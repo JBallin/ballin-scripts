@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+const HOME = require('os').homedir();
+
+exports.lightTheme = ["atom-light-ui", "atom-light-syntax"];
+exports.darkTheme = ["atom-dark-ui", "base16-tomorrow-dark-theme"];
+
+const changeTheme = require(`${HOME}/.ballin-scripts/atom_theme/atomChangeTheme.js`);
+changeTheme(process.argv[2]);
