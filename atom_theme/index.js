@@ -1,5 +1,5 @@
 const fs = require('fs');
-const CSON = require('cson-parser');
+const CSON = require('cson');
 const HOME = require('os').homedir();
 const {lightTheme, darkTheme} = require(`${HOME}/.ballin-scripts/atom_theme/bin/theme`);
 const atomConfig = `${process.env.HOME}/.atom/config.cson`

@@ -15,6 +15,6 @@
   },
   "license": "ISC",
   "dependencies": {
-    "cson-parser": "^3.0.0"
+    "cson": "^5.1.0"
   }
 }
