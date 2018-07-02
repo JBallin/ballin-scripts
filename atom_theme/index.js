@@ -1,7 +1,7 @@
 const fs = require('fs');
 const CSON = require('cson');
 const HOME = require('os').homedir();
-const {lightTheme, darkTheme} = require(`${HOME}/.ballin-scripts/atom_theme/bin/theme`);
+const {lightTheme, darkTheme} = require(`${HOME}/.ballin-scripts/config.js`);
 const atomConfig = `${process.env.HOME}/.atom/config.cson`
 
 module.exports = theme => {
