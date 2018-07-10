@@ -1,0 +1,10 @@
+#!/bin/bash
+(
+  cd $HOME/.ballin-scripts
+  update() {
+    user_config=$(node save-config.js)
+    git pull
+    node restore-config user_config
+    bin/init
+  }
+)
