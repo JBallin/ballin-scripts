@@ -1,0 +1,21 @@
+{
+  "name": "change-atom-theme",
+  "version": "1.0.0",
+  "description": "Toggle atom theme (light/dark) from the command line",
+  "main": "index.js",
+  "keywords": [
+    "atom"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JBallin/ballin-scripts.git"
+  },
+  "author": {
+    "name": "JBallin",
+    "url": "https://medium.com/@PrintSupWorld"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "cson": "^5.1.0"
+  }
+}
