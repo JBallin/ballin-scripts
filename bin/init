@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+# Check for $HOME/.ballin-scripts
+if [ ! -d "$HOME/.ballin-scripts" ]; then
+  echo "Can't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'"
+else
+
+  ### SYMLINKS
+  # ballin
+  ln -sf $HOME/.ballin-scripts/bin/ballin /usr/local/bin
+  # ballin_update
+  ln -sf $HOME/.ballin-scripts/bin/ballin_update /usr/local/bin
+  # ballin_config
+  ln -sf $HOME/.ballin-scripts/bin/ballin_config /usr/local/bin
+  # gu
+  ln -sf $HOME/.ballin-scripts/scripts/gist_update/bin/gu /usr/local/bin
+  # theme
+  ln -sf $HOME/.ballin-scripts/scripts/atom_theme/bin/theme /usr/local/bin
+  # up
+  ln -sf $HOME/.ballin-scripts/scripts/updater/bin/up /usr/local/bin
+
+
+  ### BREW INSTALL DEPENDENCIES
+  # gist
+  if [ ! -x "$(command -v gist)" ]; then
+    brew install gist
+  fi
+
+
+  ### NPM INSTALL (production === don't install devDeps)
+  (
+    export NODE_ENV='production'
+    cd $HOME/.ballin-scripts
+    npm i > /dev/null
+    cd scripts
+    for script in */ ; do
+      cd "$script"
+      npm i > /dev/null
+      cd ..
+    done
+    unset NODE_ENV
+  )
+
+
+  ### DONE
+  echo "ballin!"
+
+fi

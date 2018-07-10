@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-ln -sf $HOME/.ballin-scripts/atom_theme/bin/theme /usr/local/bin
-echo "jballin initialized!"
