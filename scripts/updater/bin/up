@@ -3,20 +3,16 @@
 # checks if command exists before running update
 
 ### HOMEBREW
-# '--cleanup' removes old versions to save space
-# brew doctor checks for any issues with brew
-
 if [ -x "$(command -v brew)" ]; then
+  # '--cleanup' removes old versions to save space
   brew upgrade --cleanup
+  # CASK
+  if [ -x "$(command -v brew cask)" ]; then
+    brew cask upgrade
+    brew cask cleanup
+  fi
+  # brew doctor checks for any issues with brew
   brew doctor
-fi
-
-
-### BREW CASK
-if [ -x "$(command -v brew cask)" ]; then
-  brew cask upgrade
-  # does upgrade auto-run brew cask cleanup?
-  brew cask cleanup
 fi
 
 
