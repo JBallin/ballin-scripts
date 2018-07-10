@@ -1,0 +1,17 @@
+#!/bin/bash
+
+echo "
+A Collection of Ballin Scripts!
+https://github.com/JBallin/ballin-scripts
+
+Commands:
+
+  ballin_update                     update to latest version (maintains config, re-runs init)
+  ballin_config                     view config
+
+Scripts:
+
+  gu                                update 'system files' gist
+  theme                             'd' (dark), 'l' (light), '' (toggle)
+  up                                update brew, npm, and apm (if present)
+"
