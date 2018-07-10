@@ -2,12 +2,11 @@ const fs = require('fs');
 const CSON = require('cson');
 const HOME = require('os').homedir();
 const {lightTheme, darkTheme} = require(`${HOME}/.ballin-scripts/config.js`);
-const atomConfig = `${process.env.HOME}/.atom/config.cson`
+const atomConfig = `${HOME}/.atom/config.cson`
 
 module.exports = theme => {
   theme = {d: 'dark', l: 'light'}[theme];
-  const csonString = fs.readFileSync(atomConfig, 'utf8');
-  const csonObj = CSON.parse(csonString);
+  const csonObj = CSON.load(atomConfig);
   const currentTheme = csonObj['*'].core.themes
 
   if (theme === undefined) {
@@ -25,10 +24,10 @@ module.exports = theme => {
   function toggleTheme() {
     if (currentTheme[0] === darkTheme[0]) {
       setTheme(lightTheme);
-      console.log('changed to light theme!');
+      console.log('light theme!');
     } else {
       setTheme(darkTheme)
-      console.log('changed to dark theme!');
+      console.log('dark theme!');
     }
   }
 
@@ -47,7 +46,7 @@ module.exports = theme => {
   function determineNewTheme() {
     if (theme === 'dark') {
       return darkTheme;
-    } else if (theme == 'light') {
+    } else if (theme === 'light') {
       return lightTheme;
     }
   }
