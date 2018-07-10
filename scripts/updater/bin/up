@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# checks if command exists before running update
+
+### HOMEBREW
+# '--cleanup' removes old versions to save space
+# brew doctor checks for any issues with brew
+
+if [ -x "$(command -v brew)" ]; then
+  brew upgrade --cleanup
+  brew doctor
+fi
+
+
+### BREW CASK
+if [ -x "$(command -v brew cask)" ]; then
+  brew cask upgrade
+  # does upgrade auto-run brew cask cleanup?
+  brew cask cleanup
+fi
+
+
+### NPM
+# update all global npm binaries
+if [ -x "$(command -v npm)" ]; then
+  npm update -g
+fi
+
+
+### APM
+# update all atom packages
+if [ -x "$(command -v apm)" ]; then
+  apm upgrade
+fi
