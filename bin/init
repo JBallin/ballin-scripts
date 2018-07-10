@@ -5,6 +5,12 @@ if [ ! -d "$HOME/.ballin-scripts" ]; then
   echo "Can't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'"
 else
 
+  # TODO Make sure `/usr/local/bin` is in your path by running `echo $PATH`. If not, add below to your profile/rc file and open a new terminal window.
+  #
+  # ```shell
+  # export PATH=/usr/local/bin:$PATH
+  # ```
+
   ### SYMLINKS
   # ballin
   ln -sf $HOME/.ballin-scripts/bin/ballin /usr/local/bin
