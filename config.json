@@ -1,0 +1,6 @@
+{
+  "theme": {
+    "lightTheme": ["atom-light-ui", "atom-light-syntax"],
+    "darkTheme": ["atom-dark-ui", "atom-dark-syntax"]
+  }
+}
