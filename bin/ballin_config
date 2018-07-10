@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cat $HOME/.ballin-scripts/config.json
