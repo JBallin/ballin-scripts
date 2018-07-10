@@ -1,7 +1,7 @@
 const { assert } = require('chai');
-const theme = require('../atom_theme/index.js');
+const theme = require('../scripts/atom_theme/index.js');
 
-describe('theme', () => {
+describe('theme: initialized to dark', () => {
   theme('d')
 
   it('should not change from dark to dark', () => {
