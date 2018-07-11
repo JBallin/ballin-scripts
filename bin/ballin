@@ -10,6 +10,7 @@ Commands:
     ballin_config         'get' (no args) view config
                           'get' KEY (ex: get theme.dark)
                           'set' KEY VALUE (ex: set up.cleanup true)
+    ballin_uninstall      remove ballin-scripts completely
 
 Scripts:
 
