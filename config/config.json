@@ -1,7 +1,7 @@
 {
   "theme": {
-    "lightTheme": ["atom-light-ui", "atom-light-syntax"],
-    "darkTheme": ["atom-dark-ui", "atom-dark-syntax"]
+    "light": ["atom-light-ui", "atom-light-syntax"],
+    "dark": ["atom-dark-ui", "atom-dark-syntax"]
   },
   "up": {
     "cleanup": true
