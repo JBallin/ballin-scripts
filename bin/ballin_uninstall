@@ -1,0 +1,10 @@
+#!/bin/bash
+
+### DELETE SYMLINKS
+(
+  cd /usr/local/bin
+  rm ballin ballin_update ballin_uninstall ballin_config gu theme up
+)
+
+### REMOVE .ballin-scripts
+rm -rf $HOME/.ballin-scripts
