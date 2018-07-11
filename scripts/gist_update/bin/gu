@@ -36,11 +36,8 @@ gu() {
 	  u 'brew_services' 'brew services list'
 		u 'gitignore_global' 'cat .gitignore_global'
 		u 'gitconfig' 'cat .gitconfig'
+    u 'apm' 'apm list --installed --no-color'
 		# u 'atomconfig' 'cat .atom/config.cson'
 		u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
 	)
-
-	apm list | sed -ne '/Community Packages/,$p' > gist_apm
-	u 'apm' 'cat gist_apm'
-	rm gist_apm
 }
