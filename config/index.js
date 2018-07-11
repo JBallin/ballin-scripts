@@ -10,4 +10,8 @@ const getConfig = keys => {
   }, configObj)
 }
 
-module.exports = getConfig;
+const setConfig = (keys, value) => {
+
+}
+
+module.exports = { getConfig, setConfig };

@@ -15,3 +15,23 @@ describe('getConfig', () => {
     assert.include([true, false], getConfig(['up', 'cleanup']))
   })
 });
+
+function setTest(key, val) {
+  const current = getConfig(key);
+
+  setConfig(key, val);
+  assert.equal(getConfig(key), val)
+  setConfig(key, current);
+}
+
+describe('setConfig', () => {
+  it("should set theme.dark", () => {
+    setTest(['theme', 'dark'], ['rainbow', 'rainbow-lite'])
+  })
+  it("should set up.cleanup", () => {
+    setTest(['up', 'cleanup'], 'test');
+  })
+  it("should set gu.id", () => {
+    setTest(['gu', 'id'], '123');
+  })
+})
