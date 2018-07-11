@@ -16,6 +16,8 @@ else
   ln -sf $HOME/.ballin-scripts/bin/ballin /usr/local/bin
   # ballin_update
   ln -sf $HOME/.ballin-scripts/bin/ballin_update /usr/local/bin
+  # ballin_uninstall
+  ln -sf $HOME/.ballin-scripts/bin/ballin_uninstall /usr/local/bin
   # ballin_config
   ln -sf $HOME/.ballin-scripts/bin/ballin_config /usr/local/bin
   # gu
