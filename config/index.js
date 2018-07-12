@@ -4,11 +4,7 @@ const HOME = require('os').homedir;
 const configJSON = fs.readFileSync(`${HOME}/.ballin-scripts/config/config.json`);
 const configObj = JSON.parse(configJSON);
 
-const getConfig = keys => {
-  return keys.reduce((res, key) => {
-    return res[key]
-  }, configObj)
-}
+const getConfig = keys => keys.split('.').reduce((res, key) => res[key], configObj)
 
 const setConfig = (keys, value) => {
 
