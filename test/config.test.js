@@ -17,6 +17,9 @@ describe('getConfig', () => {
   it("() should return an Object", () => {
     assert.typeOf(getConfig(), 'object')
   })
+  it("should return an error if given keys that don't exist", () => {
+    assert.equal(getConfig('wrong'), "wrong doesn't exist in config")
+  })
 });
 
 function setTest(keys, val) {
