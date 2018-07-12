@@ -4,8 +4,14 @@ const HOME = require('os').homedir;
 const configJSON = fs.readFileSync(`${HOME}/.ballin-scripts/config/config.json`);
 const configObj = JSON.parse(configJSON);
 
-const getConfig = keys =>
-  keys ? keys.split('.').reduce((res, key) => res[key], configObj) : configObj
+const getConfig = keys => {
+  if (keys !== undefined) {
+    res = keys.split('.').reduce((res, key) => res[key], configObj)
+    return res !== undefined ? res : `${keys} doesn't exist in config`
+  } else {
+    return configObj;
+  }
+}
 
 const setConfig = (keys, val, ...other) => {
   if (other.length || keys === undefined || val === undefined) {
@@ -18,5 +24,3 @@ const setConfig = (keys, val, ...other) => {
 }
 
 module.exports = { getConfig, setConfig };
-
-console.log(setConfig());
