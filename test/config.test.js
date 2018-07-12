@@ -37,4 +37,10 @@ describe('setConfig', () => {
   it("should set gu.id", () => {
     setTest('gu.id', '123');
   })
+  it("should give error if given no arguments", () => {
+    assert.equal(setConfig(), 'INVALID: setConfig takes two arguments, keys and value')
+  })
+  it("should give error if given 3 arguments", () => {
+    assert.equal(setConfig('a','b','c'), 'INVALID: setConfig takes two arguments, keys and value')
+  })
 })
