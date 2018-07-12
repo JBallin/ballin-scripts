@@ -16,22 +16,22 @@ describe('getConfig', () => {
   })
 });
 
-function setTest(key, val) {
-  const current = getConfig(key);
+function setTest(keys, val) {
+  const current = getConfig(keys);
 
-  setConfig(key, val);
-  assert.equal(getConfig(key), val)
-  setConfig(key, current);
+  setConfig(keys, val);
+  assert.equal(getConfig(keys), val)
+  setConfig(keys, current);
 }
 
-xdescribe('setConfig', () => {
+describe('setConfig', () => {
   it("should set theme.dark", () => {
-    setTest(['theme', 'dark'], ['rainbow', 'rainbow-lite'])
+    setTest('theme.dark', ['rainbow', 'rainbow-lite'])
   })
   it("should set up.cleanup", () => {
-    setTest(['up', 'cleanup'], 'test');
+    setTest('up.cleanup', 'test');
   })
   it("should set gu.id", () => {
-    setTest(['gu', 'id'], '123');
+    setTest('gu.id', '123');
   })
 })
