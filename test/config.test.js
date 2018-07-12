@@ -14,6 +14,9 @@ describe('getConfig', () => {
   it("('up.cleanup') should return true or false", () => {
     assert.include([true, false], getConfig('up.cleanup'))
   })
+  it("() should return an Object", () => {
+    assert.typeOf(getConfig(), 'object')
+  })
 });
 
 function setTest(keys, val) {
