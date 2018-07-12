@@ -7,7 +7,10 @@ const configObj = JSON.parse(configJSON);
 const getConfig = keys =>
   keys ? keys.split('.').reduce((res, key) => res[key], configObj) : configObj
 
-const setConfig = (keys, val) => {
+const setConfig = (keys, val, ...other) => {
+  if (other.length || keys === undefined || val === undefined) {
+    return 'INVALID: setConfig takes two arguments, keys and value'
+  }
   keysArr = keys.split('.');
   set = keysArr.splice(-1);
   nestedObj = keysArr.reduce((res, key) => res[key], configObj);
