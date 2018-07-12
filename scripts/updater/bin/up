@@ -4,9 +4,10 @@
 
 ### HOMEBREW
 if [ -x "$(command -v brew)" ]; then
-  # '--cleanup' removes old versions to save space
-  brew upgrade --cleanup
-  # CASK
+  brew upgrade
+  # 'cleanup' removes old versions to save space
+  brew cleanup
+  ### CASK
   if [ -x "$(command -v brew cask)" ]; then
     brew cask upgrade
     brew cask cleanup
