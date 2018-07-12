@@ -6,8 +6,11 @@ const configObj = JSON.parse(configJSON);
 
 const getConfig = keys => keys.split('.').reduce((res, key) => res[key], configObj)
 
-const setConfig = (keys, value) => {
-
+const setConfig = (keys, val) => {
+  keysArr = keys.split('.');
+  set = keysArr.splice(-1);
+  nestedObj = keysArr.reduce((res, key) => res[key], configObj);
+  nestedObj[set] = val;
 }
 
 module.exports = { getConfig, setConfig };
