@@ -6,10 +6,12 @@
 if [ -x "$(command -v brew)" ]; then
   brew upgrade
   # 'cleanup' removes old versions to save space
+  # TODO: only run cleanup if user has it in config, cleanup by default
   brew cleanup
   ### CASK
   if [ -x "$(command -v brew cask)" ]; then
     brew cask upgrade
+    # TODO: only run cleanup if user has it in config, cleanup by default. Add brew cleanup to config.
     brew cask cleanup
   fi
   # brew doctor checks for any issues with brew
