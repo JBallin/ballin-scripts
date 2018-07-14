@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-const HOME = require('os').homedir();
 
-const changeTheme = require(`${HOME}/.ballin-scripts/scripts/atom_theme/index.js`);
+const changeTheme = require('../');
 console.log(changeTheme(process.argv[2]));
