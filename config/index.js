@@ -21,6 +21,7 @@ const setConfig = (keys, val, ...other) => {
   set = keysArr.splice(-1);
   nestedObj = keysArr.reduce((res, key) => res[key], configObj);
   nestedObj[set] = val;
+  return `"${keys}" set to "${getConfig(keys)}"`;
 }
 
 module.exports = { getConfig, setConfig };
