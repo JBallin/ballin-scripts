@@ -1,9 +1,11 @@
 const fs = require('fs');
 const CSON = require('cson');
 const HOME = require('os').homedir();
-const configJSON = fs.readFileSync(`${HOME}/.ballin-scripts/config/config.json`);
+
+const configPath = `${HOME}/.ballin-scripts/config/config.json`;
+const configJSON = fs.readFileSync(configPath);
 const { light, dark } = JSON.parse(configJSON).theme;
-const atomConfig = `${HOME}/.atom/config.cson`
+const atomConfig = `${HOME}/.atom/config.cson`;
 
 module.exports = i => {
   const csonObj = CSON.load(atomConfig);
