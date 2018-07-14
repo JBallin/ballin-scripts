@@ -1,10 +1,15 @@
 #!/bin/bash
 
-# gist should update config!
-
-# give error if id/sn null or if gist -r $id gives error? need to make sure that the gist with that $id actually exists...tell them to run init? or maybe just run it for them now?
-
-# add to init: create gist and save in config. they need to sign into "gist" (brew) with github too!
+# TODO:
+  # function that takes a filename and reads the gist using 'gist -r'
+    # function to display names of the files?
+  # INIT:
+    # log in to gist
+    # create gist and save id in config
+  # gu should upload ballin_config too - that way have a backup of ur config
+  # give error if id/sn null or if gist -r $id gives error?
+    # need to make sure that the gist with that $id actually exists...tell them to run init?
+    # or maybe just run it for them now?
 
 id=ballin_config get gu.id
 url="https://gist.github.com/$id"
