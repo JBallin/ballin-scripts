@@ -1,8 +1,14 @@
 const { assert } = require('chai');
 const theme = require('../scripts/atom_theme');
 
-describe('theme: initialized to dark', () => {
-  theme('d')
+describe('theme', () => {
+  let currTheme = '';
+  before('save current theme and initialize theme to dark', () => {
+    currTheme = theme('d') === 'already set to dark theme...' ? 'd' : 'l';
+  })
+  after('set theme back to current theme', () => {
+    theme(currTheme);
+  })
 
   it('should not change from dark to dark', () => {
     assert.equal(theme('d'), 'already set to dark theme...');
