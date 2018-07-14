@@ -22,15 +22,16 @@ describe('getConfig', () => {
   })
 });
 
-function setTest(keys, val) {
-  const current = getConfig(keys);
-
-  setConfig(keys, val);
-  assert.equal(getConfig(keys), val)
-  setConfig(keys, current);
-}
-
 describe('setConfig', () => {
+  const initialConfig = getConfig();
+  function setTest(keys, val) {
+    const current = getConfig(keys);
+
+    setConfig(keys, val);
+    assert.equal(getConfig(keys), val)
+    setConfig(keys, current);
+  }
+  
   it("should set theme.dark", () => {
     setTest('theme.dark', ['rainbow', 'rainbow-lite'])
   })
@@ -45,5 +46,15 @@ describe('setConfig', () => {
   })
   it("should give error if given 3 arguments", () => {
     assert.equal(setConfig('a','b','c'), 'INVALID: setConfig takes two arguments, keys and value')
+  })
+  it("should return the keys/value it set", () => {
+    const keys = 'theme.light';
+    const val = 'new theme';
+    const current = getConfig(keys);
+    assert.equal(setConfig(keys, val), `"${keys}" set to "${val}"`)
+    setConfig(keys, current);
+  })
+  it("should not have changed config prior to tests", () => {
+    assert.equal(getConfig(), initialConfig)
   })
 })
