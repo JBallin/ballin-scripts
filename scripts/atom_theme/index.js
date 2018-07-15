@@ -9,6 +9,22 @@ const { light, dark } = getConfig('theme');
 const fetchAtomConfig = () => CSON.load(atomConfigPath);
 const fetchCurrentTheme = () => fetchAtomConfig()['*'].core.themes;
 
+const themeMessages = {
+  saveErr: "INVALID: saveTheme takes 'd' (dark) or 'l' (light)"
+}
+
+
+const saveTheme = mode => {
+  const currentTheme = fetchCurrentTheme();
+  const newMode = mode === 'd' ? 'dark' : mode === 'l' ? 'light' : undefined;
+  if (newMode) {
+    return setConfig(`theme.${newMode}`, currentTheme);
+  } else {
+    return themeMessages.saveErr;
+  }
+}
+
+
 const changeTheme = mode => {
   const csonObj = fetchAtomConfig();
   const currentTheme = fetchCurrentTheme();
@@ -54,4 +70,4 @@ const changeTheme = mode => {
 }
 
 
-module.exports = { changeTheme }
+module.exports = { changeTheme, saveTheme, themeMessages }
