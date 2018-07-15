@@ -1,15 +1,17 @@
 const fs = require('fs');
 const CSON = require('cson');
-const HOME = require('os').homedir();
+const { getConfig, setConfig } = require('../../config');
 
-const configPath = `${HOME}/.ballin-scripts/config/config.json`;
-const configJSON = fs.readFileSync(configPath);
-const { light, dark } = JSON.parse(configJSON).theme;
-const atomConfig = `${HOME}/.atom/config.cson`;
+const atomConfigPath = `${HOME}/.atom/config.cson`;
+const { light, dark } = getConfig('theme');
+
+const fetchAtomConfig = () => CSON.load(atomConfigPath);
+const fetchCurrentTheme = () => fetchAtomConfig()['*'].core.themes;
 
 const changeTheme = i => {
-  const csonObj = CSON.load(atomConfig);
-  const currentTheme = csonObj['*'].core.themes;
+  const csonObj = fetchAtomConfig();
+  const currentTheme = fetchCurrentTheme();
+
   theme = {d: 'dark', l: 'light'}[i];
 
   if (i === undefined) return toggleTheme();
@@ -19,7 +21,7 @@ const changeTheme = i => {
   function setTheme(newTheme) {
     csonObj['*'].core.themes = newTheme;
     updatedCsonString = CSON.stringify(csonObj);
-    fs.writeFileSync(atomConfig, updatedCsonString);
+    fs.writeFileSync(atomConfigPath, updatedCsonString);
     return `${theme} theme!`;
   }
 
