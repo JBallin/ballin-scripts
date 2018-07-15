@@ -1,19 +1,28 @@
 const fs = require('fs');
 const HOME = require('os').homedir;
+const { exec } = require('child_process')
 
-const configJSON = fs.readFileSync(`${HOME}/.ballin-scripts/config/config.json`);
-const configObj = JSON.parse(configJSON);
+const configPath = `${HOME}/.ballin-scripts/config/config.json`
+const stringify = obj => JSON.stringify(obj, null, 2);
+
+const fetchConfig = () => {
+  const configJSON = fs.readFileSync(configPath, 'utf8');
+  const configObj = JSON.parse(configJSON);
+  return { configObj, configJSON }
+}
 
 const getConfig = keys => {
+  const { configObj, configJSON } = fetchConfig();
   if (keys !== undefined) {
     res = keys.split('.').reduce((res, key) => res[key], configObj)
-    return res !== undefined ? res : `${keys} doesn't exist in config`
+    return res !== undefined ? stringify(res) : `${keys} doesn't exist in config`
   } else {
-    return configObj;
+    return configJSON;
   }
 }
 
 const setConfig = (keys, val, ...other) => {
+  const { configObj } = fetchConfig();
   if (other.length || keys === undefined || val === undefined) {
     return 'INVALID: setConfig takes two arguments, keys and value'
   }
@@ -21,7 +30,21 @@ const setConfig = (keys, val, ...other) => {
   set = keysArr.splice(-1);
   nestedObj = keysArr.reduce((res, key) => res[key], configObj);
   nestedObj[set] = val;
-  return `"${keys}" set to "${getConfig(keys)}"`;
+  fs.writeFileSync(configPath, stringify(configObj), 'utf8')
+  return `"${keys}" set to ${getConfig(keys)}`;
 }
 
-module.exports = { getConfig, setConfig };
+const configAction = (request, keys, value, other='') => {
+  if (request === 'get' || request === undefined) {
+    return getConfig(keys);
+  } else if (request === 'set') {
+    return setConfig(keys, value);
+  } else {
+    if (process.env.NODE_ENV !== 'test') {
+      exec('ballin', (error, stdout, stderr) => console.log(stdout));
+    }
+    return "INVALID"
+  }
+}
+
+module.exports = { getConfig, setConfig, configAction, stringify, configPath, fetchConfig };
