@@ -23,7 +23,7 @@ elif [ $1 == read ]; then
   else
     echo "'read' needs a filename: 'bash_profile', 'brew_list', 'brew_leaves', 'brew_cask', 'npm_global', 'brew_services', 'gitignore_global', 'gitconfig', 'apm', 'atomconfig', 'bash_completions'"
   fi
-else if $1 == help; then
+elif [ $1 == help ]; then
   ballin
 else
   gu
