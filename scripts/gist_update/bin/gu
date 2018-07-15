@@ -14,57 +14,57 @@
 id=$(ballin_config get gu.id)
 url="https://gist.github.com/$id"
 
-if [ $1 == open ]; then
-  echo $url
-  open $url
-elif [ $1 == read ]; then
-  if [ ! -z $2 ]; then
-    gist -r $id $2
-  else
-    echo "'read' needs a filename: 'bash_profile', 'brew_list', 'brew_leaves', 'brew_cask', 'npm_global', 'brew_services', 'gitignore_global', 'gitconfig', 'apm', 'atomconfig', 'bash_completions'"
+if [ ! -z $1 ]; then
+  if [ $1 == open ]; then
+    echo $url
+    open $url
+  elif [ $1 == read ]; then
+    if [ ! -z $2 ]; then
+      gist -r $id $2
+    else
+      echo "'read' needs a filename: 'bash_profile', 'brew_list', 'brew_leaves', 'brew_cask', 'npm_global', 'brew_services', 'gitignore_global', 'gitconfig', 'apm', 'atomconfig', 'bash_completions'"
+    fi
+  elif [ $1 == help ]; then
+    ballin
   fi
-elif [ $1 == help ]; then
-  ballin
 else
-  gu
-fi
+  gistUpdater() {
+    u() {
+      local file_name=$1
+      local input=$2
+      gist_is_changed() {
+        gist -r $id $file_name > raw_gist
+        local changed
+        if cmp --quiet $file_name raw_gist; then
+          echo "✔ $file_name"
+          changed=1
+        else
+          echo "✙ $file_name"
+          changed=0
+        fi
+        rm raw_gist
+        return $changed
+      }
 
-
-gu() {
-  u() {
-    local file_name=$1
-    local input=$2
-    gist_is_changed() {
-      gist -r $id $file_name > raw_gist
-      local changed
-      if cmp --quiet $file_name raw_gist; then
-        echo "✔ $file_name"
-        changed=1
-      else
-        echo "✙ $file_name"
-        changed=0
-      fi
-      rm raw_gist
-      return $changed
+      $input > $file_name
+      if gist_is_changed; then gist -u $id $file_name > /dev/null; fi
+      rm $file_name
     }
 
-    $input > $file_name
-    if gist_is_changed; then gist -u $id $file_name > /dev/null; fi
-    rm $file_name
+  	(
+  		cd $HOME
+  	  u 'bash_profile' 'cat .bash_profile'
+  	  u 'brew_list' 'brew list'
+  	  u 'brew_leaves' 'brew leaves'
+  	  u 'brew_cask' 'brew cask list'
+  	  u 'npm_global' 'ls /usr/local/lib/node_modules'
+  	  u 'brew_services' 'brew services list'
+  		u 'gitignore_global' 'cat .gitignore_global'
+  		u 'gitconfig' 'cat .gitconfig'
+      u 'apm' 'apm list --installed --no-color'
+  		# u 'atomconfig' 'cat .atom/config.cson'
+  		u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
+  	)
   }
-
-	(
-		cd $HOME
-	  u 'bash_profile' 'cat .bash_profile'
-	  u 'brew_list' 'brew list'
-	  u 'brew_leaves' 'brew leaves'
-	  u 'brew_cask' 'brew cask list'
-	  u 'npm_global' 'ls /usr/local/lib/node_modules'
-	  u 'brew_services' 'brew services list'
-		u 'gitignore_global' 'cat .gitignore_global'
-		u 'gitconfig' 'cat .gitconfig'
-    u 'apm' 'apm list --installed --no-color'
-		# u 'atomconfig' 'cat .atom/config.cson'
-		u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
-	)
-}
+  gistUpdater
+fi
