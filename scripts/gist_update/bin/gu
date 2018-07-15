@@ -11,10 +11,11 @@
     # need to make sure that the gist with that $id actually exists...tell them to run init?
     # or maybe just run it for them now?
 
-id=ballin_config get gu.id
+id=$(ballin_config get gu.id)
 url="https://gist.github.com/$id"
 
-if $1 == open; then
+if [ $1 == open ]; then
+  echo $url
   open $url
 else if $1 == read; then
   if $2; then
