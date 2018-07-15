@@ -1,6 +1,7 @@
 const fs = require('fs');
 const CSON = require('cson');
-const { getConfig, setConfig } = require('../../config');
+const HOME = require('os').homedir;
+const { getConfig, setConfig } = require(`${HOME}/.ballin-scripts/config`);
 
 const atomConfigPath = `${HOME}/.atom/config.cson`;
 const { light, dark } = getConfig('theme');
