@@ -8,13 +8,13 @@ const { light, dark } = getConfig('theme');
 const fetchAtomConfig = () => CSON.load(atomConfigPath);
 const fetchCurrentTheme = () => fetchAtomConfig()['*'].core.themes;
 
-const changeTheme = i => {
+const changeTheme = mode => {
   const csonObj = fetchAtomConfig();
   const currentTheme = fetchCurrentTheme();
 
-  theme = {d: 'dark', l: 'light'}[i];
+  theme = {d: 'dark', l: 'light'}[mode];
 
-  if (i === undefined) return toggleTheme();
+  if (mode === undefined) return toggleTheme();
   if (theme === undefined) return 'INVALID: "l" (light), "d" (dark) or "" (toggle)'
   return tryChangeTheme();
 
