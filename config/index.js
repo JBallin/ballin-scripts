@@ -1,7 +1,8 @@
 const fs = require('fs');
 const { exec } = require('child_process')
+const HOME = require('os').homedir;
 
-const configPath = `./config.json`
+const configPath = `${HOME}/.ballin-scripts/config/myconfig.json`
 const stringify = obj => JSON.stringify(obj, null, 2);
 
 const fetchConfig = () => {

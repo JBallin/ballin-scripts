@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-const { configAction } = require('../config/index.js');
+const HOME = require('os').homedir;
+
+const { configAction } = require(`${HOME}/.ballin-scripts/config/index.js`);
 const [request, keys, value, ...other] = process.argv.slice(2);
 
 console.log(configAction(request, keys, value, other));
