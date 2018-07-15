@@ -7,7 +7,7 @@ const configJSON = fs.readFileSync(configPath);
 const { light, dark } = JSON.parse(configJSON).theme;
 const atomConfig = `${HOME}/.atom/config.cson`;
 
-module.exports = i => {
+const changeTheme = i => {
   const csonObj = CSON.load(atomConfig);
   const currentTheme = csonObj['*'].core.themes;
   theme = {d: 'dark', l: 'light'}[i];
@@ -49,3 +49,6 @@ module.exports = i => {
   }
 
 }
+
+
+module.exports = { changeTheme }

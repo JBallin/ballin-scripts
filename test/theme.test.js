@@ -1,5 +1,5 @@
 const { assert } = require('chai');
-const theme = require('../scripts/atom_theme');
+const theme = require('../scripts/atom_theme').changeTheme;
 
 describe('theme', () => {
   let currTheme = '';

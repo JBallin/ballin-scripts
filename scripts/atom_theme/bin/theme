@@ -1,4 +1,4 @@
 #!/usr/bin/env node
 
-const changeTheme = require('../');
+const { changeTheme } = require('../');
 console.log(changeTheme(process.argv[2]));
