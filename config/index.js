@@ -46,9 +46,10 @@ const setConfig = (keys, val, ...other) => {
   keysArr = keys.split('.');
   set = keysArr.splice(-1);
   nestedObj = keysArr.reduce((res, key) => res[key], configObj);
-  if (typeof nestedObj[set] === 'object') {
+  const oldVal = nestedObj[set];
+  if (typeof oldVal === 'object' && ! Array.isArray(oldVal)) {
     return configMessages.setObjErr(keys);
-  } else if (nestedObj[set] === undefined) {
+  } else if (oldVal === undefined) {
     return configMessages.setDneErr(keys);
   }
   fs.writeFileSync(configPath, stringify(configObj), 'utf8')
