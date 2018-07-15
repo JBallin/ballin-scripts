@@ -15,7 +15,7 @@ const getConfig = keys => {
   const { configObj, configJSON } = fetchConfig();
   if (keys !== undefined) {
     res = keys.split('.').reduce((res, key) => res[key], configObj)
-    return res !== undefined ? stringify(res) : `${keys} doesn't exist in config`
+    return res !== undefined ? res : `${keys} doesn't exist in config`
   } else {
     return configJSON;
   }
