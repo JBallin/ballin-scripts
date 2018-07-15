@@ -3,7 +3,24 @@ const { exec } = require('child_process')
 const HOME = require('os').homedir;
 
 const configPath = `${HOME}/.ballin-scripts/config/myconfig.json`
+const defaultConfigPath = `${HOME}/.ballin-scripts/config/.defaultconfig.json`
 const stringify = obj => JSON.stringify(obj, null, 2);
+
+const configMessages = {
+  actionErr: "INVALID!",
+  getKeysDneErr: keys => `${keys} doesn't exist in config`,
+  reset: "Config has been reset to default configuration",
+  set: keys => `"${keys}" set to ${getConfig(keys)}`,
+  setArgsErr: 'INVALID: setConfig takes two arguments, keys and value',
+  setDneErr: keys => `INVALID: "${keys}" doesn't exist in config`,
+  setObjErr: keys => `INVALID: "${keys}" is an object`
+}
+
+
+const resetConfig = () => {
+  const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8');
+  fs.writeFileSync(configPath, defaultConfig, 'utf8')
+}
 
 const fetchConfig = () => {
   const configJSON = fs.readFileSync(configPath, 'utf8');
@@ -15,7 +32,7 @@ const getConfig = keys => {
   const { configObj, configJSON } = fetchConfig();
   if (keys !== undefined) {
     res = keys.split('.').reduce((res, key) => res[key], configObj)
-    return res !== undefined ? res : `${keys} doesn't exist in config`
+    return res !== undefined ? res : configMessages.getKeysDneErr(keys);
   } else {
     return configJSON;
   }
@@ -24,21 +41,25 @@ const getConfig = keys => {
 const setConfig = (keys, val, ...other) => {
   const { configObj } = fetchConfig();
   if (other.length || keys === undefined || val === undefined) {
-    return 'INVALID: setConfig takes two arguments, keys and value'
+    return configMessages.setArgsErr;
   }
   keysArr = keys.split('.');
   set = keysArr.splice(-1);
   nestedObj = keysArr.reduce((res, key) => res[key], configObj);
   if (typeof nestedObj[set] === 'object') {
-    return `INVALID: "${keys}" is an object`
+    return configMessages.setObjErr(keys);
   } else if (nestedObj[set] === undefined) {
-    return `INVALID: "${keys}" doesn't exist in config`
+    return configMessages.setDneErr(keys);
   }
   fs.writeFileSync(configPath, stringify(configObj), 'utf8')
-  return `"${keys}" set to ${getConfig(keys)}`;
+  return configMessages.set(keys);
 }
 
 const configAction = (request, keys, value, other='') => {
+  if (request === 'reset') {
+    resetConfig();
+    return configMessages.reset;
+  }
   if (request === 'get' || request === undefined) {
     return getConfig(keys);
   } else if (request === 'set') {
@@ -47,8 +68,8 @@ const configAction = (request, keys, value, other='') => {
     if (process.env.NODE_ENV !== 'test') {
       exec('ballin', (error, stdout, stderr) => console.log(stdout));
     }
-    return "INVALID"
+    return configMessages.actionErr;
   }
 }
 
-module.exports = { getConfig, setConfig, configAction, stringify, configPath, fetchConfig };
+module.exports = { getConfig, setConfig, configAction, stringify, configPath, fetchConfig, configMessages };
