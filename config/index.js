@@ -29,7 +29,11 @@ const setConfig = (keys, val, ...other) => {
   keysArr = keys.split('.');
   set = keysArr.splice(-1);
   nestedObj = keysArr.reduce((res, key) => res[key], configObj);
-  nestedObj[set] = val;
+  if (typeof nestedObj[set] === 'object') {
+    return `INVALID: "${keys}" is an object`
+  } else if (nestedObj[set] === undefined) {
+    return `INVALID: "${keys}" doesn't exist in config`
+  }
   fs.writeFileSync(configPath, stringify(configObj), 'utf8')
   return `"${keys}" set to ${getConfig(keys)}`;
 }
