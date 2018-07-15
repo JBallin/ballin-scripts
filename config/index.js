@@ -51,9 +51,11 @@ const setConfig = (keys, val, ...other) => {
     return configMessages.setObjErr(keys);
   } else if (oldVal === undefined) {
     return configMessages.setDneErr(keys);
+  } else {
+    nestedObj[set] = val;
+    fs.writeFileSync(configPath, stringify(configObj), 'utf8')
+    return configMessages.set(keys);
   }
-  fs.writeFileSync(configPath, stringify(configObj), 'utf8')
-  return configMessages.set(keys);
 }
 
 const configAction = (request, keys, value, other='') => {
