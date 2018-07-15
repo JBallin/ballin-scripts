@@ -8,9 +8,9 @@ const stringify = obj => JSON.stringify(obj, null, 2);
 
 const configMessages = {
   actionErr: "INVALID!",
-  getKeysDneErr: keys => `${keys} doesn't exist in config`,
+  getKeysDneErr: keys => `"${keys}" doesn't exist in config`,
   reset: "Config has been reset to default configuration",
-  set: keys => `"${keys}" set to ${getConfig(keys)}`,
+  set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`,
   setArgsErr: 'INVALID: setConfig takes two arguments, keys and value',
   setDneErr: keys => `INVALID: "${keys}" doesn't exist in config`,
   setObjErr: keys => `INVALID: "${keys}" is an object`

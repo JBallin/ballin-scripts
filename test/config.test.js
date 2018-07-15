@@ -3,7 +3,7 @@ process.env.NODE_ENV = 'test'
 const { assert } = require('chai');
 const fs = require('fs');
 const HOME = require('os').homedir;
-const { getConfig, setConfig, configAction, stringify, configPath, fetchConfig } = require(`${HOME}/.ballin-scripts/config`);
+const { getConfig, setConfig, configAction, stringify, configPath, fetchConfig, configMessages } = require(`${HOME}/.ballin-scripts/config`);
 
 const fetchConfigJSON = () => fetchConfig().configJSON;
 
