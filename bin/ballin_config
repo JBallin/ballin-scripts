@@ -1,3 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env node
 
-cat $HOME/.ballin-scripts/config/config.json
+const { configAction } = require('../config/index.js');
+const [request, keys, value, ...other] = process.argv.slice(2);
+
+console.log(configAction(request, keys, value, other));
