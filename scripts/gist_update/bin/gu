@@ -51,6 +51,13 @@ else
       rm $file_name
     }
 
+    # TODO: fix bug where doesn't detect changes for blank file. prob an issue with the cmp above with a blank file but `if [ -s file ]` doesnt work so it's not completely empty?
+      # I don't want to include the comments that come along with atom config
+    catWithoutCommentsAndBlankLines() {
+      # only prints non-comments TODO: add option to init to toggle whether or not want comments included
+      sed -e '/^[[:blank:]]*#/d;s/#.*//; /^$/d;' $1
+    }
+
   	(
   		cd $HOME
   	  u 'bash_profile' 'cat .bash_profile'
