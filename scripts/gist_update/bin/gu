@@ -22,7 +22,7 @@ if [ ! -z $1 ]; then
     if [ ! -z $2 ]; then
       gist -r $id $2
     else
-      echo "'read' needs a filename: 'bash_profile', 'bash_completions', 'brew_list', 'brew_leaves', 'brew_cask', 'brew_services', 'npm_global', 'gitignore_global', 'gitconfig', 'apm', 'atom_keymap', 'atom_snippets', 'atomconfig', "
+      echo "'read' needs a filename: 'bash_profile', 'bash_completions', 'brew_list', 'brew_leaves', 'brew_cask', 'brew_services', 'npm_global', 'gitignore_global', 'gitconfig', 'apm', 'atomconfig', 'atom_keymap', 'atom_snippets', 'atom_styles', 'atom_init'"
     fi
   elif [ $1 == help ]; then
     ballin
@@ -66,6 +66,8 @@ else
   		u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
       u 'atom_keymap' 'cat .atom/keymap.cson'
       u 'atom_snippets' 'cat .atom/snippets.cson'
+  		u 'atom_styles' 'cat .atom/styles.less'
+  		u 'atom_init' 'cat .atom/init.coffee'
   	)
   }
   gistUpdater
