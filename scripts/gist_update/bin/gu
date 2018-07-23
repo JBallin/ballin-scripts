@@ -111,6 +111,29 @@ else
     		u 'atom_styles' 'catWithoutCommentsAndBlankLines .atom/styles.less'
     		u 'atom_init' 'catWithoutCommentsAndBlankLines .atom/init.coffee'
       fi
+
+      ### VSCODE
+      if [ -d .vscode ]; then
+        (
+          cd $HOME/Library/Application\ Support/Code/User/
+            u 'vs_settings' 'cat settings.json'
+            u 'vs_extensions' 'code --list-extensions'
+            # check if anything in snippets folder
+              # u 'vs_snippets' 'ls snippets' TODO: figure out how snippets work in vs
+            # KEYMAP: where is it stored? TODO: try and make key bindings so that it generates a file?
+        )
+      fi
+
+      ### VIM
+      if [ -f .vimrc ]; then
+        u 'vimrc' 'cat .vimrc'
+      fi
+
+      ### NANO
+      if [ -f .nanorc ]; then
+        u 'nanorc' 'cat .nanorc'
+      fi
+
   	)
   }
   gistUpdater
