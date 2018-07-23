@@ -33,16 +33,22 @@ else
       local file_name=$1
       local input=$2
       gist_is_changed() {
-        gist -r $id $file_name > raw_gist
         local changed
-        if cmp --quiet $file_name raw_gist; then
-          echo "✔ $file_name"
-          changed=1
+        if [ -s $file_name ]; then
+          gist -r $id $file_name > raw_gist
+          # add newline to end of $file_name if not already present, to match gist format
+          sed -i -e '$a\' $file_name
+          if cmp --quiet $file_name raw_gist; then
+            echo "✔ $file_name"
+            changed=1
+          else
+            echo "✙ $file_name"
+            changed=0
+          fi
+          rm raw_gist
         else
-          echo "✙ $file_name"
-          changed=0
+          changed=1
         fi
-        rm raw_gist
         return $changed
       }
 
