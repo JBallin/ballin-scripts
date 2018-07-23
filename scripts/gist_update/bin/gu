@@ -90,11 +90,11 @@ else
       ### ATOM
       if [ -x "$(command -v atom)" ]; then
         u 'apm' 'apm list --installed --no-color'
-        u 'atomconfig' 'cat .atom/config.cson'
         u 'atom_keymap' 'cat .atom/keymap.cson'
         u 'atom_snippets' 'cat .atom/snippets.cson'
     		u 'atom_styles' 'cat .atom/styles.less'
     		u 'atom_init' 'cat .atom/init.coffee'
+        u 'atom_config' 'cat .atom/config.cson'
       fi
   	)
   }
