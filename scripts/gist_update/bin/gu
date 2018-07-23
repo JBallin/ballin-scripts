@@ -90,11 +90,12 @@ else
       ### ATOM
       if [ -x "$(command -v atom)" ]; then
         u 'apm' 'apm list --installed --no-color'
-        u 'atom_keymap' 'cat .atom/keymap.cson'
-        u 'atom_snippets' 'cat .atom/snippets.cson'
-    		u 'atom_styles' 'cat .atom/styles.less'
-    		u 'atom_init' 'cat .atom/init.coffee'
         u 'atom_config' 'cat .atom/config.cson'
+        u 'atom_keymap' 'catWithoutCommentsAndBlankLines .atom/keymap.cson'
+        u 'atom_snippets' 'catWithoutCommentsAndBlankLines .atom/snippets.cson'
+        # TODO: catWithout... not checking for CSS comments, just hashes. Need to updated func to check for those.
+    		u 'atom_styles' 'catWithoutCommentsAndBlankLines .atom/styles.less'
+    		u 'atom_init' 'catWithoutCommentsAndBlankLines .atom/init.coffee'
       fi
   	)
   }
