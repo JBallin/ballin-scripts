@@ -66,9 +66,15 @@ else
   	(
       cd $HOME
 
-      ### BASH
+      ### ENVIRONMENT
       if [ -f .bash_profile ]; then
         u 'bash_profile' 'cat .bash_profile'
+      fi
+      if [ -f .zshrc ]; then
+        u 'zshrc' 'cat .zshrc'
+      fi
+      if [ -f .bashrc ]; then
+        u 'bashrc' 'cat .bashrc'
       fi
       if [ -d /usr/local/etc/bash_completion.d ]; then
         u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
