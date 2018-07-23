@@ -67,8 +67,12 @@ else
       cd $HOME
 
       ### BASH
-  	  u 'bash_profile' 'cat .bash_profile'
-      u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
+      if [ -f .bash_profile ]; then
+        u 'bash_profile' 'cat .bash_profile'
+      fi
+      if [ -d /usr/local/etc/bash_completion.d ]; then
+        u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
+      fi
 
       ### BREW
       if [ -x "$(command -v brew)" ]; then
@@ -84,8 +88,12 @@ else
       fi
 
       ### GIT
-  		u 'gitignore_global' 'cat .gitignore_global'
-  		u 'gitconfig' 'cat .gitconfig'
+  		if [ -f .gitignore_global ]; then
+        u 'gitignore_global' 'cat .gitignore_global'
+      fi
+      if [ -f .gitconfig ]; then
+        u 'gitconfig' 'cat .gitconfig'
+      fi
 
       ### ATOM
       if [ -x "$(command -v atom)" ]; then
