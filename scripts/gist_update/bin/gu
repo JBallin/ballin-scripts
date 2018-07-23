@@ -74,7 +74,9 @@ else
       fi
 
       ### NPM
-      u 'npm_global' 'ls /usr/local/lib/node_modules'
+      if [ -x "$(command -v npm)" ]; then
+        u 'npm_global' 'ls /usr/local/lib/node_modules'
+      fi
 
       ### GIT
   		u 'gitignore_global' 'cat .gitignore_global'
