@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
 
+### CHECK SETUP
 # Check for $HOME/.ballin-scripts
 if [ ! -d "$HOME/.ballin-scripts" ]; then
   echo "Can't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'"
 # Check that /usr/local/bin is in $PATH
 elif [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
   echo "usr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window"
+# Check that either gist or brew is installed
+elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
+    echo "Can't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'"
+
+
 else
+  ### DOWNLOAD GIST (if needed)
+  if [ ! -x "$(command -v gist)" ]; then
+    brew install gist
+  fi
 
 
-  ### SYMLINKS
+  ### SYMLINK BINARIES
   # ballin
   ln -sf $HOME/.ballin-scripts/bin/ballin /usr/local/bin
   # ballin_update
@@ -24,13 +34,6 @@ else
   ln -sf $HOME/.ballin-scripts/scripts/atom_theme/bin/theme /usr/local/bin
   # up
   ln -sf $HOME/.ballin-scripts/scripts/updater/bin/up /usr/local/bin
-
-
-  ### BREW INSTALL DEPENDENCIES
-  # gist
-  if [ ! -x "$(command -v gist)" ]; then
-    brew install gist
-  fi
 
 
   ### NPM INSTALL (production === don't install devDeps)
@@ -59,5 +62,6 @@ else
 
   ### DONE
   echo "ballin!"
+
 
 fi
