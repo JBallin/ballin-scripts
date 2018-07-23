@@ -50,6 +50,15 @@ else
   )
 
 
+  ### CREATE/UPDATE CONFIG FILE
+  (
+    cd $HOME/.ballin-scripts/config/
+    if [ ! -f myconfig.json ]; then
+      cp .defaultconfig.json myconfig.json
+    fi
+  )
+
+
   ### DONE
   echo "ballin!"
 
