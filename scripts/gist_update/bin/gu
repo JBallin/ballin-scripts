@@ -102,7 +102,7 @@ else
       fi
 
       ### ATOM
-      if [ -x "$(command -v atom)" ]; then
+      if [ -d .atom ]; then
         u 'apm' 'apm list --installed --no-color'
         u 'atom_config' 'cat .atom/config.cson'
         u 'atom_keymap' 'catWithoutCommentsAndBlankLines .atom/keymap.cson'
