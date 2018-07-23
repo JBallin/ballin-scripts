@@ -37,7 +37,7 @@ else
         if [ -s $file_name ]; then
           gist -r $id $file_name > raw_gist
           # add newline to end of $file_name if not already present, to match gist format
-          sed -i -e '$a\' $file_name
+          sed -i '' -e '$a\' $file_name
           if cmp --quiet $file_name raw_gist; then
             echo "✔ $file_name"
             changed=1
