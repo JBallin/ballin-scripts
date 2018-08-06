@@ -12,38 +12,7 @@ elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
     echo "Can't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'"
 
 ### INITIAL SETUP LOOKS GOOD!
-## GIST
 else
-  # DOWNLOAD GIST (if needed)
-  if [ ! -x "$(command -v gist)" ]; then
-    echo 'brew installing gist...'
-    brew install gist
-  fi
-
-  # TODO: find way to truly verify if user is logged in? token in .gist may be expired
-  # gist --login
-  while [ ! -f .gist ]; do
-    printf "\nPlease login to gist to continue!\n"
-    gist --login
-  done
-
-  # STORE GIST ID
-  # TODO: check if already have gist ID in config before proceeding
-  # ask do you have a gist id that you've used with ballin-scripts before? Y/N
-  # Y?
-    # Please provide it
-      # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
-  # N?
-    echo 'creating private gist with title .ENV_BACKUP'
-    printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .ENV_BACKUP.md
-    gist -p .ENV_BACKUP.md > ENV_URL
-    cat ENV_URL
-    # TODO: extract ID from ENV_URL and store in config
-    # NEW_GIST_ID=$( cat ENV_URL |  )
-    # ballin_config set gu.id
-    rm .ENV_BACKUP.md ENV_URL
-
-
   ### SYMLINK BINARIES
   # ballin
   ln -sf $HOME/.ballin-scripts/bin/ballin /usr/local/bin
@@ -60,6 +29,36 @@ else
   # up
   ln -sf $HOME/.ballin-scripts/scripts/updater/bin/up /usr/local/bin
 
+
+  ### GIST
+  ## DOWNLOAD GIST
+  if [ ! -x "$(command -v gist)" ]; then
+    echo 'brew installing gist...'
+    brew install gist
+  fi
+
+  ## LOGIN GIST
+  # TODO: find way to truly verify if user is logged in? token in .gist may be expired
+  while [ ! -f .gist ]; do
+    printf "\nPlease login to gist to continue!\n"
+    gist --login
+  done
+
+  ## STORE GIST ID
+  # TODO: check if already have gist ID in config before proceeding
+  # ask do you have a gist id that you've used with ballin-scripts before? Y/N
+  # Y?
+  # Please provide it
+  # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
+  # N?
+  echo 'creating private gist with title .ENV_BACKUP'
+  printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .ENV_BACKUP.md
+  gist -p .ENV_BACKUP.md > ENV_URL
+  cat ENV_URL
+  # TODO: extract ID from ENV_URL and store in config
+  # NEW_GIST_ID=$( cat ENV_URL |  )
+  # ballin_config set gu.id
+  rm .ENV_BACKUP.md ENV_URL
 
   ### NPM INSTALL (production === don't install devDeps)
   (
