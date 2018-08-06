@@ -46,9 +46,10 @@ else
 
   ## STORE GIST ID
   # TODO: check if already have gist ID in config before proceeding
+  # ballin_config get gu.id
   # ask do you have a gist id that you've used with ballin-scripts before? Y/N
   # Y?
-  # Please provide it
+  # Please provide it (accept user input)
   # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
   # N?
   echo 'creating private gist with title .ENV_BACKUP'
