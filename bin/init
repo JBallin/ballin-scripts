@@ -20,6 +20,12 @@ else
     brew install gist
   fi
 
+  # TODO: find way to truly verify if user is logged in? token in .gist may be expired
+  # gist --login
+  while [ ! -f .gist ]; do
+    printf "\nPlease login to gist to continue!\n"
+    gist --login
+  done
 
   ### SYMLINK BINARIES
   # ballin
