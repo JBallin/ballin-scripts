@@ -2,9 +2,13 @@
 (
   cd $HOME/.ballin-scripts
   update() {
+    # TODO: check for updates before updating (echo "ballin-scripts up to date!" or "updating ballin-scripts...")
+    # store config
     user_config=$(node config/save-config.js)
+    # pull down updates
     git pull
     node config/restore-config.js user_config
+    # re-run init
     bin/init
   }
 )
