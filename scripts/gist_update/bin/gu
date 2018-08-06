@@ -13,6 +13,7 @@
 
 id=$(ballin_config get gu.id)
 url="https://gist.github.com/$id"
+file_suggestions="bash_profile.sh, zshrc.sh, profile.sh, bashrc.sh, bash_completions, brew_list, brew_leaves, brew_cask, brew_services, npm_global, nvmrc, gitignore_global, gitconfig.cson, apm, atomconfig.cson, atom_keymap.cson, atom_snippets.cson, atom_styles.less, atom_init.coffee, vs_settings.json, vs_extensions, vimrc, nanorc"
 
 if [ ! -z $1 ]; then
   if [ $1 == open ]; then
@@ -22,7 +23,7 @@ if [ ! -z $1 ]; then
     if [ ! -z $2 ]; then
       gist -r $id $2
     else
-      echo "'read' needs a filename: bash_profile.sh, zshrc.sh, profile.sh, bashrc.sh, bash_completions, brew_list, brew_leaves, brew_cask, brew_services, npm_global, nvmrc, gitignore_global, gitconfig.cson, apm, atomconfig.cson, atom_keymap.cson, atom_snippets.cson, atom_styles.less, atom_init.coffee, vs_settings.json, vs_extensions, vimrc, nanorc"
+      echo "'read' needs a filename: $file_suggestions"
     fi
   elif [ $1 == help ]; then
     ballin
