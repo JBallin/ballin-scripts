@@ -11,10 +11,10 @@ elif [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
     echo "Can't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'"
 
-
 ### INITIAL SETUP LOOKS GOOD!
+## GIST
 else
-  ### DOWNLOAD GIST (if needed)
+  # DOWNLOAD GIST (if needed)
   if [ ! -x "$(command -v gist)" ]; then
     echo 'brew installing gist...'
     brew install gist
