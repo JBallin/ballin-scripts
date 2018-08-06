@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-### CHECK SETUP
+### CHECK INITIAL SETUP
 # Check for $HOME/.ballin-scripts
 if [ ! -d "$HOME/.ballin-scripts" ]; then
   echo "Can't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'"
@@ -12,9 +12,11 @@ elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
     echo "Can't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'"
 
 
+### INITIAL SETUP LOOKS GOOD!
 else
   ### DOWNLOAD GIST (if needed)
   if [ ! -x "$(command -v gist)" ]; then
+    echo 'brew installing gist...'
     brew install gist
   fi
 
