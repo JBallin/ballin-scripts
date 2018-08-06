@@ -74,6 +74,9 @@ else
       if [ -f .zshrc ]; then
         u 'zshrc.sh' 'cat .zshrc'
       fi
+      if [ -f .profile ]; then
+        u 'profile.sh' 'cat .profile'
+      fi
       if [ -f .bashrc ]; then
         u 'bashrc.sh' 'cat .bashrc'
       fi
