@@ -2,9 +2,9 @@
 (
   cd $HOME/.ballin-scripts
   update() {
-    user_config=$(node save-config.js)
+    user_config=$(node config/save-config.js)
     git pull
-    node restore-config user_config
+    node config/restore-config.js user_config
     bin/init
   }
 )
