@@ -95,6 +95,10 @@ else
       if [ -x "$(command -v npm)" ]; then
         u 'npm_global' 'ls /usr/local/lib/node_modules'
       fi
+      # NVM
+      if [ -f .nvmrc ]; then
+        u 'nvmrc' 'cat .nvmrc'
+      fi
 
       ### GIT
   		if [ -f .gitignore_global ]; then
