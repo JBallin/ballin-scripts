@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# checks if command exists before running update
-
 ### HOMEBREW
 if [ -x "$(command -v brew)" ]; then
   brew upgrade
@@ -31,3 +29,8 @@ fi
 if [ -x "$(command -v apm)" ]; then
   apm upgrade
 fi
+
+
+# TODO:
+### BALLIN-SCRIPTS
+# ballin_update
