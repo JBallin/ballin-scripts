@@ -27,6 +27,23 @@ else
     gist --login
   done
 
+  # STORE GIST ID
+  # TODO: check if already have gist ID in config before proceeding
+  # ask do you have a gist id that you've used with ballin-scripts before? Y/N
+  # Y?
+    # Please provide it
+      # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
+  # N?
+    echo 'creating private gist with title .ENV_BACKUP'
+    printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .ENV_BACKUP.md
+    gist -p .ENV_BACKUP.md > ENV_URL
+    cat ENV_URL
+    # TODO: extract ID from ENV_URL and store in config
+    # NEW_GIST_ID=$( cat ENV_URL |  )
+    # ballin_config set gu.id
+    rm .ENV_BACKUP.md ENV_URL
+
+
   ### SYMLINK BINARIES
   # ballin
   ln -sf $HOME/.ballin-scripts/bin/ballin /usr/local/bin
