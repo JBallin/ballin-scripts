@@ -68,13 +68,13 @@ else
 
       ### SHELL
       if [ -f .bash_profile ]; then
-        u 'bash_profile' 'cat .bash_profile'
+        u 'bash_profile.sh' 'cat .bash_profile'
       fi
       if [ -f .zshrc ]; then
-        u 'zshrc' 'cat .zshrc'
+        u 'zshrc.sh' 'cat .zshrc'
       fi
       if [ -f .bashrc ]; then
-        u 'bashrc' 'cat .bashrc'
+        u 'bashrc.sh' 'cat .bashrc'
       fi
 
       ### COMPLETIONS
