@@ -21,7 +21,7 @@ if [ ! -z $1 ]; then
     open $url
   elif [ $1 == read ]; then
     if [ ! -z $2 ]; then
-      gist -r $id $2
+      gist -r $id $2 || echo "Options: $file_suggestions"
     else
       echo "'read' needs a filename: $file_suggestions"
     fi
