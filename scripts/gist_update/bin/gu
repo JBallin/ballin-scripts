@@ -22,7 +22,7 @@ if [ ! -z $1 ]; then
     if [ ! -z $2 ]; then
       gist -r $id $2
     else
-      echo "'read' needs a filename: bash_profile, zshrc, bashrc, bash_completions, brew_list, brew_leaves, brew_cask, brew_services, npm_global, gitignore_global, gitconfig, apm, atomconfig, atom_keymap, atom_snippets, atom_styles, atom_init, vs_settings, vs_extensions, vimrc, nanorc"
+      echo "'read' needs a filename: bash_profile.sh, zshrc.sh, profile.sh, bashrc.sh, bash_completions, brew_list, brew_leaves, brew_cask, brew_services, npm_global, nvmrc, gitignore_global, gitconfig.cson, apm, atomconfig.cson, atom_keymap.cson, atom_snippets.cson, atom_styles.less, atom_init.coffee, vs_settings.json, vs_extensions, vimrc, nanorc"
     fi
   elif [ $1 == help ]; then
     ballin
