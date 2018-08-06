@@ -111,19 +111,19 @@ else
       ### ATOM
       if [ -d .atom ]; then
         u 'apm' 'apm list --installed --no-color'
-        u 'atom_config' 'cat .atom/config.cson'
-        u 'atom_keymap' 'catWithoutCommentsAndBlankLines .atom/keymap.cson'
-        u 'atom_snippets' 'catWithoutCommentsAndBlankLines .atom/snippets.cson'
+        u 'atom_config.cson' 'cat .atom/config.cson'
+        u 'atom_keymap.cson' 'catWithoutCommentsAndBlankLines .atom/keymap.cson'
+        u 'atom_snippets.cson' 'catWithoutCommentsAndBlankLines .atom/snippets.cson'
         # TODO: catWithout... not checking for CSS comments, just hashes. Need to updated func to check for those.
-    		u 'atom_styles' 'catWithoutCommentsAndBlankLines .atom/styles.less'
-    		u 'atom_init' 'catWithoutCommentsAndBlankLines .atom/init.coffee'
+    		u 'atom_styles.less' 'catWithoutCommentsAndBlankLines .atom/styles.less'
+    		u 'atom_init.coffee' 'catWithoutCommentsAndBlankLines .atom/init.coffee'
       fi
 
       ### VSCODE
       if [ -d .vscode ]; then
         (
           cd $HOME/Library/Application\ Support/Code/User/
-            u 'vs_settings' 'cat settings.json'
+            u 'vs_settings.json' 'cat settings.json'
             u 'vs_extensions' 'code --list-extensions'
             # check if anything in snippets folder
               # u 'vs_snippets' 'ls snippets' TODO: figure out how snippets work in vs
