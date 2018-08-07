@@ -96,6 +96,14 @@ else
         u 'brew_services' 'brew services list'
       fi
 
+      ### GIT
+  		if [ -f .gitignore_global ]; then
+        u 'gitignore_global' 'cat .gitignore_global'
+      fi
+      if [ -f .gitconfig ]; then
+        u 'gitconfig' 'cat .gitconfig'
+      fi
+
       ### NODE
       # NPM
       if [ -x "$(command -v npm)" ]; then
@@ -104,14 +112,6 @@ else
       # NVM
       if [ -f .nvmrc ]; then
         u 'nvmrc' 'cat .nvmrc'
-      fi
-
-      ### GIT
-  		if [ -f .gitignore_global ]; then
-        u 'gitignore_global' 'cat .gitignore_global'
-      fi
-      if [ -f .gitconfig ]; then
-        u 'gitconfig' 'cat .gitconfig'
       fi
 
       ### ATOM
