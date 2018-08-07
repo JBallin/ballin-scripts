@@ -83,8 +83,7 @@ else
       if [ -f .bashrc ]; then
         u 'bashrc.sh' 'cat .bashrc'
       fi
-
-      ### COMPLETIONS
+      # BASH COMPLETIONS
       if [ -d /usr/local/etc/bash_completion.d ]; then
         u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
       fi
