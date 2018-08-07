@@ -138,12 +138,13 @@ else
         )
       fi
 
-      ### VIM
+      ### TEXT EDITORS
+      # VIM
       if [ -f .vimrc ]; then
         u 'vimrc' 'cat .vimrc'
       fi
 
-      ### NANO
+      # NANO
       if [ -f .nanorc ]; then
         u 'nanorc' 'cat .nanorc'
       fi
