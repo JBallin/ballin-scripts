@@ -79,8 +79,8 @@ else
   ### CREATE/UPDATE CONFIG FILE
   (
     cd $HOME/.ballin-scripts/config/
-    if [ ! -f myconfig.json ]; then
-      cp .defaultconfig.json myconfig.json
+    if [ ! -f ballin.json ]; then
+      cp .defaultconfig.json ballin.json
     fi
   )
 
