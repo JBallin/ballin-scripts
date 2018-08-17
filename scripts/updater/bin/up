@@ -30,6 +30,11 @@ if [ -x "$(command -v apm)" ]; then
 fi
 
 
+### Mac App Store
+if [ -x "$(command -v mas)" ]; then
+  mas outdated
+fi
+
 # TODO:
 ### BALLIN-SCRIPTS
 # ballin_update
