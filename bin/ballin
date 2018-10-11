@@ -14,7 +14,7 @@ Commands:
 
 Scripts:
 
-    gu                    update 'system files' gist
+    gu                    gist: '' (update) 'open', 'read [file_name]'
     theme                 'd' (dark), 'l' (light), '' (toggle)
     up                    update brew, npm, and apm (if present)
 "
