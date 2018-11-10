@@ -60,12 +60,12 @@ else
   # N?
   echo 'BALLIN: creating private gist with title .MyConfig'
   printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .MyConfig.md
-  gist -p .MyConfig.md > ENV_URL
-  cat ENV_URL
-  # TODO: extract ID from ENV_URL and store in config
-  # NEW_GIST_ID=$( cat ENV_URL |  )
+  gist -p .MyConfig.md > CONFIG_GIST_URL
+  cat CONFIG_GIST_URL
+  # TODO: extract ID from CONFIG_GIST_URL and store in config
+  # NEW_GIST_ID=$( cat CONFIG_GIST_URL |  )
   # ballin_config set gu.id
-  rm .MyConfig.md ENV_URL
+  rm .MyConfig.md CONFIG_GIST_URL
 
   ### NPM INSTALL (production === don't install devDeps)
   (
