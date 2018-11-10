@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+(
+  cd $HOME
+  git clone https://github.com/JBallin/ballin-scripts.git
+  mv ballin-scripts .ballin-scripts
+)
+
 ### CHECK INITIAL SETUP
 # Check for $HOME/.ballin-scripts
 if [ ! -d "$HOME/.ballin-scripts" ]; then
