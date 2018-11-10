@@ -45,8 +45,8 @@ else
 
   ## LOGIN GIST
   # TODO: find way to truly verify if user is logged in? token in .gist may be expired
-  while [ ! -f .gist ]; do
-    printf "\nPlease login to gist to continue!\n"
+  while [ ! -f $HOME/.gist ]; do
+    printf "\nPlease login to gist to continue!\n\n"
     gist --login
   done
 
