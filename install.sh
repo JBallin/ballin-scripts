@@ -58,14 +58,14 @@ else
   # Please provide it (accept user input)
   # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
   # N?
-  echo 'creating private gist with title .ENV_BACKUP'
-  printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .ENV_BACKUP.md
-  gist -p .ENV_BACKUP.md > ENV_URL
+  echo 'BALLIN: creating private gist with title .MyConfig'
+  printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .MyConfig.md
+  gist -p .MyConfig.md > ENV_URL
   cat ENV_URL
   # TODO: extract ID from ENV_URL and store in config
   # NEW_GIST_ID=$( cat ENV_URL |  )
   # ballin_config set gu.id
-  rm .ENV_BACKUP.md ENV_URL
+  rm .MyConfig.md ENV_URL
 
   ### NPM INSTALL (production === don't install devDeps)
   (
