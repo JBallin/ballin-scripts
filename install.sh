@@ -39,14 +39,14 @@ else
   ### GIST
   ## DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
-    echo 'brew installing gist...'
+    echo 'BALLIN: brew installing gist...'
     brew install gist
   fi
 
   ## LOGIN GIST
   # TODO: find way to truly verify if user is logged in? token in .gist may be expired
   while [ ! -f $HOME/.gist ]; do
-    printf "\nPlease login to gist to continue!\n\n"
+    printf "BALLIN: \nPlease login to gist to continue!\n\n"
     gist --login
   done
 
@@ -92,7 +92,7 @@ else
 
 
   ### DONE
-  echo "ballin!"
+  echo "BALLIN: ballin!"
 
 
 fi
