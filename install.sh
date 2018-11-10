@@ -39,14 +39,14 @@ else
   ### GIST
   ## DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
-    echo 'BALLIN: brew installing gist...'
+    echo 'brew installing gist...'
     brew install gist
   fi
 
   ## LOGIN GIST
   # TODO: find way to truly verify if user is logged in? token in .gist may be expired
   while [ ! -f $HOME/.gist ]; do
-    printf "BALLIN: \nPlease login to gist to continue!\n\n"
+    printf "\nPlease login to gist!\n\n"
     gist --login
   done
 
@@ -58,7 +58,7 @@ else
   # Please provide it (accept user input)
   # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
   # N?
-  echo "\nBALLIN: creating private gist with title .MyConfig at the following URL:"
+  echo "\nCreating private gist with title .MyConfig at the following URL:"
   printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .MyConfig.md
   gist -p .MyConfig.md > CONFIG_GIST_URL
   cat CONFIG_GIST_URL
@@ -92,7 +92,7 @@ else
 
 
   ### DONE
-  echo "\nBALLIN: ballin!"
+  echo "\nballin!"
 
 
 fi
