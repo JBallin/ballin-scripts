@@ -58,7 +58,7 @@ else
   # Please provide it (accept user input)
   # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
   # N?
-  echo 'BALLIN: creating private gist with title .MyConfig'
+  echo "\nBALLIN: creating private gist with title .MyConfig at the following URL:"
   printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .MyConfig.md
   gist -p .MyConfig.md > CONFIG_GIST_URL
   cat CONFIG_GIST_URL
@@ -92,7 +92,7 @@ else
 
 
   ### DONE
-  echo "BALLIN: ballin!"
+  echo "\nBALLIN: ballin!"
 
 
 fi
