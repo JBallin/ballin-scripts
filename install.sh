@@ -9,13 +9,13 @@
 ### CHECK INITIAL SETUP
 # Check for $HOME/.ballin-scripts
 if [ ! -d "$HOME/.ballin-scripts" ]; then
-  echo "Can't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'"
+  printf "\nCan't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'\n"
 # Check that /usr/local/bin is in $PATH
 elif [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
-  echo "usr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window"
+  printf "\nusr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window\n"
 # Check that either gist or brew is installed
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
-    echo "Can't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'"
+    printf "\nCan't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'\n"
 
 ### INITIAL SETUP LOOKS GOOD!
 else
@@ -39,7 +39,7 @@ else
   ### GIST
   ## DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
-    echo 'brew installing gist...'
+    printf "\nbrew installing gist...\n\n"
     brew install gist
   fi
 
@@ -58,7 +58,7 @@ else
   # Please provide it (accept user input)
   # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
   # N?
-  echo "\nCreating private gist with title .MyConfig at the following URL:"
+  printf "\nCreating a private gist titled '.MyConfig' at the following URL:\n"
   printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .MyConfig.md
   gist -p .MyConfig.md > CONFIG_GIST_URL
   cat CONFIG_GIST_URL
@@ -92,7 +92,7 @@ else
 
 
   ### DONE
-  echo "\nballin!"
+  printf "\nballin!\n"
 
 
 fi
