@@ -13,23 +13,29 @@
 
 id=$(../bin/ballin_config get gu.id)
 url="https://gist.github.com/$id"
+# TODO: generate file_suggestions based on API response instead of hard-coding
 file_suggestions="bash_profile.sh, zshrc.sh, profile.sh, bashrc.sh, bash_completions, brew_list, brew_leaves, brew_cask, brew_services, npm_global, nvmrc, gitignore_global, gitconfig.cson, apm, atomconfig.cson, atom_keymap.cson, atom_snippets.cson, atom_styles.less, atom_init.coffee, vs_settings.json, vs_extensions, brackets_settings.json, brackets_keymap.json, brackets_extensions, brackets_disabled_extensions, vimrc, nanorc."
 
 ### TODO handle error when $id fails github API (check res code) (either nonexistant, deleted gist, skipped init etc)
 
+# make sure given at least one argument
 if [ ! -z $1 ]; then
   if [ $1 == open ]; then
-    echo $url
-    open $url
+    echo $url && open $url
   elif [ $1 == read ]; then
+    # make sure given two arguments to read
     if [ ! -z $2 ]; then
-      gist -r $id $2 || echo "Options: $file_suggestions"
+      # if file exits, print it, else print the potential file options
+      gist -r $id $2 || printf "\nOptions: $file_suggestions\n"
     else
-      echo "'read' needs a filename: $file_suggestions"
+      # user didn't provide file_name to read
+      printf "Error: 'read' needs a filename.\n\nOptions: $file_suggestions\n"
     fi
   elif [ $1 == help ]; then
+    # display the main help output
     ballin
   fi
+
 else
   gistUpdater() {
     u() {
@@ -45,6 +51,7 @@ else
             file_without_extension=${file_name%.*}
             echo "✔ $file_without_extension"
             changed=1
+  # no arguments given -> run gistUpdater
           else
             echo "✙ $file_name"
             changed=0
