@@ -1,6 +1,6 @@
 # Ballin Scripts
 
-### Installation
+## Installation
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/master/README.md) using cURL:
 
@@ -8,6 +8,22 @@ Run the [install script](https://github.com/JBallin/ballin-scripts/blob/master/R
 $ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/master/install.sh)
 ```
 
-### Usage
+## Commands
 
-Use the `ballin` command for general info/usage.
+#### `ballin`
+
+Show available commands.
+
+#### `gu`
+
+Backup your dev environment to a gist.
+
+*Checkout [My Sweet Config](https://sweet-config.herokuapp.com) to visualize and share (optional) your setup.*
+
+#### `theme`
+
+Switch between light and dark themes (customizable) in Atom.
+
+#### `up`
+
+Update brew, npm, etc.
