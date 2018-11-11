@@ -11,11 +11,10 @@ const configMessages = {
   getKeysDneErr: keys => `"${keys}" doesn't exist in config`,
   reset: "Config has been reset to default configuration",
   set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`,
-  setArgsErr: 'INVALID: setConfig takes two arguments, keys and value',
+  setArgsErr: 'INVALID: setConfig takes two arguments: "keys" and "value"',
   setDneErr: keys => `INVALID: "${keys}" doesn't exist in config`,
-  setObjErr: keys => `INVALID: "${keys}" is an object`
+  setObjErr: (keys, prevVal) => `INVALID: "${keys} is not a bottom-level value, it returns ${JSON.stringify(prevVal)}."`
 }
-
 
 const resetConfig = () => {
   const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8');
