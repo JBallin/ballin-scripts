@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 
+(
+  cd $HOME
+  git clone https://github.com/JBallin/ballin-scripts.git
+  mv ballin-scripts .ballin-scripts
+)
+
 ### CHECK INITIAL SETUP
 # Check for $HOME/.ballin-scripts
 if [ ! -d "$HOME/.ballin-scripts" ]; then
-  echo "Can't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'"
+  printf "\nCan't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'\n"
 # Check that /usr/local/bin is in $PATH
 elif [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
-  echo "usr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window"
+  printf "\nusr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window\n"
 # Check that either gist or brew is installed
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
-    echo "Can't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'"
+    printf "\nCan't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'\n"
 
 ### INITIAL SETUP LOOKS GOOD!
 else
@@ -33,14 +39,14 @@ else
   ### GIST
   ## DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
-    echo 'brew installing gist...'
+    printf "\nbrew installing gist...\n\n"
     brew install gist
   fi
 
   ## LOGIN GIST
   # TODO: find way to truly verify if user is logged in? token in .gist may be expired
-  while [ ! -f .gist ]; do
-    printf "\nPlease login to gist to continue!\n"
+  while [ ! -f $HOME/.gist ]; do
+    printf "\nPlease login to gist!\n\n"
     gist --login
   done
 
@@ -52,14 +58,14 @@ else
   # Please provide it (accept user input)
   # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
   # N?
-  echo 'creating private gist with title .ENV_BACKUP'
-  printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .ENV_BACKUP.md
-  gist -p .ENV_BACKUP.md > ENV_URL
-  cat ENV_URL
-  # TODO: extract ID from ENV_URL and store in config
-  # NEW_GIST_ID=$( cat ENV_URL |  )
+  printf "\nCreating a private gist titled '.MyConfig' at the following URL:\n"
+  printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .MyConfig.md
+  gist -p .MyConfig.md > CONFIG_GIST_URL
+  cat CONFIG_GIST_URL
+  # TODO: extract ID from CONFIG_GIST_URL and store in config
+  # NEW_GIST_ID=$( cat CONFIG_GIST_URL |  )
   # ballin_config set gu.id
-  rm .ENV_BACKUP.md ENV_URL
+  rm .MyConfig.md CONFIG_GIST_URL
 
   ### NPM INSTALL (production === don't install devDeps)
   (
@@ -86,7 +92,7 @@ else
 
 
   ### DONE
-  echo "ballin!"
+  printf "\nballin!\n"
 
 
 fi
