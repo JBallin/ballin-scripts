@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 
+### CLONE REPO
 (
   cd $HOME
-  git clone https://github.com/JBallin/ballin-scripts.git
-  mv ballin-scripts .ballin-scripts
+  # only clone if folder doesn't already exist
+  if [ ! -d ".ballin-scripts" ]; then
+    git clone https://github.com/JBallin/ballin-scripts.git
+    mv ballin-scripts .ballin-scripts
+  fi
 )
 
 ### CHECK INITIAL SETUP
