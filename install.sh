@@ -51,23 +51,6 @@ else
     gist --login
   done
 
-  ## STORE GIST ID
-  # TODO: check if already have gist ID in config before proceeding
-  # ballin_config get gu.id
-  # ask do you have a gist id that you've used with ballin-scripts before? Y/N
-  # Y?
-  # Please provide it (accept user input)
-  # Check that github API gives status 200, otherwise say that gist ID isn't valid and kick back to above
-  # N?
-  printf "\nCreating a private gist titled '.MyConfig' at the following URL:\n"
-  printf '### Backup of environment files\n\nCreated by [ballin-scripts](https://github.com/JBallin/ballin-scripts)' > .MyConfig.md
-  gist -p .MyConfig.md > CONFIG_GIST_URL
-  cat CONFIG_GIST_URL
-  # TODO: extract ID from CONFIG_GIST_URL and store in config
-  # NEW_GIST_ID=$( cat CONFIG_GIST_URL |  )
-  # ballin_config set gu.id
-  rm .MyConfig.md CONFIG_GIST_URL
-
 
   ########################## CREATE/UPDATE CONFIG FILE #########################
   # TODO: update config file if there are any updates that ballin.json doesn't have yet
@@ -80,7 +63,51 @@ else
     fi
   )
 
+  ### CHECK IF USER ALREADY HAS GIST ID
+  if [ $(bin/ballin_config get gu.id) == 'null' ]; then
+    echo ''
+    read -p "Do you already have a gist associated with ballin-scripts? [y/N] " YN
+    if [[ $YN == "y" || $YN == "Y" ]]; then
+      VALID_GIST_ID=1
+      while [ $VALID_GIST_ID == 1 ]; do
+        read -ep "Enter your gist ID: " GIST_ID
+        if $(gist -r $GIST_ID > /dev/null); then
+          printf "\nStoring your previous gist ID in your config:\n"
+          bin/ballin_config set gu.id $GIST_ID
+          VALID_GIST_ID=0
+          # TODO: overwrite ballin.json config file from ballin.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.json
+        else
+          printf "\nInvalid GIST_ID: $GIST_ID\n"
+        fi
+      done
+    fi
+    unset YN GIST_ID VALID_GIST_ID
+    echo ''
+  fi
 
+  ### GENERATE + STORE GIST ID
+  if [ $(bin/ballin_config get gu.id) == 'null' ]; then
+    l1='### Backup of your dev environment'
+    l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
+    GIST_DESCRIPTION="$l1\n$l2"
+    printf "$GIST_DESCRIPTION" > .MyConfig.md
+
+    GIST_URL=$(gist -p .MyConfig.md)
+    printf "Created a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
+
+    GIST_ID=${GIST_URL##*/}
+    printf "\nStoring your new gist ID in your config...\n"
+    bin/ballin_config set gu.id $GIST_ID
+    echo ''
+
+    if [ -d .gu-cache ]; then
+      rm -rf .gu-cache
+      printf "Deleted existing .gu-cache folder\n\n"
+    fi
+
+    unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
+    rm .MyConfig.md
+  fi
 
   ################################# NPM INSTALL ################################
   # production === don't install devDeps
