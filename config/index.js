@@ -1,9 +1,9 @@
 const fs = require('fs');
-const { exec } = require('child_process')
-const HOME = require('os').homedir;
+const { exec } = require('child_process');
+const path = require('path');
 
-const configPath = `${HOME}/.ballin-scripts/config/ballin.json`
-const defaultConfigPath = `${HOME}/.ballin-scripts/config/.defaultconfig.json`
+const configPath = path.join(__dirname, './ballin.json');
+const defaultConfigPath = path.join(__dirname, './.defaultconfig.json');
 const stringify = obj => JSON.stringify(obj, null, 2);
 
 const configMessages = {
@@ -74,4 +74,12 @@ const configAction = (request, keys, value, other='') => {
   }
 }
 
-module.exports = { getConfig, setConfig, configAction, stringify, configPath, fetchConfig, configMessages };
+module.exports = {
+  getConfig,
+  setConfig,
+  configAction,
+  stringify,
+  configPath,
+  fetchConfig,
+  configMessages
+};

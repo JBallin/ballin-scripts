@@ -1,4 +1,2 @@
-const HOME = require('os').homedir;
-
-const config = require(`${HOME}/.ballin-scripts/config.js`)
+const config = require('./ballin.json');
 console.log(JSON.stringify(config));
