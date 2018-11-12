@@ -1,10 +1,11 @@
 #!/bin/bash
 
 ### DELETE SYMLINKS
-(
-  cd /usr/local/bin
-  rm ballin ballin_update ballin_uninstall ballin_config gu theme up
-)
+printf "\nIt's been real...\n"
+for bin in $HOME/.ballin-scripts/bin/*; do
+  rm /usr/local/bin/${bin##*/}
+done
+printf "Deleted symlinked binaries\n"
 
-### REMOVE .ballin-scripts
 rm -rf $HOME/.ballin-scripts
+printf "PEACE! You still ballin tho...\n\n"
