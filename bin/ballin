@@ -7,7 +7,7 @@ https://github.com/JBallin/ballin-scripts
 Commands:
 
     ballin_update         update to latest version (maintains config, re-runs init)
-    ballin_config         'get' (no args) view config
+    ballin_config         ''/'get' (no args) view config
                           'get' KEY (ex: get theme.dark)
                           'set' KEY VALUE (ex: set up.cleanup true)
     ballin_uninstall      remove ballin-scripts (including symlinks)

@@ -1,14 +1,18 @@
 #!/bin/bash
+
+update() {
+  printf "getting fresh kicks...\n"
+  # TODO: create custom update output (echo "ballin-scripts up to date!" or "updating ballin-scripts...")
+  git pull
+  echo ''
+  ./install.sh
+}
+
+# TODO: check for updates to default config and add to ballin.json if so (preserving existing settings)
+# user_config=$(node config/save-config.js)
+# node config/restore-config.js user_config
+
 (
   cd $HOME/.ballin-scripts
-  update() {
-    # TODO: check for updates before updating (echo "ballin-scripts up to date!" or "updating ballin-scripts...")
-    # store config
-    user_config=$(node config/save-config.js)
-    # pull down updates
-    git pull
-    node config/restore-config.js user_config
-    # re-run init
-    bin/init
-  }
+  update
 )

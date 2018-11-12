@@ -1,21 +1,20 @@
 const fs = require('fs');
-const { exec } = require('child_process')
-const HOME = require('os').homedir;
+const { exec } = require('child_process');
+const path = require('path');
 
-const configPath = `${HOME}/.ballin-scripts/config/ballin.json`
-const defaultConfigPath = `${HOME}/.ballin-scripts/config/.defaultconfig.json`
+const configPath = path.join(__dirname, './ballin.json');
+const defaultConfigPath = path.join(__dirname, './.defaultconfig.json');
 const stringify = obj => JSON.stringify(obj, null, 2);
 
 const configMessages = {
-  actionErr: "INVALID!",
+  actionErr: "INVALID: non-existent action given to ballin_config",
   getKeysDneErr: keys => `"${keys}" doesn't exist in config`,
   reset: "Config has been reset to default configuration",
   set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`,
-  setArgsErr: 'INVALID: setConfig takes two arguments, keys and value',
+  setArgsErr: 'INVALID: setConfig takes two arguments: "keys" and "value"',
   setDneErr: keys => `INVALID: "${keys}" doesn't exist in config`,
-  setObjErr: keys => `INVALID: "${keys}" is an object`
+  setObjErr: (keys, prevVal) => `INVALID: "${keys} is not a bottom-level value, it returns ${JSON.stringify(prevVal)}."`
 }
-
 
 const resetConfig = () => {
   const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8');
@@ -44,15 +43,23 @@ const setConfig = (keys, val, ...other) => {
     return configMessages.setArgsErr;
   }
   keysArr = keys.split('.');
-  set = keysArr.splice(-1);
-  nestedObj = keysArr.reduce((res, key) => res[key], configObj);
-  const oldVal = nestedObj[set];
-  if (typeof oldVal === 'object' && ! Array.isArray(oldVal)) {
-    return configMessages.setObjErr(keys);
-  } else if (oldVal === undefined) {
+  // ex: 'theme.light' -> [ 'theme', 'light' ]
+  keyToSet = keysArr.splice(-1);
+  // 'light'
+  topLevelKeys = keysArr;
+  // [ 'theme' ]
+  nestedObj = topLevelKeys.reduce((res, key) => res[key], configObj);
+  // { light: 'lightTheme', dark: 'darkTheme' }
+  const prevVal = nestedObj[keyToSet];
+  // 'lightTheme'
+
+  // make sure prevVal isn't an object (arrays and null are ok: gu.id defaults to null)
+  if (typeof prevVal === 'object' && ! Array.isArray(prevVal) && prevVal !== null) {
+    return configMessages.setObjErr(keys, prevVal);
+  } else if (prevVal === undefined) {
     return configMessages.setDneErr(keys);
   } else {
-    nestedObj[set] = val;
+    nestedObj[keyToSet] = val;
     fs.writeFileSync(configPath, stringify(configObj), 'utf8')
     return configMessages.set(keys);
   }
@@ -63,6 +70,7 @@ const configAction = (request, keys, value, other='') => {
     resetConfig();
     return configMessages.reset;
   }
+  // send config auto if not given a request with ballin_config command
   if (request === 'get' || request === undefined) {
     return getConfig(keys);
   } else if (request === 'set') {
@@ -75,4 +83,12 @@ const configAction = (request, keys, value, other='') => {
   }
 }
 
-module.exports = { getConfig, setConfig, configAction, stringify, configPath, fetchConfig, configMessages };
+module.exports = {
+  getConfig,
+  setConfig,
+  configAction,
+  stringify,
+  configPath,
+  fetchConfig,
+  configMessages
+};

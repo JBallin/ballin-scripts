@@ -1,6 +1,5 @@
 const { assert } = require('chai');
-const HOME = require('os').homedir;
-const { changeTheme, saveTheme, themeMessages } = require(`${HOME}/.ballin-scripts/scripts/atom_theme`);
+const { changeTheme, saveTheme, themeMessages } = require('../scripts/atom_theme');
 
 describe('theme', () => {
   describe('changeTheme', () => {
