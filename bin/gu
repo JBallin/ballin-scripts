@@ -6,7 +6,6 @@
   # INIT:
     # log in to gist
     # create gist and save id in config
-  # gu should upload ballin_config too - that way have a backup of ur config
   # give error if id/sn null or if gist -r $id gives error?
     # need to make sure that the gist with that $id actually exists...tell them to run init?
     # or maybe just run it for them now?
@@ -220,5 +219,9 @@ else
       u 'nanorc' 'cat .nanorc'
     fi
 
+    ### BALLIN SCRIPTS
+    if [ -f .ballin-scripts/config/ballin.json ]; then
+      u 'ballin_config' 'cat .ballin-scripts/config/ballin.json'
+    fi
 	)
 fi
