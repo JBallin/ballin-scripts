@@ -18,7 +18,9 @@ file_suggestions="bash_profile.sh, zshrc.sh, profile.sh, bashrc.sh, bash_complet
 ### TODO handle error when $id fails github API (check res code) (either nonexistant, deleted gist, skipped init etc)
 
 # make sure given at least one argument
-if [ ! -z $1 ]; then
+if ! $(gist -r $id > /dev/null); then
+  printf "Error retrieving your gist, please run 'ballin_update'.\n"
+elif [ ! -z $1 ]; then
   if [ $1 == open ]; then
     echo $url && open $url
   elif [ $1 == read ]; then
