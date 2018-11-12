@@ -39,60 +39,74 @@ if [ ! -z $1 ]; then
 else
   # no arguments given -> run gistUpdater
 
+  # create cache folder if doesn't exist
+  (
+    cd $HOME/.ballin-scripts
+    if [ ! -d .gu-cache ]; then mkdir .gu-cache; fi
+  )
+
   u() {
     local file_name=$1
+    local cache_file="$HOME/.ballin-scripts/.gu-cache/$file_name"
     local input=$2
+    local is_changed
+    local is_new=1
+    local is_empty=1
 
-    # helper func determines if gist needs to be updated
-    gist_is_changed() {
-      local changed
+    update_cache() {
+      # add file to cache if doesn't exist
+      if [ ! -f $cache_file ]; then
+        # set is_new to true if the $file_name doesn't exist yet in gist, otherwise create $cache_file with current gist_content
+        if ! gist -r $id $file_name > $cache_file; then
+          is_new=0
+        fi
+      fi
 
-      # put DNE in raw_gist if the $file_name doesn't exist yet
-      if ! gist -r $id $file_name > raw_gist; then echo "DNE" > raw_gist; fi
-      # add "empty file" if $file_name empty so that gist doesnt give empty file error
-      if [ ! -s $file_name ]; then
-        echo "empty file" > $file_name
+      # check for changes (mark as no changes if input is empty and file is already labeled 'empty')
+      if [ "$is_new" == 1 ] && [ "$($input)" == "$(cat $cache_file)" ] || ([ "$($input)" == "" ] && [ "$(cat $cache_file)" == "empty" ]); then
+        is_changed=1
+      else
+        $input > $cache_file
+        is_changed=0
+      fi
+
+      # add "empty" if $cache_file empty so that gist doesnt give empty error
+      if [ ! -s $cache_file ]; then
+        echo "empty" > $cache_file
       fi
       # add newline to end of $file_name (if not already there), to match gist format
-      sed -i '' -e '$a\' $file_name
+      sed -i '' -e '$a\' $cache_file
+
+      if [ "$(cat $cache_file)" == 'empty' ]; then
+        is_empty=0
+      fi
+
+    }
+    # helper func determines if gist needs to be updated
+    output_file_change() {
       # remove extension for progress output
       file_without_extension=${file_name%.*}
       # check for changes in file
-      if cmp --quiet $file_name raw_gist; then
-        # only show backup of file if gist file is non-empty
-        if [ "$(cat raw_gist)" != "empty file" ]; then
+      if [ "$is_changed" == 1 ]; then
+        # file hasn't changed
+        # only show file if non-empty
+        if [ "$is_empty" == 1 ]; then
           echo "✔ $file_without_extension"
         fi
-        changed=1
       else
-        # file updated
-        # display that file is being "deleted" if it's empty
-        if [ "$(cat $file_name)" == "empty file" ]; then
+        # file HAS changed
+        if [ "$is_new" == 0 ]; then
+          echo "🎉 $file_without_extension"
+        elif [ "$is_empty" == 0 ]; then
           echo "✖︎ $file_without_extension"
         else
-          # if DNE then show symbol that created totally "new" file in gist, otherwise just show an "update" symbol
-          if [ "$(cat $file_name)" == "DNE" ]; then
-            echo "🎉 $file_without_extension"
-          else
-            echo "✙ $file_without_extension"
-          fi
+          echo "✙ $file_without_extension"
         fi
-        changed=0
       fi
-      rm raw_gist
-
-      return $changed
     }
-
-    # if $file_name doesn't exist in current dir and there are changes: update the file
-    if [ ! -f $file_name ]; then
-      $input > $file_name
-      if gist_is_changed; then gist -u $id $file_name > /dev/null; fi
-      rm $file_name
-    else
-      # don't overwrite existing files
-      echo "Error: $file_name is an existing file, aborting so it doesn't get overwritten"
-    fi
+    update_cache
+    if [ "$is_changed" == 0 ]; then gist -u $id $cache_file > /dev/null; fi
+    output_file_change
   }
 
   # only prints non-comments
