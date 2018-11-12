@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 
+printf "let's ball...\n"
+
 ### CLONE REPO
 (
   cd $HOME
   # only clone if folder doesn't already exist
   if [ ! -d ".ballin-scripts" ]; then
+    echo ''
     git clone https://github.com/JBallin/ballin-scripts.git
     mv ballin-scripts .ballin-scripts
   fi
