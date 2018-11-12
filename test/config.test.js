@@ -41,23 +41,23 @@ describe('config', () => {
   })
 
   describe('getConfig', () => {
-    it("('theme') should return a String", () => {
-      assert.typeOf(getConfig('theme'), 'string')
+    it("('theme') should return an Object", () => {
+      assert.isObject(getConfig('theme'))
     })
-    it("('theme.dark') should return a String", () => {
-      assert.typeOf(getConfig('theme.dark'), 'string')
+    it("('theme.dark') should return an Array", () => {
+      assert.isArray(getConfig('theme.dark'))
     })
-    it("('gu') should return a String", () => {
-      assert.typeOf(getConfig('gu'), 'string')
+    it("('gu.id') should return a String", () => {
+      assert.isString(getConfig('gu.id'))
     })
-    it("('up.cleanup') should return 'true' or 'false'", () => {
-      assert.include(['true', 'false'], getConfig('up.cleanup'))
+    it("('up.cleanup') should return a Boolean", () => {
+      assert.isBoolean(getConfig('up.cleanup'))
     })
     it("() should return a String", () => {
-      assert.typeOf(getConfig(), 'string')
+      assert.isString(getConfig())
     })
     it("should return an error if given keys that don't exist", () => {
-      assert.equal(getConfig('wrong'), "wrong doesn't exist in config")
+      assert.equal(getConfig('wrong'), '"wrong" doesn\'t exist in config')
     })
   });
 
