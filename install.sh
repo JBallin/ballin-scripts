@@ -19,7 +19,7 @@ if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
   printf "\nusr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window\n"
 # Check that either gist or brew is installed
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
-    printf "\nCan't find Homebrew, which is needed to download 'gist'. Download at Homebrew at brew.sh or install ruby and run 'gem install gist'\n"
+    printf "\nCan't find Homebrew, which is needed to download 'gist'. Either download Homebrew at brew.sh or install ruby & run 'gem install gist, and then run this installation again.'\n"
 
 ### INITIAL SETUP LOOKS GOOD!
 else
@@ -91,12 +91,13 @@ else
     cd $HOME/.ballin-scripts/config/
     if [ ! -f ballin.json ]; then
       cp .defaultconfig.json ballin.json
+      printf "\nCreated 'ballin.json' file in /config using default settings\n\n"
     fi
   )
 
 
-  ### DONE
-  printf "\nballin!\n"
 
+  ### DONE
+  printf "ballin!\n"
 
 fi
