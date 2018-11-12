@@ -102,7 +102,7 @@ else
 
     if [ -d .gu-cache ]; then
       rm -rf .gu-cache
-      printf "Deleted existing .gu-cache folder\n\n"
+      printf "\nDeleted existing .gu-cache folder\n"
     fi
 
     unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
@@ -111,14 +111,14 @@ else
 
   ################################# NPM INSTALL ################################
   # production === don't install devDeps
-  printf "Installing any missing dependencies...\n\n"
+  printf "\nInstalling any missing dependencies...\n"
   npm i $HOME/.ballin-scripts --production > /dev/null 2>&1
 
   ############################## SYMLINK BINARIES ##############################
   for bin in $HOME/.ballin-scripts/bin/*; do
     ln -sf $bin /usr/local/bin
   done
-  printf "\nSymlinked binaries\n\n"
+  printf "\nSymlinked binaries\n"
 
-  printf "ballin!\n"
+  printf "\nballin!\n"
 fi
