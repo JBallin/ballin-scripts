@@ -14,11 +14,8 @@ printf "let's ball...\n"
 )
 
 ### CHECK INITIAL SETUP
-# Check for $HOME/.ballin-scripts
-if [ ! -d "$HOME/.ballin-scripts" ]; then
-  printf "\nCan't find ~/.ballin-scripts, try 'mv ~/ballin-scripts ~/.ballin-scripts'\n"
 # Check that /usr/local/bin is in $PATH
-elif [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
+if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
   printf "\nusr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window\n"
 # Check that either gist or brew is installed
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
