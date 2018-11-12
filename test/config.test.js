@@ -14,13 +14,13 @@ const {
 
 const fetchConfigJSON = () => fetchConfig().configJSON;
 
-const setConfigErr = 'INVALID: setConfig takes two arguments, keys and value';
+const setConfigErr = 'INVALID: setConfig takes two arguments: "keys" and "value"';
 const invalidErr = 'INVALID';
 const currentConfigJSON = fetchConfigJSON();
 
 const setTest = (keys, value) => {
   setConfig(keys, value);
-  assert.equal(stringify(value), getConfig(keys, value))
+  assert.deepEqual(value, getConfig(keys, value))
 }
 
 
@@ -88,7 +88,7 @@ describe('config', () => {
     it('should return the keys/value it set', () => {
       const keys = 'theme.light';
       const val = 'new theme';
-      assert.equal(setConfig(keys, val), `"${keys}" set to "${val}"`)
+      assert.equal(setConfig(keys, val), `"${keys}" set to: "${val}"`)
     })
   })
 
