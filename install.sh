@@ -41,8 +41,11 @@ else
     brew install gist
   fi
 
-  # TODO: find way to truly verify if user is logged in? token in .gist may be expired
   ### LOGIN GIST
+  if [ -f $HOME/.gist ] && ! $(gist -l > /dev/null); then
+    printf "\nDeleting ~/.gist because token is expired/invalid"
+    rm $HOME/.gist
+  fi
   while [ ! -f $HOME/.gist ]; do
     printf "\nPlease login to gist\n\n"
     gist --login
