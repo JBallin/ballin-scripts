@@ -7,7 +7,7 @@ const defaultConfigPath = path.join(__dirname, './.defaultconfig.json');
 const stringify = obj => JSON.stringify(obj, null, 2);
 
 const configMessages = {
-  actionErr: "INVALID!",
+  actionErr: "INVALID: non-existent action given to ballin_config",
   getKeysDneErr: keys => `"${keys}" doesn't exist in config`,
   reset: "Config has been reset to default configuration",
   set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`,
