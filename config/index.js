@@ -43,15 +43,23 @@ const setConfig = (keys, val, ...other) => {
     return configMessages.setArgsErr;
   }
   keysArr = keys.split('.');
-  set = keysArr.splice(-1);
-  nestedObj = keysArr.reduce((res, key) => res[key], configObj);
-  const oldVal = nestedObj[set];
-  if (typeof oldVal === 'object' && ! Array.isArray(oldVal)) {
-    return configMessages.setObjErr(keys);
-  } else if (oldVal === undefined) {
+  // ex: 'theme.light' -> [ 'theme', 'light' ]
+  keyToSet = keysArr.splice(-1);
+  // 'light'
+  topLevelKeys = keysArr;
+  // [ 'theme' ]
+  nestedObj = topLevelKeys.reduce((res, key) => res[key], configObj);
+  // { light: 'lightTheme', dark: 'darkTheme' }
+  const prevVal = nestedObj[keyToSet];
+  // 'lightTheme'
+
+  // make sure prevVal isn't an object (arrays and null are ok: gu.id defaults to null)
+  if (typeof prevVal === 'object' && ! Array.isArray(prevVal) && prevVal !== null) {
+    return configMessages.setObjErr(keys, prevVal);
+  } else if (prevVal === undefined) {
     return configMessages.setDneErr(keys);
   } else {
-    nestedObj[set] = val;
+    nestedObj[keyToSet] = val;
     fs.writeFileSync(configPath, stringify(configObj), 'utf8')
     return configMessages.set(keys);
   }
@@ -62,6 +70,7 @@ const configAction = (request, keys, value, other='') => {
     resetConfig();
     return configMessages.reset;
   }
+  // send config auto if not given a request with ballin_config command
   if (request === 'get' || request === undefined) {
     return getConfig(keys);
   } else if (request === 'set') {
