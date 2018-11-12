@@ -55,21 +55,6 @@ else
   # ballin_config set gu.id
   rm .MyConfig.md CONFIG_GIST_URL
 
-  ### NPM INSTALL (production === don't install devDeps)
-  (
-    export NODE_ENV='production'
-    cd $HOME/.ballin-scripts
-    npm i > /dev/null 2>&1
-    cd scripts
-    for script in */ ; do
-      cd "$script"
-      npm i > /dev/null 2>&1
-      cd ..
-    done
-    unset NODE_ENV
-  )
-
-
   ### CREATE/UPDATE CONFIG FILE
   (
     cd $HOME/.ballin-scripts/config/
@@ -80,6 +65,10 @@ else
   )
 
 
+
+  ### NPM INSTALL (production === don't install devDeps)
+  printf "Installing any missing dependencies...\n\n"
+  npm i $HOME/.ballin-scripts --production > /dev/null 2>&1
 
   ### SYMLINK BINARIES
   for bin in $HOME/.ballin-scripts/bin/*; do
