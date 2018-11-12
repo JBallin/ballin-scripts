@@ -15,7 +15,7 @@ const {
 const fetchConfigJSON = () => fetchConfig().configJSON;
 
 const setConfigErr = 'INVALID: setConfig takes two arguments: "keys" and "value"';
-const invalidErr = 'INVALID';
+const invalidConfigActionErr = 'INVALID: non-existent action given to ballin_config';
 const currentConfigJSON = fetchConfigJSON();
 
 const setTest = (keys, value) => {
@@ -105,11 +105,11 @@ describe('config', () => {
     it('("get", "gu.id") should return a Number', () => {
       assert.typeOf(configAction('get', 'gu.id'), 'string')
     })
-    it('("get", "theme.light") should return a string', () => {
-      assert.typeOf(configAction('get', 'theme.light'), 'string')
+    it('("get", "theme.light") should return an Array', () => {
+      assert.isArray(configAction('get', 'theme.light'))
     })
     it('("wrong") should return an invalid error', () => {
-      assert.equal(configAction('wrong'), invalidErr);
+      assert.equal(configAction('wrong'), invalidConfigActionErr);
     })
     it('("set", "gu.id", "123") should set gu.id to "123"', () => {
       setTest('gu.id', '123', configAction);
