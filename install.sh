@@ -23,22 +23,6 @@ elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
 
 ### INITIAL SETUP LOOKS GOOD!
 else
-  ### SYMLINK BINARIES
-  # ballin
-  ln -sf $HOME/.ballin-scripts/bin/ballin /usr/local/bin
-  # ballin_update
-  ln -sf $HOME/.ballin-scripts/bin/ballin_update /usr/local/bin
-  # ballin_uninstall
-  ln -sf $HOME/.ballin-scripts/bin/ballin_uninstall /usr/local/bin
-  # ballin_config
-  ln -sf $HOME/.ballin-scripts/bin/ballin_config /usr/local/bin
-  # gu
-  ln -sf $HOME/.ballin-scripts/scripts/gist_update/bin/gu /usr/local/bin
-  # theme
-  ln -sf $HOME/.ballin-scripts/scripts/atom_theme/bin/theme /usr/local/bin
-  # up
-  ln -sf $HOME/.ballin-scripts/scripts/updater/bin/up /usr/local/bin
-
 
   ### GIST
   ## DOWNLOAD GIST
@@ -96,6 +80,12 @@ else
   )
 
 
+
+  ### SYMLINK BINARIES
+  for bin in $HOME/.ballin-scripts/bin/*; do
+    ln -sf $bin /usr/local/bin
+  done
+  printf "\nSymlinked binaries\n\n"
 
   ### DONE
   printf "ballin!\n"
