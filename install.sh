@@ -17,10 +17,20 @@ printf "let's ball...\n"
 ############################## CHECK INITIAL SETUP #############################
 # Check that /usr/local/bin is in $PATH
 if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
-  printf "\nusr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window\n"
+  l1="usr/local/bin doesn't seem to be in your path."
+  l2='Run: echo \"export PATH=/usr/local/bin:$PATH\" > $HOME/.bash_profile'
+  l3="and open a new terminal window and run this installation again."
+  PATH_ERROR="\n$l1\n$l2\n$l3\n"
+  printf "$PATH_ERROR"
+  unset l1 l2 l3 PATH_ERROR
 # Check that either gist or brew is installed
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
-    printf "\nCan't find Homebrew, which is needed to download 'gist'. Either download Homebrew at brew.sh or install ruby & run 'gem install gist, and then run this installation again.'\n"
+  l1="Can't find Homebrew, which is needed to download 'gist'."
+  l2="Download Homebrew at brew.sh or install ruby & run 'gem install gist',"
+  l3="and run this installation again."
+  GIST_MISSING_ERROR="\n$l1\n$l2\n$l3\n"
+  printf "$GIST_MISSING_ERROR"
+  unset l1 l2 l3 GIST_MISSING_ERROR
 else
 
 
@@ -34,7 +44,7 @@ else
   # TODO: find way to truly verify if user is logged in? token in .gist may be expired
   ### LOGIN GIST
   while [ ! -f $HOME/.gist ]; do
-    printf "\nPlease login to gist!\n\n"
+    printf "\nPlease login to gist\n\n"
     gist --login
   done
 
