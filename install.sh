@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-
 printf "let's ball...\n"
 
-### CLONE REPO
+
+################################## CLONE REPO ##################################
 (
   cd $HOME
   # only clone if folder doesn't already exist
@@ -13,26 +13,26 @@ printf "let's ball...\n"
   fi
 )
 
-### CHECK INITIAL SETUP
+
+############################## CHECK INITIAL SETUP #############################
 # Check that /usr/local/bin is in $PATH
 if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
   printf "\nusr/local/bin doesn't seem to be in your path. Add 'export PATH=/usr/local/bin:$PATH' to the bottom of your profile/rc file' and open a new terminal window\n"
 # Check that either gist or brew is installed
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
     printf "\nCan't find Homebrew, which is needed to download 'gist'. Either download Homebrew at brew.sh or install ruby & run 'gem install gist, and then run this installation again.'\n"
-
-### INITIAL SETUP LOOKS GOOD!
 else
 
-  ### GIST
-  ## DOWNLOAD GIST
+
+  #################################### GIST ####################################
+  ### DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
     printf "\nbrew installing gist...\n\n"
     brew install gist
   fi
 
-  ## LOGIN GIST
   # TODO: find way to truly verify if user is logged in? token in .gist may be expired
+  ### LOGIN GIST
   while [ ! -f $HOME/.gist ]; do
     printf "\nPlease login to gist!\n\n"
     gist --login
@@ -55,7 +55,10 @@ else
   # ballin_config set gu.id
   rm .MyConfig.md CONFIG_GIST_URL
 
-  ### CREATE/UPDATE CONFIG FILE
+
+  ########################## CREATE/UPDATE CONFIG FILE #########################
+  # TODO: update config file if there are any updates that ballin.json doesn't have yet
+  ### CREATE CONFIG FILE
   (
     cd $HOME/.ballin-scripts/config/
     if [ ! -f ballin.json ]; then
@@ -66,17 +69,16 @@ else
 
 
 
-  ### NPM INSTALL (production === don't install devDeps)
+  ################################# NPM INSTALL ################################
+  # production === don't install devDeps
   printf "Installing any missing dependencies...\n\n"
   npm i $HOME/.ballin-scripts --production > /dev/null 2>&1
 
-  ### SYMLINK BINARIES
+  ############################## SYMLINK BINARIES ##############################
   for bin in $HOME/.ballin-scripts/bin/*; do
     ln -sf $bin /usr/local/bin
   done
   printf "\nSymlinked binaries\n\n"
 
-  ### DONE
   printf "ballin!\n"
-
 fi
