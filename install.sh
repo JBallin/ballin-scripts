@@ -59,7 +59,7 @@ else
     cd $HOME/.ballin-scripts/config/
     if [ ! -f ballin.json ]; then
       cp .defaultconfig.json ballin.json
-      printf "\nCreated 'ballin.json' file in /config using default settings\n\n"
+      printf "\nCreated 'ballin.json' file in /config using default settings\n"
     fi
   )
 
@@ -95,7 +95,7 @@ else
       printf "$GIST_DESCRIPTION" > .MyConfig.md
 
       GIST_URL=$(gist -p .MyConfig.md)
-      printf "Created a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
+      printf "\nCreated a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
 
       GIST_ID=${GIST_URL##*/}
       printf "\nStoring your new gist ID in your config...\n"
