@@ -16,7 +16,7 @@ Show available commands.
 
 #### `gu`
 
-Backup your dev environment to a gist.
+Backup your dev environment to a (private) gist.
 
 *Checkout [My Sweet Config](https://sweet-config.herokuapp.com) to visualize and share (optional) your setup.*
 
