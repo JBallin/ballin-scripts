@@ -63,56 +63,58 @@ else
     fi
   )
 
-  ### CHECK IF USER ALREADY HAS GIST ID
-  if [ $(bin/ballin_config get gu.id) == 'null' ]; then
-    echo ''
-    read -p "Do you already have a gist associated with ballin-scripts? [y/N] " YN
-    if [[ $YN == "y" || $YN == "Y" ]]; then
-      VALID_GIST_ID=1
-      while [ $VALID_GIST_ID == 1 ]; do
-        read -ep "Enter your gist ID: " GIST_ID
-        if $(gist -r $GIST_ID > /dev/null); then
-          printf "\nStoring your previous gist ID in your config:\n"
-          bin/ballin_config set gu.id $GIST_ID
-          VALID_GIST_ID=0
-          # TODO: overwrite ballin.json config file from ballin.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.json
-        else
-          printf "\nInvalid GIST_ID: $GIST_ID\n"
-        fi
-      done
-    fi
-    unset YN GIST_ID VALID_GIST_ID
-    echo ''
-  fi
-
-  ### GENERATE + STORE GIST ID
-  if [ $(bin/ballin_config get gu.id) == 'null' ]; then
+  (
     l1='### Backup of your dev environment'
     l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
-    GIST_DESCRIPTION="$l1\n$l2"
-    printf "$GIST_DESCRIPTION" > .MyConfig.md
+    GIST_DESCRIPTION="$l1\n$l2\n"
 
-    GIST_URL=$(gist -p .MyConfig.md)
-    printf "Created a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
-
-    GIST_ID=${GIST_URL##*/}
-    printf "\nStoring your new gist ID in your config...\n"
-    bin/ballin_config set gu.id $GIST_ID
-    echo ''
-
-    if [ -d .gu-cache ]; then
-      rm -rf .gu-cache
-      printf "\nDeleted existing .gu-cache folder\n"
+    ### CHECK IF USER ALREADY HAS GIST ID
+    cd $HOME/.ballin-scripts/
+    if [ $(bin/ballin_config get gu.id) == 'null' ]; then
+      echo ''
+      read -p "Do you already have a ballin-scripts gist id? [y/N] " YN
+      if [[ $YN == "y" || $YN == "Y" ]]; then
+        VALID_GIST_ID=1
+        while [ $VALID_GIST_ID == 1 ]; do
+          read -ep "Enter your gist ID: " GIST_ID
+          if [ "$(gist -r $GIST_ID)" == "$(printf "$GIST_DESCRIPTION")" ]; then
+            printf "\nStoring your previous gist ID in your config:\n"
+            bin/ballin_config set gu.id $GIST_ID
+            VALID_GIST_ID=0
+            # TODO: overwrite ballin.json config file from ballin.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.json
+          else
+            printf "\nINVALID. Expected 'gist -r $GIST_ID' to output:\n$GIST_DESCRIPTION\n"
+          fi
+        done
+      fi
+      unset YN GIST_ID VALID_GIST_ID
     fi
 
-    unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
-    rm .MyConfig.md
-  fi
+    ### GENERATE + STORE GIST ID
+    if [ $(bin/ballin_config get gu.id) == 'null' ]; then
+      printf "$GIST_DESCRIPTION" > .MyConfig.md
 
-  ################################# NPM INSTALL ################################
-  # production === don't install devDeps
-  printf "\nInstalling any missing dependencies...\n"
-  npm i $HOME/.ballin-scripts --production > /dev/null 2>&1
+      GIST_URL=$(gist -p .MyConfig.md)
+      printf "Created a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
+
+      GIST_ID=${GIST_URL##*/}
+      printf "\nStoring your new gist ID in your config...\n"
+      bin/ballin_config set gu.id $GIST_ID
+
+      if [ -d .gu-cache ]; then
+        rm -rf .gu-cache
+        printf "\nDeleted existing .gu-cache folder\n"
+      fi
+
+      unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
+      rm .MyConfig.md
+    fi
+
+    ################################# NPM INSTALL ################################
+    # production === don't install devDeps
+    printf "\nInstalling any missing dependencies...\n"
+    npm i --production > /dev/null 2>&1
+  )
 
   ############################## SYMLINK BINARIES ##############################
   for bin in $HOME/.ballin-scripts/bin/*; do
