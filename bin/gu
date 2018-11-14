@@ -202,7 +202,14 @@ else
     ### ATOM
     if [ -d .atom ]; then
       u 'apm' 'apm list --installed --no-color'
+      # TODO: 'font size'/'show panel' change shouldn't trigger update
+      # always back up dark theme so that a theme change doesn't trigger a gu update
+      DARK_THEME_RESPONSE=$(theme d)
       u 'atom_config.cson' 'cat .atom/config.cson'
+      # switch back to light theme if was originally light theme
+      if [ "$DARK_THEME_RESPONSE" != "already set to dark theme..." ]; then
+        theme l > /dev/null
+      fi
       u 'atom_keymap.cson' 'catWithoutCommentsAndBlankLines .atom/keymap.cson'
       u 'atom_snippets.cson' 'catWithoutCommentsAndBlankLines .atom/snippets.cson'
       # TODO: catWithout... not checking for CSS comments, just hashes. Need to updated func to check for those.
