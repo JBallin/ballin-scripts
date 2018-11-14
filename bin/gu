@@ -13,7 +13,35 @@
 id=$(ballin_config get gu.id)
 url="https://gist.github.com/$id"
 # TODO: generate file_suggestions based on API response instead of hard-coding
-file_suggestions="bash_profile.sh, zshrc.sh, profile.sh, bashrc.sh, bash_completions, brew_list, brew_leaves, brew_cask, brew_services, npm_global, nvmrc, gitignore_global, gitconfig.cson, apm, atomconfig.cson, atom_keymap.cson, atom_snippets.cson, atom_styles.less, atom_init.coffee, vs_settings.json, vs_extensions, brackets_settings.json, brackets_keymap.json, brackets_extensions, brackets_disabled_extensions, vimrc, nanorc."
+file_suggestions='
+  bash_profile.sh
+  zshrc.sh
+  profile.sh
+  bashrc.sh
+  bash_completions
+  brew_list
+  brew_leaves
+  brew_cask
+  brew_services
+  npm_global
+  nvmrc
+  gitignore_global
+  gitconfig.cson
+  apm
+  atomconfig.cson
+  atom_keymap.cson
+  atom_snippets.cson
+  atom_styles.less
+  atom_init.coffee
+  vs_settings.json
+  vs_extensions
+  brackets_settings.json
+  brackets_keymap.json
+  brackets_extensions
+  brackets_disabled_extensions
+  vimrc
+  nanorc
+  ballin_config'
 
 ### TODO handle error when $id fails github API (check res code) (either nonexistant, deleted gist, skipped init etc)
 
