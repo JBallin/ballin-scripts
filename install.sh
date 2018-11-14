@@ -123,6 +123,4 @@ else
   printf "\nSymlinked binaries\n"
 
   printf "\nballin!\n"
-
-  printf "\nGET STARTED: type 'ballin'\n"
 fi
