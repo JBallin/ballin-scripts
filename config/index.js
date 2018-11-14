@@ -39,7 +39,7 @@ const getConfig = (keys, val) => {
 
 const setConfig = (keys, val, other) => {
   const { configObj } = fetchConfig();
-  if (other.length || keys === undefined || val === undefined) {
+  if ((other && other.length) || !keys || val === undefined) {
     return configMessages.setArgsErr;
   }
   const keysArr = keys.split('.');
