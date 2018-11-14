@@ -1,5 +1,9 @@
 # Ballin Scripts
 
+## Description
+
+An assortment of useful scripts, descriptions below!
+
 ## Installation
 
 Run the [install script](install.sh) using cURL:
