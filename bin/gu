@@ -125,7 +125,7 @@ else
       else
         # file HAS changed
         if [ "$is_new" == 0 ]; then
-          echo "☁︎ $file_without_extension"
+          echo "💾 $file_without_extension"
         elif [ "$is_empty" == 0 ]; then
           echo "✖︎ $file_without_extension"
         else
