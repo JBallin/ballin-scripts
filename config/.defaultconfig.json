@@ -10,7 +10,8 @@
     ]
   },
   "up": {
-    "cleanup": true
+    "cleanup": "true",
+    "ballin": "true"
   },
   "gu": {
     "id": null

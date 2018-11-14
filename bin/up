@@ -35,6 +35,8 @@ if [ -x "$(command -v mas)" ]; then
   mas outdated
 fi
 
-# TODO:
+
 ### BALLIN-SCRIPTS
-# ballin_update
+if [ $(ballin_config get up.ballin) == 'true' ]; then
+  ballin_update
+fi

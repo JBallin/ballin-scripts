@@ -57,7 +57,7 @@ const setConfig = (keys, val, other) => {
   if (typeof prevVal === 'object' && !Array.isArray(prevVal) && prevVal !== null) {
     return configMessages.setObjErr(keys, prevVal);
   }
-  if (!prevVal) {
+  if (prevVal === undefined) {
     return configMessages.setDneErr(keys);
   }
   nestedObj[keyToSet] = val;
