@@ -58,7 +58,7 @@ else
   (
     cd $HOME/.ballin-scripts/config/
     if [ ! -f ballin.json ]; then
-      cp .defaultconfig.json ballin.json
+      cp .defaultConfig.json ballin.json
       printf "\nCreated 'ballin.json' file in /config using default settings\n"
     fi
   )
