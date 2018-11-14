@@ -2,7 +2,7 @@
 
 ## Description
 
-An assortment of useful scripts, descriptions below!
+An assortment of useful scripts, [descriptions](#commands) below.
 
 ## Installation
 
