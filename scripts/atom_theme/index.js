@@ -9,9 +9,10 @@ const fetchAtomConfig = () => CSON.load(atomConfigPath);
 const fetchCurrentTheme = () => fetchAtomConfig()['*'].core.themes;
 const themeMessages = {
   saveErr: 'INVALID: saveTheme takes \'d\' (dark) or \'l\' (light)',
-  currErr: 'ERROR: your atom config does not have a theme, please try changing your theme to Atom Light and try again',
   argErr: 'INVALID: "l" (light), "d" (dark) or "" (toggle)',
 };
+// one dark theme is the default so the value will be missing in the atom config
+const oneDarkTheme = ['one-dark-ui', 'one-dark-syntax'];
 
 const determineMode = (mode) => {
   switch (mode) {
@@ -25,7 +26,7 @@ const determineMode = (mode) => {
 };
 
 const saveTheme = (mode) => {
-  const currentTheme = fetchCurrentTheme();
+  const currentTheme = fetchCurrentTheme() || oneDarkTheme;
   const newMode = determineMode(mode);
   if (newMode === 'error') return themeMessages.saveErr;
   return setConfig(`theme.${newMode}`, currentTheme);
@@ -33,8 +34,7 @@ const saveTheme = (mode) => {
 
 const changeTheme = (mode) => {
   const csonObj = fetchAtomConfig();
-  const currentTheme = fetchCurrentTheme();
-  if (!currentTheme) return themeMessages.currErr;
+  const currentTheme = fetchCurrentTheme() || oneDarkTheme;
   let theme = determineMode(mode);
 
   const setTheme = (newTheme) => {
