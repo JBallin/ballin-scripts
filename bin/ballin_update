@@ -8,10 +8,6 @@ update() {
   ./install.sh
 }
 
-# TODO: check for updates to default config and add to ballin.json if so (preserving existing settings)
-# user_config=$(node config/save-config.js)
-# node config/restore-config.js user_config
-
 (
   cd $HOME/.ballin-scripts
   update

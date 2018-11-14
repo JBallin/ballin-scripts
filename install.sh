@@ -53,13 +53,19 @@ else
 
 
   ########################## CREATE/UPDATE CONFIG FILE #########################
-  # TODO: update config file if there are any updates that ballin.json doesn't have yet
-  ### CREATE CONFIG FILE
+  ### CREATE/UPDATE CONFIG FILE
   (
     cd $HOME/.ballin-scripts/config/
     if [ ! -f ballin.json ]; then
+      # create config
       cp .defaultConfig.json ballin.json
       printf "\nCreated 'ballin.json' file in /config using default settings\n"
+    else
+      # update config
+      UPDATE_RESULT=$(node $HOME/.ballin-scripts/config/updateConfig.js)
+      if [ ! -z "$UPDATE_RESULT" ]; then
+        printf "\n$UPDATE_RESULT\n"
+      fi
     fi
   )
 
