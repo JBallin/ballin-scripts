@@ -21,14 +21,14 @@ const setTest = (keys, value) => {
 describe('config', () => {
   let savedConfig;
   before('fetchConfigJSON should return a String', () => {
-    assert.typeOf(fetchConfigJSON(), 'String');
+    assert.isString(fetchConfigJSON());
   });
   after('tests shouldn\'t alter config', () => {
     assert.equal(currentConfigJSON, fetchConfigJSON());
   });
   beforeEach('Save config', () => {
     savedConfig = fetchConfigJSON();
-    assert.typeOf(savedConfig, 'String');
+    assert.isString(savedConfig);
   });
   afterEach('Reset config', () => {
     fs.writeFileSync(configPath, savedConfig, 'utf8');
@@ -44,8 +44,8 @@ describe('config', () => {
     it('("gu.id") should return a String', () => {
       assert.isString(getConfig('gu.id'));
     });
-    it('("up.cleanup") should return a Boolean', () => {
-      assert.isBoolean(getConfig('up.cleanup'));
+    it('("up.cleanup") should return true or false', () => {
+      assert.include(['true', 'false'], getConfig('up.cleanup'));
     });
     it('() should return a String', () => {
       assert.isString(getConfig());
@@ -87,16 +87,16 @@ describe('config', () => {
 
   describe('configAction', () => {
     it('() should return a String', () => {
-      assert.typeOf(configAction('get'), 'string');
+      assert.isString(configAction('get'));
     });
     it('("get") should return a String', () => {
-      assert.typeOf(configAction('get'), 'string');
+      assert.isString(configAction('get'));
     });
     it('("set") should return a setConfig error', () => {
       assert.equal(configAction('set'), configMessages.setArgsErr);
     });
     it('("get", "gu.id") should return a Number', () => {
-      assert.typeOf(configAction('get', 'gu.id'), 'string');
+      assert.isString(configAction('get', 'gu.id'));
     });
     it('("get", "theme.light") should return an Array', () => {
       assert.isArray(configAction('get', 'theme.light'));
