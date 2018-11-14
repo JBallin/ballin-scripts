@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Useful scripts to save time",
   "scripts": {
-    "test": "eslint . && mocha"
+    "test": "eslint . && NODE_ENV=test mocha"
   },
   "repository": {
     "type": "git",
