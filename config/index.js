@@ -7,12 +7,12 @@ const defaultConfigPath = path.join(__dirname, './.defaultconfig.json');
 const stringify = obj => JSON.stringify(obj, null, 2);
 
 const configMessages = {
-  actionErr: 'INVALID: non-existent action given to ballin_config',
+  actionErr: 'INVALID: ballin_config accepts "", "get", or "set"',
   getKeysDneErr: keys => `"${keys}" doesn't exist in config`,
   reset: 'Config has been reset to default configuration',
   set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`, // eslint-disable-line
-  setArgsErr: 'INVALID: setConfig takes two arguments: "keys" and "value"',
-  getArgsErr: 'INVALID: getConfig takes two arguments: "keys" and "value"',
+  setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
+  getArgsErr: 'INVALID: getConfig takes two arguments: "key(s)" and "value"',
   setDneErr: keys => `INVALID: "${keys}" doesn't exist in config`,
   setObjErr: (keys, prevVal) => `INVALID: "${keys} is not a bottom-level value, it returns ${JSON.stringify(prevVal)}."`,
 };
@@ -28,7 +28,8 @@ const fetchConfig = () => {
   return { configObj, configJSON };
 };
 
-const getConfig = (keys) => {
+const getConfig = (keys, val) => {
+  if (val) return configMessages.getArgsErr;
   const { configObj, configJSON } = fetchConfig();
   if (keys !== undefined) {
     const res = keys.split('.').reduce((result, key) => result[key], configObj);
@@ -36,7 +37,7 @@ const getConfig = (keys) => {
   } return configJSON;
 };
 
-const setConfig = (keys, val, ...other) => {
+const setConfig = (keys, val, other) => {
   const { configObj } = fetchConfig();
   if (other.length || keys === undefined || val === undefined) {
     return configMessages.setArgsErr;
@@ -64,15 +65,14 @@ const setConfig = (keys, val, ...other) => {
   return configMessages.set(keys);
 };
 
-const configAction = (request, keys, value, other = '') => {
-  if (other) return configMessages.getArgsErr;
+const configAction = (request, keys, value, other) => {
   if (request === 'reset') {
     resetConfig();
     return configMessages.reset;
   }
   // send config auto if not given a request with ballin_config command
-  if (request === 'get' || request === undefined) return getConfig(keys);
-  if (request === 'set') return setConfig(keys, value);
+  if (request === 'get' || !request) return getConfig(keys, value);
+  if (request === 'set') return setConfig(keys, value, other);
   if (process.env.NODE_ENV !== 'test') {
     exec('ballin', (error, stdout) => console.log(stdout)); // eslint-disable-line no-console
   }
