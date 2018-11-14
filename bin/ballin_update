@@ -1,7 +1,7 @@
 #!/bin/bash
 
 update() {
-  printf "getting fresh kicks...\n"
+  printf "👟 getting fresh kicks...\n"
   # TODO: create custom update output (echo "ballin-scripts up to date!" or "updating ballin-scripts...")
   git pull
   echo ''

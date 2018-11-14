@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-printf "let's ball...\n"
+printf "🏀 let's ball...\n"
 
 
 ################################## CLONE REPO ##################################
@@ -20,7 +20,7 @@ if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
   l1="usr/local/bin doesn't seem to be in your path."
   l2='Run: echo \"export PATH=/usr/local/bin:$PATH\" > $HOME/.bash_profile'
   l3="and open a new terminal window and run this installation again."
-  PATH_ERROR="\nERROR: $l1\n$l2\n$l3\n"
+  PATH_ERROR="\n⚠️ ERROR: $l1\n$l2\n$l3\n"
   printf "$PATH_ERROR"
   unset l1 l2 l3 PATH_ERROR
 # Check that either gist or brew is installed
@@ -28,7 +28,7 @@ elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
   l1="Can't find Homebrew, which is needed to download 'gist'."
   l2="Download Homebrew at brew.sh or install ruby & run 'gem install gist',"
   l3="and run this installation again."
-  GIST_MISSING_ERROR="\nERROR: $l1\n$l2\n$l3\n"
+  GIST_MISSING_ERROR="\n⚠️ ERROR: $l1\n$l2\n$l3\n"
   printf "$GIST_MISSING_ERROR"
   unset l1 l2 l3 GIST_MISSING_ERROR
 else
@@ -37,17 +37,17 @@ else
   #################################### GIST ####################################
   ### DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
-    printf "\nbrew installing gist...\n\n"
+    printf "\n🍺 brew installing gist...\n\n"
     brew install gist
   fi
 
   ### LOGIN GIST
   if [ -f $HOME/.gist ] && ! $(gist -l > /dev/null); then
-    printf "\nDeleting ~/.gist because token is expired/invalid"
+    printf "\n🗑 Deleting ~/.gist because token is expired/invalid"
     rm $HOME/.gist
   fi
   while [ ! -f $HOME/.gist ]; do
-    printf "\nPlease login to gist\n\n"
+    printf "\n🙏 Please login to gist:\n"
     gist --login
   done
 
@@ -59,12 +59,12 @@ else
     if [ ! -f ballin.json ]; then
       # create config
       cp .defaultConfig.json ballin.json
-      printf "\nCreated 'ballin.json' file in /config using default settings\n"
+      printf "\n🧠 Created 'ballin.json' file in /config using default settings\n"
     else
       # update config
       UPDATE_RESULT=$(node $HOME/.ballin-scripts/config/updateConfig.js)
       if [ ! -z "$UPDATE_RESULT" ]; then
-        printf "\n$UPDATE_RESULT\n"
+        printf "\n✍️ $UPDATE_RESULT\n"
       fi
     fi
   )
@@ -78,18 +78,18 @@ else
     cd $HOME/.ballin-scripts/
     if [ $(bin/ballin_config get gu.id) == 'null' ]; then
       echo ''
-      read -p "Do you already have a ballin-scripts gist id? [y/N] " YN
+      read -p "🤔 Do you already have a ballin-scripts backup gist? [y/N] " YN
       if [[ $YN == "y" || $YN == "Y" ]]; then
         VALID_GIST_ID=1
         while [ $VALID_GIST_ID == 1 ]; do
-          read -ep "Enter your gist ID: " GIST_ID
+          read -ep "👂 Enter your gist ID: " GIST_ID
           if [ "$(gist -r $GIST_ID)" == "$(printf "$GIST_DESCRIPTION")" ]; then
-            printf "\nStoring your previous gist ID in your config:\n"
+            printf "\n👍 Storing your previous gist ID in your config:\n"
             bin/ballin_config set gu.id $GIST_ID
             VALID_GIST_ID=0
             # TODO: overwrite ballin.json config file from ballin.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.json
           else
-            printf "\nINVALID. Expected 'gist -r $GIST_ID' to output:\n$GIST_DESCRIPTION\n"
+            printf "\n⚠️ INVALID. Expected 'gist -r $GIST_ID' to output:\n$GIST_DESCRIPTION\n"
           fi
         done
       fi
@@ -101,15 +101,15 @@ else
       printf "$GIST_DESCRIPTION" > .MyConfig.md
 
       GIST_URL=$(gist -p .MyConfig.md)
-      printf "\nCreated a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
+      printf "\n💥 Created a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
 
       GIST_ID=${GIST_URL##*/}
-      printf "\nStoring your new gist ID in your config...\n"
+      printf "\n🧳 Storing your new gist ID in your config...\n"
       bin/ballin_config set gu.id $GIST_ID
 
       if [ -d .gu-cache ]; then
         rm -rf .gu-cache
-        printf "\nDeleted existing .gu-cache folder\n"
+        printf "\n🗑 Deleted existing .gu-cache folder\n"
       fi
 
       unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
@@ -118,7 +118,7 @@ else
 
     ################################# NPM INSTALL ################################
     # production === don't install devDeps
-    printf "\nInstalling any missing dependencies...\n"
+    printf "\n🧐 Installing any missing dependencies...\n"
     npm i --production > /dev/null 2>&1
   )
 
@@ -126,7 +126,7 @@ else
   for bin in $HOME/.ballin-scripts/bin/*; do
     ln -sf $bin /usr/local/bin
   done
-  printf "\nSymlinked binaries\n"
+  printf "\n💪 Symlinked binaries\n"
 
-  printf "\nballin!\n"
+  printf "\n😎 ballin!\n"
 fi
