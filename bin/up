@@ -9,8 +9,9 @@ if [ -x "$(command -v brew)" ]; then
     # brew cleanup now includes brew cask cleanup
   fi
   # 'cleanup' removes old versions to save space
-  # TODO: only run cleanup if user has it in config, uses cleanup by default
-  brew cleanup
+  if [ $(ballin_config get up.cleanup) == 'true' ]; then
+    brew cleanup
+  fi
   # brew doctor checks for any issues with brew
   brew doctor
 fi
