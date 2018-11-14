@@ -16,5 +16,6 @@ Scripts:
 
     gu                    gist: '' (update) 'open', 'read [file_name]'
     theme                 'd' (dark), 'l' (light), '' (toggle)
+                          'save' (save current theme to config): 'd' 'l'
     up                    update brew etc.
 "
