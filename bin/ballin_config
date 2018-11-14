@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
-const HOME = require('os').homedir;
+const { configAction } = require('../config');
 
-const { configAction } = require(`../config`);
 const [request, keys, value, ...other] = process.argv.slice(2);
-
-console.log(configAction(request, keys, value, other));
+console.log(configAction(request, keys, value, other)); // eslint-disable-line
