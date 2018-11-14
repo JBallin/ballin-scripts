@@ -1,73 +1,69 @@
 const fs = require('fs');
 const CSON = require('cson');
 const HOME = require('os').homedir;
-const { getConfig, setConfig } = require(`${HOME}/.ballin-scripts/config`);
+const { getConfig, setConfig } = require('../../config');
 
 const atomConfigPath = `${HOME}/.atom/config.cson`;
 const { light, dark } = getConfig('theme');
-
 const fetchAtomConfig = () => CSON.load(atomConfigPath);
 const fetchCurrentTheme = () => fetchAtomConfig()['*'].core.themes;
-
 const themeMessages = {
-  saveErr: "INVALID: saveTheme takes 'd' (dark) or 'l' (light)"
-}
+  saveErr: 'INVALID: saveTheme takes \'d\' (dark) or \'l\' (light)',
+  currErr: 'ERROR: your atom config does not have a theme, please try changing your theme to Atom Light and try again',
+  argErr: 'INVALID: "l" (light), "d" (dark) or "" (toggle)',
+};
 
-
-const saveTheme = mode => {
-  const currentTheme = fetchCurrentTheme();
-  const newMode = mode === 'd' ? 'dark' : mode === 'l' ? 'light' : undefined;
-  if (newMode) {
-    return setConfig(`theme.${newMode}`, currentTheme);
-  } else {
-    return themeMessages.saveErr;
+const determineMode = (mode) => {
+  switch (mode) {
+    case 'd':
+      return 'dark';
+    case 'l':
+      return 'light';
+    default:
+      return 'error';
   }
-}
+};
 
+const saveTheme = (mode) => {
+  const currentTheme = fetchCurrentTheme();
+  const newMode = determineMode(mode);
+  if (newMode === 'error') return themeMessages.saveErr;
+  return setConfig(`theme.${newMode}`, currentTheme);
+};
 
-const changeTheme = mode => {
+const changeTheme = (mode) => {
   const csonObj = fetchAtomConfig();
   const currentTheme = fetchCurrentTheme();
+  if (!currentTheme) return themeMessages.currErr;
+  let theme = determineMode(mode);
 
-  theme = {d: 'dark', l: 'light'}[mode];
-
-  if (mode === undefined) return toggleTheme();
-  if (theme === undefined) return 'INVALID: "l" (light), "d" (dark) or "" (toggle)'
-  return tryChangeTheme();
-
-  function setTheme(newTheme) {
+  const setTheme = (newTheme) => {
     csonObj['*'].core.themes = newTheme;
-    updatedCsonString = CSON.stringify(csonObj);
-    fs.writeFileSync(atomConfigPath, updatedCsonString);
+    fs.writeFileSync(atomConfigPath, CSON.stringify(csonObj));
     return `${theme} theme!`;
-  }
+  };
 
-  function toggleTheme() {
-      if (currentTheme[0] === dark[0]) {
-        theme = 'light';
-        return setTheme(light);
-      }
-        theme = 'dark';
-        return setTheme(dark);
-  }
-
-  function tryChangeTheme() {
-    let newTheme = determineNewTheme();
-    if (currentTheme[0] === newTheme[0]) {
-      return `already set to ${theme} theme...`;
+  const toggleTheme = () => {
+    if (currentTheme[0] === dark[0]) {
+      theme = 'light';
+      return setTheme(light);
     }
+    theme = 'dark';
+    return setTheme(dark);
+  };
+
+  const determineNewTheme = oldTheme => ({ light, dark })[oldTheme];
+
+  const tryChangeTheme = () => {
+    const newTheme = determineNewTheme(theme);
+    if (!newTheme) return themeMessages.argErr;
+    if (currentTheme[0] === newTheme[0]) return `already set to ${theme} theme...`;
     return setTheme(newTheme);
-  }
+  };
 
-  function determineNewTheme() {
-    if (theme === 'dark') {
-      return dark;
-    } else if (theme === 'light') {
-      return light;
-    }
-  }
-
-}
+  if (!mode) return toggleTheme();
+  return tryChangeTheme();
+};
 
 
-module.exports = { changeTheme, saveTheme, themeMessages }
+module.exports = { changeTheme, saveTheme, themeMessages };
