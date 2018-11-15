@@ -11,7 +11,8 @@
   },
   "up": {
     "cleanup": "true",
-    "ballin": "true"
+    "ballin": "true",
+    "gu": "false"
   },
   "gu": {
     "id": null

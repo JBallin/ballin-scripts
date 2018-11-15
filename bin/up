@@ -41,3 +41,9 @@ fi
 if [ $(ballin_config get up.ballin) == 'true' ]; then
   ballin_update
 fi
+
+
+### GU
+if [ $(ballin_config get up.gu) == 'true' ]; then
+  gu
+fi
