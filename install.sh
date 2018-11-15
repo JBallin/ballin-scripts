@@ -64,7 +64,7 @@ else
       # update config
       UPDATE_RESULT=$(node $HOME/.ballin-scripts/config/updateConfig.js)
       if [ ! -z "$UPDATE_RESULT" ]; then
-        printf "\n✍️ $UPDATE_RESULT\n"
+        printf "\n🙌 $UPDATE_RESULT\n"
       fi
     fi
   )
@@ -120,7 +120,7 @@ else
 
     ################################# NPM INSTALL ################################
     # production === don't install devDeps
-    printf "\n🧐 Installing any missing dependencies...\n"
+    printf "\n🧐 installing any missing dependencies...\n"
     npm i --production > /dev/null 2>&1
   )
 
@@ -128,7 +128,7 @@ else
   for bin in $HOME/.ballin-scripts/bin/*; do
     ln -sf $bin /usr/local/bin
   done
-  printf "\n💪 Symlinked binaries\n"
+  printf "\n💪 symlinked binaries\n"
 
   printf "\n😎 ballin!\n"
 fi
