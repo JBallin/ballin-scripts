@@ -1,34 +1,31 @@
 # Ballin Scripts
 
-## Description
+An assortment of useful [scripts](#commands).
 
-An assortment of useful scripts, [descriptions](#commands) below.
-
-## Installation
+### Installation
 
 Run the [install script](install.sh) using cURL:
 
 ```shell
 $ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/master/install.sh)
-$ ballin
 ```
 
-## Commands
+### Commands
 
-#### `ballin`
+##### `ballin`
 
 Show available commands.
 
-#### `gu`
+##### `gu`
 
 Backup your dev environment to a (private) gist.
 
 *Checkout [My Sweet Config](https://sweet-config.herokuapp.com) to visualize and share (optional) your setup.*
 
-#### `theme`
+##### `theme`
 
 Switch between light and dark themes (customizable) in Atom.
 
-#### `up`
+##### `up`
 
 Update brew, npm, etc.
