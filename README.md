@@ -1,6 +1,6 @@
 # Ballin Scripts
 
-An assortment of useful [scripts](#commands).
+*An assortment of useful scripts*
 
 ### Installation
 
