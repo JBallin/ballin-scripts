@@ -33,4 +33,5 @@ Scripts:
     theme                 $EMPTY (toggle), $D (dark), $L (light)
                           $SAVE (save current theme): $D (dark) $L (light)
     up                    update brew etc.
+
 "
