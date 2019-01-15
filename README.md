@@ -19,7 +19,7 @@ $ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/master
 ##### `gu` - Backup your dev environment to a (private) gist
 ![gu](../assets/screenshots/1_gu.png?raw=true "gu")
 <br>
-*RELATED: [My Sweet Config](https://sweet-config.herokuapp.com) - visualize your setup*
+*RELATED: [My Sweet Config](https://github.com/JBallin/sweet-config) - visualize your setup*
 <br>
 <br>
 ##### `theme` - Switch between light and dark themes (customizable) in Atom
