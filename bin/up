@@ -24,6 +24,20 @@ if [ -x "$(command -v npm)" ]; then
 fi
 
 
+### PIP
+# update pip
+if [ -x "$(command -v pip)" ]; then
+  pip install -U pip
+fi
+
+
+### PIP3
+# update pip3
+if [ -x "$(command -v pip3)" ]; then
+  pip3 install -U pip
+fi
+
+
 ### APM
 # update all atom packages
 if [ -x "$(command -v apm)" ]; then
