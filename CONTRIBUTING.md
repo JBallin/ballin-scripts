@@ -1,6 +1,6 @@
 # Contribution Guidelines
 
-### Make Changes Locally
+## Make Changes Locally
 
 First, make a fork of the repo and set it as a remote:
 `git remote add fork $LINK_TO_FORK`
@@ -17,6 +17,6 @@ $ git push --set-upstream fork $BRANCH_NAME
 $ mv ../Desktop/ballin.json config/
 ```
 
-### Suggestions Welcome
+## Suggestions Welcome
 
 Please open issues (or PR's) with any suggestions for additions to `gu`/`up` or anything else.
