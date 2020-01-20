@@ -16,6 +16,7 @@
     "softwareupdate": "true"
   },
   "gu": {
-    "id": null
+    "id": null,
+    "url": "https://gist.github.com"
   }
 }
