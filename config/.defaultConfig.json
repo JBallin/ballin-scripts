@@ -12,7 +12,8 @@
   "up": {
     "cleanup": "true",
     "ballin": "true",
-    "gu": "false"
+    "gu": "false",
+    "softwareupdate": "true"
   },
   "gu": {
     "id": null
