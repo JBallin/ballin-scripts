@@ -47,7 +47,7 @@ fi
 
 ### Mac App Store
 if [ -x "$(command -v mas)" ]; then
-  mas outdated
+  mas upgrade
 fi
 
 
