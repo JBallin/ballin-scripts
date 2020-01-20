@@ -11,7 +11,7 @@
     # or maybe just run it for them now?
 
 id=$(ballin_config get gu.id)
-url="https://gist.github.com/$id"
+url="$(ballin_config get gu.url)/$id"
 # TODO: generate file_suggestions based on API response instead of hard-coding
 file_suggestions='
   bash_profile.sh
