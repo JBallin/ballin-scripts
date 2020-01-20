@@ -50,6 +50,11 @@ if [ -x "$(command -v mas)" ]; then
   mas upgrade
 fi
 
+### Mac Software Update
+if [ $(ballin_config get up.softwareupdate) == 'true' ]; then
+  softwareupdate -i -a
+fi
+
 
 ### BALLIN-SCRIPTS
 if [ $(ballin_config get up.ballin) == 'true' ]; then
