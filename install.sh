@@ -35,6 +35,8 @@ else
 
 
   #################################### GIST ####################################
+  gist_token_path="$HOME/$(bin/ballin_config get gu.token_file)"
+
   ### DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
     printf "\n🍺 brew installing gist...\n\n"
@@ -42,11 +44,11 @@ else
   fi
 
   ### LOGIN GIST
-  if [ -f $HOME/.gist ] && ! $(gist -l > /dev/null); then
+  if [ -f $gist_token_path ] && ! $(gist -l > /dev/null); then
     printf "\n🗑  Deleting ~/.gist because token is expired/invalid"
-    rm $HOME/.gist
+    rm $gist_token_path
   fi
-  while [ ! -f $HOME/.gist ]; do
+  while [ ! -f $gist_token_path ]; do
     printf "\n🙏 Please login to gist:\n"
     gist --login
   done

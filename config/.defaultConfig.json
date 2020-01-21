@@ -17,6 +17,7 @@
   },
   "gu": {
     "id": null,
+    "token_file": ".gist",
     "url": "https://gist.github.com"
   }
 }
