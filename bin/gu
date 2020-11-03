@@ -200,7 +200,7 @@ else
     fi
 
     ### ATOM
-    if [ -d .atom ]; then
+    if [ -x "$(command -v apm)" ] && [ -d .atom ]; then
       u 'apm' 'apm list --installed --no-color'
       # TODO: 'font size'/'show panel' change shouldn't trigger update
       # always back up dark theme so that a theme change doesn't trigger a gu update
