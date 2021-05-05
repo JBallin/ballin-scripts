@@ -172,6 +172,7 @@ else
   	  u 'brew_leaves' 'brew leaves'
   	  u 'brew_cask' 'brew list --cask'
       u 'brew_services' 'brew services list'
+      u 'Brewfile' 'brew bundle dump --file=-'
     fi
 
     ### GIT
