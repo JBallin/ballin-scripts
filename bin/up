@@ -15,7 +15,7 @@ fi
 
 ### NPM
 # update all global npm binaries
-if [ -x "$(command -v npm)" ]; then
+if [ -x "$(command -v npm)" ] && [ $(ballin_config get up.npm) == 'true' ]; then
   npm update -g
 fi
 

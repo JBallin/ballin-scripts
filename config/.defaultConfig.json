@@ -13,7 +13,8 @@
     "cleanup": "true",
     "ballin": "true",
     "gu": "false",
-    "softwareupdate": "true"
+    "softwareupdate": "true",
+    "npm": "true"
   },
   "gu": {
     "id": null,
