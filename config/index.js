@@ -4,16 +4,16 @@ const path = require('path');
 
 const configPath = path.join(__dirname, 'ballin.json');
 const defaultConfigPath = path.join(__dirname, '.defaultConfig.json');
-const stringify = obj => JSON.stringify(obj, null, 2);
+const stringify = (obj) => JSON.stringify(obj, null, 2);
 
 const configMessages = {
   actionErr: 'INVALID: ballin_config accepts "", "get", or "set"',
-  getKeysDneErr: keys => `"${keys}" doesn't exist in config`,
+  getKeysDneErr: (keys) => `"${keys}" doesn't exist in config`,
   reset: 'Config has been reset to default configuration',
   set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`, // eslint-disable-line
   setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
   getArgsErr: 'INVALID: getConfig takes two arguments: "key(s)" and "value"',
-  setDneErr: keys => `INVALID: "${keys}" doesn't exist in config`,
+  setDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
   setObjErr: (keys, prevVal) => `INVALID: "${keys} is not a bottom-level value, it returns ${JSON.stringify(prevVal)}."`,
 };
 

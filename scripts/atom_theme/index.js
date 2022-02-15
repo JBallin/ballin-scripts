@@ -52,7 +52,7 @@ const changeTheme = (mode) => {
     return setTheme(dark);
   };
 
-  const determineNewTheme = oldTheme => ({ light, dark })[oldTheme];
+  const determineNewTheme = (oldTheme) => ({ light, dark })[oldTheme];
 
   const tryChangeTheme = () => {
     const newTheme = determineNewTheme(theme);
@@ -64,6 +64,5 @@ const changeTheme = (mode) => {
   if (!mode) return toggleTheme();
   return tryChangeTheme();
 };
-
 
 module.exports = { changeTheme, saveTheme, themeMessages };

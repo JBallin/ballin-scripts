@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { stringify } = require('./');
+const { stringify } = require('.');
 const defaultConfig = require('./.defaultConfig.json');
 const userConfig = require('./ballin.json');
 

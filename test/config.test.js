@@ -55,7 +55,6 @@ describe('config', () => {
     });
   });
 
-
   describe('setConfig', () => {
     const initialConfig = fetchConfigJSON();
 
