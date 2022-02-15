@@ -3,7 +3,7 @@
 update() {
   printf "👟 getting fresh kicks...\n"
   # TODO: create custom update output (echo "ballin-scripts up to date!" or "updating ballin-scripts...")
-  git pull
+  git pull || exit
   echo ''
   ./install.sh
 }
