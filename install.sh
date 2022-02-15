@@ -36,6 +36,7 @@ else
 
   #################################### GIST ####################################
   gist_token_path="$HOME/$(bin/ballin_config get gu.token_file)"
+  gist_config_url=$(bin/ballin_config get gu.url)
 
   ### DOWNLOAD GIST
   if [ ! -x "$(command -v gist)" ]; then
@@ -44,14 +45,19 @@ else
   fi
 
   ### LOGIN GIST
-  if [ -f $gist_token_path ] && ! $(gist -l > /dev/null); then
-    printf "\n🗑  Deleting ~/.gist because token is expired/invalid"
-    rm $gist_token_path
+  if ! $(curl -s -o /dev/null $gist_config_url); then
+    printf "\n⛔️ Unable to reach $gist_config_url. Please verify your connection and try again.\n"
+    exit 1
+  else
+    if [ -f $gist_token_path ] && ! $(gist -l > /dev/null); then
+      printf "\n🗑  Deleting $gist_token_path because token is expired/invalid"
+      rm $gist_token_path
+    fi
+    while [ ! -f $gist_token_path ]; do
+      printf "\n🙏 Please login to gist:\n"
+      gist --login
+    done
   fi
-  while [ ! -f $gist_token_path ]; do
-    printf "\n🙏 Please login to gist:\n"
-    gist --login
-  done
 
 
   ########################## CREATE/UPDATE CONFIG FILE #########################
