@@ -2,9 +2,24 @@
 
 update() {
   printf "👟 getting fresh kicks...\n"
-  # TODO: create custom update output (echo "ballin-scripts up to date!" or "updating ballin-scripts...")
-  git pull || exit
-  echo ''
+
+  git fetch > /dev/null
+  if [ $? -ne 0 ]; then
+    printf "git fetch failed\n"
+    exit 1
+  fi
+
+  git merge &> /dev/null
+  if [ $? -ne 0 ]; then
+    printf "git merge failed. stashing changes and trying again...\n"
+    git add . && git stash && git checkout master && git merge &> /dev/null
+    if [ $? -ne 0 ]; then
+      printf "git merge failed again.\n"
+      exit 1
+    fi
+  fi
+
+  printf "\n"
   ./install.sh
 }
 
