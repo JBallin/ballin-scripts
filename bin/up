@@ -48,7 +48,7 @@ fi
 
 ### Mac Software Update
 if [ -x "$(command -v softwareupdate)" ] && [ $(ballin_config get up.softwareupdate) == 'true' ]; then
-  softwareupdate -i -a
+  softwareupdate -ia
 fi
 
 
