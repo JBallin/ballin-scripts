@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # TODO:
   # function that takes a filename and reads the gist using 'gist -r'
@@ -219,16 +219,27 @@ else
     fi
 
     ### VSCODE
-    if [ -d .vscode ]; then
-      (
-        cd $HOME/Library/Application\ Support/Code/User/
-          u 'vs_settings.json' 'cat settings.json'
-          u 'vs_extensions' 'code --list-extensions'
-          # TODO check if anything in snippets folder
-            # u 'vs_snippets' 'ls snippets' TODO: figure out how snippets work in vs
-          # KEYMAP: where is it stored? TODO: try and make key bindings so that it generates a file? maybe togglesidebar
-      )
-    fi
+    vscode_paths=("Code" "Code - Insiders")
+    vscode_binaries=("code" "code-insiders")
+    vscode_prefixes=("vs" "vsI")
+    vscode_files=("settings.json" "keybindings.json")
+
+    for i in "${!vscode_paths[@]}"; do
+      vscode_dir="$HOME/Library/Application Support/${vscode_paths[$i]}/User/"
+
+      if [ -d "$vscode_dir" ]; then
+        vscode_cmd="/usr/local/bin/${vscode_binaries[$i]}"
+        vscode_prefix="${vscode_prefixes[$i]}"
+        cd "$vscode_dir"
+        for file in "${vscode_files[@]}"; do
+          if [ -f "$file" ]; then
+            u "${vscode_prefix}_${file%.json}" "cat $file"
+          fi
+        done
+        u "${vscode_prefix}_extensions" "$vscode_cmd --list-extensions"
+        cd - > /dev/null
+      fi
+    done
 
     ### BRACKETS
     (

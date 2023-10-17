@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ### HOMEBREW
 # casks are now included in default upgrade and cleanup

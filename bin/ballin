@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 FILE_NAME="\e[4mfile name\e[0m"
 KEY="\e[4mkey\e[0m"
 VALUE="\e[4mvalue\e[0m"

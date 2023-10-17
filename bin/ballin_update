@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 update() {
   printf "👟 getting fresh kicks...\n"
