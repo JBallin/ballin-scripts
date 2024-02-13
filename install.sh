@@ -34,31 +34,51 @@ elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
 else
 
 
-  #################################### GIST ####################################
-  gist_token_path="$HOME/$(bin/ballin_config get gu.token_file)"
+#################################### GIST ####################################
+# Retrieve path for token and URL from configuration
+gist_token_path="$HOME/$(bin/ballin_config get gu.token_file)"
+gist_config_url=$(bin/ballin_config get gu.url)
+
+### DOWNLOAD GIST
+# Check if gist is already installed, if not, install it
+if [ ! -x "$(command -v gist)" ]; then
+  printf "\n🍺 brew installing gist...\n\n"
+  brew install gist
+fi
+
+### LOGIN GIST
+# Check if token file exists and is valid, if not, delete it
+if [ -f $gist_token_path ] && ! $(gist -l > /dev/null); then
+  printf "\n🗑  Deleting $gist_token_path because token is expired/invalid"
+  rm $gist_token_path
+fi
+
+# Prompt user for GitHub URL and token until a valid token file is created
+while [ ! -f $gist_token_path ]; do
+  printf "\n🙏 Please enter your GitHub (Enterprise) base URL (for example, https://github.com for personal accounts or https://github.enterprise.com for enterprise accounts):\n"
+  read -p "URL: " URL
+  # Save entered URL to configuration
+  bin/ballin_config set gu.url $URL
   gist_config_url=$(bin/ballin_config get gu.url)
 
-  ### DOWNLOAD GIST
-  if [ ! -x "$(command -v gist)" ]; then
-    printf "\n🍺 brew installing gist...\n\n"
-    brew install gist
-  fi
-
-  ### LOGIN GIST
+  # Check if entered URL is valid
   if ! $(curl -s -o /dev/null $gist_config_url); then
-    printf "\n⛔️ Unable to reach $gist_config_url. Please verify your connection and try again.\n"
-    exit 1
-  else
-    if [ -f $gist_token_path ] && ! $(gist -l > /dev/null); then
-      printf "\n🗑  Deleting $gist_token_path because token is expired/invalid"
-      rm $gist_token_path
-    fi
-    while [ ! -f $gist_token_path ]; do
-      printf "\n🙏 Please login to gist:\n"
-      gist --login
-    done
+    printf "\n⛔️ Unable to reach $gist_config_url. Please verify your connection and the URL, and try again.\n"
+    continue
   fi
 
+  # Guide user to generate a new token on GitHub
+  printf "\n1. Go to $gist_config_url/settings/tokens/new (you may need to adjust the URL for enterprise accounts)"
+  printf "\n2. Generate a new token with the 'gist' scope"
+  printf "\n3. Copy the token and paste it here\n"
+  read -sp "Token: " TOKEN
+  # Save entered token to file
+  echo $TOKEN > $gist_token_path
+  unset TOKEN
+
+  # Set secure permissions for the token file
+  chmod 600 $gist_token_path
+done
 
   ########################## CREATE/UPDATE CONFIG FILE #########################
   ### CREATE/UPDATE CONFIG FILE
