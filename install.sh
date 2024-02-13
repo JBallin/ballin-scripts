@@ -55,7 +55,7 @@ fi
 
 # Prompt user for GitHub URL and token until a valid token file is created
 while [ ! -f $gist_token_path ]; do
-  printf "\n🙏 Please enter your GitHub (Enterprise) base URL (for example, https://github.com for personal accounts or https://github.enterprise.com for enterprise accounts):\n"
+  printf "\n🙏 Please enter your Gist base URL (for example, 'https://gist.github.com' for personal accounts or 'https://gist.[your GitHub Enterprise domain]' for enterprise accounts):\n"
   read -p "URL: " URL
   # Save entered URL to configuration
   bin/ballin_config set gu.url $URL
@@ -68,7 +68,7 @@ while [ ! -f $gist_token_path ]; do
   fi
 
   # Guide user to generate a new token on GitHub
-  printf "\n1. Go to $gist_config_url/settings/tokens/new (you may need to adjust the URL for enterprise accounts)"
+  printf "\n1. Go to $gist_config_url/settings/tokens/new"
   printf "\n2. Generate a new token with the 'gist' scope"
   printf "\n3. Copy the token and paste it here\n"
   read -sp "Token: " TOKEN
