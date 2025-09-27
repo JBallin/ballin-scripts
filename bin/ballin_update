@@ -12,7 +12,7 @@ update() {
   git merge &> /dev/null
   if [ $? -ne 0 ]; then
     printf "git merge failed. stashing changes and trying again...\n"
-    git add . && git stash && git checkout master && git merge &> /dev/null
+    git add . && git stash && git checkout main && git merge &> /dev/null
     if [ $? -ne 0 ]; then
       printf "git merge failed again.\n"
       exit 1

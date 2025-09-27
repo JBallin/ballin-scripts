@@ -7,7 +7,7 @@
 Run the [install script](install.sh) using cURL:
 
 ```shell
-$ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/master/install.sh)
+$ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
 ## Scripts
@@ -19,9 +19,6 @@ $ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/master
 ![gu](../assets/screenshots/1_gu.png?raw=true "gu")
 <br>
 *RELATED: [My Sweet Config](https://github.com/JBallin/sweet-config) - visualize your setup*
-
-##### `theme` - Switch between light and dark themes (customizable) in Atom
-![theme](../assets/screenshots/2_theme.png?raw=true "theme")
 
 ##### `up` - Update brew, npm, etc.
 ![up](../assets/screenshots/3_up.png?raw=true "up")

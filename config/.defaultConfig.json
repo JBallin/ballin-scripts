@@ -1,14 +1,4 @@
 {
-  "theme": {
-    "light": [
-      "atom-light-ui",
-      "atom-light-syntax"
-    ],
-    "dark": [
-      "atom-dark-ui",
-      "atom-dark-syntax"
-    ]
-  },
   "up": {
     "cleanup": "true",
     "ballin": "true",
