@@ -174,7 +174,7 @@ else
     ### NODE
     # NPM
     if [ -x "$(command -v npm)" ]; then
-      u 'npm_global' 'ls /usr/local/lib/node_modules'
+      u 'npm_global' 'npm list -g --depth=0'
     fi
 
     # YARN
