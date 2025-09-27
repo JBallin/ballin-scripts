@@ -35,11 +35,8 @@ describe('config', () => {
   });
 
   describe('getConfig', () => {
-    it('("theme") should return an Object', () => {
-      assert.isObject(getConfig('theme'));
-    });
-    it('("theme.dark") should return an Array', () => {
-      assert.isArray(getConfig('theme.dark'));
+    it('("up") should return an Object', () => {
+      assert.isObject(getConfig('up'));
     });
     it('("gu.id") should return a String', () => {
       assert.isString(getConfig('gu.id'));
@@ -51,7 +48,7 @@ describe('config', () => {
       assert.isString(getConfig());
     });
     it('should return an error if given keys that don\'t exist', () => {
-      assert.equal(getConfig('wrong'), '"wrong" doesn\'t exist in config');
+      assert.equal(getConfig('wrong'), 'INVALID: "wrong" doesn\'t exist in config');
     });
   });
 
@@ -62,9 +59,6 @@ describe('config', () => {
       assert.equal(fetchConfigJSON(), initialConfig);
     });
 
-    it('should set theme.dark', () => {
-      setTest('theme.dark', ['rainbow', 'rainbow-lite']);
-    });
     it('should set up.cleanup', () => {
       setTest('up.cleanup', 'test');
     });
@@ -78,8 +72,8 @@ describe('config', () => {
       assert.equal(setConfig('a', 'b', 'c'), configMessages.setArgsErr);
     });
     it('should return the keys/value it set', () => {
-      const keys = 'theme.light';
-      const val = 'new theme';
+      const keys = 'up.cleanup';
+      const val = 'true';
       assert.equal(setConfig(keys, val), `"${keys}" set to: "${val}"`);
     });
   });
@@ -96,9 +90,6 @@ describe('config', () => {
     });
     it('("get", "gu.id") should return a Number', () => {
       assert.isString(configAction('get', 'gu.id'));
-    });
-    it('("get", "theme.light") should return an Array', () => {
-      assert.isArray(configAction('get', 'theme.light'));
     });
     it('("wrong") should return an invalid error', () => {
       assert.equal(configAction('wrong'), configMessages.actionErr);

@@ -145,11 +145,6 @@ done
       unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
       rm .MyConfig.md
     fi
-
-    ################################# NPM INSTALL ################################
-    # production === don't install devDeps
-    printf "\n🧐 installing any missing dependencies...\n"
-    npm i --production > /dev/null 2>&1
   )
 
   ############################## SYMLINK BINARIES ##############################

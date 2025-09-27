@@ -14,12 +14,6 @@ id=$(ballin_config get gu.id)
 url="$(ballin_config get gu.url)/$id"
 # TODO: generate file_suggestions based on API response instead of hard-coding
 file_suggestions='
-  apm
-  atom_init.coffee
-  atom_keymap.cson
-  atom_snippets.cson
-  atom_styles.less
-  atomconfig.cson
   ballin_config
   bash_completions
   bash_profile.sh
@@ -139,13 +133,6 @@ else
     output_file_change
   }
 
-  # only prints non-comments
-  # TODO: add option to init to toggle whether or not want comments included?
-  catWithoutCommentsAndBlankLines() {
-    local file_name=$1
-    sed -e '/^[[:blank:]]*#/d;s/#.*//; /^$/d' $file_name
-  }
-
 	(
     cd $HOME
 
@@ -199,24 +186,6 @@ else
     # NVM
     if [ -f .nvmrc ]; then
       u 'nvmrc' 'cat .nvmrc'
-    fi
-
-    ### ATOM
-    if [ -x "$(command -v apm)" ] && [ -d .atom ]; then
-      u 'apm' 'apm list --installed --no-color'
-      # TODO: 'font size'/'show panel' change shouldn't trigger update
-      # always back up dark theme so that a theme change doesn't trigger a gu update
-      DARK_THEME_RESPONSE=$(theme d)
-      u 'atom_config.cson' 'cat .atom/config.cson'
-      # switch back to light theme if was originally light theme
-      if [ "$DARK_THEME_RESPONSE" != "already set to dark theme..." ]; then
-        theme l > /dev/null
-      fi
-      u 'atom_keymap.cson' 'catWithoutCommentsAndBlankLines .atom/keymap.cson'
-      u 'atom_snippets.cson' 'catWithoutCommentsAndBlankLines .atom/snippets.cson'
-      # TODO: catWithout... not checking for CSS comments, just hashes. Need to updated func to check for those.
-  		u 'atom_styles.less' 'catWithoutCommentsAndBlankLines .atom/styles.less'
-  		u 'atom_init.coffee' 'catWithoutCommentsAndBlankLines .atom/init.coffee'
     fi
 
     ### VSCODE

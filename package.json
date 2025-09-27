@@ -24,8 +24,5 @@
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.25.4",
     "mocha": "^11.7.2"
-  },
-  "dependencies": {
-    "change-atom-theme": "file:scripts/atom_theme"
   }
 }
