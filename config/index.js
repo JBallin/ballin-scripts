@@ -7,12 +7,12 @@ const defaultConfigPath = path.join(__dirname, '.defaultConfig.json');
 const stringify = (obj) => JSON.stringify(obj, null, 2);
 
 const configMessages = {
-  actionErr: 'INVALID: ballin_config accepts "", "get", or "set"',
-  getKeysDneErr: (keys) => `"${keys}" doesn't exist in config`,
+  actionErr: 'INVALID: ballin_config accepts "", "get", "set", or "reset"',
+  getKeysDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
   reset: 'Config has been reset to default configuration',
   set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`, // eslint-disable-line
   setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
-  getArgsErr: 'INVALID: getConfig takes two arguments: "key(s)" and "value"',
+  getArgsErr: 'INVALID: getConfig takes one argument: "key(s)"',
   setDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
   setObjErr: (keys, prevVal) => `INVALID: "${keys} is not a bottom-level value, it returns ${JSON.stringify(prevVal)}."`,
 };
@@ -28,6 +28,8 @@ const fetchConfig = () => {
   return { configObj, configJSON };
 };
 
+// TODO: guard against deep missing paths in getConfig/setConfig
+//       (e.g., "gu.foo.bar" → return DNE instead of throw)
 const getConfig = (keys, val) => {
   if (val) return configMessages.getArgsErr;
   const { configObj, configJSON } = fetchConfig();
@@ -43,18 +45,18 @@ const setConfig = (keys, val, other) => {
     return configMessages.setArgsErr;
   }
   const keysArr = keys.split('.');
-  // ex: 'theme.light' -> [ 'theme', 'light' ]
-  const keyToSet = keysArr.splice(-1);
-  // 'light'
+  // ex: 'up.cleanup' -> [ 'up', 'cleanup' ]
+  const keyToSet = keysArr.pop();
+  // 'true'
   const topLevelKeys = keysArr;
-  // [ 'theme' ]
+  // [ 'up' ]
   const nestedObj = topLevelKeys.reduce((res, key) => res[key], configObj);
-  // { light: 'lightTheme', dark: 'darkTheme' }
+  // { cleanup: 'false', ballin: 'true' }
   const prevVal = nestedObj[keyToSet];
-  // 'lightTheme'
+  // 'false'
 
-  // make sure prevVal isn't an object (arrays and null are ok: gu.id defaults to null)
-  if (typeof prevVal === 'object' && !Array.isArray(prevVal) && prevVal !== null) {
+  // make sure prevVal isn't an object (gu.id defaults to null)
+  if (typeof prevVal === 'object' && prevVal !== null) {
     return configMessages.setObjErr(keys, prevVal);
   }
   if (prevVal === undefined) {

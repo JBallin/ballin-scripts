@@ -9,10 +9,7 @@ EMPTY="\e[1m''\e[0m"
 RESET="\e[1mreset\e[0m"
 OPEN="\e[1mopen\e[0m"
 READ="\e[1mread\e[0m"
-SAVE="\e[1msave\e[0m"
-D="\e[1md\e[0m"
-L="\e[1ml\e[0m"
-EX1="(ex: get theme.dark)"
+EX1="(ex: get up.cleanup)"
 EX2="(ex: set up.cleanup true)"
 
 printf "
@@ -31,8 +28,6 @@ Commands:
 Scripts:
 
     gu                    gist: $EMPTY (update) $OPEN, $READ $FILE_NAME
-    theme                 $EMPTY (toggle), $D (dark), $L (light)
-                          $SAVE (save current theme): $D (dark) $L (light)
     up                    update brew etc.
 
 "
