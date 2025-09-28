@@ -13,6 +13,13 @@ if [ -x "$(command -v brew)" ]; then
 fi
 
 
+### NVM
+# update nvm-installed LTS node
+if [ -s "$NVM_DIR/nvm.sh" ] && [ $(ballin_config get up.nvm) == 'true' ]; then
+  \. "$NVM_DIR/nvm.sh"
+  nvm install --lts
+fi
+
 ### NPM
 # update all global npm binaries
 if [ -x "$(command -v npm)" ] && [ $(ballin_config get up.npm) == 'true' ]; then
