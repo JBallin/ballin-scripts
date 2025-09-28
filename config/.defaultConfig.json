@@ -4,7 +4,7 @@
     "ballin": "true",
     "gu": "false",
     "softwareupdate": "true",
-    "npm": "true"
+    "npm": "false"
   },
   "gu": {
     "id": null,
