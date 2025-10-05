@@ -8,8 +8,7 @@ printf "🏀 let's ball...\n"
   # only clone if folder doesn't already exist
   if [ ! -d ".ballin-scripts" ]; then
     echo ''
-    git clone https://github.com/JBallin/ballin-scripts.git
-    mv ballin-scripts .ballin-scripts
+    git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts
   fi
 )
 
