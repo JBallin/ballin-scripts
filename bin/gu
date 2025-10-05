@@ -239,8 +239,8 @@ else
     fi
 
     ### BALLIN SCRIPTS
-    if [ -f .ballin-scripts/config/ballin.json ]; then
-      u 'ballin_config' 'cat .ballin-scripts/config/ballin.json'
+    if [ -f .ballin-scripts/ballin.config.json ]; then
+      u 'ballin_config' 'cat .ballin-scripts/ballin.config.json'
     fi
 	)
 fi
