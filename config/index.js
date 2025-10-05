@@ -9,17 +9,12 @@ const stringify = (obj) => JSON.stringify(obj, null, 2);
 const configMessages = {
   actionErr: 'INVALID: ballin_config accepts "", "get", "set", or "reset"',
   getKeysDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
-  reset: 'Config has been reset to default configuration',
-  set: keys => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`, // eslint-disable-line
+  reset: (prevConfig, defaultConfig) => `Config has been reset FROM:\n${prevConfig}\nTO:\n${defaultConfig}`,
+  set: (keys) => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`, // eslint-disable-line no-use-before-define
   setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
   getArgsErr: 'INVALID: getConfig takes one argument: "key(s)"',
   setDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
   setObjErr: (keys, prevVal) => `INVALID: "${keys}" is not a bottom-level value, it returns ${JSON.stringify(prevVal)}.`,
-};
-
-const resetConfig = () => {
-  const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8');
-  fs.writeFileSync(configPath, defaultConfig, 'utf8');
 };
 
 const fetchConfig = () => {
@@ -36,7 +31,15 @@ const getConfig = (keys, val) => {
   if (keys !== undefined) {
     const res = keys.split('.').reduce((result, key) => result[key], configObj);
     return res !== undefined ? res : configMessages.getKeysDneErr(keys);
-  } return configJSON;
+  }
+  return configJSON;
+};
+
+const resetConfig = () => {
+  const prevConfig = getConfig();
+  const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8');
+  fs.writeFileSync(configPath, defaultConfig, 'utf8');
+  return configMessages.reset(prevConfig, defaultConfig);
 };
 
 const setConfig = (keys, val, other) => {
@@ -68,10 +71,7 @@ const setConfig = (keys, val, other) => {
 };
 
 const configAction = (request, keys, value, other) => {
-  if (request === 'reset') {
-    resetConfig();
-    return configMessages.reset;
-  }
+  if (request === 'reset') return resetConfig();
   // send config auto if not given a request with ballin_config command
   if (request === 'get' || !request) return getConfig(keys, value);
   if (request === 'set') return setConfig(keys, value, other);
