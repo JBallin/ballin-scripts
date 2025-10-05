@@ -12,11 +12,11 @@
 $ cd $HOME/.ballin-scripts
 $ ballin_update # Update project/config
 $ git checkout -b $BRANCH_NAME
-$ cp config/ballin.json ../Desktop # Stash config
+$ cp ballin.config.json ../Desktop # Stash config
 $ npm install
 # MAKE CHANGES
 $ npm test
-$ mv ../Desktop/ballin.json config # Restore config
+$ mv ../Desktop/ballin.config.json . # Restore config
 $ git push --set-upstream fork $BRANCH_NAME
 ```
 

@@ -83,10 +83,10 @@ done
   ### CREATE/UPDATE CONFIG FILE
   (
     cd $HOME/.ballin-scripts/config/
-    if [ ! -f ballin.json ]; then
+    if [ ! -f ../ballin.config.json ]; then
       # create config
-      cp .defaultConfig.json ballin.json
-      printf "\n🧠 Created 'ballin.json' file in /config using default settings\n"
+      cp .defaultConfig.json ../ballin.config.json
+      printf "\n🧠 Created 'ballin.config.json' file in root using default settings\n"
     else
       # update config
       UPDATE_RESULT=$(node $HOME/.ballin-scripts/config/updateConfig.js)
@@ -116,7 +116,7 @@ done
             printf "\n👍 Storing your previous gist ID in your config:\n"
             bin/ballin_config set gu.id $GIST_ID
             VALID_GIST_ID=0
-            # TODO: overwrite ballin.json config file from ballin.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.json
+            # TODO: overwrite ballin.config.json config file from ballin.config.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.config.json
           else
             printf "\n⚠️  INVALID: Expected \e[1mgist -r '$GIST_ID'\e[0m to output:\n$GIST_DESCRIPTION\n"
           fi

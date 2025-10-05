@@ -4,9 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const { stringify } = require('.');
 const defaultConfig = require('./.defaultConfig.json');
-const userConfig = require('./ballin.json');
+const userConfig = require('../ballin.config.json');
 
-const userConfigPath = path.join(__dirname, 'ballin.json');
+const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
 const updates = [];
 
 Object.keys(defaultConfig).forEach((key) => {
