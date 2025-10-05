@@ -14,7 +14,7 @@ const configMessages = {
   setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
   getArgsErr: 'INVALID: getConfig takes one argument: "key(s)"',
   setDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
-  setObjErr: (keys, prevVal) => `INVALID: "${keys} is not a bottom-level value, it returns ${JSON.stringify(prevVal)}."`,
+  setObjErr: (keys, prevVal) => `INVALID: "${keys}" is not a bottom-level value, it returns ${JSON.stringify(prevVal)}.`,
 };
 
 const resetConfig = () => {

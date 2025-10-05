@@ -76,6 +76,11 @@ describe('config', () => {
       const val = 'true';
       assert.equal(setConfig(keys, val), `"${keys}" set to: "${val}"`);
     });
+    it('should give error if trying to write to an object', () => {
+      const keys = 'up';
+      const val = 'true';
+      assert.include(setConfig(keys, val), 'INVALID: "up" is not a bottom-level value, it returns');
+    });
   });
 
   describe('configAction', () => {

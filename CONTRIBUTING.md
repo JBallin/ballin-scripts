@@ -1,20 +1,23 @@
 # Contribution Guidelines
 
-## Make Changes Locally
+## Setup
 
-First, make a fork of the repo and set it as a remote:
-`git remote add fork $LINK_TO_FORK`
+1. Run the install script
+2. Fork the repository on GitHub
+3. Set the fork as a remote: `git remote add fork $FORK_REPO`
+
+## Development
 
 ```shell
 $ cd $HOME/.ballin-scripts
-$ ballin_update
+$ ballin_update # Update project/config
 $ git checkout -b $BRANCH_NAME
-$ cp config/ballin.json ../Desktop
+$ cp config/ballin.json ../Desktop # Stash config
 $ npm install
 # MAKE CHANGES
 $ npm test
+$ mv ../Desktop/ballin.json config # Restore config
 $ git push --set-upstream fork $BRANCH_NAME
-$ mv ../Desktop/ballin.json config/
 ```
 
 ## Suggestions Welcome
