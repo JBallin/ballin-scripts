@@ -102,5 +102,10 @@ describe('config', () => {
     it('("set", "gu.id", "123") should set gu.id to "123"', () => {
       setTest('gu.id', '123', configAction);
     });
+    it('("reset") should reset config', () => {
+      setTest('gu.id', '123', configAction);
+      assert.include(configAction('reset'), 'Config has been reset FROM:');
+      assert.isNull(getConfig('gu.id'));
+    });
   });
 });
