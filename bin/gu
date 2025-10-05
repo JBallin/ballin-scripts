@@ -242,5 +242,10 @@ else
     if [ -f .ballin-scripts/ballin.config.json ]; then
       u 'ballin_config' 'cat .ballin-scripts/ballin.config.json'
     fi
+
+    ### MAS
+    if [ -x "$(command -v mas)" ]; then
+      u 'mas' 'mas list'
+    fi
 	)
 fi
