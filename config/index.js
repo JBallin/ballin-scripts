@@ -10,7 +10,7 @@ const configMessages = {
   actionErr: 'INVALID: ballin_config accepts "", "get", "set", or "reset"',
   getKeysDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
   reset: (prevConfig, defaultConfig) => `Config has been reset FROM:\n${prevConfig}\nTO:\n${defaultConfig}`,
-  set: (keys) => `"${keys}" set to: ${JSON.stringify(getConfig(keys))}`, // eslint-disable-line no-use-before-define
+  set: (keys, newConfig) => `"${keys}" set to: ${JSON.stringify(newConfig)}`,
   setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
   getArgsErr: 'INVALID: getConfig takes one argument: "key(s)"',
   setDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
@@ -67,7 +67,7 @@ const setConfig = (keys, val, other) => {
   }
   nestedObj[keyToSet] = val;
   fs.writeFileSync(configPath, stringify(configObj), 'utf8');
-  return configMessages.set(keys);
+  return configMessages.set(keys, getConfig(keys));
 };
 
 const configAction = (request, keys, value, other) => {
