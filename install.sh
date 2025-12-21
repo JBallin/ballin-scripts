@@ -36,7 +36,7 @@ else
 #################################### GIST ####################################
 # Retrieve path for token and URL from configuration
 gist_token_path="$HOME/$(bin/ballin_config get gu.token_file)"
-gist_config_url=$(bin/ballin_config get gu.url)
+gist_config_url="$(bin/ballin_config get gu.url)"
 
 ### DOWNLOAD GIST
 # Check if gist is already installed, if not, install it
@@ -58,7 +58,7 @@ while [ ! -f $gist_token_path ]; do
   read -p "URL: " URL
   # Save entered URL to configuration
   bin/ballin_config set gu.url $URL
-  gist_config_url=$(bin/ballin_config get gu.url)
+  gist_config_url="$(bin/ballin_config get gu.url)"
 
   # Check if entered URL is valid
   if ! $(curl -s -o /dev/null $gist_config_url); then
@@ -103,7 +103,7 @@ done
 
     ### CHECK IF USER ALREADY HAS GIST ID
     cd $HOME/.ballin-scripts/
-    if [ $(bin/ballin_config get gu.id) == 'null' ]; then
+    if [ "$(bin/ballin_config get gu.id)" = 'null' ]; then
       echo ''
       read -p "🤔 Do you already have a ballin-scripts backup gist? [y/N] " YN
       if [[ $YN == "y" || $YN == "Y" ]]; then
@@ -126,7 +126,7 @@ done
     fi
 
     ### GENERATE + STORE GIST ID
-    if [ $(bin/ballin_config get gu.id) == 'null' ]; then
+    if [ "$(bin/ballin_config get gu.id)" = 'null' ]; then
       printf "$GIST_DESCRIPTION" > .MyConfig.md
 
       GIST_URL=$(gist -p .MyConfig.md)
