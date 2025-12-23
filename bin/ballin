@@ -27,7 +27,7 @@ Commands:
 
 Scripts:
 
-    gu                    gist: $EMPTY (update) $OPEN, $READ $FILE_NAME
+    gu                    gist: $EMPTY (update), $OPEN, $READ $FILE_NAME
     up                    update brew etc.
 
 "
