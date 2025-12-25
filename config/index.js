@@ -9,7 +9,7 @@ const stringify = (obj) => JSON.stringify(obj, null, 2);
 const configMessages = {
   actionErr: 'INVALID: ballin_config accepts "", "get", "set", or "reset"',
   getKeysDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
-  reset: (prevConfig, defaultConfig) => `Config has been reset FROM:\n${prevConfig}\nTO:\n${defaultConfig}`,
+  reset: (prevConfig, defaultConfig) => `Config has been reset...\nFROM:\n${prevConfig}TO:\n${defaultConfig}`,
   set: (keys, newConfig) => `"${keys}" set to: ${JSON.stringify(newConfig)}`,
   setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
   getArgsErr: 'INVALID: getConfig takes one argument: "key(s)"',

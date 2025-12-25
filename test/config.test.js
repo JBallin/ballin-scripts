@@ -104,7 +104,7 @@ describe('config', () => {
     });
     it('("reset") should reset config', () => {
       setTest('gu.id', '123', configAction);
-      assert.include(configAction('reset'), 'Config has been reset FROM:');
+      assert.include(configAction('reset'), 'Config has been reset...\nFROM:');
       assert.isNull(getConfig('gu.id'));
     });
   });
