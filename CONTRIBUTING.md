@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Run the install script (see [README](README.md))
+1. Run the [install script](README.md#installation)
 2. Fork the repository on GitHub
 3. Set the fork as a remote: `git remote add fork $FORK_REPO`
 
