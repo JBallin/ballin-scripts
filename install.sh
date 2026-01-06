@@ -4,7 +4,7 @@ printf "🏀 let's ball...\n"
 
 ################################## CLONE REPO ##################################
 (
-  cd $HOME
+  cd "$HOME"
   # only clone if folder doesn't already exist
   if [ ! -d ".ballin-scripts" ]; then
     echo ''
@@ -47,21 +47,21 @@ fi
 
 ### LOGIN GIST
 # Check if token file exists and is valid, if not, delete it
-if [ -f $gist_token_path ] && ! $(gist -l > /dev/null); then
+if [ -f "$gist_token_path" ] && ! gist -l > /dev/null; then
   printf "\n🗑  Deleting $gist_token_path because token is expired/invalid"
-  rm $gist_token_path
+  rm "$gist_token_path"
 fi
 
 # Prompt user for GitHub URL and token until a valid token file is created
-while [ ! -f $gist_token_path ]; do
+while [ ! -f "$gist_token_path" ]; do
   printf "\n🙏 Please enter your Gist base URL (for example, 'https://gist.github.com' for personal accounts or 'https://gist.[your GitHub Enterprise domain]' for enterprise accounts):\n"
   read -p "URL: " URL
   # Save entered URL to configuration
-  bin/ballin_config set gu.url $URL
+  bin/ballin_config set gu.url "$URL"
   gist_config_url="$(bin/ballin_config get gu.url)"
 
   # Check if entered URL is valid
-  if ! $(curl -s -o /dev/null $gist_config_url); then
+  if ! curl -s -o /dev/null "$gist_config_url"; then
     printf "\n⛔️ Unable to reach $gist_config_url. Please verify your connection and the URL, and try again.\n"
     continue
   fi
@@ -72,25 +72,25 @@ while [ ! -f $gist_token_path ]; do
   printf "\n3. Copy the token and paste it here\n"
   read -sp "Token: " TOKEN
   # Save entered token to file
-  echo $TOKEN > $gist_token_path
+  printf '%s\n' "$TOKEN" > "$gist_token_path"
   unset TOKEN
 
   # Set secure permissions for the token file
-  chmod 600 $gist_token_path
+  chmod 600 "$gist_token_path"
 done
 
   ########################## CREATE/UPDATE CONFIG FILE #########################
   ### CREATE/UPDATE CONFIG FILE
   (
-    cd $HOME/.ballin-scripts/config/
-    if [ ! -f ../ballin.config.json ]; then
+    cd "$HOME/.ballin-scripts/config"
+    if [ ! -f "../ballin.config.json" ]; then
       # create config
-      cp .defaultConfig.json ../ballin.config.json
+      cp ".defaultConfig.json" "../ballin.config.json"
       printf "\n🧠 Created 'ballin.config.json' file in root using default settings\n"
     else
       # update config
-      UPDATE_RESULT=$(node $HOME/.ballin-scripts/config/updateConfig.js)
-      if [ ! -z "$UPDATE_RESULT" ]; then
+      UPDATE_RESULT=$(node "$HOME/.ballin-scripts/config/updateConfig.js")
+      if [ -n "$UPDATE_RESULT" ]; then
         printf "\n🙌 $UPDATE_RESULT\n"
       fi
     fi
@@ -102,7 +102,7 @@ done
     GIST_DESCRIPTION="$l1\n$l2\n"
 
     ### CHECK IF USER ALREADY HAS GIST ID
-    cd $HOME/.ballin-scripts/
+    cd "$HOME/.ballin-scripts"
     if [ "$(bin/ballin_config get gu.id)" = 'null' ]; then
       echo ''
       read -p "🤔 Do you already have a ballin-scripts backup gist? [y/N] " YN
@@ -110,11 +110,11 @@ done
         unset YN
         VALID_GIST_ID=1
         printf "\nWelcome Back!\n"
-        while [ $VALID_GIST_ID == 1 ]; do
+        while [ "$VALID_GIST_ID" == 1 ]; do
           read -ep "Enter your gist ID: " GIST_ID
-          if [ "$(gist -r $GIST_ID)" == "$(printf "$GIST_DESCRIPTION")" ]; then
+          if [ "$(gist -r "$GIST_ID")" == "$(printf "$GIST_DESCRIPTION")" ]; then
             printf "\n👍 Storing your previous gist ID in your config:\n"
-            bin/ballin_config set gu.id $GIST_ID
+            bin/ballin_config set gu.id "$GIST_ID"
             VALID_GIST_ID=0
             # TODO: overwrite ballin.config.json config file from ballin.config.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.config.json
           else
@@ -127,28 +127,28 @@ done
 
     ### GENERATE + STORE GIST ID
     if [ "$(bin/ballin_config get gu.id)" = 'null' ]; then
-      printf "$GIST_DESCRIPTION" > .MyConfig.md
+      printf "$GIST_DESCRIPTION" > ".MyConfig.md"
 
-      GIST_URL=$(gist -p .MyConfig.md)
+      GIST_URL=$(gist -p ".MyConfig.md")
       printf "\n💥 Created a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
 
       GIST_ID=${GIST_URL##*/}
       printf "\n🧳 Storing your new gist ID in your config...\n"
-      bin/ballin_config set gu.id $GIST_ID
+      bin/ballin_config set gu.id "$GIST_ID"
 
-      if [ -d .gu-cache ]; then
-        rm -rf .gu-cache
+      if [ -d ".gu-cache" ]; then
+        rm -rf ".gu-cache"
         printf "\n🗑  Deleted existing .gu-cache folder\n"
       fi
 
       unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
-      rm .MyConfig.md
+      rm ".MyConfig.md"
     fi
   )
 
   ############################## SYMLINK BINARIES ##############################
-  for bin in $HOME/.ballin-scripts/bin/*; do
-    ln -sf $bin /usr/local/bin
+  for bin in "$HOME/.ballin-scripts/bin/"*; do
+    ln -sf "$bin" "/usr/local/bin"
   done
   printf "\n💪 symlinked binaries\n"
 

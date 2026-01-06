@@ -41,21 +41,21 @@ file_suggestions='
 ### TODO handle error when $id fails github API (check res code) (either nonexistant, deleted gist, skipped init etc)
 
 # make sure given at least one argument
-if ! $(gist -r $id > /dev/null); then
+if ! gist -r "$id" > /dev/null; then
   printf "Error retrieving your gist, please run 'ballin_update'.\n"
-elif [ ! -z $1 ]; then
-  if [ $1 == open ]; then
-    echo $url && open $url
-  elif [ $1 == read ]; then
+elif [ -n "$1" ]; then
+  if [ "$1" == 'open' ]; then
+    echo "$url" && open "$url"
+  elif [ "$1" == 'read' ]; then
     # make sure given two arguments to read
-    if [ ! -z $2 ]; then
+    if [ -n "$2" ]; then
       # if file exits, print it, else print the potential file options
-      gist -r $id $2 || printf "\nOptions: $file_suggestions\n"
+      gist -r "$id" "$2" || printf "\nOptions: $file_suggestions\n"
     else
       # user didn't provide file_name to read
       printf "Error: 'read' needs a filename.\n\nOptions: $file_suggestions\n"
     fi
-  elif [ $1 == help ]; then
+  elif [ "$1" == 'help' ]; then
     # display the main help output
     ballin
   fi
@@ -65,7 +65,7 @@ else
 
   # create cache folder if doesn't exist
   (
-    cd $HOME/.ballin-scripts
+    cd "$HOME/.ballin-scripts"
     if [ ! -d .gu-cache ]; then mkdir .gu-cache; fi
   )
 
@@ -79,29 +79,29 @@ else
 
     update_cache() {
       # add file to cache if doesn't exist
-      if [ ! -f $cache_file ]; then
+      if [ ! -f "$cache_file" ]; then
         # set is_new to true if the $file_name doesn't exist yet in gist, otherwise create $cache_file with current gist_content
-        if ! gist -r $id $file_name > $cache_file; then
+        if ! gist -r "$id" "$file_name" > "$cache_file"; then
           is_new=0
         fi
       fi
 
       # check for changes (mark as no changes if input is empty and file is already labeled 'empty')
-      if [ "$is_new" == 1 ] && [ "$($input)" == "$(cat $cache_file)" ] || ([ "$($input)" == "" ] && [ "$(cat $cache_file)" == "empty" ]); then
+      if [ "$is_new" == 1 ] && [ "$($input)" == "$(cat "$cache_file")" ] || ([ "$($input)" == "" ] && [ "$(cat "$cache_file")" == "empty" ]); then
         is_changed=1
       else
-        $input > $cache_file
+        $input > "$cache_file"
         is_changed=0
       fi
 
       # add "empty" if $cache_file empty so that gist doesnt give empty error
-      if [ ! -s $cache_file ]; then
-        echo "empty" > $cache_file
+      if [ ! -s "$cache_file" ]; then
+        echo "empty" > "$cache_file"
       fi
       # add newline to end of $file_name (if not already there), to match gist format
-      sed -i '' -e '$a\' $cache_file
+      sed -i '' -e '$a\' "$cache_file"
 
-      if [ "$(cat $cache_file)" == 'empty' ]; then
+      if [ "$(cat "$cache_file")" == 'empty' ]; then
         is_empty=0
       fi
 
@@ -129,12 +129,12 @@ else
       fi
     }
     update_cache
-    if [ "$is_changed" == 0 ]; then gist -u $id $cache_file > /dev/null; fi
+    if [ "$is_changed" == 0 ]; then gist -u "$id" "$cache_file" > /dev/null; fi
     output_file_change
   }
 
 	(
-    cd $HOME
+    cd "$HOME"
 
     ### SHELL
     if [ -f .bash_profile ]; then
@@ -213,7 +213,7 @@ else
 
     ### BRACKETS
     (
-      cd $HOME/Library/Application\ Support/
+      cd "$HOME/Library/Application Support/"
       if [ -d Brackets ]; then
         cd Brackets
         if [ -f brackets.json ]; then

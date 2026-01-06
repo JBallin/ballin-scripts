@@ -24,6 +24,6 @@ update() {
 }
 
 (
-  cd $HOME/.ballin-scripts
+  cd "$HOME/.ballin-scripts"
   update
 )
