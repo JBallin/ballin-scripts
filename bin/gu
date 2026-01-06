@@ -69,6 +69,7 @@ else
     if [ ! -d .gu-cache ]; then mkdir .gu-cache; fi
   )
 
+  # TODO: consider refactor to pass command arrays as $input instead of a string for safer execution.
   u() {
     local file_name=$1
     local cache_file="$HOME/.ballin-scripts/.gu-cache/$file_name"
