@@ -5,7 +5,7 @@ printf "\nIt's been real...\n"
 for bin in "$HOME/.ballin-scripts/bin/"*; do
   rm "/usr/local/bin/${bin##*/}"
 done
-printf "Deleted symlinked binaries\n"
+printf 'Deleted symlinked binaries\n'
 
 rm -rf "$HOME/.ballin-scripts"
-printf "PEACE! You still ballin tho...\n\n"
+printf 'PEACE! You still ballin tho...\n\n'

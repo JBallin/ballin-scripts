@@ -5,16 +5,16 @@ update() {
 
   git fetch > /dev/null
   if [ $? -ne 0 ]; then
-    printf "git fetch failed\n"
+    printf 'git fetch failed\n'
     exit 1
   fi
 
   git merge &> /dev/null
   if [ $? -ne 0 ]; then
-    printf "git merge failed. stashing changes and trying again...\n"
+    printf 'git merge failed. stashing changes and trying again...\n'
     git add . && git stash && git checkout main && git merge &> /dev/null
     if [ $? -ne 0 ]; then
-      printf "git merge failed again.\n"
+      printf 'git merge failed again.\n'
       exit 1
     fi
   fi

@@ -6,7 +6,7 @@ printf "🏀 let's ball...\n"
 (
   cd "$HOME"
   # only clone if folder doesn't already exist
-  if [ ! -d ".ballin-scripts" ]; then
+  if [ ! -d '.ballin-scripts' ]; then
     echo ''
     git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts
   fi
@@ -18,7 +18,7 @@ printf "🏀 let's ball...\n"
 if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
   l1="usr/local/bin doesn't seem to be in your path."
   l2='Run: echo \"export PATH=/usr/local/bin:$PATH\" > $HOME/.bash_profile'
-  l3="and open a new terminal window and run this installation again."
+  l3='and open a new terminal window and run this installation again.'
   PATH_ERROR="\n⚠️  ERROR: $l1\n$l2\n$l3\n"
   printf "$PATH_ERROR"
   unset l1 l2 l3 PATH_ERROR
@@ -26,7 +26,7 @@ if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
   l1="Can't find Homebrew, which is needed to download 'gist'."
   l2="Download Homebrew at brew.sh or install ruby & run 'gem install gist',"
-  l3="and run this installation again."
+  l3='and run this installation again.'
   GIST_MISSING_ERROR="\n⚠️  ERROR: $l1\n$l2\n$l3\n"
   printf "$GIST_MISSING_ERROR"
   unset l1 l2 l3 GIST_MISSING_ERROR
@@ -41,7 +41,7 @@ gist_config_url="$(bin/ballin_config get gu.url)"
 ### DOWNLOAD GIST
 # Check if gist is already installed, if not, install it
 if [ ! -x "$(command -v gist)" ]; then
-  printf "\n🍺 brew installing gist...\n\n"
+  printf '\n🍺 brew installing gist...\n\n'
   brew install gist
 fi
 
@@ -55,7 +55,7 @@ fi
 # Prompt user for GitHub URL and token until a valid token file is created
 while [ ! -f "$gist_token_path" ]; do
   printf "\n🙏 Please enter your Gist base URL (for example, 'https://gist.github.com' for personal accounts or 'https://gist.[your GitHub Enterprise domain]' for enterprise accounts):\n"
-  read -p "URL: " URL
+  read -p 'URL: ' URL
   # Save entered URL to configuration
   bin/ballin_config set gu.url "$URL"
   gist_config_url="$(bin/ballin_config get gu.url)"
@@ -69,8 +69,8 @@ while [ ! -f "$gist_token_path" ]; do
   # Guide user to generate a new token on GitHub
   printf "\n1. Go to $gist_config_url/settings/tokens/new"
   printf "\n2. Generate a new token with the 'gist' scope"
-  printf "\n3. Copy the token and paste it here\n"
-  read -sp "Token: " TOKEN
+  printf '\n3. Copy the token and paste it here\n'
+  read -sp 'Token: ' TOKEN
   # Save entered token to file
   printf '%s\n' "$TOKEN" > "$gist_token_path"
   unset TOKEN
@@ -83,9 +83,9 @@ done
   ### CREATE/UPDATE CONFIG FILE
   (
     cd "$HOME/.ballin-scripts/config"
-    if [ ! -f "../ballin.config.json" ]; then
+    if [ ! -f '../ballin.config.json' ]; then
       # create config
-      cp ".defaultConfig.json" "../ballin.config.json"
+      cp '.defaultConfig.json' '../ballin.config.json'
       printf "\n🧠 Created 'ballin.config.json' file in root using default settings\n"
     else
       # update config
@@ -105,15 +105,15 @@ done
     cd "$HOME/.ballin-scripts"
     if [ "$(bin/ballin_config get gu.id)" = 'null' ]; then
       echo ''
-      read -p "🤔 Do you already have a ballin-scripts backup gist? [y/N] " YN
-      if [[ $YN == "y" || $YN == "Y" ]]; then
+      read -p '🤔 Do you already have a ballin-scripts backup gist? [y/N] ' YN
+      if [[ $YN == 'y' || $YN == 'Y' ]]; then
         unset YN
         VALID_GIST_ID=1
-        printf "\nWelcome Back!\n"
+        printf '\nWelcome Back!\n'
         while [ "$VALID_GIST_ID" == 1 ]; do
-          read -ep "Enter your gist ID: " GIST_ID
+          read -ep 'Enter your gist ID: ' GIST_ID
           if [ "$(gist -r "$GIST_ID")" == "$(printf "$GIST_DESCRIPTION")" ]; then
-            printf "\n👍 Storing your previous gist ID in your config:\n"
+            printf '\n👍 Storing your previous gist ID in your config:\n'
             bin/ballin_config set gu.id "$GIST_ID"
             VALID_GIST_ID=0
             # TODO: overwrite ballin.config.json config file from ballin.config.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.config.json
@@ -127,30 +127,30 @@ done
 
     ### GENERATE + STORE GIST ID
     if [ "$(bin/ballin_config get gu.id)" = 'null' ]; then
-      printf "$GIST_DESCRIPTION" > ".MyConfig.md"
+      printf "$GIST_DESCRIPTION" > '.MyConfig.md'
 
-      GIST_URL=$(gist -p ".MyConfig.md")
+      GIST_URL=$(gist -p '.MyConfig.md')
       printf "\n💥 Created a private gist titled '.MyConfig' at the following URL:\n$GIST_URL\n"
 
       GIST_ID=${GIST_URL##*/}
-      printf "\n🧳 Storing your new gist ID in your config...\n"
+      printf '\n🧳 Storing your new gist ID in your config...\n'
       bin/ballin_config set gu.id "$GIST_ID"
 
-      if [ -d ".gu-cache" ]; then
-        rm -rf ".gu-cache"
-        printf "\n🗑  Deleted existing .gu-cache folder\n"
+      if [ -d '.gu-cache' ]; then
+        rm -rf '.gu-cache'
+        printf '\n🗑  Deleted existing .gu-cache folder\n'
       fi
 
       unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
-      rm ".MyConfig.md"
+      rm '.MyConfig.md'
     fi
   )
 
   ############################## SYMLINK BINARIES ##############################
   for bin in "$HOME/.ballin-scripts/bin/"*; do
-    ln -sf "$bin" "/usr/local/bin"
+    ln -sf "$bin" '/usr/local/bin'
   done
-  printf "\n💪 symlinked binaries\n"
+  printf '\n💪 symlinked binaries\n'
 
-  printf "\n😎 ballin!\n"
+  printf '\n😎 ballin!\n'
 fi
