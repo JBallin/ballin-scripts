@@ -3,4 +3,4 @@
 const { configAction } = require('../config');
 
 const [request, keys, value, ...other] = process.argv.slice(2);
-console.log(configAction(request, keys, value, other)); // eslint-disable-line
+console.log(configAction(request, keys, value, other)); // eslint-disable-line no-console
