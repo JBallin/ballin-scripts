@@ -42,7 +42,7 @@ file_suggestions='
 
 # make sure given at least one argument
 if ! gist -r "$id" > /dev/null; then
-  printf "Error retrieving your gist, please run 'ballin_update'.\n"
+  printf '%s\n' "Error retrieving your gist, please run 'ballin_update'."
 elif [ -n "$1" ]; then
   if [ "$1" == 'open' ]; then
     echo "$url" && open "$url"
@@ -50,10 +50,10 @@ elif [ -n "$1" ]; then
     # make sure given two arguments to read
     if [ -n "$2" ]; then
       # if file exits, print it, else print the potential file options
-      gist -r "$id" "$2" || printf "\nOptions: $file_suggestions\n"
+      gist -r "$id" "$2" || printf '\nOptions: %s\n' "$file_suggestions"
     else
       # user didn't provide file_name to read
-      printf "Error: 'read' needs a filename.\n\nOptions: $file_suggestions\n"
+      printf '%s\n\nOptions: %s\n' "Error: 'read' needs a filename." "$file_suggestions"
     fi
   elif [ "$1" == 'help' ]; then
     # display the main help output
