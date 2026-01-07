@@ -197,7 +197,7 @@ else
     vscode_files=("settings.json" "keybindings.json")
 
     for i in "${!vscode_paths[@]}"; do
-      vscode_dir="$HOME/Library/Application Support/${vscode_paths[$i]}/User/"
+      vscode_dir="$HOME/Library/Application Support/${vscode_paths[$i]}/User"
 
       if [ -d "$vscode_dir" ]; then
         vscode_cmd="/usr/local/bin/${vscode_binaries[$i]}"
@@ -215,7 +215,7 @@ else
 
     ### BRACKETS
     (
-      cd "$HOME/Library/Application Support/"
+      cd "$HOME/Library/Application Support"
       if [ -d Brackets ]; then
         cd Brackets
         if [ -f brackets.json ]; then
