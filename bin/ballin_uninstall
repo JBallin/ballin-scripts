@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 ### DELETE SYMLINKS
-printf "\nIt's been real...\n"
-for bin in $HOME/.ballin-scripts/bin/*; do
-  rm /usr/local/bin/${bin##*/}
+printf '\n%s\n' "It's been real..."
+for bin in "$HOME/.ballin-scripts/bin/"*; do
+  rm "/usr/local/bin/${bin##*/}"
 done
-printf "Deleted symlinked binaries\n"
+printf '%s\n' 'Deleted symlinked binaries'
 
-rm -rf $HOME/.ballin-scripts
-printf "PEACE! You still ballin tho...\n\n"
+rm -rf "$HOME/.ballin-scripts"
+printf '%s\n\n' 'PEACE! You still ballin tho...'

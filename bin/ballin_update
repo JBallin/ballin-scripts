@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 
 update() {
-  printf "👟 getting fresh kicks...\n"
+  printf '%s\n' '👟 getting fresh kicks...'
 
   git fetch > /dev/null
   if [ $? -ne 0 ]; then
-    printf "git fetch failed\n"
+    printf '%s\n' 'git fetch failed'
     exit 1
   fi
 
   git merge &> /dev/null
   if [ $? -ne 0 ]; then
-    printf "git merge failed. stashing changes and trying again...\n"
+    printf '%s\n' 'git merge failed. stashing changes and trying again...'
     git add . && git stash && git checkout main && git merge &> /dev/null
     if [ $? -ne 0 ]; then
-      printf "git merge failed again.\n"
+      printf '%s\n' 'git merge failed again.'
       exit 1
     fi
   fi
 
-  printf "\n"
+  printf '\n'
   ./install.sh
 }
 
 (
-  cd $HOME/.ballin-scripts
+  cd "$HOME/.ballin-scripts"
   update
 )
