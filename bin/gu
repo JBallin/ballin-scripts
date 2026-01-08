@@ -29,6 +29,7 @@ file_suggestions='
   git_config
   gitconfig.cson
   gitignore_global
+  mas
   nanorc
   npm_global
   nvmrc
