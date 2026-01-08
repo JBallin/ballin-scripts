@@ -17,7 +17,7 @@ $ npm install
 # MAKE CHANGES
 $ npm test
 $ mv ../Desktop/ballin.config.json . # Restore config
-$ git push --set-upstream fork $BRANCH_NAME
+$ git push fork $BRANCH_NAME
 ```
 
 ## Suggestions Welcome
