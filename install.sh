@@ -14,10 +14,16 @@ printf '%s\n' "🏀 let's ball..."
 
 
 ############################## CHECK INITIAL SETUP #############################
-# Check that /usr/local/bin is in $PATH
-if [[ ! $PATH  = *"/usr/local/bin:"* ]]; then
-  l1="usr/local/bin doesn't seem to be in your path."
-  l2='Run: echo \"export PATH=/usr/local/bin:$PATH\" > $HOME/.bash_profile'
+if [ -x "$(command -v brew)" ]; then
+  bin_dir="$(brew --prefix)/bin"
+else
+  bin_dir='/usr/local/bin'
+fi
+
+# Check that the directory used for commands is in $PATH
+if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+  l1="$bin_dir doesn't seem to be in your path."
+  l2="Add 'export PATH=\"$bin_dir:\$PATH\"' to your shell profile."
   l3='and open a new terminal window and run this installation again.'
   printf '\n⚠️  ERROR: %s\n%s\n%s\n' "$l1" "$l2" "$l3"
   unset l1 l2 l3
@@ -145,10 +151,18 @@ done
   )
 
   ############################## SYMLINK BINARIES ##############################
+  if ! mkdir -p "$bin_dir"; then
+    printf '\n⚠️  ERROR: Unable to create %s\n' "$bin_dir"
+    exit 1
+  fi
+
   for bin in "$HOME/.ballin-scripts/bin/"*; do
-    ln -sf "$bin" '/usr/local/bin'
+    if ! ln -sfn "$bin" "$bin_dir/${bin##*/}"; then
+      printf '\n⚠️  ERROR: Unable to symlink binaries into %s\n' "$bin_dir"
+      exit 1
+    fi
   done
-  printf '\n%s\n' '💪 symlinked binaries'
+  printf '\n💪 symlinked binaries into %s\n' "$bin_dir"
 
   printf '\n%s\n' '😎 ballin!'
 fi
