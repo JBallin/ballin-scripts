@@ -7,7 +7,7 @@
 Run the [install script](install.sh) using cURL:
 
 ```shell
-$ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
 ## Scripts
