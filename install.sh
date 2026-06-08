@@ -17,8 +17,8 @@ printf '%s\n' "🏀 let's ball..."
 if [ -x "$(command -v brew)" ]; then
   bin_dir="$(brew --prefix)/bin"
 else
-  # Only used without brew; default to the supported Apple Silicon Brew path.
-  bin_dir='/opt/homebrew/bin'
+  # Use a conventional user-owned bin directory when Homebrew is unavailable.
+  bin_dir="$HOME/.local/bin"
 fi
 
 # Check that the directory used for commands is in $PATH
