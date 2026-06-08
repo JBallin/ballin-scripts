@@ -17,7 +17,8 @@ printf '%s\n' "🏀 let's ball..."
 if [ -x "$(command -v brew)" ]; then
   bin_dir="$(brew --prefix)/bin"
 else
-  bin_dir='/usr/local/bin'
+  # Apple Silicon is the only supported Mac architecture, so use its Brew path.
+  bin_dir='/opt/homebrew/bin'
 fi
 
 # Check that the directory used for commands is in $PATH
