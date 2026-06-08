@@ -3,10 +3,11 @@
 ### DELETE SYMLINKS
 printf '\n%s\n' "It's been real..."
 
-bin_dirs=('/usr/local/bin')
+# Check the standard Intel and Apple Silicon locations even if brew is absent.
+bin_dirs=('/usr/local/bin' '/opt/homebrew/bin')
 if [ -x "$(command -v brew)" ]; then
   brew_bin_dir="$(brew --prefix)/bin"
-  if [ "$brew_bin_dir" != '/usr/local/bin' ]; then
+  if [ "$brew_bin_dir" != '/usr/local/bin' ] && [ "$brew_bin_dir" != '/opt/homebrew/bin' ]; then
     bin_dirs+=("$brew_bin_dir")
   fi
 fi
