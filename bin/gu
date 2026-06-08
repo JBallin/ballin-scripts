@@ -37,6 +37,7 @@ file_suggestions='
   vimrc
   vs_extensions
   vs_settings.json
+  zprofile.sh
   zshrc.sh'
 
 ### TODO handle error when $id fails github API (check res code) (either nonexistant, deleted gist, skipped init etc)
@@ -143,14 +144,17 @@ else
     if [ -f .bash_profile ]; then
       u 'bash_profile.sh' 'cat .bash_profile'
     fi
-    if [ -f .zshrc ]; then
-      u 'zshrc.sh' 'cat .zshrc'
+    if [ -f .bashrc ]; then
+      u 'bashrc.sh' 'cat .bashrc'
     fi
     if [ -f .profile ]; then
       u 'profile.sh' 'cat .profile'
     fi
-    if [ -f .bashrc ]; then
-      u 'bashrc.sh' 'cat .bashrc'
+    if [ -f .zprofile ]; then
+      u 'zprofile.sh' 'cat .zprofile'
+    fi
+    if [ -f .zshrc ]; then
+      u 'zshrc.sh' 'cat .zshrc'
     fi
     # BASH COMPLETIONS
     if [ -d /usr/local/etc/bash_completion.d ]; then
