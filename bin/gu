@@ -205,7 +205,6 @@ else
       vscode_dir="$HOME/Library/Application Support/${vscode_paths[$i]}/User"
 
       if [ -d "$vscode_dir" ]; then
-        vscode_cmd="/usr/local/bin/${vscode_binaries[$i]}"
         vscode_prefix="${vscode_prefixes[$i]}"
         cd "$vscode_dir"
         for file in "${vscode_files[@]}"; do
@@ -213,7 +212,9 @@ else
             u "${vscode_prefix}_${file%.json}" "cat $file"
           fi
         done
-        u "${vscode_prefix}_extensions" "$vscode_cmd --list-extensions"
+        if command -v "${vscode_binaries[$i]}" > /dev/null; then
+          u "${vscode_prefix}_extensions" "${vscode_binaries[$i]} --list-extensions"
+        fi
         cd - > /dev/null
       fi
     done
