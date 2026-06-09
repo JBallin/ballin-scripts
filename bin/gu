@@ -37,6 +37,8 @@ file_suggestions='
   vimrc
   vs_extensions
   vs_settings.json
+  vsI_extensions
+  vsI_settings.json
   zprofile.sh
   zshrc.sh'
 
