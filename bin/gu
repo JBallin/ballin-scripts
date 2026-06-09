@@ -36,8 +36,10 @@ file_suggestions='
   profile.sh
   vimrc
   vs_extensions
+  vs_keybindings
   vs_settings
   vsI_extensions
+  vsI_keybindings
   vsI_settings
   zprofile.sh
   zshrc.sh'
