@@ -92,7 +92,7 @@ while [ ! -f "$gist_token_path" ]; do
   fi
 
   # Guide user to generate a new token on GitHub
-  printf '\n%s' "1. Go to $gist_config_url/settings/tokens/new"
+  printf '\n%s' "1. Go to github.com/settings/tokens/new (or the equivalent page on your GitHub Enterprise instance)"
   printf '\n%s' "2. Generate a new token with the 'gist' scope"
   printf '\n%s\n' '3. Copy the token and paste it here'
   read -sp 'Token: ' TOKEN
