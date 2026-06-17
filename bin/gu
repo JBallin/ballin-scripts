@@ -101,7 +101,7 @@ else
       if [ ! -s "$input_file" ]; then
         echo "empty" > "$input_file"
       fi
-      # Add a final newline to match gist output format.
+      # Ensure a final newline to match gist output format.
       sed -i '' -e '$a\' "$input_file"
 
       # Check for changes against the normalized cache.
