@@ -95,7 +95,10 @@ else
       fi
 
       input_file="$(mktemp)"
-      $input > "$input_file"
+      if ! $input > "$input_file"; then
+        rm -f "$input_file"
+        return 1
+      fi
       # Add "empty" because gist rejects empty files.
       if [ ! -s "$input_file" ]; then
         echo "empty" > "$input_file"
@@ -137,7 +140,7 @@ else
         fi
       fi
     }
-    update_cache
+    if ! update_cache; then return 1; fi
     if [ "$is_changed" == 0 ]; then gist -u "$id" "$cache_file" > /dev/null; fi
     output_file_change
   }
@@ -173,9 +176,16 @@ else
       u 'brew_list' 'brew list --formula'
       u 'brew_leaves' 'brew leaves'
       u 'brew_cask' 'brew list --cask'
-      # Suppress stderr warnings when no services are installed while preserving stdout service rows.
+      # Suppress no-services stderr warnings while preserving stdout rows and real errors.
       brew_services_list() {
-        brew services list 2> /dev/null
+        local err_file
+        err_file="$(mktemp)"
+        if ! brew services list 2> "$err_file"; then
+          cat "$err_file" >&2
+          rm -f "$err_file"
+          return 1
+        fi
+        rm -f "$err_file"
       }
       u 'brew_services' 'brew_services_list'
       u 'Brewfile' 'brew bundle dump --file=-'
