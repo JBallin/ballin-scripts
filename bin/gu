@@ -97,9 +97,11 @@ else
       input_file="$(mktemp)"
       $input > "$input_file"
       # Normalize the temp file before comparing so it matches gist/cache format.
+      # Add "empty" because gist rejects empty files.
       if [ ! -s "$input_file" ]; then
         echo "empty" > "$input_file"
       fi
+      # Add a final newline to match gist output format.
       sed -i '' -e '$a\' "$input_file"
 
       # Check for changes against the normalized cache.
