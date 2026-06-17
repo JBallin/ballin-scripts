@@ -103,7 +103,7 @@ else
       if [ ! -s "$input_file" ]; then
         echo "empty" > "$input_file"
       fi
-      # Ensure non-empty files end with a newline to match gist text output.
+      # Match gist text output so caches seeded by gist -r compare cleanly.
       if [ "$(tail -c 1 "$input_file")" != "" ]; then
         printf '\n' >> "$input_file"
       fi
