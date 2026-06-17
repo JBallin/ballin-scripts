@@ -96,17 +96,12 @@ else
 
       input_file="$(mktemp)"
       $input > "$input_file"
-      # Normalize the temp file before comparing so it matches gist/cache format.
       # Add "empty" because gist rejects empty files.
       if [ ! -s "$input_file" ]; then
         echo "empty" > "$input_file"
       fi
-      # Ensure a final newline to match gist output format.
-      if [ "$(tail -c 1 "$input_file")" != "" ]; then
-        printf '\n' >> "$input_file"
-      fi
 
-      # Check for changes against the normalized cache.
+      # Check for changes against the cached output.
       if [ "$is_new" == 1 ] && cmp -s "$input_file" "$cache_file"; then
         is_changed=1
       else
