@@ -81,7 +81,7 @@ else
     local cache_file="$HOME/.ballin-scripts/.gu-cache/$file_name"
     local input=$2
     local input_file
-    # State flags follow shell status convention: 0 means yes, 1 means no.
+    # State flags follow shell status convention: 0 means true, 1 means false.
     local is_changed
     local is_new=1
     local is_empty=1
