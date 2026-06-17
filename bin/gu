@@ -81,8 +81,10 @@ else
     local cache_file="$HOME/.ballin-scripts/.gu-cache/$file_name"
     local input=$2
     local input_file
+    local input_file_with_newline
     local is_changed
     local is_new=1
+    local is_seeded_from_gist=0
     local is_empty=1
 
     update_cache() {
@@ -91,6 +93,8 @@ else
         # set is_new to true if the $file_name doesn't exist yet in gist, otherwise create $cache_file with current gist_content
         if ! gist -r "$id" "$file_name" > "$cache_file"; then
           is_new=0
+        else
+          is_seeded_from_gist=1
         fi
       fi
 
@@ -107,6 +111,18 @@ else
       # Check for changes against the cached output.
       if [ "$is_new" == 1 ] && cmp -s "$input_file" "$cache_file"; then
         is_changed=1
+      elif [ "$is_seeded_from_gist" == 1 ] && [ "$(tail -c 1 "$input_file")" != "" ]; then
+        # gist -r adds a final newline; fix the local cache without uploading.
+        input_file_with_newline="$(mktemp)"
+        cp "$input_file" "$input_file_with_newline"
+        printf '\n' >> "$input_file_with_newline"
+        if cmp -s "$input_file_with_newline" "$cache_file"; then
+          is_changed=1
+        else
+          is_changed=0
+        fi
+        cp "$input_file" "$cache_file"
+        rm -f "$input_file_with_newline"
       else
         cp "$input_file" "$cache_file"
         is_changed=0
