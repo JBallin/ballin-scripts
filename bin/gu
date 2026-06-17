@@ -81,6 +81,7 @@ else
     local cache_file="$HOME/.ballin-scripts/.gu-cache/$file_name"
     local input=$2
     local input_file
+    # State flags follow shell status convention: 0 means yes, 1 means no.
     local is_changed
     local is_new=1
     local is_empty=1
@@ -95,6 +96,7 @@ else
       fi
 
       input_file="$(mktemp)"
+      # Capture once, and leave the existing cache untouched if the command fails.
       if ! $input > "$input_file"; then
         rm -f "$input_file"
         return 1
@@ -144,6 +146,7 @@ else
         fi
       fi
     }
+    # Do not upload stale cache content when the snapshot command fails.
     if ! update_cache; then return 1; fi
     if [ "$is_changed" == 0 ]; then gist -u "$id" "$cache_file" > /dev/null; fi
     output_file_change
