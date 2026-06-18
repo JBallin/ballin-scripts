@@ -1,19 +1,27 @@
 #!/usr/bin/env bash
 
+progress() {
+  printf '\n==> %s\n' "$1"
+}
+
 ### HOMEBREW
 if [ -x "$(command -v brew)" ]; then
+  progress 'Updating Homebrew packages'
   export HOMEBREW_NO_ENV_HINTS=1
   export HOMEBREW_NO_ASK=1
   brew upgrade
   if [ "$(ballin_config get up.cleanup)" = 'true' ]; then
+    progress 'Cleaning up Homebrew packages'
     brew cleanup
   fi
+  progress 'Checking Homebrew installation'
   brew doctor
 fi
 
 ### NVM
 # update nvm-installed LTS node
 if [ -s "$NVM_DIR/nvm.sh" ] && [ "$(ballin_config get up.nvm)" = 'true' ]; then
+  progress 'Updating Node.js LTS'
   \. "$NVM_DIR/nvm.sh"
   nvm install --lts
 fi
@@ -21,6 +29,7 @@ fi
 ### NPM
 # update all global npm binaries
 if [ -x "$(command -v npm)" ] && [ "$(ballin_config get up.npm)" = 'true' ]; then
+  progress 'Updating global npm packages'
   npm update -g
 fi
 
@@ -39,20 +48,24 @@ fi
 
 ### Mac App Store
 if [ -x "$(command -v mas)" ]; then
+  progress 'Updating App Store apps'
   mas upgrade
 fi
 
 ### Mac Software Update
 if [ -x "$(command -v softwareupdate)" ] && [ "$(ballin_config get up.softwareupdate)" = 'true' ]; then
+  progress 'Installing macOS updates'
   softwareupdate -ia
 fi
 
 ### BALLIN-SCRIPTS
 if [ "$(ballin_config get up.ballin)" = 'true' ]; then
+  progress 'Updating ballin-scripts'
   ballin_update
 fi
 
 ### GU
 if [ "$(ballin_config get up.gu)" = 'true' ]; then
+  progress 'Backing up development environment'
   gu
 fi
