@@ -19,11 +19,17 @@ if [ -x "$(command -v brew)" ]; then
 fi
 
 ### NVM
-# update nvm-installed LTS node
-if [ -s "$NVM_DIR/nvm.sh" ] && [ "$(ballin_config get up.nvm)" = 'true' ]; then
-  progress 'Updating Node.js LTS'
-  \. "$NVM_DIR/nvm.sh"
-  nvm install --lts
+# update nvm-installed Node.js LTS
+if [ "$(ballin_config get up.nvm)" = 'true' ]; then
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    progress 'Updating Node.js LTS'
+    # nvm is a shell function; loading it here only affects this script.
+    \. "$NVM_DIR/nvm.sh"
+    nvm install --lts
+  else
+    printf '\n⚠️  Skipping Node.js LTS update: unable to load nvm.\n' >&2
+    printf '%s\n' 'Set NVM_DIR to your nvm installation or disable this update with: ballin_config set up.nvm false' >&2
+  fi
 fi
 
 ### NPM
