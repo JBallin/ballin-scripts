@@ -21,8 +21,8 @@ fi
 ### NVM
 # update nvm-installed Node.js LTS
 if [ "$(ballin_config get up.nvm)" = 'true' ]; then
+  progress 'Updating Node.js LTS'
   if [ -s "$NVM_DIR/nvm.sh" ]; then
-    progress 'Updating Node.js LTS'
     # nvm is a shell function; loading it here only affects this script.
     \. "$NVM_DIR/nvm.sh"
     nvm install --lts

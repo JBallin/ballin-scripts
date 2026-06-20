@@ -70,6 +70,7 @@ fi
     const result = runUp();
 
     assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Updating Node.js LTS');
     assert.include(result.stderr, 'unable to load nvm');
     assert.include(result.stderr, 'Set NVM_DIR');
     assert.include(result.stderr, 'ballin_config set up.nvm false');
