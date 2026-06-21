@@ -3,6 +3,7 @@ printf '%s\n' "🏀 let's ball..."
 
 repo_dir="$HOME/.ballin-scripts"
 ballin_config="$repo_dir/bin/ballin_config"
+optional_capabilities_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'
 
 ################################## CLONE REPO ##################################
 (
@@ -41,6 +42,11 @@ else
 
 
 ########################## CREATE/UPDATE CONFIG FILE #########################
+config_existed=true
+if [ ! -f "$repo_dir/ballin.config.json" ]; then
+  config_existed=false
+fi
+
 (
   cd "$repo_dir/config"
   if [ ! -f '../ballin.config.json' ]; then
@@ -53,6 +59,7 @@ else
     UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.js")
     if [ -n "$UPDATE_RESULT" ]; then
       printf '\n🙌 %s\n' "$UPDATE_RESULT"
+      printf '\nOptional capabilities: %s\n' "$optional_capabilities_url"
     fi
   fi
 )
@@ -167,6 +174,10 @@ done
     fi
   done
   printf '\n💪 symlinked binaries into %s\n' "$bin_dir"
+
+  if [ "$config_existed" = false ] && [ -f "$repo_dir/ballin.config.json" ]; then
+    printf '\nOptional capabilities: %s\n' "$optional_capabilities_url"
+  fi
 
   printf '\n%s\n' '😎 ballin!'
 fi
