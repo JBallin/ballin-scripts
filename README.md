@@ -11,7 +11,7 @@ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/ins
 ```
 
 After setup, see the [optional capabilities guide](docs/optional-capabilities.md)
-for integrations and additional update automation.
+for Node.js setup choices, optional tools, and update settings.
 
 ## Scripts
 
