@@ -23,7 +23,8 @@ fi
 if [ "$(ballin_config get up.nvm)" = 'true' ]; then
   progress 'Updating Node.js LTS'
   if [ -s "$NVM_DIR/nvm.sh" ]; then
-    # nvm is a shell function; loading it here only affects this script.
+    # nvm is a shell function and is not inherited by this Bash process.
+    # Load it here; changes remain local to this script.
     \. "$NVM_DIR/nvm.sh"
     nvm install --lts
   else
