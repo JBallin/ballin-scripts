@@ -31,6 +31,14 @@ if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
   l3='and open a new terminal window and run this installation again.'
   printf '\n⚠️  ERROR: %s\n%s\n%s\n' "$l1" "$l2" "$l3"
   unset l1 l2 l3
+# Check that Node.js is available before running configuration commands
+elif [ ! -x "$(command -v node)" ]; then
+  printf '\n⚠️  ERROR: Node.js is required.\n'
+  printf '\nRecommended: install Node.js LTS with nvm.\n'
+  printf 'Setup guide: %s\n' "$optional_capabilities_url"
+  printf '\nAlternatively:\n  brew install node\n'
+  printf '\nThen run this installer again.\n'
+  exit 1
 # Check that either gist or brew is installed
 elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
   l1="Can't find Homebrew, which is needed to download 'gist'."
