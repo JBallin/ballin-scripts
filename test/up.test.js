@@ -78,9 +78,10 @@ fi
   });
 
   it('does not load nvm when the integration is disabled', () => {
-    installNvmStub(path.join(tempDir, '.nvm'));
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    installNvmStub(nvmDir);
 
-    const result = runUp({ TEST_UP_NVM: 'false' });
+    const result = runUp({ NVM_DIR: nvmDir, TEST_UP_NVM: 'false' });
 
     assert.equal(result.status, 0);
     assert.notInclude(result.stdout, 'Updating Node.js LTS');
