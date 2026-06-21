@@ -1,16 +1,18 @@
 # Optional capabilities
 
-`ballin-scripts` works with a few optional tools and settings. The defaults keep
-updates predictable, while letting you opt in to broader automation.
+This guide covers choices for the required Node.js setup, plus optional tools
+and settings that extend `ballin-scripts`. The defaults keep updates predictable
+while letting you opt in to broader automation.
 
 ## Node.js
 
-Node.js is required by `ballin-scripts`. For a development environment, the
-recommended setup is [nvm](https://github.com/nvm-sh/nvm)
+Node.js is required by `ballin-scripts`; install it using whichever method fits
+your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
 with the latest Node.js long-term support (LTS) release. It supports switching
-versions and project-specific `.nvmrc` files without a system-wide installation.
+versions, project-specific `.nvmrc` files, and a user-local installation.
 
-Follow nvm's official [installation and shell setup instructions](https://github.com/nvm-sh/nvm#installing-and-updating),
+Follow nvm's official
+[installation and shell setup instructions](https://github.com/nvm-sh/nvm#installing-and-updating),
 then install Node.js LTS:
 
 ```shell
@@ -25,9 +27,10 @@ ballin_config set up.nvm true
 ```
 
 `up.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
-`false` because it assumes you want the LTS release, and installing a new Node.js
-version does not migrate your globally installed npm packages automatically. If
-nvm cannot be loaded, `up` warns and continues with its remaining updates.
+`false` because enabling it opts into the LTS release, and installing a new
+Node.js version does not migrate your globally installed npm packages
+automatically. If nvm cannot be loaded, `up` warns and continues with its
+remaining updates.
 
 For a simpler setup, install Homebrew's current Node.js release instead:
 
@@ -44,8 +47,9 @@ canonical reference for choosing and setting up a Node.js installation method.
 
 ## Mac App Store apps
 
-Follow the official [`mas` installation instructions](https://github.com/mas-cli/mas#installation)
-to add Mac App Store support.
+Follow the official
+[`mas` installation instructions](https://github.com/mas-cli/mas#installation) to
+add Mac App Store support.
 
 When `mas` is available, `up` updates installed App Store apps and `gu` includes
 the installed-app list in your backup. No configuration setting is required.
