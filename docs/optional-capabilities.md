@@ -41,15 +41,14 @@ brew install node
 With this option, Homebrew manages Node.js updates along with your other formulae.
 The `up.nvm` setting does not apply.
 
-The installer's missing-Node detection and guidance are tracked separately in
-[#60](https://github.com/JBallin/ballin-scripts/issues/60); this guide is the
-canonical reference for choosing and setting up a Node.js installation method.
-
 ## Mac App Store apps
 
-Follow the official
-[`mas` installation instructions](https://github.com/mas-cli/mas#installation) to
-add Mac App Store support.
+Install [`mas`](https://github.com/mas-cli/mas) with Homebrew to add Mac App
+Store support:
+
+```shell
+brew install mas
+```
 
 When `mas` is available, `up` updates installed App Store apps and `gu` includes
 the installed-app list in your backup. No configuration setting is required.
@@ -66,4 +65,4 @@ Change a setting with `ballin_config set up.<name> true` or
 | `up.gu` | `false` | Runs `gu` to back up your development environment. Enable it when you want each update to also modify your backup gist. |
 | `up.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `up.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
-| `up.npm` | `false` | Updates all globally installed npm packages. This is separate from the npm version bundled with Node.js; many tools can instead stay project-local or run through `npx`. |
+| `up.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |
