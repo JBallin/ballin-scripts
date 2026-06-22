@@ -10,8 +10,8 @@ Run the [install script](install.sh) using cURL:
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-After setup, see the [optional capabilities guide](docs/optional-capabilities.md)
-for integrations and additional update automation.
+See the [optional capabilities guide](docs/optional-capabilities.md) for
+additional setup and configuration.
 
 ## Scripts
 
