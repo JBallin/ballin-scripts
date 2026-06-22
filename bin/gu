@@ -153,10 +153,11 @@ else
     }
     # Do not upload stale cache content or print normal status when the input
     # command fails. Its own stderr is preserved; this line adds snapshot context.
+    # Record and return the failure; without set -e, later snapshots still run.
     if ! update_cache; then
       printf 'gu: failed to snapshot %s\n' "$file_name" >&2
       printf 'failed\n' > "$snapshot_failure_file"
-      return 0
+      return 1
     fi
     if [ "$is_changed" == 0 ]; then gist -u "$id" "$cache_file" > /dev/null; fi
     output_file_change
