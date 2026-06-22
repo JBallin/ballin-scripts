@@ -1,0 +1,297 @@
+const { assert } = require('chai');
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const guPath = path.join(__dirname, '..', 'bin', 'gu');
+const snapshotFileName = 'zshrc.sh';
+// Expose only the basic commands gu needs; package managers remain unavailable.
+const requiredCommands = [
+  'bash',
+  'cat',
+  'cmp',
+  'cp',
+  'mkdir',
+  'mktemp',
+  'rm',
+  'tail',
+];
+
+describe('gu', () => {
+  let testHomeDir;
+  let testBinDir;
+  let guCacheDir;
+  let fakeGistDir;
+  let gistReadLogPath;
+  let scratchDir;
+  let gistUploadLogPath;
+
+  const linkRequiredCommand = (command) => {
+    const commandPath = process.env.PATH
+      .split(path.delimiter)
+      .map((directory) => path.join(directory, command))
+      .find((candidate) => fs.existsSync(candidate));
+
+    assert.exists(commandPath, `${command} is required to run the gu test harness`);
+    fs.symlinkSync(commandPath, path.join(testBinDir, command));
+  };
+
+  const writeTestExecutable = (name, contents) => {
+    fs.writeFileSync(path.join(testBinDir, name), contents, { mode: 0o755 });
+  };
+
+  const installFakeBallinConfigCommand = () => {
+    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
+if [ "$1" != 'get' ]; then
+  printf '%s\\n' 'Unexpected ballin_config action' >&2
+  exit 2
+elif [ "$2" = 'gu.id' ]; then
+  printf '%s\\n' 'test-gist-id'
+elif [ "$2" = 'gu.url' ]; then
+  printf '%s\\n' 'https://example.test/gists'
+else
+  printf '%s\\n' 'Unexpected ballin_config call' >&2
+  exit 2
+fi
+`);
+  };
+
+  const installFakeGistCommand = () => {
+    // Store the fake remote Gist as ordinary files inside the temporary test home.
+    writeTestExecutable('gist', `#!/usr/bin/env bash
+if [ "$2" != 'test-gist-id' ]; then
+  printf '%s\\n' 'Unexpected Gist ID' >&2
+  exit 2
+fi
+if [ "$1" = '-r' ]; then
+  if [ "$#" -eq 2 ]; then
+    exit 0
+  elif [ "$#" -ne 3 ]; then
+    printf '%s\\n' 'Unexpected gist read arguments' >&2
+    exit 2
+  fi
+  printf '%s\\n' "$3" >> "$FAKE_GIST_READ_LOG"
+  fake_gist_file="$FAKE_GIST_STORAGE_DIR/$3"
+  if [ -f "$fake_gist_file" ]; then
+    cat "$fake_gist_file"
+  else
+    exit 1
+  fi
+elif [ "$1" = '-u' ]; then
+  if [ "$#" -ne 3 ]; then
+    printf '%s\\n' 'Unexpected gist upload arguments' >&2
+    exit 2
+  fi
+  cache_file="$3"
+  file_name="\${cache_file##*/}"
+  cp "$cache_file" "$FAKE_GIST_STORAGE_DIR/$file_name"
+  printf '%s\\n' "$file_name" >> "$FAKE_GIST_UPLOAD_LOG"
+else
+  printf '%s\\n' 'Unexpected gist call' >&2
+  exit 2
+fi
+`);
+  };
+
+  beforeEach(() => {
+    testHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-gu-'));
+    testBinDir = path.join(testHomeDir, 'bin');
+    guCacheDir = path.join(testHomeDir, '.ballin-scripts', '.gu-cache');
+    fakeGistDir = path.join(testHomeDir, 'fake-gist');
+    gistReadLogPath = path.join(testHomeDir, 'fake-gist-reads.log');
+    scratchDir = path.join(testHomeDir, 'tmp');
+    gistUploadLogPath = path.join(testHomeDir, 'fake-gist-uploads.log');
+
+    [
+      testBinDir,
+      path.join(testHomeDir, '.ballin-scripts'),
+      path.join(testHomeDir, 'Library', 'Application Support'),
+      fakeGistDir,
+      scratchDir,
+    ].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
+    requiredCommands.forEach(linkRequiredCommand);
+    installFakeBallinConfigCommand();
+    installFakeGistCommand();
+  });
+
+  afterEach(() => {
+    fs.rmSync(testHomeDir, { recursive: true, force: true });
+  });
+
+  // Pass a complete child environment so real tools and credentials are not inherited.
+  const runGu = () => spawnSync(guPath, [], {
+    encoding: 'utf8',
+    env: {
+      HOME: testHomeDir,
+      PATH: testBinDir,
+      TMPDIR: scratchDir,
+      BALLIN_GU_BASH_COMPLETION_DIR: path.join(testHomeDir, 'bash-completion.d'),
+      FAKE_GIST_STORAGE_DIR: fakeGistDir,
+      FAKE_GIST_READ_LOG: gistReadLogPath,
+      FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
+    },
+  });
+
+  const snapshotPath = () => path.join(testHomeDir, '.zshrc');
+  const cachedSnapshotPath = () => path.join(guCacheDir, snapshotFileName);
+  const fakeGistFilePath = () => path.join(fakeGistDir, snapshotFileName);
+  const writeSnapshot = (content) => fs.writeFileSync(snapshotPath(), content);
+  const seedGuCache = (content) => {
+    fs.mkdirSync(guCacheDir, { recursive: true });
+    fs.writeFileSync(cachedSnapshotPath(), content);
+  };
+  const seedFakeGist = (content) => fs.writeFileSync(fakeGistFilePath(), content);
+  const assertGuSucceeded = (result) => {
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+  };
+  const readLogLines = (logPath) => (
+    fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : []
+  );
+  const gistReads = () => readLogLines(gistReadLogPath);
+  const gistUploads = () => readLogLines(gistUploadLogPath);
+
+  it('creates and uploads the first snapshot when cache and Gist are missing', () => {
+    writeSnapshot('alias hello="world"\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'alias hello="world"\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'alias hello="world"\n');
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('uses the current new-file icon for a first empty snapshot', () => {
+    writeSnapshot('');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'empty\n');
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('hydrates a missing cache from unchanged Gist content', () => {
+    writeSnapshot('export EDITOR=vim\n');
+    seedFakeGist('export EDITOR=vim\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✔ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export EDITOR=vim\n');
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('compares against hydrated Gist content before uploading a change', () => {
+    writeSnapshot('new value\n');
+    seedFakeGist('old value\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('reports unchanged non-empty output without uploading it', () => {
+    writeSnapshot('set -o vi\n');
+    seedGuCache('set -o vi\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✔ zshrc\n');
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports and uploads changed non-empty output', () => {
+    writeSnapshot('export COLOR=blue\n');
+    seedGuCache('export COLOR=red\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('reports and uploads non-empty output becoming empty', () => {
+    writeSnapshot('');
+    seedGuCache('old content\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✖︎ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('hides unchanged empty output and does not upload it', () => {
+    writeSnapshot('');
+    seedGuCache('empty\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '');
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves the current changed icon when empty becomes non-empty', () => {
+    writeSnapshot('restored\n');
+    seedGuCache('empty\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('preserves multiple trailing blank lines', () => {
+    writeSnapshot('line\n\n\n');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'line\n\n\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'line\n\n\n');
+  });
+
+  it('normalizes output missing its final newline', () => {
+    writeSnapshot('line');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'line\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'line\n');
+  });
+
+  it('uploads a normalized snapshot only once when a later run is unchanged', () => {
+    writeSnapshot('stable without newline');
+
+    const firstResult = runGu();
+    const secondResult = runGu();
+
+    assertGuSucceeded(firstResult);
+    assertGuSucceeded(secondResult);
+    assert.equal(secondResult.stdout, '✔ zshrc\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+});

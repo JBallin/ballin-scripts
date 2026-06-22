@@ -155,6 +155,8 @@ else
 	(
     cd "$HOME"
 
+    bash_completion_dir="${BALLIN_GU_BASH_COMPLETION_DIR:-/usr/local/etc/bash_completion.d}"
+
     ### SHELL
     if [ -f .bash_profile ]; then
       u 'bash_profile.sh' 'cat .bash_profile'
@@ -172,8 +174,11 @@ else
       u 'zshrc.sh' 'cat .zshrc'
     fi
     # BASH COMPLETIONS
-    if [ -d /usr/local/etc/bash_completion.d ]; then
-      u 'bash_completions' 'ls /usr/local/etc/bash_completion.d'
+    if [ -d "$bash_completion_dir" ]; then
+      bash_completions_list() {
+        ls "$bash_completion_dir"
+      }
+      u 'bash_completions' 'bash_completions_list'
     fi
 
     ### BREW
