@@ -2,7 +2,8 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const path = require('path');
 
-const configPath = path.join(__dirname, '..', 'ballin.config.json');
+const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
+const configPath = process.env.BALLIN_TEST_CONFIG_PATH || userConfigPath;
 const defaultConfigPath = path.join(__dirname, '.defaultConfig.json');
 const stringify = (obj) => JSON.stringify(obj, null, 2);
 

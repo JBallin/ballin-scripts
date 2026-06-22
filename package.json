@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "description": "Useful scripts to save time",
   "scripts": {
-    "test": "eslint . && NODE_ENV=test mocha"
+    "test": "eslint . && mocha"
+  },
+  "mocha": {
+    "require": [
+      "test/setup.js"
+    ]
   },
   "repository": {
     "type": "git",
