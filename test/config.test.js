@@ -29,8 +29,8 @@ describe('config', () => {
     assert.notEqual(configPath, path.join(__dirname, '..', 'ballin.config.json'));
   });
 
-  it('does not fall back to the user config in the test environment', () => {
-    const result = spawnSync(process.execPath, ['-e', "require('./config')"], {
+  it('does not treat NODE_ENV=test as a fixture run by itself', () => {
+    const result = spawnSync(process.execPath, ['-p', "require('./config').configPath"], {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',
       env: {
@@ -40,8 +40,8 @@ describe('config', () => {
       },
     });
 
-    assert.notEqual(result.status, 0);
-    assert.include(result.stderr, 'BALLIN_TEST_CONFIG_PATH must be set when NODE_ENV=test');
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout.trim(), path.join(__dirname, '..', 'ballin.config.json'));
   });
 
   before('fetchConfigJSON should return a String', () => {

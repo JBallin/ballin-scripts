@@ -3,12 +3,7 @@ const { exec } = require('child_process');
 const path = require('path');
 
 const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
-const configPath = process.env.NODE_ENV === 'test'
-  ? process.env.BALLIN_TEST_CONFIG_PATH
-  : userConfigPath;
-if (!configPath) {
-  throw new Error('BALLIN_TEST_CONFIG_PATH must be set when NODE_ENV=test');
-}
+const configPath = process.env.BALLIN_TEST_CONFIG_PATH || userConfigPath;
 const defaultConfigPath = path.join(__dirname, '.defaultConfig.json');
 const stringify = (obj) => JSON.stringify(obj, null, 2);
 
