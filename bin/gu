@@ -69,6 +69,10 @@ elif [ -n "$1" ]; then
 else
   # no arguments given -> run gistUpdater
 
+  # Snapshot commands are independent: remember failures, continue the run, and
+  # return nonzero only after every eligible snapshot has been attempted.
+  snapshot_failure_file="$(mktemp)"
+
   # create cache folder if doesn't exist
   (
     cd "$HOME/.ballin-scripts"
@@ -91,6 +95,7 @@ else
       if [ ! -f "$cache_file" ]; then
         # set is_new to true if the $file_name doesn't exist yet in gist, otherwise create $cache_file with current gist_content
         if ! gist -r "$id" "$file_name" > "$cache_file"; then
+          rm -f "$cache_file"
           is_new=0
         fi
       fi
@@ -146,8 +151,14 @@ else
         fi
       fi
     }
-    # Do not upload stale cache content when the snapshot command fails.
-    if ! update_cache; then return 1; fi
+    # Do not upload stale cache content or print normal status when the input
+    # command fails. Its own stderr is preserved; this line adds snapshot context.
+    # Record and return the failure; without set -e, later snapshots still run.
+    if ! update_cache; then
+      printf 'gu: failed to snapshot %s\n' "$file_name" >&2
+      printf 'failed\n' > "$snapshot_failure_file"
+      return 1
+    fi
     if [ "$is_changed" == 0 ]; then gist -u "$id" "$cache_file" > /dev/null; fi
     output_file_change
   }
@@ -288,5 +299,12 @@ else
     if [ -x "$(command -v mas)" ]; then
       u 'mas' 'mas list'
     fi
+
+    if [ -s "$snapshot_failure_file" ]; then
+      exit 1
+    fi
 	)
+  gu_status=$?
+  rm -f "$snapshot_failure_file"
+  exit "$gu_status"
 fi

@@ -26,6 +26,7 @@ describe('gu', () => {
   let gistReadLogPath;
   let scratchDir;
   let gistUploadLogPath;
+  let realCatPath;
 
   const linkRequiredCommand = (command) => {
     const commandPath = process.env.PATH
@@ -94,6 +95,24 @@ fi
 `);
   };
 
+  const installControllableCatCommand = () => {
+    const catPath = fs.realpathSync(path.join(testBinDir, 'cat'));
+    fs.unlinkSync(path.join(testBinDir, 'cat'));
+    writeTestExecutable('cat', `#!/usr/bin/env bash
+IFS=':' read -r -a failed_paths <<< "$FAKE_CAT_FAILURE_PATHS"
+for failed_path in "\${failed_paths[@]}"; do
+  if [ -n "$failed_path" ] && [ "$1" = "$failed_path" ]; then
+    if [ "$FAKE_CAT_EMIT_STDERR" = 'true' ]; then
+      printf 'cat: simulated failure reading %s\n' "$1" >&2
+    fi
+    exit 23
+  fi
+done
+"$REAL_CAT" "$@"
+`);
+    return catPath;
+  };
+
   beforeEach(() => {
     testHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-gu-'));
     testBinDir = path.join(testHomeDir, 'bin');
@@ -111,6 +130,7 @@ fi
       scratchDir,
     ].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
     requiredCommands.forEach(linkRequiredCommand);
+    realCatPath = installControllableCatCommand();
     installFakeBallinConfigCommand();
     installFakeGistCommand();
   });
@@ -120,7 +140,7 @@ fi
   });
 
   // Pass a complete child environment so real tools and credentials are not inherited.
-  const runGu = () => spawnSync(guPath, [], {
+  const runGu = ({ failedPaths = [], emitUnderlyingStderr = false } = {}) => spawnSync(guPath, [], {
     encoding: 'utf8',
     env: {
       HOME: testHomeDir,
@@ -130,6 +150,9 @@ fi
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
+      FAKE_CAT_FAILURE_PATHS: failedPaths.join(':'),
+      FAKE_CAT_EMIT_STDERR: emitUnderlyingStderr ? 'true' : 'false',
+      REAL_CAT: realCatPath,
     },
   });
 
@@ -293,5 +316,83 @@ fi
     assertGuSucceeded(secondResult);
     assert.equal(secondResult.stdout, '✔ zshrc\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('preserves failed snapshot state, adds context, and continues later snapshots', () => {
+    const gitconfigPath = path.join(testHomeDir, '.gitconfig');
+    writeSnapshot('new zsh value\n');
+    fs.writeFileSync(gitconfigPath, 'new git value\n');
+    seedGuCache('old zsh value\n');
+    seedFakeGist('old zsh value\n');
+
+    const result = runGu({
+      failedPaths: ['.zshrc'],
+      emitUnderlyingStderr: true,
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '💾 gitconfig\n');
+    assert.equal(
+      result.stderr,
+      'cat: simulated failure reading .zshrc\n'
+        + 'gu: failed to snapshot zshrc.sh\n',
+    );
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh value\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old zsh value\n');
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'gitconfig'), 'utf8'),
+      'new git value\n',
+    );
+    assert.deepEqual(gistUploads(), ['gitconfig']);
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+  });
+
+  it('reports a silent command failure without leaving failed Gist hydration behind', () => {
+    writeSnapshot('not captured\n');
+
+    const result = runGu({ failedPaths: ['.zshrc'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu: failed to snapshot zshrc.sh\n');
+    assert.isFalse(fs.existsSync(cachedSnapshotPath()));
+    assert.isFalse(fs.existsSync(fakeGistFilePath()));
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistUploads(), []);
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+  });
+
+  it('recovers cleanly on the next successful invocation', () => {
+    writeSnapshot('recovered\n');
+    seedGuCache('before failure\n');
+    seedFakeGist('before failure\n');
+
+    const failedResult = runGu({ failedPaths: ['.zshrc'] });
+    const recoveredResult = runGu();
+
+    assert.equal(failedResult.status, 1);
+    assertGuSucceeded(recoveredResult);
+    assert.equal(recoveredResult.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'recovered\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'recovered\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('returns one predictable failure status after multiple snapshot failures', () => {
+    const gitconfigPath = path.join(testHomeDir, '.gitconfig');
+    writeSnapshot('zsh value\n');
+    fs.writeFileSync(gitconfigPath, 'git value\n');
+
+    const result = runGu({ failedPaths: ['.zshrc', '.gitconfig'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'gu: failed to snapshot zshrc.sh\n'
+        + 'gu: failed to snapshot gitconfig\n',
+    );
+    assert.deepEqual(gistUploads(), []);
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
   });
 });
