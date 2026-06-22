@@ -31,6 +31,7 @@ if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
   l3='and open a new terminal window and run this installation again.'
   printf '\n⚠️  ERROR: %s\n%s\n%s\n' "$l1" "$l2" "$l3"
   unset l1 l2 l3
+  exit 1
 # Check that Node.js is available before running configuration commands
 elif [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js is required.\n'
@@ -46,6 +47,7 @@ elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
   l3='and run this installation again.'
   printf '\n⚠️  ERROR: %s\n%s\n%s\n' "$l1" "$l2" "$l3"
   unset l1 l2 l3
+  exit 1
 else
 
 
@@ -55,22 +57,30 @@ if [ ! -f "$repo_dir/ballin.config.json" ]; then
   config_existed=false
 fi
 
-(
+# Configuration must succeed before Gist credentials or command symlinks are touched.
+if ! (
   cd "$repo_dir/config"
   if [ ! -f '../ballin.config.json' ]; then
     # create config
-    cp '.defaultConfig.json' '../ballin.config.json'
+    if ! cp '.defaultConfig.json' '../ballin.config.json'; then
+      exit 1
+    fi
     printf '\n%s\n' "🧠 Created 'ballin.config.json' file in root using default settings"
   else
     # ballin_update reruns this installer after pulling changes; add any new
     # default options to the existing config without overwriting user settings.
-    UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.js")
+    if ! UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.js"); then
+      exit 1
+    fi
     if [ -n "$UPDATE_RESULT" ]; then
       printf '\n🙌 %s\n' "$UPDATE_RESULT"
       printf '\nOptional capabilities: %s\n' "$optional_capabilities_url"
     fi
   fi
-)
+); then
+  printf '\n⚠️  ERROR: Unable to create or update ballin.config.json\n'
+  exit 1
+fi
 
 
 #################################### GIST ####################################
