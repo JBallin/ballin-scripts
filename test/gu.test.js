@@ -26,6 +26,7 @@ describe('gu', () => {
   let gistReadLogPath;
   let scratchDir;
   let gistUploadLogPath;
+  let brewLogPath;
   let realCatPath;
 
   const linkRequiredCommand = (command) => {
@@ -95,6 +96,24 @@ fi
 `);
   };
 
+  const installFakeBrewCommand = () => {
+    writeTestExecutable('brew', `#!/usr/bin/env bash
+printf '%s|%s|%s\\n' "$HOMEBREW_NO_AUTO_UPDATE" "$HOMEBREW_NO_ENV_HINTS" "$*" >> "$FAKE_BREW_LOG"
+case "$*" in
+  'list --formula') printf '%s\\n' 'formula-one' ;;
+  'leaves') printf '%s\\n' 'leaf-one' ;;
+  'list --cask') printf '%s\\n' 'cask-one' ;;
+  'services list')
+    printf '%s\\n' 'service-one started'
+    printf '%s\\n' 'simulated services warning' >&2
+    if [ "$FAKE_BREW_SERVICES_FAIL" = 'true' ]; then exit 31; fi
+    ;;
+  'bundle dump --file=-') printf '%s\\n' 'brew "formula-one"' ;;
+  *) printf '%s\\n' 'Unexpected brew call' >&2; exit 2 ;;
+esac
+`);
+  };
+
   const installControllableCatCommand = () => {
     const catPath = fs.realpathSync(path.join(testBinDir, 'cat'));
     fs.unlinkSync(path.join(testBinDir, 'cat'));
@@ -121,6 +140,7 @@ done
     gistReadLogPath = path.join(testHomeDir, 'fake-gist-reads.log');
     scratchDir = path.join(testHomeDir, 'tmp');
     gistUploadLogPath = path.join(testHomeDir, 'fake-gist-uploads.log');
+    brewLogPath = path.join(testHomeDir, 'fake-brew.log');
 
     [
       testBinDir,
@@ -140,7 +160,11 @@ done
   });
 
   // Pass a complete child environment so real tools and credentials are not inherited.
-  const runGu = ({ failedPaths = [], emitUnderlyingStderr = false } = {}) => spawnSync(guPath, [], {
+  const runGu = ({
+    failedPaths = [],
+    emitUnderlyingStderr = false,
+    brewServicesFail = false,
+  } = {}) => spawnSync(guPath, [], {
     encoding: 'utf8',
     env: {
       HOME: testHomeDir,
@@ -150,6 +174,8 @@ done
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
+      FAKE_BREW_LOG: brewLogPath,
+      FAKE_BREW_SERVICES_FAIL: brewServicesFail ? 'true' : 'false',
       FAKE_CAT_FAILURE_PATHS: failedPaths.join(':'),
       FAKE_CAT_EMIT_STDERR: emitUnderlyingStderr ? 'true' : 'false',
       REAL_CAT: realCatPath,
@@ -175,6 +201,58 @@ done
   );
   const gistReads = () => readLogLines(gistReadLogPath);
   const gistUploads = () => readLogLines(gistUploadLogPath);
+  const brewCalls = () => readLogLines(brewLogPath);
+
+  it('captures Homebrew inventory with flags while suppressing successful services stderr', () => {
+    installFakeBrewCommand();
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      '💾 brew_list',
+      '💾 brew_leaves',
+      '💾 brew_cask',
+      '💾 brew_services',
+      '💾 Brewfile',
+    ]);
+    assert.deepEqual(brewCalls(), [
+      '1|1|list --formula',
+      '1|1|leaves',
+      '1|1|list --cask',
+      '1|1|services list',
+      '1|1|bundle dump --file=-',
+    ]);
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'brew_services'), 'utf8'),
+      'service-one started\n',
+    );
+    assert.deepEqual(gistUploads(), [
+      'brew_list',
+      'brew_leaves',
+      'brew_cask',
+      'brew_services',
+      'Brewfile',
+    ]);
+  });
+
+  it('surfaces failed brew services stderr and preserves other inventory snapshots', () => {
+    installFakeBrewCommand();
+
+    const result = runGu({ brewServicesFail: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'simulated services warning\n');
+    assert.include(result.stderr, 'gu: failed to snapshot brew_services\n');
+    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'brew_services')));
+    assert.deepEqual(gistUploads(), [
+      'brew_list',
+      'brew_leaves',
+      'brew_cask',
+      'Brewfile',
+    ]);
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+  });
 
   it('creates and uploads the first snapshot when cache and Gist are missing', () => {
     writeSnapshot('alias hello="world"\n');
