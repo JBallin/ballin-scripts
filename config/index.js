@@ -77,6 +77,7 @@ const configAction = (request, keys, value, other) => {
   if (request === 'get' || !request) return getConfig(keys, value);
   if (request === 'set') return setConfig(keys, value, other);
   if (process.env.NODE_ENV !== 'test') {
+    // exec() is async, so actionErr is returned before the help output is printed.
     exec('ballin', (error, stdout) => console.log(stdout)); // eslint-disable-line no-console
   }
   return configMessages.actionErr;
