@@ -10,8 +10,8 @@ Run the [install script](install.sh) using cURL:
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-See the [optional capabilities guide](docs/optional-capabilities.md) for Node.js
-setup, optional tools, and update settings.
+See the [optional capabilities guide](docs/optional-capabilities.md) for
+additional setup and configuration.
 
 ## Scripts
 
