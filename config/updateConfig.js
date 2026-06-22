@@ -1,12 +1,10 @@
 /* eslint-disable no-console */
 
 const fs = require('fs');
-const path = require('path');
-const { stringify } = require('.');
+const { configPath, fetchConfig, stringify } = require('.');
 const defaultConfig = require('./.defaultConfig.json');
-const userConfig = require('../ballin.config.json');
 
-const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
+const { configObj: userConfig } = fetchConfig();
 const updates = [];
 
 Object.keys(defaultConfig).forEach((key) => {
@@ -27,7 +25,7 @@ Object.keys(defaultConfig).forEach((key) => {
 });
 
 if (updates.length) {
-  fs.writeFileSync(userConfigPath, stringify(userConfig), 'utf-8');
+  fs.writeFileSync(configPath, stringify(userConfig), 'utf-8');
   console.log('New configuration options have been added! Here are the updates:');
   updates.forEach((update) => {
     console.log(update);

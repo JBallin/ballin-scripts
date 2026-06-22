@@ -1,5 +1,8 @@
 const { assert } = require('chai');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
+const path = require('path');
+const defaultConfig = require('../config/.defaultConfig.json');
 const {
   getConfig,
   setConfig,
@@ -20,6 +23,27 @@ const setTest = (keys, value) => {
 
 describe('config', () => {
   let savedConfig;
+
+  it('uses the isolated test config fixture', () => {
+    assert.equal(configPath, process.env.BALLIN_TEST_CONFIG_PATH);
+    assert.notEqual(configPath, path.join(__dirname, '..', 'ballin.config.json'));
+  });
+
+  it('does not fall back to the user config in the test environment', () => {
+    const result = spawnSync(process.execPath, ['-e', "require('./config')"], {
+      cwd: path.join(__dirname, '..'),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        BALLIN_TEST_CONFIG_PATH: '',
+        NODE_ENV: 'test',
+      },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.include(result.stderr, 'BALLIN_TEST_CONFIG_PATH must be set when NODE_ENV=test');
+  });
+
   before('fetchConfigJSON should return a String', () => {
     assert.isString(fetchConfigJSON());
   });
@@ -38,8 +62,8 @@ describe('config', () => {
     it('("up") should return an Object', () => {
       assert.isObject(getConfig('up'));
     });
-    it('("gu.id") should return a String', () => {
-      assert.isString(getConfig('gu.id'));
+    it('("gu.id") should return null by default', () => {
+      assert.isNull(getConfig('gu.id'));
     });
     it('("up.cleanup") should return true or false', () => {
       assert.include(['true', 'false'], getConfig('up.cleanup'));
@@ -93,8 +117,8 @@ describe('config', () => {
     it('("set") should return a setConfig error', () => {
       assert.equal(configAction('set'), configMessages.setArgsErr);
     });
-    it('("get", "gu.id") should return a Number', () => {
-      assert.isString(configAction('get', 'gu.id'));
+    it('("get", "gu.id") should return null by default', () => {
+      assert.isNull(configAction('get', 'gu.id'));
     });
     it('("wrong") should return an invalid error', () => {
       assert.equal(configAction('wrong'), configMessages.actionErr);
@@ -106,6 +130,21 @@ describe('config', () => {
       setTest('gu.id', '123', configAction);
       assert.include(configAction('reset'), 'Config has been reset...\nFROM:');
       assert.isNull(getConfig('gu.id'));
+    });
+  });
+
+  describe('updateConfig', () => {
+    it('updates the isolated fixture', () => {
+      fs.writeFileSync(configPath, '{}', 'utf8');
+
+      const result = spawnSync(process.execPath, ['-e', "require('./config/updateConfig')"], {
+        cwd: path.join(__dirname, '..'),
+        encoding: 'utf8',
+        env: process.env,
+      });
+
+      assert.equal(result.status, 0);
+      assert.deepEqual(fetchConfig().configObj, defaultConfig);
     });
   });
 });
