@@ -31,7 +31,7 @@ const getNestedValue = (configObj, keys) => {
 
   for (let index = 0; index < keysArr.length; index += 1) {
     if (value === null || typeof value !== 'object') {
-      return { missingKeys: keysArr.slice(0, index).join('.') };
+      return { missingKeys: keysArr.slice(0, index + 1).join('.') };
     }
     if (!hasOwn(value, keysArr[index])) {
       return { missingKeys: keysArr.slice(0, index + 1).join('.') };
@@ -77,7 +77,7 @@ const setConfig = (keys, val, other) => {
     return configMessages.setDneErr(missingKeys);
   }
   if (nestedObj === null || typeof nestedObj !== 'object') {
-    return configMessages.setDneErr(topLevelKeys.join('.'));
+    return configMessages.setDneErr(keys);
   }
   // { cleanup: 'false', ballin: 'true' }
   if (!hasOwn(nestedObj, keyToSet)) {

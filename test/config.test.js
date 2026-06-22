@@ -79,8 +79,9 @@ describe('config', () => {
       assert.equal(getConfig('gu.missing.nested'), configMessages.getKeysDneErr('gu.missing'));
     });
     it('should reject traversal through primitive and null values', () => {
-      assert.equal(getConfig('up.cleanup.nested'), configMessages.getKeysDneErr('up.cleanup'));
-      assert.equal(getConfig('gu.id.nested'), configMessages.getKeysDneErr('gu.id'));
+      assert.equal(getConfig('up.cleanup.nested'), configMessages.getKeysDneErr('up.cleanup.nested'));
+      assert.equal(getConfig('gu.id.nested'), configMessages.getKeysDneErr('gu.id.nested'));
+      assert.equal(getConfig('up.cleanup.nested.deeper'), configMessages.getKeysDneErr('up.cleanup.nested'));
     });
     it('should not treat inherited properties as config keys', () => {
       assert.equal(getConfig('constructor'), configMessages.getKeysDneErr('constructor'));
@@ -126,8 +127,9 @@ describe('config', () => {
     it('should reject primitive and null traversal without changing config', () => {
       const configBeforeSet = fetchConfigJSON();
 
-      assert.equal(setConfig('up.cleanup.nested', 'test'), configMessages.setDneErr('up.cleanup'));
-      assert.equal(setConfig('gu.id.nested', 'test'), configMessages.setDneErr('gu.id'));
+      assert.equal(setConfig('up.cleanup.nested', 'test'), configMessages.setDneErr('up.cleanup.nested'));
+      assert.equal(setConfig('gu.id.nested', 'test'), configMessages.setDneErr('gu.id.nested'));
+      assert.equal(setConfig('up.cleanup.nested.deeper', 'test'), configMessages.setDneErr('up.cleanup.nested'));
       assert.equal(fetchConfigJSON(), configBeforeSet);
     });
     it('should reject inherited paths without changing config', () => {
