@@ -6,6 +6,7 @@ const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
 const configPath = process.env.BALLIN_TEST_CONFIG_PATH || userConfigPath;
 const defaultConfigPath = path.join(__dirname, '.defaultConfig.json');
 const stringify = (obj) => JSON.stringify(obj, null, 2);
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 const configMessages = {
   actionErr: 'INVALID: ballin_config accepts "", "get", "set", or "reset"',
@@ -24,14 +25,29 @@ const fetchConfig = () => {
   return { configObj, configJSON };
 };
 
-// TODO: guard against deep missing paths in getConfig/setConfig
-//       (e.g., "gu.foo.bar" → return DNE instead of throw)
+const getNestedValue = (configObj, keys) => {
+  const keysArr = keys.split('.');
+  let value = configObj;
+
+  for (let index = 0; index < keysArr.length; index += 1) {
+    if (value === null || typeof value !== 'object') {
+      return { missingKeys: keysArr.slice(0, index).join('.') };
+    }
+    if (!hasOwn(value, keysArr[index])) {
+      return { missingKeys: keysArr.slice(0, index + 1).join('.') };
+    }
+    value = value[keysArr[index]];
+  }
+
+  return { value };
+};
+
 const getConfig = (keys, val) => {
   if (val) return configMessages.getArgsErr;
   const { configObj, configJSON } = fetchConfig();
   if (keys !== undefined) {
-    const res = keys.split('.').reduce((result, key) => result[key], configObj);
-    return res !== undefined ? res : configMessages.getKeysDneErr(keys);
+    const { value, missingKeys } = getNestedValue(configObj, keys);
+    return missingKeys === undefined ? value : configMessages.getKeysDneErr(missingKeys);
   }
   return configJSON;
 };
@@ -54,17 +70,25 @@ const setConfig = (keys, val, other) => {
   // 'true'
   const topLevelKeys = keysArr;
   // [ 'up' ]
-  const nestedObj = topLevelKeys.reduce((res, key) => res[key], configObj);
+  const { value: nestedObj, missingKeys } = topLevelKeys.length
+    ? getNestedValue(configObj, topLevelKeys.join('.'))
+    : { value: configObj };
+  if (missingKeys !== undefined) {
+    return configMessages.setDneErr(missingKeys);
+  }
+  if (nestedObj === null || typeof nestedObj !== 'object') {
+    return configMessages.setDneErr(topLevelKeys.join('.'));
+  }
   // { cleanup: 'false', ballin: 'true' }
+  if (!hasOwn(nestedObj, keyToSet)) {
+    return configMessages.setDneErr(keys);
+  }
   const prevVal = nestedObj[keyToSet];
   // 'false'
 
   // make sure prevVal isn't an object (gu.id defaults to null)
   if (typeof prevVal === 'object' && prevVal !== null) {
     return configMessages.setObjErr(keys, prevVal);
-  }
-  if (prevVal === undefined) {
-    return configMessages.setDneErr(keys);
   }
   nestedObj[keyToSet] = val;
   fs.writeFileSync(configPath, stringify(configObj), 'utf8');

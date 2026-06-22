@@ -74,6 +74,17 @@ describe('config', () => {
     it('should return an error if given keys that don\'t exist', () => {
       assert.equal(getConfig('wrong'), 'INVALID: "wrong" doesn\'t exist in config');
     });
+    it('should report the first missing portion of a nested path', () => {
+      assert.equal(getConfig('test.nested'), configMessages.getKeysDneErr('test'));
+      assert.equal(getConfig('gu.missing.nested'), configMessages.getKeysDneErr('gu.missing'));
+    });
+    it('should reject traversal through primitive and null values', () => {
+      assert.equal(getConfig('up.cleanup.nested'), configMessages.getKeysDneErr('up.cleanup'));
+      assert.equal(getConfig('gu.id.nested'), configMessages.getKeysDneErr('gu.id'));
+    });
+    it('should not treat inherited properties as config keys', () => {
+      assert.equal(getConfig('constructor'), configMessages.getKeysDneErr('constructor'));
+    });
   });
 
   describe('setConfig', () => {
@@ -104,6 +115,26 @@ describe('config', () => {
       const keys = 'up';
       const val = 'true';
       assert.include(setConfig(keys, val), 'INVALID: "up" is not a bottom-level value, it returns');
+    });
+    it('should report the first missing portion without changing config', () => {
+      const configBeforeSet = fetchConfigJSON();
+
+      assert.equal(setConfig('test.nested', 'test'), configMessages.setDneErr('test'));
+      assert.equal(setConfig('gu.missing.nested', 'test'), configMessages.setDneErr('gu.missing'));
+      assert.equal(fetchConfigJSON(), configBeforeSet);
+    });
+    it('should reject primitive and null traversal without changing config', () => {
+      const configBeforeSet = fetchConfigJSON();
+
+      assert.equal(setConfig('up.cleanup.nested', 'test'), configMessages.setDneErr('up.cleanup'));
+      assert.equal(setConfig('gu.id.nested', 'test'), configMessages.setDneErr('gu.id'));
+      assert.equal(fetchConfigJSON(), configBeforeSet);
+    });
+    it('should reject inherited paths without changing config', () => {
+      const configBeforeSet = fetchConfigJSON();
+
+      assert.equal(setConfig('__proto__.nested', 'test'), configMessages.setDneErr('__proto__'));
+      assert.equal(fetchConfigJSON(), configBeforeSet);
     });
   });
 
