@@ -11,22 +11,35 @@ describe('up', () => {
   let binDir;
   let logPath;
 
+  const writeTestExecutable = (name, contents) => {
+    fs.writeFileSync(path.join(binDir, name), contents, { mode: 0o755 });
+  };
+
+  const installCommandStub = (name, { output = '', status = 0 } = {}) => {
+    writeTestExecutable(name, `#!/usr/bin/env bash
+printf '%s|%s|%s\\n' "${name}" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
+${output ? `printf '%s\\n' '${output}'` : ''}
+exit ${status}
+`);
+  };
+
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-up-'));
     binDir = path.join(tempDir, 'bin');
-    logPath = path.join(tempDir, 'nvm.log');
+    logPath = path.join(tempDir, 'commands.log');
     fs.mkdirSync(binDir);
-    fs.writeFileSync(
-      path.join(binDir, 'ballin_config'),
-      `#!/usr/bin/env bash
-if [ "$2" = 'up.nvm' ]; then
-  printf '%s\\n' "\${TEST_UP_NVM:-false}"
-else
-  printf '%s\\n' 'false'
-fi
-`,
-      { mode: 0o755 },
-    );
+    fs.symlinkSync('/bin/bash', path.join(binDir, 'bash'));
+    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
+case "$2" in
+  up.cleanup) printf '%s\\n' "\${TEST_UP_CLEANUP:-false}" ;;
+  up.nvm) printf '%s\\n' "\${TEST_UP_NVM:-false}" ;;
+  up.npm) printf '%s\\n' "\${TEST_UP_NPM:-false}" ;;
+  up.softwareupdate) printf '%s\\n' "\${TEST_UP_SOFTWAREUPDATE:-false}" ;;
+  up.ballin) printf '%s\\n' "\${TEST_UP_BALLIN:-false}" ;;
+  up.gu) printf '%s\\n' "\${TEST_UP_GU:-false}" ;;
+  *) printf '%s\\n' 'false' ;;
+esac
+`);
   });
 
   afterEach(() => {
@@ -37,8 +50,9 @@ fi
     encoding: 'utf8',
     env: {
       HOME: tempDir,
-      PATH: `${binDir}:/usr/bin:/bin`,
+      PATH: binDir,
       NVM_TEST_LOG: logPath,
+      UP_TEST_LOG: logPath,
       TEST_UP_NVM: 'true',
       ...env,
     },
@@ -54,6 +68,98 @@ fi
 `,
     );
   };
+
+  const commandLog = () => (
+    fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : []
+  );
+
+  it('sets Homebrew flags, preserves output, cleans conditionally, and runs doctor', () => {
+    installCommandStub('brew', { output: 'visible Homebrew output' });
+
+    const result = runUp({ TEST_UP_NVM: 'false', TEST_UP_CLEANUP: 'true' });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'visible Homebrew output');
+    assert.include(result.stdout, 'Cleaning up Homebrew packages');
+    assert.include(result.stdout, 'Checking Homebrew installation');
+    assert.deepEqual(commandLog(), [
+      'brew|1,1|upgrade',
+      'brew|1,1|cleanup',
+      'brew|1,1|doctor',
+    ]);
+  });
+
+  it('skips cleanup when disabled while preserving upgrade and doctor output', () => {
+    installCommandStub('brew', { output: 'brew command output' });
+
+    const result = runUp({ TEST_UP_NVM: 'false' });
+
+    assert.equal(result.status, 0);
+    assert.notInclude(result.stdout, 'Cleaning up Homebrew packages');
+    assert.deepEqual(commandLog(), [
+      'brew|1,1|upgrade',
+      'brew|1,1|doctor',
+    ]);
+    assert.equal(result.stdout.match(/brew command output/g).length, 2);
+  });
+
+  it('runs enabled npm, macOS update, ballin update, and gu integrations', () => {
+    ['npm', 'softwareupdate', 'ballin_update', 'gu'].forEach((command) => {
+      installCommandStub(command);
+    });
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_NPM: 'true',
+      TEST_UP_SOFTWAREUPDATE: 'true',
+      TEST_UP_BALLIN: 'true',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.deepEqual(commandLog(), [
+      'npm|,|update -g',
+      'softwareupdate|,|-ia',
+      'ballin_update|,|',
+      'gu|,|',
+    ]);
+  });
+
+  it('does not run disabled optional integrations even when commands exist', () => {
+    ['npm', 'softwareupdate', 'ballin_update', 'gu'].forEach((command) => {
+      installCommandStub(command);
+    });
+
+    const result = runUp({ TEST_UP_NVM: 'false' });
+
+    assert.equal(result.status, 0);
+    assert.deepEqual(commandLog(), []);
+    assert.notInclude(result.stdout, 'Updating global npm packages');
+    assert.notInclude(result.stdout, 'Installing macOS updates');
+    assert.notInclude(result.stdout, 'Updating ballin-scripts');
+    assert.notInclude(result.stdout, 'Backing up development environment');
+  });
+
+  it('keeps later integrations isolated when an optional command fails', () => {
+    installCommandStub('npm', { output: 'simulated npm failure', status: 23 });
+    installCommandStub('ballin_update');
+    installCommandStub('gu');
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_NPM: 'true',
+      TEST_UP_BALLIN: 'true',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'simulated npm failure');
+    assert.deepEqual(commandLog(), [
+      'npm|,|update -g',
+      'ballin_update|,|',
+      'gu|,|',
+    ]);
+  });
 
   it('loads nvm from NVM_DIR and updates Node.js LTS', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
