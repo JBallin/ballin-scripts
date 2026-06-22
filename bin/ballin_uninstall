@@ -4,12 +4,27 @@
 printf '\n%s\n' "It's been real..."
 
 # Include current and legacy install locations so upgrades remain uninstallable.
-bin_dirs=("$HOME/.local/bin" '/usr/local/bin' '/opt/homebrew/bin')
+# Tests can relocate system directories without granting access to the real ones.
+system_root="${BALLIN_UNINSTALL_TEST_SYSTEM_ROOT:-}"
+bin_dirs=("$HOME/.local/bin" "$system_root/usr/local/bin" "$system_root/opt/homebrew/bin")
+
+add_bin_dir() {
+  local candidate="$1"
+  local bin_dir
+  for bin_dir in "${bin_dirs[@]}"; do
+    if [ "$bin_dir" = "$candidate" ]; then
+      return
+    fi
+  done
+  bin_dirs+=("$candidate")
+}
+
 if [ -x "$(command -v brew)" ]; then
-  brew_bin_dir="$(brew --prefix)/bin"
-  if [ "$brew_bin_dir" != '/usr/local/bin' ] && [ "$brew_bin_dir" != '/opt/homebrew/bin' ]; then
-    bin_dirs+=("$brew_bin_dir")
-  fi
+  brew_prefix="$(brew --prefix)"
+  case "$brew_prefix" in
+    /usr/local|/opt/homebrew) brew_prefix="$system_root$brew_prefix" ;;
+  esac
+  add_bin_dir "$brew_prefix/bin"
 fi
 
 for bin in "$HOME/.ballin-scripts/bin/"*; do
