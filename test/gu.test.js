@@ -12,6 +12,7 @@ describe('gu', () => {
   let cacheDir;
   let gistDir;
   let readLogPath;
+  let tempWorkDir;
   let uploadLogPath;
 
   const fileName = 'zshrc.sh';
@@ -32,12 +33,14 @@ describe('gu', () => {
     cacheDir = path.join(homeDir, '.ballin-scripts', '.gu-cache');
     gistDir = path.join(homeDir, 'gist');
     readLogPath = path.join(homeDir, 'gist-reads.log');
+    tempWorkDir = path.join(homeDir, 'tmp');
     uploadLogPath = path.join(homeDir, 'gist-uploads.log');
 
     fs.mkdirSync(binDir);
     fs.mkdirSync(path.join(homeDir, '.ballin-scripts'));
     fs.mkdirSync(path.join(homeDir, 'Library', 'Application Support'), { recursive: true });
     fs.mkdirSync(gistDir);
+    fs.mkdirSync(tempWorkDir);
     [
       'bash',
       'cat',
@@ -113,6 +116,7 @@ fi
     env: {
       HOME: homeDir,
       PATH: binDir,
+      TMPDIR: tempWorkDir,
       BALLIN_GU_BASH_COMPLETION_DIR: path.join(homeDir, 'bash-completion.d'),
       GIST_TEST_DIR: gistDir,
       GIST_TEST_READ_LOG: readLogPath,
@@ -132,6 +136,7 @@ fi
   const assertSucceeded = (result) => {
     assert.equal(result.status, 0);
     assert.equal(result.stderr, '');
+    assert.deepEqual(fs.readdirSync(tempWorkDir), []);
   };
   const reads = () => (
     fs.existsSync(readLogPath)
