@@ -15,6 +15,17 @@ const {
 const fetchConfigJSON = () => fetchConfig().configJSON;
 
 const currentConfigJSON = fetchConfigJSON();
+const invalidPathCases = [
+  ['missing', 'missing'],
+  ['test.nested', 'test'],
+  ['gu.missing.nested', 'gu.missing'],
+  ['up.cleanup.nested', 'up.cleanup.nested'],
+  ['up.cleanup.nested.deeper', 'up.cleanup.nested'],
+  ['gu.id.nested', 'gu.id.nested'],
+  ['gu.id.nested.deeper', 'gu.id.nested'],
+  ['constructor', 'constructor'],
+  ['__proto__.nested', '__proto__'],
+];
 
 const setTest = (keys, value) => {
   setConfig(keys, value);
@@ -71,8 +82,25 @@ describe('config', () => {
     it('() should return a String', () => {
       assert.isString(getConfig());
     });
-    it('should return an error if given keys that don\'t exist', () => {
-      assert.equal(getConfig('wrong'), 'INVALID: "wrong" doesn\'t exist in config');
+    invalidPathCases.forEach(([keys, missingKeys]) => {
+      it(`should report "${missingKeys}" for invalid path "${keys}"`, () => {
+        assert.equal(getConfig(keys), configMessages.getKeysDneErr(missingKeys));
+      });
+    });
+    it('should reject traversal through every JSON primitive type', () => {
+      const configObj = JSON.parse(fetchConfigJSON());
+      configObj.testValues = {
+        boolean: false,
+        number: 0,
+        string: 'value',
+        null: null,
+      };
+      fs.writeFileSync(configPath, JSON.stringify(configObj), 'utf8');
+
+      ['boolean', 'number', 'string', 'null'].forEach((key) => {
+        const keys = `testValues.${key}.nested`;
+        assert.equal(getConfig(keys), configMessages.getKeysDneErr(keys));
+      });
     });
   });
 
@@ -105,6 +133,53 @@ describe('config', () => {
       const val = 'true';
       assert.include(setConfig(keys, val), 'INVALID: "up" is not a bottom-level value, it returns');
     });
+    invalidPathCases.forEach(([keys, missingKeys]) => {
+      it(`should reject invalid path "${keys}" without changing config`, () => {
+        const configBeforeSet = fetchConfigJSON();
+
+        assert.equal(setConfig(keys, 'test'), configMessages.setDneErr(missingKeys));
+        assert.equal(fetchConfigJSON(), configBeforeSet);
+      });
+    });
+    it('should reject every JSON primitive type without changing config', () => {
+      const configObj = JSON.parse(fetchConfigJSON());
+      configObj.testValues = {
+        boolean: false,
+        number: 0,
+        string: 'value',
+        null: null,
+      };
+      fs.writeFileSync(configPath, JSON.stringify(configObj), 'utf8');
+      const configBeforeSet = fetchConfigJSON();
+
+      ['boolean', 'number', 'string', 'null'].forEach((key) => {
+        const keys = `testValues.${key}.nested`;
+        assert.equal(setConfig(keys, 'test'), configMessages.setDneErr(keys));
+        assert.equal(fetchConfigJSON(), configBeforeSet);
+      });
+    });
+  });
+
+  it('CLI invalid get/set commands exit cleanly without changing config', () => {
+    const configBeforeSet = fetchConfigJSON();
+    const cliPath = path.join(__dirname, '..', 'bin', 'ballin_config');
+    const getResult = spawnSync(process.execPath, [cliPath, 'get', 'up.nvm.nested'], {
+      encoding: 'utf8',
+      env: process.env,
+    });
+    const setResult = spawnSync(process.execPath, [cliPath, 'set', 'up.nvm.nested', 'test'], {
+      encoding: 'utf8',
+      env: process.env,
+    });
+    const expectedOutput = `${configMessages.getKeysDneErr('up.nvm.nested')}\n`;
+
+    assert.equal(getResult.status, 0);
+    assert.equal(getResult.stdout, expectedOutput);
+    assert.equal(getResult.stderr, '');
+    assert.equal(setResult.status, 0);
+    assert.equal(setResult.stdout, expectedOutput);
+    assert.equal(setResult.stderr, '');
+    assert.equal(fetchConfigJSON(), configBeforeSet);
   });
 
   describe('configAction', () => {
