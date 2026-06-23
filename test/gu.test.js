@@ -15,6 +15,7 @@ const requiredCommands = [
   'mkdir',
   'mktemp',
   'rm',
+  'ls',
   'tail',
 ];
 
@@ -100,6 +101,10 @@ fi
     writeTestExecutable('brew', `#!/usr/bin/env bash
 printf '%s|%s|%s\\n' "$HOMEBREW_NO_AUTO_UPDATE" "$HOMEBREW_NO_ENV_HINTS" "$*" >> "$FAKE_BREW_LOG"
 case "$*" in
+  '--prefix')
+    if [ "$FAKE_BREW_PREFIX_FAIL" = 'true' ]; then exit 32; fi
+    printf '%s\\n' "$FAKE_BREW_PREFIX"
+    ;;
   'list --formula') printf '%s\\n' 'formula-one' ;;
   'leaves') printf '%s\\n' 'leaf-one' ;;
   'list --cask') printf '%s\\n' 'cask-one' ;;
@@ -112,6 +117,10 @@ case "$*" in
   *) printf '%s\\n' 'Unexpected brew call' >&2; exit 2 ;;
 esac
 `);
+  };
+
+  const installNonExecutableBrewCommand = () => {
+    fs.writeFileSync(path.join(testBinDir, 'brew'), 'not executable\n', { mode: 0o644 });
   };
 
   const installControllableCatCommand = () => {
@@ -164,17 +173,24 @@ done
     failedPaths = [],
     emitUnderlyingStderr = false,
     brewServicesFail = false,
+    brewPrefix = path.join(testHomeDir, 'opt', 'homebrew'),
+    brewPrefixFail = false,
+    completionDir,
   } = {}) => spawnSync(guPath, [], {
     encoding: 'utf8',
     env: {
       HOME: testHomeDir,
       PATH: testBinDir,
       TMPDIR: scratchDir,
-      BALLIN_GU_BASH_COMPLETION_DIR: path.join(testHomeDir, 'bash-completion.d'),
+      ...(completionDir === undefined ? {} : {
+        BALLIN_GU_BASH_COMPLETION_DIR: completionDir,
+      }),
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
       FAKE_BREW_LOG: brewLogPath,
+      FAKE_BREW_PREFIX: brewPrefix,
+      FAKE_BREW_PREFIX_FAIL: brewPrefixFail ? 'true' : 'false',
       FAKE_BREW_SERVICES_FAIL: brewServicesFail ? 'true' : 'false',
       FAKE_CAT_FAILURE_PATHS: failedPaths.join(':'),
       FAKE_CAT_EMIT_STDERR: emitUnderlyingStderr ? 'true' : 'false',
@@ -203,6 +219,116 @@ done
   const gistUploads = () => readLogLines(gistUploadLogPath);
   const brewCalls = () => readLogLines(brewLogPath);
 
+  const writeBashCompletions = (brewPrefix, names) => {
+    const completionDirectory = path.join(brewPrefix, 'etc', 'bash_completion.d');
+    fs.mkdirSync(completionDirectory, { recursive: true });
+    names.forEach((name) => fs.writeFileSync(path.join(completionDirectory, name), ''));
+  };
+
+  [
+    ['Apple Silicon', path.join('opt', 'homebrew')],
+    ['Intel', path.join('usr', 'local')],
+    ['custom', path.join('srv', 'custombrew')],
+  ].forEach(([label, relativePrefix]) => {
+    it(`discovers ${label}-style bash completions from the active Homebrew prefix`, () => {
+      const brewPrefix = path.join(testHomeDir, relativePrefix);
+      installFakeBrewCommand();
+      writeBashCompletions(brewPrefix, ['git', 'npm']);
+
+      const result = runGu({ brewPrefix });
+
+      assertGuSucceeded(result);
+      assert.include(result.stdout, '💾 bash_completions\n');
+      assert.equal(
+        fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
+        'git\nnpm\n',
+      );
+      assert.equal(brewCalls().filter((call) => call.endsWith('|--prefix')).length, 1);
+      assert.equal(gistUploads().filter((name) => name === 'bash_completions').length, 1);
+    });
+  });
+
+  it('skips bash completions when the active Homebrew completion directory is missing', () => {
+    installFakeBrewCommand();
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.notInclude(result.stdout, 'bash_completions');
+    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
+  });
+
+  it('snapshots only the active prefix when multiple Homebrew prefixes coexist', () => {
+    const activePrefix = path.join(testHomeDir, 'active-homebrew');
+    const inactivePrefix = path.join(testHomeDir, 'inactive-homebrew');
+    installFakeBrewCommand();
+    writeBashCompletions(activePrefix, ['active-tool']);
+    writeBashCompletions(inactivePrefix, ['inactive-tool']);
+
+    const result = runGu({ brewPrefix: activePrefix });
+
+    assertGuSucceeded(result);
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
+      'active-tool\n',
+    );
+    assert.equal(gistUploads().filter((name) => name === 'bash_completions').length, 1);
+  });
+
+  it('uses an explicit bash completion directory override when brew is unavailable', () => {
+    const appleSiliconPrefix = path.join(testHomeDir, 'opt', 'homebrew');
+    const completionDir = path.join(appleSiliconPrefix, 'etc', 'bash_completion.d');
+    writeBashCompletions(appleSiliconPrefix, ['apple-silicon-tool']);
+
+    const result = runGu({ completionDir });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '💾 bash_completions\n');
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
+      'apple-silicon-tool\n',
+    );
+    assert.deepEqual(brewCalls(), []);
+  });
+
+  it('skips bash completions instead of guessing a prefix when brew is unavailable', () => {
+    writeBashCompletions(path.join(testHomeDir, 'opt', 'homebrew'), ['apple-silicon-tool']);
+    writeBashCompletions(path.join(testHomeDir, 'usr', 'local'), ['intel-tool']);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.notInclude(result.stdout, 'bash_completions');
+    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
+    assert.deepEqual(brewCalls(), []);
+  });
+
+  it('skips Homebrew snapshots when brew resolves but is not executable', () => {
+    installNonExecutableBrewCommand();
+    writeBashCompletions(path.join(testHomeDir, 'opt', 'homebrew'), ['apple-silicon-tool']);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '');
+    assert.deepEqual(brewCalls(), []);
+    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
+    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'brew_list')));
+  });
+
+  it('skips bash completions instead of guessing a prefix when brew prefix discovery fails', () => {
+    installFakeBrewCommand();
+    writeBashCompletions(path.join(testHomeDir, 'opt', 'homebrew'), ['apple-silicon-tool']);
+    writeBashCompletions(path.join(testHomeDir, 'usr', 'local'), ['intel-tool']);
+
+    const result = runGu({ brewPrefixFail: true });
+
+    assertGuSucceeded(result);
+    assert.notInclude(result.stdout, 'bash_completions');
+    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
+    assert.equal(brewCalls().filter((call) => call.endsWith('|--prefix')).length, 1);
+  });
+
   it('captures Homebrew inventory with flags while suppressing successful services stderr', () => {
     installFakeBrewCommand();
 
@@ -217,6 +343,7 @@ done
       '💾 Brewfile',
     ]);
     assert.deepEqual(brewCalls(), [
+      '1|1|--prefix',
       '1|1|list --formula',
       '1|1|leaves',
       '1|1|list --cask',
