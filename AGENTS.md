@@ -26,13 +26,13 @@ the shell scripts and configuration helpers.
   `BALLIN_TEST_CONFIG_PATH`, `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log
   stubs before adding new test escape hatches.
 
-## Shell and config changes
+## Shell, config, and docs
 
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
   in sync when adding or changing settings.
-- Document new or changed user-facing configuration options in
-  `docs/optional-capabilities.md`, including settings that affect `up`, `gu`,
-  install, or update commands.
+- Update `docs/optional-capabilities.md` when optional setup, integrations,
+  dependencies, or user-facing settings change, especially for `up`, `gu`,
+  install, or update behavior.
