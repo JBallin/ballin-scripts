@@ -10,10 +10,9 @@ the shell scripts and config helpers.
 ## Development workflow
 
 - Use the Node.js version from `.nvmrc`.
-- Install dependencies with `npm ci` for a clean, lockfile-based install. Use
-  `npm install` only when intentionally updating dependencies.
-- If using a git worktree, treat it like a fresh checkout; there is no
-  repo-specific worktree setup beyond installing dependencies in that checkout.
+- Install dependencies with `npm ci`.
+- Git worktrees need no special setup beyond installing dependencies in the
+  worktree checkout.
 - Run checks based on the change: `npm test` for code, config, script, or test
   changes; the CI whitespace check is enough for docs-only changes.
 
@@ -32,8 +31,6 @@ the shell scripts and config helpers.
 - Use the existing test escape hatches, such as `BALLIN_TEST_CONFIG_PATH`,
   `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log stubs, before adding new
   ones.
-- Keep tests deterministic and avoid depending on the developer machine's actual
-  installed tools, global packages, Homebrew state, Gists, or dotfiles.
 
 ## Shell script guidance
 
