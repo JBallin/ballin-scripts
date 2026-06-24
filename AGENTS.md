@@ -33,5 +33,5 @@ the shell scripts and configuration helpers.
   executable modes on `bin/*` and `install.sh`.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
   in sync when adding or changing settings.
-- Update `docs/optional-capabilities.md` when optional setup, integrations,
-  dependencies, or documented settings change.
+- `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
+  and `up` settings; update it when those user-facing choices change.
