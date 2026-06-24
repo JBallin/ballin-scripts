@@ -22,8 +22,8 @@ the shell scripts and config helpers.
 ## Testing and safety
 
 - Do not run install, uninstall, `up`, `gu`, Homebrew, Gist, GitHub, npm-global,
-  `softwareupdate`, symlink, or network-affecting behavior against the real user
-  environment.
+  `softwareupdate`, symlink, or other network-affecting operations against the
+  real user environment.
 - Tests for install, uninstall, `up`, `gu`, Homebrew, Gist, GitHub, npm-global,
   `softwareupdate`, symlink, or network-affecting behavior must use temporary
   directories, fixture files, complete child-process environments, and command
