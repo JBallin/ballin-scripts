@@ -23,10 +23,11 @@ the shell scripts and config helpers.
 
 - Do not run install, uninstall, `up`, `gu`, Homebrew, Gist, GitHub, npm-global,
   `softwareupdate`, symlink, or network-affecting behavior against the real user
-  environment unless the issue explicitly asks for it.
-- Tests for those paths must use temporary directories, fixture files, complete
-  child-process environments, and command stubs instead of the real user
   environment.
+- Tests for install, uninstall, `up`, `gu`, Homebrew, Gist, GitHub, npm-global,
+  `softwareupdate`, symlink, or network-affecting behavior must use temporary
+  directories, fixture files, complete child-process environments, and command
+  stubs instead of the real user environment.
 - Follow the existing `spawnSync` harness style and hooks like
   `BALLIN_TEST_CONFIG_PATH`, `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log
   stubs before adding new test escape hatches.
