@@ -31,21 +31,10 @@ the shell scripts and config helpers.
 
 ## Shell and config changes
 
-- Preserve existing user-facing behavior unless the issue explicitly asks for a
-  behavior change.
-- Be careful with quoting, globbing, and paths that may contain spaces.
-- Keep files under `bin/` and `install.sh` executable.
+- For shell changes, preserve CLI output and side effects unless the issue asks
+  for behavior changes; watch quoting, globbing, paths with spaces, and
+  executable modes on `bin/*` and `install.sh`.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
   in sync when adding or changing settings.
 - Document user-facing optional behavior in `docs/optional-capabilities.md` when
   a setting changes how `up`, `gu`, install, or update commands behave.
-
-## Git hygiene
-
-- Inspect the worktree before editing and preserve unrelated user changes.
-- Keep commits focused on the issue being addressed.
-
-## PR notes
-
-When opening a PR, include the issue being addressed, a concise summary of
-behavior changes, and the local checks that were run.
