@@ -44,6 +44,13 @@ the shell scripts and config helpers.
 - When adding behavior that can affect the user's environment, add or update
   tests that prove it stays confined to the test harness.
 
+## Config guidance
+
+- Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
+  in sync when adding or changing settings.
+- Document user-facing optional behavior in `docs/optional-capabilities.md` when
+  a setting changes how `up`, `gu`, install, or update commands behave.
+
 ## Git hygiene
 
 - Inspect the worktree before editing and preserve unrelated user changes.
