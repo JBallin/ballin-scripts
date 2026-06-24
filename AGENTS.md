@@ -10,9 +10,12 @@ the shell scripts and config helpers.
 ## Development workflow
 
 - Use the Node.js version from `.nvmrc`.
-- Install dependencies with `npm ci`.
-- Run the full local check with `npm test`; this runs ESLint and Mocha.
-- Before opening a PR, also run the whitespace check used by CI:
+- Install dependencies with `npm ci` for a clean, lockfile-based install. Use
+  `npm install` only when intentionally updating dependencies.
+- If using a git worktree, treat it like a fresh checkout; there is no
+  repo-specific worktree setup beyond installing dependencies in that checkout.
+- Run checks based on the change: `npm test` for code, config, script, or test
+  changes; the CI whitespace check is enough for docs-only changes.
 
   ```sh
   git diff --check "$(git hash-object -t tree /dev/null)" HEAD
@@ -37,12 +40,13 @@ the shell scripts and config helpers.
 - Preserve existing user-facing behavior unless the issue explicitly asks for a
   behavior change.
 - Be careful with quoting, globbing, and paths that may contain spaces.
-- Preserve executable bits on files under `bin/` and on `install.sh`.
+- Keep files under `bin/` and `install.sh` executable.
 - Prefer explicit checks and clear failure messages for operations that touch
   user config, symlinks, package managers, network-backed tools, or system update
   commands.
-- When adding behavior that can affect the user's environment, add or update
-  tests that prove it stays confined to the test harness.
+- For install, uninstall, update, Gist, symlink, package-manager, or system
+  update behavior, add or update tests that use temporary paths and stubs rather
+  than the real user environment.
 
 ## Config guidance
 
@@ -55,8 +59,6 @@ the shell scripts and config helpers.
 
 - Inspect the worktree before editing and preserve unrelated user changes.
 - Keep commits focused on the issue being addressed.
-- Do not encode personal Codex/session workflow preferences here; keep this file
-  limited to durable repository guidance.
 
 ## PR notes
 
