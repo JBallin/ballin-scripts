@@ -12,12 +12,6 @@ the shell scripts and configuration helpers.
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
 - Run `npm test` after changes to code, config, scripts, or tests.
-- CI also runs this empty-tree whitespace check; use it locally when investigating
-  whitespace failures:
-
-  ```sh
-  git diff --check "$(git hash-object -t tree /dev/null)" HEAD
-  ```
 
 ## Testing and safety
 
@@ -39,5 +33,6 @@ the shell scripts and configuration helpers.
   executable modes on `bin/*` and `install.sh`.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
   in sync when adding or changing settings.
-- Document user-facing optional behavior in `docs/optional-capabilities.md` when
-  a setting changes how `up`, `gu`, install, or update commands behave.
+- Document new or changed user-facing configuration options in
+  `docs/optional-capabilities.md`, including settings that affect `up`, `gu`,
+  install, or update commands.
