@@ -3,15 +3,15 @@
 ## Repo map
 
 `ballin-scripts` is a small personal automation toolkit. Most user-facing behavior
-lives in Bash scripts under `bin/` and in `install.sh`. The Node.js layer in
+lives in Bash scripts under `bin/` and in `install.sh`. The Node.js code in
 `config/` manages `ballin.config.json`, and the Mocha tests in `test/` exercise
-the shell scripts and config helpers.
+the shell scripts and configuration helpers.
 
 ## Local commands
 
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
-- Run `npm test` after code, config, script, or test changes.
+- Run `npm test` after changes to code, config, scripts, or tests.
 - CI also runs this empty-tree whitespace check; use it locally when investigating
   whitespace failures:
 
@@ -28,7 +28,7 @@ the shell scripts and config helpers.
   `softwareupdate`, symlink, or other network-affecting operations must use
   temporary directories, fixture files, complete child-process environments, and
   command stubs instead of the real user environment.
-- Follow the existing `spawnSync` harness style and hooks like
+- Follow the existing `spawnSync` harness style, using hooks like
   `BALLIN_TEST_CONFIG_PATH`, `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log
   stubs before adding new test escape hatches.
 
