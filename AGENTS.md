@@ -34,5 +34,4 @@ the shell scripts and configuration helpers.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
   in sync when adding or changing settings.
 - Update `docs/optional-capabilities.md` when optional setup, integrations,
-  dependencies, or user-facing settings change, especially for `up`, `gu`,
-  install, or update behavior.
+  dependencies, or user-facing `up` settings change.
