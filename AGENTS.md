@@ -1,20 +1,19 @@
 # AGENTS.md
 
-## Repository context
+## Repo map
 
 `ballin-scripts` is a small personal automation toolkit. Most user-facing behavior
 lives in Bash scripts under `bin/` and in `install.sh`. The Node.js layer in
 `config/` manages `ballin.config.json`, and the Mocha tests in `test/` exercise
 the shell scripts and config helpers.
 
-## Development workflow
+## Local commands
 
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
-- Git worktrees need no special setup beyond installing dependencies in the
-  worktree checkout.
-- Run checks based on the change: `npm test` for code, config, script, or test
-  changes; the CI whitespace check is enough for docs-only changes.
+- Run `npm test` for code, config, script, or test changes.
+- CI also runs this empty-tree whitespace check; use it locally when investigating
+  whitespace failures:
 
   ```sh
   git diff --check "$(git hash-object -t tree /dev/null)" HEAD
@@ -22,31 +21,20 @@ the shell scripts and config helpers.
 
 ## Testing and safety
 
-- Keep tests isolated from the real developer machine. Use temporary directories,
-  fixture files, and command stubs instead of real Homebrew, Gist, GitHub, npm,
-  macOS update, install, uninstall, or network behavior.
-- Follow the existing `spawnSync` test style: pass complete child-process
-  environments when that prevents real credentials, tools, config, or shell
-  state from leaking in.
-- Use the existing test escape hatches, such as `BALLIN_TEST_CONFIG_PATH`,
-  `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log stubs, before adding new
-  ones.
+- Tests for install, uninstall, `up`, `gu`, Homebrew, Gist, GitHub, npm,
+  `softwareupdate`, symlinks, or network behavior must use temporary directories,
+  fixture files, and command stubs instead of the real user environment.
+- Follow the existing `spawnSync` harness style: pass complete child-process
+  environments and use hooks like `BALLIN_TEST_CONFIG_PATH`,
+  `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log stubs before adding new
+  test escape hatches.
 
-## Shell script guidance
+## Shell and config changes
 
 - Preserve existing user-facing behavior unless the issue explicitly asks for a
   behavior change.
 - Be careful with quoting, globbing, and paths that may contain spaces.
 - Keep files under `bin/` and `install.sh` executable.
-- Prefer explicit checks and clear failure messages for operations that touch
-  user config, symlinks, package managers, network-backed tools, or system update
-  commands.
-- For install, uninstall, update, Gist, symlink, package-manager, or system
-  update behavior, add or update tests that use temporary paths and stubs rather
-  than the real user environment.
-
-## Config guidance
-
 - Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
   in sync when adding or changing settings.
 - Document user-facing optional behavior in `docs/optional-capabilities.md` when
