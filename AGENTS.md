@@ -11,7 +11,7 @@ the shell scripts and config helpers.
 
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
-- Run `npm test` for code, config, script, or test changes.
+- Run `npm test` after code, config, script, or test changes.
 - CI also runs this empty-tree whitespace check; use it locally when investigating
   whitespace failures:
 
