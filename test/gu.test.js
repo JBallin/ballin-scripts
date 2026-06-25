@@ -28,6 +28,8 @@ describe('gu', () => {
   let scratchDir;
   let gistUploadLogPath;
   let brewLogPath;
+  let openLogPath;
+  let ballinLogPath;
   let realCatPath;
 
   const linkRequiredCommand = (command) => {
@@ -69,6 +71,7 @@ if [ "$2" != 'test-gist-id' ]; then
 fi
 if [ "$1" = '-r' ]; then
   if [ "$#" -eq 2 ]; then
+    if [ "$FAKE_GIST_INITIAL_READ_FAIL" = 'true' ]; then exit 17; fi
     exit 0
   elif [ "$#" -ne 3 ]; then
     printf '%s\\n' 'Unexpected gist read arguments' >&2
@@ -94,6 +97,19 @@ else
   printf '%s\\n' 'Unexpected gist call' >&2
   exit 2
 fi
+`);
+  };
+
+  const installFakeOpenCommand = () => {
+    writeTestExecutable('open', `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_OPEN_LOG"
+`);
+  };
+
+  const installFakeBallinCommand = () => {
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_BALLIN_LOG"
+printf '%s\\n' 'fake ballin help'
 `);
   };
 
@@ -150,6 +166,8 @@ done
     scratchDir = path.join(testHomeDir, 'tmp');
     gistUploadLogPath = path.join(testHomeDir, 'fake-gist-uploads.log');
     brewLogPath = path.join(testHomeDir, 'fake-brew.log');
+    openLogPath = path.join(testHomeDir, 'fake-open.log');
+    ballinLogPath = path.join(testHomeDir, 'fake-ballin.log');
 
     [
       testBinDir,
@@ -162,6 +180,8 @@ done
     realCatPath = installControllableCatCommand();
     installFakeBallinConfigCommand();
     installFakeGistCommand();
+    installFakeOpenCommand();
+    installFakeBallinCommand();
   });
 
   afterEach(() => {
@@ -170,13 +190,15 @@ done
 
   // Pass a complete child environment so real tools and credentials are not inherited.
   const runGu = ({
+    args = [],
     failedPaths = [],
     emitUnderlyingStderr = false,
     brewServicesFail = false,
     brewPrefix = path.join(testHomeDir, 'opt', 'homebrew'),
     brewPrefixFail = false,
     completionDir,
-  } = {}) => spawnSync(guPath, [], {
+    gistInitialReadFail = false,
+  } = {}) => spawnSync(guPath, args, {
     encoding: 'utf8',
     env: {
       HOME: testHomeDir,
@@ -188,7 +210,10 @@ done
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
+      FAKE_GIST_INITIAL_READ_FAIL: gistInitialReadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
+      FAKE_OPEN_LOG: openLogPath,
+      FAKE_BALLIN_LOG: ballinLogPath,
       FAKE_BREW_PREFIX: brewPrefix,
       FAKE_BREW_PREFIX_FAIL: brewPrefixFail ? 'true' : 'false',
       FAKE_BREW_SERVICES_FAIL: brewServicesFail ? 'true' : 'false',
@@ -207,6 +232,9 @@ done
     fs.writeFileSync(cachedSnapshotPath(), content);
   };
   const seedFakeGist = (content) => fs.writeFileSync(fakeGistFilePath(), content);
+  const seedFakeGistFile = (fileName, content) => {
+    fs.writeFileSync(path.join(fakeGistDir, fileName), content);
+  };
   const assertGuSucceeded = (result) => {
     assert.equal(result.status, 0);
     assert.equal(result.stderr, '');
@@ -218,12 +246,196 @@ done
   const gistReads = () => readLogLines(gistReadLogPath);
   const gistUploads = () => readLogLines(gistUploadLogPath);
   const brewCalls = () => readLogLines(brewLogPath);
+  const openCalls = () => readLogLines(openLogPath);
+  const ballinCalls = () => readLogLines(ballinLogPath);
 
   const writeBashCompletions = (brewPrefix, names) => {
     const completionDirectory = path.join(brewPrefix, 'etc', 'bash_completion.d');
     fs.mkdirSync(completionDirectory, { recursive: true });
     names.forEach((name) => fs.writeFileSync(path.join(completionDirectory, name), ''));
   };
+
+  const writeAppSupportFile = (segments, content) => {
+    const filePath = path.join(testHomeDir, 'Library', 'Application Support', ...segments);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
+  };
+
+  it('prints the configured Gist URL and opens it', () => {
+    const result = runGu({ args: ['open'] });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
+  });
+
+  it('prints help through the ballin command', () => {
+    const result = runGu({ args: ['help'] });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'fake ballin help\n');
+    assert.deepEqual(ballinCalls(), ['']);
+  });
+
+  it('reads a named Gist file', () => {
+    seedFakeGistFile('vimrc', 'set number\n');
+
+    const result = runGu({ args: ['read', 'vimrc'] });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'set number\n');
+    assert.deepEqual(gistReads(), ['vimrc']);
+  });
+
+  it('prints options when a requested Gist file is missing', () => {
+    const result = runGu({ args: ['read', 'missing_file'] });
+
+    assertGuSucceeded(result);
+    assert.include(result.stdout, '\nOptions: ');
+    assert.include(result.stdout, 'ballin_config');
+    assert.include(result.stdout, 'vsI_settings');
+    assert.deepEqual(gistReads(), ['missing_file']);
+  });
+
+  it('prints options when read is missing a filename', () => {
+    const result = runGu({ args: ['read'] });
+
+    assertGuSucceeded(result);
+    assert.include(result.stdout, "Error: 'read' needs a filename.");
+    assert.include(result.stdout, '\nOptions: ');
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('reports an initial Gist retrieval failure before snapshotting', () => {
+    const result = runGu({ gistInitialReadFail: true });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stderr, '');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('snapshots VS Code and Insiders settings, keybindings, and extensions', () => {
+    writeAppSupportFile(['Code', 'User', 'settings.json'], '{"fontSize":14}\n');
+    writeAppSupportFile(['Code', 'User', 'keybindings.json'], '[{"key":"cmd+k"}]\n');
+    writeAppSupportFile(['Code - Insiders', 'User', 'settings.json'], '{"fontSize":15}\n');
+    writeAppSupportFile(
+      ['Code - Insiders', 'User', 'keybindings.json'],
+      '[{"key":"cmd+i"}]\n',
+    );
+    writeTestExecutable('code', `#!/usr/bin/env bash
+if [ "$*" != '--list-extensions' ]; then exit 2; fi
+printf '%s\\n' 'publisher.stable-extension'
+`);
+    writeTestExecutable('code-insiders', `#!/usr/bin/env bash
+if [ "$*" != '--list-extensions' ]; then exit 2; fi
+printf '%s\\n' 'publisher.insiders-extension'
+`);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      '💾 vs_settings',
+      '💾 vs_keybindings',
+      '💾 vs_extensions',
+      '💾 vsI_settings',
+      '💾 vsI_keybindings',
+      '💾 vsI_extensions',
+    ]);
+    assert.equal(fs.readFileSync(path.join(guCacheDir, 'vs_settings'), 'utf8'), '{"fontSize":14}\n');
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'vs_keybindings'), 'utf8'),
+      '[{"key":"cmd+k"}]\n',
+    );
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'vs_extensions'), 'utf8'),
+      'publisher.stable-extension\n',
+    );
+    assert.equal(fs.readFileSync(path.join(guCacheDir, 'vsI_settings'), 'utf8'), '{"fontSize":15}\n');
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'vsI_keybindings'), 'utf8'),
+      '[{"key":"cmd+i"}]\n',
+    );
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'vsI_extensions'), 'utf8'),
+      'publisher.insiders-extension\n',
+    );
+    assert.deepEqual(gistUploads(), [
+      'vs_settings',
+      'vs_keybindings',
+      'vs_extensions',
+      'vsI_settings',
+      'vsI_keybindings',
+      'vsI_extensions',
+    ]);
+  });
+
+  it('snapshots Brackets settings, keymap, and extension directories', () => {
+    const bracketsDir = path.join(testHomeDir, 'Library', 'Application Support', 'Brackets');
+    fs.mkdirSync(path.join(bracketsDir, 'extensions', 'user'), { recursive: true });
+    fs.mkdirSync(path.join(bracketsDir, 'extensions', 'disabled'), { recursive: true });
+    fs.writeFileSync(path.join(bracketsDir, 'brackets.json'), '{"linting.enabled":true}\n');
+    fs.writeFileSync(path.join(bracketsDir, 'keymap.json'), '{"Ctrl-E":"edit"}\n');
+    fs.writeFileSync(path.join(bracketsDir, 'extensions', 'user', 'beautify'), '');
+    fs.writeFileSync(path.join(bracketsDir, 'extensions', 'disabled', 'legacy-lint'), '');
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      '💾 brackets_settings',
+      '💾 brackets_keymap',
+      '💾 brackets_extensions',
+      '💾 brackets_disabled_extensions',
+    ]);
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'brackets_settings.json'), 'utf8'),
+      '{"linting.enabled":true}\n',
+    );
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'brackets_keymap.json'), 'utf8'),
+      '{"Ctrl-E":"edit"}\n',
+    );
+    assert.equal(fs.readFileSync(path.join(guCacheDir, 'brackets_extensions'), 'utf8'), 'beautify\n');
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'brackets_disabled_extensions'), 'utf8'),
+      'legacy-lint\n',
+    );
+    assert.deepEqual(gistUploads(), [
+      'brackets_settings.json',
+      'brackets_keymap.json',
+      'brackets_extensions',
+      'brackets_disabled_extensions',
+    ]);
+  });
+
+  it('snapshots npm globals and Mac App Store apps when commands are available', () => {
+    writeTestExecutable('npm', `#!/usr/bin/env bash
+if [ "$*" != 'list -g --depth=0' ]; then exit 2; fi
+printf '%s\\n' '/fake/npm' '+-- eslint@1.0.0'
+`);
+    writeTestExecutable('mas', `#!/usr/bin/env bash
+if [ "$*" != 'list' ]; then exit 2; fi
+printf '%s\\n' '123456 Example App'
+`);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      '💾 npm_global',
+      '💾 mas',
+    ]);
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'npm_global'), 'utf8'),
+      '/fake/npm\n+-- eslint@1.0.0\n',
+    );
+    assert.equal(fs.readFileSync(path.join(guCacheDir, 'mas'), 'utf8'), '123456 Example App\n');
+    assert.deepEqual(gistUploads(), ['npm_global', 'mas']);
+  });
 
   [
     ['Apple Silicon', path.join('opt', 'homebrew')],
