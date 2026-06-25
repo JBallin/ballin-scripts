@@ -13,6 +13,7 @@ const {
 } = require('../config');
 
 const fetchConfigJSON = () => fetchConfig().configJSON;
+const cliPath = path.join(__dirname, '..', 'bin', 'ballin_config');
 
 const currentConfigJSON = fetchConfigJSON();
 const invalidPathCases = [
@@ -31,6 +32,11 @@ const setTest = (keys, value) => {
   setConfig(keys, value);
   assert.deepEqual(value, getConfig(keys));
 };
+
+const runConfigCli = (args = []) => spawnSync(process.execPath, [cliPath, ...args], {
+  encoding: 'utf8',
+  env: process.env,
+});
 
 describe('config', () => {
   let savedConfig;
@@ -162,15 +168,8 @@ describe('config', () => {
 
   it('CLI invalid get/set commands exit cleanly without changing config', () => {
     const configBeforeSet = fetchConfigJSON();
-    const cliPath = path.join(__dirname, '..', 'bin', 'ballin_config');
-    const getResult = spawnSync(process.execPath, [cliPath, 'get', 'up.nvm.nested'], {
-      encoding: 'utf8',
-      env: process.env,
-    });
-    const setResult = spawnSync(process.execPath, [cliPath, 'set', 'up.nvm.nested', 'test'], {
-      encoding: 'utf8',
-      env: process.env,
-    });
+    const getResult = runConfigCli(['get', 'up.nvm.nested']);
+    const setResult = runConfigCli(['set', 'up.nvm.nested', 'test']);
     const expectedOutput = `${configMessages.getKeysDneErr('up.nvm.nested')}\n`;
 
     assert.equal(getResult.status, 0);
@@ -180,6 +179,33 @@ describe('config', () => {
     assert.equal(setResult.stdout, expectedOutput);
     assert.equal(setResult.stderr, '');
     assert.equal(fetchConfigJSON(), configBeforeSet);
+  });
+
+  it('CLI prints the full config when called without arguments', () => {
+    const result = runConfigCli();
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, `${fetchConfigJSON()}\n`);
+    assert.equal(result.stderr, '');
+  });
+
+  it('CLI reset restores the default config', () => {
+    setConfig('gu.id', 'changed-id');
+
+    const result = runConfigCli(['reset']);
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Config has been reset...\nFROM:');
+    assert.isNull(getConfig('gu.id'));
+    assert.deepEqual(fetchConfig().configObj, defaultConfig);
+  });
+
+  it('CLI invalid action exits cleanly in test mode', () => {
+    const result = runConfigCli(['wrong']);
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, `${configMessages.actionErr}\n`);
+    assert.equal(result.stderr, '');
   });
 
   describe('configAction', () => {
