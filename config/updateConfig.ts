@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
 const fs = require('fs');
-const { configPath, fetchConfig, stringify } = require('.');
+const { configPath, fetchConfig, stringify } = require('./index.ts');
 const defaultConfig = require('./.defaultConfig.json');
 
 type ConfigLeaf = string | number | boolean | null;

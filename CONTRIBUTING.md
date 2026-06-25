@@ -12,7 +12,7 @@
 $ cd $HOME/.ballin-scripts
 $ ballin_update # Update project/config
 $ git checkout -b $BRANCH_NAME
-$ npm ci
+$ npm install
 # MAKE CHANGES
 $ npm test
 $ git push fork $BRANCH_NAME

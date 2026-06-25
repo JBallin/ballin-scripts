@@ -3,7 +3,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const defaultConfig = require('../config/.defaultConfig.json');
-const configModule = require('../config');
+const configModule = require('../config/index.ts');
 
 const {
   getConfig,
@@ -52,13 +52,13 @@ describe('config', () => {
     assert.notEqual(configPath, path.join(__dirname, '..', 'ballin.config.json'));
   });
 
-  it('loads through the CommonJS config directory shim', () => {
+  it('loads the TypeScript config implementation directly', () => {
     assert.equal(configModule.configPath, configPath);
     assert.strictEqual(configModule.getConfig, getConfig);
   });
 
   it('does not treat NODE_ENV=test as a fixture run by itself', () => {
-    const result = spawnSync(process.execPath, ['-p', "require('./config').configPath"], {
+    const result = spawnSync(process.execPath, ['-p', "require('./config/index.ts').configPath"], {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',
       env: {
@@ -257,10 +257,10 @@ describe('config', () => {
   });
 
   describe('updateConfig', () => {
-    it('updates the isolated fixture through the CommonJS shim', () => {
+    it('updates the isolated fixture when required directly', () => {
       fs.writeFileSync(configPath, '{}', 'utf8');
 
-      const result = spawnSync(process.execPath, ['-e', "require('./config/updateConfig')"], {
+      const result = spawnSync(process.execPath, ['-e', "require('./config/updateConfig.ts')"], {
         cwd: path.join(__dirname, '..'),
         encoding: 'utf8',
         env: process.env,
@@ -270,10 +270,10 @@ describe('config', () => {
       assert.deepEqual(fetchConfig().configObj, defaultConfig);
     });
 
-    it('updates the isolated fixture when invoked through updateConfig.js', () => {
+    it('updates the isolated fixture when invoked through updateConfig.ts', () => {
       fs.writeFileSync(configPath, '{}', 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.js')], {
+      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
         cwd: path.join(__dirname, '..'),
         encoding: 'utf8',
         env: process.env,

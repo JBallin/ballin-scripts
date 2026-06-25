@@ -76,7 +76,7 @@ if ! (
   else
     # ballin_update reruns this installer after pulling changes; add any new
     # default options to the existing config without overwriting user settings.
-    if ! UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.js"); then
+    if ! UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.ts"); then
       exit 1
     fi
     if [ -n "$UPDATE_RESULT" ]; then

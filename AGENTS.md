@@ -35,9 +35,9 @@ the shell scripts and configuration helpers.
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
 - Keep extensionless `bin/*` commands and existing JavaScript entrypoint paths
-  stable unless an issue explicitly changes them. Small `.js` files may be
-  compatibility shims into `.ts`; put real logic in the TypeScript source.
-- Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, its JavaScript
-  shim, and config tests in sync when adding or changing settings.
+  stable unless an issue explicitly changes them. TypeScript source under
+  `config/` is executed directly by Node.
+- Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
+  in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
   and `up` settings; update it when those user-facing choices change.
