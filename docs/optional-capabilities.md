@@ -6,17 +6,17 @@ while letting you opt in to broader automation.
 
 ## Node.js
 
-Node.js is required by `ballin-scripts`; install a current supported Node.js
-version using whichever method fits your environment. For development, we
-recommend [nvm](https://github.com/nvm-sh/nvm) with the version in the repo's
-`.nvmrc` file. It supports switching versions, project-specific `.nvmrc` files,
-and a user-local installation.
+Node.js is required by `ballin-scripts`; install it using whichever method fits
+your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
+with the version in the repo's `.nvmrc` file. It supports switching versions,
+project-specific `.nvmrc` files, and a user-local installation.
 
 Follow nvm's official
 [installation and shell setup instructions](https://github.com/nvm-sh/nvm#installing-and-updating),
-then install Node.js:
+then install Node.js from the repo:
 
 ```shell
+cd "$HOME/.ballin-scripts"
 nvm install
 ```
 
