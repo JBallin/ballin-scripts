@@ -7,8 +7,12 @@ const commonGlobals = {
   ...globals.mocha,
 };
 
+const jsRules = {
+  ...js.configs.recommended.rules,
+  'no-console': 'error',
+};
 const tsFiles = ['config/**/*.ts', 'test/**/*.ts'];
-const isBallinConfigBin = (filePath) => filePath.endsWith('/bin/ballin_config')
+const isBallinConfigBin = (filePath) => filePath.replaceAll('\\', '/').endsWith('/bin/ballin_config')
   || filePath === 'bin/ballin_config';
 
 export default tseslint.config(
@@ -23,10 +27,17 @@ export default tseslint.config(
       sourceType: 'commonjs',
       globals: commonGlobals,
     },
-    rules: {
-      ...js.configs.recommended.rules,
-      'no-console': 'error',
+    rules: jsRules,
+  },
+  {
+    files: ['**/*.mjs'],
+    ...js.configs.recommended,
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.node,
     },
+    rules: jsRules,
   },
   ...tseslint.configs.recommended.map((config) => ({
     ...config,
