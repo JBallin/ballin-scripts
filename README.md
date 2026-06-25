@@ -10,8 +10,6 @@ Run the [install script](install.sh) using cURL:
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-Requires Node.js 24 or newer.
-
 See the [optional capabilities guide](docs/optional-capabilities.md) for
 additional setup and configuration.
 
