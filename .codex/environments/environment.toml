@@ -5,13 +5,10 @@ name = "ballin-scripts"
 [setup]
 script = '''
 cd "$CODEX_WORKTREE_PATH"
-. "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
-nvm install
-nvm use
 npm ci
 '''
 
 [[actions]]
 name = "test"
 icon = "tool"
-command = ". \"${NVM_DIR:-$HOME/.nvm}/nvm.sh\" && nvm use && npm test"
+command = "npm test"
