@@ -34,7 +34,7 @@ the shell scripts and configuration helpers.
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
-- Keep extensionless `bin/*` commands and existing JavaScript entrypoint paths
+- Keep extensionless `bin/*` commands and existing Node entrypoint paths
   stable unless an issue explicitly changes them. TypeScript source under
   `config/` is executed directly by Node.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
