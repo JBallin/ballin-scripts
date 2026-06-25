@@ -20,6 +20,9 @@ cd /path/to/ballin-scripts
 nvm install
 ```
 
+Installed commands use the `node` found on your shell `PATH`, so make sure new
+terminal sessions use a supported Node.js version too.
+
 After installing `ballin-scripts`, optionally let `up` install newer LTS
 releases:
 
