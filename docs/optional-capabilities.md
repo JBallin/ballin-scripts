@@ -6,17 +6,18 @@ while letting you opt in to broader automation.
 
 ## Node.js
 
-Node.js is required by `ballin-scripts`; install it using whichever method fits
-your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
-with the latest Node.js long-term support (LTS) release. It supports switching
-versions, project-specific `.nvmrc` files, and a user-local installation.
+Node.js 24 or newer is required by `ballin-scripts`; install it using whichever
+method fits your environment. For development, we recommend
+[nvm](https://github.com/nvm-sh/nvm) with the version in the repo's `.nvmrc`
+file. It supports switching versions, project-specific `.nvmrc` files, and a
+user-local installation.
 
 Follow nvm's official
 [installation and shell setup instructions](https://github.com/nvm-sh/nvm#installing-and-updating),
-then install Node.js LTS:
+then install the supported Node.js version:
 
 ```shell
-nvm install --lts
+nvm install 24
 ```
 
 After installing `ballin-scripts`, optionally let `up` install newer LTS
@@ -27,10 +28,10 @@ ballin_config set up.nvm true
 ```
 
 `up.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
-`false` because enabling it opts into the LTS release, and installing a new
+`false` because enabling it opts into newer LTS releases, and installing a new
 Node.js version does not migrate your globally installed npm packages
-automatically. If nvm cannot be loaded, `up` warns and continues with its
-remaining updates.
+automatically. Keep Node.js at version 24 or newer for `ballin-scripts`. If nvm
+cannot be loaded, `up` warns and continues with its remaining updates.
 
 For a simpler setup, install Homebrew's current Node.js release instead:
 
