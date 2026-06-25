@@ -5,6 +5,18 @@ name = "ballin-scripts"
 [setup]
 script = '''
 cd "$CODEX_WORKTREE_PATH"
+
+required_node="$(cat .nvmrc)"
+
+if [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+  . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  nvm install
+  nvm use
+elif [ "$(node --version 2>/dev/null)" != "v${required_node}" ]; then
+  printf 'Node.js %s is required. Install it with nvm or put it first on PATH.\n' "$required_node" >&2
+  exit 1
+fi
+
 npm ci
 '''
 
