@@ -1,6 +1,7 @@
 const { assert } = require('chai');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const defaultConfig = require('../config/.defaultConfig.json');
 const configModule = require('../config/index.ts');
@@ -209,6 +210,26 @@ describe('config', () => {
     assert.equal(result.status, 0);
     assert.equal(result.stdout, 'null\n');
     assert.equal(result.stderr, '');
+  });
+
+  it('CLI remains executable through the installed symlink model', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-bin-'));
+    const symlinkPath = path.join(tempDir, 'ballin_config');
+
+    try {
+      fs.symlinkSync(cliPath, symlinkPath);
+
+      const result = spawnSync(symlinkPath, ['get', 'gu.id'], {
+        encoding: 'utf8',
+        env: process.env,
+      });
+
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, 'null\n');
+      assert.equal(result.stderr, '');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('CLI reset restores the default config', () => {
