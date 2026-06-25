@@ -12,11 +12,15 @@
 $ cd $HOME/.ballin-scripts
 $ ballin_update # Update project/config
 $ git checkout -b $BRANCH_NAME
-$ npm install
+$ npm ci
 # MAKE CHANGES
 $ npm test
 $ git push fork $BRANCH_NAME
 ```
+
+`npm test` runs linting, TypeScript typechecking, and unit tests. TypeScript
+source should remain directly runnable by the supported Node.js version; do not
+add generated JavaScript, a `dist/` build, or a bundler for production commands.
 
 ## Suggestions Welcome
 
