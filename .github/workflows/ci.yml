@@ -24,6 +24,11 @@ jobs:
       - name: Check whitespace
         run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD
 
+      - name: Check Bash syntax
+        run: |
+          git grep -Ilz '^#!.*bash' -- . \
+            | xargs -0 -r bash -n
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
