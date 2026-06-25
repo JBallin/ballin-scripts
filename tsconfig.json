@@ -2,6 +2,7 @@
   "compilerOptions": {
     "allowJs": false,
     "checkJs": false,
+    "erasableSyntaxOnly": true,
     "forceConsistentCasingInFileNames": true,
     "module": "CommonJS",
     "moduleDetection": "force",
