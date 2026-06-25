@@ -12,4 +12,4 @@ npm ci
 [[actions]]
 name = "test"
 icon = "tool"
-command = "npm test"
+command = "nvm use && npm test"
