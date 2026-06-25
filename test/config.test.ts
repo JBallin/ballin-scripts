@@ -1,8 +1,11 @@
 const { assert } = require('chai');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const defaultConfig = require('../config/.defaultConfig.json');
+const configModule = require('../config/index.ts');
+
 const {
   getConfig,
   setConfig,
@@ -10,7 +13,9 @@ const {
   configPath,
   fetchConfig,
   configMessages,
-} = require('../config');
+} = configModule;
+
+type SpawnArgs = string[];
 
 const fetchConfigJSON = () => fetchConfig().configJSON;
 const cliPath = path.join(__dirname, '..', 'bin', 'ballin_config');
@@ -28,26 +33,33 @@ const invalidPathCases = [
   ['__proto__.nested', '__proto__'],
 ];
 
-const setTest = (keys, value) => {
-  setConfig(keys, value);
+const setTest = (keys: string, value: string, action = setConfig) => {
+  action(keys, value);
   assert.deepEqual(value, getConfig(keys));
 };
 
-const runConfigCli = (args = []) => spawnSync(process.execPath, [cliPath, ...args], {
+const setConfigAction = (keys: string, value: string) => configAction('set', keys, value);
+
+const runConfigCli = (args: SpawnArgs = []) => spawnSync(process.execPath, [cliPath, ...args], {
   encoding: 'utf8',
   env: process.env,
 });
 
 describe('config', () => {
-  let savedConfig;
+  let savedConfig: string;
 
   it('uses the isolated test config fixture', () => {
     assert.equal(configPath, process.env.BALLIN_TEST_CONFIG_PATH);
     assert.notEqual(configPath, path.join(__dirname, '..', 'ballin.config.json'));
   });
 
+  it('loads the TypeScript config implementation directly', () => {
+    assert.equal(configModule.configPath, configPath);
+    assert.strictEqual(configModule.getConfig, getConfig);
+  });
+
   it('does not treat NODE_ENV=test as a fixture run by itself', () => {
-    const result = spawnSync(process.execPath, ['-p', "require('./config').configPath"], {
+    const result = spawnSync(process.execPath, ['-p', "require('./config/index.ts').configPath"], {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',
       env: {
@@ -127,7 +139,7 @@ describe('config', () => {
       assert.equal(setConfig(), configMessages.setArgsErr);
     });
     it('should give error if given 3 arguments', () => {
-      assert.equal(setConfig('a', 'b', 'c'), configMessages.setArgsErr);
+      assert.equal(setConfig('a', 'b', ['c']), configMessages.setArgsErr);
     });
     it('should return the keys/value it set', () => {
       const keys = 'up.cleanup';
@@ -189,6 +201,37 @@ describe('config', () => {
     assert.equal(result.stderr, '');
   });
 
+  it('CLI remains executable through its shebang', () => {
+    const result = spawnSync(cliPath, ['get', 'gu.id'], {
+      encoding: 'utf8',
+      env: process.env,
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, 'null\n');
+    assert.equal(result.stderr, '');
+  });
+
+  it('CLI remains executable through the installed symlink model', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-bin-'));
+    const symlinkPath = path.join(tempDir, 'ballin_config');
+
+    try {
+      fs.symlinkSync(cliPath, symlinkPath);
+
+      const result = spawnSync(symlinkPath, ['get', 'gu.id'], {
+        encoding: 'utf8',
+        env: process.env,
+      });
+
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, 'null\n');
+      assert.equal(result.stderr, '');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('CLI reset restores the default config', () => {
     setConfig('gu.id', 'changed-id');
 
@@ -225,20 +268,33 @@ describe('config', () => {
       assert.equal(configAction('wrong'), configMessages.actionErr);
     });
     it('("set", "gu.id", "123") should set gu.id to "123"', () => {
-      setTest('gu.id', '123', configAction);
+      setTest('gu.id', '123', setConfigAction);
     });
     it('("reset") should reset config', () => {
-      setTest('gu.id', '123', configAction);
+      setTest('gu.id', '123', setConfigAction);
       assert.include(configAction('reset'), 'Config has been reset...\nFROM:');
       assert.isNull(getConfig('gu.id'));
     });
   });
 
   describe('updateConfig', () => {
-    it('updates the isolated fixture', () => {
+    it('updates the isolated fixture when required directly', () => {
       fs.writeFileSync(configPath, '{}', 'utf8');
 
-      const result = spawnSync(process.execPath, ['-e', "require('./config/updateConfig')"], {
+      const result = spawnSync(process.execPath, ['-e', "require('./config/updateConfig.ts')"], {
+        cwd: path.join(__dirname, '..'),
+        encoding: 'utf8',
+        env: process.env,
+      });
+
+      assert.equal(result.status, 0);
+      assert.deepEqual(fetchConfig().configObj, defaultConfig);
+    });
+
+    it('updates the isolated fixture when invoked through updateConfig.ts', () => {
+      fs.writeFileSync(configPath, '{}', 'utf8');
+
+      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
         cwd: path.join(__dirname, '..'),
         encoding: 'utf8',
         env: process.env,

@@ -31,6 +31,10 @@ describe('install', () => {
   const installBaseCommands = () => {
     ['chmod', 'cp', 'ln', 'mkdir', 'rm'].forEach((command) => linkCommand(command));
     writeExecutable('node', `#!/usr/bin/env bash
+if [ "$1" = '-p' ]; then
+  printf '%s\\n' "$FAKE_NODE_SUPPORTED"
+  exit 0
+fi
 printf '%s' "$FAKE_UPDATE_OUTPUT"
 exit "$FAKE_NODE_STATUS"
 `);
@@ -58,6 +62,7 @@ esac
       HOME: homeDir,
       PATH: binDir,
       FAKE_COMMAND_LOG: commandLogPath,
+      FAKE_NODE_SUPPORTED: 'true',
       FAKE_NODE_STATUS: '0',
       ...env,
     },
@@ -91,11 +96,26 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js is required');
-    assert.include(result.stdout, 'Node.js LTS with nvm');
+    assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
     assert.include(result.stdout, 'docs/optional-capabilities.md');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
+  it('stops with guidance when Node.js is below the supported version', () => {
+    installBaseCommands();
+
+    const result = runInstall({ env: { FAKE_NODE_SUPPORTED: 'false' } });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Node.js 24.12 or newer is required');
+    assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
+    assert.include(result.stdout, 'docs/optional-capabilities.md');
+    assert.include(result.stdout, 'brew install node');
+    assert.include(result.stdout, 'run this installer again');
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    assert.equal(commandLog(), '');
   });
 
   it('stops before configuration and Gist work when the command directory is missing from PATH', () => {

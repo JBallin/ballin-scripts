@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { configAction } = require('../config');
+const { configAction } = require('../config/index.ts');
 
 const [request, keys, value, ...other] = process.argv.slice(2);
 console.log(configAction(request, keys, value, other)); // eslint-disable-line no-console

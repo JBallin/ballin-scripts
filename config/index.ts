@@ -2,34 +2,46 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const path = require('path');
 
+type ConfigLeaf = string | number | boolean | null;
+type ConfigObject = { [key: string]: ConfigValue };
+type ConfigValue = ConfigLeaf | ConfigObject;
+type NestedValueResult = {
+  value?: ConfigValue;
+  missingKeys?: string;
+};
+
 const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
 const configPath = process.env.BALLIN_TEST_CONFIG_PATH || userConfigPath;
 const defaultConfigPath = path.join(__dirname, '.defaultConfig.json');
-const stringify = (obj) => JSON.stringify(obj, null, 2);
+const stringify = (obj: ConfigObject) => JSON.stringify(obj, null, 2);
 // Only JSON-owned keys count; inherited properties are not config entries.
-const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const hasOwn = (obj: ConfigObject, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
 
 const configMessages = {
   actionErr: 'INVALID: ballin_config accepts "", "get", "set", or "reset"',
-  getKeysDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
-  reset: (prevConfig, defaultConfig) => `Config has been reset...\nFROM:\n${prevConfig}TO:\n${defaultConfig}`,
-  set: (keys, newConfig) => `"${keys}" set to: ${JSON.stringify(newConfig)}`,
+  getKeysDneErr: (keys: string) => `INVALID: "${keys}" doesn't exist in config`,
+  reset: (prevConfig: ConfigValue, defaultConfig: string) => (
+    `Config has been reset...\nFROM:\n${prevConfig}TO:\n${defaultConfig}`
+  ),
+  set: (keys: string, newConfig: ConfigValue) => `"${keys}" set to: ${JSON.stringify(newConfig)}`,
   setArgsErr: 'INVALID: setConfig takes two arguments: "key(s)" and "value"',
   getArgsErr: 'INVALID: getConfig takes one argument: "key(s)"',
-  setDneErr: (keys) => `INVALID: "${keys}" doesn't exist in config`,
-  setObjErr: (keys, prevVal) => `INVALID: "${keys}" is not a bottom-level value, it returns ${JSON.stringify(prevVal)}.`,
+  setDneErr: (keys: string) => `INVALID: "${keys}" doesn't exist in config`,
+  setObjErr: (keys: string, prevVal: ConfigValue) => (
+    `INVALID: "${keys}" is not a bottom-level value, it returns ${JSON.stringify(prevVal)}.`
+  ),
 };
 
 const fetchConfig = () => {
   const configJSON = fs.readFileSync(configPath, 'utf8');
-  const configObj = JSON.parse(configJSON);
+  const configObj = JSON.parse(configJSON) as ConfigObject;
   return { configObj, configJSON };
 };
 
 // Return the value, or the first path prefix that cannot be resolved.
-const getNestedValue = (configObj, keys) => {
+const getNestedValue = (configObj: ConfigObject, keys: string): NestedValueResult => {
   const keysArr = keys.split('.');
-  let value = configObj;
+  let value: ConfigValue = configObj;
 
   for (let index = 0; index < keysArr.length; index += 1) {
     const key = keysArr[index];
@@ -43,12 +55,14 @@ const getNestedValue = (configObj, keys) => {
   return { value };
 };
 
-const getConfig = (keys, val) => {
+const getConfig = (keys?: string, val?: string): ConfigValue | string => {
   if (val) return configMessages.getArgsErr;
   const { configObj, configJSON } = fetchConfig();
   if (keys !== undefined) {
     const { value, missingKeys } = getNestedValue(configObj, keys);
-    return missingKeys === undefined ? value : configMessages.getKeysDneErr(missingKeys);
+    return missingKeys === undefined
+      ? value as ConfigValue
+      : configMessages.getKeysDneErr(missingKeys);
   }
   return configJSON;
 };
@@ -60,13 +74,13 @@ const resetConfig = () => {
   return configMessages.reset(prevConfig, defaultConfig);
 };
 
-const setConfig = (keys, val, other) => {
+const setConfig = (keys?: string, val?: ConfigValue, other?: string[]) => {
   const { configObj } = fetchConfig();
   if ((other && other.length) || !keys || val === undefined) {
     return configMessages.setArgsErr;
   }
   const keysArr = keys.split('.');
-  const keyToSet = keysArr.pop();
+  const keyToSet = keysArr.pop() as string;
   const parentKeys = keysArr;
   // Resolve the parent first: setConfig updates existing leaves and never creates paths.
   const { value: nestedObj, missingKeys } = parentKeys.length
@@ -92,14 +106,14 @@ const setConfig = (keys, val, other) => {
   return configMessages.set(keys, getConfig(keys));
 };
 
-const configAction = (request, keys, value, other) => {
+const configAction = (request?: string, keys?: string, value?: string, other?: string[]) => {
   if (request === 'reset') return resetConfig();
   // send config auto if not given a request with ballin_config command
   if (request === 'get' || !request) return getConfig(keys, value);
   if (request === 'set') return setConfig(keys, value, other);
   if (process.env.NODE_ENV !== 'test') {
     // exec() is async, so actionErr is returned before the help output is printed.
-    exec('ballin', (error, stdout) => console.log(stdout)); // eslint-disable-line no-console
+    exec('ballin', (error: Error | null, stdout: string) => console.log(stdout)); // eslint-disable-line no-console
   }
   return configMessages.actionErr;
 };

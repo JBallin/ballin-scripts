@@ -4,6 +4,7 @@ printf '%s\n' "🏀 let's ball..."
 repo_dir="$HOME/.ballin-scripts"
 ballin_config="$repo_dir/bin/ballin_config"
 optional_capabilities_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'
+required_node_version='24.12'
 
 ################################## CLONE REPO ##################################
 (
@@ -35,7 +36,14 @@ if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
 # Check that Node.js is available before running configuration commands
 elif [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js is required.\n'
-  printf '\nRecommended: install Node.js LTS with nvm.\n'
+  printf '\nRecommended: install Node.js %s or newer with nvm.\n' "$required_node_version"
+  printf 'Setup guide: %s\n' "$optional_capabilities_url"
+  printf '\nAlternatively:\n  brew install node\n'
+  printf '\nThen run this installer again.\n'
+  exit 1
+elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null)" != 'true' ]; then
+  printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
+  printf '\nRecommended: install Node.js %s or newer with nvm.\n' "$required_node_version"
   printf 'Setup guide: %s\n' "$optional_capabilities_url"
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'
@@ -69,7 +77,7 @@ if ! (
   else
     # ballin_update reruns this installer after pulling changes; add any new
     # default options to the existing config without overwriting user settings.
-    if ! UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.js"); then
+    if ! UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.ts"); then
       exit 1
     fi
     if [ -n "$UPDATE_RESULT" ]; then

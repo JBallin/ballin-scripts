@@ -19,6 +19,9 @@ then install Node.js LTS:
 nvm install --lts
 ```
 
+Installed commands use the `node` found on your shell `PATH`, so make sure new
+terminal sessions use a supported Node.js version too.
+
 After installing `ballin-scripts`, optionally let `up` install newer LTS
 releases:
 
@@ -27,7 +30,7 @@ ballin_config set up.nvm true
 ```
 
 `up.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
-`false` because enabling it opts into the LTS release, and installing a new
+`false` because enabling it opts into newer LTS releases, and installing a new
 Node.js version does not migrate your globally installed npm packages
 automatically. If nvm cannot be loaded, `up` warns and continues with its
 remaining updates.

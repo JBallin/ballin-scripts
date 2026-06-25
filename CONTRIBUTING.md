@@ -9,9 +9,10 @@
 ## Development
 
 ```shell
-$ cd $HOME/.ballin-scripts
+$ cd /path/to/ballin-scripts
 $ ballin_update # Update project/config
 $ git checkout -b $BRANCH_NAME
+$ nvm use # If you use nvm
 $ npm install
 # MAKE CHANGES
 $ npm test
