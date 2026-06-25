@@ -18,8 +18,6 @@ $ npm test
 $ git push fork $BRANCH_NAME
 ```
 
-`npm test` runs linting, TypeScript typechecking, and unit tests.
-
 ## Suggestions Welcome
 
 Please open issues (or PR's) with any suggestions for additions to `gu`/`up` or anything else.
