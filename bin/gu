@@ -12,7 +12,7 @@
 
 id=$(ballin_config get gu.id)
 url="$(ballin_config get gu.url)/$id"
-# TODO: generate file_suggestions based on API response instead of hard-coding
+# TODO: generate file_suggestions based on API response from GitHub gist instead of hard-coding all of them
 file_suggestions='
   ballin_config
   bash_completions
@@ -44,7 +44,7 @@ file_suggestions='
   zprofile.sh
   zshrc.sh'
 
-### TODO handle error when $id fails github API (check res code) (either nonexistant, deleted gist, skipped init etc)
+### TODO handle error when $id fails github API (check response code) (either nonexistant, deleted gist, skipped init etc)
 
 # make sure given at least one argument
 if ! gist -r "$id" > /dev/null; then
