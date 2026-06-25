@@ -16,7 +16,7 @@ Follow nvm's official
 then install Node.js from the repo:
 
 ```shell
-cd "$HOME/.ballin-scripts"
+cd /path/to/ballin-scripts
 nvm install
 ```
 
