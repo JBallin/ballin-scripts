@@ -12,6 +12,9 @@ the shell scripts and configuration helpers.
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
 - Run `npm test` after changes to code, config, scripts, or tests.
+- TypeScript is checked with `tsc --noEmit` as part of `npm test`; production
+  commands must remain runnable directly by Node without generated JavaScript,
+  `dist/`, `ts-node`, `tsx`, Babel, or a bundler.
 
 ## Testing and safety
 
@@ -31,6 +34,9 @@ the shell scripts and configuration helpers.
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
+- Keep extensionless `bin/*` commands and existing JavaScript entrypoint paths
+  stable unless an issue explicitly changes them. Small `.js` files may be
+  compatibility shims into `.ts`; put real logic in the TypeScript source.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, its JavaScript
   shim, and config tests in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
