@@ -8,16 +8,15 @@ while letting you opt in to broader automation.
 
 Node.js is required by `ballin-scripts`; install it using whichever method fits
 your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
-with the version in the repo's `.nvmrc` file. It supports switching versions,
-project-specific `.nvmrc` files, and a user-local installation.
+with the latest Node.js long-term support (LTS) release. It supports switching
+versions, project-specific `.nvmrc` files, and a user-local installation.
 
 Follow nvm's official
 [installation and shell setup instructions](https://github.com/nvm-sh/nvm#installing-and-updating),
-then install Node.js from the repo:
+then install Node.js LTS:
 
 ```shell
-cd /path/to/ballin-scripts
-nvm install
+nvm install --lts
 ```
 
 Installed commands use the `node` found on your shell `PATH`, so make sure new
