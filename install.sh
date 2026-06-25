@@ -35,14 +35,14 @@ if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
 # Check that Node.js is available before running configuration commands
 elif [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js is required.\n'
-  printf '\nRecommended: install Node.js 24 or newer with nvm.\n'
+  printf '\nRecommended: install Node.js 24.12 or newer with nvm.\n'
   printf 'Setup guide: %s\n' "$optional_capabilities_url"
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'
   exit 1
-elif ! node_major=$(node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null) || [ "$node_major" -lt 24 ]; then
-  printf '\n⚠️  ERROR: Node.js 24 or newer is required.\n'
-  printf '\nRecommended: install Node.js 24 or newer with nvm.\n'
+elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(Number); major > 24 || (major === 24 && minor >= 12)" 2>/dev/null)" != 'true' ]; then
+  printf '\n⚠️  ERROR: Node.js 24.12 or newer is required.\n'
+  printf '\nRecommended: install Node.js 24.12 or newer with nvm.\n'
   printf 'Setup guide: %s\n' "$optional_capabilities_url"
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'

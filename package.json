@@ -9,7 +9,7 @@
     "test": "npm run lint && npm run typecheck && npm run test:unit"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.12"
   },
   "mocha": {
     "extension": [
