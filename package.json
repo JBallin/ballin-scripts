@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Useful scripts to save time",
   "scripts": {
-    "lint": "eslint . --ext .js,.ts",
+    "lint": "eslint . bin/ballin_config",
     "typecheck": "tsc --noEmit",
     "test:unit": "mocha",
     "test": "npm run lint && npm run typecheck && npm run test:unit"
@@ -34,16 +34,15 @@
   },
   "homepage": "https://github.com/JBallin/ballin-scripts#readme",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/chai": "^4.3.20",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.13.2",
-    "@typescript-eslint/eslint-plugin": "^8.62.0",
-    "@typescript-eslint/parser": "^8.62.0",
     "chai": "^4.3.6",
-    "eslint": "^8.9.0",
-    "eslint-config-airbnb-base": "^15.0.0",
-    "eslint-plugin-import": "^2.25.4",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
     "mocha": "^11.7.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.0"
   }
 }

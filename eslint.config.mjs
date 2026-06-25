@@ -1,0 +1,53 @@
+import js from '@eslint/js';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
+
+const commonGlobals = {
+  ...globals.node,
+  ...globals.mocha,
+};
+
+const tsFiles = ['config/**/*.ts', 'test/**/*.ts'];
+const isBallinConfigBin = (filePath) => filePath.endsWith('/bin/ballin_config')
+  || filePath === 'bin/ballin_config';
+
+export default tseslint.config(
+  {
+    ignores: ['coverage/**'],
+  },
+  {
+    files: ['**/*.js', isBallinConfigBin],
+    ...js.configs.recommended,
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: commonGlobals,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-console': 'error',
+    },
+  },
+  ...tseslint.configs.recommended.map((config) => ({
+    ...config,
+    files: tsFiles,
+  })),
+  {
+    files: tsFiles,
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      globals: commonGlobals,
+      parserOptions: {
+        project: './tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      'no-console': 'error',
+      'no-use-before-define': 'off',
+      '@typescript-eslint/no-use-before-define': 'error',
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+);
