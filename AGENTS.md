@@ -31,7 +31,7 @@ the shell scripts and configuration helpers.
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
-- Keep `config/.defaultConfig.json`, `config/updateConfig.js`, and config tests
-  in sync when adding or changing settings.
+- Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, its JavaScript
+  shim, and config tests in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
   and `up` settings; update it when those user-facing choices change.
