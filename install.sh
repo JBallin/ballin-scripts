@@ -82,7 +82,7 @@ if ! (
     fi
     if [ -n "$UPDATE_RESULT" ]; then
       printf '\n🙌 %s\n' "$UPDATE_RESULT"
-      printf '\nOptional capabilities: %s\n' "$optional_capabilities_url"
+      printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
     fi
   fi
 ); then
@@ -201,7 +201,7 @@ done
   printf '\n💪 symlinked binaries into %s\n' "$bin_dir"
 
   if [ "$config_existed" = false ] && [ -f "$repo_dir/ballin.config.json" ]; then
-    printf '\nOptional capabilities: %s\n' "$optional_capabilities_url"
+    printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
   fi
 
   printf '\n%s\n' '😎 ballin!'
