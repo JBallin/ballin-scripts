@@ -34,9 +34,10 @@ the shell scripts and configuration helpers.
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
-- Keep extensionless `bin/*` commands stable. If a command delegates to Node.js
-  code, keep the `bin/*` file as a tiny shim and cover user-facing shims with
-  shebang and installed-symlink execution tests.
+- Keep extensionless `bin/*` commands and Node-backed entrypoints stable unless
+  a change intentionally updates their public behavior. If a command delegates
+  to Node.js code, keep the `bin/*` file as a small shim and cover user-facing
+  shims with shebang and installed-symlink execution tests.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
