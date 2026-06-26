@@ -36,15 +36,15 @@ if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
 # Check that Node.js is available before running configuration commands
 elif [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js is required.\n'
-  printf '\nRecommended: install Node.js %s or newer with nvm.\n' "$required_node_version"
-  printf 'Setup guide: %s\n' "$optional_capabilities_url"
+  printf '\nRecommended: install Node.js %s or newer with nvm.' "$required_node_version"
+  printf '\nSetup guide: %s\n' "$optional_capabilities_url"
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'
   exit 1
 elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null)" != 'true' ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
-  printf '\nRecommended: install Node.js %s or newer with nvm.\n' "$required_node_version"
-  printf 'Setup guide: %s\n' "$optional_capabilities_url"
+  printf '\nRecommended: install Node.js %s or newer with nvm.' "$required_node_version"
+  printf '\nSetup guide: %s\n' "$optional_capabilities_url"
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'
   exit 1
