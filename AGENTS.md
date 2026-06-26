@@ -29,26 +29,30 @@ the shell scripts and configuration helpers.
   `BALLIN_TEST_CONFIG_PATH`, `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log
   stubs before adding new test escape hatches.
 
-## Command implementation layout
+## Command shims and typed code
 
-- User-facing commands keep their stable, extensionless names under `bin/`.
-  When a command needs Node.js implementation code, keep the `bin/*` file as a
-  small shim and put the typed implementation next to the feature it owns. The
-  first proof of concept is `bin/ballin_config`, which loads `config/cli.ts`
-  beside the config helpers it orchestrates.
-- Use the feature-local pattern first (`config/`, a future command-specific
-  folder, or another existing domain folder) instead of adding a top-level
-  `commands/` or `src/commands/` directory. Introduce a shared command directory
-  only after several migrated commands need common structure that feature-local
-  folders cannot provide cleanly.
-- Node-backed command modules should export a runner such as
-  `runConfigCli(args)`. The runner should accept parsed arguments, default to
-  `process.argv.slice(2)` only at the CLI boundary, and return or print through
-  a narrow boundary that is easy to exercise from tests.
-- Keep file IO, environment reads, and child-process calls in helper functions
-  that can be pointed at fixtures or command stubs, using the existing test
-  hooks before adding new ones.
-- Shims should stay intentionally small:
+- Keep user-facing command names stable and extensionless under `bin/`. Treat
+  those files as the installed command surface, even when their implementation
+  moves elsewhere.
+- When a `bin/*` command delegates to Node.js code, prefer a tiny shim that
+  loads a typed module from the feature area that owns the behavior. The current
+  proof of concept is `bin/ballin_config` delegating to `config/cli.ts`.
+- Keep typed command modules directly executable by Node.js 24 native
+  type-stripping. Do not introduce production build output or runtime loaders
+  such as `dist/`, `ts-node`, `tsx`, Babel, or a bundler.
+- Export a small runner such as `runConfigCli(args)` from Node-backed command
+  modules. Default to `process.argv.slice(2)` only at the CLI boundary so tests
+  can call the runner or lower-level helpers with explicit inputs.
+- Keep process IO, environment reads, file IO, and child-process calls behind
+  narrow helpers that tests can point at fixtures, isolated environments, or
+  command stubs. Reuse existing test hooks before adding new escape hatches.
+- Cover user-facing Node shims with both direct shebang execution and
+  installed-symlink execution tests.
+- Use feature-local implementation files first (`config/`, a future
+  command-specific folder, or another existing domain folder). If a migration
+  seems to need a shared top-level command directory, capture that decision in
+  the shim architecture tracker before adding the directory.
+- Shim shape for Node-backed commands:
 
   ```js
   #!/usr/bin/env node
@@ -56,23 +60,14 @@ the shell scripts and configuration helpers.
   require('../feature/cli.ts').runFeatureCli();
   ```
 
-  This CommonJS `require()` style is intentional while the project relies on
-  Node.js 24 native TypeScript type stripping.
-- When migrating or adding a command, keep the installed command name and
-  executable mode stable in `bin/`, expose implementation functions that tests
-  can import directly, and cover user-facing shims with shebang and
-  installed-symlink execution tests.
-- See issue #132 for the `ballin_config` proof of concept and issue #130 for
-  the parent shim architecture tracker.
+- Issue #130 tracks the broader shim architecture. Issue #132 is the
+  `ballin_config` proof of concept.
 
 ## Shell, config, and docs
 
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
-- Keep extensionless `bin/*` commands and Node-backed command entrypoints
-  stable unless a change intentionally updates their public behavior.
-  TypeScript source under `config/` is executed directly by Node.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,

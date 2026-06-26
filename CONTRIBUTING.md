@@ -19,7 +19,8 @@ $ npm test
 $ git push fork $BRANCH_NAME
 ```
 
-Command implementation conventions live in [AGENTS.md](AGENTS.md).
+For repo-specific development context and automation guidance, see
+[AGENTS.md](AGENTS.md).
 
 ## Suggestions Welcome
 
