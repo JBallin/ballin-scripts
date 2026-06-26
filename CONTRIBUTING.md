@@ -19,6 +19,8 @@ $ npm test
 $ git push fork $BRANCH_NAME
 ```
 
+For more repo context, see [AGENTS.md](AGENTS.md).
+
 ## Suggestions Welcome
 
 Please open issues (or PR's) with any suggestions for additions to `gu`/`up` or anything else.
