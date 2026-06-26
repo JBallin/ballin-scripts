@@ -11,7 +11,9 @@ the shell scripts and configuration helpers.
 
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
-- Run `npm test` after changes to code, config, scripts, or tests.
+- Run `npm test` after changes to code, config, scripts, or tests. For docs-only
+  changes, prefer `git diff --check` unless the docs change setup, commands, or
+  other user-facing behavior expectations.
 - TypeScript is checked with `tsc --noEmit` as part of `npm test`; production
   commands must remain runnable directly by Node without generated JavaScript,
   `dist/`, `ts-node`, `tsx`, Babel, or a bundler.
@@ -34,9 +36,9 @@ the shell scripts and configuration helpers.
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
-- Keep extensionless `bin/*` commands and Node-backed entrypoints stable unless
-  a change intentionally updates their public behavior. Cover user-facing
-  command shims with shebang and installed-symlink execution tests.
+- Keep extensionless `bin/*` commands stable unless a change intentionally
+  updates their public behavior. Preserve executable modes and existing
+  shebang/symlink coverage for user-facing commands.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
