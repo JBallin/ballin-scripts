@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Useful scripts to save time",
   "scripts": {
-    "lint": "eslint . bin/ballin_config",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:unit": "mocha",
     "test": "npm run lint && npm run typecheck && npm run test:unit"

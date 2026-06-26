@@ -12,15 +12,13 @@ const jsRules = {
   'no-console': 'error',
 };
 const tsFiles = ['config/**/*.ts', 'test/**/*.ts'];
-const isBallinConfigBin = (filePath) => filePath.replaceAll('\\', '/').endsWith('/bin/ballin_config')
-  || filePath === 'bin/ballin_config';
 
 export default tseslint.config(
   {
     ignores: ['coverage/**'],
   },
   {
-    files: ['**/*.js', isBallinConfigBin],
+    files: ['**/*.js'],
     ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 'latest',
