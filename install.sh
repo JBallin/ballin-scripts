@@ -157,7 +157,6 @@ done
             printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
             "$ballin_config" set gu.id "$GIST_ID"
             VALID_GIST_ID=0
-            # TODO: overwrite ballin.config.json config file from ballin.config.json in gist (if it exists) and echo that to user (both action and the stored config?). what if there were updates to the default though? maybe just copy the default and then overwrite any values that exist in the previous ballin.config.json
           else
             printf "\n⚠️  INVALID: Expected \e[1mgist -r '%s'\e[0m to output:\n%s\n" "$GIST_ID" "$GIST_DESCRIPTION"
           fi
