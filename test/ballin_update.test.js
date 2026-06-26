@@ -74,7 +74,7 @@ exit "$FAKE_INSTALL_STATUS"
 `, repoDir);
   };
 
-  const runUpdate = (env = {}) => spawnSync(updatePath, [], {
+  const runUpdate = (env = {}, commandPath = updatePath) => spawnSync(commandPath, [], {
     encoding: 'utf8',
     env: {
       HOME: homeDir,
@@ -121,6 +121,24 @@ exit "$FAKE_INSTALL_STATUS"
 
   it('fetches, merges, then runs the installer from the installed repository', () => {
     const result = runUpdate();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch`,
+      `${repoDir}|git:merge`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('remains executable through the installed symlink model', () => {
+    const installBinDir = path.join(testDir, 'installed-bin');
+    const symlinkPath = path.join(installBinDir, 'ballin_update');
+    fs.mkdirSync(installBinDir);
+    fs.symlinkSync(updatePath, symlinkPath);
+
+    const result = runUpdate({}, symlinkPath);
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');

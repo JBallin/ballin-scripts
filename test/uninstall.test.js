@@ -30,7 +30,7 @@ describe('ballin_uninstall', () => {
     return filePath;
   };
 
-  const runUninstall = ({ brewPrefix } = {}) => {
+  const runUninstall = ({ brewPrefix, commandPath: command = uninstallPath } = {}) => {
     if (brewPrefix) {
       writeExecutable('brew', `#!/usr/bin/env bash
 if [ "$1" = '--prefix' ]; then
@@ -41,7 +41,7 @@ exit 2
 `);
     }
 
-    return spawnSync(uninstallPath, [], {
+    return spawnSync(command, [], {
       encoding: 'utf8',
       env: {
         HOME: homeDir,
@@ -88,6 +88,23 @@ exit 2
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isTrue(fs.statSync(path.join(userBin, 'gu')).isFile());
     assert.isTrue(fs.lstatSync(path.join(userBin, 'up')).isSymbolicLink());
+    assert.isFalse(fs.existsSync(repoDir));
+  });
+
+  it('remains executable through the installed symlink model', () => {
+    const installBinDir = path.join(testDir, 'installed-bin');
+    const symlinkPath = path.join(installBinDir, 'ballin_uninstall');
+    const userBin = path.join(homeDir, '.local', 'bin');
+    const ballin = createCommand('ballin');
+    fs.mkdirSync(installBinDir);
+    fs.symlinkSync(uninstallPath, symlinkPath);
+    fs.symlinkSync(ballin, path.join(userBin, 'ballin'));
+
+    const result = runUninstall({ commandPath: symlinkPath });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
+    assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isFalse(fs.existsSync(repoDir));
   });
 
