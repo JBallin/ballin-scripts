@@ -12,7 +12,7 @@ type SpawnResult = {
   error?: Error;
 };
 
-type SpawnOptions = Omit<SpawnSyncOptionsWithStringEncoding, 'encoding'>;
+type SpawnOptions = Omit<SpawnSyncOptionsWithStringEncoding, 'encoding' | 'shell'>;
 
 const runCommand = (
   command: string,
@@ -23,12 +23,25 @@ const runCommand = (
   ...options,
 });
 
+const isExecutable = (candidate: string): boolean => {
+  try {
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+};
+
 const commandExists = (command: string, options: SpawnOptions = {}): boolean => {
-  const result = runCommand('bash', ['-c', `candidate="$(command -v ${command})" && [ -x "$candidate" ]`], {
-    stdio: 'ignore',
-    ...options,
-  });
-  return result.status === 0;
+  if (command.includes(path.sep)) {
+    return isExecutable(command);
+  }
+
+  const envPath = options.env?.PATH ?? process.env.PATH ?? '';
+  return envPath
+    .split(path.delimiter)
+    .filter(Boolean)
+    .some((directory) => isExecutable(path.join(directory, command)));
 };
 
 const readCommandOutput = (

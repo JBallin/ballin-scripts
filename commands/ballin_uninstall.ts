@@ -3,7 +3,6 @@ const path = require('path');
 const {
   commandExists,
   readCommandOutput,
-  runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
@@ -23,9 +22,8 @@ const removeOwnedLink = (linkPath: string, targetPath: string): void => {
     return;
   }
 
-  const readlinkOutput = readCommandOutput('readlink', [linkPath]);
-  if (readlinkOutput?.trimEnd() === targetPath) {
-    runCommand('rm', [linkPath], { stdio: 'inherit' });
+  if (fs.readlinkSync(linkPath) === targetPath) {
+    fs.unlinkSync(linkPath);
   }
 };
 
@@ -63,7 +61,7 @@ const runBallinUninstallCli = (): void => {
   }
 
   writeStdoutLine('Deleted symlinked binaries');
-  runCommand('rm', ['-rf', repoDir], { stdio: 'inherit' });
+  fs.rmSync(repoDir, { recursive: true, force: true });
   writeStdoutLine('PEACE! You still ballin tho...');
   writeStdoutLine();
 };

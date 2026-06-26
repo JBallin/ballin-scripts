@@ -12,7 +12,6 @@ describe('ballin_uninstall', () => {
   let repoDir;
   let toolDir;
   let systemRoot;
-  let commandLogPath;
 
   const commandPath = (name) => process.env.PATH
     .split(path.delimiter)
@@ -48,12 +47,9 @@ exit 2
         HOME: homeDir,
         PATH: toolDir,
         BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: systemRoot,
-        FAKE_COMMAND_LOG: commandLogPath,
       },
     });
   };
-
-  const commandLog = () => fs.readFileSync(commandLogPath, 'utf8');
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-uninstall-'));
@@ -61,30 +57,15 @@ exit 2
     repoDir = path.join(homeDir, '.ballin-scripts');
     toolDir = path.join(testDir, 'tools');
     systemRoot = path.join(testDir, 'system');
-    commandLogPath = path.join(testDir, 'commands.log');
     fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
     fs.mkdirSync(path.join(homeDir, '.local', 'bin'), { recursive: true });
     fs.mkdirSync(path.join(systemRoot, 'usr', 'local', 'bin'), { recursive: true });
     fs.mkdirSync(path.join(systemRoot, 'opt', 'homebrew', 'bin'), { recursive: true });
     fs.mkdirSync(toolDir);
-    fs.writeFileSync(commandLogPath, '');
-
     const bashPath = commandPath('bash');
-    const readlinkPath = commandPath('readlink');
-    const rmPath = commandPath('rm');
     assert.exists(bashPath, 'bash is required to run the uninstall test harness');
-    assert.exists(readlinkPath, 'readlink is required to run the uninstall test harness');
-    assert.exists(rmPath, 'rm is required to run the uninstall test harness');
     fs.symlinkSync(bashPath, path.join(toolDir, 'bash'));
     fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
-    writeExecutable('readlink', `#!/usr/bin/env bash
-printf 'readlink:%s\\n' "$1" >> "$FAKE_COMMAND_LOG"
-exec '${readlinkPath}' "$@"
-`);
-    writeExecutable('rm', `#!/usr/bin/env bash
-printf 'rm:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-exec '${rmPath}' "$@"
-`);
   });
 
   afterEach(() => {
@@ -108,11 +89,6 @@ exec '${rmPath}' "$@"
     assert.isTrue(fs.statSync(path.join(userBin, 'gu')).isFile());
     assert.isTrue(fs.lstatSync(path.join(userBin, 'up')).isSymbolicLink());
     assert.isFalse(fs.existsSync(repoDir));
-
-    const logLines = commandLog().trim().split('\n');
-    assert.equal(logLines[0], `readlink:${path.join(userBin, 'ballin')}`);
-    assert.equal(logLines[1], `rm:${path.join(userBin, 'ballin')}`);
-    assert.equal(logLines.at(-1), `rm:-rf ${repoDir}`);
   });
 
   [
@@ -128,10 +104,6 @@ exec '${rmPath}' "$@"
 
       assert.equal(result.status, 0, result.stderr);
       assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
-      assert.equal(
-        commandLog().split('\n').filter((line) => line === `readlink:${path.join(binDir, 'ballin')}`).length,
-        1,
-      );
     });
   });
 
@@ -146,6 +118,5 @@ exec '${rmPath}' "$@"
 
     assert.equal(result.status, 0, result.stderr);
     assert.isFalse(fs.existsSync(path.join(customBin, 'ballin')));
-    assert.include(commandLog(), `rm:${path.join(customBin, 'ballin')}\n`);
   });
 });
