@@ -36,7 +36,9 @@ the shell scripts and configuration helpers.
   executable modes on `bin/*` and `install.sh`.
 - Keep extensionless `bin/*` commands and Node-backed command entrypoints
   stable unless a change intentionally updates their public behavior.
-  TypeScript source under `config/` is executed directly by Node.
+  TypeScript source under `config/` is executed directly by Node. Preserve
+  executable modes and existing shebang/symlink coverage for user-facing
+  commands.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
