@@ -14,6 +14,7 @@
     "types": ["node", "mocha"]
   },
   "include": [
+    "commands/**/*.ts",
     "config/**/*.ts",
     "test/config.test.ts",
     "test/setup.ts"

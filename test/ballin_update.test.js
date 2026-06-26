@@ -36,6 +36,14 @@ describe('ballin_update', () => {
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
 case "$1" in
   fetch)
+    if [ "$FAKE_GIT_FETCH_READ_STDIN" = '1' ]; then
+      printf 'credential prompt\\n' >&2
+      if ! IFS= read -r answer; then
+        exit 31
+      fi
+      printf 'fetch-stdin:%s\\n' "$answer" >> "$BALLIN_UPDATE_TEST_LOG"
+    fi
+    printf 'fetch stdout should stay hidden\\n'
     exit "$FAKE_GIT_FETCH_STATUS"
     ;;
   merge)
@@ -74,7 +82,7 @@ exit "$FAKE_INSTALL_STATUS"
 `, repoDir);
   };
 
-  const runUpdate = (env = {}) => spawnSync(updatePath, [], {
+  const runUpdate = (env = {}, commandPath = updatePath, spawnOptions = {}) => spawnSync(commandPath, [], {
     encoding: 'utf8',
     env: {
       HOME: homeDir,
@@ -90,6 +98,7 @@ exit "$FAKE_INSTALL_STATUS"
       FAKE_INSTALL_STATUS: '0',
       ...env,
     },
+    ...spawnOptions,
   });
 
   const commandLog = () => (
@@ -110,6 +119,7 @@ exit "$FAKE_INSTALL_STATUS"
     fs.mkdirSync(toolDir);
     linkCommand('bash');
     linkCommand('cat');
+    fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
     installGitStub();
     installInstallerStub();
   });
@@ -122,6 +132,55 @@ exit "$FAKE_INSTALL_STATUS"
     const result = runUpdate();
 
     assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch`,
+      `${repoDir}|git:merge`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('lets fetch use stdin and stderr while keeping stdout quiet', () => {
+    const result = runUpdate(
+      { FAKE_GIT_FETCH_READ_STDIN: '1' },
+      updatePath,
+      { input: 'secret-token\n' },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, 'credential prompt\n');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch`,
+      'fetch-stdin:secret-token',
+      `${repoDir}|git:merge`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('remains executable through the installed symlink model', () => {
+    const installBinDir = path.join(testDir, 'installed-bin');
+    const symlinkPath = path.join(installBinDir, 'ballin_update');
+    fs.mkdirSync(installBinDir);
+    fs.symlinkSync(updatePath, symlinkPath);
+
+    const result = runUpdate({}, symlinkPath);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch`,
+      `${repoDir}|git:merge`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('returns the installer status when install fails after a successful merge', () => {
+    const result = runUpdate({ FAKE_INSTALL_STATUS: '27' });
+
+    assert.equal(result.status, 27);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
