@@ -3,6 +3,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { relocateSystemPath } = require('../commands/ballin_uninstall.ts');
 
 const uninstallPath = path.join(__dirname, '..', 'bin', 'ballin_uninstall');
 
@@ -72,6 +73,14 @@ exit 2
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
+  it('preserves absolute legacy bin dirs outside the test system root', () => {
+    assert.equal(relocateSystemPath('', '/usr/local/bin'), '/usr/local/bin');
+    assert.equal(
+      relocateSystemPath(systemRoot, '/usr/local/bin'),
+      path.join(systemRoot, 'usr', 'local', 'bin'),
+    );
+  });
+
   it('removes only owned user-local links, then removes the repository', () => {
     const userBin = path.join(homeDir, '.local', 'bin');
     const ballin = createCommand('ballin');
@@ -106,6 +115,29 @@ exit 2
     assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isFalse(fs.existsSync(repoDir));
+  });
+
+  it('continues removing the repository when an owned system link cannot be unlinked', function test() {
+    if (process.platform === 'win32') {
+      this.skip();
+    }
+
+    const binDir = path.join(systemRoot, 'usr', 'local', 'bin');
+    const ballin = createCommand('ballin');
+    const linkPath = path.join(binDir, 'ballin');
+    fs.symlinkSync(ballin, linkPath);
+    fs.chmodSync(binDir, 0o555);
+
+    try {
+      const result = runUninstall();
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stderr, 'ballin');
+      assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
+      assert.isFalse(fs.existsSync(repoDir));
+    } finally {
+      fs.chmodSync(binDir, 0o755);
+    }
   });
 
   [
