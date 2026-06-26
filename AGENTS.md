@@ -11,8 +11,7 @@ the shell scripts and configuration helpers.
 
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
-- Run `npm test` after changes to code, config, scripts, or tests. For docs-only
-  changes, use `git diff --check`.
+- Run `npm test` after changes to code, config, scripts, or tests.
 - TypeScript is checked with `tsc --noEmit` as part of `npm test`; production
   commands must remain runnable directly by Node without generated JavaScript,
   `dist/`, `ts-node`, `tsx`, Babel, or a bundler.
