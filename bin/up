@@ -40,19 +40,6 @@ if [ -x "$(command -v npm)" ] && [ "$(ballin_config get up.npm)" = 'true' ]; the
   npm update -g
 fi
 
-# TODO: fix pip/pip3
-### PIP
-# update pip
-# if [ -x "$(command -v pip)" ]; then
-#   pip install -U pip
-# fi
-
-### PIP3
-# update pip3
-# if [ -x "$(command -v pip3)" ]; then
-#   pip3 install -U pip
-# fi
-
 ### Mac App Store
 if [ -x "$(command -v mas)" ]; then
   progress 'Updating App Store apps'

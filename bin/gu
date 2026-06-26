@@ -1,18 +1,7 @@
 #!/usr/bin/env bash
 
-# TODO:
-  # function that takes a filename and reads the gist using 'gist -r'
-    # function to display names of the files?
-  # INIT:
-    # log in to gist
-    # create gist and save id in config
-  # give error if id/sn null or if gist -r $id gives error?
-    # need to make sure that the gist with that $id actually exists...tell them to run init?
-    # or maybe just run it for them now?
-
 id=$(ballin_config get gu.id)
 url="$(ballin_config get gu.url)/$id"
-# TODO: generate file_suggestions based on API response from GitHub gist instead of hard-coding all of them
 file_suggestions='
   ballin_config
   bash_completions
@@ -43,8 +32,6 @@ file_suggestions='
   vsI_settings
   zprofile.sh
   zshrc.sh'
-
-### TODO handle error when $id fails github API (check response code) (either nonexistant, deleted gist, skipped init etc)
 
 # make sure given at least one argument
 if ! gist -r "$id" > /dev/null; then
@@ -79,7 +66,6 @@ else
     if [ ! -d .gu-cache ]; then mkdir .gu-cache; fi
   )
 
-  # TODO: consider refactor to pass command arrays as $input instead of a string for safer execution.
   u() {
     local file_name=$1
     local cache_file="$HOME/.ballin-scripts/.gu-cache/$file_name"
@@ -240,12 +226,6 @@ else
     if [ -x "$(command -v npm)" ]; then
       u 'npm_global' 'npm list -g --depth=0'
     fi
-
-    # YARN
-    # TODO: remove last line (Done) which varies based on time
-    # if [ -x "$(command -v npm)" ]; then
-    #   u 'yarn_global' "yarn global list --depth=0 | sed '$d'"
-    # fi
 
     # NVM
     if [ -f .nvmrc ]; then
