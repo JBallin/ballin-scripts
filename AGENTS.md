@@ -2,10 +2,11 @@
 
 ## Repo map
 
-`ballin-scripts` is a small personal automation toolkit. Most user-facing behavior
-lives in Bash scripts under `bin/` and in `install.sh`. The Node.js code in
-`config/` manages `ballin.config.json`, and the Mocha tests in `test/` exercise
-the shell scripts and configuration helpers.
+`ballin-scripts` is a small personal automation toolkit. User-facing command
+names live as stable extensionless files under `bin/`, with Bash implementations
+still allowed there. Migrated Node-backed command implementations live under
+`commands/`, config code lives under `config/`, and the Mocha tests in `test/`
+exercise scripts, shims, and configuration helpers.
 
 ## Local commands
 
@@ -34,11 +35,12 @@ the shell scripts and configuration helpers.
 - For shell changes, preserve CLI output and side effects unless the issue asks
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
-- Keep extensionless `bin/*` commands and Node-backed command entrypoints
-  stable unless a change intentionally updates their public behavior.
-  TypeScript source under `config/` is executed directly by Node. Preserve
-  executable modes and existing shebang/symlink coverage for user-facing
-  commands.
+- Keep extensionless `bin/*` commands stable unless a change intentionally
+  updates their public behavior. When migrating a command to Node, keep `bin/*`
+  as a tiny shim and put the typed implementation under `commands/` or the
+  feature folder that owns it. TypeScript source under `commands/` and `config/`
+  is executed directly by Node. Preserve executable modes and existing
+  shebang/symlink coverage for user-facing commands.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,

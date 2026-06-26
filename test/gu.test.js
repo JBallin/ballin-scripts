@@ -17,7 +17,6 @@ const requiredCommands = [
   'rm',
   'ls',
   'tail',
-  'node',
 ];
 
 describe('gu', () => {

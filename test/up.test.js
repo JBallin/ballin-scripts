@@ -29,7 +29,6 @@ exit ${status}
     logPath = path.join(tempDir, 'commands.log');
     fs.mkdirSync(binDir);
     fs.symlinkSync('/bin/bash', path.join(binDir, 'bash'));
-    fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
     writeTestExecutable('ballin_config', `#!/usr/bin/env bash
 case "$2" in
   up.cleanup) printf '%s\\n' "\${TEST_UP_CLEANUP:-false}" ;;
