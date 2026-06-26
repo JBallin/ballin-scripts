@@ -121,6 +121,9 @@ exit 2
     if (process.platform === 'win32') {
       this.skip();
     }
+    if (process.getuid?.() === 0) {
+      this.skip();
+    }
 
     const binDir = path.join(systemRoot, 'usr', 'local', 'bin');
     const ballin = createCommand('ballin');
