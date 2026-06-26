@@ -19,7 +19,7 @@ $ npm test
 $ git push fork $BRANCH_NAME
 ```
 
-For repo-specific development context and automation guidance, see
+For extra repo context, testing notes, and automation guardrails, see
 [AGENTS.md](AGENTS.md).
 
 ## Suggestions Welcome
