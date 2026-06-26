@@ -110,6 +110,7 @@ exit "$FAKE_INSTALL_STATUS"
     fs.mkdirSync(toolDir);
     linkCommand('bash');
     linkCommand('cat');
+    fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
     installGitStub();
     installInstallerStub();
   });

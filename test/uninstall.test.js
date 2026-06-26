@@ -76,6 +76,7 @@ exit 2
     assert.exists(readlinkPath, 'readlink is required to run the uninstall test harness');
     assert.exists(rmPath, 'rm is required to run the uninstall test harness');
     fs.symlinkSync(bashPath, path.join(toolDir, 'bash'));
+    fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
     writeExecutable('readlink', `#!/usr/bin/env bash
 printf 'readlink:%s\\n' "$1" >> "$FAKE_COMMAND_LOG"
 exec '${readlinkPath}' "$@"
