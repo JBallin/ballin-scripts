@@ -29,6 +29,7 @@ exit ${status}
     logPath = path.join(tempDir, 'commands.log');
     fs.mkdirSync(binDir);
     fs.symlinkSync('/bin/bash', path.join(binDir, 'bash'));
+    fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
     writeTestExecutable('ballin_config', `#!/usr/bin/env bash
 case "$2" in
   up.cleanup) printf '%s\\n' "\${TEST_UP_CLEANUP:-false}" ;;
@@ -72,6 +73,27 @@ esac
   const commandLog = () => (
     fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : []
   );
+
+  it('remains executable through the installed symlink model', () => {
+    const installBinDir = path.join(tempDir, 'installed-bin');
+    const symlinkPath = path.join(installBinDir, 'up');
+    fs.mkdirSync(installBinDir);
+    fs.symlinkSync(upPath, symlinkPath);
+
+    const result = spawnSync(symlinkPath, [], {
+      encoding: 'utf8',
+      env: {
+        HOME: tempDir,
+        PATH: binDir,
+        TEST_UP_NVM: 'false',
+        UP_TEST_LOG: logPath,
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), []);
+  });
 
   it('sets Homebrew flags, preserves output, cleans conditionally, and runs doctor', () => {
     installCommandStub('brew', { output: 'visible Homebrew output' });
@@ -157,6 +179,21 @@ esac
     assert.deepEqual(commandLog(), [
       'npm|,|update -g',
       'ballin_update|,|',
+      'gu|,|',
+    ]);
+  });
+
+  it('uses gu as the final exit status when gu is enabled', () => {
+    installCommandStub('gu', { output: 'simulated gu failure', status: 17 });
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 17);
+    assert.include(result.stdout, 'simulated gu failure');
+    assert.deepEqual(commandLog(), [
       'gu|,|',
     ]);
   });
