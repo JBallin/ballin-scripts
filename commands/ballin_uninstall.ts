@@ -13,11 +13,13 @@ const addUnique = (items: string[], candidate: string): void => {
 };
 
 const removeOwnedLink = (linkPath: string, targetPath: string): void => {
-  if (!fs.existsSync(linkPath)) {
+  let stat;
+  try {
+    stat = fs.lstatSync(linkPath);
+  } catch {
     return;
   }
 
-  const stat = fs.lstatSync(linkPath);
   if (!stat.isSymbolicLink()) {
     return;
   }
