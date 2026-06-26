@@ -17,7 +17,6 @@ type SnapshotCommand = {
   args?: string[];
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  shell?: boolean;
   suppressStderrOnSuccess?: boolean;
 };
 
@@ -87,7 +86,6 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
   const result = runCommand(snapshot.command, snapshot.args ?? [], {
     cwd: snapshot.cwd,
     env: snapshot.env,
-    shell: snapshot.shell ?? false,
     encoding: 'utf8',
   });
 
@@ -186,9 +184,9 @@ const shellSnapshot = (
   cwd: string,
 ): SnapshotCommand => ({
   fileName,
-  command,
+  command: 'bash',
+  args: ['-c', command],
   cwd,
-  shell: true,
 });
 
 const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
@@ -307,7 +305,8 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   if (args.length > 0) {
     if (args[0] === 'open') {
       writeStdoutLine(url);
-      runCommand('open', [url], { stdio: 'inherit' });
+      const result = runCommand('open', [url], { stdio: 'inherit' });
+      process.exitCode = result.status ?? 1;
     } else if (args[0] === 'read') {
       if (args[1]) {
         const result = runGist(['-r', id, args[1]]);
@@ -320,7 +319,8 @@ const runGuCli = (args = process.argv.slice(2)): void => {
         process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
       }
     } else if (args[0] === 'help') {
-      runCommand('ballin', [], { stdio: 'inherit' });
+      const result = runCommand('ballin', [], { stdio: 'inherit' });
+      process.exitCode = result.status ?? 1;
     }
     return;
   }

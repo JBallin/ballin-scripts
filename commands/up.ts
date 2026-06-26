@@ -12,9 +12,9 @@ const configValue = (key: string): string => (
   readCommandOutput('ballin_config', ['get', key])?.trim() ?? ''
 );
 
-const runVisible = (command: string, args: string[] = [], env = process.env): void => {
-  runCommand(command, args, { env, stdio: 'inherit' });
-};
+const runVisible = (command: string, args: string[] = [], env = process.env): number | null => (
+  runCommand(command, args, { env, stdio: 'inherit' }).status
+);
 
 const runUpCli = (): void => {
   if (commandExists('brew')) {
@@ -40,7 +40,7 @@ const runUpCli = (): void => {
     const nvmDir = process.env.NVM_DIR ?? '';
     const nvmScript = path.join(nvmDir, 'nvm.sh');
     if (nvmDir && fs.existsSync(nvmScript) && fs.statSync(nvmScript).size > 0) {
-      runCommand('bash', ['-lc', '. "$NVM_DIR/nvm.sh"; nvm install --lts'], {
+      runCommand('bash', ['-c', '. "$NVM_DIR/nvm.sh"; nvm install --lts'], {
         env: process.env,
         stdio: 'inherit',
       });
@@ -73,7 +73,8 @@ const runUpCli = (): void => {
 
   if (configValue('up.gu') === 'true') {
     progress('Backing up development environment');
-    runVisible('gu');
+    const guStatus = runVisible('gu');
+    process.exitCode = guStatus ?? 1;
   }
 };
 

@@ -132,6 +132,19 @@ exit "$FAKE_INSTALL_STATUS"
     ]);
   });
 
+  it('returns the installer status when install fails after a successful merge', () => {
+    const result = runUpdate({ FAKE_INSTALL_STATUS: '27' });
+
+    assert.equal(result.status, 27);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch`,
+      `${repoDir}|git:merge`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
   it('stops before merge and install when fetch fails', () => {
     const result = runUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
 

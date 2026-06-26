@@ -41,7 +41,7 @@ const runBallinUpdateCli = (): void => {
   }
 
   writeStdoutLine();
-  runCommand('./install.sh', [], {
+  const installResult = runCommand('./install.sh', [], {
     cwd: repoDir,
     env: {
       ...process.env,
@@ -49,6 +49,7 @@ const runBallinUpdateCli = (): void => {
     },
     stdio: 'inherit',
   });
+  process.exitCode = installResult.status ?? 1;
 };
 
 module.exports = {
