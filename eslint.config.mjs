@@ -18,7 +18,7 @@ export default tseslint.config(
     ignores: ['coverage/**'],
   },
   {
-    files: ['**/*.js', 'bin/ballin_config'],
+    files: ['**/*.js'],
     ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 'latest',
