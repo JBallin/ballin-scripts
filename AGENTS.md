@@ -27,6 +27,11 @@ that owns them, config code lives under `config/`, and the Mocha tests in
   `softwareupdate`, symlink, or other network-affecting operations must use
   temporary directories, fixture files, complete child-process environments, and
   command stubs instead of the real user environment.
+- Do not manually smoke-test `bin/ballin_uninstall`, `bin/ballin_update`,
+  `install.sh`, `bin/up`, or `bin/gu` against the live checkout. If a direct
+  invocation is needed, run it through the test harness with temp roots such as
+  `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, isolated config, and stubbed external
+  commands.
 - Follow the existing `spawnSync` harness style, using hooks like
   `BALLIN_TEST_CONFIG_PATH`, `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log
   stubs before adding new test escape hatches.
