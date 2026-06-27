@@ -1,44 +1,125 @@
 # Ballin Scripts
 
-*An assortment of useful scripts*
+*Back up your dotfiles and update your macOS development environment.*
+
+`ballin-scripts` helps you recreate and maintain a macOS development environment
+with minimal manual setup. It backs up dotfiles, editor settings, Homebrew
+state, npm globals, and related configuration to a private Gist, then automates
+routine updates.
+
+Core commands:
+
+- `up` updates the development environment.
+- `gu` snapshots it to a private Gist.
 
 ## Installation
 
-Run the [install script](install.sh) using cURL:
+Install with:
 
 ```shell
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-See the [optional capabilities guide](docs/optional-capabilities.md) for
-additional setup and configuration.
+See the [optional capabilities guide](docs/optional-capabilities.md) for Node.js
+setup, update settings, and optional integrations.
 
-## Scripts
+## Example output
 
-##### `ballin` - Show available commands
-![ballin](../assets/screenshots/0_ballin.png?raw=true "ballin")
+With optional integrations enabled, `up` updates the machine and finishes by
+backing up the development environment. Output varies by installed tools and
+settings.
 
-##### `gu` - Backup your dev environment to a (private) gist
-![gu](../assets/screenshots/1_gu.png?raw=true "gu")
-<br>
-*RELATED: [My Sweet Config](https://github.com/JBallin/sweet-config) - visualize your setup*
+```shell
+$ up
 
-##### `up` - Update brew, npm, etc.
-![up](../assets/screenshots/3_up.png?raw=true "up")
+==> Updating Homebrew packages
 
-## Other Commands
+==> Cleaning up Homebrew packages
 
-##### Installation
-![install](../assets/screenshots/4_install.png?raw=true "install")
+==> Checking Homebrew installation
+Your system is ready to brew.
 
-##### `ballin_uninstall`
-![uninstall](../assets/screenshots/5_ballin_uninstall.png?raw=true "uninstall")
+==> Updating Node.js LTS
+Installing latest LTS version.
+v24.18.0 is already installed.
+Now using node v24.18.0 (npm v11.16.0)
 
-##### `ballin_update`
-![update](../assets/screenshots/6_ballin_update.png?raw=true "update")
+==> Updating App Store apps
 
-##### `ballin_config`
-![config](../assets/screenshots/7_ballin_config.png?raw=true "config")
+==> Installing macOS updates
+Software Update Tool
 
-##### Resulting Gist
-![gist](../assets/screenshots/8_gist.png?raw=true "gist")
+Finding available software
+No updates are available.
+
+==> Backing up development environment
+✔ zprofile
+✔ zshrc
+✔ bash_completions
+✔ brew_list
+✔ brew_leaves
+✔ brew_cask
+✔ Brewfile
+✔ gitconfig
+✔ npm_global
+✔ vs_settings
+✔ vs_extensions
+✔ ballin_config
+✔ mas
+```
+
+## Usage
+
+### Update with `up`
+
+`up` automates common maintenance tasks for a macOS development machine,
+including Homebrew maintenance, App Store and macOS updates, `ballin-scripts`
+updates, optional Node.js/npm updates, and optional `gu` backups.
+
+```shell
+up
+```
+
+Most optional behavior is controlled through `ballin_config`:
+
+```shell
+ballin_config set up.gu true
+ballin_config set up.npm false
+```
+
+See the [optional capabilities guide](docs/optional-capabilities.md) for the
+full list of update settings and optional integrations.
+
+### Back up with `gu`
+
+`gu` uploads changed snapshots to a configured private Gist. It can include
+shell dotfiles, Git config, Homebrew formulae and casks, global npm packages,
+nvm settings, editor settings, editor extensions, bash completions, and Mac App
+Store apps when the supporting tools are installed.
+
+```shell
+gu
+```
+
+Open the configured backup Gist:
+
+```shell
+gu open
+```
+
+Read one backed-up file from the Gist:
+
+```shell
+gu read zshrc.sh
+```
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `ballin` | Shows available commands and common usage. |
+| `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
+| `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
+| `ballin_config` | Reads and updates local `ballin-scripts` settings. |
+| `ballin_update` | Pulls the latest `ballin-scripts` changes and reruns the installer. |
+| `ballin_uninstall` | Removes installed command symlinks and the local checkout. |
