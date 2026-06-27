@@ -3,7 +3,7 @@ printf '%s\n' "🏀 let's ball..."
 
 repo_dir="$HOME/.ballin-scripts"
 ballin_config="$repo_dir/bin/ballin_config"
-optional_capabilities_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'
+docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md'
 required_node_version='24.12'
 
 ################################## CLONE REPO ##################################
@@ -42,14 +42,14 @@ if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
 elif [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js is required.\n'
   printf '\nRecommended: install Node.js %s or newer with nvm.' "$required_node_version"
-  printf '\nSetup guide: %s\n' "$optional_capabilities_url"
+  printf '\nSetup guide: %s\n' "$docs_url"
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'
   exit 1
 elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null)" != 'true' ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
   printf '\nRecommended: install Node.js %s or newer with nvm.' "$required_node_version"
-  printf '\nSetup guide: %s\n' "$optional_capabilities_url"
+  printf '\nSetup guide: %s\n' "$docs_url"
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'
   exit 1
@@ -87,7 +87,7 @@ if ! (
     fi
     if [ -n "$UPDATE_RESULT" ]; then
       printf '\n🙌 %s\n' "$UPDATE_RESULT"
-      printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
+      printf '\n👀 Docs: %s\n' "$docs_url"
     fi
   fi
 ); then
@@ -228,7 +228,7 @@ done
   printf '\n💪 symlinked binaries into %s\n' "$bin_dir"
 
   if [ "$config_existed" = false ] && [ -f "$repo_dir/ballin.config.json" ]; then
-    printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
+    printf '\n👀 Docs: %s\n' "$docs_url"
   fi
 
   printf '\n%s\n' '😎 ballin!'

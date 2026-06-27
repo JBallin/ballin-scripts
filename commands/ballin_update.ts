@@ -1,11 +1,12 @@
+const fs = require('fs');
 const path = require('path');
 const {
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
-const runQuiet = (command: string, args: string[], cwd: string): number | null => (
-  runCommand(command, args, {
+const runGitQuiet = (args: string[], cwd: string): number | null => (
+  runCommand('git', args, {
     cwd,
     env: {
       ...process.env,
@@ -15,8 +16,11 @@ const runQuiet = (command: string, args: string[], cwd: string): number | null =
   }).status
 );
 
+const updateBranch = 'main';
+const updateRemoteRef = `origin/${updateBranch}`;
+
 const runFetch = (cwd: string): number | null => (
-  runCommand('git', ['fetch'], {
+  runCommand('git', ['fetch', 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`], {
     cwd,
     env: {
       ...process.env,
@@ -26,26 +30,89 @@ const runFetch = (cwd: string): number | null => (
   }).status
 );
 
+const isMergeInProgress = (cwd: string): boolean => (
+  runGitQuiet(['rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd) === 0
+);
+
+const isDirectory = (candidate: string): boolean => {
+  try {
+    return fs.statSync(candidate).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+const stashChanges = (repoDir: string, recoveryContext: string): boolean => {
+  if (isMergeInProgress(repoDir) && runGitQuiet(['merge', '--abort'], repoDir) !== 0) {
+    writeStdoutLine(`git merge abort failed during ${recoveryContext}.`);
+    return false;
+  }
+
+  if (runGitQuiet(['stash', 'push', '--include-untracked'], repoDir) !== 0) {
+    writeStdoutLine(`git stash failed during ${recoveryContext}.`);
+    return false;
+  }
+
+  return true;
+};
+
+const checkoutUpdateBranch = (repoDir: string): boolean => {
+  if (runGitQuiet(['checkout', updateBranch], repoDir) === 0) {
+    return true;
+  }
+
+  writeStdoutLine(`git checkout ${updateBranch} failed. stashing changes and trying again...`);
+
+  if (!stashChanges(repoDir, 'checkout recovery')) {
+    return false;
+  }
+
+  if (runGitQuiet(['checkout', updateBranch], repoDir) !== 0) {
+    writeStdoutLine('git checkout failed during checkout recovery.');
+    return false;
+  }
+
+  return true;
+};
+
 const runBallinUpdateCli = (): void => {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
 
   writeStdoutLine('👟 getting fresh kicks...');
 
-  if (runFetch(repoDir) !== 0) {
-    writeStdoutLine('git fetch failed');
+  if (!isDirectory(repoDir)) {
+    writeStdoutLine(`install directory not found: ${repoDir}`);
     process.exitCode = 1;
     return;
   }
 
-  if (runQuiet('git', ['merge'], repoDir) !== 0) {
-    writeStdoutLine('git merge failed. stashing changes and trying again...');
-    const recovered = runQuiet('git', ['add', '.'], repoDir) === 0
-      && runQuiet('git', ['stash'], repoDir) === 0
-      && runQuiet('git', ['checkout', 'main'], repoDir) === 0
-      && runQuiet('git', ['merge'], repoDir) === 0;
+  if (runFetch(repoDir) !== 0) {
+    writeStdoutLine(`git fetch origin ${updateBranch} failed`);
+    process.exitCode = 1;
+    return;
+  }
 
-    if (!recovered) {
-      writeStdoutLine('git merge failed again.');
+  if (!checkoutUpdateBranch(repoDir)) {
+    process.exitCode = 1;
+    return;
+  }
+
+  if (runGitQuiet(['merge', updateRemoteRef], repoDir) !== 0) {
+    writeStdoutLine('git merge failed. stashing changes and trying again...');
+
+    if (!stashChanges(repoDir, 'merge recovery')) {
+      process.exitCode = 1;
+      return;
+    }
+
+    if (runGitQuiet(['checkout', updateBranch], repoDir) !== 0) {
+      writeStdoutLine('git checkout failed during merge recovery.');
+      process.exitCode = 1;
+      return;
+    }
+
+    if (runGitQuiet(['merge', updateRemoteRef], repoDir) !== 0) {
+      writeStdoutLine('git merge failed during merge recovery.');
       process.exitCode = 1;
       return;
     }
