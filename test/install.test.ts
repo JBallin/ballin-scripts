@@ -227,6 +227,45 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     assert.notInclude(commandLog(), 'node:install_setup');
   });
 
+  it('falls back to Bash config setup when the typed setup entrypoint does not support configure yet', () => {
+    installBaseCommands();
+    installConfigCommand();
+    writeExecutable('node', `#!/usr/bin/env bash
+if [ "$1" = '-p' ]; then
+  printf '%s\\n' "$FAKE_NODE_SUPPORTED"
+  exit 0
+fi
+if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
+  printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+  shift
+  if [ "$1" = 'symlink-binaries' ]; then
+    repo_dir="$2"
+    bin_dir="$3"
+    mkdir -p "$bin_dir"
+    for bin in "$repo_dir/bin/"*; do
+      ln -sfn "$bin" "$bin_dir/\${bin##*/}"
+    done
+    printf '\\n💪 symlinked binaries into %s\\n' "$bin_dir"
+    exit 0
+  fi
+  exit 1
+fi
+printf '%s' "$FAKE_UPDATE_OUTPUT"
+exit "$FAKE_NODE_STATUS"
+`);
+    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
+
+    const result = runInstall();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, "Created 'ballin.config.json'");
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
+      JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
+    );
+    assert.include(commandLog(), 'node:install_setup');
+  });
+
   it('does not repeat unchanged setup guidance during an ordinary update', () => {
     installBaseCommands();
     installConfigCommand();

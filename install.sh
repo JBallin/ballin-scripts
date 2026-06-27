@@ -71,11 +71,9 @@ if [ ! -f "$repo_dir/ballin.config.json" ]; then
 fi
 
 # Configuration must succeed before Gist credentials or command symlinks are touched.
-if [ -f "$repo_dir/commands/install_setup.ts" ]; then
-  if ! node "$repo_dir/commands/install_setup.ts" configure "$repo_dir" "$docs_url"; then
-    printf '\n⚠️  ERROR: Unable to create or update ballin.config.json\n'
-    exit 1
-  fi
+if [ -f "$repo_dir/commands/install_setup.ts" ] \
+  && node "$repo_dir/commands/install_setup.ts" configure "$repo_dir" "$docs_url"; then
+  :
 else
   if ! (
     cd "$repo_dir/config"
