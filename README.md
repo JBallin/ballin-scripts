@@ -2,7 +2,7 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
-`ballin-scripts` helps recreate and maintain a macOS development environment
+`ballin-scripts` helps you recreate and maintain a macOS development environment
 with minimal manual setup. It backs up dotfiles, editor settings, Homebrew
 state, npm globals, and related configuration to a private Gist, then automates
 routine updates.
@@ -72,10 +72,9 @@ No updates are available.
 
 ### Update with `up`
 
-`up` automates common maintenance tasks for a macOS development machine:
-Homebrew upgrades and cleanup, Homebrew health checks, App Store updates through
-`mas`, macOS updates, `ballin-scripts` updates, optional Node.js LTS updates,
-optional global npm package updates, and optional `gu` backups.
+`up` automates common maintenance tasks for a macOS development machine,
+including Homebrew maintenance, App Store and macOS updates, `ballin-scripts`
+updates, optional Node.js/npm updates, and optional `gu` backups.
 
 ```shell
 up
