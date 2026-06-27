@@ -9,6 +9,7 @@
   },
   "gu": {
     "id": null,
+    "host": "github.com",
     "token_file": ".gist",
     "url": "https://gist.github.com"
   }

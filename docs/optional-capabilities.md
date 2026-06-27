@@ -56,6 +56,24 @@ brew install mas
 When `mas` is available, `up` updates installed App Store apps and `gu` includes
 the installed-app list in your backup. No configuration setting is required.
 
+## Gist backups
+
+`gu` uses [GitHub CLI](https://cli.github.com/) to read and update the
+configured backup Gist. Install `gh`, authenticate it for your GitHub host, and
+store the backup Gist ID in config:
+
+```shell
+gh auth login --hostname github.com
+ballin_config set gu.id YOUR_GIST_ID
+```
+
+GitHub Enterprise users should set the host as well:
+
+```shell
+ballin_config set gu.host github.example.com
+gh auth login --hostname github.example.com
+```
+
 ## `up` settings
 
 Change a setting with `ballin_config set up.<name> true` or

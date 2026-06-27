@@ -30,7 +30,7 @@ Commands:
 
 Scripts:
 
-    gu                    gist: ${format.empty} (update), ${format.open}, ${format.read} ${format.fileName}
+    gu                    Gist: ${format.empty} (update), ${format.open}, ${format.read} ${format.fileName}
     up                    update brew etc.
 
 `;

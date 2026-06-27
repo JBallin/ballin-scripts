@@ -29,9 +29,10 @@ type RunGuOptions = {
   brewPrefix?: string;
   brewPrefixFail?: boolean;
   completionDir?: string;
-  gistInitialReadFail?: boolean;
-  gistInitialReadSignal?: boolean;
-  gistUploadFail?: boolean;
+  ghAuthFail?: boolean;
+  ghInitialReadFail?: boolean;
+  ghInitialReadSignal?: boolean;
+  ghUploadFail?: boolean;
   commandPath?: string;
 };
 
@@ -69,8 +70,8 @@ if [ "$1" != 'get' ]; then
   exit 2
 elif [ "$2" = 'gu.id' ]; then
   printf '%s\\n' 'test-gist-id'
-elif [ "$2" = 'gu.url' ]; then
-  printf '%s\\n' 'https://example.test/gists'
+elif [ "$2" = 'gu.host' ]; then
+  printf '%s\\n' 'example.test'
 else
   printf '%s\\n' 'Unexpected ballin_config call' >&2
   exit 2
@@ -78,50 +79,81 @@ fi
 `);
   };
 
-  const installFakeGistCommand = () => {
+  const installFakeGhCommand = () => {
     // Store the fake remote Gist as ordinary files inside the temporary test home.
-    writeTestExecutable('gist', `#!/usr/bin/env bash
-if [ "$2" != 'test-gist-id' ]; then
+    writeTestExecutable('gh', `#!/usr/bin/env bash
+if [ "$GH_HOST" != 'example.test' ] && [ "$1:$2" != 'auth:status' ]; then
+  printf '%s\\n' 'Unexpected GH_HOST' >&2
+  exit 2
+fi
+if [ "$1:$2" = 'auth:status' ]; then
+  if [ "$*" != 'auth status --active --hostname example.test' ]; then
+    printf '%s\\n' 'Unexpected gh auth arguments' >&2
+    exit 2
+  fi
+  if [ "$FAKE_GH_AUTH_FAIL" = 'true' ]; then
+    printf '%s\\n' 'simulated gh auth failure' >&2
+    exit 4
+  fi
+  exit 0
+fi
+if [ "$1:$2" != 'gist:view' ] && [ "$1:$2" != 'gist:edit' ]; then
+  printf '%s\\n' 'Unexpected gh call' >&2
+  exit 2
+fi
+if [ "$3" != 'test-gist-id' ]; then
   printf '%s\\n' 'Unexpected Gist ID' >&2
   exit 2
 fi
-if [ "$1" = '-r' ]; then
-  if [ "$#" -eq 2 ]; then
-    if [ "$FAKE_GIST_INITIAL_READ_FAIL" = 'true' ]; then
-      printf '%s\\n' 'simulated initial gist read failure' >&2
+if [ "$1:$2" = 'gist:view' ]; then
+  if [ "$4" = '--web' ] && [ "$#" -eq 4 ]; then
+    printf '%s\\n' "$*" >> "$FAKE_GH_WEB_LOG"
+    exit 0
+  fi
+  if [ "$4" != '--raw' ]; then
+    printf '%s\\n' 'Unexpected gh gist view arguments' >&2
+    exit 2
+  fi
+  if [ "$#" -eq 4 ]; then
+    if [ "$FAKE_GH_INITIAL_READ_FAIL" = 'true' ]; then
+      printf '%s\\n' 'simulated initial gh gist read failure' >&2
       exit 17
     fi
-    if [ "$FAKE_GIST_INITIAL_READ_SIGNAL" = 'true' ]; then
+    if [ "$FAKE_GH_INITIAL_READ_SIGNAL" = 'true' ]; then
       kill -TERM "$$"
     fi
     exit 0
-  elif [ "$#" -ne 3 ]; then
-    printf '%s\\n' 'Unexpected gist read arguments' >&2
+  elif [ "$5" != '--filename' ] || [ "$#" -ne 6 ]; then
+    printf '%s\\n' 'Unexpected gh gist file read arguments' >&2
     exit 2
   fi
-  printf '%s\\n' "$3" >> "$FAKE_GIST_READ_LOG"
-  fake_gist_file="$FAKE_GIST_STORAGE_DIR/$3"
+  printf '%s\\n' "$6" >> "$FAKE_GIST_READ_LOG"
+  fake_gist_file="$FAKE_GIST_STORAGE_DIR/$6"
   if [ -f "$fake_gist_file" ]; then
     cat "$fake_gist_file"
   else
     exit 1
   fi
-elif [ "$1" = '-u' ]; then
-  if [ "$#" -ne 3 ]; then
-    printf '%s\\n' 'Unexpected gist upload arguments' >&2
+elif [ "$1:$2" = 'gist:edit' ]; then
+  if [ "$4" = '--add' ] && [ "$#" -eq 5 ]; then
+    cache_file="$5"
+  elif [ "$4" = '--filename' ] && [ "$#" -eq 6 ]; then
+    cache_file="$6"
+    if [ "$5" != "\${cache_file##*/}" ]; then
+      printf '%s\\n' 'Unexpected gh gist edit filename' >&2
+      exit 2
+    fi
+  else
+    printf '%s\\n' 'Unexpected gh gist edit arguments' >&2
     exit 2
   fi
-  if [ "$FAKE_GIST_UPLOAD_FAIL" = 'true' ]; then
-    printf '%s\\n' 'simulated gist upload failure' >&2
+  if [ "$FAKE_GH_UPLOAD_FAIL" = 'true' ]; then
+    printf '%s\\n' 'simulated gh gist upload failure' >&2
     exit 19
   fi
-  cache_file="$3"
   file_name="\${cache_file##*/}"
   cp "$cache_file" "$FAKE_GIST_STORAGE_DIR/$file_name"
   printf '%s\\n' "$file_name" >> "$FAKE_GIST_UPLOAD_LOG"
-else
-  printf '%s\\n' 'Unexpected gist call' >&2
-  exit 2
 fi
 `);
   };
@@ -146,8 +178,8 @@ if [ "$1" != 'get' ]; then
   exit 2
 elif [ "$2" = 'gu.id' ]; then
   printf '%s\\n' 'null'
-elif [ "$2" = 'gu.url' ]; then
-  printf '%s\\n' 'https://example.test/gists'
+elif [ "$2" = 'gu.host' ]; then
+  printf '%s\\n' 'example.test'
 else
   printf '%s\\n' 'Unexpected ballin_config call' >&2
   exit 2
@@ -164,13 +196,13 @@ fi
     fs.chmodSync(path.join(testBinDir, 'ballin_config'), 0o644);
   };
 
-  const removeGistCommand = () => {
-    fs.rmSync(path.join(testBinDir, 'gist'));
+  const removeGhCommand = () => {
+    fs.rmSync(path.join(testBinDir, 'gh'));
   };
 
-  const makeGistCommandPermissionDenied = () => {
-    fs.writeFileSync(path.join(testBinDir, 'gist'), 'not executable\n', { mode: 0o644 });
-    fs.chmodSync(path.join(testBinDir, 'gist'), 0o644);
+  const makeGhCommandPermissionDenied = () => {
+    fs.writeFileSync(path.join(testBinDir, 'gh'), 'not executable\n', { mode: 0o644 });
+    fs.chmodSync(path.join(testBinDir, 'gh'), 0o644);
   };
 
   const installFakeBallinCommand = () => {
@@ -246,7 +278,7 @@ done
     requiredCommands.forEach(linkRequiredCommand);
     realCatPath = installControllableCatCommand();
     installFakeBallinConfigCommand();
-    installFakeGistCommand();
+    installFakeGhCommand();
     installFakeOpenCommand();
     installFakeBallinCommand();
   });
@@ -264,9 +296,10 @@ done
     brewPrefix = path.join(testHomeDir, 'opt', 'homebrew'),
     brewPrefixFail = false,
     completionDir,
-    gistInitialReadFail = false,
-    gistInitialReadSignal = false,
-    gistUploadFail = false,
+    ghAuthFail = false,
+    ghInitialReadFail = false,
+    ghInitialReadSignal = false,
+    ghUploadFail = false,
     commandPath = guPath,
   }: RunGuOptions = {}) => spawnSync(commandPath, args, {
     encoding: 'utf8',
@@ -281,9 +314,11 @@ done
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
-      FAKE_GIST_INITIAL_READ_FAIL: gistInitialReadFail ? 'true' : 'false',
-      FAKE_GIST_INITIAL_READ_SIGNAL: gistInitialReadSignal ? 'true' : 'false',
-      FAKE_GIST_UPLOAD_FAIL: gistUploadFail ? 'true' : 'false',
+      FAKE_GH_WEB_LOG: openLogPath,
+      FAKE_GH_AUTH_FAIL: ghAuthFail ? 'true' : 'false',
+      FAKE_GH_INITIAL_READ_FAIL: ghInitialReadFail ? 'true' : 'false',
+      FAKE_GH_INITIAL_READ_SIGNAL: ghInitialReadSignal ? 'true' : 'false',
+      FAKE_GH_UPLOAD_FAIL: ghUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_OPEN_LOG: openLogPath,
       FAKE_BALLIN_LOG: ballinLogPath,
@@ -334,20 +369,20 @@ done
     fs.writeFileSync(filePath, content);
   };
 
-  it('prints the configured Gist URL and opens it', () => {
+  it('opens the configured Gist through gh', () => {
     const result = runGu({ args: ['open'] });
 
     assertGuSucceeded(result);
-    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
-    assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
+    assert.equal(result.stdout, '');
+    assert.deepEqual(openCalls(), ['gist view test-gist-id --web']);
   });
 
-  it('opens the configured Gist URL without requiring a readable Gist', () => {
-    const result = runGu({ args: ['open'], gistInitialReadFail: true });
+  it('opens the configured Gist without requiring a readable Gist', () => {
+    const result = runGu({ args: ['open'], ghInitialReadFail: true });
 
     assertGuSucceeded(result);
-    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
-    assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
+    assert.equal(result.stdout, '');
+    assert.deepEqual(openCalls(), ['gist view test-gist-id --web']);
     assert.deepEqual(gistReads(), []);
   });
 
@@ -371,9 +406,9 @@ done
     assert.equal(
       result.stderr,
       'ballin_config failed for gu.id\n'
-        + 'ballin_config failed for gu.url\n'
+        + 'ballin_config failed for gu.host\n'
         + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.url\n',
+        + 'gu: missing config value gu.host\n',
     );
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
@@ -403,36 +438,37 @@ done
   });
 
   it('uses a shell-style signal exit status for open', () => {
-    writeTestExecutable('open', `#!/usr/bin/env bash
-kill -TERM "$$"
+    writeTestExecutable('gh', `#!/usr/bin/env bash
+if [ "$1:$2" = 'auth:status' ]; then exit 0; fi
+if [ "$*" = 'gist view test-gist-id --web' ]; then kill -TERM "$$"; fi
+exit 2
 `);
 
     const result = runGu({ args: ['open'] });
 
     assert.equal(result.status, 143);
-    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.equal(result.stdout, '');
     assert.equal(result.stderr, '');
   });
 
-  it('reports missing open like the shell did', () => {
-    fs.unlinkSync(path.join(testBinDir, 'open'));
+  it('reports missing gh before opening', () => {
+    removeGhCommand();
 
     const result = runGu({ args: ['open'] });
 
     assert.equal(result.status, 127);
-    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
-    assert.equal(result.stderr, 'open: command not found\n');
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gh: command not found\n');
   });
 
-  it('reports permission-denied open like the shell did', () => {
-    fs.writeFileSync(path.join(testBinDir, 'open'), 'not executable\n', { mode: 0o644 });
-    fs.chmodSync(path.join(testBinDir, 'open'), 0o644);
+  it('reports permission-denied gh before opening', () => {
+    makeGhCommandPermissionDenied();
 
     const result = runGu({ args: ['open'] });
 
     assert.equal(result.status, 126);
-    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
-    assert.equal(result.stderr, 'open: Permission denied\n');
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gh: Permission denied\n');
   });
 
   it('prints help through the ballin command', () => {
@@ -444,7 +480,7 @@ kill -TERM "$$"
   });
 
   it('prints help without requiring a readable Gist', () => {
-    const result = runGu({ args: ['help'], gistInitialReadFail: true });
+    const result = runGu({ args: ['help'], ghInitialReadFail: true });
 
     assertGuSucceeded(result);
     assert.equal(result.stdout, 'fake ballin help\n');
@@ -473,7 +509,7 @@ kill -TERM "$$"
   });
 
   it('fails unknown commands before checking Gist readability', () => {
-    const result = runGu({ args: ['typo'], gistInitialReadFail: true });
+    const result = runGu({ args: ['typo'], ghInitialReadFail: true });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
@@ -534,7 +570,7 @@ kill -TERM "$$"
   });
 
   it('reports a missing read filename before checking Gist readability', () => {
-    const result = runGu({ args: ['read'], gistInitialReadFail: true });
+    const result = runGu({ args: ['read'], ghInitialReadFail: true });
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
@@ -544,18 +580,18 @@ kill -TERM "$$"
   });
 
   it('uses the initial Gist retrieval failure status before snapshotting', () => {
-    const result = runGu({ gistInitialReadFail: true });
+    const result = runGu({ ghInitialReadFail: true });
 
     assert.equal(result.status, 17);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
-    assert.equal(result.stderr, 'simulated initial gist read failure\n');
+    assert.equal(result.stderr, 'simulated initial gh gist read failure\n');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
   it('uses a shell-style signal exit status for initial Gist retrieval', () => {
-    const result = runGu({ gistInitialReadSignal: true });
+    const result = runGu({ ghInitialReadSignal: true });
 
     assert.equal(result.status, 143);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
@@ -565,27 +601,43 @@ kill -TERM "$$"
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('reports missing gist reads before snapshotting', () => {
-    removeGistCommand();
+  it('reports gh authentication failures before snapshotting', () => {
+    const result = runGu({ ghAuthFail: true });
 
-    const result = runGu();
-
-    assert.equal(result.status, 127);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
-    assert.equal(result.stderr, 'gist: command not found\n');
+    assert.equal(result.status, 4);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'simulated gh auth failure\n'
+        + 'gu: GitHub CLI authentication is required for example.test\n'
+        + "gu: run 'gh auth login --hostname example.test'\n",
+    );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('reports permission-denied gist reads before snapshotting', () => {
-    makeGistCommandPermissionDenied();
+  it('reports missing gh before snapshotting', () => {
+    removeGhCommand();
+
+    const result = runGu();
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gh: command not found\n');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports permission-denied gh before snapshotting', () => {
+    makeGhCommandPermissionDenied();
 
     const result = runGu();
 
     assert.equal(result.status, 126);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
-    assert.equal(result.stderr, 'gist: Permission denied\n');
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gh: Permission denied\n');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
@@ -601,9 +653,9 @@ kill -TERM "$$"
     assert.equal(
       result.stderr,
       'ballin_config failed for gu.id\n'
-        + 'ballin_config failed for gu.url\n'
+        + 'ballin_config failed for gu.host\n'
         + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.url\n',
+        + 'gu: missing config value gu.host\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
@@ -622,7 +674,7 @@ kill -TERM "$$"
       'ballin_config: command not found\n'
         + 'ballin_config: command not found\n'
         + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.url\n',
+        + 'gu: missing config value gu.host\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
@@ -641,7 +693,7 @@ kill -TERM "$$"
       'ballin_config: Permission denied\n'
         + 'ballin_config: Permission denied\n'
         + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.url\n',
+        + 'gu: missing config value gu.host\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
@@ -1019,10 +1071,10 @@ printf '%s\\n' '123456 Example App'
     seedGuCache('export COLOR=red\n');
     seedFakeGist('export COLOR=red\n');
 
-    const result = runGu({ gistUploadFail: true });
+    const result = runGu({ ghUploadFail: true });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'simulated gist upload failure\ngu: failed to snapshot zshrc.sh\n');
+    assert.equal(result.stderr, 'simulated gh gist upload failure\ngu: failed to snapshot zshrc.sh\n');
     assert.deepEqual(fs.readdirSync(scratchDir), []);
     assert.equal(result.stdout, '');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=red\n');
@@ -1035,7 +1087,7 @@ printf '%s\\n' '123456 Example App'
     seedGuCache('export COLOR=red\n');
     seedFakeGist('export COLOR=red\n');
 
-    const failedResult = runGu({ gistUploadFail: true });
+    const failedResult = runGu({ ghUploadFail: true });
     const retriedResult = runGu();
 
     assert.equal(failedResult.status, 1);

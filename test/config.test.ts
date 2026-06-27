@@ -94,6 +94,9 @@ describe('config', () => {
     it('("gu.id") should return null by default', () => {
       assert.isNull(getConfig('gu.id'));
     });
+    it('("gu.host") should return github.com by default', () => {
+      assert.equal(getConfig('gu.host'), 'github.com');
+    });
     it('("up.cleanup") should return true or false', () => {
       assert.include(['true', 'false'], getConfig('up.cleanup'));
     });
