@@ -22,6 +22,8 @@ bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/ins
 
 See the [optional capabilities guide](docs/optional-capabilities.md) for Node.js
 setup, update settings, and optional integrations.
+See the [supported capabilities reference](docs/capabilities.md) for the full
+list of `up` integrations and `gu` snapshots.
 
 ## Example output
 
@@ -87,8 +89,8 @@ ballin_config set up.gu true
 ballin_config set up.npm false
 ```
 
-See the [optional capabilities guide](docs/optional-capabilities.md) for the
-full list of update settings and optional integrations.
+See the [supported capabilities reference](docs/capabilities.md) for the full
+list of update integrations.
 
 ### Back up with `gu`
 
@@ -96,6 +98,9 @@ full list of update settings and optional integrations.
 shell dotfiles, Git config, Homebrew formulae and casks, global npm packages,
 nvm settings, editor settings, editor extensions, bash completions, and Mac App
 Store apps when the supporting tools are installed.
+
+See the [supported capabilities reference](docs/capabilities.md) for the full
+list of backup snapshots.
 
 ```shell
 gu

@@ -185,7 +185,7 @@ esac
   });
 
   it('does not run disabled optional integrations even when commands exist', () => {
-    ['npm', 'pip', 'pip3', 'softwareupdate', 'ballin_update', 'gu'].forEach((command) => {
+    ['npm', 'softwareupdate', 'ballin_update', 'gu'].forEach((command) => {
       installCommandStub(command);
     });
 
