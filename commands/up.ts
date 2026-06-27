@@ -2,34 +2,87 @@ const fs = require('fs');
 const path = require('path');
 const {
   commandExists,
+  makeTempFile,
   progress,
-  readCommandOutput,
+  removeTempFile,
   runCommand,
   writeStderrLine,
 } = require('./commandHelpers.ts');
 
+const commandPermissionDeniedStatus = 126;
 const commandNotFoundStatus = 127;
 
+const reportSpawnError = (command: string, error: Error): number => {
+  const errorCode = (error as { code?: string }).code;
+  if (errorCode === 'EACCES') {
+    writeStderrLine(`${command}: Permission denied`);
+    return commandPermissionDeniedStatus;
+  }
+  if (errorCode === 'ENOENT') {
+    writeStderrLine(`${command}: command not found`);
+    return commandNotFoundStatus;
+  }
+  writeStderrLine(error.message);
+  return 1;
+};
+
 const configValue = (key: string, env = process.env): string => {
-  const value = readCommandOutput('ballin_config', ['get', key], {
+  const result = runCommand('ballin_config', ['get', key], {
     env,
     stdio: ['ignore', 'pipe', 'inherit'],
   });
-  return value?.trim() ?? '';
+  if (result.error) {
+    reportSpawnError('ballin_config', result.error);
+    return '';
+  }
+  if (result.status !== 0) {
+    return '';
+  }
+  return result.stdout.trim();
 };
 
 const runVisible = (command: string, args: string[] = [], env = process.env): number => {
   const result = runCommand(command, args, { env, stdio: 'inherit' });
   if (result.error) {
-    writeStderrLine(`${command}: command not found`);
-    return commandNotFoundStatus;
+    return reportSpawnError(command, result.error);
   }
   return result.status ?? 1;
 };
 
+const parseEnvOutput = (output: string): NodeJS.ProcessEnv => JSON.parse(output);
+
+const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
+  const envPath = makeTempFile('ballin-up-env-');
+  try {
+    const result = runCommand('bash', [
+      '-c',
+      '. "$NVM_DIR/nvm.sh"; nvm install --lts; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UP_ENV_PATH"',
+    ], {
+      env: {
+        ...env,
+        BALLIN_UP_ENV_PATH: envPath,
+      },
+      stdio: 'inherit',
+    });
+
+    if (result.error) {
+      reportSpawnError('bash', result.error);
+      return null;
+    }
+    if (!fs.existsSync(envPath)) {
+      return null;
+    }
+
+    const nextEnv = parseEnvOutput(fs.readFileSync(envPath, 'utf8'));
+    delete nextEnv.BALLIN_UP_ENV_PATH;
+    return nextEnv;
+  } finally {
+    removeTempFile(envPath);
+  }
+};
+
 const runUpCli = (): void => {
   let childEnv = process.env;
-  let npmHandledByNvm = false;
 
   if (commandExists('brew')) {
     progress('Updating Homebrew packages');
@@ -54,20 +107,7 @@ const runUpCli = (): void => {
     const nvmDir = process.env.NVM_DIR ?? '';
     const nvmScript = path.join(nvmDir, 'nvm.sh');
     if (nvmDir && fs.existsSync(nvmScript) && fs.statSync(nvmScript).size > 0) {
-      npmHandledByNvm = configValue('up.npm', childEnv) === 'true';
-      runCommand('bash', [
-        '-c',
-        [
-          '. "$NVM_DIR/nvm.sh"',
-          'nvm install --lts',
-          npmHandledByNvm
-            ? 'if command -v npm >/dev/null 2>&1; then printf \'\\n==> Updating global npm packages\\n\'; npm update -g; fi'
-            : '',
-        ].filter(Boolean).join('; '),
-      ], {
-        env: childEnv,
-        stdio: 'inherit',
-      });
+      childEnv = runNvmInstall(childEnv) ?? childEnv;
     } else {
       writeStderrLine();
       writeStderrLine('⚠️  Skipping Node.js LTS update: unable to load nvm.');
@@ -75,7 +115,7 @@ const runUpCli = (): void => {
     }
   }
 
-  if (!npmHandledByNvm && commandExists('npm', { env: childEnv }) && configValue('up.npm', childEnv) === 'true') {
+  if (commandExists('npm', { env: childEnv }) && configValue('up.npm', childEnv) === 'true') {
     progress('Updating global npm packages');
     runVisible('npm', ['update', '-g'], childEnv);
   }

@@ -239,6 +239,20 @@ esac
     assert.deepEqual(commandLog(), []);
   });
 
+  it('reports permission-denied unguarded integrations like the shell did', () => {
+    fs.writeFileSync(path.join(binDir, 'gu'), '#!/usr/bin/env bash\n', { mode: 0o644 });
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 126);
+    assert.include(result.stdout, 'Backing up development environment');
+    assert.include(result.stderr, 'gu: Permission denied');
+    assert.deepEqual(commandLog(), []);
+  });
+
   it('loads nvm from NVM_DIR and updates Node.js LTS', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     installNvmStub(nvmDir);
@@ -268,6 +282,29 @@ esac
     assert.equal(fs.readFileSync(logPath, 'utf8').split('\n')[0], 'install --lts');
     assert.deepEqual(commandLog().slice(1), [
       'npm|,|update -g',
+    ]);
+  });
+
+  it('keeps nvm PATH changes for later gu backups', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const nvmBinDir = path.join(tempDir, 'nvm-bin');
+    const nvmNpmPath = path.join(nvmBinDir, 'npm');
+    fs.mkdirSync(nvmBinDir);
+    installPathUpdatingNvmStub(nvmDir, nvmBinDir);
+    installCommandStub('npm', { directory: nvmBinDir });
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+printf 'gu-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
+`);
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.deepEqual(commandLog().slice(1), [
+      `gu-npm|${nvmNpmPath}`,
     ]);
   });
 
@@ -304,6 +341,16 @@ exit 42
 
     assert.equal(result.status, 0);
     assert.include(result.stderr, 'broken config');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('reports missing ballin_config reads like the shell did', () => {
+    fs.rmSync(path.join(binDir, 'ballin_config'));
+
+    const result = runUp();
+
+    assert.equal(result.status, 0);
+    assert.include(result.stderr, 'ballin_config: command not found');
     assert.deepEqual(commandLog(), []);
   });
 });
