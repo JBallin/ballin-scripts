@@ -1,46 +1,44 @@
-const fs = require('fs');
 const path = require('path');
 const {
+  isDirectory,
   runCommand,
+  runVisibleCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
-const runGitQuiet = (args: string[], cwd: string): number | null => (
+import type { StdioOptions } from 'child_process';
+
+const commandEnv = (cwd: string): NodeJS.ProcessEnv => ({
+  ...process.env,
+  PWD: cwd,
+});
+
+const runGit = (args: string[], cwd: string, stdio: StdioOptions): number | null => (
   runCommand('git', args, {
     cwd,
-    env: {
-      ...process.env,
-      PWD: cwd,
-    },
-    stdio: 'ignore',
+    env: commandEnv(cwd),
+    stdio,
   }).status
+);
+
+const runGitQuiet = (args: string[], cwd: string): number | null => (
+  runGit(args, cwd, 'ignore')
 );
 
 const updateBranch = 'main';
 const updateRemoteRef = `origin/${updateBranch}`;
 
 const runFetch = (cwd: string): number | null => (
-  runCommand('git', ['fetch', 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`], {
+  runGit(
+    ['fetch', 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`],
     cwd,
-    env: {
-      ...process.env,
-      PWD: cwd,
-    },
-    stdio: ['inherit', 'ignore', 'inherit'],
-  }).status
+    ['inherit', 'ignore', 'inherit'],
+  )
 );
 
 const isMergeInProgress = (cwd: string): boolean => (
   runGitQuiet(['rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd) === 0
 );
-
-const isDirectory = (candidate: string): boolean => {
-  try {
-    return fs.statSync(candidate).isDirectory();
-  } catch {
-    return false;
-  }
-};
 
 const stashChanges = (repoDir: string, recoveryContext: string): boolean => {
   if (isMergeInProgress(repoDir) && runGitQuiet(['merge', '--abort'], repoDir) !== 0) {
@@ -119,15 +117,10 @@ const runBallinUpdateCli = (): void => {
   }
 
   writeStdoutLine();
-  const installResult = runCommand('./install.sh', [], {
+  process.exitCode = runVisibleCommand('./install.sh', [], {
     cwd: repoDir,
-    env: {
-      ...process.env,
-      PWD: repoDir,
-    },
-    stdio: 'inherit',
+    env: commandEnv(repoDir),
   });
-  process.exitCode = installResult.status ?? 1;
 };
 
 module.exports = {
