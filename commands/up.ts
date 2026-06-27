@@ -7,7 +7,7 @@ const {
   reportSpawnError,
   removeTempFile,
   runCommand,
-  spawnResultStatus,
+  runVisibleCommand,
   writeStderrLine,
 } = require('./commandHelpers.ts');
 
@@ -24,14 +24,6 @@ const configValue = (key: string, env = process.env): string => {
     return '';
   }
   return result.stdout.trim();
-};
-
-const runVisible = (command: string, args: string[] = [], env = process.env): number => {
-  const result = runCommand(command, args, { env, stdio: 'inherit' });
-  if (result.error) {
-    return reportSpawnError(command, result.error);
-  }
-  return spawnResultStatus(result);
 };
 
 const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
@@ -90,15 +82,15 @@ const runUpCli = (): void => {
       HOMEBREW_NO_ENV_HINTS: '1',
       HOMEBREW_NO_ASK: '1',
     };
-    runVisible('brew', ['upgrade'], childEnv);
+    runVisibleCommand('brew', ['upgrade'], { env: childEnv });
 
     if (configValue('up.cleanup', childEnv) === 'true') {
       progress('Cleaning up Homebrew packages');
-      runVisible('brew', ['cleanup'], childEnv);
+      runVisibleCommand('brew', ['cleanup'], { env: childEnv });
     }
 
     progress('Checking Homebrew installation');
-    runVisible('brew', ['doctor'], childEnv);
+    runVisibleCommand('brew', ['doctor'], { env: childEnv });
   }
 
   if (configValue('up.nvm', childEnv) === 'true') {
@@ -116,27 +108,27 @@ const runUpCli = (): void => {
 
   if (commandExists('npm', { env: childEnv }) && configValue('up.npm', childEnv) === 'true') {
     progress('Updating global npm packages');
-    runVisible('npm', ['update', '-g'], childEnv);
+    runVisibleCommand('npm', ['update', '-g'], { env: childEnv });
   }
 
   if (commandExists('mas', { env: childEnv })) {
     progress('Updating App Store apps');
-    runVisible('mas', ['upgrade'], childEnv);
+    runVisibleCommand('mas', ['upgrade'], { env: childEnv });
   }
 
   if (commandExists('softwareupdate', { env: childEnv }) && configValue('up.softwareupdate', childEnv) === 'true') {
     progress('Installing macOS updates');
-    runVisible('softwareupdate', ['-ia'], childEnv);
+    runVisibleCommand('softwareupdate', ['-ia'], { env: childEnv });
   }
 
   if (configValue('up.ballin', childEnv) === 'true') {
     progress('Updating ballin-scripts');
-    runVisible('ballin_update', [], childEnv);
+    runVisibleCommand('ballin_update', [], { env: childEnv });
   }
 
   if (configValue('up.gu', childEnv) === 'true') {
     progress('Backing up development environment');
-    process.exitCode = runVisible('gu', [], childEnv);
+    process.exitCode = runVisibleCommand('gu', [], { env: childEnv });
   }
 };
 

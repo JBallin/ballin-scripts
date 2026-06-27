@@ -104,6 +104,18 @@ const spawnResultStatus = (result: SpawnResult): number => {
   return result.status ?? 1;
 };
 
+const runVisibleCommand = (
+  command: string,
+  args: string[] = [],
+  options: SpawnOptions = {},
+): number => {
+  const result = runCommand(command, args, { ...options, stdio: 'inherit' });
+  if (result.error) {
+    return reportSpawnError(command, result.error);
+  }
+  return spawnResultStatus(result);
+};
+
 const ensureDir = (directory: string): void => {
   fs.mkdirSync(directory, { recursive: true });
 };
@@ -127,6 +139,7 @@ module.exports = {
   reportSpawnError,
   removeTempFile,
   runCommand,
+  runVisibleCommand,
   spawnResultStatus,
   writeStderrLine,
   writeStdoutLine,
