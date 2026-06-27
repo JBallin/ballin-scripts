@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const {
   commandExists,
-  isDirectory,
   readCommandOutput,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
@@ -64,7 +63,7 @@ const runBallinUninstallCli = (): void => {
   }
 
   const repoBinDir = path.join(repoDir, 'bin');
-  if (isDirectory(repoBinDir)) {
+  if (fs.existsSync(repoBinDir)) {
     fs.readdirSync(repoBinDir).forEach((binName: string) => {
       const targetPath = path.join(repoBinDir, binName);
       binDirs.forEach((binDir) => {
