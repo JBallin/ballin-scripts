@@ -2,13 +2,26 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
-`ballin-scripts` is a personal macOS toolkit for keeping a development machine
-reproducible and up to date. It snapshots dotfiles, editor settings, Homebrew
-state, npm globals, and related config to a private Gist, then runs the update
-tasks that keep the machine current.
+`ballin-scripts` is a personal macOS CLI for making a development machine easy
+to rebuild and simple to keep current. It backs up dotfiles, editor settings,
+Homebrew state, npm globals, and related configuration to a private Gist, then
+runs the update tasks that keep the machine up to date.
 
-Together, `up` and `gu` create a repeatable loop: update the environment, then
-preserve the state needed to rebuild it.
+Core workflow:
+
+- `up` updates the local development environment.
+- `gu` snapshots the configuration needed to recreate it.
+
+## Installation
+
+Run the [install script](install.sh) using cURL:
+
+```shell
+bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+```
+
+See the [optional capabilities guide](docs/optional-capabilities.md) for Node.js
+setup, update settings, and optional integrations.
 
 ## Example output
 
@@ -55,20 +68,9 @@ No updates are available.
 ✔ mas
 ```
 
-## Installation
+## Usage
 
-Run the [install script](install.sh) using cURL:
-
-```shell
-bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
-```
-
-See the [optional capabilities guide](docs/optional-capabilities.md) for
-additional setup and configuration.
-
-## What it does
-
-### Update your environment with `up`
+### Update with `up`
 
 `up` runs the update tasks that are useful on a macOS development machine:
 Homebrew upgrades and cleanup, Homebrew health checks, App Store updates through
@@ -89,13 +91,12 @@ ballin_config set up.npm false
 See the [optional capabilities guide](docs/optional-capabilities.md) for the
 full list of update settings and optional integrations.
 
-### Back up your setup with `gu`
+### Back up with `gu`
 
-`gu` snapshots the local files and tool state that describe your development
-environment, then uploads only changed snapshots to a configured private Gist.
-It can include shell dotfiles, Git config, Homebrew formulae and casks, global
-npm packages, nvm settings, editor settings, editor extensions, bash
-completions, and Mac App Store apps when the supporting tools are installed.
+`gu` uploads changed snapshots to a configured private Gist. It can include
+shell dotfiles, Git config, Homebrew formulae and casks, global npm packages,
+nvm settings, editor settings, editor extensions, bash completions, and Mac App
+Store apps when the supporting tools are installed.
 
 ```shell
 gu
@@ -118,8 +119,8 @@ gu read zshrc.sh
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
+| `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
 | `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
-| `up` | Updates Homebrew, macOS, App Store apps, Node.js/npm options, `ballin-scripts`, and optional backups. |
 | `ballin_config` | Reads and updates local `ballin-scripts` settings. |
 | `ballin_update` | Pulls the latest `ballin-scripts` changes and reruns installation. |
 | `ballin_uninstall` | Removes installed command symlinks and the local checkout. |
