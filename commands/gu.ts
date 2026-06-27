@@ -266,7 +266,7 @@ const uploadGistFile = (host: string, id: string, filePath: string, isNew: boole
 };
 
 const verifyGistReadable = (host: string, id: string): CommandCheckResult => {
-  const result = runGh(host, ['gist', 'view', id, '--raw'], { stdio: ['ignore', 'ignore', 'inherit'] });
+  const result = runGh(host, ['gist', 'view', id, '--files'], { stdio: ['ignore', 'ignore', 'inherit'] });
   if (result.error) {
     return {
       ok: false,

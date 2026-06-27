@@ -110,11 +110,7 @@ if [ "$1:$2" = 'gist:view' ]; then
     printf '%s\\n' "$*" >> "$FAKE_GH_WEB_LOG"
     exit 0
   fi
-  if [ "$4" != '--raw' ]; then
-    printf '%s\\n' 'Unexpected gh gist view arguments' >&2
-    exit 2
-  fi
-  if [ "$#" -eq 4 ]; then
+  if [ "$4" = '--files' ] && [ "$#" -eq 4 ]; then
     if [ "$FAKE_GH_INITIAL_READ_FAIL" = 'true' ]; then
       printf '%s\\n' 'simulated initial gh gist read failure' >&2
       exit 17
@@ -123,7 +119,12 @@ if [ "$1:$2" = 'gist:view' ]; then
       kill -TERM "$$"
     fi
     exit 0
-  elif [ "$5" != '--filename' ] || [ "$#" -ne 6 ]; then
+  fi
+  if [ "$4" != '--raw' ]; then
+    printf '%s\\n' 'Unexpected gh gist view arguments' >&2
+    exit 2
+  fi
+  if [ "$5" != '--filename' ] || [ "$#" -ne 6 ]; then
     printf '%s\\n' 'Unexpected gh gist file read arguments' >&2
     exit 2
   fi
