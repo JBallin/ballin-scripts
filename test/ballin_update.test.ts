@@ -17,6 +17,7 @@ describe('ballin_update', () => {
   let toolDir: string;
   let commandLogPath: string;
   let mergeCountPath: string;
+  let checkoutCountPath: string;
 
   const commandPath = (name: string) => (process.env.PATH ?? '')
     .split(path.delimiter)
@@ -39,6 +40,12 @@ describe('ballin_update', () => {
     writeExecutable('git', `#!/usr/bin/env bash
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
 case "$1" in
+  rev-parse)
+    if [ "$FAKE_GIT_MERGE_IN_PROGRESS" = '1' ]; then
+      exit 0
+    fi
+    exit 1
+    ;;
   fetch)
     if [ "$FAKE_GIT_FETCH_READ_STDIN" = '1' ]; then
       printf 'credential prompt\\n' >&2
@@ -51,6 +58,9 @@ case "$1" in
     exit "$FAKE_GIT_FETCH_STATUS"
     ;;
   merge)
+    if [ "$2" = '--abort' ]; then
+      exit "$FAKE_GIT_MERGE_ABORT_STATUS"
+    fi
     count=0
     if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
       count="$(cat "$FAKE_GIT_MERGE_COUNT_PATH")"
@@ -62,14 +72,20 @@ case "$1" in
     fi
     exit "$FAKE_GIT_RETRY_MERGE_STATUS"
     ;;
-  add)
-    exit "$FAKE_GIT_ADD_STATUS"
-    ;;
   stash)
     exit "$FAKE_GIT_STASH_STATUS"
     ;;
   checkout)
-    exit "$FAKE_GIT_CHECKOUT_STATUS"
+    count=0
+    if [ -f "$FAKE_GIT_CHECKOUT_COUNT_PATH" ]; then
+      count="$(cat "$FAKE_GIT_CHECKOUT_COUNT_PATH")"
+    fi
+    count=$((count + 1))
+    printf '%s\\n' "$count" > "$FAKE_GIT_CHECKOUT_COUNT_PATH"
+    if [ "$count" -eq 1 ]; then
+      exit "$FAKE_GIT_FIRST_CHECKOUT_STATUS"
+    fi
+    exit "$FAKE_GIT_RETRY_CHECKOUT_STATUS"
     ;;
   *)
     printf 'unexpected git command: %s\\n' "$*" >&2
@@ -98,12 +114,15 @@ exit "$FAKE_INSTALL_STATUS"
       PATH: toolDir,
       BALLIN_UPDATE_TEST_LOG: commandLogPath,
       FAKE_GIT_MERGE_COUNT_PATH: mergeCountPath,
+      FAKE_GIT_CHECKOUT_COUNT_PATH: checkoutCountPath,
       FAKE_GIT_FETCH_STATUS: '0',
       FAKE_GIT_FIRST_MERGE_STATUS: '0',
       FAKE_GIT_RETRY_MERGE_STATUS: '0',
-      FAKE_GIT_ADD_STATUS: '0',
+      FAKE_GIT_MERGE_IN_PROGRESS: '0',
+      FAKE_GIT_MERGE_ABORT_STATUS: '0',
       FAKE_GIT_STASH_STATUS: '0',
-      FAKE_GIT_CHECKOUT_STATUS: '0',
+      FAKE_GIT_FIRST_CHECKOUT_STATUS: '0',
+      FAKE_GIT_RETRY_CHECKOUT_STATUS: '0',
       FAKE_INSTALL_STATUS: '0',
       ...env,
     },
@@ -122,6 +141,7 @@ exit "$FAKE_INSTALL_STATUS"
     toolDir = path.join(testDir, 'tools');
     commandLogPath = path.join(testDir, 'commands.log');
     mergeCountPath = path.join(testDir, 'merge-count');
+    checkoutCountPath = path.join(testDir, 'checkout-count');
 
     fs.mkdirSync(repoDir, { recursive: true });
     fs.mkdirSync(toolDir);
@@ -143,8 +163,9 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -160,9 +181,10 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, 'credential prompt\n');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       'fetch-stdin:secret-token',
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -179,8 +201,9 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -192,8 +215,9 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -202,10 +226,99 @@ exit "$FAKE_INSTALL_STATUS"
     const result = runUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\ngit fetch failed\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\ngit fetch origin main failed\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+    ]);
+  });
+
+  it('stops before git commands when the installed repository is missing', () => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+
+    const result = runUpdate();
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, `👟 getting fresh kicks...\ninstall directory not found: ${repoDir}\n`);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('stops before git commands when the installed repository path is not a directory', () => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    fs.writeFileSync(repoDir, '');
+
+    const result = runUpdate();
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, `👟 getting fresh kicks...\ninstall directory not found: ${repoDir}\n`);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('stashes, retries checkout main, merges, and installs when initial checkout is blocked', () => {
+    const result = runUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '27' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\n'
+        + 'git checkout main failed. stashing changes and trying again...\n\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('stops before merge and install when checkout recovery cannot stash changes', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
+      FAKE_GIT_STASH_STATUS: '28',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\n'
+        + 'git checkout main failed. stashing changes and trying again...\n'
+        + 'git stash failed during checkout recovery.\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:stash push --include-untracked`,
+    ]);
+  });
+
+  it('stops before merge and install when checkout still fails after stashing', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
+      FAKE_GIT_RETRY_CHECKOUT_STATUS: '28',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\n'
+        + 'git checkout main failed. stashing changes and trying again...\n'
+        + 'git checkout failed during checkout recovery.\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
     ]);
   });
 
@@ -219,13 +332,63 @@ exit "$FAKE_INSTALL_STATUS"
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
-      `${repoDir}|git:add .`,
-      `${repoDir}|git:stash`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('aborts an in-progress failed merge before stashing changes during recovery', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_MERGE_STATUS: '24',
+      FAKE_GIT_MERGE_IN_PROGRESS: '1',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\ngit merge failed. stashing changes and trying again...\n\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:merge --abort`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('stops before stashing when aborting an in-progress failed merge fails', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_MERGE_STATUS: '24',
+      FAKE_GIT_MERGE_IN_PROGRESS: '1',
+      FAKE_GIT_MERGE_ABORT_STATUS: '29',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\n'
+        + 'git merge failed. stashing changes and trying again...\n'
+        + 'git merge abort failed during merge recovery.\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:merge --abort`,
     ]);
   });
 
@@ -240,16 +403,17 @@ exit "$FAKE_INSTALL_STATUS"
       result.stdout,
       '👟 getting fresh kicks...\n'
         + 'git merge failed. stashing changes and trying again...\n'
-        + 'git merge failed again.\n',
+        + 'git merge failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
-      `${repoDir}|git:add .`,
-      `${repoDir}|git:stash`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
     ]);
   });
 
@@ -264,14 +428,39 @@ exit "$FAKE_INSTALL_STATUS"
       result.stdout,
       '👟 getting fresh kicks...\n'
         + 'git merge failed. stashing changes and trying again...\n'
-        + 'git merge failed again.\n',
+        + 'git stash failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
-      `${repoDir}|git:add .`,
-      `${repoDir}|git:stash`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:stash push --include-untracked`,
+    ]);
+  });
+
+  it('stops before retry merge and install when the fallback checkout fails', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_MERGE_STATUS: '24',
+      FAKE_GIT_RETRY_CHECKOUT_STATUS: '27',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\n'
+        + 'git merge failed. stashing changes and trying again...\n'
+        + 'git checkout failed during merge recovery.\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
     ]);
   });
 });
