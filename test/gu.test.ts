@@ -139,6 +139,22 @@ exit 42
 `);
   };
 
+  const installDefaultIdBallinConfigCommand = () => {
+    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
+if [ "$1" != 'get' ]; then
+  printf '%s\\n' 'Unexpected ballin_config action' >&2
+  exit 2
+elif [ "$2" = 'gu.id' ]; then
+  printf '%s\\n' 'null'
+elif [ "$2" = 'gu.url' ]; then
+  printf '%s\\n' 'https://example.test/gists'
+else
+  printf '%s\\n' 'Unexpected ballin_config call' >&2
+  exit 2
+fi
+`);
+  };
+
   const removeBallinConfigCommand = () => {
     fs.rmSync(path.join(testBinDir, 'ballin_config'));
   };
@@ -359,6 +375,18 @@ done
         + 'gu: missing config value gu.id\n'
         + 'gu: missing config value gu.url\n',
     );
+    assert.deepEqual(openCalls(), []);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('treats a default null Gist ID as missing when opening', () => {
+    installDefaultIdBallinConfigCommand();
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu: missing config value gu.id\n');
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
   });

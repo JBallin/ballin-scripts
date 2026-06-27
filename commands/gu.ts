@@ -124,7 +124,8 @@ const configValue = (key: string): ConfigValueResult => {
   if (result.status !== 0) {
     return { value: '' };
   }
-  return { value: result.stdout.trim() };
+  const value = result.stdout.trim();
+  return { value: value === 'null' ? '' : value };
 };
 
 const guConfig = (): GuConfigResult => {
