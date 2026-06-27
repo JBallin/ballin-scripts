@@ -493,8 +493,20 @@ const runGuCli = (args = process.argv.slice(2)): void => {
     return;
   }
 
+  if (command === 'open' && args.length !== 1) {
+    writeStderrLine('gu open: expected no arguments');
+    process.exitCode = 1;
+    return;
+  }
+
   if (command === 'read' && !args[1]) {
     process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === 'read' && args.length !== 2) {
+    writeStderrLine('gu read: expected exactly one filename');
     process.exitCode = 1;
     return;
   }

@@ -311,6 +311,16 @@ done
     assert.deepEqual(gistReads(), []);
   });
 
+  it('fails open when extra arguments are provided', () => {
+    const result = runGu({ args: ['open', 'extra'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu open: expected no arguments\n');
+    assert.deepEqual(openCalls(), []);
+    assert.deepEqual(gistReads(), []);
+  });
+
   it('remains executable through the installed symlink model', () => {
     const linkPath = path.join(testBinDir, 'gu-link');
     fs.symlinkSync(guPath, linkPath);
@@ -400,6 +410,15 @@ kill -TERM "$$"
     assertGuSucceeded(result);
     assert.equal(result.stdout, 'set number\n');
     assert.deepEqual(gistReads(), ['vimrc']);
+  });
+
+  it('fails read when extra arguments are provided', () => {
+    const result = runGu({ args: ['read', 'vimrc', 'extra'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu read: expected exactly one filename\n');
+    assert.deepEqual(gistReads(), []);
   });
 
   it('streams large Gist files when reading a named file', () => {
