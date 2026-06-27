@@ -14,8 +14,8 @@ that owns them, config code lives under `config/`, and the Mocha tests in
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
 - Run `npm test` after changes to code, config, scripts, or tests.
-- For docs-only changes, skip `npm test`; use focused review or formatting
-  checks instead.
+- For docs-only changes such as README or guide edits, skip local validation
+  and rely on CI for automated checks.
 - TypeScript is checked with `tsc --noEmit` as part of `npm test`; production
   commands must remain runnable directly by Node without generated JavaScript,
   `dist/`, `ts-node`, `tsx`, Babel, or a bundler.
