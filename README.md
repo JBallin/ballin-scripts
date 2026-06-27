@@ -2,19 +2,19 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
-`ballin-scripts` is a personal macOS CLI for keeping a development machine
-reproducible and current. It backs up dotfiles, editor settings, Homebrew state,
-npm globals, and related configuration to a private Gist, then automates routine
-updates.
+`ballin-scripts` helps recreate and maintain a macOS development environment
+with minimal manual setup. It backs up dotfiles, editor settings, Homebrew
+state, npm globals, and related configuration to a private Gist, then automates
+routine updates.
 
-Core workflow:
+Core commands:
 
-- `up` updates the local development environment.
-- `gu` snapshots the configuration needed to recreate it.
+- `up` updates the development environment.
+- `gu` snapshots it to a private Gist.
 
 ## Installation
 
-Run the [install script](install.sh) using cURL:
+Install with:
 
 ```shell
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
@@ -72,7 +72,7 @@ No updates are available.
 
 ### Update with `up`
 
-`up` runs the update tasks that are useful on a macOS development machine:
+`up` automates common maintenance tasks for a macOS development machine:
 Homebrew upgrades and cleanup, Homebrew health checks, App Store updates through
 `mas`, macOS updates, `ballin-scripts` updates, optional Node.js LTS updates,
 optional global npm package updates, and optional `gu` backups.
@@ -122,5 +122,5 @@ gu read zshrc.sh
 | `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
 | `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
 | `ballin_config` | Reads and updates local `ballin-scripts` settings. |
-| `ballin_update` | Pulls the latest `ballin-scripts` changes and reruns installation. |
+| `ballin_update` | Pulls the latest `ballin-scripts` changes and reruns the installer. |
 | `ballin_uninstall` | Removes installed command symlinks and the local checkout. |
