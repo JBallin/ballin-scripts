@@ -15,6 +15,9 @@ type SpawnResult = {
 
 type SpawnOptions = Omit<SpawnSyncOptionsWithStringEncoding, 'encoding' | 'shell'>;
 
+const commandPermissionDeniedStatus = 126;
+const commandNotFoundStatus = 127;
+
 const runCommand = (
   command: string,
   args: string[] = [],
@@ -28,6 +31,14 @@ const isExecutable = (candidate: string): boolean => {
   try {
     fs.accessSync(candidate, fs.constants.X_OK);
     return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+};
+
+const isDirectory = (candidate: string): boolean => {
+  try {
+    return fs.statSync(candidate).isDirectory();
   } catch {
     return false;
   }
@@ -69,6 +80,42 @@ const progress = (text: string): void => {
   process.stdout.write(`\n==> ${text}\n`);
 };
 
+const reportSpawnError = (command: string, error: Error): number => {
+  const errorCode = (error as { code?: string }).code;
+  if (errorCode === 'EACCES') {
+    writeStderrLine(`${command}: Permission denied`);
+    return commandPermissionDeniedStatus;
+  }
+  if (errorCode === 'ENOENT') {
+    writeStderrLine(`${command}: command not found`);
+    return commandNotFoundStatus;
+  }
+  writeStderrLine(error.message);
+  return 1;
+};
+
+const spawnResultStatus = (result: SpawnResult): number => {
+  if (result.signal) {
+    const signalNumber = os.constants.signals[result.signal];
+    if (typeof signalNumber === 'number') {
+      return 128 + signalNumber;
+    }
+  }
+  return result.status ?? 1;
+};
+
+const runVisibleCommand = (
+  command: string,
+  args: string[] = [],
+  options: SpawnOptions = {},
+): number => {
+  const result = runCommand(command, args, { ...options, stdio: 'inherit' });
+  if (result.error) {
+    return reportSpawnError(command, result.error);
+  }
+  return spawnResultStatus(result);
+};
+
 const ensureDir = (directory: string): void => {
   fs.mkdirSync(directory, { recursive: true });
 };
@@ -85,11 +132,15 @@ const removeTempFile = (filePath: string): void => {
 module.exports = {
   commandExists,
   ensureDir,
+  isDirectory,
   makeTempFile,
   progress,
   readCommandOutput,
+  reportSpawnError,
   removeTempFile,
   runCommand,
+  runVisibleCommand,
+  spawnResultStatus,
   writeStderrLine,
   writeStdoutLine,
 };
