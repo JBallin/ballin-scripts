@@ -5,27 +5,31 @@ const os = require('os');
 const path = require('path');
 
 const updatePath = path.join(__dirname, '..', 'bin', 'ballin_update');
+type SpawnUpdateOverrides = Omit<
+  import('child_process').SpawnSyncOptionsWithStringEncoding,
+  'encoding' | 'env'
+>;
 
 describe('ballin_update', () => {
-  let testDir;
-  let homeDir;
-  let repoDir;
-  let toolDir;
-  let commandLogPath;
-  let mergeCountPath;
+  let testDir: string;
+  let homeDir: string;
+  let repoDir: string;
+  let toolDir: string;
+  let commandLogPath: string;
+  let mergeCountPath: string;
 
-  const commandPath = (name) => process.env.PATH
+  const commandPath = (name: string) => (process.env.PATH ?? '')
     .split(path.delimiter)
     .map((directory) => path.join(directory, name))
     .find((candidate) => fs.existsSync(candidate));
 
-  const writeExecutable = (name, contents, directory = toolDir) => {
+  const writeExecutable = (name: string, contents: string, directory = toolDir) => {
     const executablePath = path.join(directory, name);
     fs.writeFileSync(executablePath, contents, { mode: 0o755 });
     return executablePath;
   };
 
-  const linkCommand = (name) => {
+  const linkCommand = (name: string) => {
     const sourcePath = commandPath(name);
     assert.exists(sourcePath, `${name} is required to run the ballin_update test harness`);
     fs.symlinkSync(sourcePath, path.join(toolDir, name));
@@ -82,7 +86,12 @@ exit "$FAKE_INSTALL_STATUS"
 `, repoDir);
   };
 
-  const runUpdate = (env = {}, commandPath = updatePath, spawnOptions = {}) => spawnSync(commandPath, [], {
+  const runUpdate = (
+    env: NodeJS.ProcessEnv = {},
+    commandPath = updatePath,
+    spawnOptions: SpawnUpdateOverrides = {},
+  ) => spawnSync(commandPath, [], {
+    ...spawnOptions,
     encoding: 'utf8',
     env: {
       HOME: homeDir,
@@ -98,7 +107,6 @@ exit "$FAKE_INSTALL_STATUS"
       FAKE_INSTALL_STATUS: '0',
       ...env,
     },
-    ...spawnOptions,
   });
 
   const commandLog = () => (

@@ -5,9 +5,10 @@ const os = require('os');
 const path = require('path');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
+type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
 
 describe('ballin', () => {
-  const assertHelpOutput = (result) => {
+  const assertHelpOutput = (result: StringSpawnResult) => {
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'A Collection of Ballin Scripts!');
     assert.include(result.stdout, 'ballin_update');
