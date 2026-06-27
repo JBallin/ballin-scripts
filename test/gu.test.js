@@ -17,6 +17,7 @@ const requiredCommands = [
   'rm',
   'ls',
   'tail',
+  'node',
 ];
 
 describe('gu', () => {
@@ -71,7 +72,10 @@ if [ "$2" != 'test-gist-id' ]; then
 fi
 if [ "$1" = '-r' ]; then
   if [ "$#" -eq 2 ]; then
-    if [ "$FAKE_GIST_INITIAL_READ_FAIL" = 'true' ]; then exit 17; fi
+    if [ "$FAKE_GIST_INITIAL_READ_FAIL" = 'true' ]; then
+      printf '%s\\n' 'simulated initial gist read failure' >&2
+      exit 17
+    fi
     exit 0
   elif [ "$#" -ne 3 ]; then
     printf '%s\\n' 'Unexpected gist read arguments' >&2
@@ -89,6 +93,10 @@ elif [ "$1" = '-u' ]; then
     printf '%s\\n' 'Unexpected gist upload arguments' >&2
     exit 2
   fi
+  if [ "$FAKE_GIST_UPLOAD_FAIL" = 'true' ]; then
+    printf '%s\\n' 'simulated gist upload failure' >&2
+    exit 19
+  fi
   cache_file="$3"
   file_name="\${cache_file##*/}"
   cp "$cache_file" "$FAKE_GIST_STORAGE_DIR/$file_name"
@@ -103,6 +111,13 @@ fi
   const installFakeOpenCommand = () => {
     writeTestExecutable('open', `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_OPEN_LOG"
+`);
+  };
+
+  const installFailingBallinConfigCommand = () => {
+    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
+printf 'ballin_config failed for %s\\n' "$2" >&2
+exit 42
 `);
   };
 
@@ -198,8 +213,11 @@ done
     brewPrefixFail = false,
     completionDir,
     gistInitialReadFail = false,
-  } = {}) => spawnSync(guPath, args, {
+    gistUploadFail = false,
+    commandPath = guPath,
+  } = {}) => spawnSync(commandPath, args, {
     encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
     env: {
       HOME: testHomeDir,
       PATH: testBinDir,
@@ -211,6 +229,7 @@ done
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
       FAKE_GIST_INITIAL_READ_FAIL: gistInitialReadFail ? 'true' : 'false',
+      FAKE_GIST_UPLOAD_FAIL: gistUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_OPEN_LOG: openLogPath,
       FAKE_BALLIN_LOG: ballinLogPath,
@@ -269,6 +288,50 @@ done
     assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
   });
 
+  it('remains executable through the installed symlink model', () => {
+    const linkPath = path.join(testBinDir, 'gu-link');
+    fs.symlinkSync(guPath, linkPath);
+    seedFakeGistFile('vimrc', 'set number\n');
+
+    const result = runGu({ args: ['read', 'vimrc'], commandPath: linkPath });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'set number\n');
+  });
+
+  it('uses a shell-style signal exit status for open', () => {
+    writeTestExecutable('open', `#!/usr/bin/env bash
+kill -TERM "$$"
+`);
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 143);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.equal(result.stderr, '');
+  });
+
+  it('reports missing open like the shell did', () => {
+    fs.unlinkSync(path.join(testBinDir, 'open'));
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.equal(result.stderr, 'open: command not found\n');
+  });
+
+  it('reports permission-denied open like the shell did', () => {
+    fs.writeFileSync(path.join(testBinDir, 'open'), 'not executable\n', { mode: 0o644 });
+    fs.chmodSync(path.join(testBinDir, 'open'), 0o644);
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 126);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.equal(result.stderr, 'open: Permission denied\n');
+  });
+
   it('prints help through the ballin command', () => {
     const result = runGu({ args: ['help'] });
 
@@ -284,6 +347,19 @@ done
 
     assertGuSucceeded(result);
     assert.equal(result.stdout, 'set number\n');
+    assert.deepEqual(gistReads(), ['vimrc']);
+  });
+
+  it('streams large Gist files when reading a named file', () => {
+    const largeSnapshot = `${'r'.repeat(1024 * 1024 + 1)}\n`;
+    seedFakeGistFile('vimrc', largeSnapshot);
+
+    const result = runGu({ args: ['read', 'vimrc'] });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout.length, largeSnapshot.length);
+    assert.equal(result.stdout.slice(0, 1), 'r');
+    assert.equal(result.stdout.slice(-1), '\n');
     assert.deepEqual(gistReads(), ['vimrc']);
   });
 
@@ -311,9 +387,26 @@ done
 
     assert.equal(result.status, 0);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
-    assert.equal(result.stderr, '');
+    assert.equal(result.stderr, 'simulated initial gist read failure\n');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves config stderr when config reads fail', () => {
+    installFailingBallinConfigCommand();
+
+    const result = runGu();
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(
+      result.stderr,
+      'ballin_config failed for gu.id\n'
+        + 'ballin_config failed for gu.url\n'
+        + 'Unexpected Gist ID\n',
+    );
+    assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistUploads(), []);
   });
 
@@ -632,6 +725,20 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), []);
   });
 
+  it('streams large Gist files when hydrating a missing cache', () => {
+    const largeSnapshot = `${'h'.repeat(1024 * 1024 + 1)}\n`;
+    writeSnapshot(largeSnapshot);
+    seedFakeGist(largeSnapshot);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✔ zshrc\n');
+    assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistUploads(), []);
+  });
+
   it('compares against hydrated Gist content before uploading a change', () => {
     writeSnapshot('new value\n');
     seedFakeGist('old value\n');
@@ -667,6 +774,57 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('keeps current shell behavior when a Gist upload fails', () => {
+    writeSnapshot('export COLOR=blue\n');
+    seedGuCache('export COLOR=red\n');
+    seedFakeGist('export COLOR=red\n');
+
+    const result = runGu({ gistUploadFail: true });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, 'simulated gist upload failure\n');
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=red\n');
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('streams large snapshot output without the default spawn buffer limit', () => {
+    const largeSnapshot = `${'x'.repeat(1024 * 1024 + 1)}\n`;
+    writeSnapshot(largeSnapshot);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assert.equal(fs.statSync(fakeGistFilePath()).size, largeSnapshot.length);
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('streams large snapshot stderr without the default spawn buffer limit', () => {
+    writeAppSupportFile(['Code', 'User', 'settings.json'], '{}\n');
+    writeTestExecutable('code', `#!/usr/bin/env bash
+printf 'publisher.large-stderr\\n'
+printf '%*s\\n' 1048577 '' >&2
+`);
+
+    const result = runGu();
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, '💾 vs_extensions\n');
+    assert.equal(result.stderr.length, 1024 * 1024 + 2);
+    assert.equal(result.stderr.slice(0, 1), ' ');
+    assert.equal(result.stderr.slice(-1), '\n');
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'vs_extensions'), 'utf8'),
+      'publisher.large-stderr\n',
+    );
+    assert.include(gistUploads(), 'vs_extensions');
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
   });
 
   it('reports and uploads non-empty output becoming empty', () => {
