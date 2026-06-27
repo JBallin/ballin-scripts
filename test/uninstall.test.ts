@@ -6,32 +6,36 @@ const path = require('path');
 const { relocateSystemPath } = require('../commands/ballin_uninstall.ts');
 
 const uninstallPath = path.join(__dirname, '..', 'bin', 'ballin_uninstall');
+type RunUninstallOptions = {
+  brewPrefix?: string;
+  commandPath?: string;
+};
 
 describe('ballin_uninstall', () => {
-  let testDir;
-  let homeDir;
-  let repoDir;
-  let toolDir;
-  let systemRoot;
+  let testDir: string;
+  let homeDir: string;
+  let repoDir: string;
+  let toolDir: string;
+  let systemRoot: string;
 
-  const commandPath = (name) => process.env.PATH
+  const commandPath = (name: string) => (process.env.PATH ?? '')
     .split(path.delimiter)
     .map((directory) => path.join(directory, name))
     .find((candidate) => fs.existsSync(candidate));
 
-  const writeExecutable = (name, contents) => {
+  const writeExecutable = (name: string, contents: string) => {
     const executablePath = path.join(toolDir, name);
     fs.writeFileSync(executablePath, contents, { mode: 0o755 });
     return executablePath;
   };
 
-  const createCommand = (name) => {
+  const createCommand = (name: string) => {
     const filePath = path.join(repoDir, 'bin', name);
     fs.writeFileSync(filePath, `${name}\n`);
     return filePath;
   };
 
-  const runUninstall = ({ brewPrefix, commandPath: command = uninstallPath } = {}) => {
+  const runUninstall = ({ brewPrefix, commandPath: command = uninstallPath }: RunUninstallOptions = {}) => {
     if (brewPrefix) {
       writeExecutable('brew', `#!/usr/bin/env bash
 if [ "$1" = '--prefix' ]; then
@@ -143,10 +147,10 @@ exit 2
     }
   });
 
-  [
+  ([
     { name: 'Intel Homebrew', prefix: '/usr/local', relativeBin: ['usr', 'local', 'bin'] },
     { name: 'Apple Silicon Homebrew', prefix: '/opt/homebrew', relativeBin: ['opt', 'homebrew', 'bin'] },
-  ].forEach(({ name, prefix, relativeBin }) => {
+  ] as { name: string; prefix: string; relativeBin: string[] }[]).forEach(({ name, prefix, relativeBin }) => {
     it(`handles the ${name} location without checking it twice`, () => {
       const binDir = path.join(systemRoot, ...relativeBin);
       const ballin = createCommand('ballin');

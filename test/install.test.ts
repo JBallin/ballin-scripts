@@ -5,21 +5,25 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
+type RunInstallOptions = {
+  env?: NodeJS.ProcessEnv;
+  input?: string;
+};
 
 describe('install', () => {
-  let homeDir;
-  let binDir;
-  let repoDir;
-  let commandLogPath;
+  let homeDir: string;
+  let binDir: string;
+  let repoDir: string;
+  let commandLogPath: string;
 
-  const writeExecutable = (name, contents, directory = binDir) => {
+  const writeExecutable = (name: string, contents: string, directory = binDir) => {
     const executablePath = path.join(directory, name);
     fs.writeFileSync(executablePath, contents, { mode: 0o755 });
     return executablePath;
   };
 
-  const linkCommand = (name, directory = binDir) => {
-    const commandPath = process.env.PATH
+  const linkCommand = (name: string, directory = binDir) => {
+    const commandPath = (process.env.PATH ?? '')
       .split(path.delimiter)
       .map((commandDirectory) => path.join(commandDirectory, name))
       .find((candidate) => fs.existsSync(candidate));
@@ -55,7 +59,7 @@ esac
 `, path.join(repoDir, 'bin'));
   };
 
-  const runInstall = ({ env = {}, input } = {}) => spawnSync(installPath, [], {
+  const runInstall = ({ env = {}, input }: RunInstallOptions = {}) => spawnSync(installPath, [], {
     encoding: 'utf8',
     input,
     env: {
