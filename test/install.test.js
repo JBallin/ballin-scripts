@@ -157,7 +157,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created 'ballin.config.json'");
-    assert.equal(result.stdout.match(/Optional capabilities:/g).length, 1);
+    assert.equal(result.stdout.match(/👀 Optional capabilities:/g).length, 1);
     assert.include(result.stdout, `symlinked binaries into ${binDir}`);
     assert.include(result.stdout, '😎 ballin!');
     assert.deepEqual(
@@ -180,7 +180,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     const result = runInstall();
 
     assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Optional capabilities:');
+    assert.notInclude(result.stdout, '👀 Optional capabilities:');
     assert.notInclude(result.stdout, "Created 'ballin.config.json'");
     assert.include(result.stdout, '😎 ballin!');
   });
@@ -196,7 +196,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, updateOutput.trim());
-    assert.equal(result.stdout.match(/Optional capabilities:/g).length, 1);
+    assert.equal(result.stdout.match(/👀 Optional capabilities:/g).length, 1);
     assert.include(result.stdout, 'docs/optional-capabilities.md');
   });
 

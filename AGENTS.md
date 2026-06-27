@@ -3,10 +3,11 @@
 ## Repo map
 
 `ballin-scripts` is a small personal automation toolkit. User-facing command
-names live as stable extensionless files under `bin/`, with Bash implementations
-still allowed there. Migrated Node-backed command implementations live under
-`commands/`, config code lives under `config/`, and the Mocha tests in `test/`
-exercise scripts, shims, and configuration helpers.
+names live as stable extensionless files under `bin/`. Commands that have not
+been migrated may still keep their Bash implementation there. Migrated
+Node-backed command implementations live under `commands/` or the feature folder
+that owns them, config code lives under `config/`, and the Mocha tests in
+`test/` exercise scripts, shims, and configuration helpers.
 
 ## Local commands
 
@@ -26,6 +27,11 @@ exercise scripts, shims, and configuration helpers.
   `softwareupdate`, symlink, or other network-affecting operations must use
   temporary directories, fixture files, complete child-process environments, and
   command stubs instead of the real user environment.
+- Do not manually smoke-test `bin/ballin_uninstall`, `bin/ballin_update`,
+  `install.sh`, `bin/up`, or `bin/gu` against the live checkout. If a direct
+  invocation is needed, run it through the test harness with temp roots such as
+  `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, isolated config, and stubbed external
+  commands.
 - Follow the existing `spawnSync` harness style, using hooks like
   `BALLIN_TEST_CONFIG_PATH`, `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, and command-log
   stubs before adding new test escape hatches.
@@ -41,6 +47,9 @@ exercise scripts, shims, and configuration helpers.
   feature folder that owns it. TypeScript source under `commands/` and `config/`
   is executed directly by Node. Preserve executable modes and existing
   shebang/symlink coverage for user-facing commands.
+- During command migrations, preserve behavior first and keep unrelated
+  refactors or behavior changes in separate issues or PRs unless they are needed
+  for safety, testability, or parity.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,

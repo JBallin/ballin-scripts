@@ -15,12 +15,23 @@ const runQuiet = (command: string, args: string[], cwd: string): number | null =
   }).status
 );
 
+const runFetch = (cwd: string): number | null => (
+  runCommand('git', ['fetch'], {
+    cwd,
+    env: {
+      ...process.env,
+      PWD: cwd,
+    },
+    stdio: ['inherit', 'ignore', 'inherit'],
+  }).status
+);
+
 const runBallinUpdateCli = (): void => {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
 
   writeStdoutLine('👟 getting fresh kicks...');
 
-  if (runQuiet('git', ['fetch'], repoDir) !== 0) {
+  if (runFetch(repoDir) !== 0) {
     writeStdoutLine('git fetch failed');
     process.exitCode = 1;
     return;

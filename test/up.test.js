@@ -15,12 +15,12 @@ describe('up', () => {
     fs.writeFileSync(path.join(binDir, name), contents, { mode: 0o755 });
   };
 
-  const installCommandStub = (name, { output = '', status = 0 } = {}) => {
-    writeTestExecutable(name, `#!/usr/bin/env bash
+  const installCommandStub = (name, { output = '', status = 0, directory = binDir } = {}) => {
+    fs.writeFileSync(path.join(directory, name), `#!/usr/bin/env bash
 printf '%s|%s|%s\\n' "${name}" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
 ${output ? `printf '%s\\n' '${output}'` : ''}
 exit ${status}
-`);
+`, { mode: 0o755 });
   };
 
   beforeEach(() => {
@@ -29,6 +29,7 @@ exit ${status}
     logPath = path.join(tempDir, 'commands.log');
     fs.mkdirSync(binDir);
     fs.symlinkSync('/bin/bash', path.join(binDir, 'bash'));
+    fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
     writeTestExecutable('ballin_config', `#!/usr/bin/env bash
 case "$2" in
   up.cleanup) printf '%s\\n' "\${TEST_UP_CLEANUP:-false}" ;;
@@ -69,9 +70,42 @@ esac
     );
   };
 
+  const installPathUpdatingNvmStub = (nvmDir, nvmBinDir) => {
+    fs.mkdirSync(nvmDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(nvmDir, 'nvm.sh'),
+      `nvm() {
+  printf '%s\\n' "$*" >> "$NVM_TEST_LOG"
+  export PATH="${nvmBinDir}:$PATH"
+}
+`,
+    );
+  };
+
   const commandLog = () => (
     fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : []
   );
+
+  it('remains executable through the installed symlink model', () => {
+    const installBinDir = path.join(tempDir, 'installed-bin');
+    const symlinkPath = path.join(installBinDir, 'up');
+    fs.mkdirSync(installBinDir);
+    fs.symlinkSync(upPath, symlinkPath);
+
+    const result = spawnSync(symlinkPath, [], {
+      encoding: 'utf8',
+      env: {
+        HOME: tempDir,
+        PATH: binDir,
+        TEST_UP_NVM: 'false',
+        UP_TEST_LOG: logPath,
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), []);
+  });
 
   it('sets Homebrew flags, preserves output, cleans conditionally, and runs doctor', () => {
     installCommandStub('brew', { output: 'visible Homebrew output' });
@@ -86,6 +120,23 @@ esac
       'brew|1,1|upgrade',
       'brew|1,1|cleanup',
       'brew|1,1|doctor',
+    ]);
+  });
+
+  it('passes exported Homebrew flags to later integrations', () => {
+    installCommandStub('brew');
+    installCommandStub('ballin_update');
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_BALLIN: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.deepEqual(commandLog(), [
+      'brew|1,1|upgrade',
+      'brew|1,1|doctor',
+      'ballin_update|1,1|',
     ]);
   });
 
@@ -161,6 +212,61 @@ esac
     ]);
   });
 
+  it('uses gu as the final exit status when gu is enabled', () => {
+    installCommandStub('gu', { output: 'simulated gu failure', status: 17 });
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 17);
+    assert.include(result.stdout, 'simulated gu failure');
+    assert.deepEqual(commandLog(), [
+      'gu|,|',
+    ]);
+  });
+
+  it('uses a shell-style signal exit status for final gu', () => {
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+kill -TERM "$$"
+`);
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 143);
+    assert.include(result.stdout, 'Backing up development environment');
+  });
+
+  it('reports missing unguarded integrations like the shell did', () => {
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 127);
+    assert.include(result.stdout, 'Backing up development environment');
+    assert.include(result.stderr, 'gu: command not found');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('reports permission-denied unguarded integrations like the shell did', () => {
+    fs.writeFileSync(path.join(binDir, 'gu'), '#!/usr/bin/env bash\n', { mode: 0o644 });
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 126);
+    assert.include(result.stdout, 'Backing up development environment');
+    assert.include(result.stderr, 'gu: Permission denied');
+    assert.deepEqual(commandLog(), []);
+  });
+
   it('loads nvm from NVM_DIR and updates Node.js LTS', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     installNvmStub(nvmDir);
@@ -170,6 +276,74 @@ esac
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.equal(fs.readFileSync(logPath, 'utf8'), 'install --lts\n');
+  });
+
+  it('keeps nvm PATH changes for the npm update', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const nvmBinDir = path.join(tempDir, 'nvm-bin');
+    fs.mkdirSync(nvmBinDir);
+    installPathUpdatingNvmStub(nvmDir, nvmBinDir);
+    installCommandStub('npm', { directory: nvmBinDir });
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_NPM: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.include(result.stdout, 'Updating global npm packages');
+    assert.equal(fs.readFileSync(logPath, 'utf8').split('\n')[0], 'install --lts');
+    assert.deepEqual(commandLog().slice(1), [
+      'npm|,|update -g',
+    ]);
+  });
+
+  it('keeps nvm PATH changes for later gu backups', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const nvmBinDir = path.join(tempDir, 'nvm-bin');
+    const nvmNpmPath = path.join(nvmBinDir, 'npm');
+    fs.mkdirSync(nvmBinDir);
+    installPathUpdatingNvmStub(nvmDir, nvmBinDir);
+    installCommandStub('npm', { directory: nvmBinDir });
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+printf 'gu-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
+`);
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.deepEqual(commandLog().slice(1), [
+      `gu-npm|${nvmNpmPath}`,
+    ]);
+  });
+
+  it('keeps running later integrations when nvm env capture fails', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const brokenNodeDir = path.join(tempDir, 'broken-node');
+    fs.mkdirSync(brokenNodeDir);
+    installPathUpdatingNvmStub(nvmDir, brokenNodeDir);
+    fs.writeFileSync(path.join(brokenNodeDir, 'node'), `#!/usr/bin/env bash
+exit 42
+`, { mode: 0o755 });
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
+`);
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.deepEqual(commandLog().slice(1), [
+      'gu still ran',
+    ]);
   });
 
   it('warns when nvm is enabled but cannot be loaded', () => {
@@ -193,5 +367,28 @@ esac
     assert.notInclude(result.stdout, 'Updating Node.js LTS');
     assert.notInclude(result.stderr, 'unable to load nvm');
     assert.isFalse(fs.existsSync(logPath));
+  });
+
+  it('surfaces ballin_config stderr when config reads fail', () => {
+    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
+printf '%s\\n' 'broken config' >&2
+exit 42
+`);
+
+    const result = runUp();
+
+    assert.equal(result.status, 0);
+    assert.include(result.stderr, 'broken config');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('reports missing ballin_config reads like the shell did', () => {
+    fs.rmSync(path.join(binDir, 'ballin_config'));
+
+    const result = runUp();
+
+    assert.equal(result.status, 0);
+    assert.include(result.stderr, 'ballin_config: command not found');
+    assert.deepEqual(commandLog(), []);
   });
 });

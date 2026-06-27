@@ -7,6 +7,7 @@ import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
 
 type SpawnResult = {
   status: number | null;
+  signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
   error?: Error;
