@@ -3,11 +3,12 @@
 ## Repo map
 
 `ballin-scripts` is a small personal automation toolkit. User-facing command
-names live as stable extensionless files under `bin/`. Commands that have not
-been migrated may still keep their Bash implementation there. Migrated
-Node-backed command implementations live under `commands/` or the feature folder
-that owns them, config code lives under `config/`, and the Mocha tests in
-`test/` exercise scripts, shims, and configuration helpers.
+names live as stable extensionless files under `bin/`. Current `bin/*`
+commands are tiny Node shims; command implementations live under `commands/` or
+the feature folder that owns them, config code lives under `config/`, and the
+Mocha tests in `test/` exercise scripts, shims, and configuration helpers.
+`install.sh` remains Bash bootstrap/install glue rather than part of the
+installed command-shim surface.
 
 ## Local commands
 
@@ -42,14 +43,18 @@ that owns them, config code lives under `config/`, and the Mocha tests in
   for behavior changes; watch quoting, globbing, paths with spaces, and
   executable modes on `bin/*` and `install.sh`.
 - Keep extensionless `bin/*` commands stable unless a change intentionally
-  updates their public behavior. When migrating a command to Node, keep `bin/*`
-  as a tiny shim and put the typed implementation under `commands/` or the
-  feature folder that owns it. TypeScript source under `commands/` and `config/`
-  is executed directly by Node. Preserve executable modes and existing
-  shebang/symlink coverage for user-facing commands.
-- During command migrations, preserve behavior first and keep unrelated
-  refactors or behavior changes in separate issues or PRs unless they are needed
-  for safety, testability, or parity.
+  updates their public behavior. Keep `bin/*` as tiny shims and put typed
+  implementations under `commands/` or the feature folder that owns them.
+  TypeScript source under `commands/` and `config/` is executed directly by
+  Node. Preserve executable modes and existing shebang/symlink coverage for
+  user-facing commands.
+- For post-migration command work, preserve behavior unless an issue explicitly
+  asks for a behavior change; keep broad refactors, product changes, and cleanup
+  in focused issues or PRs.
+- Treat `install.sh` changes as installer/bootstrap work. Do not assume it
+  should follow the same Node-shim pattern as installed `bin/*` commands; update
+  README install guidance only when the installer behavior intentionally
+  changes.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
