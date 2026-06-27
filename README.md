@@ -10,10 +10,11 @@ tasks that keep the machine current.
 Together, `up` and `gu` create a repeatable loop: update the environment, then
 preserve the state needed to rebuild it.
 
-## Typical use
+## Example output
 
 With optional integrations enabled, `up` updates the machine and finishes by
-backing up the development environment:
+backing up the development environment. Output varies by installed tools and
+settings.
 
 ```shell
 $ up
