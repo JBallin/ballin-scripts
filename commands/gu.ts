@@ -1,4 +1,5 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const {
   commandExists,
@@ -10,6 +11,9 @@ const {
   writeStderrLine,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
+
+const commandPermissionDeniedStatus = 126;
+const commandNotFoundStatus = 127;
 
 type SnapshotCommand = {
   fileName: string;
@@ -52,12 +56,44 @@ const fileSuggestions = `
   zshrc.sh`;
 
 const configValue = (key: string): string => (
-  readCommandOutput('ballin_config', ['get', key])?.trim() ?? ''
+  readCommandOutput('ballin_config', ['get', key], { stdio: ['ignore', 'pipe', 'inherit'] })?.trim() ?? ''
 );
 
 const runGist = (args: string[], options = {}): ReturnType<typeof runCommand> => (
   runCommand('gist', args, options)
 );
+
+const reportSpawnError = (command: string, error: Error): number => {
+  const errorCode = (error as { code?: string }).code;
+  if (errorCode === 'EACCES') {
+    writeStderrLine(`${command}: Permission denied`);
+    return commandPermissionDeniedStatus;
+  }
+  if (errorCode === 'ENOENT') {
+    writeStderrLine(`${command}: command not found`);
+    return commandNotFoundStatus;
+  }
+  writeStderrLine(error.message);
+  return 1;
+};
+
+const shellStyleExitStatus = (result: ReturnType<typeof runCommand>): number => {
+  if (result.signal) {
+    const signalNumber = os.constants.signals[result.signal];
+    if (typeof signalNumber === 'number') {
+      return 128 + signalNumber;
+    }
+  }
+  return result.status ?? 1;
+};
+
+const runVisible = (command: string, args: string[] = []): number => {
+  const result = runCommand(command, args, { stdio: 'inherit' });
+  if (result.error) {
+    return reportSpawnError(command, result.error);
+  }
+  return shellStyleExitStatus(result);
+};
 
 const fileExists = (filePath: string): boolean => {
   try {
@@ -96,6 +132,9 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
   }
   if (result.stderr && !(snapshot.suppressStderrOnSuccess && result.status === 0)) {
     process.stderr.write(result.stderr);
+  }
+  if (result.error) {
+    reportSpawnError(snapshot.command, result.error);
   }
 
   return result.status === 0 && !result.error;
@@ -297,7 +336,11 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   const id = configValue('gu.id');
   const url = `${configValue('gu.url')}/${id}`;
 
-  if (runGist(['-r', id], { stdio: 'ignore' }).status !== 0) {
+  const initialGistRead = runGist(['-r', id], { stdio: 'ignore' });
+  if (initialGistRead.error) {
+    reportSpawnError('gist', initialGistRead.error);
+  }
+  if (initialGistRead.status !== 0 || initialGistRead.error) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
     return;
   }
@@ -305,8 +348,7 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   if (args.length > 0) {
     if (args[0] === 'open') {
       writeStdoutLine(url);
-      const result = runCommand('open', [url], { stdio: 'inherit' });
-      process.exitCode = result.status ?? 1;
+      process.exitCode = runVisible('open', [url]);
     } else if (args[0] === 'read') {
       if (args[1]) {
         const result = runGist(['-r', id, args[1]]);
@@ -319,8 +361,7 @@ const runGuCli = (args = process.argv.slice(2)): void => {
         process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
       }
     } else if (args[0] === 'help') {
-      const result = runCommand('ballin', [], { stdio: 'inherit' });
-      process.exitCode = result.status ?? 1;
+      process.exitCode = runVisible('ballin');
     }
     return;
   }

@@ -90,6 +90,7 @@ elif [ "$1" = '-u' ]; then
     printf '%s\\n' 'Unexpected gist upload arguments' >&2
     exit 2
   fi
+  if [ "$FAKE_GIST_UPLOAD_FAIL" = 'true' ]; then exit 19; fi
   cache_file="$3"
   file_name="\${cache_file##*/}"
   cp "$cache_file" "$FAKE_GIST_STORAGE_DIR/$file_name"
@@ -104,6 +105,13 @@ fi
   const installFakeOpenCommand = () => {
     writeTestExecutable('open', `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_OPEN_LOG"
+`);
+  };
+
+  const installFailingBallinConfigCommand = () => {
+    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
+printf 'ballin_config failed for %s\\n' "$2" >&2
+exit 42
 `);
   };
 
@@ -199,7 +207,9 @@ done
     brewPrefixFail = false,
     completionDir,
     gistInitialReadFail = false,
-  } = {}) => spawnSync(guPath, args, {
+    gistUploadFail = false,
+    commandPath = guPath,
+  } = {}) => spawnSync(commandPath, args, {
     encoding: 'utf8',
     env: {
       HOME: testHomeDir,
@@ -212,6 +222,7 @@ done
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
       FAKE_GIST_INITIAL_READ_FAIL: gistInitialReadFail ? 'true' : 'false',
+      FAKE_GIST_UPLOAD_FAIL: gistUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_OPEN_LOG: openLogPath,
       FAKE_BALLIN_LOG: ballinLogPath,
@@ -270,6 +281,50 @@ done
     assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
   });
 
+  it('remains executable through the installed symlink model', () => {
+    const linkPath = path.join(testBinDir, 'gu-link');
+    fs.symlinkSync(guPath, linkPath);
+    seedFakeGistFile('vimrc', 'set number\n');
+
+    const result = runGu({ args: ['read', 'vimrc'], commandPath: linkPath });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'set number\n');
+  });
+
+  it('uses a shell-style signal exit status for open', () => {
+    writeTestExecutable('open', `#!/usr/bin/env bash
+kill -TERM "$$"
+`);
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 143);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.equal(result.stderr, '');
+  });
+
+  it('reports missing open like the shell did', () => {
+    fs.unlinkSync(path.join(testBinDir, 'open'));
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.equal(result.stderr, 'open: command not found\n');
+  });
+
+  it('reports permission-denied open like the shell did', () => {
+    fs.writeFileSync(path.join(testBinDir, 'open'), 'not executable\n', { mode: 0o644 });
+    fs.chmodSync(path.join(testBinDir, 'open'), 0o644);
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 126);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.equal(result.stderr, 'open: Permission denied\n');
+  });
+
   it('prints help through the ballin command', () => {
     const result = runGu({ args: ['help'] });
 
@@ -315,6 +370,22 @@ done
     assert.equal(result.stderr, '');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves config stderr when config reads fail', () => {
+    installFailingBallinConfigCommand();
+
+    const result = runGu();
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(
+      result.stderr,
+      'ballin_config failed for gu.id\n'
+        + 'ballin_config failed for gu.url\n',
+    );
+    assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistUploads(), []);
   });
 
@@ -668,6 +739,20 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('keeps current shell behavior when a Gist upload fails', () => {
+    writeSnapshot('export COLOR=blue\n');
+    seedGuCache('export COLOR=red\n');
+    seedFakeGist('export COLOR=red\n');
+
+    const result = runGu({ gistUploadFail: true });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=red\n');
+    assert.deepEqual(gistUploads(), []);
   });
 
   it('reports and uploads non-empty output becoming empty', () => {
