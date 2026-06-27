@@ -42,6 +42,22 @@ fi
 if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
   printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
   shift
+  if [ "$1" = 'configure' ]; then
+    repo_dir="$2"
+    docs_url="$3"
+    if [ ! -f "$repo_dir/ballin.config.json" ]; then
+      if ! cp "$repo_dir/config/.defaultConfig.json" "$repo_dir/ballin.config.json"; then
+        exit 1
+      fi
+      printf "\\n🧠 Created 'ballin.config.json' file in root using default settings\\n"
+      exit 0
+    fi
+    printf '%s' "$FAKE_UPDATE_OUTPUT"
+    if [ -n "$FAKE_UPDATE_OUTPUT" ]; then
+      printf '\\n👀 Docs: %s\\n' "$docs_url"
+    fi
+    exit "$FAKE_NODE_STATUS"
+  fi
   if [ "$1" != 'symlink-binaries' ]; then
     exit 2
   fi
@@ -193,6 +209,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     );
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
     assert.include(commandLog(), 'node:install_setup');
+    assert.include(commandLog(), 'symlink-binaries');
     assert.include(commandLog(), 'gist:-l\n');
   });
 
@@ -240,6 +257,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     assert.include(result.stdout, updateOutput.trim());
     assert.equal(result.stdout.match(/👀 Docs:/g).length, 1);
     assert.include(result.stdout, 'docs/README.md');
+    assert.include(commandLog(), 'configure');
   });
 
   it('stops before Gist and success output when config creation fails', () => {
