@@ -2,10 +2,10 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
-`ballin-scripts` is a personal macOS CLI for making a development machine easy
-to rebuild and simple to keep current. It backs up dotfiles, editor settings,
-Homebrew state, npm globals, and related configuration to a private Gist, then
-runs the update tasks that keep the machine up to date.
+`ballin-scripts` is a personal macOS CLI for keeping a development machine
+reproducible and current. It backs up dotfiles, editor settings, Homebrew state,
+npm globals, and related configuration to a private Gist, then runs the update
+tasks that keep the machine fresh.
 
 Core workflow:
 
