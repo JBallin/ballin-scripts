@@ -160,9 +160,26 @@ done
           read -rep 'Enter your gist ID: ' GIST_ID
           if [ "$(gist -r "$GIST_ID")" == "$(printf '%b' "$GIST_DESCRIPTION")" ]; then
             printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
+            RESTORE_CONFIG='.ballin.config.restore.tmp'
+            PREVIOUS_CONFIG='.ballin.config.restore.previous.tmp'
+            cp 'ballin.config.json' "$PREVIOUS_CONFIG"
+            if gist -r "$GIST_ID" ballin_config > "$RESTORE_CONFIG"; then
+              cp "$RESTORE_CONFIG" 'ballin.config.json'
+              if ! UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.ts"); then
+                cp "$PREVIOUS_CONFIG" 'ballin.config.json'
+                rm -f "$RESTORE_CONFIG" "$PREVIOUS_CONFIG"
+                exit 1
+              fi
+              printf '\n%s\n' '♻️  Restored ballin.config.json from your backup gist.'
+              if [ -n "$UPDATE_RESULT" ]; then
+                printf '\n🙌 %s\n' "$UPDATE_RESULT"
+                printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
+              fi
+            else
+              printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
+            fi
+            rm -f "$RESTORE_CONFIG" "$PREVIOUS_CONFIG"
             "$ballin_config" set gu.id "$GIST_ID"
-            printf '\n%s\n' 'ℹ️  Keeping your local ballin.config.json settings; only the backup gist ID was adopted.'
-            printf '%s\n' '    New defaults stay managed by installer updates, and future gu runs will back up local settings.'
             VALID_GIST_ID=0
           else
             printf "\n⚠️  INVALID: Expected \e[1mgist -r '%s'\e[0m to output:\n%s\n" "$GIST_ID" "$GIST_DESCRIPTION"

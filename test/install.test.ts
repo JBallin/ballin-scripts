@@ -228,7 +228,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     assert.include(result.stdout, 'docs/optional-capabilities.md');
   });
 
-  it('adopts an existing backup gist without restoring remote config values', () => {
+  it('restores config values from an adopted backup gist', () => {
     installBaseCommands();
     installAdoptableConfigCommand();
     fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
@@ -238,8 +238,8 @@ case "$1:$2" in
   -l:) exit 0 ;;
   -r:returning-gist-id)
     if [ "$3" = 'ballin_config' ]; then
-      printf '%s\\n' 'remote config should not be restored' >&2
-      exit 3
+      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".restored-gist","url":"https://gist.example.test"}}'
+      exit 0
     fi
     printf '%s\\n' '### Backup of your dev environment'
     printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
@@ -252,14 +252,13 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Storing your previous gist ID in your config');
-    assert.include(result.stdout, 'Keeping your local ballin.config.json settings');
-    assert.include(result.stdout, 'only the backup gist ID was adopted');
-    assert.notInclude(commandLog(), 'gist:-r returning-gist-id ballin_config');
+    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
+    assert.include(commandLog(), 'gist:-r returning-gist-id ballin_config');
     assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
-    assert.deepEqual(
-      JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
-      JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
-    );
+    const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
+    assert.equal(restoredConfig.up.cleanup, 'false');
+    assert.equal(restoredConfig.up.gu, 'true');
+    assert.equal(restoredConfig.gu.token_file, '.restored-gist');
   });
 
   it('stops before Gist and success output when config creation fails', () => {
