@@ -96,6 +96,41 @@ esac
 `, path.join(repoDir, 'bin'));
   };
 
+  const installAdoptableConfigCommand = () => {
+    writeExecutable('ballin_config', `#!/usr/bin/env bash
+printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+gist_id_file="$HOME/.configured-gist-id"
+case "$1:$2" in
+  get:gu.token_file)
+    config_json=''
+    if [ -f "$HOME/.ballin-scripts/ballin.config.json" ]; then
+      config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
+    fi
+    case "$config_json" in
+      *'.config/ballin/restored-gist'*) printf '%s\\n' '.config/ballin/restored-gist' ;;
+      *) printf '%s\\n' '.gist' ;;
+    esac
+    ;;
+  get:gu.url) printf '%s\\n' 'https://gist.example.test' ;;
+  get:gu.id)
+    if [ -f "$gist_id_file" ]; then
+      while IFS= read -r gist_id; do
+        printf '%s\\n' "$gist_id"
+      done < "$gist_id_file"
+    else
+      printf '%s\\n' 'null'
+    fi
+    ;;
+  set:gu.id)
+    printf '%s\\n' "$3" > "$gist_id_file"
+    config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
+    printf '%s\\n' "\${config_json/\\\"id\\\":\\\"previous-gist-id\\\"/\\\"id\\\":\\\"$3\\\"}" > "$HOME/.ballin-scripts/ballin.config.json"
+    printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
+    ;;
+esac
+`, path.join(repoDir, 'bin'));
+  };
+
   const runInstall = ({ env = {}, input }: RunInstallOptions = {}) => spawnSync(installPath, [], {
     encoding: 'utf8',
     input,
@@ -297,6 +332,42 @@ exit "$FAKE_NODE_STATUS"
     assert.equal(result.stdout.match(/👀 Docs:/g).length, 1);
     assert.include(result.stdout, 'docs/README.md');
     assert.include(commandLog(), 'configure');
+  });
+
+  it('restores config values from an adopted backup gist', () => {
+    installBaseCommands();
+    installAdoptableConfigCommand();
+    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
+    writeExecutable('gist', `#!/usr/bin/env bash
+printf 'gist:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$1:$2" in
+  -l:) exit 0 ;;
+  -r:returning-gist-id)
+    if [ "$3" = 'ballin_config' ]; then
+      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".config/ballin/restored-gist","url":"https://old-gist.example.test"}}'
+      exit 0
+    fi
+    printf '%s\\n' '### Backup of your dev environment'
+    printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
+    printf '\\n'
+    ;;
+esac
+`);
+
+    const result = runInstall({ input: 'y\nreturning-gist-id\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Storing your previous gist ID in your config');
+    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
+    assert.include(commandLog(), 'gist:-r returning-gist-id ballin_config');
+    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
+    const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
+    assert.equal(restoredConfig.up.cleanup, 'false');
+    assert.equal(restoredConfig.up.gu, 'true');
+    assert.equal(restoredConfig.gu.id, 'returning-gist-id');
+    assert.equal(restoredConfig.gu.token_file, '.config/ballin/restored-gist');
+    assert.equal(restoredConfig.gu.url, 'https://old-gist.example.test');
+    assert.equal(fs.readFileSync(path.join(homeDir, '.config', 'ballin', 'restored-gist'), 'utf8'), 'token\n');
   });
 
   it('stops before Gist and success output when config creation fails', () => {
