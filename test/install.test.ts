@@ -77,7 +77,8 @@ case "$1:$2" in
     ;;
   set:gu.id)
     printf '%s\\n' "$3" > "$gist_id_file"
-    printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"returning-gist-id","token_file":".restored-gist","url":"https://old-gist.example.test"}}' > "$HOME/.ballin-scripts/ballin.config.json"
+    config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
+    printf '%s\\n' "\${config_json/\\\"id\\\":\\\"previous-gist-id\\\"/\\\"id\\\":\\\"$3\\\"}" > "$HOME/.ballin-scripts/ballin.config.json"
     printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
     ;;
 esac
