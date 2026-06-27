@@ -42,6 +42,39 @@ const isDirectory = (candidate: string): boolean => {
   }
 };
 
+const stashChanges = (repoDir: string, recoveryContext: string): boolean => {
+  if (isMergeInProgress(repoDir) && runGitQuiet(['merge', '--abort'], repoDir) !== 0) {
+    writeStdoutLine(`git merge abort failed during ${recoveryContext}.`);
+    return false;
+  }
+
+  if (runGitQuiet(['stash', 'push', '--include-untracked'], repoDir) !== 0) {
+    writeStdoutLine(`git stash failed during ${recoveryContext}.`);
+    return false;
+  }
+
+  return true;
+};
+
+const checkoutUpdateBranch = (repoDir: string): boolean => {
+  if (runGitQuiet(['checkout', updateBranch], repoDir) === 0) {
+    return true;
+  }
+
+  writeStdoutLine(`git checkout ${updateBranch} failed. stashing changes and trying again...`);
+
+  if (!stashChanges(repoDir, 'checkout recovery')) {
+    return false;
+  }
+
+  if (runGitQuiet(['checkout', updateBranch], repoDir) !== 0) {
+    writeStdoutLine('git checkout failed during checkout recovery.');
+    return false;
+  }
+
+  return true;
+};
+
 const runBallinUpdateCli = (): void => {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
 
@@ -59,17 +92,15 @@ const runBallinUpdateCli = (): void => {
     return;
   }
 
+  if (!checkoutUpdateBranch(repoDir)) {
+    process.exitCode = 1;
+    return;
+  }
+
   if (runGitQuiet(['merge', updateRemoteRef], repoDir) !== 0) {
     writeStdoutLine('git merge failed. stashing changes and trying again...');
 
-    if (isMergeInProgress(repoDir) && runGitQuiet(['merge', '--abort'], repoDir) !== 0) {
-      writeStdoutLine('git merge abort failed during merge recovery.');
-      process.exitCode = 1;
-      return;
-    }
-
-    if (runGitQuiet(['stash', 'push', '--include-untracked'], repoDir) !== 0) {
-      writeStdoutLine('git stash failed during merge recovery.');
+    if (!stashChanges(repoDir, 'merge recovery')) {
       process.exitCode = 1;
       return;
     }
