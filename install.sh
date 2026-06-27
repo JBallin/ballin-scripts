@@ -7,14 +7,19 @@ optional_capabilities_url='https://github.com/JBallin/ballin-scripts/blob/main/d
 required_node_version='24.12'
 
 ################################## CLONE REPO ##################################
-(
-  cd "$HOME"
+if ! (
+  cd "$HOME" || exit
   # only clone if folder doesn't already exist
   if [ ! -d '.ballin-scripts' ]; then
     echo ''
-    git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts
+    if ! git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts; then
+      exit 1
+    fi
   fi
-)
+); then
+  printf '\n⚠️  ERROR: Unable to prepare %s\n' "$repo_dir"
+  exit 1
+fi
 
 
 ############################## CHECK INITIAL SETUP #############################
@@ -113,7 +118,7 @@ fi
 # Prompt user for GitHub URL and token until a valid token file is created
 while [ ! -f "$gist_token_path" ]; do
   printf '\n%s\n' "🙏 Please enter your Gist base URL (for example, 'https://gist.github.com' for personal accounts or 'https://gist.[your GitHub Enterprise domain]' for enterprise accounts):"
-  read -p 'URL: ' URL
+  read -rp 'URL: ' URL
   # Save entered URL to configuration
   "$ballin_config" set gu.url "$URL"
   gist_config_url="$("$ballin_config" get gu.url)"
@@ -128,7 +133,7 @@ while [ ! -f "$gist_token_path" ]; do
   printf '\n%s' "1. Go to github.com/settings/tokens/new (or the equivalent page on your GitHub Enterprise instance)"
   printf '\n%s' "2. Generate a new token with the 'gist' scope"
   printf '\n%s\n' '3. Copy the token and paste it here'
-  read -sp 'Token: ' TOKEN
+  read -rsp 'Token: ' TOKEN
   # Save entered token to file
   printf '%s\n' "$TOKEN" > "$gist_token_path"
   unset TOKEN
@@ -137,23 +142,23 @@ while [ ! -f "$gist_token_path" ]; do
   chmod 600 "$gist_token_path"
 done
 
-  (
+  if ! (
     l1='### Backup of your dev environment'
     l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
     GIST_DESCRIPTION="$l1\n$l2\n"
 
     ### CHECK IF USER ALREADY HAS GIST ID
-    cd "$repo_dir"
+    cd "$repo_dir" || exit
     if [ "$("$ballin_config" get gu.id)" = 'null' ]; then
       echo ''
-      read -p '🤔 Do you already have a ballin-scripts backup gist? [y/N] ' YN
+      read -rp '🤔 Do you already have a ballin-scripts backup gist? [y/N] ' YN
       if [[ $YN == 'y' || $YN == 'Y' ]]; then
         unset YN
         VALID_GIST_ID=1
         printf '\n%s\n' 'Welcome Back!'
         while [ "$VALID_GIST_ID" == 1 ]; do
-          read -ep 'Enter your gist ID: ' GIST_ID
-          if [ "$(gist -r "$GIST_ID")" == "$(printf "$GIST_DESCRIPTION")" ]; then
+          read -rep 'Enter your gist ID: ' GIST_ID
+          if [ "$(gist -r "$GIST_ID")" == "$(printf '%b' "$GIST_DESCRIPTION")" ]; then
             printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
             "$ballin_config" set gu.id "$GIST_ID"
             VALID_GIST_ID=0
@@ -167,7 +172,7 @@ done
 
     ### GENERATE + STORE GIST ID
     if [ "$("$ballin_config" get gu.id)" = 'null' ]; then
-      printf "$GIST_DESCRIPTION" > '.MyConfig.md'
+      printf '%b' "$GIST_DESCRIPTION" > '.MyConfig.md'
 
       GIST_URL=$(gist -p '.MyConfig.md')
       printf "\n💥 Created a private gist titled '.MyConfig' at the following URL:\n%s\n" "$GIST_URL"
@@ -184,7 +189,10 @@ done
       unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
       rm '.MyConfig.md'
     fi
-  )
+  ); then
+    printf '\n⚠️  ERROR: Unable to configure Gist backup\n'
+    exit 1
+  fi
 
   ############################## SYMLINK BINARIES ##############################
   if ! mkdir -p "$bin_dir"; then
