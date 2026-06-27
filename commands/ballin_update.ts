@@ -6,29 +6,34 @@ const {
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
-const runGitQuiet = (args: string[], cwd: string): number | null => (
+import type { StdioOptions } from 'child_process';
+
+const commandEnv = (cwd: string): NodeJS.ProcessEnv => ({
+  ...process.env,
+  PWD: cwd,
+});
+
+const runGit = (args: string[], cwd: string, stdio: StdioOptions): number | null => (
   runCommand('git', args, {
     cwd,
-    env: {
-      ...process.env,
-      PWD: cwd,
-    },
-    stdio: 'ignore',
+    env: commandEnv(cwd),
+    stdio,
   }).status
+);
+
+const runGitQuiet = (args: string[], cwd: string): number | null => (
+  runGit(args, cwd, 'ignore')
 );
 
 const updateBranch = 'main';
 const updateRemoteRef = `origin/${updateBranch}`;
 
 const runFetch = (cwd: string): number | null => (
-  runCommand('git', ['fetch', 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`], {
+  runGit(
+    ['fetch', 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`],
     cwd,
-    env: {
-      ...process.env,
-      PWD: cwd,
-    },
-    stdio: ['inherit', 'ignore', 'inherit'],
-  }).status
+    ['inherit', 'ignore', 'inherit'],
+  )
 );
 
 const isMergeInProgress = (cwd: string): boolean => (
@@ -114,10 +119,7 @@ const runBallinUpdateCli = (): void => {
   writeStdoutLine();
   process.exitCode = runVisibleCommand('./install.sh', [], {
     cwd: repoDir,
-    env: {
-      ...process.env,
-      PWD: repoDir,
-    },
+    env: commandEnv(repoDir),
   });
 };
 
