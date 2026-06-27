@@ -39,6 +39,26 @@ if [ "$1" = '-p' ]; then
   printf '%s\\n' "$FAKE_NODE_SUPPORTED"
   exit 0
 fi
+if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
+  shift
+  if [ "$1" != 'symlink-binaries' ]; then
+    exit 2
+  fi
+  repo_dir="$2"
+  bin_dir="$3"
+  if ! mkdir -p "$bin_dir"; then
+    printf '\\n⚠️  ERROR: Unable to create %s\\n' "$bin_dir"
+    exit 1
+  fi
+  for bin in "$repo_dir/bin/"*; do
+    if ! ln -sfn "$bin" "$bin_dir/\${bin##*/}"; then
+      printf '\\n⚠️  ERROR: Unable to symlink binaries into %s\\n' "$bin_dir"
+      exit 1
+    fi
+  done
+  printf '\\n💪 symlinked binaries into %s\\n' "$bin_dir"
+  exit 0
+fi
 printf '%s' "$FAKE_UPDATE_OUTPUT"
 exit "$FAKE_NODE_STATUS"
 `);
@@ -82,6 +102,7 @@ esac
     repoDir = path.join(homeDir, '.ballin-scripts');
     fs.mkdirSync(binDir, { recursive: true });
     fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
+    fs.mkdirSync(path.join(repoDir, 'commands'));
     fs.mkdirSync(path.join(repoDir, 'config'));
     fs.copyFileSync(
       path.join(__dirname, '..', 'config', '.defaultConfig.json'),

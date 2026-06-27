@@ -195,18 +195,9 @@ done
   fi
 
   ############################## SYMLINK BINARIES ##############################
-  if ! mkdir -p "$bin_dir"; then
-    printf '\n⚠️  ERROR: Unable to create %s\n' "$bin_dir"
+  if ! node "$repo_dir/commands/install_setup.ts" symlink-binaries "$repo_dir" "$bin_dir"; then
     exit 1
   fi
-
-  for bin in "$repo_dir/bin/"*; do
-    if ! ln -sfn "$bin" "$bin_dir/${bin##*/}"; then
-      printf '\n⚠️  ERROR: Unable to symlink binaries into %s\n' "$bin_dir"
-      exit 1
-    fi
-  done
-  printf '\n💪 symlinked binaries into %s\n' "$bin_dir"
 
   if [ "$config_existed" = false ] && [ -f "$repo_dir/ballin.config.json" ]; then
     printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
