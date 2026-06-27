@@ -3,12 +3,12 @@
 ## Repo map
 
 `ballin-scripts` is a small personal automation toolkit. User-facing command
-names live as stable extensionless files under `bin/`. Current `bin/*`
-commands are tiny Node shims; command implementations live under `commands/` or
-the feature folder that owns them, config code lives under `config/`, and the
-Mocha tests in `test/` exercise scripts, shims, and configuration helpers.
-`install.sh` remains Bash bootstrap/install glue rather than part of the
-installed command-shim surface.
+names live as stable extensionless files under `bin/`. The `bin/*` commands are
+tiny Node shims; command implementations live under `commands/` or the feature
+folder that owns them, config code lives under `config/`, and the Mocha tests in
+`test/` exercise scripts, shims, and configuration helpers. `install.sh` is
+Bash bootstrap/install glue rather than part of the installed command-shim
+surface.
 
 ## Local commands
 
@@ -48,9 +48,9 @@ installed command-shim surface.
   TypeScript source under `commands/` and `config/` is executed directly by
   Node. Preserve executable modes and existing shebang/symlink coverage for
   user-facing commands.
-- For post-migration command work, preserve behavior unless an issue explicitly
-  asks for a behavior change; keep broad refactors, product changes, and cleanup
-  in focused issues or PRs.
+- For command work, preserve behavior unless an issue explicitly asks for a
+  behavior change; keep broad refactors, product changes, and cleanup in focused
+  issues or PRs.
 - Treat `install.sh` changes as installer/bootstrap work. Do not assume it
   should follow the same Node-shim pattern as installed `bin/*` commands; update
   README install guidance only when the installer behavior intentionally
