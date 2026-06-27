@@ -87,8 +87,9 @@ ballin_config set up.gu true
 ballin_config set up.npm false
 ```
 
-See the [documentation index](docs/README.md) for update settings and the full
-list of update integrations.
+See the [optional capabilities guide](docs/optional-capabilities.md) for update
+settings, and the [supported capabilities reference](docs/capabilities.md) for
+the full list of update integrations.
 
 ### Back up with `gu`
 
@@ -97,8 +98,8 @@ shell dotfiles, Git config, Homebrew formulae and casks, global npm packages,
 nvm settings, editor settings, editor extensions, bash completions, and Mac App
 Store apps when the supporting tools are installed.
 
-See the [documentation index](docs/README.md) for the full list of backup
-snapshots.
+See the [supported capabilities reference](docs/capabilities.md) for the full
+list of backup snapshots.
 
 ```shell
 gu
