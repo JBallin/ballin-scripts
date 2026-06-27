@@ -491,7 +491,6 @@ kill -TERM "$$"
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
-    assert.include(result.stdout, 'Brewfile');
     assert.include(result.stdout, 'ballin_config');
     assert.include(result.stdout, 'vsI_settings');
     assert.deepEqual(gistReads(), ['missing_file']);

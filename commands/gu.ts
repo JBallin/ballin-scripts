@@ -66,7 +66,6 @@ const fileSuggestions = `
   ballin_config
   bash_completions
   bash_profile.sh
-  Brewfile
   bashrc.sh
   brackets_disabled_extensions
   brackets_extensions
