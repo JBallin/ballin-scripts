@@ -173,7 +173,7 @@ done
               printf '\n%s\n' '♻️  Restored ballin.config.json from your backup gist.'
               if [ -n "$UPDATE_RESULT" ]; then
                 printf '\n🙌 %s\n' "$UPDATE_RESULT"
-                printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
+                printf '\n👀 Docs: %s\n' "$docs_url"
               fi
             else
               printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
