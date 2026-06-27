@@ -217,6 +217,7 @@ done
     commandPath = guPath,
   } = {}) => spawnSync(commandPath, args, {
     encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
     env: {
       HOME: testHomeDir,
       PATH: testBinDir,
@@ -346,6 +347,19 @@ kill -TERM "$$"
 
     assertGuSucceeded(result);
     assert.equal(result.stdout, 'set number\n');
+    assert.deepEqual(gistReads(), ['vimrc']);
+  });
+
+  it('streams large Gist files when reading a named file', () => {
+    const largeSnapshot = `${'r'.repeat(1024 * 1024 + 1)}\n`;
+    seedFakeGistFile('vimrc', largeSnapshot);
+
+    const result = runGu({ args: ['read', 'vimrc'] });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout.length, largeSnapshot.length);
+    assert.equal(result.stdout.slice(0, 1), 'r');
+    assert.equal(result.stdout.slice(-1), '\n');
     assert.deepEqual(gistReads(), ['vimrc']);
   });
 
@@ -711,6 +725,20 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), []);
   });
 
+  it('streams large Gist files when hydrating a missing cache', () => {
+    const largeSnapshot = `${'h'.repeat(1024 * 1024 + 1)}\n`;
+    writeSnapshot(largeSnapshot);
+    seedFakeGist(largeSnapshot);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✔ zshrc\n');
+    assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistUploads(), []);
+  });
+
   it('compares against hydrated Gist content before uploading a change', () => {
     writeSnapshot('new value\n');
     seedFakeGist('old value\n');
@@ -775,6 +803,28 @@ printf '%s\\n' '123456 Example App'
     assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
     assert.equal(fs.statSync(fakeGistFilePath()).size, largeSnapshot.length);
     assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('streams large snapshot stderr without the default spawn buffer limit', () => {
+    writeAppSupportFile(['Code', 'User', 'settings.json'], '{}\n');
+    writeTestExecutable('code', `#!/usr/bin/env bash
+printf 'publisher.large-stderr\\n'
+printf '%*s\\n' 1048577 '' >&2
+`);
+
+    const result = runGu();
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, '💾 vs_extensions\n');
+    assert.equal(result.stderr.length, 1024 * 1024 + 2);
+    assert.equal(result.stderr.slice(0, 1), ' ');
+    assert.equal(result.stderr.slice(-1), '\n');
+    assert.equal(
+      fs.readFileSync(path.join(guCacheDir, 'vs_extensions'), 'utf8'),
+      'publisher.large-stderr\n',
+    );
+    assert.include(gistUploads(), 'vs_extensions');
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
   });
 
   it('reports and uploads non-empty output becoming empty', () => {

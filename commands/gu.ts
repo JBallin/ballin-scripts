@@ -118,22 +118,32 @@ const ensureTrailingNewline = (filePath: string): void => {
   }
 };
 
+const writeFileToStderr = (filePath: string): void => {
+  if (fs.statSync(filePath).size > 0) {
+    process.stderr.write(fs.readFileSync(filePath));
+  }
+};
+
 const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boolean => {
   const outputFd = fs.openSync(inputFile, 'w');
+  const stderrFile = makeTempFile('ballin-gu-stderr-');
+  const stderrFd = fs.openSync(stderrFile, 'w');
   let result: ReturnType<typeof runCommand>;
   try {
     result = runCommand(snapshot.command, snapshot.args ?? [], {
       cwd: snapshot.cwd,
       env: snapshot.env,
-      stdio: ['ignore', outputFd, 'pipe'],
+      stdio: ['ignore', outputFd, stderrFd],
     });
   } finally {
     fs.closeSync(outputFd);
+    fs.closeSync(stderrFd);
   }
 
-  if (result.stderr && !(snapshot.suppressStderrOnSuccess && result.status === 0)) {
-    process.stderr.write(result.stderr);
+  if (!(snapshot.suppressStderrOnSuccess && result.status === 0)) {
+    writeFileToStderr(stderrFile);
   }
+  removeTempFile(stderrFile);
   if (result.error) {
     reportSpawnError(snapshot.command, result.error);
   }
@@ -142,18 +152,20 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
 };
 
 const seedCacheFromGist = (id: string, fileName: string, cacheFile: string): boolean => {
-  const result = runGist(['-r', id, fileName]);
-  if (result.status === 0) {
-    fs.writeFileSync(cacheFile, result.stdout);
-    if (result.stderr) {
-      process.stderr.write(result.stderr);
-    }
+  const outputFd = fs.openSync(cacheFile, 'w');
+  let result: ReturnType<typeof runCommand>;
+  try {
+    result = runGist(['-r', id, fileName], { stdio: ['ignore', outputFd, 'inherit'] });
+  } finally {
+    fs.closeSync(outputFd);
+  }
+  if (result.error) {
+    reportSpawnError('gist', result.error);
+  }
+  if (result.status === 0 && !result.error) {
     return true;
   }
-
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-  }
+  fs.rmSync(cacheFile, { force: true });
   return false;
 };
 
@@ -192,10 +204,7 @@ const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand)
   }
 
   if (isChanged) {
-    const result = runGist(['-u', id, cacheFile], { stdio: ['ignore', 'ignore', 'pipe'] });
-    if (result.stderr) {
-      process.stderr.write(result.stderr);
-    }
+    const result = runGist(['-u', id, cacheFile], { stdio: ['ignore', 'ignore', 'inherit'] });
     if (result.error) {
       reportSpawnError('gist', result.error);
     }
@@ -343,12 +352,9 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   const id = configValue('gu.id');
   const url = `${configValue('gu.url')}/${id}`;
 
-  const initialGistRead = runGist(['-r', id], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const initialGistRead = runGist(['-r', id], { stdio: ['ignore', 'ignore', 'inherit'] });
   if (initialGistRead.error) {
     reportSpawnError('gist', initialGistRead.error);
-  }
-  if (initialGistRead.stderr) {
-    process.stderr.write(initialGistRead.stderr);
   }
   if (initialGistRead.status !== 0 || initialGistRead.error) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
@@ -361,9 +367,12 @@ const runGuCli = (args = process.argv.slice(2)): void => {
       process.exitCode = runVisible('open', [url]);
     } else if (args[0] === 'read') {
       if (args[1]) {
-        const result = runGist(['-r', id, args[1]]);
+        const result = runGist(['-r', id, args[1]], { stdio: ['ignore', 'inherit', 'inherit'] });
+        if (result.error) {
+          reportSpawnError('gist', result.error);
+        }
         if (result.status === 0) {
-          process.stdout.write(result.stdout);
+          return;
         } else {
           process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
         }
