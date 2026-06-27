@@ -39,6 +39,27 @@ if [ "$1" = '-p' ]; then
   printf '%s\\n' "$FAKE_NODE_SUPPORTED"
   exit 0
 fi
+if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
+  printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+  shift
+  if [ "$1" != 'symlink-binaries' ]; then
+    exit 2
+  fi
+  repo_dir="$2"
+  bin_dir="$3"
+  if ! mkdir -p "$bin_dir"; then
+    printf '\\n⚠️  ERROR: Unable to create %s\\n' "$bin_dir"
+    exit 1
+  fi
+  for bin in "$repo_dir/bin/"*; do
+    if ! ln -sfn "$bin" "$bin_dir/\${bin##*/}"; then
+      printf '\\n⚠️  ERROR: Unable to symlink binaries into %s\\n' "$bin_dir"
+      exit 1
+    fi
+  done
+  printf '\\n💪 symlinked binaries into %s\\n' "$bin_dir"
+  exit 0
+fi
 printf '%s' "$FAKE_UPDATE_OUTPUT"
 exit "$FAKE_NODE_STATUS"
 `);
@@ -117,6 +138,8 @@ esac
     repoDir = path.join(homeDir, '.ballin-scripts');
     fs.mkdirSync(binDir, { recursive: true });
     fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
+    fs.mkdirSync(path.join(repoDir, 'commands'));
+    fs.writeFileSync(path.join(repoDir, 'commands', 'install_setup.ts'), '');
     fs.mkdirSync(path.join(repoDir, 'config'));
     fs.copyFileSync(
       path.join(__dirname, '..', 'config', '.defaultConfig.json'),
@@ -204,7 +227,22 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
       JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
     );
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
+    assert.include(commandLog(), 'node:install_setup');
     assert.include(commandLog(), 'gist:-l\n');
+  });
+
+  it('falls back to Bash symlinking when the typed setup entrypoint is missing from an existing checkout', () => {
+    installBaseCommands();
+    installConfigCommand();
+    fs.unlinkSync(path.join(repoDir, 'commands', 'install_setup.ts'));
+    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
+
+    const result = runInstall();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, `symlinked binaries into ${binDir}`);
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
+    assert.notInclude(commandLog(), 'node:install_setup');
   });
 
   it('does not repeat unchanged setup guidance during an ordinary update', () => {
