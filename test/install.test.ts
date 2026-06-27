@@ -124,7 +124,7 @@ esac
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js is required');
     assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
-    assert.include(result.stdout, 'docs/optional-capabilities.md');
+    assert.include(result.stdout, 'docs/README.md');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -138,7 +138,7 @@ esac
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js 24.12 or newer is required');
     assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
-    assert.include(result.stdout, 'docs/optional-capabilities.md');
+    assert.include(result.stdout, 'docs/README.md');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -175,7 +175,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     assert.equal(commandLog(), '');
   });
 
-  it('performs an isolated initial setup and shows optional capabilities once', () => {
+  it('performs an isolated initial setup and shows docs once', () => {
     installBaseCommands();
     installConfigCommand();
     fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
@@ -184,7 +184,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created 'ballin.config.json'");
-    assert.equal(result.stdout.match(/👀 Optional capabilities:/g).length, 1);
+    assert.equal(result.stdout.match(/👀 Docs:/g).length, 1);
     assert.include(result.stdout, `symlinked binaries into ${binDir}`);
     assert.include(result.stdout, '😎 ballin!');
     assert.deepEqual(
@@ -222,7 +222,7 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     const result = runInstall();
 
     assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, '👀 Optional capabilities:');
+    assert.notInclude(result.stdout, '👀 Docs:');
     assert.notInclude(result.stdout, "Created 'ballin.config.json'");
     assert.include(result.stdout, '😎 ballin!');
   });
@@ -238,8 +238,8 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, updateOutput.trim());
-    assert.equal(result.stdout.match(/👀 Optional capabilities:/g).length, 1);
-    assert.include(result.stdout, 'docs/optional-capabilities.md');
+    assert.equal(result.stdout.match(/👀 Docs:/g).length, 1);
+    assert.include(result.stdout, 'docs/README.md');
   });
 
   it('stops before Gist and success output when config creation fails', () => {
