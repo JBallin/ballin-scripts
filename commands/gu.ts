@@ -43,6 +43,11 @@ type GuConfigResult = {
   exitStatus: number;
 };
 
+type CommandCheckResult = {
+  ok: boolean;
+  exitStatus: number;
+};
+
 type SnapshotCollector = {
   addFile: (sourceName: string, fileName: string) => void;
   addShellCommand: (
@@ -61,6 +66,7 @@ const fileSuggestions = `
   ballin_config
   bash_completions
   bash_profile.sh
+  Brewfile
   bashrc.sh
   brackets_disabled_extensions
   brackets_extensions
@@ -218,12 +224,18 @@ const uploadGistFile = (id: string, filePath: string): boolean => {
   return result.status === 0 && !result.error;
 };
 
-const verifyGistReadable = (id: string): boolean => {
+const verifyGistReadable = (id: string): CommandCheckResult => {
   const result = runGist(['-r', id], { stdio: ['ignore', 'ignore', 'inherit'] });
   if (result.error) {
-    reportSpawnError('gist', result.error);
+    return {
+      ok: false,
+      exitStatus: reportSpawnError('gist', result.error),
+    };
   }
-  return result.status === 0 && !result.error;
+  if (result.status !== 0) {
+    return { ok: false, exitStatus: 1 };
+  }
+  return { ok: true, exitStatus: 0 };
 };
 
 const readGistFileToStdout = (id: string, fileName: string): boolean => {
@@ -573,9 +585,10 @@ const runGuCli = (args = process.argv.slice(2)): void => {
     return;
   }
 
-  if (!verifyGistReadable(config.id)) {
+  const gistReadable = verifyGistReadable(config.id);
+  if (!gistReadable.ok) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
-    process.exitCode = 1;
+    process.exitCode = gistReadable.exitStatus;
     return;
   }
 

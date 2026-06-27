@@ -144,6 +144,15 @@ exit 42
     fs.chmodSync(path.join(testBinDir, 'ballin_config'), 0o644);
   };
 
+  const removeGistCommand = () => {
+    fs.rmSync(path.join(testBinDir, 'gist'));
+  };
+
+  const makeGistCommandPermissionDenied = () => {
+    fs.writeFileSync(path.join(testBinDir, 'gist'), 'not executable\n', { mode: 0o644 });
+    fs.chmodSync(path.join(testBinDir, 'gist'), 0o644);
+  };
+
   const installFakeBallinCommand = () => {
     writeTestExecutable('ballin', `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_BALLIN_LOG"
@@ -476,6 +485,7 @@ kill -TERM "$$"
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
+    assert.include(result.stdout, 'Brewfile');
     assert.include(result.stdout, 'ballin_config');
     assert.include(result.stdout, 'vsI_settings');
     assert.deepEqual(gistReads(), ['missing_file']);
@@ -506,6 +516,32 @@ kill -TERM "$$"
     assert.equal(result.status, 1);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
     assert.equal(result.stderr, 'simulated initial gist read failure\n');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports missing gist reads before snapshotting', () => {
+    removeGistCommand();
+
+    const result = runGu();
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stderr, 'gist: command not found\n');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports permission-denied gist reads before snapshotting', () => {
+    makeGistCommandPermissionDenied();
+
+    const result = runGu();
+
+    assert.equal(result.status, 126);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stderr, 'gist: Permission denied\n');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
