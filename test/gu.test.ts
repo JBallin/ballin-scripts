@@ -19,22 +19,36 @@ const requiredCommands = [
   'tail',
   'node',
 ];
+type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
+
+type RunGuOptions = {
+  args?: string[];
+  failedPaths?: string[];
+  emitUnderlyingStderr?: boolean;
+  brewServicesFail?: boolean;
+  brewPrefix?: string;
+  brewPrefixFail?: boolean;
+  completionDir?: string;
+  gistInitialReadFail?: boolean;
+  gistUploadFail?: boolean;
+  commandPath?: string;
+};
 
 describe('gu', () => {
-  let testHomeDir;
-  let testBinDir;
-  let guCacheDir;
-  let fakeGistDir;
-  let gistReadLogPath;
-  let scratchDir;
-  let gistUploadLogPath;
-  let brewLogPath;
-  let openLogPath;
-  let ballinLogPath;
-  let realCatPath;
+  let testHomeDir: string;
+  let testBinDir: string;
+  let guCacheDir: string;
+  let fakeGistDir: string;
+  let gistReadLogPath: string;
+  let scratchDir: string;
+  let gistUploadLogPath: string;
+  let brewLogPath: string;
+  let openLogPath: string;
+  let ballinLogPath: string;
+  let realCatPath: string;
 
-  const linkRequiredCommand = (command) => {
-    const commandPath = process.env.PATH
+  const linkRequiredCommand = (command: string) => {
+    const commandPath = (process.env.PATH ?? '')
       .split(path.delimiter)
       .map((directory) => path.join(directory, command))
       .find((candidate) => fs.existsSync(candidate));
@@ -43,7 +57,7 @@ describe('gu', () => {
     fs.symlinkSync(commandPath, path.join(testBinDir, command));
   };
 
-  const writeTestExecutable = (name, contents) => {
+  const writeTestExecutable = (name: string, contents: string) => {
     fs.writeFileSync(path.join(testBinDir, name), contents, { mode: 0o755 });
   };
 
@@ -215,7 +229,7 @@ done
     gistInitialReadFail = false,
     gistUploadFail = false,
     commandPath = guPath,
-  } = {}) => spawnSync(commandPath, args, {
+  }: RunGuOptions = {}) => spawnSync(commandPath, args, {
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
     env: {
@@ -245,21 +259,21 @@ done
   const snapshotPath = () => path.join(testHomeDir, '.zshrc');
   const cachedSnapshotPath = () => path.join(guCacheDir, snapshotFileName);
   const fakeGistFilePath = () => path.join(fakeGistDir, snapshotFileName);
-  const writeSnapshot = (content) => fs.writeFileSync(snapshotPath(), content);
-  const seedGuCache = (content) => {
+  const writeSnapshot = (content: string) => fs.writeFileSync(snapshotPath(), content);
+  const seedGuCache = (content: string) => {
     fs.mkdirSync(guCacheDir, { recursive: true });
     fs.writeFileSync(cachedSnapshotPath(), content);
   };
-  const seedFakeGist = (content) => fs.writeFileSync(fakeGistFilePath(), content);
-  const seedFakeGistFile = (fileName, content) => {
+  const seedFakeGist = (content: string) => fs.writeFileSync(fakeGistFilePath(), content);
+  const seedFakeGistFile = (fileName: string, content: string) => {
     fs.writeFileSync(path.join(fakeGistDir, fileName), content);
   };
-  const assertGuSucceeded = (result) => {
+  const assertGuSucceeded = (result: StringSpawnResult) => {
     assert.equal(result.status, 0);
     assert.equal(result.stderr, '');
     assert.deepEqual(fs.readdirSync(scratchDir), []);
   };
-  const readLogLines = (logPath) => (
+  const readLogLines = (logPath: string) => (
     fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : []
   );
   const gistReads = () => readLogLines(gistReadLogPath);
@@ -268,13 +282,13 @@ done
   const openCalls = () => readLogLines(openLogPath);
   const ballinCalls = () => readLogLines(ballinLogPath);
 
-  const writeBashCompletions = (brewPrefix, names) => {
+  const writeBashCompletions = (brewPrefix: string, names: string[]) => {
     const completionDirectory = path.join(brewPrefix, 'etc', 'bash_completion.d');
     fs.mkdirSync(completionDirectory, { recursive: true });
     names.forEach((name) => fs.writeFileSync(path.join(completionDirectory, name), ''));
   };
 
-  const writeAppSupportFile = (segments, content) => {
+  const writeAppSupportFile = (segments: string[], content: string) => {
     const filePath = path.join(testHomeDir, 'Library', 'Application Support', ...segments);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content);
@@ -530,11 +544,11 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), ['npm_global', 'mas']);
   });
 
-  [
+  ([
     ['Apple Silicon', path.join('opt', 'homebrew')],
     ['Intel', path.join('usr', 'local')],
     ['custom', path.join('srv', 'custombrew')],
-  ].forEach(([label, relativePrefix]) => {
+  ] as [string, string][]).forEach(([label, relativePrefix]) => {
     it(`discovers ${label}-style bash completions from the active Homebrew prefix`, () => {
       const brewPrefix = path.join(testHomeDir, relativePrefix);
       installFakeBrewCommand();
@@ -548,8 +562,8 @@ printf '%s\\n' '123456 Example App'
         fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
         'git\nnpm\n',
       );
-      assert.equal(brewCalls().filter((call) => call.endsWith('|--prefix')).length, 1);
-      assert.equal(gistUploads().filter((name) => name === 'bash_completions').length, 1);
+      assert.equal(brewCalls().filter((call: string) => call.endsWith('|--prefix')).length, 1);
+      assert.equal(gistUploads().filter((name: string) => name === 'bash_completions').length, 1);
     });
   });
 
@@ -577,7 +591,7 @@ printf '%s\\n' '123456 Example App'
       fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
       'active-tool\n',
     );
-    assert.equal(gistUploads().filter((name) => name === 'bash_completions').length, 1);
+    assert.equal(gistUploads().filter((name: string) => name === 'bash_completions').length, 1);
   });
 
   it('uses an explicit bash completion directory override when brew is unavailable', () => {
@@ -631,7 +645,7 @@ printf '%s\\n' '123456 Example App'
     assertGuSucceeded(result);
     assert.notInclude(result.stdout, 'bash_completions');
     assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
-    assert.equal(brewCalls().filter((call) => call.endsWith('|--prefix')).length, 1);
+    assert.equal(brewCalls().filter((call: string) => call.endsWith('|--prefix')).length, 1);
   });
 
   it('captures Homebrew inventory with flags while suppressing successful services stderr', () => {

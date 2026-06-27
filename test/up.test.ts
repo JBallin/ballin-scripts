@@ -5,17 +5,25 @@ const os = require('os');
 const path = require('path');
 
 const upPath = path.join(__dirname, '..', 'bin', 'up');
+type InstallCommandStubOptions = {
+  output?: string;
+  status?: number;
+  directory?: string;
+};
 
 describe('up', () => {
-  let tempDir;
-  let binDir;
-  let logPath;
+  let tempDir: string;
+  let binDir: string;
+  let logPath: string;
 
-  const writeTestExecutable = (name, contents) => {
+  const writeTestExecutable = (name: string, contents: string) => {
     fs.writeFileSync(path.join(binDir, name), contents, { mode: 0o755 });
   };
 
-  const installCommandStub = (name, { output = '', status = 0, directory = binDir } = {}) => {
+  const installCommandStub = (
+    name: string,
+    { output = '', status = 0, directory = binDir }: InstallCommandStubOptions = {},
+  ) => {
     fs.writeFileSync(path.join(directory, name), `#!/usr/bin/env bash
 printf '%s|%s|%s\\n' "${name}" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
 ${output ? `printf '%s\\n' '${output}'` : ''}
@@ -47,7 +55,7 @@ esac
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  const runUp = (env = {}) => spawnSync(upPath, [], {
+  const runUp = (env: NodeJS.ProcessEnv = {}) => spawnSync(upPath, [], {
     encoding: 'utf8',
     env: {
       HOME: tempDir,
@@ -59,7 +67,7 @@ esac
     },
   });
 
-  const installNvmStub = (nvmDir) => {
+  const installNvmStub = (nvmDir: string) => {
     fs.mkdirSync(nvmDir, { recursive: true });
     fs.writeFileSync(
       path.join(nvmDir, 'nvm.sh'),
@@ -70,7 +78,7 @@ esac
     );
   };
 
-  const installPathUpdatingNvmStub = (nvmDir, nvmBinDir) => {
+  const installPathUpdatingNvmStub = (nvmDir: string, nvmBinDir: string) => {
     fs.mkdirSync(nvmDir, { recursive: true });
     fs.writeFileSync(
       path.join(nvmDir, 'nvm.sh'),
