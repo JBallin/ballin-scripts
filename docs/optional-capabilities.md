@@ -69,3 +69,7 @@ Change a setting with `ballin_config set up.<name> true` or
 | `up.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `up.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
 | `up.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |
+
+`up` does not update Python package tooling such as `pip` or `pip3`. Python
+installations may be system-, user-, virtualenv-, pyenv-, or Homebrew-managed,
+so update Python tooling through the manager that owns that environment.
