@@ -30,6 +30,7 @@ type RunGuOptions = {
   brewPrefixFail?: boolean;
   completionDir?: string;
   gistInitialReadFail?: boolean;
+  gistInitialReadSignal?: boolean;
   gistUploadFail?: boolean;
   commandPath?: string;
 };
@@ -90,6 +91,9 @@ if [ "$1" = '-r' ]; then
       printf '%s\\n' 'simulated initial gist read failure' >&2
       exit 17
     fi
+    if [ "$FAKE_GIST_INITIAL_READ_SIGNAL" = 'true' ]; then
+      kill -TERM "$$"
+    fi
     exit 0
   elif [ "$#" -ne 3 ]; then
     printf '%s\\n' 'Unexpected gist read arguments' >&2
@@ -133,6 +137,40 @@ printf '%s\\n' "$*" >> "$FAKE_OPEN_LOG"
 printf 'ballin_config failed for %s\\n' "$2" >&2
 exit 42
 `);
+  };
+
+  const installDefaultIdBallinConfigCommand = () => {
+    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
+if [ "$1" != 'get' ]; then
+  printf '%s\\n' 'Unexpected ballin_config action' >&2
+  exit 2
+elif [ "$2" = 'gu.id' ]; then
+  printf '%s\\n' 'null'
+elif [ "$2" = 'gu.url' ]; then
+  printf '%s\\n' 'https://example.test/gists'
+else
+  printf '%s\\n' 'Unexpected ballin_config call' >&2
+  exit 2
+fi
+`);
+  };
+
+  const removeBallinConfigCommand = () => {
+    fs.rmSync(path.join(testBinDir, 'ballin_config'));
+  };
+
+  const makeBallinConfigCommandPermissionDenied = () => {
+    fs.writeFileSync(path.join(testBinDir, 'ballin_config'), 'not executable\n', { mode: 0o644 });
+    fs.chmodSync(path.join(testBinDir, 'ballin_config'), 0o644);
+  };
+
+  const removeGistCommand = () => {
+    fs.rmSync(path.join(testBinDir, 'gist'));
+  };
+
+  const makeGistCommandPermissionDenied = () => {
+    fs.writeFileSync(path.join(testBinDir, 'gist'), 'not executable\n', { mode: 0o644 });
+    fs.chmodSync(path.join(testBinDir, 'gist'), 0o644);
   };
 
   const installFakeBallinCommand = () => {
@@ -227,6 +265,7 @@ done
     brewPrefixFail = false,
     completionDir,
     gistInitialReadFail = false,
+    gistInitialReadSignal = false,
     gistUploadFail = false,
     commandPath = guPath,
   }: RunGuOptions = {}) => spawnSync(commandPath, args, {
@@ -243,6 +282,7 @@ done
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
       FAKE_GIST_INITIAL_READ_FAIL: gistInitialReadFail ? 'true' : 'false',
+      FAKE_GIST_INITIAL_READ_SIGNAL: gistInitialReadSignal ? 'true' : 'false',
       FAKE_GIST_UPLOAD_FAIL: gistUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_OPEN_LOG: openLogPath,
@@ -302,6 +342,55 @@ done
     assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
   });
 
+  it('opens the configured Gist URL without requiring a readable Gist', () => {
+    const result = runGu({ args: ['open'], gistInitialReadFail: true });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails open when extra arguments are provided', () => {
+    const result = runGu({ args: ['open', 'extra'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu open: expected no arguments\n');
+    assert.deepEqual(openCalls(), []);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails open when Gist config cannot be read', () => {
+    installFailingBallinConfigCommand();
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'ballin_config failed for gu.id\n'
+        + 'ballin_config failed for gu.url\n'
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
+    );
+    assert.deepEqual(openCalls(), []);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('treats a default null Gist ID as missing when opening', () => {
+    installDefaultIdBallinConfigCommand();
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu: missing config value gu.id\n');
+    assert.deepEqual(openCalls(), []);
+    assert.deepEqual(gistReads(), []);
+  });
+
   it('remains executable through the installed symlink model', () => {
     const linkPath = path.join(testBinDir, 'gu-link');
     fs.symlinkSync(guPath, linkPath);
@@ -354,6 +443,45 @@ kill -TERM "$$"
     assert.deepEqual(ballinCalls(), ['']);
   });
 
+  it('prints help without requiring a readable Gist', () => {
+    const result = runGu({ args: ['help'], gistInitialReadFail: true });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'fake ballin help\n');
+    assert.deepEqual(ballinCalls(), ['']);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails help when extra arguments are provided', () => {
+    const result = runGu({ args: ['help', 'extra'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu help: expected no arguments\n');
+    assert.deepEqual(ballinCalls(), []);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails unknown commands instead of ignoring them', () => {
+    const result = runGu({ args: ['typo'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, "gu: unknown command 'typo'\n");
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('fails unknown commands before checking Gist readability', () => {
+    const result = runGu({ args: ['typo'], gistInitialReadFail: true });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, "gu: unknown command 'typo'\n");
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
   it('reads a named Gist file', () => {
     seedFakeGistFile('vimrc', 'set number\n');
 
@@ -362,6 +490,15 @@ kill -TERM "$$"
     assertGuSucceeded(result);
     assert.equal(result.stdout, 'set number\n');
     assert.deepEqual(gistReads(), ['vimrc']);
+  });
+
+  it('fails read when extra arguments are provided', () => {
+    const result = runGu({ args: ['read', 'vimrc', 'extra'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu read: expected exactly one filename\n');
+    assert.deepEqual(gistReads(), []);
   });
 
   it('streams large Gist files when reading a named file', () => {
@@ -380,7 +517,7 @@ kill -TERM "$$"
   it('prints options when a requested Gist file is missing', () => {
     const result = runGu({ args: ['read', 'missing_file'] });
 
-    assertGuSucceeded(result);
+    assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
     assert.include(result.stdout, 'ballin_config');
     assert.include(result.stdout, 'vsI_settings');
@@ -390,18 +527,65 @@ kill -TERM "$$"
   it('prints options when read is missing a filename', () => {
     const result = runGu({ args: ['read'] });
 
-    assertGuSucceeded(result);
+    assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
     assert.include(result.stdout, '\nOptions: ');
     assert.deepEqual(gistReads(), []);
   });
 
-  it('reports an initial Gist retrieval failure before snapshotting', () => {
+  it('reports a missing read filename before checking Gist readability', () => {
+    const result = runGu({ args: ['read'], gistInitialReadFail: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, "Error: 'read' needs a filename.");
+    assert.include(result.stdout, '\nOptions: ');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('uses the initial Gist retrieval failure status before snapshotting', () => {
     const result = runGu({ gistInitialReadFail: true });
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 17);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
     assert.equal(result.stderr, 'simulated initial gist read failure\n');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('uses a shell-style signal exit status for initial Gist retrieval', () => {
+    const result = runGu({ gistInitialReadSignal: true });
+
+    assert.equal(result.status, 143);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stderr, '');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports missing gist reads before snapshotting', () => {
+    removeGistCommand();
+
+    const result = runGu();
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stderr, 'gist: command not found\n');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports permission-denied gist reads before snapshotting', () => {
+    makeGistCommandPermissionDenied();
+
+    const result = runGu();
+
+    assert.equal(result.status, 126);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stderr, 'gist: Permission denied\n');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
@@ -412,15 +596,55 @@ kill -TERM "$$"
 
     const result = runGu();
 
-    assert.equal(result.status, 0);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
       'ballin_config failed for gu.id\n'
         + 'ballin_config failed for gu.url\n'
-        + 'Unexpected Gist ID\n',
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports missing ballin_config reads before snapshotting', () => {
+    removeBallinConfigCommand();
+
+    const result = runGu();
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'ballin_config: command not found\n'
+        + 'ballin_config: command not found\n'
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
+    );
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports permission-denied ballin_config reads before snapshotting', () => {
+    makeBallinConfigCommandPermissionDenied();
+
+    const result = runGu();
+
+    assert.equal(result.status, 126);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'ballin_config: Permission denied\n'
+        + 'ballin_config: Permission denied\n'
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
+    );
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
@@ -790,20 +1014,36 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
-  it('keeps current shell behavior when a Gist upload fails', () => {
+  it('reports a failure when a Gist upload fails', () => {
     writeSnapshot('export COLOR=blue\n');
     seedGuCache('export COLOR=red\n');
     seedFakeGist('export COLOR=red\n');
 
     const result = runGu({ gistUploadFail: true });
 
-    assert.equal(result.status, 0);
-    assert.equal(result.stderr, 'simulated gist upload failure\n');
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, 'simulated gist upload failure\ngu: failed to snapshot zshrc.sh\n');
     assert.deepEqual(fs.readdirSync(scratchDir), []);
-    assert.equal(result.stdout, '✚ zshrc\n');
-    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=red\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=red\n');
     assert.deepEqual(gistUploads(), []);
+  });
+
+  it('retries a changed snapshot after a failed Gist upload', () => {
+    writeSnapshot('export COLOR=blue\n');
+    seedGuCache('export COLOR=red\n');
+    seedFakeGist('export COLOR=red\n');
+
+    const failedResult = runGu({ gistUploadFail: true });
+    const retriedResult = runGu();
+
+    assert.equal(failedResult.status, 1);
+    assertGuSucceeded(retriedResult);
+    assert.equal(retriedResult.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
   it('streams large snapshot output without the default spawn buffer limit', () => {
