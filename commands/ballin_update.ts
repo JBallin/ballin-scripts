@@ -1,11 +1,12 @@
+const fs = require('fs');
 const path = require('path');
 const {
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
-const runQuiet = (command: string, args: string[], cwd: string): number | null => (
-  runCommand(command, args, {
+const runGitQuiet = (args: string[], cwd: string): number | null => (
+  runCommand('git', args, {
     cwd,
     env: {
       ...process.env,
@@ -15,8 +16,25 @@ const runQuiet = (command: string, args: string[], cwd: string): number | null =
   }).status
 );
 
-const runFetch = (cwd: string): number | null => (
-  runCommand('git', ['fetch'], {
+const runGitOutput = (args: string[], cwd: string): string | null => {
+  const result = runCommand('git', args, {
+    cwd,
+    env: {
+      ...process.env,
+      PWD: cwd,
+    },
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  return result.stdout.trim();
+};
+
+const runFetch = (branch: string, cwd: string): number | null => (
+  runCommand('git', ['fetch', 'origin', branch], {
     cwd,
     env: {
       ...process.env,
@@ -26,26 +44,65 @@ const runFetch = (cwd: string): number | null => (
   }).status
 );
 
+const getCurrentBranch = (cwd: string): string | null => {
+  const branch = runGitOutput(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+  if (!branch || branch === 'HEAD') {
+    return null;
+  }
+
+  return branch;
+};
+
+const isDirectory = (candidate: string): boolean => {
+  try {
+    return fs.statSync(candidate).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
 const runBallinUpdateCli = (): void => {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
 
   writeStdoutLine('👟 getting fresh kicks...');
 
-  if (runFetch(repoDir) !== 0) {
-    writeStdoutLine('git fetch failed');
+  if (!isDirectory(repoDir)) {
+    writeStdoutLine(`install directory not found: ${repoDir}`);
     process.exitCode = 1;
     return;
   }
 
-  if (runQuiet('git', ['merge'], repoDir) !== 0) {
-    writeStdoutLine('git merge failed. stashing changes and trying again...');
-    const recovered = runQuiet('git', ['add', '.'], repoDir) === 0
-      && runQuiet('git', ['stash'], repoDir) === 0
-      && runQuiet('git', ['checkout', 'main'], repoDir) === 0
-      && runQuiet('git', ['merge'], repoDir) === 0;
+  const branch = getCurrentBranch(repoDir);
+  if (!branch) {
+    writeStdoutLine('git current branch lookup failed');
+    process.exitCode = 1;
+    return;
+  }
 
-    if (!recovered) {
-      writeStdoutLine('git merge failed again.');
+  const remoteRef = `origin/${branch}`;
+  if (runFetch(branch, repoDir) !== 0) {
+    writeStdoutLine(`git fetch origin ${branch} failed`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (runGitQuiet(['merge', remoteRef], repoDir) !== 0) {
+    writeStdoutLine('git merge failed. stashing changes and trying again...');
+
+    if (runGitQuiet(['stash', 'push', '--include-untracked'], repoDir) !== 0) {
+      writeStdoutLine('git stash failed during merge recovery.');
+      process.exitCode = 1;
+      return;
+    }
+
+    if (runGitQuiet(['checkout', branch], repoDir) !== 0) {
+      writeStdoutLine('git checkout failed during merge recovery.');
+      process.exitCode = 1;
+      return;
+    }
+
+    if (runGitQuiet(['merge', remoteRef], repoDir) !== 0) {
+      writeStdoutLine('git merge failed during merge recovery.');
       process.exitCode = 1;
       return;
     }

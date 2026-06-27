@@ -39,6 +39,13 @@ describe('ballin_update', () => {
     writeExecutable('git', `#!/usr/bin/env bash
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
 case "$1" in
+  rev-parse)
+    if [ "$FAKE_GIT_BRANCH_STATUS" != '0' ]; then
+      exit "$FAKE_GIT_BRANCH_STATUS"
+    fi
+    printf '%s\\n' "$FAKE_GIT_BRANCH"
+    exit 0
+    ;;
   fetch)
     if [ "$FAKE_GIT_FETCH_READ_STDIN" = '1' ]; then
       printf 'credential prompt\\n' >&2
@@ -61,9 +68,6 @@ case "$1" in
       exit "$FAKE_GIT_FIRST_MERGE_STATUS"
     fi
     exit "$FAKE_GIT_RETRY_MERGE_STATUS"
-    ;;
-  add)
-    exit "$FAKE_GIT_ADD_STATUS"
     ;;
   stash)
     exit "$FAKE_GIT_STASH_STATUS"
@@ -99,9 +103,10 @@ exit "$FAKE_INSTALL_STATUS"
       BALLIN_UPDATE_TEST_LOG: commandLogPath,
       FAKE_GIT_MERGE_COUNT_PATH: mergeCountPath,
       FAKE_GIT_FETCH_STATUS: '0',
+      FAKE_GIT_BRANCH: 'main',
+      FAKE_GIT_BRANCH_STATUS: '0',
       FAKE_GIT_FIRST_MERGE_STATUS: '0',
       FAKE_GIT_RETRY_MERGE_STATUS: '0',
-      FAKE_GIT_ADD_STATUS: '0',
       FAKE_GIT_STASH_STATUS: '0',
       FAKE_GIT_CHECKOUT_STATUS: '0',
       FAKE_INSTALL_STATUS: '0',
@@ -143,8 +148,9 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -160,9 +166,10 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, 'credential prompt\n');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
       'fetch-stdin:secret-token',
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -179,8 +186,9 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -192,8 +200,9 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -202,14 +211,74 @@ exit "$FAKE_INSTALL_STATUS"
     const result = runUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\ngit fetch failed\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\ngit fetch origin main failed\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
     ]);
   });
 
-  it('stashes, checks out main, retries merge, and installs after an initial merge failure', () => {
+  it('stops before git commands when the installed repository is missing', () => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+
+    const result = runUpdate();
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, `👟 getting fresh kicks...\ninstall directory not found: ${repoDir}\n`);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('stops before git commands when the installed repository path is not a directory', () => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    fs.writeFileSync(repoDir, '');
+
+    const result = runUpdate();
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, `👟 getting fresh kicks...\ninstall directory not found: ${repoDir}\n`);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('stops before fetch and install when the current branch cannot be resolved', () => {
+    const result = runUpdate({ FAKE_GIT_BRANCH_STATUS: '28' });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\ngit current branch lookup failed\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+    ]);
+  });
+
+  it('stops before fetch and install when the installed repository is detached', () => {
+    const result = runUpdate({ FAKE_GIT_BRANCH: 'HEAD' });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\ngit current branch lookup failed\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+    ]);
+  });
+
+  it('fetches and merges the current branch explicitly', () => {
+    const result = runUpdate({ FAKE_GIT_BRANCH: 'stable' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin stable`,
+      `${repoDir}|git:merge origin/stable`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('stashes, checks out the current branch, retries merge, and installs after an initial merge failure', () => {
     const result = runUpdate({ FAKE_GIT_FIRST_MERGE_STATUS: '24' });
 
     assert.equal(result.status, 0, result.stderr);
@@ -219,12 +288,12 @@ exit "$FAKE_INSTALL_STATUS"
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
-      `${repoDir}|git:add .`,
-      `${repoDir}|git:stash`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -240,16 +309,16 @@ exit "$FAKE_INSTALL_STATUS"
       result.stdout,
       '👟 getting fresh kicks...\n'
         + 'git merge failed. stashing changes and trying again...\n'
-        + 'git merge failed again.\n',
+        + 'git merge failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
-      `${repoDir}|git:add .`,
-      `${repoDir}|git:stash`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge`,
+      `${repoDir}|git:merge origin/main`,
     ]);
   });
 
@@ -264,14 +333,37 @@ exit "$FAKE_INSTALL_STATUS"
       result.stdout,
       '👟 getting fresh kicks...\n'
         + 'git merge failed. stashing changes and trying again...\n'
-        + 'git merge failed again.\n',
+        + 'git stash failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch`,
-      `${repoDir}|git:merge`,
-      `${repoDir}|git:add .`,
-      `${repoDir}|git:stash`,
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:stash push --include-untracked`,
+    ]);
+  });
+
+  it('stops before retry merge and install when the fallback checkout fails', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_MERGE_STATUS: '24',
+      FAKE_GIT_CHECKOUT_STATUS: '27',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\n'
+        + 'git merge failed. stashing changes and trying again...\n'
+        + 'git checkout failed during merge recovery.\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
     ]);
   });
 });
