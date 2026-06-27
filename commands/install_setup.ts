@@ -1,8 +1,52 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
+
+const configure = (repoDir: string, docsUrl: string): boolean => {
+  const configPath = path.join(repoDir, 'ballin.config.json');
+  const defaultConfigPath = path.join(repoDir, 'config', '.defaultConfig.json');
+  const updateConfigPath = path.join(repoDir, 'config', 'updateConfig.ts');
+
+  if (!fs.existsSync(configPath)) {
+    try {
+      fs.copyFileSync(defaultConfigPath, configPath);
+    } catch {
+      return false;
+    }
+    writeStdoutLine("\n🧠 Created 'ballin.config.json' file in root using default settings");
+    return true;
+  }
+
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PWD: path.join(repoDir, 'config'),
+  };
+  delete childEnv.BALLIN_TEST_CONFIG_PATH;
+
+  const updateResult = runCommand(process.execPath, [updateConfigPath], {
+    cwd: path.join(repoDir, 'config'),
+    env: childEnv,
+  });
+
+  if (updateResult.stderr) {
+    process.stderr.write(updateResult.stderr);
+  }
+
+  if (updateResult.status !== 0 || updateResult.error) {
+    return false;
+  }
+
+  const updateOutput = updateResult.stdout.trimEnd();
+  if (updateOutput) {
+    writeStdoutLine(`\n🙌 ${updateOutput}`);
+    writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
+  }
+
+  return true;
+};
 
 const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
   const sourceBinDir = path.join(repoDir, 'bin');
@@ -32,15 +76,26 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
 };
 
 const runInstallSetupCli = (): void => {
-  const [, , command, repoDir, binDir] = process.argv;
+  const [, , command, repoDir, option] = process.argv;
 
-  if (command !== 'symlink-binaries' || !repoDir || !binDir) {
-    writeStdoutLine('Usage: install_setup.ts symlink-binaries <repo-dir> <bin-dir>');
+  if (command === 'configure' && repoDir && option) {
+    process.exitCode = configure(repoDir, option) ? 0 : 1;
+    return;
+  }
+
+  if (command === 'symlink-binaries' && repoDir && option) {
+    process.exitCode = symlinkBinaries(repoDir, option) ? 0 : 1;
+    return;
+  }
+
+  if (!command || !repoDir || !option) {
+    writeStdoutLine('Usage: install_setup.ts <configure|symlink-binaries> <repo-dir> <docs-url|bin-dir>');
     process.exitCode = 1;
     return;
   }
 
-  process.exitCode = symlinkBinaries(repoDir, binDir) ? 0 : 1;
+  writeStdoutLine(`Unknown install setup command: ${command}`);
+  process.exitCode = 1;
 };
 
 if (require.main === module) {
@@ -48,6 +103,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  configure,
   runInstallSetupCli,
   symlinkBinaries,
 };
