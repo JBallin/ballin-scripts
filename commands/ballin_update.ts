@@ -34,7 +34,7 @@ const runGitOutput = (args: string[], cwd: string): string | null => {
 };
 
 const runFetch = (branch: string, cwd: string): number | null => (
-  runCommand('git', ['fetch', 'origin', `${branch}:refs/remotes/origin/${branch}`], {
+  runCommand('git', ['fetch', 'origin', `+${branch}:refs/remotes/origin/${branch}`], {
     cwd,
     env: {
       ...process.env,

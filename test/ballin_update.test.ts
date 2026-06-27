@@ -149,7 +149,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
@@ -167,7 +167,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, 'credential prompt\n');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       'fetch-stdin:secret-token',
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
@@ -187,7 +187,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
@@ -201,7 +201,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
     ]);
@@ -215,7 +215,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
     ]);
   });
 
@@ -272,8 +272,22 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin stable:refs/remotes/origin/stable`,
+      `${repoDir}|git:fetch origin +stable:refs/remotes/origin/stable`,
       `${repoDir}|git:merge origin/stable`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('fetches and merges branch names with slashes explicitly', () => {
+    const result = runUpdate({ FAKE_GIT_BRANCH: 'release/v1' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin +release/v1:refs/remotes/origin/release/v1`,
+      `${repoDir}|git:merge origin/release/v1`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -289,11 +303,34 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('uses the current branch with slashes during merge recovery', () => {
+    const result = runUpdate({
+      FAKE_GIT_BRANCH: 'release/v1',
+      FAKE_GIT_FIRST_MERGE_STATUS: '24',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\ngit merge failed. stashing changes and trying again...\n\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
+      `${repoDir}|git:fetch origin +release/v1:refs/remotes/origin/release/v1`,
+      `${repoDir}|git:merge origin/release/v1`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout release/v1`,
+      `${repoDir}|git:merge origin/release/v1`,
       `${repoDir}|install.sh:`,
     ]);
   });
@@ -314,7 +351,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
@@ -338,7 +375,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:stash push --include-untracked`,
     ]);
@@ -360,7 +397,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:rev-parse --abbrev-ref HEAD`,
-      `${repoDir}|git:fetch origin main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
