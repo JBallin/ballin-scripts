@@ -321,6 +321,24 @@ done
     assert.deepEqual(gistReads(), []);
   });
 
+  it('fails open when Gist config cannot be read', () => {
+    installFailingBallinConfigCommand();
+
+    const result = runGu({ args: ['open'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'ballin_config failed for gu.id\n'
+        + 'ballin_config failed for gu.url\n'
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
+    );
+    assert.deepEqual(openCalls(), []);
+    assert.deepEqual(gistReads(), []);
+  });
+
   it('remains executable through the installed symlink model', () => {
     const linkPath = path.join(testBinDir, 'gu-link');
     fs.symlinkSync(guPath, linkPath);
@@ -379,6 +397,16 @@ kill -TERM "$$"
     assertGuSucceeded(result);
     assert.equal(result.stdout, 'fake ballin help\n');
     assert.deepEqual(ballinCalls(), ['']);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails help when extra arguments are provided', () => {
+    const result = runGu({ args: ['help', 'extra'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'gu help: expected no arguments\n');
+    assert.deepEqual(ballinCalls(), []);
     assert.deepEqual(gistReads(), []);
   });
 
@@ -480,14 +508,16 @@ kill -TERM "$$"
     const result = runGu();
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
       'ballin_config failed for gu.id\n'
         + 'ballin_config failed for gu.url\n'
-        + 'Unexpected Gist ID\n',
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 

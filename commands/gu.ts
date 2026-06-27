@@ -82,6 +82,23 @@ const configValue = (key: string): string => (
   readCommandOutput('ballin_config', ['get', key], { stdio: ['ignore', 'pipe', 'inherit'] })?.trim() ?? ''
 );
 
+const guConfig = (): { id: string; url: string } | null => {
+  const id = configValue('gu.id');
+  const url = configValue('gu.url');
+
+  if (id && url) {
+    return { id, url };
+  }
+
+  if (!id) {
+    writeStderrLine('gu: missing config value gu.id');
+  }
+  if (!url) {
+    writeStderrLine('gu: missing config value gu.url');
+  }
+  return null;
+};
+
 const runGist = (args: string[], options = {}): ReturnType<typeof runCommand> => (
   runCommand('gist', args, options)
 );
@@ -483,6 +500,11 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   const command = args[0];
 
   if (command === 'help') {
+    if (args.length !== 1) {
+      writeStderrLine('gu help: expected no arguments');
+      process.exitCode = 1;
+      return;
+    }
     process.exitCode = runVisible('ballin');
     return;
   }
@@ -511,8 +533,12 @@ const runGuCli = (args = process.argv.slice(2)): void => {
     return;
   }
 
-  const id = configValue('gu.id');
-  const url = `${configValue('gu.url')}/${id}`;
+  const config = guConfig();
+  if (!config) {
+    process.exitCode = 1;
+    return;
+  }
+  const url = `${config.url}/${config.id}`;
 
   if (command === 'open') {
     writeStdoutLine(url);
@@ -520,14 +546,14 @@ const runGuCli = (args = process.argv.slice(2)): void => {
     return;
   }
 
-  if (!verifyGistReadable(id)) {
+  if (!verifyGistReadable(config.id)) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
     process.exitCode = 1;
     return;
   }
 
   if (command === 'read') {
-    if (readGistFileToStdout(id, args[1])) {
+    if (readGistFileToStdout(config.id, args[1])) {
       return;
     } else {
       process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
@@ -541,7 +567,7 @@ const runGuCli = (args = process.argv.slice(2)): void => {
 
   let failed = false;
   collectSnapshots(homeDir).forEach((snapshot) => {
-    if (!updateSnapshot(id, cacheDir, snapshot)) {
+    if (!updateSnapshot(config.id, cacheDir, snapshot)) {
       writeStderrLine(`gu: failed to snapshot ${snapshot.fileName}`);
       failed = true;
     }
