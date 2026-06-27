@@ -48,13 +48,9 @@ surface.
   TypeScript source under `commands/` and `config/` is executed directly by
   Node. Preserve executable modes and existing shebang/symlink coverage for
   user-facing commands.
-- For command work, preserve behavior unless an issue explicitly asks for a
-  behavior change; keep broad refactors, product changes, and cleanup in focused
-  issues or PRs.
 - Treat `install.sh` changes as installer/bootstrap work. Do not assume it
-  should follow the same Node-shim pattern as installed `bin/*` commands; update
-  README install guidance only when the installer behavior intentionally
-  changes.
+  follows the same Node-shim pattern as installed `bin/*` commands; update
+  README install guidance when the install invocation changes.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
