@@ -135,6 +135,15 @@ exit 42
 `);
   };
 
+  const removeBallinConfigCommand = () => {
+    fs.rmSync(path.join(testBinDir, 'ballin_config'));
+  };
+
+  const makeBallinConfigCommandPermissionDenied = () => {
+    fs.writeFileSync(path.join(testBinDir, 'ballin_config'), 'not executable\n', { mode: 0o644 });
+    fs.chmodSync(path.join(testBinDir, 'ballin_config'), 0o644);
+  };
+
   const installFakeBallinCommand = () => {
     writeTestExecutable('ballin', `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_BALLIN_LOG"
@@ -513,6 +522,44 @@ kill -TERM "$$"
       result.stderr,
       'ballin_config failed for gu.id\n'
         + 'ballin_config failed for gu.url\n'
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
+    );
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports missing ballin_config reads before snapshotting', () => {
+    removeBallinConfigCommand();
+
+    const result = runGu();
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'ballin_config: command not found\n'
+        + 'ballin_config: command not found\n'
+        + 'gu: missing config value gu.id\n'
+        + 'gu: missing config value gu.url\n',
+    );
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports permission-denied ballin_config reads before snapshotting', () => {
+    makeBallinConfigCommandPermissionDenied();
+
+    const result = runGu();
+
+    assert.equal(result.status, 126);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'ballin_config: Permission denied\n'
+        + 'ballin_config: Permission denied\n'
         + 'gu: missing config value gu.id\n'
         + 'gu: missing config value gu.url\n',
     );

@@ -33,6 +33,16 @@ type SnapshotResultState = 'unchanged' | 'created' | 'removed' | 'updated';
 
 type SnapshotOptions = Pick<SnapshotCommand, 'env' | 'suppressStderrOnSuccess'>;
 
+type ConfigValueResult = {
+  value: string;
+  spawnStatus?: number;
+};
+
+type GuConfigResult = {
+  config: { id: string; url: string } | null;
+  exitStatus: number;
+};
+
 type SnapshotCollector = {
   addFile: (sourceName: string, fileName: string) => void;
   addShellCommand: (
@@ -78,27 +88,6 @@ const fileSuggestions = `
   zprofile.sh
   zshrc.sh`;
 
-const configValue = (key: string): string => (
-  readCommandOutput('ballin_config', ['get', key], { stdio: ['ignore', 'pipe', 'inherit'] })?.trim() ?? ''
-);
-
-const guConfig = (): { id: string; url: string } | null => {
-  const id = configValue('gu.id');
-  const url = configValue('gu.url');
-
-  if (id && url) {
-    return { id, url };
-  }
-
-  if (!id) {
-    writeStderrLine('gu: missing config value gu.id');
-  }
-  if (!url) {
-    writeStderrLine('gu: missing config value gu.url');
-  }
-  return null;
-};
-
 const runGist = (args: string[], options = {}): ReturnType<typeof runCommand> => (
   runCommand('gist', args, options)
 );
@@ -115,6 +104,44 @@ const reportSpawnError = (command: string, error: Error): number => {
   }
   writeStderrLine(error.message);
   return 1;
+};
+
+const configValue = (key: string): ConfigValueResult => {
+  const result = runCommand('ballin_config', ['get', key], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  if (result.error) {
+    return {
+      value: '',
+      spawnStatus: reportSpawnError('ballin_config', result.error),
+    };
+  }
+  if (result.status !== 0) {
+    return { value: '' };
+  }
+  return { value: result.stdout.trim() };
+};
+
+const guConfig = (): GuConfigResult => {
+  const idResult = configValue('gu.id');
+  const urlResult = configValue('gu.url');
+  const id = idResult.value;
+  const url = urlResult.value;
+
+  if (id && url) {
+    return { config: { id, url }, exitStatus: 0 };
+  }
+
+  if (!id) {
+    writeStderrLine('gu: missing config value gu.id');
+  }
+  if (!url) {
+    writeStderrLine('gu: missing config value gu.url');
+  }
+  return {
+    config: null,
+    exitStatus: idResult.spawnStatus ?? urlResult.spawnStatus ?? 1,
+  };
 };
 
 const shellStyleExitStatus = (result: ReturnType<typeof runCommand>): number => {
@@ -533,9 +560,9 @@ const runGuCli = (args = process.argv.slice(2)): void => {
     return;
   }
 
-  const config = guConfig();
+  const { config, exitStatus } = guConfig();
   if (!config) {
-    process.exitCode = 1;
+    process.exitCode = exitStatus;
     return;
   }
   const url = `${config.url}/${config.id}`;
