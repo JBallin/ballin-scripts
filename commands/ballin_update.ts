@@ -16,25 +16,11 @@ const runGitQuiet = (args: string[], cwd: string): number | null => (
   }).status
 );
 
-const runGitOutput = (args: string[], cwd: string): string | null => {
-  const result = runCommand('git', args, {
-    cwd,
-    env: {
-      ...process.env,
-      PWD: cwd,
-    },
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
+const updateBranch = 'main';
+const updateRemoteRef = `origin/${updateBranch}`;
 
-  if (result.status !== 0) {
-    return null;
-  }
-
-  return result.stdout.trim();
-};
-
-const runFetch = (branch: string, cwd: string): number | null => (
-  runCommand('git', ['fetch', 'origin', `+${branch}:refs/remotes/origin/${branch}`], {
+const runFetch = (cwd: string): number | null => (
+  runCommand('git', ['fetch', 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`], {
     cwd,
     env: {
       ...process.env,
@@ -43,15 +29,6 @@ const runFetch = (branch: string, cwd: string): number | null => (
     stdio: ['inherit', 'ignore', 'inherit'],
   }).status
 );
-
-const getCurrentBranch = (cwd: string): string | null => {
-  const branch = runGitOutput(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
-  if (!branch || branch === 'HEAD') {
-    return null;
-  }
-
-  return branch;
-};
 
 const isDirectory = (candidate: string): boolean => {
   try {
@@ -72,21 +49,13 @@ const runBallinUpdateCli = (): void => {
     return;
   }
 
-  const branch = getCurrentBranch(repoDir);
-  if (!branch) {
-    writeStdoutLine('git current branch lookup failed');
+  if (runFetch(repoDir) !== 0) {
+    writeStdoutLine(`git fetch origin ${updateBranch} failed`);
     process.exitCode = 1;
     return;
   }
 
-  const remoteRef = `origin/${branch}`;
-  if (runFetch(branch, repoDir) !== 0) {
-    writeStdoutLine(`git fetch origin ${branch} failed`);
-    process.exitCode = 1;
-    return;
-  }
-
-  if (runGitQuiet(['merge', remoteRef], repoDir) !== 0) {
+  if (runGitQuiet(['merge', updateRemoteRef], repoDir) !== 0) {
     writeStdoutLine('git merge failed. stashing changes and trying again...');
 
     if (runGitQuiet(['stash', 'push', '--include-untracked'], repoDir) !== 0) {
@@ -95,13 +64,13 @@ const runBallinUpdateCli = (): void => {
       return;
     }
 
-    if (runGitQuiet(['checkout', branch], repoDir) !== 0) {
+    if (runGitQuiet(['checkout', updateBranch], repoDir) !== 0) {
       writeStdoutLine('git checkout failed during merge recovery.');
       process.exitCode = 1;
       return;
     }
 
-    if (runGitQuiet(['merge', remoteRef], repoDir) !== 0) {
+    if (runGitQuiet(['merge', updateRemoteRef], repoDir) !== 0) {
       writeStdoutLine('git merge failed during merge recovery.');
       process.exitCode = 1;
       return;
