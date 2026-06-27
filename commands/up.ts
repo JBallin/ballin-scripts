@@ -49,7 +49,17 @@ const runVisible = (command: string, args: string[] = [], env = process.env): nu
   return result.status ?? 1;
 };
 
-const parseEnvOutput = (output: string): NodeJS.ProcessEnv => JSON.parse(output);
+const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
+  if (!output.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(output);
+  } catch {
+    return null;
+  }
+};
 
 const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
   const envPath = makeTempFile('ballin-up-env-');
@@ -69,11 +79,15 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
       reportSpawnError('bash', result.error);
       return null;
     }
-    if (!fs.existsSync(envPath)) {
+    if (result.status !== 0 || !fs.existsSync(envPath)) {
       return null;
     }
 
     const nextEnv = parseEnvOutput(fs.readFileSync(envPath, 'utf8'));
+    if (!nextEnv) {
+      return null;
+    }
+
     delete nextEnv.BALLIN_UP_ENV_PATH;
     return nextEnv;
   } finally {

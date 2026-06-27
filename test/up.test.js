@@ -308,6 +308,30 @@ printf 'gu-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
     ]);
   });
 
+  it('keeps running later integrations when nvm env capture fails', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const brokenNodeDir = path.join(tempDir, 'broken-node');
+    fs.mkdirSync(brokenNodeDir);
+    installPathUpdatingNvmStub(nvmDir, brokenNodeDir);
+    fs.writeFileSync(path.join(brokenNodeDir, 'node'), `#!/usr/bin/env bash
+exit 42
+`, { mode: 0o755 });
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
+`);
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.deepEqual(commandLog().slice(1), [
+      'gu still ran',
+    ]);
+  });
+
   it('warns when nvm is enabled but cannot be loaded', () => {
     const result = runUp();
 
