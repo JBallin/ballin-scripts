@@ -480,14 +480,33 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
 
 const runGuCli = (args = process.argv.slice(2)): void => {
   const homeDir = process.env.HOME ?? '';
+  const command = args[0];
 
-  if (args[0] === 'help') {
+  if (command === 'help') {
     process.exitCode = runVisible('ballin');
+    return;
+  }
+
+  if (command && !['open', 'read'].includes(command)) {
+    writeStderrLine(`gu: unknown command '${command}'`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === 'read' && !args[1]) {
+    process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
+    process.exitCode = 1;
     return;
   }
 
   const id = configValue('gu.id');
   const url = `${configValue('gu.url')}/${id}`;
+
+  if (command === 'open') {
+    writeStdoutLine(url);
+    process.exitCode = runVisible('open', [url]);
+    return;
+  }
 
   if (!verifyGistReadable(id)) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
@@ -495,24 +514,11 @@ const runGuCli = (args = process.argv.slice(2)): void => {
     return;
   }
 
-  if (args.length > 0) {
-    if (args[0] === 'open') {
-      writeStdoutLine(url);
-      process.exitCode = runVisible('open', [url]);
-    } else if (args[0] === 'read') {
-      if (args[1]) {
-        if (readGistFileToStdout(id, args[1])) {
-          return;
-        } else {
-          process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
-          process.exitCode = 1;
-        }
-      } else {
-        process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
-        process.exitCode = 1;
-      }
+  if (command === 'read') {
+    if (readGistFileToStdout(id, args[1])) {
+      return;
     } else {
-      writeStderrLine(`gu: unknown command '${args[0]}'`);
+      process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
       process.exitCode = 1;
     }
     return;

@@ -302,6 +302,15 @@ done
     assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
   });
 
+  it('opens the configured Gist URL without requiring a readable Gist', () => {
+    const result = runGu({ args: ['open'], gistInitialReadFail: true });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'https://example.test/gists/test-gist-id\n');
+    assert.deepEqual(openCalls(), ['https://example.test/gists/test-gist-id']);
+    assert.deepEqual(gistReads(), []);
+  });
+
   it('remains executable through the installed symlink model', () => {
     const linkPath = path.join(testBinDir, 'gu-link');
     fs.symlinkSync(guPath, linkPath);
@@ -373,6 +382,16 @@ kill -TERM "$$"
     assert.deepEqual(gistUploads(), []);
   });
 
+  it('fails unknown commands before checking Gist readability', () => {
+    const result = runGu({ args: ['typo'], gistInitialReadFail: true });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, "gu: unknown command 'typo'\n");
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
   it('reads a named Gist file', () => {
     seedFakeGistFile('vimrc', 'set number\n');
 
@@ -412,6 +431,16 @@ kill -TERM "$$"
     assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
     assert.include(result.stdout, '\nOptions: ');
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('reports a missing read filename before checking Gist readability', () => {
+    const result = runGu({ args: ['read'], gistInitialReadFail: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, "Error: 'read' needs a filename.");
+    assert.include(result.stdout, '\nOptions: ');
+    assert.equal(result.stderr, '');
     assert.deepEqual(gistReads(), []);
   });
 
