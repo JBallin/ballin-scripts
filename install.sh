@@ -175,6 +175,11 @@ done
                 printf '\n🙌 %s\n' "$UPDATE_RESULT"
                 printf '\n👀 Docs: %s\n' "$docs_url"
               fi
+              restored_gist_token_path="$HOME/$("$ballin_config" get gu.token_file)"
+              if [ "$restored_gist_token_path" != "$gist_token_path" ] && [ ! -f "$restored_gist_token_path" ]; then
+                cp "$gist_token_path" "$restored_gist_token_path"
+                chmod 600 "$restored_gist_token_path"
+              fi
             else
               printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
             fi

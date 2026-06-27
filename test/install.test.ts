@@ -64,7 +64,16 @@ esac
 printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 gist_id_file="$HOME/.configured-gist-id"
 case "$1:$2" in
-  get:gu.token_file) printf '%s\\n' '.gist' ;;
+  get:gu.token_file)
+    config_json=''
+    if [ -f "$HOME/.ballin-scripts/ballin.config.json" ]; then
+      config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
+    fi
+    case "$config_json" in
+      *'.restored-gist'*) printf '%s\\n' '.restored-gist' ;;
+      *) printf '%s\\n' '.gist' ;;
+    esac
+    ;;
   get:gu.url) printf '%s\\n' 'https://gist.example.test' ;;
   get:gu.id)
     if [ -f "$gist_id_file" ]; then
@@ -263,6 +272,7 @@ esac
     assert.equal(restoredConfig.gu.id, 'returning-gist-id');
     assert.equal(restoredConfig.gu.token_file, '.restored-gist');
     assert.equal(restoredConfig.gu.url, 'https://old-gist.example.test');
+    assert.equal(fs.readFileSync(path.join(homeDir, '.restored-gist'), 'utf8'), 'token\n');
   });
 
   it('stops before Gist and success output when config creation fails', () => {
