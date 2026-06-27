@@ -30,6 +30,7 @@ type RunGuOptions = {
   brewPrefixFail?: boolean;
   completionDir?: string;
   gistInitialReadFail?: boolean;
+  gistInitialReadSignal?: boolean;
   gistUploadFail?: boolean;
   commandPath?: string;
 };
@@ -89,6 +90,9 @@ if [ "$1" = '-r' ]; then
     if [ "$FAKE_GIST_INITIAL_READ_FAIL" = 'true' ]; then
       printf '%s\\n' 'simulated initial gist read failure' >&2
       exit 17
+    fi
+    if [ "$FAKE_GIST_INITIAL_READ_SIGNAL" = 'true' ]; then
+      kill -TERM "$$"
     fi
     exit 0
   elif [ "$#" -ne 3 ]; then
@@ -245,6 +249,7 @@ done
     brewPrefixFail = false,
     completionDir,
     gistInitialReadFail = false,
+    gistInitialReadSignal = false,
     gistUploadFail = false,
     commandPath = guPath,
   }: RunGuOptions = {}) => spawnSync(commandPath, args, {
@@ -261,6 +266,7 @@ done
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
       FAKE_GIST_INITIAL_READ_FAIL: gistInitialReadFail ? 'true' : 'false',
+      FAKE_GIST_INITIAL_READ_SIGNAL: gistInitialReadSignal ? 'true' : 'false',
       FAKE_GIST_UPLOAD_FAIL: gistUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_OPEN_LOG: openLogPath,
@@ -510,12 +516,23 @@ kill -TERM "$$"
     assert.deepEqual(gistReads(), []);
   });
 
-  it('reports an initial Gist retrieval failure before snapshotting', () => {
+  it('uses the initial Gist retrieval failure status before snapshotting', () => {
     const result = runGu({ gistInitialReadFail: true });
 
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 17);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
     assert.equal(result.stderr, 'simulated initial gist read failure\n');
+    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('uses a shell-style signal exit status for initial Gist retrieval', () => {
+    const result = runGu({ gistInitialReadSignal: true });
+
+    assert.equal(result.status, 143);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stderr, '');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);

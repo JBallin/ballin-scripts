@@ -233,7 +233,7 @@ const verifyGistReadable = (id: string): CommandCheckResult => {
     };
   }
   if (result.status !== 0) {
-    return { ok: false, exitStatus: 1 };
+    return { ok: false, exitStatus: shellStyleExitStatus(result) };
   }
   return { ok: true, exitStatus: 0 };
 };
