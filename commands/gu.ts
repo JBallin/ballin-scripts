@@ -247,6 +247,13 @@ const snapshotIsEmpty = (filePath: string): boolean => (
   fs.readFileSync(filePath, 'utf8') === emptySnapshotContent
 );
 
+const createSnapshotUploadFile = (sourceFile: string, fileName: string): string => {
+  const tempFile = makeTempFile('ballin-gu-upload-');
+  const uploadFile = path.join(path.dirname(tempFile), fileName);
+  fs.copyFileSync(sourceFile, uploadFile);
+  return uploadFile;
+};
+
 const classifySnapshotResult = (
   isNew: boolean,
   isChanged: boolean,
@@ -301,19 +308,22 @@ const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand)
       isChanged = !snapshotFilesMatch(inputFile, cacheFile);
     }
 
+    isEmpty = snapshotIsEmpty(inputFile);
+    resultState = classifySnapshotResult(isNew, isChanged, isEmpty);
+
     if (isChanged) {
+      const uploadFile = createSnapshotUploadFile(inputFile, snapshot.fileName);
+      try {
+        if (!uploadGistFile(id, uploadFile)) {
+          return false;
+        }
+      } finally {
+        removeTempFile(uploadFile);
+      }
       fs.copyFileSync(inputFile, cacheFile);
     }
-    isEmpty = snapshotIsEmpty(cacheFile);
-    resultState = classifySnapshotResult(isNew, isChanged, isEmpty);
   } finally {
     removeTempFile(inputFile);
-  }
-
-  if (resultState !== 'unchanged') {
-    if (!uploadGistFile(id, cacheFile)) {
-      return false;
-    }
   }
 
   writeSnapshotStatus(snapshot, resultState, isEmpty);

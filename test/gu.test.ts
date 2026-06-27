@@ -801,9 +801,25 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.stderr, 'simulated gist upload failure\ngu: failed to snapshot zshrc.sh\n');
     assert.deepEqual(fs.readdirSync(scratchDir), []);
     assert.equal(result.stdout, '');
-    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=red\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=red\n');
     assert.deepEqual(gistUploads(), []);
+  });
+
+  it('retries a changed snapshot after a failed Gist upload', () => {
+    writeSnapshot('export COLOR=blue\n');
+    seedGuCache('export COLOR=red\n');
+    seedFakeGist('export COLOR=red\n');
+
+    const failedResult = runGu({ gistUploadFail: true });
+    const retriedResult = runGu();
+
+    assert.equal(failedResult.status, 1);
+    assertGuSucceeded(retriedResult);
+    assert.equal(retriedResult.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
   it('streams large snapshot output without the default spawn buffer limit', () => {
