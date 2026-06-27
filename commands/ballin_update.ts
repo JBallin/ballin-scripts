@@ -2,6 +2,7 @@ const path = require('path');
 const {
   isDirectory,
   runCommand,
+  runVisibleCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
@@ -111,15 +112,13 @@ const runBallinUpdateCli = (): void => {
   }
 
   writeStdoutLine();
-  const installResult = runCommand('./install.sh', [], {
+  process.exitCode = runVisibleCommand('./install.sh', [], {
     cwd: repoDir,
     env: {
       ...process.env,
       PWD: repoDir,
     },
-    stdio: 'inherit',
   });
-  process.exitCode = installResult.status ?? 1;
 };
 
 module.exports = {
