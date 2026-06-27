@@ -1,31 +1,15 @@
-const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const {
   commandExists,
   makeTempFile,
   progress,
+  reportSpawnError,
   removeTempFile,
   runCommand,
+  spawnResultStatus,
   writeStderrLine,
 } = require('./commandHelpers.ts');
-
-const commandPermissionDeniedStatus = 126;
-const commandNotFoundStatus = 127;
-
-const reportSpawnError = (command: string, error: Error): number => {
-  const errorCode = (error as { code?: string }).code;
-  if (errorCode === 'EACCES') {
-    writeStderrLine(`${command}: Permission denied`);
-    return commandPermissionDeniedStatus;
-  }
-  if (errorCode === 'ENOENT') {
-    writeStderrLine(`${command}: command not found`);
-    return commandNotFoundStatus;
-  }
-  writeStderrLine(error.message);
-  return 1;
-};
 
 const configValue = (key: string, env = process.env): string => {
   const result = runCommand('ballin_config', ['get', key], {
@@ -47,13 +31,7 @@ const runVisible = (command: string, args: string[] = [], env = process.env): nu
   if (result.error) {
     return reportSpawnError(command, result.error);
   }
-  if (result.signal) {
-    const signalNumber = os.constants.signals[result.signal];
-    if (typeof signalNumber === 'number') {
-      return 128 + signalNumber;
-    }
-  }
-  return result.status ?? 1;
+  return spawnResultStatus(result);
 };
 
 const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {

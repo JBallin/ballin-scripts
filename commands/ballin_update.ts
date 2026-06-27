@@ -1,6 +1,6 @@
-const fs = require('fs');
 const path = require('path');
 const {
+  isDirectory,
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
@@ -33,14 +33,6 @@ const runFetch = (cwd: string): number | null => (
 const isMergeInProgress = (cwd: string): boolean => (
   runGitQuiet(['rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd) === 0
 );
-
-const isDirectory = (candidate: string): boolean => {
-  try {
-    return fs.statSync(candidate).isDirectory();
-  } catch {
-    return false;
-  }
-};
 
 const stashChanges = (repoDir: string, recoveryContext: string): boolean => {
   if (isMergeInProgress(repoDir) && runGitQuiet(['merge', '--abort'], repoDir) !== 0) {
