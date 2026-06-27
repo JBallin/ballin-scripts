@@ -227,6 +227,20 @@ esac
     ]);
   });
 
+  it('uses a shell-style signal exit status for final gu', () => {
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+kill -TERM "$$"
+`);
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 143);
+    assert.include(result.stdout, 'Backing up development environment');
+  });
+
   it('reports missing unguarded integrations like the shell did', () => {
     const result = runUp({
       TEST_UP_NVM: 'false',

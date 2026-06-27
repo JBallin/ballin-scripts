@@ -1,3 +1,4 @@
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -45,6 +46,12 @@ const runVisible = (command: string, args: string[] = [], env = process.env): nu
   const result = runCommand(command, args, { env, stdio: 'inherit' });
   if (result.error) {
     return reportSpawnError(command, result.error);
+  }
+  if (result.signal) {
+    const signalNumber = os.constants.signals[result.signal];
+    if (typeof signalNumber === 'number') {
+      return 128 + signalNumber;
+    }
   }
   return result.status ?? 1;
 };
