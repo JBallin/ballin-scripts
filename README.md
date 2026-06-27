@@ -48,7 +48,7 @@ Optional update behavior is controlled through `ballin_config`; see the
 [optional capabilities guide](docs/optional-capabilities.md) for the defaults
 and tradeoffs.
 
-## Fresh machine story
+## Fresh Mac setup
 
 On a new Mac, install `ballin-scripts` and point it at an existing backup Gist
 when prompted. The installer can adopt that Gist and restore saved
@@ -57,15 +57,8 @@ recreating shell files, Git settings, package lists, editor settings, and other
 development-environment state.
 
 This is currently a backup and maintenance toolkit, not a full one-command
-machine restore system. The backed-up snapshots are meant to make rebuilds more
-repeatable and auditable as the project grows toward a broader shared-tool
-workflow.
-
-## Project status
-
-`ballin-scripts` started as a personal macOS setup tool and is being shaped into
-a reusable development-environment toolkit. The current focus is making the
-backup, update, and rebuild story clear before broadening the public workflow.
+machine restore system. The backed-up snapshots make rebuilds more repeatable
+and auditable.
 
 ## Installation
 
