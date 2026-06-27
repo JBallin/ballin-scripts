@@ -380,7 +380,7 @@ kill -TERM "$$"
   it('prints options when a requested Gist file is missing', () => {
     const result = runGu({ args: ['read', 'missing_file'] });
 
-    assertGuSucceeded(result);
+    assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
     assert.include(result.stdout, 'ballin_config');
     assert.include(result.stdout, 'vsI_settings');
@@ -390,7 +390,7 @@ kill -TERM "$$"
   it('prints options when read is missing a filename', () => {
     const result = runGu({ args: ['read'] });
 
-    assertGuSucceeded(result);
+    assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
     assert.include(result.stdout, '\nOptions: ');
     assert.deepEqual(gistReads(), []);
@@ -399,7 +399,7 @@ kill -TERM "$$"
   it('reports an initial Gist retrieval failure before snapshotting', () => {
     const result = runGu({ gistInitialReadFail: true });
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 1);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
     assert.equal(result.stderr, 'simulated initial gist read failure\n');
     assert.isFalse(fs.existsSync(guCacheDir));
@@ -412,7 +412,7 @@ kill -TERM "$$"
 
     const result = runGu();
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 1);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
     assert.equal(
       result.stderr,
@@ -790,17 +790,17 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
-  it('keeps current shell behavior when a Gist upload fails', () => {
+  it('reports a failure when a Gist upload fails', () => {
     writeSnapshot('export COLOR=blue\n');
     seedGuCache('export COLOR=red\n');
     seedFakeGist('export COLOR=red\n');
 
     const result = runGu({ gistUploadFail: true });
 
-    assert.equal(result.status, 0);
-    assert.equal(result.stderr, 'simulated gist upload failure\n');
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, 'simulated gist upload failure\ngu: failed to snapshot zshrc.sh\n');
     assert.deepEqual(fs.readdirSync(scratchDir), []);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=red\n');
     assert.deepEqual(gistUploads(), []);

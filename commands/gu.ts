@@ -166,11 +166,12 @@ const readGistFileToFile = (
   return result.status === 0 && !result.error;
 };
 
-const uploadGistFile = (id: string, filePath: string): void => {
+const uploadGistFile = (id: string, filePath: string): boolean => {
   const result = runGist(['-u', id, filePath], { stdio: ['ignore', 'ignore', 'inherit'] });
   if (result.error) {
     reportSpawnError('gist', result.error);
   }
+  return result.status === 0 && !result.error;
 };
 
 const verifyGistReadable = (id: string): boolean => {
@@ -310,7 +311,9 @@ const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand)
   }
 
   if (resultState !== 'unchanged') {
-    uploadGistFile(id, cacheFile);
+    if (!uploadGistFile(id, cacheFile)) {
+      return false;
+    }
   }
 
   writeSnapshotStatus(snapshot, resultState, isEmpty);
@@ -472,6 +475,7 @@ const runGuCli = (args = process.argv.slice(2)): void => {
 
   if (!verifyGistReadable(id)) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
+    process.exitCode = 1;
     return;
   }
 
@@ -485,9 +489,11 @@ const runGuCli = (args = process.argv.slice(2)): void => {
           return;
         } else {
           process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
+          process.exitCode = 1;
         }
       } else {
         process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
+        process.exitCode = 1;
       }
     } else if (args[0] === 'help') {
       process.exitCode = runVisible('ballin');
