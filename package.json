@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:analytics-worker": "tsc --noEmit --strict --target ES2023 --module ESNext --lib ES2023,WebWorker --ignoreConfig analytics-worker/src/index.ts",
     "test:unit": "mocha",
-    "test": "npm run lint && npm run typecheck && npm run test:unit"
+    "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:unit"
   },
   "engines": {
     "node": ">=24.12"
