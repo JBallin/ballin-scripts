@@ -79,6 +79,9 @@ case "$1:$2" in
     printf '%s\\n' "$3" > "$gist_id_file"
     printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
     ;;
+  set:gu.token_file|set:gu.url)
+    printf '%s\\n' "\\"$2\\" set to: \\"$3\\""
+    ;;
 esac
 `, path.join(repoDir, 'bin'));
   };
@@ -238,7 +241,7 @@ case "$1:$2" in
   -l:) exit 0 ;;
   -r:returning-gist-id)
     if [ "$3" = 'ballin_config' ]; then
-      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".restored-gist","url":"https://gist.example.test"}}'
+      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".restored-gist","url":"https://old-gist.example.test"}}'
       exit 0
     fi
     printf '%s\\n' '### Backup of your dev environment'
@@ -254,11 +257,12 @@ esac
     assert.include(result.stdout, 'Storing your previous gist ID in your config');
     assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
     assert.include(commandLog(), 'gist:-r returning-gist-id ballin_config');
+    assert.include(commandLog(), 'ballin_config:set gu.token_file .gist\n');
+    assert.include(commandLog(), 'ballin_config:set gu.url https://gist.example.test\n');
     assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
     const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
     assert.equal(restoredConfig.up.cleanup, 'false');
     assert.equal(restoredConfig.up.gu, 'true');
-    assert.equal(restoredConfig.gu.token_file, '.restored-gist');
   });
 
   it('stops before Gist and success output when config creation fails', () => {

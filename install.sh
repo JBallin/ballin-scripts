@@ -162,6 +162,8 @@ done
             printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
             RESTORE_CONFIG='.ballin.config.restore.tmp'
             PREVIOUS_CONFIG='.ballin.config.restore.previous.tmp'
+            ACTIVE_GIST_TOKEN_FILE="$("$ballin_config" get gu.token_file)"
+            ACTIVE_GIST_URL="$("$ballin_config" get gu.url)"
             cp 'ballin.config.json' "$PREVIOUS_CONFIG"
             if gist -r "$GIST_ID" ballin_config > "$RESTORE_CONFIG"; then
               cp "$RESTORE_CONFIG" 'ballin.config.json'
@@ -175,6 +177,8 @@ done
                 printf '\n🙌 %s\n' "$UPDATE_RESULT"
                 printf '\n👀 Optional capabilities: %s\n' "$optional_capabilities_url"
               fi
+              "$ballin_config" set gu.token_file "$ACTIVE_GIST_TOKEN_FILE"
+              "$ballin_config" set gu.url "$ACTIVE_GIST_URL"
             else
               printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
             fi
