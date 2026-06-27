@@ -7,14 +7,19 @@ optional_capabilities_url='https://github.com/JBallin/ballin-scripts/blob/main/d
 required_node_version='24.12'
 
 ################################## CLONE REPO ##################################
-(
+if ! (
   cd "$HOME" || exit
   # only clone if folder doesn't already exist
   if [ ! -d '.ballin-scripts' ]; then
     echo ''
-    git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts
+    if ! git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts; then
+      exit 1
+    fi
   fi
-)
+); then
+  printf '\n⚠️  ERROR: Unable to prepare %s\n' "$repo_dir"
+  exit 1
+fi
 
 
 ############################## CHECK INITIAL SETUP #############################
@@ -137,7 +142,7 @@ while [ ! -f "$gist_token_path" ]; do
   chmod 600 "$gist_token_path"
 done
 
-  (
+  if ! (
     l1='### Backup of your dev environment'
     l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
     GIST_DESCRIPTION="$l1\n$l2\n"
@@ -184,7 +189,10 @@ done
       unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
       rm '.MyConfig.md'
     fi
-  )
+  ); then
+    printf '\n⚠️  ERROR: Unable to configure Gist backup\n'
+    exit 1
+  fi
 
   ############################## SYMLINK BINARIES ##############################
   if ! mkdir -p "$bin_dir"; then
