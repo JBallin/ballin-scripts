@@ -354,6 +354,25 @@ kill -TERM "$$"
     assert.deepEqual(ballinCalls(), ['']);
   });
 
+  it('prints help without requiring a readable Gist', () => {
+    const result = runGu({ args: ['help'], gistInitialReadFail: true });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, 'fake ballin help\n');
+    assert.deepEqual(ballinCalls(), ['']);
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails unknown commands instead of ignoring them', () => {
+    const result = runGu({ args: ['typo'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, "gu: unknown command 'typo'\n");
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
   it('reads a named Gist file', () => {
     seedFakeGistFile('vimrc', 'set number\n');
 

@@ -480,6 +480,12 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
 
 const runGuCli = (args = process.argv.slice(2)): void => {
   const homeDir = process.env.HOME ?? '';
+
+  if (args[0] === 'help') {
+    process.exitCode = runVisible('ballin');
+    return;
+  }
+
   const id = configValue('gu.id');
   const url = `${configValue('gu.url')}/${id}`;
 
@@ -505,8 +511,9 @@ const runGuCli = (args = process.argv.slice(2)): void => {
         process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
         process.exitCode = 1;
       }
-    } else if (args[0] === 'help') {
-      process.exitCode = runVisible('ballin');
+    } else {
+      writeStderrLine(`gu: unknown command '${args[0]}'`);
+      process.exitCode = 1;
     }
     return;
   }
