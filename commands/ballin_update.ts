@@ -30,6 +30,10 @@ const runFetch = (cwd: string): number | null => (
   }).status
 );
 
+const isMergeInProgress = (cwd: string): boolean => (
+  runGitQuiet(['rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd) === 0
+);
+
 const isDirectory = (candidate: string): boolean => {
   try {
     return fs.statSync(candidate).isDirectory();
@@ -57,6 +61,12 @@ const runBallinUpdateCli = (): void => {
 
   if (runGitQuiet(['merge', updateRemoteRef], repoDir) !== 0) {
     writeStdoutLine('git merge failed. stashing changes and trying again...');
+
+    if (isMergeInProgress(repoDir) && runGitQuiet(['merge', '--abort'], repoDir) !== 0) {
+      writeStdoutLine('git merge abort failed during merge recovery.');
+      process.exitCode = 1;
+      return;
+    }
 
     if (runGitQuiet(['stash', 'push', '--include-untracked'], repoDir) !== 0) {
       writeStdoutLine('git stash failed during merge recovery.');

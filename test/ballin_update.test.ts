@@ -39,6 +39,12 @@ describe('ballin_update', () => {
     writeExecutable('git', `#!/usr/bin/env bash
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
 case "$1" in
+  rev-parse)
+    if [ "$FAKE_GIT_MERGE_IN_PROGRESS" = '1' ]; then
+      exit 0
+    fi
+    exit 1
+    ;;
   fetch)
     if [ "$FAKE_GIT_FETCH_READ_STDIN" = '1' ]; then
       printf 'credential prompt\\n' >&2
@@ -51,6 +57,9 @@ case "$1" in
     exit "$FAKE_GIT_FETCH_STATUS"
     ;;
   merge)
+    if [ "$2" = '--abort' ]; then
+      exit "$FAKE_GIT_MERGE_ABORT_STATUS"
+    fi
     count=0
     if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
       count="$(cat "$FAKE_GIT_MERGE_COUNT_PATH")"
@@ -98,6 +107,8 @@ exit "$FAKE_INSTALL_STATUS"
       FAKE_GIT_FETCH_STATUS: '0',
       FAKE_GIT_FIRST_MERGE_STATUS: '0',
       FAKE_GIT_RETRY_MERGE_STATUS: '0',
+      FAKE_GIT_MERGE_IN_PROGRESS: '0',
+      FAKE_GIT_MERGE_ABORT_STATUS: '0',
       FAKE_GIT_STASH_STATUS: '0',
       FAKE_GIT_CHECKOUT_STATUS: '0',
       FAKE_INSTALL_STATUS: '0',
@@ -240,10 +251,58 @@ exit "$FAKE_INSTALL_STATUS"
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('aborts an in-progress failed merge before stashing changes during recovery', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_MERGE_STATUS: '24',
+      FAKE_GIT_MERGE_IN_PROGRESS: '1',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\ngit merge failed. stashing changes and trying again...\n\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:merge --abort`,
+      `${repoDir}|git:stash push --include-untracked`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
+  it('stops before stashing when aborting an in-progress failed merge fails', () => {
+    const result = runUpdate({
+      FAKE_GIT_FIRST_MERGE_STATUS: '24',
+      FAKE_GIT_MERGE_IN_PROGRESS: '1',
+      FAKE_GIT_MERGE_ABORT_STATUS: '29',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      '👟 getting fresh kicks...\n'
+        + 'git merge failed. stashing changes and trying again...\n'
+        + 'git merge abort failed during merge recovery.\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
+      `${repoDir}|git:merge --abort`,
     ]);
   });
 
@@ -264,6 +323,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
@@ -287,6 +347,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
       `${repoDir}|git:stash push --include-untracked`,
     ]);
   });
@@ -308,6 +369,7 @@ exit "$FAKE_INSTALL_STATUS"
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:merge origin/main`,
+      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
     ]);
