@@ -4,8 +4,8 @@
 
 `ballin-scripts` is a personal macOS CLI for keeping a development machine
 reproducible and current. It backs up dotfiles, editor settings, Homebrew state,
-npm globals, and related configuration to a private Gist, then runs the update
-tasks that keep the machine fresh.
+npm globals, and related configuration to a private Gist, then automates routine
+updates.
 
 Core workflow:
 
