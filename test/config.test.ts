@@ -306,5 +306,46 @@ describe('config', () => {
       assert.equal(result.status, 0);
       assert.deepEqual(fetchConfig().configObj, defaultConfig);
     });
+
+    it('derives gu.host from a legacy Enterprise Gist URL', () => {
+      fs.writeFileSync(configPath, JSON.stringify({
+        up: defaultConfig.up,
+        gu: {
+          id: 'enterprise-gist-id',
+          url: 'https://gist.github.example.test',
+          token_file: '.legacy-gist-token',
+        },
+      }), 'utf8');
+
+      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
+        cwd: path.join(__dirname, '..'),
+        encoding: 'utf8',
+        env: process.env,
+      });
+
+      assert.equal(result.status, 0);
+      assert.equal(getConfig('gu.host'), 'github.example.test');
+      assert.equal(getConfig('gu.url'), 'https://gist.github.example.test');
+      assert.equal(getConfig('gu.token_file'), '.legacy-gist-token');
+    });
+
+    it('maps the legacy github.com Gist URL to the GitHub host', () => {
+      fs.writeFileSync(configPath, JSON.stringify({
+        up: defaultConfig.up,
+        gu: {
+          id: 'github-gist-id',
+          url: 'https://gist.github.com',
+        },
+      }), 'utf8');
+
+      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
+        cwd: path.join(__dirname, '..'),
+        encoding: 'utf8',
+        env: process.env,
+      });
+
+      assert.equal(result.status, 0);
+      assert.equal(getConfig('gu.host'), 'github.com');
+    });
   });
 });

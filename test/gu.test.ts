@@ -32,6 +32,7 @@ type RunGuOptions = {
   ghAuthFail?: boolean;
   ghInitialReadFail?: boolean;
   ghInitialReadSignal?: boolean;
+  ghEditMissingFile?: boolean;
   ghUploadFail?: boolean;
   commandPath?: string;
 };
@@ -87,7 +88,7 @@ if [ "$GH_HOST" != 'example.test' ] && [ "$1:$2" != 'auth:status' ]; then
   exit 2
 fi
 if [ "$1:$2" = 'auth:status' ]; then
-  if [ "$*" != 'auth status --active --hostname example.test' ]; then
+  if [ "$*" != 'auth status --hostname example.test' ]; then
     printf '%s\\n' 'Unexpected gh auth arguments' >&2
     exit 2
   fi
@@ -139,6 +140,10 @@ elif [ "$1:$2" = 'gist:edit' ]; then
   if [ "$4" = '--add' ] && [ "$#" -eq 5 ]; then
     cache_file="$5"
   elif [ "$4" = '--filename' ] && [ "$#" -eq 6 ]; then
+    if [ "$FAKE_GH_EDIT_MISSING_FILE" = 'true' ]; then
+      printf '%s\\n' 'gist has no file' >&2
+      exit 20
+    fi
     cache_file="$6"
     if [ "$5" != "\${cache_file##*/}" ]; then
       printf '%s\\n' 'Unexpected gh gist edit filename' >&2
@@ -300,6 +305,7 @@ done
     ghAuthFail = false,
     ghInitialReadFail = false,
     ghInitialReadSignal = false,
+    ghEditMissingFile = false,
     ghUploadFail = false,
     commandPath = guPath,
   }: RunGuOptions = {}) => spawnSync(commandPath, args, {
@@ -319,6 +325,7 @@ done
       FAKE_GH_AUTH_FAIL: ghAuthFail ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_FAIL: ghInitialReadFail ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_SIGNAL: ghInitialReadSignal ? 'true' : 'false',
+      FAKE_GH_EDIT_MISSING_FILE: ghEditMissingFile ? 'true' : 'false',
       FAKE_GH_UPLOAD_FAIL: ghUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_OPEN_LOG: openLogPath,
@@ -1064,6 +1071,19 @@ printf '%s\\n' '123456 Example App'
     assertGuSucceeded(result);
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('recreates a missing remote file when the local cache is warm', () => {
+    writeSnapshot('export COLOR=blue\n');
+    seedGuCache('export COLOR=red\n');
+
+    const result = runGu({ ghEditMissingFile: true });
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 

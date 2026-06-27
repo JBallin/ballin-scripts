@@ -53,14 +53,6 @@ elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(N
   printf '\nAlternatively:\n  brew install node\n'
   printf '\nThen run this installer again.\n'
   exit 1
-# Check that either gist or brew is installed
-elif [ ! -x "$(command -v gist)" ] && [ ! -x "$(command -v brew)" ]; then
-  l1="Can't find Homebrew, which is needed to download 'gist'."
-  l2="Download Homebrew at brew.sh or install ruby & run 'gem install gist',"
-  l3='and run this installation again.'
-  printf '\n⚠️  ERROR: %s\n%s\n%s\n' "$l1" "$l2" "$l3"
-  unset l1 l2 l3
-  exit 1
 else
 
 
@@ -102,129 +94,82 @@ fi
 
 
 #################################### GIST ####################################
-# Retrieve path for token and URL from configuration
-gist_token_path="$HOME/$("$ballin_config" get gu.token_file)"
-gist_config_url="$("$ballin_config" get gu.url)"
-
-### DOWNLOAD GIST
-# Check if gist is already installed, if not, install it
-if [ ! -x "$(command -v gist)" ]; then
-  printf '\n%s\n\n' '🍺 brew installing gist...'
-  brew install gist
-fi
-
-### LOGIN GIST
-# Check if token file exists and is valid, if not, delete it
-if [ -f "$gist_token_path" ] && ! gist -l > /dev/null; then
-  printf '\n%s' "🗑  Deleting $gist_token_path because token is expired/invalid"
-  rm "$gist_token_path"
-fi
-
-# Prompt user for GitHub URL and token until a valid token file is created
-while [ ! -f "$gist_token_path" ]; do
-  printf '\n%s\n' "🙏 Please enter your Gist base URL (for example, 'https://gist.github.com' for personal accounts or 'https://gist.[your GitHub Enterprise domain]' for enterprise accounts):"
-  read -rp 'URL: ' URL
-  # Save entered URL to configuration
-  "$ballin_config" set gu.url "$URL"
-  gist_config_url="$("$ballin_config" get gu.url)"
-
-  # Check if entered URL is valid
-  if ! curl -s -o /dev/null "$gist_config_url"; then
-    printf '\n%s\n' "⛔️ Unable to reach $gist_config_url. Please verify your connection and the URL, and try again."
-    continue
-  fi
-
-  # Guide user to generate a new token on GitHub
-  printf '\n%s' "1. Go to github.com/settings/tokens/new (or the equivalent page on your GitHub Enterprise instance)"
-  printf '\n%s' "2. Generate a new token with the 'gist' scope"
-  printf '\n%s\n' '3. Copy the token and paste it here'
-  read -rsp 'Token: ' TOKEN
-  # Save entered token to file
-  printf '%s\n' "$TOKEN" > "$gist_token_path"
-  unset TOKEN
-
-  # Set secure permissions for the token file
-  chmod 600 "$gist_token_path"
-done
-
   if ! (
-    l1='### Backup of your dev environment'
-    l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
-    GIST_DESCRIPTION="$l1\n$l2\n"
-
-    ### CHECK IF USER ALREADY HAS GIST ID
     cd "$repo_dir" || exit
-    if [ "$("$ballin_config" get gu.id)" = 'null' ]; then
-      echo ''
-      read -rp '🤔 Do you already have a ballin-scripts backup gist? [y/N] ' YN
-      if [[ $YN == 'y' || $YN == 'Y' ]]; then
-        unset YN
-        VALID_GIST_ID=1
-        printf '\n%s\n' 'Welcome Back!'
-        while [ "$VALID_GIST_ID" == 1 ]; do
-          read -rep 'Enter your gist ID: ' GIST_ID
-          if [ "$(gist -r "$GIST_ID")" == "$(printf '%b' "$GIST_DESCRIPTION")" ]; then
-            printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
-            RESTORE_CONFIG='.ballin.config.restore.tmp'
-            PREVIOUS_CONFIG='.ballin.config.restore.previous.tmp'
-            cp 'ballin.config.json' "$PREVIOUS_CONFIG"
-            if gist -r "$GIST_ID" ballin_config > "$RESTORE_CONFIG"; then
-              cp "$RESTORE_CONFIG" 'ballin.config.json'
-              if ! UPDATE_RESULT=$(node "$repo_dir/config/updateConfig.ts"); then
-                cp "$PREVIOUS_CONFIG" 'ballin.config.json'
-                rm -f "$RESTORE_CONFIG" "$PREVIOUS_CONFIG"
-                exit 1
-              fi
-              printf '\n%s\n' '♻️  Restored ballin.config.json from your backup gist.'
-              if [ -n "$UPDATE_RESULT" ]; then
-                printf '\n🙌 %s\n' "$UPDATE_RESULT"
-                printf '\n👀 Docs: %s\n' "$docs_url"
-              fi
-              restored_gist_token_path="$HOME/$("$ballin_config" get gu.token_file)"
-              if [ "$restored_gist_token_path" != "$gist_token_path" ] && [ ! -f "$restored_gist_token_path" ]; then
-                restored_gist_token_dir="${restored_gist_token_path%/*}"
-                if ! mkdir -p "$restored_gist_token_dir"; then
+    gu_host="$("$ballin_config" get gu.host)"
+    gu_id="$("$ballin_config" get gu.id)"
+
+    if [ "$gu_id" = 'null' ]; then
+      if [ ! -x "$(command -v gh)" ]; then
+        printf '\n%s\n' 'ℹ️  Skipping optional Gist backup setup because GitHub CLI is not installed.'
+        printf '%s\n' "   Install gh and run: gh auth login --hostname $gu_host"
+        printf '%s\n' "   Then set gu.id or rerun this installer."
+      elif ! gh auth status --hostname "$gu_host" > /dev/null 2>&1; then
+        printf '\n%s\n' "ℹ️  Skipping optional Gist backup setup because gh is not authenticated for $gu_host."
+        printf '%s\n' "   Run: gh auth login --hostname $gu_host"
+        printf '%s\n' '   Then set gu.id or rerun this installer.'
+      else
+        l1='### Backup of your dev environment'
+        l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
+        gist_description="$l1\n$l2\n"
+
+        echo ''
+        read -rp '🤔 Do you already have a ballin-scripts backup gist? [y/N] ' YN
+        if [[ $YN == 'y' || $YN == 'Y' ]]; then
+          unset YN
+          valid_gist_id=1
+          printf '\n%s\n' 'Welcome Back!'
+          while [ "$valid_gist_id" = 1 ]; do
+            read -rep 'Enter your gist ID: ' gist_id
+            if gh gist view "$gist_id" --files > /dev/null; then
+              printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
+              restore_config='.ballin.config.restore.tmp'
+              previous_config='.ballin.config.restore.previous.tmp'
+              cp 'ballin.config.json' "$previous_config"
+              if gh gist view "$gist_id" --raw --filename ballin_config > "$restore_config"; then
+                cp "$restore_config" 'ballin.config.json'
+                if ! update_result=$(node "$repo_dir/config/updateConfig.ts"); then
+                  cp "$previous_config" 'ballin.config.json'
+                  rm -f "$restore_config" "$previous_config"
                   exit 1
                 fi
-                if ! cp "$gist_token_path" "$restored_gist_token_path"; then
-                  exit 1
+                printf '\n%s\n' '♻️  Restored ballin.config.json from your backup gist.'
+                if [ -n "$update_result" ]; then
+                  printf '\n🙌 %s\n' "$update_result"
+                  printf '\n👀 Docs: %s\n' "$docs_url"
                 fi
-                if ! chmod 600 "$restored_gist_token_path"; then
-                  exit 1
-                fi
+              else
+                printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
               fi
+              rm -f "$restore_config" "$previous_config"
+              "$ballin_config" set gu.id "$gist_id"
+              valid_gist_id=0
             else
-              printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
+              printf "\n⚠️  INVALID: Unable to read gist '%s' with gh.\n" "$gist_id"
             fi
-            rm -f "$RESTORE_CONFIG" "$PREVIOUS_CONFIG"
-            "$ballin_config" set gu.id "$GIST_ID"
-            VALID_GIST_ID=0
-          else
-            printf "\n⚠️  INVALID: Expected \e[1mgist -r '%s'\e[0m to output:\n%s\n" "$GIST_ID" "$GIST_DESCRIPTION"
+          done
+        fi
+        unset YN gist_id valid_gist_id
+
+        if [ "$("$ballin_config" get gu.id)" = 'null' ]; then
+          printf '%b' "$gist_description" > '.MyConfig.md'
+
+          gist_url=$(gh gist create '.MyConfig.md' --desc "$gist_description")
+          printf "\n💥 Created a secret gist titled '.MyConfig' at the following URL:\n%s\n" "$gist_url"
+
+          gist_id=${gist_url##*/}
+          printf '\n%s\n' '🧳 Storing your new gist ID in your config...'
+          "$ballin_config" set gu.id "$gist_id"
+
+          if [ -d '.gu-cache' ]; then
+            rm -rf '.gu-cache'
+            printf '\n%s\n' '🗑  Deleted existing .gu-cache folder'
           fi
-        done
+
+          unset gist_url gist_id l1 l2 gist_description
+          rm '.MyConfig.md'
+        fi
       fi
-      unset YN GIST_ID VALID_GIST_ID
-    fi
-
-    ### GENERATE + STORE GIST ID
-    if [ "$("$ballin_config" get gu.id)" = 'null' ]; then
-      printf '%b' "$GIST_DESCRIPTION" > '.MyConfig.md'
-
-      GIST_URL=$(gist -p '.MyConfig.md')
-      printf "\n💥 Created a private gist titled '.MyConfig' at the following URL:\n%s\n" "$GIST_URL"
-
-      GIST_ID=${GIST_URL##*/}
-      printf '\n%s\n' '🧳 Storing your new gist ID in your config...'
-      "$ballin_config" set gu.id "$GIST_ID"
-
-      if [ -d '.gu-cache' ]; then
-        rm -rf '.gu-cache'
-        printf '\n%s\n' '🗑  Deleted existing .gu-cache folder'
-      fi
-
-      unset GIST_URL GIST_ID l1 l2 GIST_DESCRIPTION
-      rm '.MyConfig.md'
     fi
   ); then
     printf '\n⚠️  ERROR: Unable to configure Gist backup\n'

@@ -79,18 +79,13 @@ fi
 printf '%s' "$FAKE_UPDATE_OUTPUT"
 exit "$FAKE_NODE_STATUS"
 `);
-    writeExecutable('gist', `#!/usr/bin/env bash
-printf 'gist:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-exit 0
-`);
   };
 
   const installConfigCommand = () => {
     writeExecutable('ballin_config', `#!/usr/bin/env bash
 printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 case "$1:$2" in
-  get:gu.token_file) printf '%s\\n' '.gist' ;;
-  get:gu.url) printf '%s\\n' 'https://gist.example.test' ;;
+  get:gu.host) printf '%s\\n' 'github.example.test' ;;
   get:gu.id) printf '%s\\n' 'existing-gist-id' ;;
 esac
 `, path.join(repoDir, 'bin'));
@@ -101,17 +96,7 @@ esac
 printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 gist_id_file="$HOME/.configured-gist-id"
 case "$1:$2" in
-  get:gu.token_file)
-    config_json=''
-    if [ -f "$HOME/.ballin-scripts/ballin.config.json" ]; then
-      config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
-    fi
-    case "$config_json" in
-      *'.config/ballin/restored-gist'*) printf '%s\\n' '.config/ballin/restored-gist' ;;
-      *) printf '%s\\n' '.gist' ;;
-    esac
-    ;;
-  get:gu.url) printf '%s\\n' 'https://gist.example.test' ;;
+  get:gu.host) printf '%s\\n' 'github.example.test' ;;
   get:gu.id)
     if [ -f "$gist_id_file" ]; then
       while IFS= read -r gist_id; do
@@ -123,12 +108,38 @@ case "$1:$2" in
     ;;
   set:gu.id)
     printf '%s\\n' "$3" > "$gist_id_file"
-    config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
-    printf '%s\\n' "\${config_json/\\\"id\\\":\\\"previous-gist-id\\\"/\\\"id\\\":\\\"$3\\\"}" > "$HOME/.ballin-scripts/ballin.config.json"
+    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"github.example.test"}}\\n' "$3" > "$HOME/.ballin-scripts/ballin.config.json"
     printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
     ;;
 esac
 `, path.join(repoDir, 'bin'));
+  };
+
+  const installFakeGhCommand = () => {
+    writeExecutable('gh', `#!/usr/bin/env bash
+printf 'gh:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$1:$2" in
+  auth:status)
+    if [ "$*" != 'auth status --hostname github.example.test' ]; then exit 2; fi
+    exit "$FAKE_GH_AUTH_STATUS"
+    ;;
+  gist:view)
+    if [ "$3" = 'returning-gist-id' ] && [ "$4" = '--files' ]; then
+      exit 0
+    fi
+    if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:ballin_config' ]; then
+      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":null,"host":"github.example.test"}}'
+      exit 0
+    fi
+    exit 2
+    ;;
+  gist:create)
+    if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
+    printf '%s\\n' 'https://gist.github.com/new-gist-id'
+    ;;
+  *) exit 2 ;;
+esac
+`);
   };
 
   const runInstall = ({ env = {}, input }: RunInstallOptions = {}) => spawnSync(installPath, [], {
@@ -140,6 +151,7 @@ esac
       FAKE_COMMAND_LOG: commandLogPath,
       FAKE_NODE_SUPPORTED: 'true',
       FAKE_NODE_STATUS: '0',
+      FAKE_GH_AUTH_STATUS: '0',
       ...env,
     },
   });
@@ -201,9 +213,6 @@ esac
     fs.mkdirSync(pathDir);
     ['bash'].forEach((command) => linkCommand(command, pathDir));
     writeExecutable('node', '#!/usr/bin/env bash\nexit 0\n', pathDir);
-    writeExecutable('gist', `#!/usr/bin/env bash
-printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
-`, pathDir);
 
     const result = runInstall({ env: { PATH: pathDir } });
 
@@ -214,22 +223,22 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     assert.equal(commandLog(), '');
   });
 
-  it('checks the Gist prerequisite before configuration work', () => {
+  it('succeeds without Homebrew, gist, or gh when Gist backup is unconfigured', () => {
     installBaseCommands();
-    fs.unlinkSync(path.join(binDir, 'gist'));
+    installAdoptableConfigCommand();
 
     const result = runInstall();
 
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, "Can't find Homebrew, which is needed to download 'gist'.");
-    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
-    assert.equal(commandLog(), '');
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Skipping optional Gist backup setup because GitHub CLI is not installed');
+    assert.include(result.stdout, 'gh auth login --hostname github.example.test');
+    assert.include(result.stdout, '😎 ballin!');
+    assert.notInclude(commandLog(), 'gh:');
   });
 
   it('performs an isolated initial setup and shows docs once', () => {
     installBaseCommands();
     installConfigCommand();
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
 
     const result = runInstall();
 
@@ -245,14 +254,14 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
     assert.include(commandLog(), 'node:install_setup');
     assert.include(commandLog(), 'symlink-binaries');
-    assert.include(commandLog(), 'gist:-l\n');
+    assert.notInclude(commandLog(), 'gist:');
+    assert.notInclude(commandLog(), 'gh:');
   });
 
   it('falls back to Bash symlinking when the typed setup entrypoint is missing from an existing checkout', () => {
     installBaseCommands();
     installConfigCommand();
     fs.unlinkSync(path.join(repoDir, 'commands', 'install_setup.ts'));
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
 
     const result = runInstall();
 
@@ -288,7 +297,6 @@ fi
 printf '%s' "$FAKE_UPDATE_OUTPUT"
 exit "$FAKE_NODE_STATUS"
 `);
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
 
     const result = runInstall();
 
@@ -308,7 +316,6 @@ exit "$FAKE_NODE_STATUS"
       path.join(repoDir, 'config', '.defaultConfig.json'),
       path.join(repoDir, 'ballin.config.json'),
     );
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
 
     const result = runInstall();
 
@@ -322,7 +329,6 @@ exit "$FAKE_NODE_STATUS"
     installBaseCommands();
     installConfigCommand();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
 
     const updateOutput = 'New configuration options have been added!\nup.nvm: false\n';
     const result = runInstall({ env: { FAKE_UPDATE_OUTPUT: updateOutput } });
@@ -337,37 +343,20 @@ exit "$FAKE_NODE_STATUS"
   it('restores config values from an adopted backup gist', () => {
     installBaseCommands();
     installAdoptableConfigCommand();
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
-    writeExecutable('gist', `#!/usr/bin/env bash
-printf 'gist:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-case "$1:$2" in
-  -l:) exit 0 ;;
-  -r:returning-gist-id)
-    if [ "$3" = 'ballin_config' ]; then
-      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".config/ballin/restored-gist","url":"https://old-gist.example.test"}}'
-      exit 0
-    fi
-    printf '%s\\n' '### Backup of your dev environment'
-    printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
-    printf '\\n'
-    ;;
-esac
-`);
+    installFakeGhCommand();
 
     const result = runInstall({ input: 'y\nreturning-gist-id\n' });
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Storing your previous gist ID in your config');
     assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
-    assert.include(commandLog(), 'gist:-r returning-gist-id ballin_config');
+    assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
     assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
     const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
     assert.equal(restoredConfig.up.cleanup, 'false');
     assert.equal(restoredConfig.up.gu, 'true');
     assert.equal(restoredConfig.gu.id, 'returning-gist-id');
-    assert.equal(restoredConfig.gu.token_file, '.config/ballin/restored-gist');
-    assert.equal(restoredConfig.gu.url, 'https://old-gist.example.test');
-    assert.equal(fs.readFileSync(path.join(homeDir, '.config', 'ballin', 'restored-gist'), 'utf8'), 'token\n');
+    assert.equal(restoredConfig.gu.host, 'github.example.test');
   });
 
   it('stops before Gist and success output when config creation fails', () => {
@@ -404,7 +393,6 @@ esac
   it('uses the Homebrew prefix as the command directory when brew is present', () => {
     installBaseCommands();
     installConfigCommand();
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
     writeExecutable('brew', `#!/usr/bin/env bash
 if [ "$1" = '--prefix' ]; then
   printf '%s\\n' "$HOME/.local"
@@ -419,28 +407,17 @@ exit 2
     assert.include(result.stdout, `symlinked binaries into ${binDir}`);
   });
 
-  it('installs a missing Gist dependency through the Homebrew stub', () => {
+  it('creates a new secret Gist when gh is authenticated and no backup is configured', () => {
     installBaseCommands();
-    installConfigCommand();
-    fs.unlinkSync(path.join(binDir, 'gist'));
-    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
-    writeExecutable('brew', `#!/usr/bin/env bash
-if [ "$1" = '--prefix' ]; then
-  printf '%s\\n' "$HOME/.local"
-elif [ "$1:$2" = 'install:gist' ]; then
-  printf '%s\\n' '#!/usr/bin/env bash' 'printf "gist:%s\\\\n" "$*" >> "$FAKE_COMMAND_LOG"' > "$HOME/.local/bin/gist"
-  chmod +x "$HOME/.local/bin/gist"
-  printf '%s\\n' 'brew:install gist' >> "$FAKE_COMMAND_LOG"
-else
-  exit 2
-fi
-`);
+    installAdoptableConfigCommand();
+    installFakeGhCommand();
 
-    const result = runInstall();
+    const result = runInstall({ input: 'n\n' });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'brew installing gist');
-    assert.include(commandLog(), 'brew:install gist\n');
-    assert.include(commandLog(), 'gist:-l\n');
+    assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
+    assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
+    assert.include(commandLog(), 'ballin_config:set gu.id new-gist-id\n');
+    assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
   });
 });

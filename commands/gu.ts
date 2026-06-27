@@ -215,7 +215,7 @@ const writeFileToStderr = (filePath: string): void => {
 };
 
 const ghAuthStatus = (host: string): CommandCheckResult => {
-  const result = runCommand('gh', ['auth', 'status', '--active', '--hostname', host], {
+  const result = runCommand('gh', ['auth', 'status', '--hostname', host], {
     stdio: ['ignore', 'ignore', 'inherit'],
   });
   if (result.error) {
@@ -255,14 +255,44 @@ const readGistFileToFile = (
 };
 
 const uploadGistFile = (host: string, id: string, filePath: string, isNew: boolean): boolean => {
-  const args = isNew
-    ? ['gist', 'edit', id, '--add', filePath]
-    : ['gist', 'edit', id, '--filename', path.basename(filePath), filePath];
-  const result = runGh(host, args, { stdio: ['ignore', 'ignore', 'inherit'] });
-  if (result.error) {
-    reportSpawnError('gh', result.error);
+  const addArgs = ['gist', 'edit', id, '--add', filePath];
+  const editArgs = ['gist', 'edit', id, '--filename', path.basename(filePath), filePath];
+  const args = isNew ? addArgs : editArgs;
+  const stderrFile = makeTempFile('ballin-gu-upload-stderr-');
+  const stderrFd = fs.openSync(stderrFile, 'w');
+  let result: ReturnType<typeof runCommand>;
+  try {
+    result = runGh(host, args, { stdio: ['ignore', 'ignore', stderrFd] });
+  } finally {
+    fs.closeSync(stderrFd);
   }
-  return result.status === 0 && !result.error;
+  if (result.error) {
+    writeFileToStderr(stderrFile);
+    removeTempFile(stderrFile);
+    reportSpawnError('gh', result.error);
+    return false;
+  }
+  if (result.status === 0) {
+    removeTempFile(stderrFile);
+    return true;
+  }
+  const uploadError = fs.readFileSync(stderrFile, 'utf8');
+  if (!isNew && uploadError.includes('has no file')) {
+    const addResult = runGh(host, addArgs, { stdio: ['ignore', 'ignore', 'inherit'] });
+    if (addResult.error) {
+      writeFileToStderr(stderrFile);
+      removeTempFile(stderrFile);
+      reportSpawnError('gh', addResult.error);
+      return false;
+    }
+    if (addResult.status === 0) {
+      removeTempFile(stderrFile);
+      return true;
+    }
+  }
+  writeFileToStderr(stderrFile);
+  removeTempFile(stderrFile);
+  return false;
 };
 
 const verifyGistReadable = (host: string, id: string): CommandCheckResult => {
