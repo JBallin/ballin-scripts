@@ -20,6 +20,7 @@ type ScheduledController = {
 type Env = {
   ANALYTICS_DB: D1Database;
   INSTALL_ID_HASH_SECRET: string;
+  INGEST_TOKEN: string;
 };
 
 type AnalyticsEvent = {
@@ -35,16 +36,23 @@ type AnalyticsEvent = {
   osVersion: string;
 };
 
+type ParseOptions = {
+  now: Date;
+};
+
 const allowedCommands = new Set(['up', 'gu', 'ballin_update', 'ballin']);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const allowedOs = new Set(['darwin', 'linux', 'win32', 'unknown']);
-const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const dateBucketPattern = /^\d{4}-\d{2}-\d{2}$/;
-const versionPattern = /^[0-9]+(?:\.[0-9]+){0,2}(?:[-+][0-9A-Za-z.-]+)?$/;
+const versionPattern = /^[0-9]+(?:\.[0-9]+){0,2}$/;
 const majorVersionPattern = /^[0-9]+$/;
 const coarseOsVersionPattern = /^[0-9]+(?:\.[0-9]+)?$|^unknown$/;
+const ingestTokenHeader = 'x-ballin-analytics-token';
+const maxBodyBytes = 2048;
 const retentionDays = 395;
+const allowedDateSkewDays = 1;
 
 const jsonResponse = (status: number, body: { error: string }): Response => (
   new Response(JSON.stringify(body), {
@@ -82,7 +90,14 @@ const validateDateBucket = (dateBucket: string): boolean => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(dateBucket);
 };
 
-const parseAnalyticsEvent = (payload: unknown): AnalyticsEvent | string => {
+const isDateBucketWithinSkew = (dateBucket: string, now: Date): boolean => {
+  const dateBucketTime = Date.parse(`${dateBucket}T00:00:00.000Z`);
+  const currentBucketTime = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const maxDifference = allowedDateSkewDays * 24 * 60 * 60 * 1000;
+  return Math.abs(dateBucketTime - currentBucketTime) <= maxDifference;
+};
+
+const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): AnalyticsEvent | string => {
   if (!isObject(payload)) {
     return 'event payload must be a JSON object';
   }
@@ -101,10 +116,13 @@ const parseAnalyticsEvent = (payload: unknown): AnalyticsEvent | string => {
   const osVersion = stringField(payload, 'osVersion');
 
   if (!installId || !installIdPattern.test(installId)) {
-    return 'installId must be a UUID';
+    return 'installId must be a lowercase UUID';
   }
   if (!dateBucket || !validateDateBucket(dateBucket)) {
     return 'dateBucket must be YYYY-MM-DD';
+  }
+  if (!isDateBucketWithinSkew(dateBucket, options.now)) {
+    return 'dateBucket is outside the accepted clock skew';
   }
   if (!command || !allowedCommands.has(command)) {
     return 'command is not supported';
@@ -116,7 +134,7 @@ const parseAnalyticsEvent = (payload: unknown): AnalyticsEvent | string => {
     return 'durationBucket is not supported';
   }
   if (!appVersion || !versionPattern.test(appVersion)) {
-    return 'appVersion must be a coarse semantic version';
+    return 'appVersion must be a released semantic version';
   }
   if (!nodeMajor || !majorVersionPattern.test(nodeMajor)) {
     return 'nodeMajor must be a major version number';
@@ -205,6 +223,16 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   if (!env.INSTALL_ID_HASH_SECRET) {
     return jsonResponse(500, { error: 'analytics backend is not configured' });
   }
+  if (!env.INGEST_TOKEN) {
+    return jsonResponse(500, { error: 'analytics ingest gate is not configured' });
+  }
+  if (request.headers.get(ingestTokenHeader) !== env.INGEST_TOKEN) {
+    return emptyResponse(401);
+  }
+  const contentLength = Number(request.headers.get('content-length') ?? '0');
+  if (!Number.isFinite(contentLength) || contentLength <= 0 || contentLength > maxBodyBytes) {
+    return jsonResponse(400, { error: 'invalid content length' });
+  }
 
   let payload: unknown;
   try {
@@ -213,7 +241,7 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
     return jsonResponse(400, { error: 'invalid JSON' });
   }
 
-  const event = parseAnalyticsEvent(payload);
+  const event = parseAnalyticsEvent(payload, { now: new Date() });
   if (typeof event === 'string') {
     return jsonResponse(400, { error: event });
   }

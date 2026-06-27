@@ -1,7 +1,6 @@
 CREATE TABLE IF NOT EXISTS install_days (
   date_bucket TEXT NOT NULL,
   install_id_hash TEXT NOT NULL,
-  first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   PRIMARY KEY (date_bucket, install_id_hash)
 );
 

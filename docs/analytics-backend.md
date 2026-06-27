@@ -16,7 +16,7 @@ CLI.
   IDs.
 - The CLI does not need a runtime analytics SDK.
 - Retention is controlled by the Worker and D1 schema.
-- The deployment can stay tiny: one Worker, one D1 database, and one secret.
+- The deployment can stay tiny: one Worker, one D1 database, and two secrets.
 
 ## Alternatives Considered
 
@@ -32,6 +32,14 @@ CLI.
 The Worker deletes rows older than 395 days. That keeps roughly 13 months of
 daily active-install and command-count data.
 
+## Abuse Controls
+
+The skeleton requires an ingest token before accepting events and rejects
+oversized payloads. A distributed CLI cannot keep a token truly secret, so this
+is a deployment gate rather than the complete production abuse story. Before
+real production traffic is enabled, configure Cloudflare-side rate limiting or
+equivalent edge protection for `POST /v1/events`.
+
 ## Production Checklist
 
 Before enabling the CLI to send production events:
@@ -40,6 +48,8 @@ Before enabling the CLI to send production events:
 - create the D1 database
 - apply `analytics-worker/migrations/0001_initial.sql`
 - set `INSTALL_ID_HASH_SECRET`
+- set `INGEST_TOKEN`
+- configure Cloudflare-side rate limiting or equivalent edge protection
 - deploy the Worker
 - configure the CLI endpoint in the client implementation
 - re-check that the client payload matches the documented allowlist

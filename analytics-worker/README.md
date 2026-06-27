@@ -40,6 +40,12 @@ The worker must not store:
 
 `POST /v1/events`
 
+Required header:
+
+```text
+X-Ballin-Analytics-Token: <configured ingest token>
+```
+
 Example payload:
 
 ```json
@@ -61,12 +67,25 @@ Responses:
 
 - `204` when the event is accepted
 - `400` for invalid JSON or invalid event fields
+- `401` when the ingest token is missing or invalid
 - `404` for unknown paths
 - `405` for unsupported methods
+
+The event is rejected unless:
+
+- `installId` is a lowercase UUID
+- `dateBucket` is today, yesterday, or tomorrow in UTC
+- `appVersion` is a released numeric version such as `1.0.0`
+- the JSON body is 2048 bytes or smaller
 
 The worker should ignore request IP for analytics purposes. Cloudflare may still
 process request metadata operationally before the worker runs; the application
 schema does not read or persist it.
+
+The ingest token is a deployment gate for the backend skeleton, not a permanent
+abuse solution for a distributed CLI. Before production traffic is enabled,
+configure Cloudflare-side rate limiting or equivalent edge protection for
+`POST /v1/events`.
 
 ## Local Setup
 
@@ -86,13 +105,20 @@ This repository does not require a live Cloudflare project yet. When ready:
    wrangler secret put INSTALL_ID_HASH_SECRET
    ```
 
-5. Apply migrations:
+5. Set the ingest token:
+
+   ```shell
+   wrangler secret put INGEST_TOKEN
+   ```
+
+6. Configure Cloudflare-side rate limiting for `POST /v1/events`.
+7. Apply migrations:
 
    ```shell
    wrangler d1 migrations apply ballin-scripts-analytics
    ```
 
-6. Deploy:
+8. Deploy:
 
    ```shell
    wrangler deploy
