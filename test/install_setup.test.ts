@@ -4,16 +4,19 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
+  configure,
   symlinkBinaries,
 } = require('../commands/install_setup.ts');
 
 const installSetupPath = path.join(__dirname, '..', 'commands', 'install_setup.ts');
+const repoRoot = path.join(__dirname, '..');
 
 describe('install setup', () => {
   let testDir: string;
   let repoDir: string;
   let sourceBinDir: string;
   let binDir: string;
+  const docsUrl = 'https://example.test/docs';
 
   const withoutStdout = (action: () => boolean): boolean => {
     const originalWrite = process.stdout.write;
@@ -23,6 +26,16 @@ describe('install setup', () => {
     } finally {
       process.stdout.write = originalWrite;
     }
+  };
+
+  const installConfigSources = () => {
+    fs.mkdirSync(path.join(repoDir, 'config'), { recursive: true });
+    ['.defaultConfig.json', 'index.ts', 'updateConfig.ts'].forEach((fileName) => {
+      fs.copyFileSync(
+        path.join(repoRoot, 'config', fileName),
+        path.join(repoDir, 'config', fileName),
+      );
+    });
   };
 
   beforeEach(() => {
@@ -48,6 +61,48 @@ describe('install setup', () => {
     assert.isTrue(fs.lstatSync(path.join(binDir, 'gu')).isSymbolicLink());
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
     assert.equal(fs.readlinkSync(path.join(binDir, 'gu')), path.join(sourceBinDir, 'gu'));
+  });
+
+  it('creates the default config through setup code', () => {
+    installConfigSources();
+
+    const result = withoutStdout(() => configure(repoDir, docsUrl));
+
+    assert.isTrue(result);
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
+      JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
+    );
+  });
+
+  it('runs config creation through the setup CLI', () => {
+    installConfigSources();
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'configure',
+      repoDir,
+      docsUrl,
+    ], {
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, "Created 'ballin.config.json'");
+    assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
+  it('updates an existing config through setup code', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
+
+    const result = withoutStdout(() => configure(repoDir, docsUrl));
+
+    assert.isTrue(result);
+    assert.include(
+      fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'),
+      '"up"',
+    );
   });
 
   it('runs the symlink step through the setup CLI', () => {
