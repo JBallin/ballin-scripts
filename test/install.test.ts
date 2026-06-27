@@ -70,7 +70,7 @@ case "$1:$2" in
       config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
     fi
     case "$config_json" in
-      *'.restored-gist'*) printf '%s\\n' '.restored-gist' ;;
+      *'.config/ballin/restored-gist'*) printf '%s\\n' '.config/ballin/restored-gist' ;;
       *) printf '%s\\n' '.gist' ;;
     esac
     ;;
@@ -249,7 +249,7 @@ case "$1:$2" in
   -l:) exit 0 ;;
   -r:returning-gist-id)
     if [ "$3" = 'ballin_config' ]; then
-      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".restored-gist","url":"https://old-gist.example.test"}}'
+      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".config/ballin/restored-gist","url":"https://old-gist.example.test"}}'
       exit 0
     fi
     printf '%s\\n' '### Backup of your dev environment'
@@ -270,9 +270,9 @@ esac
     assert.equal(restoredConfig.up.cleanup, 'false');
     assert.equal(restoredConfig.up.gu, 'true');
     assert.equal(restoredConfig.gu.id, 'returning-gist-id');
-    assert.equal(restoredConfig.gu.token_file, '.restored-gist');
+    assert.equal(restoredConfig.gu.token_file, '.config/ballin/restored-gist');
     assert.equal(restoredConfig.gu.url, 'https://old-gist.example.test');
-    assert.equal(fs.readFileSync(path.join(homeDir, '.restored-gist'), 'utf8'), 'token\n');
+    assert.equal(fs.readFileSync(path.join(homeDir, '.config', 'ballin', 'restored-gist'), 'utf8'), 'token\n');
   });
 
   it('stops before Gist and success output when config creation fails', () => {

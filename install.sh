@@ -177,8 +177,16 @@ done
               fi
               restored_gist_token_path="$HOME/$("$ballin_config" get gu.token_file)"
               if [ "$restored_gist_token_path" != "$gist_token_path" ] && [ ! -f "$restored_gist_token_path" ]; then
-                cp "$gist_token_path" "$restored_gist_token_path"
-                chmod 600 "$restored_gist_token_path"
+                restored_gist_token_dir="${restored_gist_token_path%/*}"
+                if ! mkdir -p "$restored_gist_token_dir"; then
+                  exit 1
+                fi
+                if ! cp "$gist_token_path" "$restored_gist_token_path"; then
+                  exit 1
+                fi
+                if ! chmod 600 "$restored_gist_token_path"; then
+                  exit 1
+                fi
               fi
             else
               printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
