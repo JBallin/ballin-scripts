@@ -119,17 +119,18 @@ const ensureTrailingNewline = (filePath: string): void => {
 };
 
 const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boolean => {
-  const result = runCommand(snapshot.command, snapshot.args ?? [], {
-    cwd: snapshot.cwd,
-    env: snapshot.env,
-    encoding: 'utf8',
-  });
-
-  if (result.stdout) {
-    fs.writeFileSync(inputFile, result.stdout);
-  } else {
-    fs.writeFileSync(inputFile, '');
+  const outputFd = fs.openSync(inputFile, 'w');
+  let result: ReturnType<typeof runCommand>;
+  try {
+    result = runCommand(snapshot.command, snapshot.args ?? [], {
+      cwd: snapshot.cwd,
+      env: snapshot.env,
+      stdio: ['ignore', outputFd, 'pipe'],
+    });
+  } finally {
+    fs.closeSync(outputFd);
   }
+
   if (result.stderr && !(snapshot.suppressStderrOnSuccess && result.status === 0)) {
     process.stderr.write(result.stderr);
   }
@@ -191,7 +192,13 @@ const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand)
   }
 
   if (isChanged) {
-    runGist(['-u', id, cacheFile], { stdio: 'ignore' });
+    const result = runGist(['-u', id, cacheFile], { stdio: ['ignore', 'ignore', 'pipe'] });
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+    }
+    if (result.error) {
+      reportSpawnError('gist', result.error);
+    }
   }
 
   const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
@@ -336,9 +343,12 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   const id = configValue('gu.id');
   const url = `${configValue('gu.url')}/${id}`;
 
-  const initialGistRead = runGist(['-r', id], { stdio: 'ignore' });
+  const initialGistRead = runGist(['-r', id], { stdio: ['ignore', 'ignore', 'pipe'] });
   if (initialGistRead.error) {
     reportSpawnError('gist', initialGistRead.error);
+  }
+  if (initialGistRead.stderr) {
+    process.stderr.write(initialGistRead.stderr);
   }
   if (initialGistRead.status !== 0 || initialGistRead.error) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");

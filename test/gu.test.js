@@ -72,7 +72,10 @@ if [ "$2" != 'test-gist-id' ]; then
 fi
 if [ "$1" = '-r' ]; then
   if [ "$#" -eq 2 ]; then
-    if [ "$FAKE_GIST_INITIAL_READ_FAIL" = 'true' ]; then exit 17; fi
+    if [ "$FAKE_GIST_INITIAL_READ_FAIL" = 'true' ]; then
+      printf '%s\\n' 'simulated initial gist read failure' >&2
+      exit 17
+    fi
     exit 0
   elif [ "$#" -ne 3 ]; then
     printf '%s\\n' 'Unexpected gist read arguments' >&2
@@ -90,7 +93,10 @@ elif [ "$1" = '-u' ]; then
     printf '%s\\n' 'Unexpected gist upload arguments' >&2
     exit 2
   fi
-  if [ "$FAKE_GIST_UPLOAD_FAIL" = 'true' ]; then exit 19; fi
+  if [ "$FAKE_GIST_UPLOAD_FAIL" = 'true' ]; then
+    printf '%s\\n' 'simulated gist upload failure' >&2
+    exit 19
+  fi
   cache_file="$3"
   file_name="\${cache_file##*/}"
   cp "$cache_file" "$FAKE_GIST_STORAGE_DIR/$file_name"
@@ -367,7 +373,7 @@ kill -TERM "$$"
 
     assert.equal(result.status, 0);
     assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
-    assert.equal(result.stderr, '');
+    assert.equal(result.stderr, 'simulated initial gist read failure\n');
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
@@ -383,7 +389,8 @@ kill -TERM "$$"
     assert.equal(
       result.stderr,
       'ballin_config failed for gu.id\n'
-        + 'ballin_config failed for gu.url\n',
+        + 'ballin_config failed for gu.url\n'
+        + 'Unexpected Gist ID\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistUploads(), []);
@@ -748,11 +755,26 @@ printf '%s\\n' '123456 Example App'
 
     const result = runGu({ gistUploadFail: true });
 
-    assertGuSucceeded(result);
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, 'simulated gist upload failure\n');
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=red\n');
     assert.deepEqual(gistUploads(), []);
+  });
+
+  it('streams large snapshot output without the default spawn buffer limit', () => {
+    const largeSnapshot = `${'x'.repeat(1024 * 1024 + 1)}\n`;
+    writeSnapshot(largeSnapshot);
+
+    const result = runGu();
+
+    assertGuSucceeded(result);
+    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assert.equal(fs.statSync(fakeGistFilePath()).size, largeSnapshot.length);
+    assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
   it('reports and uploads non-empty output becoming empty', () => {
