@@ -161,6 +161,8 @@ done
           if [ "$(gist -r "$GIST_ID")" == "$(printf '%b' "$GIST_DESCRIPTION")" ]; then
             printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
             "$ballin_config" set gu.id "$GIST_ID"
+            printf '\n%s\n' 'ℹ️  Keeping your local ballin.config.json settings; only the backup gist ID was adopted.'
+            printf '%s\n' '    New defaults stay managed by installer updates, and future gu runs will back up local settings.'
             VALID_GIST_ID=0
           else
             printf "\n⚠️  INVALID: Expected \e[1mgist -r '%s'\e[0m to output:\n%s\n" "$GIST_ID" "$GIST_DESCRIPTION"

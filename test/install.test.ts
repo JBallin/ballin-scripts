@@ -59,6 +59,30 @@ esac
 `, path.join(repoDir, 'bin'));
   };
 
+  const installAdoptableConfigCommand = () => {
+    writeExecutable('ballin_config', `#!/usr/bin/env bash
+printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+gist_id_file="$HOME/.configured-gist-id"
+case "$1:$2" in
+  get:gu.token_file) printf '%s\\n' '.gist' ;;
+  get:gu.url) printf '%s\\n' 'https://gist.example.test' ;;
+  get:gu.id)
+    if [ -f "$gist_id_file" ]; then
+      while IFS= read -r gist_id; do
+        printf '%s\\n' "$gist_id"
+      done < "$gist_id_file"
+    else
+      printf '%s\\n' 'null'
+    fi
+    ;;
+  set:gu.id)
+    printf '%s\\n' "$3" > "$gist_id_file"
+    printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
+    ;;
+esac
+`, path.join(repoDir, 'bin'));
+  };
+
   const runInstall = ({ env = {}, input }: RunInstallOptions = {}) => spawnSync(installPath, [], {
     encoding: 'utf8',
     input,
@@ -202,6 +226,40 @@ printf '%s\\n' gist >> "$FAKE_COMMAND_LOG"
     assert.include(result.stdout, updateOutput.trim());
     assert.equal(result.stdout.match(/👀 Optional capabilities:/g).length, 1);
     assert.include(result.stdout, 'docs/optional-capabilities.md');
+  });
+
+  it('adopts an existing backup gist without restoring remote config values', () => {
+    installBaseCommands();
+    installAdoptableConfigCommand();
+    fs.writeFileSync(path.join(homeDir, '.gist'), 'token\n');
+    writeExecutable('gist', `#!/usr/bin/env bash
+printf 'gist:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$1:$2" in
+  -l:) exit 0 ;;
+  -r:returning-gist-id)
+    if [ "$3" = 'ballin_config' ]; then
+      printf '%s\\n' 'remote config should not be restored' >&2
+      exit 3
+    fi
+    printf '%s\\n' '### Backup of your dev environment'
+    printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
+    printf '\\n'
+    ;;
+esac
+`);
+
+    const result = runInstall({ input: 'y\nreturning-gist-id\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Storing your previous gist ID in your config');
+    assert.include(result.stdout, 'Keeping your local ballin.config.json settings');
+    assert.include(result.stdout, 'only the backup gist ID was adopted');
+    assert.notInclude(commandLog(), 'gist:-r returning-gist-id ballin_config');
+    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
+      JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
+    );
   });
 
   it('stops before Gist and success output when config creation fails', () => {
