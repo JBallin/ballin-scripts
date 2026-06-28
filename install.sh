@@ -61,6 +61,11 @@ config_existed=true
 if [ ! -f "$repo_dir/ballin.config.json" ]; then
   config_existed=false
 fi
+gu_host_existed=false
+if [ "$config_existed" = true ] \
+  && [ "$(node -e "const fs = require('fs'); const config = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(config.gu && Object.prototype.hasOwnProperty.call(config.gu, 'host') ? 'true' : 'false')" "$repo_dir/ballin.config.json" 2>/dev/null)" = 'true' ]; then
+  gu_host_existed=true
+fi
 
 # Configuration must succeed before Gist credentials or command symlinks are touched.
 if [ -f "$repo_dir/commands/install_setup.ts" ] \
@@ -101,7 +106,7 @@ fi
     if [ -n "${BALLIN_GU_HOST:-}" ]; then
       "$ballin_config" set gu.host "$BALLIN_GU_HOST"
       gu_host="$("$ballin_config" get gu.host)"
-    elif [ "$gu_id" = 'null' ]; then
+    elif [ "$gu_id" = 'null' ] || [ "$gu_host_existed" = false ]; then
       read -rp "🤔 What GitHub host should be used for Gist backups? [${gu_host}] " input_host
       if [ -n "$input_host" ]; then
         "$ballin_config" set gu.host "$input_host"
