@@ -9,8 +9,7 @@
   },
   "gu": {
     "id": null,
-    "token_file": ".gist",
-    "url": "https://gist.github.com"
+    "host": "github.com"
   },
   "analytics": {
     "enabled": "true"
