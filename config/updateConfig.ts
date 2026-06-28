@@ -17,7 +17,12 @@ Object.keys(defaultConfig).forEach((key) => {
     userConfig[key] = defaultVal;
     updates.push(`${key}: ${defaultVal}`);
   }
-  if (typeof defaultVal === 'object' && (defaultVal as unknown) !== 'null') {
+  if (defaultVal !== null && typeof defaultVal === 'object') {
+    if (userConfig[key] === null || typeof userConfig[key] !== 'object') {
+      userConfig[key] = defaultVal;
+      updates.push(`${key}: ${defaultVal}`);
+      return;
+    }
     Object.keys(defaultVal as ConfigObject).forEach((nestedKey) => {
       const nestedUserConfig = userConfig[key] as ConfigObject;
       const nestedDefaultConfig = defaultVal as ConfigObject;
