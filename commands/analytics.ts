@@ -7,6 +7,7 @@ const { fetchConfig } = require('../config/index.ts');
 
 import type { ClientRequest, IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
+import type { Socket } from 'net';
 
 type AnalyticsConfig = {
   enabled?: string;
@@ -201,6 +202,12 @@ const ignoreRequestFailure = (request: ClientRequest): void => {
   request.on('error', () => {});
 };
 
+const unrefRequestSocket = (request: ClientRequest): void => {
+  request.on('socket', (socket: Socket) => {
+    socket.unref();
+  });
+};
+
 const sendAnalyticsPayload: AnalyticsSender = (payload, options) => {
   if (!options.endpoint || !options.ingestToken) {
     return;
@@ -220,11 +227,11 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => {
     });
 
     ignoreRequestFailure(request);
+    unrefRequestSocket(request);
     request.setTimeout(options.timeoutMs ?? defaultTimeoutMs, () => {
       request.destroy();
     });
     request.end(body);
-    request.unref();
   } catch {
     // Analytics must never affect command behavior.
   }

@@ -10,6 +10,7 @@ const {
 
 import type { ClientRequest, IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
+import type { Socket } from 'net';
 
 type AnalyticsPayload = {
   schemaVersion: 1;
@@ -286,7 +287,7 @@ describe('analytics client', () => {
     let timeoutMs = 0;
     const timeoutHandler: { current?: () => void } = {};
     let destroyed = false;
-    let unrefCalled = false;
+    let socketUnrefCalled = false;
 
     https.request = (options: RequestOptions, callback: (response: IncomingMessage) => void): ClientRequest => {
       capturedOptions = options;
@@ -295,7 +296,6 @@ describe('analytics client', () => {
       callback(response);
 
       const request = new EventEmitter() as ClientRequest;
-      const requestWithUnref = request as ClientRequest & { unref: () => ClientRequest };
       request.setTimeout = (milliseconds: number, handler?: () => void) => {
         timeoutMs = milliseconds;
         timeoutHandler.current = handler;
@@ -303,14 +303,17 @@ describe('analytics client', () => {
       };
       request.end = ((body?: unknown) => {
         capturedBody = typeof body === 'string' || Buffer.isBuffer(body) ? body.toString() : '';
+        const socket = {
+          unref: () => {
+            socketUnrefCalled = true;
+            return socket;
+          },
+        } as Socket;
+        request.emit('socket', socket);
         return request;
       }) as ClientRequest['end'];
       request.destroy = () => {
         destroyed = true;
-        return request;
-      };
-      requestWithUnref.unref = () => {
-        unrefCalled = true;
         return request;
       };
       return request;
@@ -342,7 +345,7 @@ describe('analytics client', () => {
 
     assert.equal(timeoutMs, 25);
     assert.isTrue(destroyed);
-    assert.isTrue(unrefCalled);
+    assert.isTrue(socketUnrefCalled);
     assert.include(capturedBody, '"command":"up"');
     assert.isNotNull(capturedOptions);
     const options = capturedOptions as unknown as RequestOptions;
