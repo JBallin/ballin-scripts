@@ -95,8 +95,15 @@ esac
     writeExecutable('ballin_config', `#!/usr/bin/env bash
 printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 gist_id_file="$HOME/.configured-gist-id"
+host_file="$HOME/.configured-gu-host"
+configured_host='github.example.test'
+if [ -f "$host_file" ]; then
+  while IFS= read -r stored_host; do
+    configured_host="$stored_host"
+  done < "$host_file"
+fi
 case "$1:$2" in
-  get:gu.host) printf '%s\\n' 'github.example.test' ;;
+  get:gu.host) printf '%s\\n' "$configured_host" ;;
   get:gu.id)
     if [ -f "$gist_id_file" ]; then
       while IFS= read -r gist_id; do
@@ -106,9 +113,13 @@ case "$1:$2" in
       printf '%s\\n' 'null'
     fi
     ;;
+  set:gu.host)
+    printf '%s\\n' "$3" > "$host_file"
+    printf '%s\\n' "\\"gu.host\\" set to: \\"$3\\""
+    ;;
   set:gu.id)
     printf '%s\\n' "$3" > "$gist_id_file"
-    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"github.example.test"}}\\n' "$3" > "$HOME/.ballin-scripts/ballin.config.json"
+    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"%s"}}\\n' "$3" "$configured_host" > "$HOME/.ballin-scripts/ballin.config.json"
     printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
     ;;
 esac
@@ -118,13 +129,14 @@ esac
   const installFakeGhCommand = () => {
     writeExecutable('gh', `#!/usr/bin/env bash
 printf 'gh:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+expected_host="\${FAKE_GH_HOST:-github.example.test}"
 case "$1:$2" in
   auth:status)
-    if [ "$*" != 'auth status --hostname github.example.test' ]; then exit 2; fi
+    if [ "$*" != "auth status --hostname $expected_host" ]; then exit 2; fi
     exit "$FAKE_GH_AUTH_STATUS"
     ;;
   gist:view)
-    if [ "$GH_HOST" != 'github.example.test' ]; then
+    if [ "$GH_HOST" != "$expected_host" ]; then
       printf '%s\\n' 'Unexpected GH_HOST' >&2
       exit 2
     fi
@@ -145,7 +157,7 @@ case "$1:$2" in
     exit 2
     ;;
   gist:create)
-    if [ "$GH_HOST" != 'github.example.test' ]; then
+    if [ "$GH_HOST" != "$expected_host" ]; then
       printf '%s\\n' 'Unexpected GH_HOST' >&2
       exit 2
     fi
@@ -477,5 +489,29 @@ exit 2
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
     assert.include(commandLog(), 'ballin_config:set gu.id new-gist-id\n');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
+  });
+
+  it('uses an install-time custom Gist host for gh auth and creation', () => {
+    installBaseCommands();
+    installAdoptableConfigCommand();
+    installFakeGhCommand();
+
+    const result = runInstall({
+      env: {
+        BALLIN_GU_HOST: 'github.enterprise.test',
+        FAKE_GH_HOST: 'github.enterprise.test',
+      },
+      input: 'n\n',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(commandLog(), 'ballin_config:set gu.host github.enterprise.test\n');
+    assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
+    assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
+    const configuredHost = fs.readFileSync(path.join(homeDir, '.configured-gu-host'), 'utf8').trim();
+    assert.equal(configuredHost, 'github.enterprise.test');
+    const createdConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
+    assert.equal(createdConfig.gu.host, 'github.enterprise.test');
+    assert.equal(createdConfig.gu.id, 'new-gist-id');
   });
 });

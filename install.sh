@@ -97,6 +97,10 @@ fi
   if ! (
     cd "$repo_dir" || exit
     gu_host="$("$ballin_config" get gu.host)"
+    if [ -n "${BALLIN_GU_HOST:-}" ]; then
+      "$ballin_config" set gu.host "$BALLIN_GU_HOST"
+      gu_host="$("$ballin_config" get gu.host)"
+    fi
     gu_id="$("$ballin_config" get gu.id)"
     export GH_HOST="$gu_host"
 

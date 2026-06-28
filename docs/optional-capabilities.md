@@ -70,13 +70,12 @@ During install, `ballin-scripts` asks whether you already have a backup Gist.
 It can adopt that Gist, restore saved `ballin_config` values, or create a new
 secret Gist and store its ID in `gu.id`.
 
-GitHub Enterprise users who are not using `github.com` should set `gu.host`,
-authenticate that host, and rerun the installer:
+GitHub Enterprise users who are not using `github.com` should authenticate that
+host and pass it during install:
 
 ```shell
-~/.ballin-scripts/bin/ballin_config set gu.host github.example.com
 gh auth login --hostname github.example.com
-bash ~/.ballin-scripts/install.sh
+BALLIN_GU_HOST=github.example.com bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
 ## `up` settings
