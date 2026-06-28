@@ -13,8 +13,6 @@
     "url": "https://gist.github.com"
   },
   "analytics": {
-    "enabled": "true",
-    "noticeShown": "false",
-    "installId": null
+    "enabled": "true"
   }
 }

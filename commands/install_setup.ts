@@ -1,9 +1,32 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  ensureAnalyticsInstallId,
+} = require('./analytics.ts');
+const {
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
+
+type ConfigObject = { [key: string]: unknown };
+
+const isConfigObject = (value: unknown): value is ConfigObject => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as ConfigObject;
+    const analyticsConfig = isConfigObject(config.analytics) ? config.analytics : undefined;
+    ensureAnalyticsInstallId({
+      analyticsConfig,
+      repoDir,
+      noticeWriter: writeStdoutLine,
+    });
+  } catch {
+    // Analytics setup must never block install or update.
+  }
+};
 
 const configure = (repoDir: string, docsUrl: string): boolean => {
   const configPath = path.join(repoDir, 'ballin.config.json');
@@ -17,6 +40,7 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
       return false;
     }
     writeStdoutLine("\n🧠 Created 'ballin.config.json' file in root using default settings");
+    setupAnalyticsInstallId(repoDir, configPath);
     return true;
   }
 
@@ -44,6 +68,7 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
     writeStdoutLine(`\n🙌 ${updateOutput}`);
     writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
   }
+  setupAnalyticsInstallId(repoDir, configPath);
 
   return true;
 };

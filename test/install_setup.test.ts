@@ -4,6 +4,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
+  analyticsNotice,
+} = require('../commands/analytics.ts');
+const {
   configure,
   symlinkBinaries,
 } = require('../commands/install_setup.ts');
@@ -17,6 +20,7 @@ describe('install setup', () => {
   let sourceBinDir: string;
   let binDir: string;
   const docsUrl = 'https://example.test/docs';
+  const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 
   const withoutStdout = (action: () => boolean): boolean => {
     const originalWrite = process.stdout.write;
@@ -27,6 +31,25 @@ describe('install setup', () => {
       process.stdout.write = originalWrite;
     }
   };
+
+  const captureStdout = (action: () => boolean): { output: string; result: boolean } => {
+    const originalWrite = process.stdout.write;
+    let output = '';
+    process.stdout.write = ((chunk: string) => {
+      output += chunk;
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const result = action();
+      return { output, result };
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+  };
+
+  const installIdPath = () => path.join(repoDir, '.analytics', 'install-id');
+
+  const readInstallId = () => fs.readFileSync(installIdPath(), 'utf8');
 
   const installConfigSources = () => {
     fs.mkdirSync(path.join(repoDir, 'config'), { recursive: true });
@@ -75,6 +98,16 @@ describe('install setup', () => {
     );
   });
 
+  it('shows the analytics notice and creates a local install ID on first config creation', () => {
+    installConfigSources();
+
+    const { output, result } = captureStdout(() => configure(repoDir, docsUrl));
+
+    assert.isTrue(result);
+    assert.include(output, analyticsNotice);
+    assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
+  });
+
   it('runs config creation through the setup CLI', () => {
     installConfigSources();
 
@@ -103,6 +136,53 @@ describe('install setup', () => {
       fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'),
       '"up"',
     );
+  });
+
+  it('shows the analytics notice and creates a local install ID for existing enabled config', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'true',
+      },
+    }));
+
+    const { output, result } = captureStdout(() => configure(repoDir, docsUrl));
+
+    assert.isTrue(result);
+    assert.include(output, analyticsNotice);
+    assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
+  });
+
+  it('does not repeat the analytics notice when a local install ID already exists', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'true',
+      },
+    }));
+    fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
+    fs.writeFileSync(installIdPath(), `${fixedInstallId}\n`, 'utf8');
+
+    const { output, result } = captureStdout(() => configure(repoDir, docsUrl));
+
+    assert.isTrue(result);
+    assert.notInclude(output, analyticsNotice);
+    assert.equal(readInstallId(), `${fixedInstallId}\n`);
+  });
+
+  it('does not create a local install ID when analytics are disabled', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'false',
+      },
+    }));
+
+    const { output, result } = captureStdout(() => configure(repoDir, docsUrl));
+
+    assert.isTrue(result);
+    assert.notInclude(output, analyticsNotice);
+    assert.isFalse(fs.existsSync(installIdPath()));
   });
 
   it('runs the symlink step through the setup CLI', () => {

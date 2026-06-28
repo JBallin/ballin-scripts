@@ -58,10 +58,11 @@ the installed-app list in your backup. No configuration setting is required.
 
 ## Analytics
 
-`ballin-scripts` can send minimal anonymous command analytics after showing a
-first-run notice. Analytics never include command arguments, local paths,
+`ballin-scripts` can send minimal anonymous command analytics after showing an
+install/update notice. Analytics never include command arguments, local paths,
 usernames, Gist IDs, dotfile contents, package lists, editor settings, raw
-errors, environment variables, or arbitrary config values.
+errors, environment variables, arbitrary config values, or the local install ID
+file.
 
 Disable analytics persistently:
 

@@ -4,7 +4,6 @@ const https = require('https');
 const { fetchConfig, configPath, stringify } = require('../config/index.ts');
 const {
   analyticsDisabledByEnv,
-  analyticsNotice,
   recordAnalyticsEvent,
   sendAnalyticsPayload,
 } = require('../commands/analytics.ts');
@@ -26,8 +25,9 @@ type AnalyticsPayload = {
 };
 
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
-const otherInstallId = '11111111-1111-4111-8111-111111111111';
 const fixedNow = new Date('2026-06-27T20:15:00.000Z');
 const allowedPayloadKeys = [
   'schemaVersion',
@@ -43,6 +43,7 @@ const allowedPayloadKeys = [
 ];
 
 const fetchConfigJSON = () => fetchConfig().configJSON;
+let testInstallIdPath = '';
 
 const writeConfig = (configObj: Record<string, unknown>): void => {
   fs.writeFileSync(configPath, stringify(configObj), 'utf8');
@@ -52,6 +53,11 @@ const setAnalyticsConfig = (analytics: Record<string, unknown>): void => {
   const { configObj } = fetchConfig();
   configObj.analytics = analytics;
   writeConfig(configObj);
+};
+
+const writeInstallId = (installId = fixedInstallId): void => {
+  fs.mkdirSync(path.dirname(testInstallIdPath), { recursive: true });
+  fs.writeFileSync(testInstallIdPath, `${installId}\n`, 'utf8');
 };
 
 const recordWithSender = (
@@ -66,7 +72,7 @@ const recordWithSender = (
     endpoint: 'https://analytics.example.test/v1/events',
     ingestToken: 'test-token',
     env: {},
-    generateInstallId: () => fixedInstallId,
+    installIdPath: testInstallIdPath,
     sender: (payload: AnalyticsPayload) => {
       order.push('send');
       payloads.push(payload);
@@ -83,13 +89,17 @@ const recordWithSender = (
 
 describe('analytics client', () => {
   let savedConfig: string;
+  let tempDir: string;
 
   beforeEach(() => {
     savedConfig = fetchConfigJSON();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-'));
+    testInstallIdPath = path.join(tempDir, '.analytics', 'install-id');
   });
 
   afterEach(() => {
     fs.writeFileSync(configPath, savedConfig, 'utf8');
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('treats BALLIN_NO_ANALYTICS and CI as hard opt-outs', () => {
@@ -101,14 +111,13 @@ describe('analytics client', () => {
   it('does not send when analytics are disabled in config', () => {
     setAnalyticsConfig({
       enabled: 'false',
-      noticeShown: 'true',
-      installId: fixedInstallId,
     });
+    writeInstallId();
 
     const { payloads, notices } = recordWithSender({
       command: 'up',
       now: fixedNow,
-    }, { isInteractive: true });
+    });
 
     assert.deepEqual(payloads, []);
     assert.deepEqual(notices, []);
@@ -123,9 +132,8 @@ describe('analytics client', () => {
     optOuts.forEach((env) => {
       setAnalyticsConfig({
         enabled: 'true',
-        noticeShown: 'true',
-        installId: fixedInstallId,
       });
+      writeInstallId();
 
       const { payloads } = recordWithSender({
         command: 'up',
@@ -136,78 +144,55 @@ describe('analytics client', () => {
     });
   });
 
-  it('gates the first send on an interactive notice and then persists the install ID', () => {
+  it('reads the local install ID and includes it in the payload', () => {
     setAnalyticsConfig({
       enabled: 'true',
-      noticeShown: 'false',
-      installId: null,
     });
+    writeInstallId();
 
     const { payloads, notices, order } = recordWithSender({
       command: 'up',
       status: 'success',
       durationBucket: '<1s',
       now: fixedNow,
-    }, { isInteractive: true });
+    });
     const updatedAnalytics = fetchConfig().configObj.analytics;
 
-    assert.deepEqual(order, ['notice', 'send']);
-    assert.equal(notices[0], analyticsNotice);
+    assert.deepEqual(order, ['send']);
+    assert.deepEqual(notices, []);
     assert.lengthOf(payloads, 1);
     assert.equal(payloads[0].installId, fixedInstallId);
-    assert.deepInclude(updatedAnalytics, {
+    assert.deepEqual(updatedAnalytics, {
       enabled: 'true',
-      noticeShown: 'true',
-      installId: fixedInstallId,
     });
   });
 
-  it('does not generate an install ID or send before the first interactive notice', () => {
+  it('skips sending when the local install ID is missing', () => {
     setAnalyticsConfig({
       enabled: 'true',
-      noticeShown: 'false',
-      installId: null,
     });
 
     const { payloads, notices } = recordWithSender({
       command: 'up',
       now: fixedNow,
-    }, { isInteractive: false });
+    });
 
     assert.deepEqual(payloads, []);
     assert.deepEqual(notices, []);
-    assert.isNull((fetchConfig().configObj.analytics as { installId: string | null }).installId);
-  });
-
-  it('can send after the first-run notice has already been shown', () => {
-    setAnalyticsConfig({
-      enabled: 'true',
-      noticeShown: 'true',
-      installId: otherInstallId,
-    });
-
-    const { payloads, notices } = recordWithSender({
-      command: 'gu',
-      now: fixedNow,
-    }, { isInteractive: false });
-
-    assert.deepEqual(notices, []);
-    assert.lengthOf(payloads, 1);
-    assert.equal(payloads[0].installId, otherInstallId);
   });
 
   it('never throws when analytics config or sender behavior fails', () => {
     setAnalyticsConfig({
       enabled: 'true',
-      noticeShown: 'true',
-      installId: fixedInstallId,
     });
+    writeInstallId();
 
     assert.doesNotThrow(() => {
       recordAnalyticsEvent({
         command: 'up',
         now: fixedNow,
       }, {
+        installIdPath: testInstallIdPath,
         sender: () => {
           throw new Error('network unavailable');
         },
@@ -218,9 +203,8 @@ describe('analytics client', () => {
   it('sends only the allowlisted payload fields', () => {
     setAnalyticsConfig({
       enabled: 'true',
-      noticeShown: 'true',
-      installId: fixedInstallId,
     });
+    writeInstallId();
 
     const { payloads } = recordWithSender({
       command: 'ballin_config',
@@ -251,9 +235,8 @@ describe('analytics client', () => {
   it('skips unsupported commands and invalid enum values', () => {
     setAnalyticsConfig({
       enabled: 'true',
-      noticeShown: 'true',
-      installId: fixedInstallId,
     });
+    writeInstallId();
 
     const unsupportedCommand = recordWithSender({
       command: 'git',

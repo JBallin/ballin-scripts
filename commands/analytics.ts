@@ -3,15 +3,13 @@ const crypto = require('crypto');
 const https = require('https');
 const os = require('os');
 const path = require('path');
-const { configPath, fetchConfig, stringify } = require('../config/index.ts');
+const { fetchConfig } = require('../config/index.ts');
 
 import type { ClientRequest, IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
 
 type AnalyticsConfig = {
   enabled?: string;
-  noticeShown?: string;
-  installId?: string | null;
 };
 
 type AnalyticsPayload = {
@@ -44,10 +42,16 @@ type AnalyticsSender = (payload: AnalyticsPayload, options: SenderOptions) => vo
 
 type AnalyticsRuntime = SenderOptions & {
   env?: NodeJS.ProcessEnv;
-  isInteractive?: boolean;
-  noticeWriter?: (message: string) => void;
+  installIdPath?: string;
   sender?: AnalyticsSender;
+};
+
+type AnalyticsInstallIdOptions = {
+  analyticsConfig?: AnalyticsConfig;
   generateInstallId?: () => string;
+  installIdPath?: string;
+  noticeWriter?: (message: string) => void;
+  repoDir?: string;
 };
 
 type ConfigObject = { [key: string]: unknown };
@@ -65,6 +69,7 @@ const allowedCommands = new Set([
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const allowedOs = new Set(['darwin', 'linux', 'win32']);
+const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const analyticsNotice = [
   'ballin-scripts collects minimal anonymous command analytics.',
   'No command arguments, paths, usernames, Gist IDs, dotfiles, package lists, raw errors, or environment values are sent.',
@@ -73,6 +78,7 @@ const analyticsNotice = [
 ].join('\n');
 
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
+const defaultRepoDir = path.join(__dirname, '..');
 
 const loadAppVersion = (): string => {
   try {
@@ -83,32 +89,59 @@ const loadAppVersion = (): string => {
   }
 };
 
-const defaultNoticeWriter = (message: string): void => {
-  process.stderr.write(`${message}\n`);
-};
-
-const isInteractiveRun = (): boolean => Boolean(process.stdin.isTTY && process.stderr.isTTY);
-
 const isAnalyticsConfig = (value: unknown): value is AnalyticsConfig => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-const readAnalyticsConfig = (): { root: ConfigObject; analytics: AnalyticsConfig } => {
+const readAnalyticsConfig = (): { analytics: AnalyticsConfig } => {
   const { configObj } = fetchConfig() as { configObj: ConfigObject };
   return {
-    root: configObj,
     analytics: isAnalyticsConfig(configObj.analytics) ? configObj.analytics : {},
   };
-};
-
-const writeAnalyticsConfig = (root: ConfigObject, analytics: AnalyticsConfig): void => {
-  root.analytics = analytics;
-  fs.writeFileSync(configPath, stringify(root), 'utf8');
 };
 
 const analyticsDisabledByEnv = (env: NodeJS.ProcessEnv): boolean => (
   env.BALLIN_NO_ANALYTICS === '1' || Boolean(env.CI)
 );
+
+const installIdPathForRepo = (repoDir = defaultRepoDir): string => (
+  path.join(repoDir, '.analytics', 'install-id')
+);
+
+const readLocalInstallId = (installIdPath = installIdPathForRepo()): string | null => {
+  try {
+    const installId = fs.readFileSync(installIdPath, 'utf8').trim();
+    return installIdPattern.test(installId) ? installId : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalInstallId = (installId: string, installIdPath = installIdPathForRepo()): boolean => {
+  try {
+    fs.mkdirSync(path.dirname(installIdPath), { recursive: true });
+    fs.writeFileSync(installIdPath, `${installId}\n`, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): string | null => {
+  if (options.analyticsConfig?.enabled !== 'true') {
+    return null;
+  }
+
+  const installIdPath = options.installIdPath ?? installIdPathForRepo(options.repoDir);
+  const existingInstallId = readLocalInstallId(installIdPath);
+  if (existingInstallId) {
+    return existingInstallId;
+  }
+
+  options.noticeWriter?.(analyticsNotice);
+  const installId = (options.generateInstallId ?? crypto.randomUUID)();
+  return writeLocalInstallId(installId, installIdPath) ? installId : null;
+};
 
 const dateBucket = (now: Date): string => now.toISOString().slice(0, 10);
 
@@ -207,31 +240,12 @@ const recordAnalyticsEvent = (input: AnalyticsRecordInput, runtime: AnalyticsRun
       return;
     }
 
-    const { root, analytics } = readAnalyticsConfig();
+    const { analytics } = readAnalyticsConfig();
     if (analytics.enabled !== 'true') {
       return;
     }
 
-    let installId = analytics.installId;
-    if (analytics.noticeShown !== 'true') {
-      const interactive = runtime.isInteractive ?? isInteractiveRun();
-      if (!interactive) {
-        return;
-      }
-      (runtime.noticeWriter ?? defaultNoticeWriter)(analyticsNotice);
-      installId = (runtime.generateInstallId ?? crypto.randomUUID)();
-      writeAnalyticsConfig(root, {
-        ...analytics,
-        noticeShown: 'true',
-        installId,
-      });
-    } else if (!installId) {
-      installId = (runtime.generateInstallId ?? crypto.randomUUID)();
-      writeAnalyticsConfig(root, {
-        ...analytics,
-        installId,
-      });
-    }
+    const installId = readLocalInstallId(runtime.installIdPath);
     if (!installId) {
       return;
     }
@@ -256,6 +270,9 @@ module.exports = {
   analyticsDisabledByEnv,
   analyticsNotice,
   buildAnalyticsPayload,
+  ensureAnalyticsInstallId,
+  installIdPathForRepo,
+  readLocalInstallId,
   recordAnalyticsEvent,
   sendAnalyticsPayload,
 };

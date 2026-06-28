@@ -320,8 +320,6 @@ describe('config', () => {
       assert.equal(result.status, 0);
       assert.deepEqual(fetchConfig().configObj.analytics, {
         enabled: 'false',
-        noticeShown: 'false',
-        installId: null,
       });
     });
   });
