@@ -100,16 +100,18 @@ fi
     gu_id="$("$ballin_config" get gu.id)"
     export GH_HOST="$gu_host"
 
-    if [ "$gu_id" = 'null' ]; then
-      if [ ! -x "$(command -v gh)" ]; then
-        printf '\n%s\n' 'ℹ️  Skipping optional Gist backup setup because GitHub CLI is not installed.'
-        printf '%s\n' "   Install gh and run: gh auth login --hostname $gu_host"
-        printf '%s\n' "   Then set gu.id or rerun this installer."
-      elif ! gh auth status --hostname "$gu_host" > /dev/null 2>&1; then
-        printf '\n%s\n' "ℹ️  Skipping optional Gist backup setup because gh is not authenticated for $gu_host."
-        printf '%s\n' "   Run: gh auth login --hostname $gu_host"
-        printf '%s\n' '   Then set gu.id or rerun this installer.'
-      else
+    if [ ! -x "$(command -v gh)" ]; then
+      printf '\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.\n'
+      printf '\nInstall gh, authenticate it, then run this installer again.\n'
+      printf '\nSetup guide: %s\n' "$docs_url"
+      printf '\nRun after installing gh:\n  gh auth login --hostname %s\n' "$gu_host"
+      exit 1
+    elif ! gh auth status --hostname "$gu_host" > /dev/null 2>&1; then
+      printf '\n⚠️  ERROR: gh is not authenticated for %s.\n' "$gu_host"
+      printf '\nRun:\n  gh auth login --hostname %s\n' "$gu_host"
+      printf '\nThen run this installer again.\n'
+      exit 1
+    elif [ "$gu_id" = 'null' ]; then
         l1='### Backup of your dev environment'
         l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
         gist_description="$l1\n$l2\n"
@@ -170,7 +172,6 @@ fi
           unset gist_url gist_id l1 l2 gist_description
           rm '.MyConfig.md'
         fi
-      fi
     fi
   ); then
     printf '\n⚠️  ERROR: Unable to configure Gist backup\n'

@@ -62,6 +62,13 @@ and auditable.
 
 ## Installation
 
+Before installing, make sure Node.js is available and GitHub CLI is
+authenticated for the Gist host:
+
+```shell
+gh auth login --hostname github.com
+```
+
 Install with:
 
 ```shell

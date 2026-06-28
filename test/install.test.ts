@@ -238,22 +238,45 @@ esac
     assert.equal(commandLog(), '');
   });
 
-  it('succeeds without Homebrew, gist, or gh when Gist backup is unconfigured', () => {
+  it('stops with guidance when GitHub CLI is unavailable', () => {
     installBaseCommands();
     installAdoptableConfigCommand();
 
     const result = runInstall();
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Skipping optional Gist backup setup because GitHub CLI is not installed');
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'GitHub CLI is required for Gist backup setup');
+    assert.include(result.stdout, 'Install gh, authenticate it, then run this installer again');
     assert.include(result.stdout, 'gh auth login --hostname github.example.test');
-    assert.include(result.stdout, '😎 ballin!');
+    assert.include(result.stdout, 'docs/README.md');
     assert.notInclude(commandLog(), 'gh:');
+    assert.notInclude(result.stdout, 'symlinked binaries');
+    assert.notInclude(result.stdout, '😎 ballin!');
+    assert.isFalse(fs.existsSync(path.join(binDir, 'ballin_config')));
+  });
+
+  it('stops with guidance when GitHub CLI is not authenticated', () => {
+    installBaseCommands();
+    installAdoptableConfigCommand();
+    installFakeGhCommand();
+
+    const result = runInstall({ env: { FAKE_GH_AUTH_STATUS: '4' } });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'gh is not authenticated for github.example.test');
+    assert.include(result.stdout, 'gh auth login --hostname github.example.test');
+    assert.include(result.stdout, 'Then run this installer again');
+    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
+    assert.notInclude(commandLog(), 'gh:gist');
+    assert.notInclude(result.stdout, 'symlinked binaries');
+    assert.notInclude(result.stdout, '😎 ballin!');
+    assert.isFalse(fs.existsSync(path.join(binDir, 'ballin_config')));
   });
 
   it('performs an isolated initial setup and shows docs once', () => {
     installBaseCommands();
     installConfigCommand();
+    installFakeGhCommand();
 
     const result = runInstall();
 
@@ -270,12 +293,14 @@ esac
     assert.include(commandLog(), 'node:install_setup');
     assert.include(commandLog(), 'symlink-binaries');
     assert.notInclude(commandLog(), 'gist:');
-    assert.notInclude(commandLog(), 'gh:');
+    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
+    assert.notInclude(commandLog(), 'gh:gist');
   });
 
   it('falls back to Bash symlinking when the typed setup entrypoint is missing from an existing checkout', () => {
     installBaseCommands();
     installConfigCommand();
+    installFakeGhCommand();
     fs.unlinkSync(path.join(repoDir, 'commands', 'install_setup.ts'));
 
     const result = runInstall();
@@ -289,6 +314,7 @@ esac
   it('falls back to Bash config setup when the typed setup entrypoint does not support configure yet', () => {
     installBaseCommands();
     installConfigCommand();
+    installFakeGhCommand();
     writeExecutable('node', `#!/usr/bin/env bash
 if [ "$1" = '-p' ]; then
   printf '%s\\n' "$FAKE_NODE_SUPPORTED"
@@ -327,6 +353,7 @@ exit "$FAKE_NODE_STATUS"
   it('does not repeat unchanged setup guidance during an ordinary update', () => {
     installBaseCommands();
     installConfigCommand();
+    installFakeGhCommand();
     fs.copyFileSync(
       path.join(repoDir, 'config', '.defaultConfig.json'),
       path.join(repoDir, 'ballin.config.json'),
@@ -343,6 +370,7 @@ exit "$FAKE_NODE_STATUS"
   it('reports newly added configuration and links to the guide', () => {
     installBaseCommands();
     installConfigCommand();
+    installFakeGhCommand();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
 
     const updateOutput = 'New configuration options have been added!\nup.nvm: false\n';
@@ -422,6 +450,7 @@ exit "$FAKE_NODE_STATUS"
   it('uses the Homebrew prefix as the command directory when brew is present', () => {
     installBaseCommands();
     installConfigCommand();
+    installFakeGhCommand();
     writeExecutable('brew', `#!/usr/bin/env bash
 if [ "$1" = '--prefix' ]; then
   printf '%s\\n' "$HOME/.local"
