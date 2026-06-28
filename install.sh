@@ -97,17 +97,17 @@ fi
   if ! (
     cd "$repo_dir" || exit
     gu_host="$("$ballin_config" get gu.host)"
+    gu_id="$("$ballin_config" get gu.id)"
     if [ -n "${BALLIN_GU_HOST:-}" ]; then
       "$ballin_config" set gu.host "$BALLIN_GU_HOST"
       gu_host="$("$ballin_config" get gu.host)"
-    else
+    elif [ "$gu_id" = 'null' ]; then
       read -rp "🤔 What GitHub host should be used for Gist backups? [${gu_host}] " input_host
       if [ -n "$input_host" ]; then
         "$ballin_config" set gu.host "$input_host"
         gu_host="$("$ballin_config" get gu.host)"
       fi
     fi
-    gu_id="$("$ballin_config" get gu.id)"
     export GH_HOST="$gu_host"
 
     if [ ! -x "$(command -v gh)" ]; then
