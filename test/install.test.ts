@@ -376,7 +376,29 @@ exit "$FAKE_NODE_STATUS"
     assert.equal(result.status, 0, result.stderr);
     assert.notInclude(result.stdout, '👀 Docs:');
     assert.notInclude(result.stdout, "Created 'ballin.config.json'");
+    assert.notInclude(result.stdout, 'What GitHub host should be used for Gist backups?');
     assert.include(result.stdout, '😎 ballin!');
+  });
+
+  it('prompts once when migration adds gu.host to an existing Gist config', () => {
+    installBaseCommands();
+    installAdoptableConfigCommand();
+    installFakeGhCommand();
+    fs.writeFileSync(path.join(homeDir, '.configured-gist-id'), 'existing-gist-id\n');
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{"gu":{"id":"existing-gist-id"}}\n');
+
+    const result = runInstall({
+      env: {
+        FAKE_GH_HOST: 'github.enterprise.test',
+        FAKE_UPDATE_OUTPUT: 'New configuration options have been added!\ngu.host: github.example.test\n',
+      },
+      input: 'github.enterprise.test\n',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(commandLog(), 'ballin_config:set gu.host github.enterprise.test\n');
+    assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
+    assert.notInclude(commandLog(), 'gh:gist');
   });
 
   it('reports newly added configuration and links to the guide', () => {
