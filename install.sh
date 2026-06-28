@@ -107,6 +107,7 @@ fi
       "$ballin_config" set gu.host "$BALLIN_GU_HOST"
       gu_host="$("$ballin_config" get gu.host)"
     elif [ "$gu_id" = 'null' ] || [ "$gu_host_existed" = false ]; then
+      echo ''
       read -rp "🤔 What GitHub host should be used for Gist backups? [${gu_host}] " input_host
       if [ -n "$input_host" ]; then
         "$ballin_config" set gu.host "$input_host"
