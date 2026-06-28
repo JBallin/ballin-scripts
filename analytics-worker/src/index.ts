@@ -40,7 +40,26 @@ type ParseOptions = {
   now: Date;
 };
 
-const allowedCommands = new Set(['up', 'gu', 'ballin_update', 'ballin']);
+const allowedCommands = new Set([
+  'ballin',
+  'ballin_config',
+  'ballin_uninstall',
+  'ballin_update',
+  'gu',
+  'up',
+]);
+const allowedPayloadKeys = new Set([
+  'schemaVersion',
+  'installId',
+  'dateBucket',
+  'command',
+  'status',
+  'durationBucket',
+  'appVersion',
+  'nodeMajor',
+  'os',
+  'osVersion',
+]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const allowedOs = new Set(['darwin', 'linux', 'win32', 'unknown']);
@@ -77,6 +96,10 @@ const isObject = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
+const hasOnlyAllowedPayloadKeys = (payload: Record<string, unknown>): boolean => (
+  Object.keys(payload).every((key) => allowedPayloadKeys.has(key))
+);
+
 const stringField = (payload: Record<string, unknown>, key: string): string | null => {
   const value = payload[key];
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -100,6 +123,9 @@ const isDateBucketWithinSkew = (dateBucket: string, now: Date): boolean => {
 const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): AnalyticsEvent | string => {
   if (!isObject(payload)) {
     return 'event payload must be a JSON object';
+  }
+  if (!hasOnlyAllowedPayloadKeys(payload)) {
+    return 'event payload contains unsupported fields';
   }
   if (payload.schemaVersion !== 1) {
     return 'schemaVersion must be 1';
@@ -229,14 +255,14 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   if (request.headers.get(ingestTokenHeader) !== env.INGEST_TOKEN) {
     return emptyResponse(401);
   }
-  const contentLength = Number(request.headers.get('content-length') ?? '0');
-  if (!Number.isFinite(contentLength) || contentLength <= 0 || contentLength > maxBodyBytes) {
-    return jsonResponse(400, { error: 'invalid content length' });
+  const body = await request.text();
+  if (new TextEncoder().encode(body).byteLength > maxBodyBytes) {
+    return jsonResponse(400, { error: 'request body is too large' });
   }
 
   let payload: unknown;
   try {
-    payload = await request.json();
+    payload = JSON.parse(body);
   } catch {
     return jsonResponse(400, { error: 'invalid JSON' });
   }

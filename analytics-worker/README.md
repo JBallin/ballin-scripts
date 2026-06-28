@@ -75,8 +75,11 @@ The event is rejected unless:
 
 - `installId` is a lowercase UUID
 - `dateBucket` is today, yesterday, or tomorrow in UTC
+- `command` is one of `ballin`, `ballin_config`, `ballin_uninstall`,
+  `ballin_update`, `gu`, or `up`
 - `appVersion` is a released numeric version such as `1.0.0`
 - the JSON body is 2048 bytes or smaller
+- the JSON body contains no fields outside the documented schema
 
 The worker should ignore request IP for analytics purposes. Cloudflare may still
 process request metadata operationally before the worker runs; the application
