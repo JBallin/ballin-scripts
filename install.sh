@@ -98,6 +98,7 @@ fi
     cd "$repo_dir" || exit
     gu_host="$("$ballin_config" get gu.host)"
     gu_id="$("$ballin_config" get gu.id)"
+    export GH_HOST="$gu_host"
 
     if [ "$gu_id" = 'null' ]; then
       if [ ! -x "$(command -v gh)" ]; then
@@ -121,7 +122,7 @@ fi
           printf '\n%s\n' 'Welcome Back!'
           while [ "$valid_gist_id" = 1 ]; do
             read -rep 'Enter your gist ID: ' gist_id
-            if gh gist view "$gist_id" --files > /dev/null; then
+            if [ "$(gh gist view "$gist_id" --raw --filename '.MyConfig.md' 2>/dev/null)" = "$(printf '%b' "$gist_description")" ]; then
               printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
               restore_config='.ballin.config.restore.tmp'
               previous_config='.ballin.config.restore.previous.tmp'
@@ -145,7 +146,7 @@ fi
               "$ballin_config" set gu.id "$gist_id"
               valid_gist_id=0
             else
-              printf "\n⚠️  INVALID: Unable to read gist '%s' with gh.\n" "$gist_id"
+              printf "\n⚠️  INVALID: Expected backup marker in gist '%s'.\n" "$gist_id"
             fi
           done
         fi

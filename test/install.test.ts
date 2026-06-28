@@ -124,7 +124,18 @@ case "$1:$2" in
     exit "$FAKE_GH_AUTH_STATUS"
     ;;
   gist:view)
-    if [ "$3" = 'returning-gist-id' ] && [ "$4" = '--files' ]; then
+    if [ "$GH_HOST" != 'github.example.test' ]; then
+      printf '%s\\n' 'Unexpected GH_HOST' >&2
+      exit 2
+    fi
+    if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:.MyConfig.md' ]; then
+      printf '%s\\n' '### Backup of your dev environment'
+      printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
+      printf '\\n'
+      exit 0
+    fi
+    if [ "$3" = 'wrong-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:.MyConfig.md' ]; then
+      printf '%s\\n' 'not a ballin backup'
       exit 0
     fi
     if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:ballin_config' ]; then
@@ -134,6 +145,10 @@ case "$1:$2" in
     exit 2
     ;;
   gist:create)
+    if [ "$GH_HOST" != 'github.example.test' ]; then
+      printf '%s\\n' 'Unexpected GH_HOST' >&2
+      exit 2
+    fi
     if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
     printf '%s\\n' 'https://gist.github.com/new-gist-id'
     ;;
@@ -357,6 +372,20 @@ exit "$FAKE_NODE_STATUS"
     assert.equal(restoredConfig.up.gu, 'true');
     assert.equal(restoredConfig.gu.id, 'returning-gist-id');
     assert.equal(restoredConfig.gu.host, 'github.example.test');
+  });
+
+  it('rejects readable returning Gists without the backup marker', () => {
+    installBaseCommands();
+    installAdoptableConfigCommand();
+    installFakeGhCommand();
+
+    const result = runInstall({ input: 'y\nwrong-gist-id\nreturning-gist-id\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, "INVALID: Expected backup marker in gist 'wrong-gist-id'");
+    assert.include(commandLog(), 'gh:gist view wrong-gist-id --raw --filename .MyConfig.md');
+    assert.notInclude(commandLog(), 'ballin_config:set gu.id wrong-gist-id');
+    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
   });
 
   it('stops before Gist and success output when config creation fails', () => {
