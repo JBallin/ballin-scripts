@@ -100,6 +100,12 @@ fi
     if [ -n "${BALLIN_GU_HOST:-}" ]; then
       "$ballin_config" set gu.host "$BALLIN_GU_HOST"
       gu_host="$("$ballin_config" get gu.host)"
+    else
+      read -rp "🤔 What GitHub host should be used for Gist backups? [${gu_host}] " input_host
+      if [ -n "$input_host" ]; then
+        "$ballin_config" set gu.host "$input_host"
+        gu_host="$("$ballin_config" get gu.host)"
+      fi
     fi
     gu_id="$("$ballin_config" get gu.id)"
     export GH_HOST="$gu_host"

@@ -71,11 +71,11 @@ It can adopt that Gist, restore saved `ballin_config` values, or create a new
 secret Gist and store its ID in `gu.id`.
 
 GitHub Enterprise users who are not using `github.com` should authenticate that
-host and pass it during install:
+host:
 
 ```shell
 gh auth login --hostname github.example.com
-BALLIN_GU_HOST=github.example.com bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
 ## `up` settings

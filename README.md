@@ -75,12 +75,6 @@ Install with:
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-For a non-`github.com` Gist host, pass the host during install:
-
-```shell
-BALLIN_GU_HOST=github.example.com bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
-```
-
 See the [documentation index](docs/README.md) for Node.js setup, update
 settings, optional integrations, and the full list of managed capabilities.
 

@@ -400,7 +400,7 @@ exit "$FAKE_NODE_STATUS"
     installAdoptableConfigCommand();
     installFakeGhCommand();
 
-    const result = runInstall({ input: 'y\nreturning-gist-id\n' });
+    const result = runInstall({ input: '\ny\nreturning-gist-id\n' });
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Storing your previous gist ID in your config');
@@ -419,7 +419,7 @@ exit "$FAKE_NODE_STATUS"
     installAdoptableConfigCommand();
     installFakeGhCommand();
 
-    const result = runInstall({ input: 'y\nwrong-gist-id\nreturning-gist-id\n' });
+    const result = runInstall({ input: '\ny\nwrong-gist-id\nreturning-gist-id\n' });
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "INVALID: Expected backup marker in gist 'wrong-gist-id'");
@@ -482,7 +482,7 @@ exit 2
     installAdoptableConfigCommand();
     installFakeGhCommand();
 
-    const result = runInstall({ input: 'n\n' });
+    const result = runInstall({ input: '\nn\n' });
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
@@ -491,17 +491,14 @@ exit 2
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
   });
 
-  it('uses an install-time custom Gist host for gh auth and creation', () => {
+  it('uses an install-time custom Gist host from user input', () => {
     installBaseCommands();
     installAdoptableConfigCommand();
     installFakeGhCommand();
 
     const result = runInstall({
-      env: {
-        BALLIN_GU_HOST: 'github.enterprise.test',
-        FAKE_GH_HOST: 'github.enterprise.test',
-      },
-      input: 'n\n',
+      env: { FAKE_GH_HOST: 'github.enterprise.test' },
+      input: 'github.enterprise.test\nn\n',
     });
 
     assert.equal(result.status, 0, result.stderr);
