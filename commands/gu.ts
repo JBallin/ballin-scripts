@@ -39,7 +39,7 @@ type ConfigValueResult = {
 };
 
 type GuConfigResult = {
-  config: { id: string; url: string } | null;
+  config: { id: string; host: string } | null;
   exitStatus: number;
 };
 
@@ -58,6 +58,12 @@ type SnapshotCollector = {
   ) => void;
   addDirectoryListing: (fileName: string, directory: string) => void;
   snapshots: SnapshotCommand[];
+};
+
+type CommandOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  stdio?: unknown;
 };
 
 const emptySnapshotContent = 'empty\n';
@@ -93,8 +99,19 @@ const fileSuggestions = `
   zprofile.sh
   zshrc.sh`;
 
-const runGist = (args: string[], options = {}): ReturnType<typeof runCommand> => (
-  runCommand('gist', args, options)
+const runGh = (
+  host: string,
+  args: string[],
+  options: CommandOptions = {},
+): ReturnType<typeof runCommand> => (
+  runCommand('gh', args, {
+    ...options,
+    env: {
+      ...process.env,
+      ...options.env,
+      GH_HOST: host,
+    },
+  })
 );
 
 const reportSpawnError = (command: string, error: Error): number => {
@@ -130,23 +147,23 @@ const configValue = (key: string): ConfigValueResult => {
 
 const guConfig = (): GuConfigResult => {
   const idResult = configValue('gu.id');
-  const urlResult = configValue('gu.url');
+  const hostResult = configValue('gu.host');
   const id = idResult.value;
-  const url = urlResult.value;
+  const host = hostResult.value;
 
-  if (id && url) {
-    return { config: { id, url }, exitStatus: 0 };
+  if (id && host) {
+    return { config: { id, host }, exitStatus: 0 };
   }
 
   if (!id) {
     writeStderrLine('gu: missing config value gu.id');
   }
-  if (!url) {
-    writeStderrLine('gu: missing config value gu.url');
+  if (!host) {
+    writeStderrLine('gu: missing config value gu.host');
   }
   return {
     config: null,
-    exitStatus: idResult.spawnStatus ?? urlResult.spawnStatus ?? 1,
+    exitStatus: idResult.spawnStatus ?? hostResult.spawnStatus ?? 1,
   };
 };
 
@@ -197,7 +214,26 @@ const writeFileToStderr = (filePath: string): void => {
   }
 };
 
+const ghAuthStatus = (host: string): CommandCheckResult => {
+  const result = runCommand('gh', ['auth', 'status', '--hostname', host], {
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+  if (result.error) {
+    return {
+      ok: false,
+      exitStatus: reportSpawnError('gh', result.error),
+    };
+  }
+  if (result.status !== 0) {
+    writeStderrLine(`gu: GitHub CLI authentication is required for ${host}`);
+    writeStderrLine(`gu: run 'gh auth login --hostname ${host}'`);
+    return { ok: false, exitStatus: shellStyleExitStatus(result) };
+  }
+  return { ok: true, exitStatus: 0 };
+};
+
 const readGistFileToFile = (
+  host: string,
   id: string,
   fileName: string,
   outputFile: string,
@@ -206,30 +242,65 @@ const readGistFileToFile = (
   const outputFd = fs.openSync(outputFile, 'w');
   let result: ReturnType<typeof runCommand>;
   try {
-    result = runGist(['-r', id, fileName], { stdio: ['ignore', outputFd, stderr] });
+    result = runGh(host, ['gist', 'view', id, '--raw', '--filename', fileName], {
+      stdio: ['ignore', outputFd, stderr],
+    });
   } finally {
     fs.closeSync(outputFd);
   }
   if (result.error) {
-    reportSpawnError('gist', result.error);
+    reportSpawnError('gh', result.error);
   }
   return result.status === 0 && !result.error;
 };
 
-const uploadGistFile = (id: string, filePath: string): boolean => {
-  const result = runGist(['-u', id, filePath], { stdio: ['ignore', 'ignore', 'inherit'] });
+const uploadGistFile = (host: string, id: string, filePath: string, isNew: boolean): boolean => {
+  const addArgs = ['gist', 'edit', id, '--add', filePath];
+  const editArgs = ['gist', 'edit', id, '--filename', path.basename(filePath), filePath];
+  const args = isNew ? addArgs : editArgs;
+  const stderrFile = makeTempFile('ballin-gu-upload-stderr-');
+  const stderrFd = fs.openSync(stderrFile, 'w');
+  let result: ReturnType<typeof runCommand>;
+  try {
+    result = runGh(host, args, { stdio: ['ignore', 'ignore', stderrFd] });
+  } finally {
+    fs.closeSync(stderrFd);
+  }
   if (result.error) {
-    reportSpawnError('gist', result.error);
+    writeFileToStderr(stderrFile);
+    removeTempFile(stderrFile);
+    reportSpawnError('gh', result.error);
+    return false;
   }
-  return result.status === 0 && !result.error;
+  if (result.status === 0) {
+    removeTempFile(stderrFile);
+    return true;
+  }
+  const uploadError = fs.readFileSync(stderrFile, 'utf8');
+  if (!isNew && uploadError.includes('has no file')) {
+    const addResult = runGh(host, addArgs, { stdio: ['ignore', 'ignore', 'inherit'] });
+    if (addResult.error) {
+      writeFileToStderr(stderrFile);
+      removeTempFile(stderrFile);
+      reportSpawnError('gh', addResult.error);
+      return false;
+    }
+    if (addResult.status === 0) {
+      removeTempFile(stderrFile);
+      return true;
+    }
+  }
+  writeFileToStderr(stderrFile);
+  removeTempFile(stderrFile);
+  return false;
 };
 
-const verifyGistReadable = (id: string): CommandCheckResult => {
-  const result = runGist(['-r', id], { stdio: ['ignore', 'ignore', 'inherit'] });
+const verifyGistReadable = (host: string, id: string): CommandCheckResult => {
+  const result = runGh(host, ['gist', 'view', id, '--files'], { stdio: ['ignore', 'ignore', 'inherit'] });
   if (result.error) {
     return {
       ok: false,
-      exitStatus: reportSpawnError('gist', result.error),
+      exitStatus: reportSpawnError('gh', result.error),
     };
   }
   if (result.status !== 0) {
@@ -238,10 +309,12 @@ const verifyGistReadable = (id: string): CommandCheckResult => {
   return { ok: true, exitStatus: 0 };
 };
 
-const readGistFileToStdout = (id: string, fileName: string): boolean => {
-  const result = runGist(['-r', id, fileName], { stdio: ['ignore', 'inherit', 'inherit'] });
+const readGistFileToStdout = (host: string, id: string, fileName: string): boolean => {
+  const result = runGh(host, ['gist', 'view', id, '--raw', '--filename', fileName], {
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
   if (result.error) {
-    reportSpawnError('gist', result.error);
+    reportSpawnError('gh', result.error);
   }
   return result.status === 0 && !result.error;
 };
@@ -273,17 +346,22 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
   return result.status === 0 && !result.error;
 };
 
-const seedCacheFromGist = (id: string, fileName: string, cacheFile: string): boolean => {
-  if (readGistFileToFile(id, fileName, cacheFile, 'inherit')) {
+const seedCacheFromGist = (host: string, id: string, fileName: string, cacheFile: string): boolean => {
+  if (readGistFileToFile(host, id, fileName, cacheFile, 'inherit')) {
     return true;
   }
   fs.rmSync(cacheFile, { force: true });
   return false;
 };
 
-const prepareSnapshotCache = (id: string, cacheDir: string, fileName: string): SnapshotCacheState => {
+const prepareSnapshotCache = (
+  host: string,
+  id: string,
+  cacheDir: string,
+  fileName: string,
+): SnapshotCacheState => {
   const cacheFile = path.join(cacheDir, fileName);
-  const isNew = !fileExists(cacheFile) && !seedCacheFromGist(id, fileName, cacheFile);
+  const isNew = !fileExists(cacheFile) && !seedCacheFromGist(host, id, fileName, cacheFile);
   return { cacheFile, isNew };
 };
 
@@ -346,8 +424,13 @@ const writeSnapshotStatus = (
   }
 };
 
-const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand): boolean => {
-  const { cacheFile, isNew } = prepareSnapshotCache(id, cacheDir, snapshot.fileName);
+const updateSnapshot = (
+  host: string,
+  id: string,
+  cacheDir: string,
+  snapshot: SnapshotCommand,
+): boolean => {
+  const { cacheFile, isNew } = prepareSnapshotCache(host, id, cacheDir, snapshot.fileName);
   let resultState: SnapshotResultState = 'updated';
   let isEmpty = false;
 
@@ -370,7 +453,7 @@ const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand)
     if (isChanged) {
       const uploadFile = createSnapshotUploadFile(inputFile, snapshot.fileName);
       try {
-        if (!uploadGistFile(id, uploadFile)) {
+        if (!uploadGistFile(host, id, uploadFile, isNew)) {
           return false;
         }
       } finally {
@@ -577,15 +660,24 @@ const runGuCli = (args = process.argv.slice(2)): void => {
     process.exitCode = exitStatus;
     return;
   }
-  const url = `${config.url}/${config.id}`;
 
-  if (command === 'open') {
-    writeStdoutLine(url);
-    process.exitCode = runVisible('open', [url]);
+  const ghAuthenticated = ghAuthStatus(config.host);
+  if (!ghAuthenticated.ok) {
+    process.exitCode = ghAuthenticated.exitStatus;
     return;
   }
 
-  const gistReadable = verifyGistReadable(config.id);
+  if (command === 'open') {
+    const result = runGh(config.host, ['gist', 'view', config.id, '--web'], { stdio: 'inherit' });
+    if (result.error) {
+      process.exitCode = reportSpawnError('gh', result.error);
+    } else {
+      process.exitCode = shellStyleExitStatus(result);
+    }
+    return;
+  }
+
+  const gistReadable = verifyGistReadable(config.host, config.id);
   if (!gistReadable.ok) {
     writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
     process.exitCode = gistReadable.exitStatus;
@@ -593,7 +685,7 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   }
 
   if (command === 'read') {
-    if (readGistFileToStdout(config.id, args[1])) {
+    if (readGistFileToStdout(config.host, config.id, args[1])) {
       return;
     } else {
       process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
@@ -607,7 +699,7 @@ const runGuCli = (args = process.argv.slice(2)): void => {
 
   let failed = false;
   collectSnapshots(homeDir).forEach((snapshot) => {
-    if (!updateSnapshot(config.id, cacheDir, snapshot)) {
+    if (!updateSnapshot(config.host, config.id, cacheDir, snapshot)) {
       writeStderrLine(`gu: failed to snapshot ${snapshot.fileName}`);
       failed = true;
     }

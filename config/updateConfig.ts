@@ -11,6 +11,25 @@ type ConfigValue = ConfigLeaf | ConfigObject;
 const { configObj: userConfig } = fetchConfig();
 const updates: string[] = [];
 
+const hostFromLegacyGistUrl = (url: ConfigValue): string | null => {
+  if (typeof url !== 'string' || !url) {
+    return null;
+  }
+
+  try {
+    const hostname = new URL(url).hostname;
+    if (hostname === 'gist.github.com') {
+      return 'github.com';
+    }
+    if (hostname.startsWith('gist.')) {
+      return hostname.slice('gist.'.length);
+    }
+    return hostname;
+  } catch {
+    return null;
+  }
+};
+
 Object.keys(defaultConfig).forEach((key) => {
   const defaultVal = defaultConfig[key] as ConfigValue;
   if (!(key in userConfig)) {
@@ -22,7 +41,9 @@ Object.keys(defaultConfig).forEach((key) => {
       const nestedUserConfig = userConfig[key] as ConfigObject;
       const nestedDefaultConfig = defaultVal as ConfigObject;
       if (!(nestedKey in nestedUserConfig)) {
-        const nestedDefaultVal = nestedDefaultConfig[nestedKey];
+        const nestedDefaultVal = key === 'gu' && nestedKey === 'host'
+          ? hostFromLegacyGistUrl(nestedUserConfig.url) ?? nestedDefaultConfig[nestedKey]
+          : nestedDefaultConfig[nestedKey];
         nestedUserConfig[nestedKey] = nestedDefaultVal;
         updates.push(`${key}.${nestedKey}: ${nestedDefaultVal}`);
       }
