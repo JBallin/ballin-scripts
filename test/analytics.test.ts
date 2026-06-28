@@ -65,6 +65,7 @@ const recordWithSender = (
   recordAnalyticsEvent(input, {
     endpoint: 'https://analytics.example.test/v1/events',
     ingestToken: 'test-token',
+    env: {},
     generateInstallId: () => fixedInstallId,
     sender: (payload: AnalyticsPayload) => {
       order.push('send');
