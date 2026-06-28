@@ -61,7 +61,9 @@ the installed-app list in your backup. No configuration setting is required.
 `gu` uses [GitHub CLI](https://cli.github.com/) to read and update the
 configured backup Gist. During install, `ballin-scripts` prompts for the GitHub
 host, including GitHub Enterprise hosts, checks `gh` authentication for that
-host, and adopts an existing backup Gist or creates a new one.
+host, and either adopts an existing backup Gist or creates a new one. When an
+adopted backup includes saved `ballin_config` values, the installer restores
+them before continuing.
 
 ## `up` settings
 
