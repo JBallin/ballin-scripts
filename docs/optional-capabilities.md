@@ -59,24 +59,12 @@ the installed-app list in your backup. No configuration setting is required.
 ## Gist backups
 
 `gu` uses [GitHub CLI](https://cli.github.com/) to read and update the
-configured backup Gist. Install `gh` and authenticate it for your GitHub host
-before running the installer:
-
-```shell
-gh auth login --hostname github.com
-```
+configured backup Gist. The installer checks `gh` authentication and prompts for
+the GitHub host, including GitHub Enterprise hosts.
 
 During install, `ballin-scripts` asks whether you already have a backup Gist.
 It can adopt that Gist, restore saved `ballin_config` values, or create a new
 secret Gist and store its ID in `gu.id`.
-
-GitHub Enterprise users who are not using `github.com` should authenticate that
-host:
-
-```shell
-gh auth login --hostname github.example.com
-bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
-```
 
 ## `up` settings
 

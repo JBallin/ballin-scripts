@@ -68,8 +68,6 @@ Install with:
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-The installer walks through Gist host and backup setup interactively.
-
 See the [documentation index](docs/README.md) for Node.js setup, update
 settings, optional integrations, and the full list of managed capabilities.
 
