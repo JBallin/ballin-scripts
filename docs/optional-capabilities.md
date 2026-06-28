@@ -60,10 +60,11 @@ the installed-app list in your backup. No configuration setting is required.
 
 `ballin-scripts` can send minimal anonymous command analytics after showing an
 install/update notice. Setup creates a local anonymous install ID, but it does
-not send analytics during install. Analytics never include command arguments,
-local paths, usernames, Gist IDs, dotfile contents, package lists, editor
-settings, raw errors, environment variables, arbitrary config values, or the
-local install ID file.
+not send analytics during install. Later command analytics include that install
+ID so the backend can count active installs; the backend hashes it before
+storage. Analytics never include command arguments, local paths, usernames, Gist
+IDs, dotfile contents, package lists, editor settings, raw errors, environment
+variables, arbitrary config values, or the local install ID file.
 
 Disable analytics persistently:
 

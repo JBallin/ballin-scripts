@@ -75,6 +75,7 @@ const analyticsNotice = [
   'ballin-scripts collects minimal anonymous command analytics.',
   'No command arguments, paths, usernames, Gist IDs, dotfiles, package lists, raw errors, or environment values are sent.',
   'Setup creates a local anonymous install ID now, but it does not send analytics during install.',
+  'Later analytics events include that install ID so the backend can count active installs; the backend hashes it before storage.',
   'Opt out with: ballin_config set analytics.enabled false',
   'Or for a single environment: BALLIN_NO_ANALYTICS=1',
 ].join('\n');
