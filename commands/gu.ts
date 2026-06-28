@@ -24,6 +24,44 @@ type SnapshotCommand = {
   suppressStderrOnSuccess?: boolean;
 };
 
+type SnapshotCacheState = {
+  cacheFile: string;
+  isNew: boolean;
+};
+
+type SnapshotResultState = 'unchanged' | 'created' | 'removed' | 'updated';
+
+type SnapshotOptions = Pick<SnapshotCommand, 'env' | 'suppressStderrOnSuccess'>;
+
+type ConfigValueResult = {
+  value: string;
+  spawnStatus?: number;
+};
+
+type GuConfigResult = {
+  config: { id: string; url: string } | null;
+  exitStatus: number;
+};
+
+type CommandCheckResult = {
+  ok: boolean;
+  exitStatus: number;
+};
+
+type SnapshotCollector = {
+  addFile: (sourceName: string, fileName: string) => void;
+  addShellCommand: (
+    fileName: string,
+    command: string,
+    cwd?: string,
+    options?: SnapshotOptions,
+  ) => void;
+  addDirectoryListing: (fileName: string, directory: string) => void;
+  snapshots: SnapshotCommand[];
+};
+
+const emptySnapshotContent = 'empty\n';
+
 const fileSuggestions = `
   ballin_config
   bash_completions
@@ -55,10 +93,6 @@ const fileSuggestions = `
   zprofile.sh
   zshrc.sh`;
 
-const configValue = (key: string): string => (
-  readCommandOutput('ballin_config', ['get', key], { stdio: ['ignore', 'pipe', 'inherit'] })?.trim() ?? ''
-);
-
 const runGist = (args: string[], options = {}): ReturnType<typeof runCommand> => (
   runCommand('gist', args, options)
 );
@@ -75,6 +109,45 @@ const reportSpawnError = (command: string, error: Error): number => {
   }
   writeStderrLine(error.message);
   return 1;
+};
+
+const configValue = (key: string): ConfigValueResult => {
+  const result = runCommand('ballin_config', ['get', key], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  if (result.error) {
+    return {
+      value: '',
+      spawnStatus: reportSpawnError('ballin_config', result.error),
+    };
+  }
+  if (result.status !== 0) {
+    return { value: '' };
+  }
+  const value = result.stdout.trim();
+  return { value: value === 'null' ? '' : value };
+};
+
+const guConfig = (): GuConfigResult => {
+  const idResult = configValue('gu.id');
+  const urlResult = configValue('gu.url');
+  const id = idResult.value;
+  const url = urlResult.value;
+
+  if (id && url) {
+    return { config: { id, url }, exitStatus: 0 };
+  }
+
+  if (!id) {
+    writeStderrLine('gu: missing config value gu.id');
+  }
+  if (!url) {
+    writeStderrLine('gu: missing config value gu.url');
+  }
+  return {
+    config: null,
+    exitStatus: idResult.spawnStatus ?? urlResult.spawnStatus ?? 1,
+  };
 };
 
 const shellStyleExitStatus = (result: ReturnType<typeof runCommand>): number => {
@@ -124,6 +197,55 @@ const writeFileToStderr = (filePath: string): void => {
   }
 };
 
+const readGistFileToFile = (
+  id: string,
+  fileName: string,
+  outputFile: string,
+  stderr: 'inherit' | 'ignore',
+): boolean => {
+  const outputFd = fs.openSync(outputFile, 'w');
+  let result: ReturnType<typeof runCommand>;
+  try {
+    result = runGist(['-r', id, fileName], { stdio: ['ignore', outputFd, stderr] });
+  } finally {
+    fs.closeSync(outputFd);
+  }
+  if (result.error) {
+    reportSpawnError('gist', result.error);
+  }
+  return result.status === 0 && !result.error;
+};
+
+const uploadGistFile = (id: string, filePath: string): boolean => {
+  const result = runGist(['-u', id, filePath], { stdio: ['ignore', 'ignore', 'inherit'] });
+  if (result.error) {
+    reportSpawnError('gist', result.error);
+  }
+  return result.status === 0 && !result.error;
+};
+
+const verifyGistReadable = (id: string): CommandCheckResult => {
+  const result = runGist(['-r', id], { stdio: ['ignore', 'ignore', 'inherit'] });
+  if (result.error) {
+    return {
+      ok: false,
+      exitStatus: reportSpawnError('gist', result.error),
+    };
+  }
+  if (result.status !== 0) {
+    return { ok: false, exitStatus: shellStyleExitStatus(result) };
+  }
+  return { ok: true, exitStatus: 0 };
+};
+
+const readGistFileToStdout = (id: string, fileName: string): boolean => {
+  const result = runGist(['-r', id, fileName], { stdio: ['ignore', 'inherit', 'inherit'] });
+  if (result.error) {
+    reportSpawnError('gist', result.error);
+  }
+  return result.status === 0 && !result.error;
+};
+
 const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boolean => {
   const outputFd = fs.openSync(inputFile, 'w');
   const stderrFile = makeTempFile('ballin-gu-stderr-');
@@ -152,32 +274,82 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
 };
 
 const seedCacheFromGist = (id: string, fileName: string, cacheFile: string): boolean => {
-  const outputFd = fs.openSync(cacheFile, 'w');
-  let result: ReturnType<typeof runCommand>;
-  try {
-    result = runGist(['-r', id, fileName], { stdio: ['ignore', outputFd, 'inherit'] });
-  } finally {
-    fs.closeSync(outputFd);
-  }
-  if (result.error) {
-    reportSpawnError('gist', result.error);
-  }
-  if (result.status === 0 && !result.error) {
+  if (readGistFileToFile(id, fileName, cacheFile, 'inherit')) {
     return true;
   }
   fs.rmSync(cacheFile, { force: true });
   return false;
 };
 
-const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand): boolean => {
-  const cacheFile = path.join(cacheDir, snapshot.fileName);
-  let isNew = false;
-  let isChanged = true;
-  let isEmpty = false;
+const prepareSnapshotCache = (id: string, cacheDir: string, fileName: string): SnapshotCacheState => {
+  const cacheFile = path.join(cacheDir, fileName);
+  const isNew = !fileExists(cacheFile) && !seedCacheFromGist(id, fileName, cacheFile);
+  return { cacheFile, isNew };
+};
 
-  if (!fileExists(cacheFile)) {
-    isNew = !seedCacheFromGist(id, snapshot.fileName, cacheFile);
+const normalizeSnapshotInput = (inputFile: string): void => {
+  if (fs.statSync(inputFile).size === 0) {
+    fs.writeFileSync(inputFile, emptySnapshotContent);
+  } else {
+    ensureTrailingNewline(inputFile);
   }
+};
+
+const snapshotFilesMatch = (leftFile: string, rightFile: string): boolean => (
+  fs.readFileSync(leftFile).equals(fs.readFileSync(rightFile))
+);
+
+const snapshotIsEmpty = (filePath: string): boolean => (
+  fs.readFileSync(filePath, 'utf8') === emptySnapshotContent
+);
+
+const createSnapshotUploadFile = (sourceFile: string, fileName: string): string => {
+  const tempFile = makeTempFile('ballin-gu-upload-');
+  const uploadFile = path.join(path.dirname(tempFile), fileName);
+  fs.copyFileSync(sourceFile, uploadFile);
+  return uploadFile;
+};
+
+const classifySnapshotResult = (
+  isNew: boolean,
+  isChanged: boolean,
+  isEmpty: boolean,
+): SnapshotResultState => {
+  if (!isChanged) {
+    return 'unchanged';
+  }
+  if (isNew) {
+    return 'created';
+  }
+  if (isEmpty) {
+    return 'removed';
+  }
+  return 'updated';
+};
+
+const writeSnapshotStatus = (
+  snapshot: SnapshotCommand,
+  resultState: SnapshotResultState,
+  isEmpty: boolean,
+): void => {
+  const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
+  if (resultState === 'unchanged') {
+    if (!isEmpty) {
+      writeStdoutLine(`✔ ${fileWithoutExtension}`);
+    }
+  } else if (resultState === 'created') {
+    writeStdoutLine(`💾 ${fileWithoutExtension}`);
+  } else if (resultState === 'removed') {
+    writeStdoutLine(`✖︎ ${fileWithoutExtension}`);
+  } else {
+    writeStdoutLine(`✚ ${fileWithoutExtension}`);
+  }
+};
+
+const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand): boolean => {
+  const { cacheFile, isNew } = prepareSnapshotCache(id, cacheDir, snapshot.fileName);
+  let resultState: SnapshotResultState = 'updated';
+  let isEmpty = false;
 
   const inputFile = makeTempFile('ballin-gu-input-');
   try {
@@ -185,43 +357,32 @@ const updateSnapshot = (id: string, cacheDir: string, snapshot: SnapshotCommand)
       return false;
     }
 
-    if (fs.statSync(inputFile).size === 0) {
-      fs.writeFileSync(inputFile, 'empty\n');
-    } else {
-      ensureTrailingNewline(inputFile);
+    normalizeSnapshotInput(inputFile);
+
+    let isChanged = true;
+    if (!isNew && fileExists(cacheFile)) {
+      isChanged = !snapshotFilesMatch(inputFile, cacheFile);
     }
 
-    if (!isNew && fileExists(cacheFile)) {
-      isChanged = !fs.readFileSync(inputFile).equals(fs.readFileSync(cacheFile));
-    }
+    isEmpty = snapshotIsEmpty(inputFile);
+    resultState = classifySnapshotResult(isNew, isChanged, isEmpty);
 
     if (isChanged) {
+      const uploadFile = createSnapshotUploadFile(inputFile, snapshot.fileName);
+      try {
+        if (!uploadGistFile(id, uploadFile)) {
+          return false;
+        }
+      } finally {
+        removeTempFile(uploadFile);
+      }
       fs.copyFileSync(inputFile, cacheFile);
     }
-    isEmpty = fs.readFileSync(cacheFile, 'utf8') === 'empty\n';
   } finally {
     removeTempFile(inputFile);
   }
 
-  if (isChanged) {
-    const result = runGist(['-u', id, cacheFile], { stdio: ['ignore', 'ignore', 'inherit'] });
-    if (result.error) {
-      reportSpawnError('gist', result.error);
-    }
-  }
-
-  const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
-  if (!isChanged) {
-    if (!isEmpty) {
-      writeStdoutLine(`✔ ${fileWithoutExtension}`);
-    }
-  } else if (isNew) {
-    writeStdoutLine(`💾 ${fileWithoutExtension}`);
-  } else if (isEmpty) {
-    writeStdoutLine(`✖︎ ${fileWithoutExtension}`);
-  } else {
-    writeStdoutLine(`✚ ${fileWithoutExtension}`);
-  }
+  writeSnapshotStatus(snapshot, resultState, isEmpty);
 
   return true;
 };
@@ -244,19 +405,50 @@ const shellSnapshot = (
   cwd,
 });
 
-const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
+const directoryListingSnapshot = (fileName: string, directory: string): SnapshotCommand => ({
+  fileName,
+  command: 'ls',
+  args: [directory],
+});
+
+const createSnapshotCollector = (homeDir: string): SnapshotCollector => {
   const snapshots: SnapshotCommand[] = [];
-  const addIfFile = (sourceName: string, fileName: string): void => {
+  const addFile = (sourceName: string, fileName: string): void => {
     if (fileExists(path.join(homeDir, sourceName))) {
       snapshots.push(catSnapshot(homeDir, fileName, sourceName));
     }
   };
+  const addShellCommand = (
+    fileName: string,
+    command: string,
+    cwd = homeDir,
+    options: SnapshotOptions = {},
+  ): void => {
+    snapshots.push({ ...shellSnapshot(fileName, command, cwd), ...options });
+  };
+  const addDirectoryListing = (fileName: string, directory: string): void => {
+    if (dirExists(directory)) {
+      snapshots.push(directoryListingSnapshot(fileName, directory));
+    }
+  };
 
-  addIfFile('.bash_profile', 'bash_profile.sh');
-  addIfFile('.bashrc', 'bashrc.sh');
-  addIfFile('.profile', 'profile.sh');
-  addIfFile('.zprofile', 'zprofile.sh');
-  addIfFile('.zshrc', 'zshrc.sh');
+  return {
+    addFile,
+    addShellCommand,
+    addDirectoryListing,
+    snapshots,
+  };
+};
+
+const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
+  const collector = createSnapshotCollector(homeDir);
+  const { addFile, addShellCommand, addDirectoryListing, snapshots } = collector;
+
+  addFile('.bash_profile', 'bash_profile.sh');
+  addFile('.bashrc', 'bashrc.sh');
+  addFile('.profile', 'profile.sh');
+  addFile('.zprofile', 'zprofile.sh');
+  addFile('.zshrc', 'zshrc.sh');
 
   const brewAvailable = commandExists('brew');
   let bashCompletionDir = process.env.BALLIN_GU_BASH_COMPLETION_DIR ?? '';
@@ -273,11 +465,7 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
     }
   }
   if (bashCompletionDir && dirExists(bashCompletionDir)) {
-    snapshots.push({
-      fileName: 'bash_completions',
-      command: 'ls',
-      args: [bashCompletionDir],
-    });
+    addDirectoryListing('bash_completions', bashCompletionDir);
   }
 
   if (brewAvailable) {
@@ -286,25 +474,24 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
       HOMEBREW_NO_AUTO_UPDATE: '1',
       HOMEBREW_NO_ENV_HINTS: '1',
     };
-    snapshots.push({ ...shellSnapshot('brew_list', 'brew list --formula', homeDir), env: brewEnv });
-    snapshots.push({ ...shellSnapshot('brew_leaves', 'brew leaves', homeDir), env: brewEnv });
-    snapshots.push({ ...shellSnapshot('brew_cask', 'brew list --cask', homeDir), env: brewEnv });
-    snapshots.push({
-      ...shellSnapshot('brew_services', 'brew services list', homeDir),
+    addShellCommand('brew_list', 'brew list --formula', homeDir, { env: brewEnv });
+    addShellCommand('brew_leaves', 'brew leaves', homeDir, { env: brewEnv });
+    addShellCommand('brew_cask', 'brew list --cask', homeDir, { env: brewEnv });
+    addShellCommand('brew_services', 'brew services list', homeDir, {
       env: brewEnv,
       suppressStderrOnSuccess: true,
     });
-    snapshots.push({ ...shellSnapshot('Brewfile', 'brew bundle dump --file=-', homeDir), env: brewEnv });
+    addShellCommand('Brewfile', 'brew bundle dump --file=-', homeDir, { env: brewEnv });
   }
 
-  addIfFile('.gitignore_global', 'gitignore_global');
-  addIfFile('.gitconfig', 'gitconfig');
+  addFile('.gitignore_global', 'gitignore_global');
+  addFile('.gitconfig', 'gitconfig');
 
   if (commandExists('npm')) {
-    snapshots.push(shellSnapshot('npm_global', 'npm list -g --depth=0', homeDir));
+    addShellCommand('npm_global', 'npm list -g --depth=0');
   }
 
-  addIfFile('.nvmrc', 'nvmrc');
+  addFile('.nvmrc', 'nvmrc');
 
   [
     ['Code', 'code', 'vs'],
@@ -320,7 +507,7 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
       }
     });
     if (commandExists(binaryName)) {
-      snapshots.push(shellSnapshot(`${prefix}_extensions`, `${binaryName} --list-extensions`, vscodeDir));
+      addShellCommand(`${prefix}_extensions`, `${binaryName} --list-extensions`, vscodeDir);
     }
   });
 
@@ -332,16 +519,16 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
     if (fileExists(path.join(bracketsDir, 'keymap.json'))) {
       snapshots.push(catSnapshot(bracketsDir, 'brackets_keymap.json', 'keymap.json'));
     }
-    snapshots.push(shellSnapshot('brackets_extensions', 'ls -A extensions/user/', bracketsDir));
-    snapshots.push(shellSnapshot('brackets_disabled_extensions', 'ls -A extensions/disabled/', bracketsDir));
+    addShellCommand('brackets_extensions', 'ls -A extensions/user/', bracketsDir);
+    addShellCommand('brackets_disabled_extensions', 'ls -A extensions/disabled/', bracketsDir);
   }
 
-  addIfFile('.vimrc', 'vimrc');
-  addIfFile('.nanorc', 'nanorc');
-  addIfFile(path.join('.ballin-scripts', 'ballin.config.json'), 'ballin_config');
+  addFile('.vimrc', 'vimrc');
+  addFile('.nanorc', 'nanorc');
+  addFile(path.join('.ballin-scripts', 'ballin.config.json'), 'ballin_config');
 
   if (commandExists('mas')) {
-    snapshots.push(shellSnapshot('mas', 'mas list', homeDir));
+    addShellCommand('mas', 'mas list');
   }
 
   return snapshots;
@@ -349,38 +536,68 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
 
 const runGuCli = (args = process.argv.slice(2)): void => {
   const homeDir = process.env.HOME ?? '';
-  const id = configValue('gu.id');
-  const url = `${configValue('gu.url')}/${id}`;
+  const command = args[0];
 
-  const initialGistRead = runGist(['-r', id], { stdio: ['ignore', 'ignore', 'inherit'] });
-  if (initialGistRead.error) {
-    reportSpawnError('gist', initialGistRead.error);
-  }
-  if (initialGistRead.status !== 0 || initialGistRead.error) {
-    writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
+  if (command === 'help') {
+    if (args.length !== 1) {
+      writeStderrLine('gu help: expected no arguments');
+      process.exitCode = 1;
+      return;
+    }
+    process.exitCode = runVisible('ballin');
     return;
   }
 
-  if (args.length > 0) {
-    if (args[0] === 'open') {
-      writeStdoutLine(url);
-      process.exitCode = runVisible('open', [url]);
-    } else if (args[0] === 'read') {
-      if (args[1]) {
-        const result = runGist(['-r', id, args[1]], { stdio: ['ignore', 'inherit', 'inherit'] });
-        if (result.error) {
-          reportSpawnError('gist', result.error);
-        }
-        if (result.status === 0) {
-          return;
-        } else {
-          process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
-        }
-      } else {
-        process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
-      }
-    } else if (args[0] === 'help') {
-      process.exitCode = runVisible('ballin');
+  if (command && !['open', 'read'].includes(command)) {
+    writeStderrLine(`gu: unknown command '${command}'`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === 'open' && args.length !== 1) {
+    writeStderrLine('gu open: expected no arguments');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === 'read' && !args[1]) {
+    process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === 'read' && args.length !== 2) {
+    writeStderrLine('gu read: expected exactly one filename');
+    process.exitCode = 1;
+    return;
+  }
+
+  const { config, exitStatus } = guConfig();
+  if (!config) {
+    process.exitCode = exitStatus;
+    return;
+  }
+  const url = `${config.url}/${config.id}`;
+
+  if (command === 'open') {
+    writeStdoutLine(url);
+    process.exitCode = runVisible('open', [url]);
+    return;
+  }
+
+  const gistReadable = verifyGistReadable(config.id);
+  if (!gistReadable.ok) {
+    writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
+    process.exitCode = gistReadable.exitStatus;
+    return;
+  }
+
+  if (command === 'read') {
+    if (readGistFileToStdout(config.id, args[1])) {
+      return;
+    } else {
+      process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
+      process.exitCode = 1;
     }
     return;
   }
@@ -390,7 +607,7 @@ const runGuCli = (args = process.argv.slice(2)): void => {
 
   let failed = false;
   collectSnapshots(homeDir).forEach((snapshot) => {
-    if (!updateSnapshot(id, cacheDir, snapshot)) {
+    if (!updateSnapshot(config.id, cacheDir, snapshot)) {
       writeStderrLine(`gu: failed to snapshot ${snapshot.fileName}`);
       failed = true;
     }

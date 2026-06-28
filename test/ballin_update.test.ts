@@ -222,6 +222,40 @@ exit "$FAKE_INSTALL_STATUS"
     ]);
   });
 
+  it('reports a missing installer with the shared command error format', () => {
+    fs.rmSync(path.join(repoDir, 'install.sh'));
+
+    const result = runUpdate();
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.include(result.stderr, './install.sh: command not found');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+    ]);
+  });
+
+  it('uses a shell-style signal exit status when the installer is signaled', () => {
+    writeExecutable('install.sh', `#!/usr/bin/env bash
+printf '%s|install.sh:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
+kill -TERM "$$"
+`, repoDir);
+
+    const result = runUpdate();
+
+    assert.equal(result.status, 143);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), [
+      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:checkout main`,
+      `${repoDir}|git:merge origin/main`,
+      `${repoDir}|install.sh:`,
+    ]);
+  });
+
   it('stops before merge and install when fetch fails', () => {
     const result = runUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
 
