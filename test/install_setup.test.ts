@@ -8,6 +8,7 @@ const {
 } = require('../commands/analytics.ts');
 const {
   configure,
+  setupAnalytics,
   symlinkBinaries,
 } = require('../commands/install_setup.ts');
 
@@ -138,14 +139,14 @@ describe('install setup', () => {
     );
   });
 
-  it('shows the analytics notice and creates a local install ID on first config creation', () => {
+  it('does not create a local install ID while creating config', () => {
     installConfigSources();
 
     const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => configure(repoDir, docsUrl)));
 
     assert.isTrue(result);
-    assert.include(output, analyticsNotice);
-    assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
+    assert.notInclude(output, analyticsNotice);
+    assert.isFalse(fs.existsSync(installIdPath()));
   });
 
   it('runs config creation through the setup CLI', () => {
@@ -178,7 +179,7 @@ describe('install setup', () => {
     );
   });
 
-  it('shows the analytics notice and creates a local install ID for existing enabled config', () => {
+  it('shows the analytics notice and creates a local install ID for enabled config', () => {
     installConfigSources();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
       analytics: {
@@ -186,7 +187,7 @@ describe('install setup', () => {
       },
     }));
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => configure(repoDir, docsUrl)));
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.include(output, analyticsNotice);
@@ -203,7 +204,7 @@ describe('install setup', () => {
     fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
     fs.writeFileSync(installIdPath(), `${fixedInstallId}\n`, 'utf8');
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => configure(repoDir, docsUrl)));
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.notInclude(output, analyticsNotice);
@@ -218,7 +219,7 @@ describe('install setup', () => {
       },
     }));
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => configure(repoDir, docsUrl)));
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.notInclude(output, analyticsNotice);
@@ -238,7 +239,7 @@ describe('install setup', () => {
         },
       }));
 
-      const { output, result } = withEnv(env, () => captureStdout(() => configure(repoDir, docsUrl)));
+      const { output, result } = withEnv(env, () => captureStdout(() => setupAnalytics(repoDir)));
 
       assert.isTrue(result);
       assert.notInclude(output, analyticsNotice);
@@ -256,7 +257,7 @@ describe('install setup', () => {
     fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
     fs.writeFileSync(installIdPath(), 'not-a-uuid\n', 'utf8');
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => configure(repoDir, docsUrl)));
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.include(output, analyticsNotice);
@@ -278,6 +279,31 @@ describe('install setup', () => {
     assert.include(result.stdout, `symlinked binaries into ${binDir}`);
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+  });
+
+  it('runs analytics setup through the setup CLI', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'true',
+      },
+    }));
+    const childEnv = { ...process.env };
+    delete childEnv.CI;
+    delete childEnv.BALLIN_NO_ANALYTICS;
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'setup-analytics',
+      repoDir,
+    ], {
+      encoding: 'utf8',
+      env: childEnv,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, analyticsNotice);
+    assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 
   it('replaces existing command symlinks', () => {

@@ -29,6 +29,11 @@ const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
   }
 };
 
+const setupAnalytics = (repoDir: string): boolean => {
+  setupAnalyticsInstallId(repoDir, path.join(repoDir, 'ballin.config.json'));
+  return true;
+};
+
 const configure = (repoDir: string, docsUrl: string): boolean => {
   const configPath = path.join(repoDir, 'ballin.config.json');
   const defaultConfigPath = path.join(repoDir, 'config', '.defaultConfig.json');
@@ -41,7 +46,6 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
       return false;
     }
     writeStdoutLine("\n🧠 Created 'ballin.config.json' file in root using default settings");
-    setupAnalyticsInstallId(repoDir, configPath);
     return true;
   }
 
@@ -69,7 +73,6 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
     writeStdoutLine(`\n🙌 ${updateOutput}`);
     writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
   }
-  setupAnalyticsInstallId(repoDir, configPath);
 
   return true;
 };
@@ -114,8 +117,13 @@ const runInstallSetupCli = (): void => {
     return;
   }
 
+  if (command === 'setup-analytics' && repoDir) {
+    process.exitCode = setupAnalytics(repoDir) ? 0 : 1;
+    return;
+  }
+
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|symlink-binaries> <repo-dir> <docs-url|bin-dir>');
+    writeStdoutLine('Usage: install_setup.ts <configure|symlink-binaries|setup-analytics> <repo-dir> [docs-url|bin-dir]');
     process.exitCode = 1;
     return;
   }
@@ -131,5 +139,6 @@ if (require.main === module) {
 module.exports = {
   configure,
   runInstallSetupCli,
+  setupAnalytics,
   symlinkBinaries,
 };

@@ -58,6 +58,20 @@ if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
     fi
     exit "$FAKE_NODE_STATUS"
   fi
+  if [ "$1" = 'setup-analytics' ]; then
+    repo_dir="$2"
+    config_json=$(<"$repo_dir/ballin.config.json")
+    case "$config_json" in
+      *'"enabled":"false"'*) exit 0 ;;
+    esac
+    if [ "$BALLIN_NO_ANALYTICS" = '1' ] || [ -n "$CI" ]; then
+      exit 0
+    fi
+    mkdir -p "$repo_dir/.analytics"
+    printf '%s\\n' '826f9faa-9995-4f66-a01b-73b4f7aebdf1' > "$repo_dir/.analytics/install-id"
+    printf '%s\\n' 'ballin-scripts collects minimal anonymous command analytics.'
+    exit 0
+  fi
   if [ "$1" != 'symlink-binaries' ]; then
     exit 2
   fi
@@ -344,7 +358,7 @@ case "$1:$2" in
   -l:) exit 0 ;;
   -r:returning-gist-id)
     if [ "$3" = 'ballin_config' ]; then
-      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".config/ballin/restored-gist","url":"https://old-gist.example.test"}}'
+      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"previous-gist-id","token_file":".config/ballin/restored-gist","url":"https://old-gist.example.test"},"analytics":{"enabled":"false"}}'
       exit 0
     fi
     printf '%s\\n' '### Backup of your dev environment'
@@ -367,6 +381,8 @@ esac
     assert.equal(restoredConfig.gu.id, 'returning-gist-id');
     assert.equal(restoredConfig.gu.token_file, '.config/ballin/restored-gist');
     assert.equal(restoredConfig.gu.url, 'https://old-gist.example.test');
+    assert.equal(restoredConfig.analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(path.join(repoDir, '.analytics', 'install-id')));
     assert.equal(fs.readFileSync(path.join(homeDir, '.config', 'ballin', 'restored-gist'), 'utf8'), 'token\n');
   });
 
