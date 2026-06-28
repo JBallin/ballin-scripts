@@ -62,18 +62,13 @@ and auditable.
 
 ## Installation
 
-Before installing, make sure Node.js is available and GitHub CLI is
-authenticated for the Gist host:
-
-```shell
-gh auth login --hostname github.com
-```
-
 Install with:
 
 ```shell
 bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
+
+The installer walks through Gist host and backup setup interactively.
 
 See the [documentation index](docs/README.md) for Node.js setup, update
 settings, optional integrations, and the full list of managed capabilities.
