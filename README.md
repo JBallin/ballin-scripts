@@ -7,10 +7,58 @@ with minimal manual setup. It backs up dotfiles, editor settings, Homebrew
 state, npm globals, and related configuration to a private Gist, then automates
 routine updates.
 
+It is built for people who want their Mac setup to be repeatable: the files and
+package lists that define the environment are captured in one place, and the
+routine update path is available as a single command.
+
 Core commands:
 
 - `up` updates the development environment.
 - `gu` snapshots it to a private Gist.
+
+## What it manages
+
+`ballin-scripts` focuses on the state that is easy to lose when moving between
+Macs or rebuilding a development machine:
+
+- shell startup files and common editor config files
+- Git config and global ignore files
+- Homebrew formulae, casks, services, and Brewfile output
+- global npm packages and Node.js version preference
+- VS Code and VS Code Insiders settings, keybindings, and extensions
+- optional Mac App Store app inventory through `mas`
+- local `ballin-scripts` configuration
+
+See the [supported capabilities reference](docs/capabilities.md) for the exact
+snapshot files and update integrations.
+
+## What it changes
+
+The tools split backup from broader system maintenance:
+
+- `gu` reads local development-environment state and uploads changed snapshots
+  to the configured private Gist.
+- `up` runs maintenance tasks such as Homebrew upgrades, optional Node.js/npm
+  updates, optional macOS and App Store updates, optional `ballin-scripts`
+  updates, and optional `gu` backups.
+- Installation adds the command shims to your shell path and configures the
+  private Gist used by `gu`.
+
+Optional update behavior is controlled through `ballin_config`; see the
+[optional capabilities guide](docs/optional-capabilities.md) for the defaults
+and tradeoffs.
+
+## Fresh Mac setup
+
+On a new Mac, install `ballin-scripts` and point it at an existing backup Gist
+when prompted. The installer can adopt that Gist and restore saved
+`ballin_config` values, while the Gist snapshots provide the reference for
+recreating shell files, Git settings, package lists, editor settings, and other
+development-environment state.
+
+This is currently a backup and maintenance toolkit, not a full one-command
+machine restore system. The backed-up snapshots make rebuilds more repeatable
+and auditable.
 
 ## Installation
 
