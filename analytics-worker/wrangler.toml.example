@@ -1,0 +1,11 @@
+name = "ballin-scripts-analytics"
+main = "src/index.ts"
+compatibility_date = "2026-06-27"
+
+[[d1_databases]]
+binding = "ANALYTICS_DB"
+database_name = "ballin-scripts-analytics"
+database_id = "replace-with-cloudflare-d1-database-id"
+
+[triggers]
+crons = ["17 3 * * *"]
