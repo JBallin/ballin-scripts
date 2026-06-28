@@ -48,6 +48,7 @@ type AnalyticsRuntime = SenderOptions & {
 
 type AnalyticsInstallIdOptions = {
   analyticsConfig?: AnalyticsConfig;
+  env?: NodeJS.ProcessEnv;
   generateInstallId?: () => string;
   installIdPath?: string;
   noticeWriter?: (message: string) => void;
@@ -73,6 +74,7 @@ const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 const analyticsNotice = [
   'ballin-scripts collects minimal anonymous command analytics.',
   'No command arguments, paths, usernames, Gist IDs, dotfiles, package lists, raw errors, or environment values are sent.',
+  'Setup creates a local anonymous install ID now, but it does not send analytics during install.',
   'Opt out with: ballin_config set analytics.enabled false',
   'Or for a single environment: BALLIN_NO_ANALYTICS=1',
 ].join('\n');
@@ -128,6 +130,9 @@ const writeLocalInstallId = (installId: string, installIdPath = installIdPathFor
 };
 
 const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): string | null => {
+  if (analyticsDisabledByEnv(options.env ?? process.env)) {
+    return null;
+  }
   if (options.analyticsConfig?.enabled !== 'true') {
     return null;
   }

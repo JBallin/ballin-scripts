@@ -20,6 +20,7 @@ const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
     const analyticsConfig = isConfigObject(config.analytics) ? config.analytics : undefined;
     ensureAnalyticsInstallId({
       analyticsConfig,
+      env: process.env,
       repoDir,
       noticeWriter: writeStdoutLine,
     });

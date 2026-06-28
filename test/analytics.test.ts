@@ -60,6 +60,11 @@ const writeInstallId = (installId = fixedInstallId): void => {
   fs.writeFileSync(testInstallIdPath, `${installId}\n`, 'utf8');
 };
 
+const writeRawInstallId = (installId: string): void => {
+  fs.mkdirSync(path.dirname(testInstallIdPath), { recursive: true });
+  fs.writeFileSync(testInstallIdPath, installId, 'utf8');
+};
+
 const recordWithSender = (
   input: Record<string, unknown>,
   runtime: Record<string, unknown> = {},
@@ -179,6 +184,22 @@ describe('analytics client', () => {
 
     assert.deepEqual(payloads, []);
     assert.deepEqual(notices, []);
+  });
+
+  it('skips sending and does not rewrite an invalid local install ID', () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeRawInstallId('not-a-uuid\n');
+
+    const { payloads, notices } = recordWithSender({
+      command: 'up',
+      now: fixedNow,
+    });
+
+    assert.deepEqual(payloads, []);
+    assert.deepEqual(notices, []);
+    assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
   });
 
   it('never throws when analytics config or sender behavior fails', () => {
