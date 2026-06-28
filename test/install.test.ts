@@ -376,6 +376,7 @@ exit "$FAKE_NODE_STATUS"
     assert.equal(result.status, 0, result.stderr);
     assert.notInclude(result.stdout, '👀 Docs:');
     assert.notInclude(result.stdout, "Created 'ballin.config.json'");
+    assert.notInclude(result.stdout, 'What GitHub host should be used for Gist backups?');
     assert.include(result.stdout, '😎 ballin!');
   });
 
