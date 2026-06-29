@@ -53,6 +53,7 @@ type CommandAnalyticsRuntime = AnalyticsRuntime & {
 
 type AnalyticsInstallIdOptions = {
   analyticsConfig?: AnalyticsConfig;
+  docsUrl?: string;
   env?: NodeJS.ProcessEnv;
   generateInstallId?: () => string;
   installIdPath?: string;
@@ -76,14 +77,13 @@ const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const allowedOs = new Set(['darwin', 'linux', 'win32']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const analyticsNotice = [
-  'ballin-scripts collects minimal anonymous command analytics.',
-  'No command arguments, paths, usernames, Gist IDs, dotfiles, package lists, raw errors, or environment values are sent.',
-  'Setup creates a local anonymous install ID now, but it does not send analytics during install.',
-  'Later analytics events include that install ID so the backend can count active installs; the backend hashes it before storage.',
-  'Opt out with: ballin_config set analytics.enabled false',
-  'Or for a single environment: BALLIN_NO_ANALYTICS=1',
+const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
+  'ballin-scripts collects minimal anonymous usage analytics after this notice.',
+  'Disable: ballin_config set analytics.enabled false',
+  `Details: ${docsUrl}`,
 ].join('\n');
+const analyticsNotice = analyticsNoticeFor();
 
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 const defaultRepoDir = path.join(__dirname, '..');
@@ -149,7 +149,7 @@ const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): stri
     return existingInstallId;
   }
 
-  options.noticeWriter?.(analyticsNotice);
+  options.noticeWriter?.(analyticsNoticeFor(options.docsUrl));
   const installId = (options.generateInstallId ?? crypto.randomUUID)();
   return writeLocalInstallId(installId, installIdPath) ? installId : null;
 };
@@ -334,6 +334,7 @@ const runWithCommandAnalytics = (
 module.exports = {
   analyticsDisabledByEnv,
   analyticsNotice,
+  analyticsNoticeFor,
   buildAnalyticsPayload,
   durationBucketFromMs,
   ensureAnalyticsInstallId,

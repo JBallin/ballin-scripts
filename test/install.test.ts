@@ -6,6 +6,7 @@ const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 
 type RunInstallOptions = {
   env?: NodeJS.ProcessEnv;
@@ -129,7 +130,7 @@ esac
     ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter(Boolean)
     : []);
 
-  const setupCommand = () => `node:install_setup ${repoDir}/commands/install_setup.ts setup ${repoDir} ${docsUrl}`;
+  const setupCommand = () => `node:install_setup ${repoDir}/commands/install_setup.ts setup ${repoDir} ${docsUrl} ${analyticsDocsUrl}`;
 
   beforeEach(() => {
     homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-install-'));

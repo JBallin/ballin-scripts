@@ -67,9 +67,11 @@ them before continuing.
 
 ## Analytics
 
-`ballin-scripts` can send anonymous usage analytics.
+`ballin-scripts` can send minimal anonymous usage analytics after a first-run
+notice. See [Analytics](analytics.md) for what is sent, what is never sent, and
+how long it is kept.
 
-Disable analytics persistently:
+Disable persistently:
 
 ```shell
 ballin_config set analytics.enabled false

@@ -47,12 +47,13 @@ const isConfigObject = (value: unknown): value is ConfigObject => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
+const setupAnalyticsInstallId = (repoDir: string, configPath: string, docsUrl?: string): void => {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as ConfigObject;
     const analyticsConfig = isConfigObject(config.analytics) ? config.analytics : undefined;
     ensureAnalyticsInstallId({
       analyticsConfig,
+      docsUrl,
       env: process.env,
       repoDir,
       noticeWriter: writeStdoutLine,
@@ -62,8 +63,8 @@ const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
   }
 };
 
-const setupAnalytics = (repoDir: string): boolean => {
-  setupAnalyticsInstallId(repoDir, path.join(repoDir, 'ballin.config.json'));
+const setupAnalytics = (repoDir: string, docsUrl?: string): boolean => {
+  setupAnalyticsInstallId(repoDir, path.join(repoDir, 'ballin.config.json'), docsUrl);
   return true;
 };
 
@@ -392,7 +393,7 @@ const validateBinDirInPath = (binDir: string): boolean => {
   return false;
 };
 
-const setup = (repoDir: string, docsUrl: string): boolean => {
+const setup = (repoDir: string, docsUrl: string, analyticsDocsUrl?: string): boolean => {
   const binDir = resolveBinDir();
   if (!binDir || !validateBinDirInPath(binDir)) {
     return false;
@@ -411,7 +412,7 @@ const setup = (repoDir: string, docsUrl: string): boolean => {
     return false;
   }
 
-  setupAnalytics(repoDir);
+  setupAnalytics(repoDir, analyticsDocsUrl);
 
   if (!symlinkBinaries(repoDir, binDir)) {
     return false;
@@ -445,7 +446,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (command === 'setup' && repoDir && option) {
-    process.exitCode = setup(repoDir, option) ? 0 : 1;
+    process.exitCode = setup(repoDir, option, process.argv[5]) ? 0 : 1;
     return;
   }
 
@@ -455,7 +456,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (command === 'setup-analytics' && repoDir) {
-    process.exitCode = setupAnalytics(repoDir) ? 0 : 1;
+    process.exitCode = setupAnalytics(repoDir, option) ? 0 : 1;
     return;
   }
 

@@ -3,6 +3,7 @@ printf '%s\n' "🏀 let's ball..."
 
 repo_dir="$HOME/.ballin-scripts"
 docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md'
+analytics_docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md'
 required_node_version='24.12'
 repo_existed=true
 
@@ -75,7 +76,7 @@ fi
 
 (
   cd "$repo_dir" || exit
-  node "$repo_dir/commands/install_setup.ts" setup "$repo_dir" "$docs_url"
+  node "$repo_dir/commands/install_setup.ts" setup "$repo_dir" "$docs_url" "$analytics_docs_url"
 )
 setup_status=$?
 if [ "$setup_status" -ne 0 ]; then
