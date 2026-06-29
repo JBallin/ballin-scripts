@@ -1,3 +1,7 @@
+const {
+  runWithCommandAnalytics,
+} = require('./analytics.ts');
+
 const format = {
   fileName: '\x1b[4mfile name\x1b[0m',
   key: '\x1b[4mkey\x1b[0m',
@@ -39,8 +43,12 @@ const writeStdout = (text: string): void => {
   process.stdout.write(text);
 };
 
-const runBallinCli = (): void => {
+function runBallinCommand(): void {
   writeStdout(ballinHelp);
+}
+
+const runBallinCli = (): void => {
+  runWithCommandAnalytics('ballin', runBallinCommand);
 };
 
 module.exports = {

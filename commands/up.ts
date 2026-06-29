@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  runWithCommandAnalytics,
+} = require('./analytics.ts');
+const {
   commandExists,
   makeTempFile,
   progress,
@@ -72,7 +75,7 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
   }
 };
 
-const runUpCli = (): void => {
+function runUpCommand(): void {
   let childEnv = process.env;
 
   if (commandExists('brew')) {
@@ -130,6 +133,10 @@ const runUpCli = (): void => {
     progress('Backing up development environment');
     process.exitCode = runVisibleCommand('gu', [], { env: childEnv });
   }
+}
+
+const runUpCli = (): void => {
+  runWithCommandAnalytics('up', runUpCommand);
 };
 
 module.exports = {

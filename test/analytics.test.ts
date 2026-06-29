@@ -4,7 +4,9 @@ const https = require('https');
 const { fetchConfig, configPath, stringify } = require('../config/index.ts');
 const {
   analyticsDisabledByEnv,
+  durationBucketFromMs,
   recordAnalyticsEvent,
+  runWithCommandAnalytics,
   sendAnalyticsPayload,
 } = require('../commands/analytics.ts');
 
@@ -278,6 +280,124 @@ describe('analytics client', () => {
     assert.deepEqual(unsupportedCommand.payloads, []);
     assert.deepEqual(unsupportedStatus.payloads, []);
     assert.deepEqual(unsupportedDuration.payloads, []);
+  });
+
+  it('buckets command durations coarsely', () => {
+    assert.equal(durationBucketFromMs(0), '<1s');
+    assert.equal(durationBucketFromMs(999), '<1s');
+    assert.equal(durationBucketFromMs(1000), '1-10s');
+    assert.equal(durationBucketFromMs(9999), '1-10s');
+    assert.equal(durationBucketFromMs(10_000), '10-60s');
+    assert.equal(durationBucketFromMs(59_999), '10-60s');
+    assert.equal(durationBucketFromMs(60_000), '1-10m');
+    assert.equal(durationBucketFromMs(599_999), '1-10m');
+    assert.equal(durationBucketFromMs(600_000), '10m+');
+  });
+
+  it('records one command-level success event after the command finishes', () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const events: string[] = [];
+    const payloads: AnalyticsPayload[] = [];
+    let currentNow = 10_000;
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      runWithCommandAnalytics('ballin', () => {
+        events.push('command');
+        currentNow = 10_800;
+      }, {
+        endpoint: 'https://analytics.example.test/v1/events',
+        ingestToken: 'test-token',
+        env: {},
+        installIdPath: testInstallIdPath,
+        nowMs: () => currentNow,
+        sender: (payload: AnalyticsPayload) => {
+          events.push('send');
+          payloads.push(payload);
+        },
+      });
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+
+    assert.deepEqual(events, ['command', 'send']);
+    assert.deepInclude(payloads[0], {
+      command: 'ballin',
+      status: 'success',
+      durationBucket: '<1s',
+    });
+  });
+
+  it('records command-level failures from exitCode without changing it', () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const payloads: AnalyticsPayload[] = [];
+    let currentNow = 1000;
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      runWithCommandAnalytics('gu', () => {
+        currentNow = 13_000;
+        process.exitCode = 17;
+      }, {
+        endpoint: 'https://analytics.example.test/v1/events',
+        ingestToken: 'test-token',
+        env: {},
+        installIdPath: testInstallIdPath,
+        nowMs: () => currentNow,
+        sender: (payload: AnalyticsPayload) => {
+          payloads.push(payload);
+        },
+      });
+
+      assert.equal(process.exitCode, 17);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+
+    assert.deepInclude(payloads[0], {
+      command: 'gu',
+      status: 'failure',
+      durationBucket: '10-60s',
+    });
+  });
+
+  it('records command-level failures when the command throws and rethrows', () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const payloads: AnalyticsPayload[] = [];
+    let currentNow = 0;
+
+    assert.throws(() => {
+      runWithCommandAnalytics('up', () => {
+        currentNow = 60_000;
+        throw new Error('simulated command failure');
+      }, {
+        endpoint: 'https://analytics.example.test/v1/events',
+        ingestToken: 'test-token',
+        env: {},
+        installIdPath: testInstallIdPath,
+        nowMs: () => currentNow,
+        sender: (payload: AnalyticsPayload) => {
+          payloads.push(payload);
+        },
+      });
+    }, 'simulated command failure');
+
+    assert.deepInclude(payloads[0], {
+      command: 'up',
+      status: 'failure',
+      durationBucket: '1-10m',
+    });
   });
 
   it('sends through https with a short timeout and swallows request failures', () => {

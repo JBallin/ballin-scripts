@@ -2,6 +2,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
+  runWithCommandAnalytics,
+} = require('./analytics.ts');
+const {
   commandExists,
   ensureDir,
   makeTempFile,
@@ -617,7 +620,7 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
   return snapshots;
 };
 
-const runGuCli = (args = process.argv.slice(2)): void => {
+function runGuCommand(args = process.argv.slice(2)): void {
   const homeDir = process.env.HOME ?? '';
   const command = args[0];
 
@@ -708,6 +711,10 @@ const runGuCli = (args = process.argv.slice(2)): void => {
   if (failed) {
     process.exitCode = 1;
   }
+}
+
+const runGuCli = (args = process.argv.slice(2)): void => {
+  runWithCommandAnalytics('gu', () => runGuCommand(args));
 };
 
 module.exports = {
