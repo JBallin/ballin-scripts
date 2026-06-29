@@ -5,6 +5,7 @@ const {
 } = require('./analytics.ts');
 const {
   commandExists,
+  readCommandOutput,
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
@@ -35,6 +36,7 @@ const stripTrailingNewlines = (text: string): string => text.replace(/[\r\n]+$/u
 const supportedCommands = new Set([
   'configure',
   'gist',
+  'setup',
   'setup-analytics',
   'symlink-binaries',
 ]);
@@ -66,25 +68,30 @@ const setupAnalytics = (repoDir: string, docsUrl?: string): boolean => {
   return true;
 };
 
-const configure = (repoDir: string, docsUrl: string): boolean => {
-  const configPath = path.join(repoDir, 'ballin.config.json');
-  const defaultConfigPath = path.join(repoDir, 'config', '.defaultConfig.json');
-  const updateConfigPath = path.join(repoDir, 'config', 'updateConfig.ts');
+const configPathFor = (repoDir: string): string => path.join(repoDir, 'ballin.config.json');
 
-  if (!fs.existsSync(configPath)) {
-    try {
-      fs.copyFileSync(defaultConfigPath, configPath);
-    } catch {
-      return false;
-    }
-    writeStdoutLine("\n🧠 Created 'ballin.config.json' file in root using default settings");
-    return true;
+const commandEnv = (cwd: string): NodeJS.ProcessEnv => ({
+  ...process.env,
+  PWD: cwd,
+});
+
+const readJsonObject = (filePath: string): ConfigObject | null => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+    return isConfigObject(parsed) ? parsed : null;
+  } catch {
+    return null;
   }
+};
 
-  const childEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    PWD: path.join(repoDir, 'config'),
-  };
+const configHasGuHost = (repoDir: string): boolean => {
+  const config = readJsonObject(configPathFor(repoDir));
+  return isConfigObject(config?.gu) && Object.prototype.hasOwnProperty.call(config.gu, 'host');
+};
+
+const updateConfig = (repoDir: string, docsUrl: string): boolean => {
+  const updateConfigPath = path.join(repoDir, 'config', 'updateConfig.ts');
+  const childEnv = commandEnv(path.join(repoDir, 'config'));
   delete childEnv.BALLIN_TEST_CONFIG_PATH;
 
   const updateResult = runCommand(process.execPath, [updateConfigPath], {
@@ -107,6 +114,23 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
   }
 
   return true;
+};
+
+const configure = (repoDir: string, docsUrl: string): boolean => {
+  const configPath = configPathFor(repoDir);
+  const defaultConfigPath = path.join(repoDir, 'config', '.defaultConfig.json');
+
+  if (!fs.existsSync(configPath)) {
+    try {
+      fs.copyFileSync(defaultConfigPath, configPath);
+    } catch {
+      return false;
+    }
+    writeStdoutLine("\n🧠 Created 'ballin.config.json' file in root using default settings");
+    return true;
+  }
+
+  return updateConfig(repoDir, docsUrl);
 };
 
 const configValue = (ballinConfig: string, key: string): string | null => {
@@ -134,7 +158,7 @@ const setConfigValue = (ballinConfig: string, key: string, value: string): boole
 const runGh = (
   host: string,
   args: string[],
-  options: { cwd: string; suppressStderr?: boolean } = { cwd: process.cwd() },
+  options: { cwd: string } = { cwd: process.cwd() },
 ) => runCommand('gh', args, {
   cwd: options.cwd,
   env: {
@@ -151,7 +175,7 @@ const restoreAdoptedConfig = (
 ): boolean => {
   const restoreConfig = path.join(repoDir, '.ballin.config.restore.tmp');
   const previousConfig = path.join(repoDir, '.ballin.config.restore.previous.tmp');
-  const configPath = path.join(repoDir, 'ballin.config.json');
+  const configPath = configPathFor(repoDir);
   let shouldRollback = false;
 
   try {
@@ -173,21 +197,7 @@ const restoreAdoptedConfig = (
     shouldRollback = true;
     fs.copyFileSync(restoreConfig, configPath);
 
-    const childEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      PWD: path.join(repoDir, 'config'),
-    };
-    delete childEnv.BALLIN_TEST_CONFIG_PATH;
-
-    const updateResult = runCommand(process.execPath, [path.join(repoDir, 'config', 'updateConfig.ts')], {
-      cwd: repoDir,
-      env: childEnv,
-    });
-    if (updateResult.stderr) {
-      process.stderr.write(updateResult.stderr);
-    }
-
-    if (updateResult.status !== 0 || updateResult.error) {
+    if (!updateConfig(repoDir, docsUrl)) {
       fs.copyFileSync(previousConfig, configPath);
       shouldRollback = false;
       return false;
@@ -195,12 +205,6 @@ const restoreAdoptedConfig = (
 
     shouldRollback = false;
     writeStdoutLine('\n♻️  Restored ballin.config.json from your backup gist.');
-    const updateOutput = updateResult.stdout.trimEnd();
-    if (updateOutput) {
-      writeStdoutLine(`\n🙌 ${updateOutput}`);
-      writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
-    }
-
     return true;
   } finally {
     if (shouldRollback && fs.existsSync(previousConfig)) {
@@ -365,6 +369,63 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
   return true;
 };
 
+const resolveBinDir = (): string | null => {
+  if (commandExists('brew')) {
+    const brewPrefix = readCommandOutput('brew', ['--prefix']);
+    if (brewPrefix !== null) {
+      return path.join(brewPrefix.trimEnd(), 'bin');
+    }
+  }
+
+  const homeDir = process.env.HOME;
+  return homeDir ? path.join(homeDir, '.local', 'bin') : null;
+};
+
+const validateBinDirInPath = (binDir: string): boolean => {
+  const envPath = process.env.PATH ?? '';
+  if (envPath.split(path.delimiter).includes(binDir)) {
+    return true;
+  }
+
+  writeStdoutLine(`\n⚠️  ERROR: ${binDir} doesn't seem to be in your path.`);
+  writeStdoutLine(`Add 'export PATH="${binDir}:$PATH"' to your shell profile.`);
+  writeStdoutLine('and open a new terminal window and run this installation again.');
+  return false;
+};
+
+const setup = (repoDir: string, docsUrl: string, analyticsDocsUrl?: string): boolean => {
+  const binDir = resolveBinDir();
+  if (!binDir || !validateBinDirInPath(binDir)) {
+    return false;
+  }
+
+  const configExisted = fs.existsSync(configPathFor(repoDir));
+  const guHostExisted = configExisted && configHasGuHost(repoDir);
+
+  if (!configure(repoDir, docsUrl)) {
+    writeStdoutLine('\n⚠️  ERROR: Unable to create or update ballin.config.json');
+    return false;
+  }
+
+  if (!configureGist(repoDir, docsUrl, guHostExisted)) {
+    writeStdoutLine('\n⚠️  ERROR: Unable to configure Gist backup');
+    return false;
+  }
+
+  setupAnalytics(repoDir, analyticsDocsUrl);
+
+  if (!symlinkBinaries(repoDir, binDir)) {
+    return false;
+  }
+
+  if (!configExisted && fs.existsSync(configPathFor(repoDir))) {
+    writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
+  }
+
+  writeStdoutLine('\n😎 ballin!');
+  return true;
+};
+
 const runInstallSetupCli = (): void => {
   const [, , command, repoDir, option] = process.argv;
 
@@ -384,6 +445,11 @@ const runInstallSetupCli = (): void => {
     return;
   }
 
+  if (command === 'setup' && repoDir && option) {
+    process.exitCode = setup(repoDir, option, process.argv[5]) ? 0 : 1;
+    return;
+  }
+
   if (command === 'symlink-binaries' && repoDir && option) {
     process.exitCode = symlinkBinaries(repoDir, option) ? 0 : 1;
     return;
@@ -395,7 +461,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|gist|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [gu-host-existed]');
+    writeStdoutLine('Usage: install_setup.ts <configure|gist|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [gu-host-existed]');
     process.exitCode = 1;
     return;
   }
@@ -412,6 +478,7 @@ module.exports = {
   configure,
   configureGist,
   runInstallSetupCli,
+  setup,
   setupAnalytics,
   symlinkBinaries,
 };

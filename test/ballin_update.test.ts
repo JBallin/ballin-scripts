@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const updatePath = path.join(__dirname, '..', 'bin', 'ballin_update');
+const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
 type SpawnUpdateOverrides = Omit<
   import('child_process').SpawnSyncOptionsWithStringEncoding,
   'encoding' | 'env'
@@ -95,11 +96,16 @@ esac
 `);
   };
 
-  const installInstallerStub = () => {
-    writeExecutable('install.sh', `#!/usr/bin/env bash
-printf '%s|install.sh:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
-exit "$FAKE_INSTALL_STATUS"
-`, repoDir);
+  const installSetupStub = () => {
+    const commandsDir = path.join(repoDir, 'commands');
+    fs.mkdirSync(commandsDir, { recursive: true });
+    fs.writeFileSync(path.join(commandsDir, 'install_setup.ts'), `const fs = require('fs');
+fs.appendFileSync(process.env.BALLIN_UPDATE_TEST_LOG, process.cwd() + '|install_setup:' + process.argv.slice(2).join(' ') + '\\n');
+if (process.env.FAKE_SETUP_SIGNAL) {
+  process.kill(process.pid, process.env.FAKE_SETUP_SIGNAL);
+}
+process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
+`);
   };
 
   const runUpdate = (
@@ -123,7 +129,7 @@ exit "$FAKE_INSTALL_STATUS"
       FAKE_GIT_STASH_STATUS: '0',
       FAKE_GIT_FIRST_CHECKOUT_STATUS: '0',
       FAKE_GIT_RETRY_CHECKOUT_STATUS: '0',
-      FAKE_INSTALL_STATUS: '0',
+      FAKE_SETUP_STATUS: '0',
       ...env,
     },
   });
@@ -133,6 +139,8 @@ exit "$FAKE_INSTALL_STATUS"
       ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter(Boolean)
       : []
   );
+
+  const setupLog = () => `${fs.realpathSync(repoDir)}|install_setup:setup ${repoDir} ${docsUrl}`;
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-update-'));
@@ -149,14 +157,14 @@ exit "$FAKE_INSTALL_STATUS"
     linkCommand('cat');
     fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
     installGitStub();
-    installInstallerStub();
+    installSetupStub();
   });
 
   afterEach(() => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
-  it('fetches, merges, then runs the installer from the installed repository', () => {
+  it('fetches, merges, then runs the setup from the installed repository', () => {
     const result = runUpdate();
 
     assert.equal(result.status, 0, result.stderr);
@@ -166,7 +174,7 @@ exit "$FAKE_INSTALL_STATUS"
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
@@ -185,7 +193,7 @@ exit "$FAKE_INSTALL_STATUS"
       'fetch-stdin:secret-token',
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
@@ -204,12 +212,12 @@ exit "$FAKE_INSTALL_STATUS"
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
-  it('returns the installer status when install fails after a successful merge', () => {
-    const result = runUpdate({ FAKE_INSTALL_STATUS: '27' });
+  it('returns the setup status when setup fails after a successful merge', () => {
+    const result = runUpdate({ FAKE_SETUP_STATUS: '27' });
 
     assert.equal(result.status, 27);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
@@ -218,18 +226,18 @@ exit "$FAKE_INSTALL_STATUS"
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
-  it('reports a missing installer with the shared command error format', () => {
-    fs.rmSync(path.join(repoDir, 'install.sh'));
+  it('reports a missing setup through Node when the typed setup file is unavailable', () => {
+    fs.rmSync(path.join(repoDir, 'commands', 'install_setup.ts'));
 
     const result = runUpdate();
 
-    assert.equal(result.status, 127);
+    assert.equal(result.status, 1);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
-    assert.include(result.stderr, './install.sh: command not found');
+    assert.include(result.stderr, 'Cannot find module');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
@@ -237,13 +245,8 @@ exit "$FAKE_INSTALL_STATUS"
     ]);
   });
 
-  it('uses a shell-style signal exit status when the installer is signaled', () => {
-    writeExecutable('install.sh', `#!/usr/bin/env bash
-printf '%s|install.sh:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
-kill -TERM "$$"
-`, repoDir);
-
-    const result = runUpdate();
+  it('uses a shell-style signal exit status when the setup is signaled', () => {
+    const result = runUpdate({ FAKE_SETUP_SIGNAL: 'SIGTERM' });
 
     assert.equal(result.status, 143);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
@@ -252,11 +255,11 @@ kill -TERM "$$"
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
-  it('stops before merge and install when fetch fails', () => {
+  it('stops before merge and setup when fetch fails', () => {
     const result = runUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
 
     assert.equal(result.status, 1);
@@ -290,7 +293,7 @@ kill -TERM "$$"
     assert.deepEqual(commandLog(), []);
   });
 
-  it('stashes, retries checkout main, merges, and installs when initial checkout is blocked', () => {
+  it('stashes, retries checkout main, merges, and runs setup when initial checkout is blocked', () => {
     const result = runUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '27' });
 
     assert.equal(result.status, 0, result.stderr);
@@ -307,11 +310,11 @@ kill -TERM "$$"
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
-  it('stops before merge and install when checkout recovery cannot stash changes', () => {
+  it('stops before merge and setup when checkout recovery cannot stash changes', () => {
     const result = runUpdate({
       FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
       FAKE_GIT_STASH_STATUS: '28',
@@ -333,7 +336,7 @@ kill -TERM "$$"
     ]);
   });
 
-  it('stops before merge and install when checkout still fails after stashing', () => {
+  it('stops before merge and setup when checkout still fails after stashing', () => {
     const result = runUpdate({
       FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
       FAKE_GIT_RETRY_CHECKOUT_STATUS: '28',
@@ -356,7 +359,7 @@ kill -TERM "$$"
     ]);
   });
 
-  it('stashes, checks out main, retries merge, and installs after an initial merge failure', () => {
+  it('stashes, checks out main, retries merge, and runs setup after an initial merge failure', () => {
     const result = runUpdate({ FAKE_GIT_FIRST_MERGE_STATUS: '24' });
 
     assert.equal(result.status, 0, result.stderr);
@@ -373,7 +376,7 @@ kill -TERM "$$"
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
@@ -398,7 +401,7 @@ kill -TERM "$$"
       `${repoDir}|git:stash push --include-untracked`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
-      `${repoDir}|install.sh:`,
+      setupLog(),
     ]);
   });
 
@@ -426,7 +429,7 @@ kill -TERM "$$"
     ]);
   });
 
-  it('stops before install when the retry merge fails', () => {
+  it('stops before setup when the retry merge fails', () => {
     const result = runUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_RETRY_MERGE_STATUS: '25',
@@ -451,7 +454,7 @@ kill -TERM "$$"
     ]);
   });
 
-  it('stops before retry merge and install when the fallback stash path fails', () => {
+  it('stops before retry merge and setup when the fallback stash path fails', () => {
     const result = runUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_STASH_STATUS: '26',
@@ -474,7 +477,7 @@ kill -TERM "$$"
     ]);
   });
 
-  it('stops before retry merge and install when the fallback checkout fails', () => {
+  it('stops before retry merge and setup when the fallback checkout fails', () => {
     const result = runUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_RETRY_CHECKOUT_STATUS: '27',
