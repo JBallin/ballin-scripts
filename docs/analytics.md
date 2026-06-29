@@ -10,11 +10,13 @@ Disable persistently:
 ballin_config set analytics.enabled false
 ```
 
-Disable for one environment:
+Disable for one command:
 
 ```shell
-BALLIN_NO_ANALYTICS=1
+BALLIN_NO_ANALYTICS=1 up
 ```
+
+Replace `up` with the command you are running.
 
 CI never sends analytics. Analytics failures are ignored and never change
 command output, side effects, or exit status.
