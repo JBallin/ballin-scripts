@@ -304,11 +304,7 @@ describe('config', () => {
     it('updates the isolated fixture when invoked through updateConfig.ts', () => {
       fs.writeFileSync(configPath, '{}', 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.deepEqual(fetchConfig().configObj, defaultConfig);
@@ -321,11 +317,7 @@ describe('config', () => {
         },
       }), 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.deepEqual(fetchConfig().configObj.analytics, {
@@ -357,7 +349,7 @@ describe('config', () => {
 
         assert.equal(result.status, 0);
         assert.deepEqual(fetchConfig().configObj, defaultConfig);
-        assert.include(result.stdout, `${key}: [object Object]`);
+        assert.include(result.stdout, `${key}: ${JSON.stringify(defaultConfig[key])}`);
       });
     });
 
@@ -371,11 +363,7 @@ describe('config', () => {
         },
       }), 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.equal(getConfig('gu.host'), 'github.example.test');
@@ -392,11 +380,7 @@ describe('config', () => {
         },
       }), 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.equal(getConfig('gu.host'), 'github.com');
