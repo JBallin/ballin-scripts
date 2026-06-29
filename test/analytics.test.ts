@@ -369,6 +369,39 @@ describe('analytics client', () => {
     });
   });
 
+  it('isolates command-level status from a stale process exitCode', () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const payloads: AnalyticsPayload[] = [];
+    const previousExitCode = process.exitCode;
+    process.exitCode = 17;
+
+    try {
+      runWithCommandAnalytics('ballin_update', () => {}, {
+        endpoint: 'https://analytics.example.test/v1/events',
+        ingestToken: 'test-token',
+        env: {},
+        installIdPath: testInstallIdPath,
+        nowMs: () => 1000,
+        sender: (payload: AnalyticsPayload) => {
+          payloads.push(payload);
+        },
+      });
+
+      assert.isUndefined(process.exitCode);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+
+    assert.deepInclude(payloads[0], {
+      command: 'ballin_update',
+      status: 'success',
+      durationBucket: '<1s',
+    });
+  });
+
   it('records command-level failures when the command throws and rethrows', () => {
     setAnalyticsConfig({
       enabled: 'true',

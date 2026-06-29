@@ -313,6 +313,7 @@ const runWithCommandAnalytics = (
 ): void => {
   const nowMs = runtime.nowMs ?? Date.now;
   const startedAt = nowMs();
+  process.exitCode = undefined;
   try {
     runCommand();
     recordAnalyticsEvent({
