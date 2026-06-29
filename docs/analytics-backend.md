@@ -1,8 +1,8 @@
 # Analytics Backend
 
 `ballin-scripts` uses a small Cloudflare Worker backed by D1 for usage
-analytics. The goal is to see whether anyone is using the app and how, not to
-run a general product analytics platform.
+analytics. The backend records only the minimal signals needed for active
+installs, top-level command usage, and command success or failure.
 
 The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). It is
 not deployed by default and does not require a Cloudflare account to work on the
