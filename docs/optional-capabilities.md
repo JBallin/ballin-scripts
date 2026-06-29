@@ -67,8 +67,8 @@ them before continuing.
 
 ## Analytics
 
-After an install/update notice, `ballin-scripts` can send anonymous command
-analytics to help understand which tools are used and whether they succeed.
+`ballin-scripts` can send anonymous command analytics to help understand which
+tools are used and whether they succeed.
 
 Disable analytics persistently:
 
