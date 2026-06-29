@@ -69,7 +69,7 @@ them before continuing.
 
 `ballin-scripts` can send minimal anonymous active-install analytics after a
 first-run notice. See [Analytics](analytics.md) for what is sent, what is never
-sent, retention, and production-send status.
+sent, retention, and current status.
 
 Disable persistently:
 
