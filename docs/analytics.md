@@ -1,0 +1,58 @@
+# Analytics
+
+`ballin-scripts` can send minimal anonymous active-install analytics after the
+installer shows a first-run notice. Analytics help answer whether installs are
+active, which top-level commands are used, and whether those commands succeed or
+fail.
+
+Disable persistently:
+
+```shell
+ballin_config set analytics.enabled false
+```
+
+Disable for one environment:
+
+```shell
+BALLIN_NO_ANALYTICS=1
+```
+
+CI never sends analytics. Analytics failures are ignored and never change
+command output, side effects, or exit status.
+
+## What Is Sent
+
+- schema version
+- random install ID
+- date bucket, such as `YYYY-MM-DD`
+- command name for currently instrumented top-level commands: `up`, `gu`,
+  `ballin_update`, and `ballin`
+- status: `success`, `failure`, or `unknown`
+- coarse duration bucket: `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
+  `10m+`
+- `ballin-scripts` version
+- Node.js major version
+- OS family: `darwin`, `linux`, `win32`, or `unknown`
+- coarse OS version
+
+## What Is Never Sent
+
+- command arguments
+- usernames
+- local paths
+- Gist IDs or URLs
+- dotfile contents
+- package lists
+- editor settings or extensions
+- raw errors or command output
+- environment variables
+- config values
+
+## Storage
+
+The installer creates a random local install ID under `.analytics/`. The
+backend hashes install IDs before storage, stores daily install rows plus
+aggregate command/version/Node/OS counts, and deletes rows older than 395 days.
+
+Production sends stay disabled until backend deployment, abuse controls, and
+final payload review are complete.

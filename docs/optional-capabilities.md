@@ -67,9 +67,9 @@ them before continuing.
 
 ## Analytics
 
-`ballin-scripts` can send minimal anonymous active-install analytics after the
-installer shows a first-run notice. It is for maintenance visibility: active
-installs, top-level command usage, and command success or failure.
+`ballin-scripts` can send minimal anonymous active-install analytics after a
+first-run notice. See [Analytics](analytics.md) for what is sent, what is never
+sent, retention, and production-send status.
 
 Disable persistently:
 
@@ -82,37 +82,6 @@ Disable for one environment:
 ```shell
 BALLIN_NO_ANALYTICS=1
 ```
-
-Analytics are enabled after the notice unless disabled by config, environment,
-or CI detection. CI never sends analytics. Analytics failures are ignored and
-never change command output, side effects, or exit status. The installer creates
-a random local install ID under `.analytics/` so the backend can count active
-installs across days; the backend hashes it before storage.
-
-Sent fields:
-
-- schema version
-- random install ID
-- date bucket, such as `YYYY-MM-DD`
-- command name for currently instrumented top-level commands: `up`, `gu`,
-  `ballin_update`, and `ballin`
-- status: `success`, `failure`, or `unknown`
-- coarse duration bucket: `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
-  `10m+`
-- `ballin-scripts` version
-- Node.js major version
-- OS family: `darwin`, `linux`, `win32`, or `unknown`
-- coarse OS version
-
-Never sent: command arguments, usernames, local paths, Gist IDs or URLs,
-dotfile contents, package lists, editor settings or extensions, raw errors,
-command output, environment variables, or config values.
-
-Backend: a small Cloudflare Worker with D1 stores server-hashed daily install
-IDs plus aggregate command, status, duration, version, Node, and OS counts. Rows
-older than 395 days are deleted. Production sends stay disabled until
-deployment, abuse controls, and final payload review are complete. See the
-[analytics backend notes](analytics-backend.md).
 
 ## `up` settings
 

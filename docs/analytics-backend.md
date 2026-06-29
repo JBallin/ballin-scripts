@@ -1,8 +1,8 @@
 # Analytics Backend
 
-Issue #166 selected a small Cloudflare Worker backed by D1 for the first
-`ballin-scripts` analytics backend. The goal is active-install visibility, not a
-general product analytics platform.
+`ballin-scripts` uses a small Cloudflare Worker backed by D1 for active-install
+analytics. The goal is maintenance visibility, not a general product analytics
+platform.
 
 The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). It is
 not deployed by default and does not require a Cloudflare account to work on the
@@ -10,12 +10,10 @@ CLI.
 
 ## Current Production Status
 
-Production sends stay disabled until
-[#185](https://github.com/JBallin/ballin-scripts/issues/185) configures the
-endpoint and token. Before enabling them, confirm deployment, D1 binding,
-migrations, secrets, retention cleanup, abuse controls, and payload alignment
-with the first-run notice and
-[optional capabilities guide](optional-capabilities.md#analytics).
+Production sends stay disabled until the CLI endpoint and token are configured.
+Before enabling them, confirm deployment, D1 binding, migrations, secrets,
+retention cleanup, abuse controls, and payload alignment with the first-run
+notice and [Analytics](analytics.md).
 
 ## Why Cloudflare Worker and D1
 
@@ -61,6 +59,5 @@ Before enabling the CLI to send production events:
 - configure Cloudflare-side rate limiting or equivalent edge protection
 - deploy the Worker
 - configure the CLI endpoint in the client implementation
-- re-check that the client payload, first-run notice, and
-  `docs/optional-capabilities.md` analytics section match the documented
-  allowlist
+- re-check that the client payload, first-run notice, and `docs/analytics.md`
+  match the documented allowlist
