@@ -18,6 +18,12 @@ BALLIN_NO_ANALYTICS=1 up
 
 Replace `up` with the command you are running.
 
+Disable for a shell session or profile:
+
+```shell
+export BALLIN_NO_ANALYTICS=1
+```
+
 CI never sends analytics. Analytics failures are ignored and never change
 command output, side effects, or exit status.
 
