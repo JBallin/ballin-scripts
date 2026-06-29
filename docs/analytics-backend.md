@@ -8,7 +8,7 @@ The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). It is
 not deployed by default and does not require a Cloudflare account to work on the
 CLI.
 
-## Production Gate
+## Production Setup
 
 Production sends stay disabled until the CLI endpoint and token are configured.
 Before enabling them, confirm deployment, D1 binding, migrations, secrets,

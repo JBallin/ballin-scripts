@@ -81,7 +81,6 @@ const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/
 const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
   'ballin-scripts collects minimal anonymous active-install analytics after this notice.',
   'Disable: ballin_config set analytics.enabled false',
-  'Or for this environment: BALLIN_NO_ANALYTICS=1',
   `Details: ${docsUrl}`,
 ].join('\n');
 const analyticsNotice = analyticsNoticeFor();
