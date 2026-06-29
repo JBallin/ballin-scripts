@@ -8,4 +8,4 @@ Start here when setting up or auditing what `ballin-scripts` manages.
 - [Supported capabilities](capabilities.md): the current `up` integrations and
   `gu` backup snapshots.
 - [Analytics backend](analytics-backend.md): backend deployment and data-policy
-  notes for active-install analytics.
+  notes for usage analytics.

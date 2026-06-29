@@ -1,8 +1,8 @@
 # Analytics Backend
 
-`ballin-scripts` uses a small Cloudflare Worker backed by D1 for active-install
-analytics. The goal is maintenance visibility, not a general product analytics
-platform.
+`ballin-scripts` uses a small Cloudflare Worker backed by D1 for usage
+analytics. The goal is to see whether anyone is using the app and how, not to
+run a general product analytics platform.
 
 The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). It is
 not deployed by default and does not require a Cloudflare account to work on the
@@ -19,8 +19,7 @@ notice and [Analytics](analytics.md).
 
 - The event schema is owned by this project and can reject anything outside the
   privacy allowlist.
-- D1 can compute exact DAU/WAU/MAU from daily buckets and server-hashed install
-  IDs.
+- D1 can count active installs from daily buckets and server-hashed install IDs.
 - The CLI does not need a runtime analytics SDK.
 - Retention is controlled by the Worker and D1 schema.
 - The deployment can stay tiny: one Worker, one D1 database, and two secrets.
@@ -32,12 +31,12 @@ notice and [Analytics](analytics.md).
 - Plausible is privacy-focused, but its visitor model is shaped around web
   traffic headers rather than CLI install IDs.
 - Workers Analytics Engine is useful for high-cardinality metric streams, but D1
-  is simpler for exact low-volume active-install counts.
+  is simpler for exact low-volume usage counts.
 
 ## Retention
 
 The Worker deletes rows older than 395 days. That keeps roughly 13 months of
-daily active-install and command-count data.
+daily install and command-count data.
 
 ## Abuse Controls
 

@@ -1,9 +1,8 @@
 # Analytics
 
-`ballin-scripts` can send minimal anonymous active-install analytics after the
-installer shows a first-run notice. Analytics help answer whether installs are
-active, which top-level commands are used, and whether those commands succeed or
-fail.
+`ballin-scripts` can send minimal anonymous usage analytics after the installer
+shows a first-run notice. Analytics help show whether anyone is using the app,
+which top-level commands they use, and whether those commands succeed or fail.
 
 Disable persistently:
 
