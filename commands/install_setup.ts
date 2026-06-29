@@ -4,9 +4,40 @@ const {
   ensureAnalyticsInstallId,
 } = require('./analytics.ts');
 const {
+  commandExists,
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
+
+const backupMarker = '### Backup of your dev environment\n'
+  + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n'
+  + '\n';
+
+const readPrompt = (prompt: string): string => {
+  process.stdout.write(prompt);
+
+  const input: string[] = [];
+  const buffer = Buffer.alloc(1);
+  while (fs.readSync(0, buffer, 0, 1, null) > 0) {
+    const character = buffer.toString('utf8');
+    if (character === '\n') {
+      break;
+    }
+    if (character !== '\r') {
+      input.push(character);
+    }
+  }
+
+  return input.join('');
+};
+
+const stripTrailingNewlines = (text: string): string => text.replace(/[\r\n]+$/u, '');
+const supportedCommands = new Set([
+  'configure',
+  'gist',
+  'setup-analytics',
+  'symlink-binaries',
+]);
 
 type ConfigObject = { [key: string]: unknown };
 
@@ -77,6 +108,235 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
   return true;
 };
 
+const configValue = (ballinConfig: string, key: string): string | null => {
+  const result = runCommand(ballinConfig, ['get', key]);
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  if (result.status !== 0 || result.error) {
+    return null;
+  }
+  return result.stdout.trimEnd();
+};
+
+const setConfigValue = (ballinConfig: string, key: string, value: string): boolean => {
+  const result = runCommand(ballinConfig, ['set', key, value]);
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  return result.status === 0 && !result.error;
+};
+
+const runGh = (
+  host: string,
+  args: string[],
+  options: { cwd: string; suppressStderr?: boolean } = { cwd: process.cwd() },
+) => runCommand('gh', args, {
+  cwd: options.cwd,
+  env: {
+    ...process.env,
+    GH_HOST: host,
+  },
+});
+
+const restoreAdoptedConfig = (
+  repoDir: string,
+  docsUrl: string,
+  host: string,
+  gistId: string,
+): boolean => {
+  const restoreConfig = path.join(repoDir, '.ballin.config.restore.tmp');
+  const previousConfig = path.join(repoDir, '.ballin.config.restore.previous.tmp');
+  const configPath = path.join(repoDir, 'ballin.config.json');
+  let shouldRollback = false;
+
+  try {
+    fs.copyFileSync(configPath, previousConfig);
+
+    const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', 'ballin_config'], {
+      cwd: repoDir,
+    });
+    if (gistResult.stderr) {
+      process.stderr.write(gistResult.stderr);
+    }
+
+    if (gistResult.status !== 0 || gistResult.error) {
+      writeStdoutLine('\nℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.');
+      return true;
+    }
+
+    fs.writeFileSync(restoreConfig, gistResult.stdout);
+    shouldRollback = true;
+    fs.copyFileSync(restoreConfig, configPath);
+
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PWD: path.join(repoDir, 'config'),
+    };
+    delete childEnv.BALLIN_TEST_CONFIG_PATH;
+
+    const updateResult = runCommand(process.execPath, [path.join(repoDir, 'config', 'updateConfig.ts')], {
+      cwd: repoDir,
+      env: childEnv,
+    });
+    if (updateResult.stderr) {
+      process.stderr.write(updateResult.stderr);
+    }
+
+    if (updateResult.status !== 0 || updateResult.error) {
+      fs.copyFileSync(previousConfig, configPath);
+      shouldRollback = false;
+      return false;
+    }
+
+    shouldRollback = false;
+    writeStdoutLine('\n♻️  Restored ballin.config.json from your backup gist.');
+    const updateOutput = updateResult.stdout.trimEnd();
+    if (updateOutput) {
+      writeStdoutLine(`\n🙌 ${updateOutput}`);
+      writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
+    }
+
+    return true;
+  } finally {
+    if (shouldRollback && fs.existsSync(previousConfig)) {
+      fs.copyFileSync(previousConfig, configPath);
+    }
+    fs.rmSync(restoreConfig, { force: true });
+    fs.rmSync(previousConfig, { force: true });
+  }
+};
+
+const configureGist = (repoDir: string, docsUrl: string, guHostExisted: boolean): boolean => {
+  const ballinConfig = path.join(repoDir, 'bin', 'ballin_config');
+  let guHost = configValue(ballinConfig, 'gu.host');
+  let guId = configValue(ballinConfig, 'gu.id');
+
+  if (guHost === null || guId === null) {
+    return false;
+  }
+
+  if (process.env.BALLIN_GU_HOST) {
+    if (!setConfigValue(ballinConfig, 'gu.host', process.env.BALLIN_GU_HOST)) {
+      return false;
+    }
+    guHost = configValue(ballinConfig, 'gu.host');
+    if (guHost === null) {
+      return false;
+    }
+  } else if (guId === 'null' || !guHostExisted) {
+    const inputHost = readPrompt(`\n🤔 What GitHub host should be used for Gist backups? [${guHost}] `);
+    if (inputHost) {
+      if (!setConfigValue(ballinConfig, 'gu.host', inputHost)) {
+        return false;
+      }
+      guHost = configValue(ballinConfig, 'gu.host');
+      if (guHost === null) {
+        return false;
+      }
+    }
+  }
+
+  if (!commandExists('gh')) {
+    writeStdoutLine('\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.');
+    writeStdoutLine('\nInstall gh, authenticate it, then run this installer again.');
+    writeStdoutLine(`\nSetup guide: ${docsUrl}`);
+    writeStdoutLine(`\nRun after installing gh:\n  gh auth login --hostname ${guHost}`);
+    return false;
+  }
+
+  const authResult = runCommand('gh', ['auth', 'status', '--hostname', guHost], {
+    cwd: repoDir,
+    env: {
+      ...process.env,
+      GH_HOST: guHost,
+    },
+  });
+
+  if (authResult.status !== 0 || authResult.error) {
+    writeStdoutLine(`\n⚠️  ERROR: gh is not authenticated for ${guHost}.`);
+    writeStdoutLine(`\nRun:\n  gh auth login --hostname ${guHost}`);
+    writeStdoutLine('\nThen run this installer again.');
+    return false;
+  }
+
+  if (guId !== 'null') {
+    return true;
+  }
+
+  const hasBackup = readPrompt('\n🤔 Do you already have a ballin-scripts backup gist? [y/N] ');
+  if (hasBackup === 'y' || hasBackup === 'Y') {
+    writeStdoutLine('\nWelcome Back!');
+    let validGistId = false;
+    while (!validGistId) {
+      const gistId = readPrompt('Enter your gist ID: ');
+      const markerResult = runGh(guHost, ['gist', 'view', gistId, '--raw', '--filename', '.MyConfig.md'], {
+        cwd: repoDir,
+      });
+
+      if (
+        markerResult.status === 0
+        && stripTrailingNewlines(markerResult.stdout) === stripTrailingNewlines(backupMarker)
+      ) {
+        writeStdoutLine('\n👍 Storing your previous gist ID in your config:');
+        if (!restoreAdoptedConfig(repoDir, docsUrl, guHost, gistId)) {
+          return false;
+        }
+        if (!setConfigValue(ballinConfig, 'gu.id', gistId)) {
+          return false;
+        }
+        validGistId = true;
+      } else {
+        writeStdoutLine(`\n⚠️  INVALID: Expected backup marker in gist '${gistId}'.`);
+      }
+    }
+  }
+
+  guId = configValue(ballinConfig, 'gu.id');
+  if (guId === null) {
+    return false;
+  }
+
+  if (guId === 'null') {
+    const markerPath = path.join(repoDir, '.MyConfig.md');
+    fs.writeFileSync(markerPath, backupMarker);
+
+    try {
+      const createResult = runGh(guHost, ['gist', 'create', '.MyConfig.md', '--desc', backupMarker], {
+        cwd: repoDir,
+      });
+      if (createResult.stderr) {
+        process.stderr.write(createResult.stderr);
+      }
+      if (createResult.status !== 0 || createResult.error) {
+        return false;
+      }
+
+      const gistUrl = createResult.stdout.trimEnd();
+      writeStdoutLine(`\n💥 Created a secret gist titled '.MyConfig' at the following URL:\n${gistUrl}`);
+
+      const createdGistId = gistUrl.split('/').pop() ?? gistUrl;
+      writeStdoutLine('\n🧳 Storing your new gist ID in your config...');
+      if (!setConfigValue(ballinConfig, 'gu.id', createdGistId)) {
+        return false;
+      }
+
+      const guCacheDir = path.join(repoDir, '.gu-cache');
+      if (fs.existsSync(guCacheDir) && fs.statSync(guCacheDir).isDirectory()) {
+        fs.rmSync(guCacheDir, { recursive: true, force: true });
+        writeStdoutLine('\n🗑  Deleted existing .gu-cache folder');
+      }
+    } finally {
+      fs.rmSync(markerPath, { force: true });
+    }
+  }
+
+  return true;
+};
+
 const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
   const sourceBinDir = path.join(repoDir, 'bin');
 
@@ -107,8 +367,19 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
 const runInstallSetupCli = (): void => {
   const [, , command, repoDir, option] = process.argv;
 
+  if (command === 'supports-command') {
+    process.exitCode = supportedCommands.has(repoDir) ? 0 : 1;
+    return;
+  }
+
   if (command === 'configure' && repoDir && option) {
     process.exitCode = configure(repoDir, option) ? 0 : 1;
+    return;
+  }
+
+  if (command === 'gist' && repoDir && option) {
+    const guHostExisted = process.argv[5] === 'true';
+    process.exitCode = configureGist(repoDir, option, guHostExisted) ? 0 : 1;
     return;
   }
 
@@ -123,7 +394,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|symlink-binaries|setup-analytics> <repo-dir> [docs-url|bin-dir]');
+    writeStdoutLine('Usage: install_setup.ts <configure|gist|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [gu-host-existed]');
     process.exitCode = 1;
     return;
   }
@@ -138,6 +409,7 @@ if (require.main === module) {
 
 module.exports = {
   configure,
+  configureGist,
   runInstallSetupCli,
   setupAnalytics,
   symlinkBinaries,
