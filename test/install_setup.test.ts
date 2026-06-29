@@ -8,6 +8,7 @@ const {
 } = require('../commands/analytics.ts');
 const {
   configure,
+  setup,
   setupAnalytics,
   symlinkBinaries,
 } = require('../commands/install_setup.ts');
@@ -52,6 +53,16 @@ describe('install setup', () => {
   const installIdPath = () => path.join(repoDir, '.analytics', 'install-id');
 
   const readInstallId = () => fs.readFileSync(installIdPath(), 'utf8');
+
+  const writeExecutable = (name: string, contents: string, directory = binDir) => {
+    const executablePath = path.join(directory, name);
+    fs.writeFileSync(executablePath, contents, { mode: 0o755 });
+    return executablePath;
+  };
+
+  const commandLog = () => (fs.existsSync(commandLogPath)
+    ? fs.readFileSync(commandLogPath, 'utf8')
+    : '');
 
   const withEnv = (env: NodeJS.ProcessEnv, action: () => { output: string; result: boolean }) => {
     const previousValues = new Map<string, string | undefined>();
@@ -103,12 +114,6 @@ describe('install setup', () => {
     });
   };
 
-  const writeExecutable = (name: string, contents: string, directory = binDir) => {
-    const executablePath = path.join(directory, name);
-    fs.writeFileSync(executablePath, contents, { mode: 0o755 });
-    return executablePath;
-  };
-
   const installGistConfigCommand = () => {
     writeExecutable('ballin_config', `#!/bin/bash
 printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
@@ -137,9 +142,27 @@ case "$1:$2" in
     ;;
   set:gu.id)
     printf '%s\\n' "$3" > "$gist_id_file"
-    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"%s"}}\\n' "$3" "$configured_host" > "$TEST_REPO_DIR/ballin.config.json"
+    analytics_json=''
+    if [ -f "$TEST_REPO_DIR/ballin.config.json" ]; then
+      config_json=$(<"$TEST_REPO_DIR/ballin.config.json")
+      case "$config_json" in
+        *'"analytics":{"enabled":"false"}'*) analytics_json=',"analytics":{"enabled":"false"}' ;;
+      esac
+    fi
+    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"%s"}%s}\\n' "$3" "$configured_host" "$analytics_json" > "$TEST_REPO_DIR/ballin.config.json"
     printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
     ;;
+esac
+`, sourceBinDir);
+  };
+
+  const installStaticConfigCommand = (id = 'existing-gist-id', host = 'github.example.test') => {
+    writeExecutable('ballin_config', `#!/bin/bash
+printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$1:$2" in
+  get:gu.host) printf '%s\\n' '${host}' ;;
+  get:gu.id) printf '%s\\n' '${id}' ;;
+  set:gu.host|set:gu.id) printf '%s\\n' "\\"$2\\" set to: \\"$3\\"" ;;
 esac
 `, sourceBinDir);
   };
@@ -221,10 +244,6 @@ esac
       ...env,
     },
   });
-
-  const commandLog = () => (fs.existsSync(commandLogPath)
-    ? fs.readFileSync(commandLogPath, 'utf8')
-    : '');
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-install-setup-'));
@@ -436,7 +455,7 @@ esac
     const supportedResult = spawnSync(process.execPath, [
       installSetupPath,
       'supports-command',
-      'gist',
+      'setup',
     ], {
       encoding: 'utf8',
     });
@@ -681,5 +700,74 @@ esac
     assert.include(commandLog(), 'ballin_config:set gu.id new-gist-id\n');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.gu-cache')));
+  });
+
+  it('runs full setup with existing Gist settings through typed orchestration', () => {
+    installConfigSources();
+    installStaticConfigCommand();
+    installFakeGhCommand();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      gu: { id: 'existing-gist-id', host: 'github.example.test' },
+      analytics: { enabled: 'false' },
+    }));
+
+    const result = withEnv({
+      HOME: path.join(testDir, 'home'),
+      PATH: binDir,
+      FAKE_COMMAND_LOG: commandLogPath,
+      FAKE_GH_AUTH_STATUS: '0',
+      TEST_DIR: testDir,
+      TEST_REPO_DIR: repoDir,
+    }, () => captureStdout(() => setup(repoDir, docsUrl)));
+
+    assert.isTrue(result.result);
+    assert.include(result.output, `symlinked binaries into ${binDir}`);
+    assert.include(result.output, '😎 ballin!');
+    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
+  });
+
+  it('stops before setup work when the command directory is missing from PATH', () => {
+    installConfigSources();
+
+    const result = withEnv({
+      HOME: path.join(testDir, 'home'),
+      PATH: path.join(testDir, 'other-bin'),
+    }, () => captureStdout(() => setup(repoDir, docsUrl)));
+
+    assert.isFalse(result.result);
+    assert.include(result.output, `${binDir} doesn't seem to be in your path.`);
+    assert.include(result.output, `export PATH="${binDir}:$PATH"`);
+  });
+
+  it('creates a new secret Gist through the setup CLI when no backup is configured', () => {
+    installConfigSources();
+    installGistConfigCommand();
+    installFakeGhCommand();
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'setup',
+      repoDir,
+      docsUrl,
+    ], {
+      encoding: 'utf8',
+      input: '\nn\n',
+      env: {
+        ...process.env,
+        HOME: path.join(testDir, 'home'),
+        PATH: binDir,
+        FAKE_COMMAND_LOG: commandLogPath,
+        FAKE_GH_AUTH_STATUS: '0',
+        TEST_DIR: testDir,
+        TEST_REPO_DIR: repoDir,
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
+    assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
+    assert.include(commandLog(), 'ballin_config:set gu.id new-gist-id\n');
+    assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
   });
 });
