@@ -67,8 +67,7 @@ them before continuing.
 
 ## Analytics
 
-`ballin-scripts` can send anonymous command analytics to help understand which
-tools are used and whether they succeed.
+`ballin-scripts` can send anonymous usage analytics.
 
 Disable analytics persistently:
 
