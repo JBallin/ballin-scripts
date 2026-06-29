@@ -60,6 +60,7 @@ if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
   fi
   if [ "$1" = 'setup-analytics' ]; then
     repo_dir="$2"
+    docs_url="$3"
     config_json=$(<"$repo_dir/ballin.config.json")
     case "$config_json" in
       *'"enabled":"false"'*) exit 0 ;;
@@ -70,6 +71,7 @@ if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
     mkdir -p "$repo_dir/.analytics"
     printf '%s\\n' '826f9faa-9995-4f66-a01b-73b4f7aebdf1' > "$repo_dir/.analytics/install-id"
     printf '%s\\n' 'ballin-scripts collects minimal anonymous active-install analytics after this notice.'
+    printf '%s\\n' "Details: $docs_url"
     exit 0
   fi
   if [ "$1" != 'symlink-binaries' ]; then

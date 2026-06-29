@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const {
   analyticsNotice,
+  analyticsNoticeFor,
 } = require('../commands/analytics.ts');
 const {
   configure,
@@ -296,13 +297,14 @@ describe('install setup', () => {
       installSetupPath,
       'setup-analytics',
       repoDir,
+      docsUrl,
     ], {
       encoding: 'utf8',
       env: childEnv,
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, analyticsNotice);
+    assert.include(result.stdout, analyticsNoticeFor(docsUrl));
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 

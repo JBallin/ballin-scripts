@@ -54,5 +54,5 @@ The installer creates a random local install ID under `.analytics/`. The
 backend hashes install IDs before storage, stores daily install rows plus
 aggregate command/version/Node/OS counts, and deletes rows older than 395 days.
 
-Production sends stay disabled until backend deployment, abuse controls, and
-final payload review are complete.
+Events are sent only when analytics are enabled and the CLI is configured with
+an analytics endpoint and token.

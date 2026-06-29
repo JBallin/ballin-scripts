@@ -53,6 +53,7 @@ type CommandAnalyticsRuntime = AnalyticsRuntime & {
 
 type AnalyticsInstallIdOptions = {
   analyticsConfig?: AnalyticsConfig;
+  docsUrl?: string;
   env?: NodeJS.ProcessEnv;
   generateInstallId?: () => string;
   installIdPath?: string;
@@ -76,14 +77,14 @@ const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const allowedOs = new Set(['darwin', 'linux', 'win32']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const analyticsNotice = [
+const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
   'ballin-scripts collects minimal anonymous active-install analytics after this notice.',
-  'Sent: schema version, random install ID, date bucket, command, status, duration bucket, app version, Node major, OS family, and coarse OS version.',
-  'Never sent: command arguments, usernames, paths, Gist IDs or URLs, dotfiles, package lists, editor settings or extensions, raw errors or output, environment variables, or config values.',
-  'Setup creates the install ID now, but sends nothing during install. CI never sends analytics; failures never affect commands. Install IDs are backend-hashed; rows older than 395 days are deleted.',
   'Disable: ballin_config set analytics.enabled false',
   'Or for this environment: BALLIN_NO_ANALYTICS=1',
+  `Details: ${docsUrl}`,
 ].join('\n');
+const analyticsNotice = analyticsNoticeFor();
 
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 const defaultRepoDir = path.join(__dirname, '..');
@@ -149,7 +150,7 @@ const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): stri
     return existingInstallId;
   }
 
-  options.noticeWriter?.(analyticsNotice);
+  options.noticeWriter?.(analyticsNoticeFor(options.docsUrl));
   const installId = (options.generateInstallId ?? crypto.randomUUID)();
   return writeLocalInstallId(installId, installIdPath) ? installId : null;
 };
@@ -334,6 +335,7 @@ const runWithCommandAnalytics = (
 module.exports = {
   analyticsDisabledByEnv,
   analyticsNotice,
+  analyticsNoticeFor,
   buildAnalyticsPayload,
   durationBucketFromMs,
   ensureAnalyticsInstallId,

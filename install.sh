@@ -4,6 +4,7 @@ printf '%s\n' "🏀 let's ball..."
 repo_dir="$HOME/.ballin-scripts"
 ballin_config="$repo_dir/bin/ballin_config"
 docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md'
+analytics_docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md'
 required_node_version='24.12'
 
 ################################## CLONE REPO ##################################
@@ -196,7 +197,7 @@ fi
 
   ############################## ANALYTICS SETUP ###############################
   if [ -f "$repo_dir/commands/install_setup.ts" ]; then
-    node "$repo_dir/commands/install_setup.ts" setup-analytics "$repo_dir" || :
+    node "$repo_dir/commands/install_setup.ts" setup-analytics "$repo_dir" "$analytics_docs_url" || :
   fi
 
   ############################## SYMLINK BINARIES ##############################
