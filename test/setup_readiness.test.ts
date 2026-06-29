@@ -1,5 +1,4 @@
 const { assert } = require('chai');
-const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -25,8 +24,6 @@ type FakeRunResult = {
   stderr: string;
   error?: Error;
 };
-
-const installSetupPath = path.join(__dirname, '..', 'commands', 'install_setup.ts');
 
 describe('setup readiness', () => {
   let tempDir: string;
@@ -211,30 +208,5 @@ describe('setup readiness', () => {
     assert.equal(checkById(authFailed, 'gu.auth').status, 'warn');
     assert.equal(authFailed.status, 'warn');
     assert.deepEqual(commandLog, ['gh auth status --hostname example.test']);
-  });
-
-  it('exposes readiness JSON through the install setup developer CLI', () => {
-    const result = spawnSync(process.execPath, [
-      installSetupPath,
-      'readiness',
-      repoDir,
-    ], {
-      encoding: 'utf8',
-      env: {
-        PATH: binDir,
-      },
-    });
-    const supportResult = spawnSync(process.execPath, [
-      installSetupPath,
-      'supports-command',
-      'readiness',
-    ], {
-      encoding: 'utf8',
-    });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stderr, '');
-    assert.equal(JSON.parse(result.stdout).checks[0].id, 'runtime.node');
-    assert.equal(supportResult.status, 0, supportResult.stderr);
   });
 });

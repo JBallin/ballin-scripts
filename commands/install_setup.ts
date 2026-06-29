@@ -9,9 +9,6 @@ const {
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
-const {
-  collectSetupReadiness,
-} = require('./setup_readiness.ts');
 
 const backupMarker = '### Backup of your dev environment\n'
   + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n'
@@ -39,7 +36,6 @@ const stripTrailingNewlines = (text: string): string => text.replace(/[\r\n]+$/u
 const supportedCommands = new Set([
   'configure',
   'gist',
-  'readiness',
   'setup',
   'setup-analytics',
   'symlink-binaries',
@@ -449,11 +445,6 @@ const runInstallSetupCli = (): void => {
     return;
   }
 
-  if (command === 'readiness' && repoDir) {
-    writeStdoutLine(JSON.stringify(collectSetupReadiness({ repoDir }), null, 2));
-    return;
-  }
-
   if (command === 'setup' && repoDir && option) {
     process.exitCode = setup(repoDir, option, process.argv[5]) ? 0 : 1;
     return;
@@ -470,7 +461,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|gist|readiness|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [gu-host-existed]');
+    writeStdoutLine('Usage: install_setup.ts <configure|gist|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [gu-host-existed]');
     process.exitCode = 1;
     return;
   }
