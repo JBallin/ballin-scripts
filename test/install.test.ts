@@ -69,7 +69,7 @@ if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
     fi
     mkdir -p "$repo_dir/.analytics"
     printf '%s\\n' '826f9faa-9995-4f66-a01b-73b4f7aebdf1' > "$repo_dir/.analytics/install-id"
-    printf '%s\\n' 'ballin-scripts collects minimal anonymous command analytics.'
+    printf '%s\\n' 'ballin-scripts collects minimal anonymous active-install analytics after this notice.'
     exit 0
   fi
   if [ "$1" != 'symlink-binaries' ]; then
