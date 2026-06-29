@@ -68,13 +68,8 @@ them before continuing.
 ## Analytics
 
 `ballin-scripts` can send minimal anonymous active-install analytics after the
-installer shows a first-run notice. The goal is maintenance visibility: whether
-there are active installs, which top-level commands are used, and whether those
-commands succeed or fail.
-
-Analytics are enabled after the notice unless disabled by config, environment,
-or CI detection. Analytics failures are ignored and never change command output,
-side effects, or exit status.
+installer shows a first-run notice. It is for maintenance visibility: active
+installs, top-level command usage, and command success or failure.
 
 Disable analytics persistently:
 
@@ -88,12 +83,11 @@ Disable analytics for one environment:
 BALLIN_NO_ANALYTICS=1
 ```
 
-CI environments never send analytics.
-
-The local installer creates a random install ID under the checkout's
-`.analytics/` directory when analytics are enabled. That ID lets the backend
-count active installs across days. The backend hashes the install ID before
-storage.
+Analytics are enabled after the notice unless disabled by config, environment,
+or CI detection. CI never sends analytics. Analytics failures are ignored and
+never change command output, side effects, or exit status. The installer creates
+a random local install ID under `.analytics/` so the backend can count active
+installs across days; the backend hashes it before storage.
 
 Allowed event fields:
 
@@ -114,12 +108,11 @@ Analytics never send command arguments, usernames, local paths, Gist IDs or
 URLs, dotfile contents, package lists, editor settings or extensions, raw
 errors, command output, environment variables, or config values.
 
-The planned backend is a small Cloudflare Worker with D1 storage. It stores
+The planned backend is a small Cloudflare Worker with D1. It stores
 server-hashed daily install IDs and aggregate command, status, duration,
-version, Node, and OS counts, then deletes rows older than 395 days. The
-production endpoint is not enabled until the backend deployment, abuse controls,
-and final payload review are complete. See the
-[analytics backend notes](analytics-backend.md) for deployment details.
+version, Node, and OS counts, then deletes rows older than 395 days. Production
+sends stay disabled until deployment, abuse controls, and final payload review
+are complete. See the [analytics backend notes](analytics-backend.md).
 
 ## `up` settings
 

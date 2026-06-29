@@ -12,11 +12,10 @@ CLI.
 
 The CLI client and Worker skeleton are present, but production analytics sends
 are still disabled until the endpoint and token are configured in the client.
-Before enabling them, re-check the first-run notice and
-[optional capabilities guide](optional-capabilities.md#analytics) against the
-implemented payload and confirm the Worker deployment, D1 binding, migrations,
+Before enabling them, confirm the Worker deployment, D1 binding, migrations,
 secrets, retention cleanup, and Cloudflare-side rate limiting or equivalent
-abuse controls.
+abuse controls. Also re-check the implemented payload against the first-run
+notice and [optional capabilities guide](optional-capabilities.md#analytics).
 
 ## Why Cloudflare Worker and D1
 
