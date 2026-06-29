@@ -112,7 +112,9 @@ The planned backend is a small Cloudflare Worker with D1. It stores
 server-hashed daily install IDs and aggregate command, status, duration,
 version, Node, and OS counts, then deletes rows older than 395 days. Production
 sends stay disabled until deployment, abuse controls, and final payload review
-are complete. See the [analytics backend notes](analytics-backend.md).
+are complete; that follow-up is tracked in
+[#185](https://github.com/JBallin/ballin-scripts/issues/185). See the
+[analytics backend notes](analytics-backend.md).
 
 ## `up` settings
 
