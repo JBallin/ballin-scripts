@@ -4,7 +4,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
+  analyticsNotice,
+} = require('../commands/analytics.ts');
+const {
   configure,
+  setupAnalytics,
   symlinkBinaries,
 } = require('../commands/install_setup.ts');
 
@@ -17,6 +21,7 @@ describe('install setup', () => {
   let sourceBinDir: string;
   let binDir: string;
   const docsUrl = 'https://example.test/docs';
+  const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 
   const withoutStdout = (action: () => boolean): boolean => {
     const originalWrite = process.stdout.write;
@@ -25,6 +30,65 @@ describe('install setup', () => {
       return action();
     } finally {
       process.stdout.write = originalWrite;
+    }
+  };
+
+  const captureStdout = (action: () => boolean): { output: string; result: boolean } => {
+    const originalWrite = process.stdout.write;
+    let output = '';
+    process.stdout.write = ((chunk: string) => {
+      output += chunk;
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const result = action();
+      return { output, result };
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+  };
+
+  const installIdPath = () => path.join(repoDir, '.analytics', 'install-id');
+
+  const readInstallId = () => fs.readFileSync(installIdPath(), 'utf8');
+
+  const withEnv = (env: NodeJS.ProcessEnv, action: () => { output: string; result: boolean }) => {
+    const previousValues = new Map<string, string | undefined>();
+    Object.keys(env).forEach((key) => {
+      previousValues.set(key, process.env[key]);
+      process.env[key] = env[key];
+    });
+    try {
+      return action();
+    } finally {
+      previousValues.forEach((value, key) => {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      });
+    }
+  };
+
+  const withoutAnalyticsOptOutEnv = (action: () => { output: string; result: boolean }) => {
+    const previousCi = process.env.CI;
+    const previousNoAnalytics = process.env.BALLIN_NO_ANALYTICS;
+    delete process.env.CI;
+    delete process.env.BALLIN_NO_ANALYTICS;
+    try {
+      return action();
+    } finally {
+      if (previousCi === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = previousCi;
+      }
+      if (previousNoAnalytics === undefined) {
+        delete process.env.BALLIN_NO_ANALYTICS;
+      } else {
+        process.env.BALLIN_NO_ANALYTICS = previousNoAnalytics;
+      }
     }
   };
 
@@ -75,6 +139,16 @@ describe('install setup', () => {
     );
   });
 
+  it('does not create a local install ID while creating config', () => {
+    installConfigSources();
+
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => configure(repoDir, docsUrl)));
+
+    assert.isTrue(result);
+    assert.notInclude(output, analyticsNotice);
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
   it('runs config creation through the setup CLI', () => {
     installConfigSources();
 
@@ -105,6 +179,92 @@ describe('install setup', () => {
     );
   });
 
+  it('shows the analytics notice and creates a local install ID for enabled config', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'true',
+      },
+    }));
+
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+
+    assert.isTrue(result);
+    assert.include(output, analyticsNotice);
+    assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
+  });
+
+  it('does not repeat the analytics notice when a local install ID already exists', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'true',
+      },
+    }));
+    fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
+    fs.writeFileSync(installIdPath(), `${fixedInstallId}\n`, 'utf8');
+
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+
+    assert.isTrue(result);
+    assert.notInclude(output, analyticsNotice);
+    assert.equal(readInstallId(), `${fixedInstallId}\n`);
+  });
+
+  it('does not create a local install ID when analytics are disabled', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'false',
+      },
+    }));
+
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+
+    assert.isTrue(result);
+    assert.notInclude(output, analyticsNotice);
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
+  it('does not create a local install ID when analytics are disabled by environment', () => {
+    [
+      { BALLIN_NO_ANALYTICS: '1' },
+      { CI: 'true' },
+    ].forEach((env) => {
+      fs.rmSync(installIdPath(), { force: true });
+      installConfigSources();
+      fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+        analytics: {
+          enabled: 'true',
+        },
+      }));
+
+      const { output, result } = withEnv(env, () => captureStdout(() => setupAnalytics(repoDir)));
+
+      assert.isTrue(result);
+      assert.notInclude(output, analyticsNotice);
+      assert.isFalse(fs.existsSync(installIdPath()));
+    });
+  });
+
+  it('replaces an invalid local install ID during eligible analytics setup', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'true',
+      },
+    }));
+    fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
+    fs.writeFileSync(installIdPath(), 'not-a-uuid\n', 'utf8');
+
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+
+    assert.isTrue(result);
+    assert.include(output, analyticsNotice);
+    assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
+    assert.notEqual(readInstallId(), 'not-a-uuid\n');
+  });
+
   it('runs the symlink step through the setup CLI', () => {
     const result = spawnSync(process.execPath, [
       installSetupPath,
@@ -119,6 +279,31 @@ describe('install setup', () => {
     assert.include(result.stdout, `symlinked binaries into ${binDir}`);
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+  });
+
+  it('runs analytics setup through the setup CLI', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: {
+        enabled: 'true',
+      },
+    }));
+    const childEnv = { ...process.env };
+    delete childEnv.CI;
+    delete childEnv.BALLIN_NO_ANALYTICS;
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'setup-analytics',
+      repoDir,
+    ], {
+      encoding: 'utf8',
+      env: childEnv,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, analyticsNotice);
+    assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 
   it('replaces existing command symlinks', () => {

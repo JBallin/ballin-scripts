@@ -1,9 +1,38 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  ensureAnalyticsInstallId,
+} = require('./analytics.ts');
+const {
   runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
+
+type ConfigObject = { [key: string]: unknown };
+
+const isConfigObject = (value: unknown): value is ConfigObject => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as ConfigObject;
+    const analyticsConfig = isConfigObject(config.analytics) ? config.analytics : undefined;
+    ensureAnalyticsInstallId({
+      analyticsConfig,
+      env: process.env,
+      repoDir,
+      noticeWriter: writeStdoutLine,
+    });
+  } catch {
+    // Analytics setup must never block install or update.
+  }
+};
+
+const setupAnalytics = (repoDir: string): boolean => {
+  setupAnalyticsInstallId(repoDir, path.join(repoDir, 'ballin.config.json'));
+  return true;
+};
 
 const configure = (repoDir: string, docsUrl: string): boolean => {
   const configPath = path.join(repoDir, 'ballin.config.json');
@@ -88,8 +117,13 @@ const runInstallSetupCli = (): void => {
     return;
   }
 
+  if (command === 'setup-analytics' && repoDir) {
+    process.exitCode = setupAnalytics(repoDir) ? 0 : 1;
+    return;
+  }
+
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|symlink-binaries> <repo-dir> <docs-url|bin-dir>');
+    writeStdoutLine('Usage: install_setup.ts <configure|symlink-binaries|setup-analytics> <repo-dir> [docs-url|bin-dir]');
     process.exitCode = 1;
     return;
   }
@@ -105,5 +139,6 @@ if (require.main === module) {
 module.exports = {
   configure,
   runInstallSetupCli,
+  setupAnalytics,
   symlinkBinaries,
 };

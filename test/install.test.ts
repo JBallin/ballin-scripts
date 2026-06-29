@@ -58,6 +58,20 @@ if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
     fi
     exit "$FAKE_NODE_STATUS"
   fi
+  if [ "$1" = 'setup-analytics' ]; then
+    repo_dir="$2"
+    config_json=$(<"$repo_dir/ballin.config.json")
+    case "$config_json" in
+      *'"enabled":"false"'*) exit 0 ;;
+    esac
+    if [ "$BALLIN_NO_ANALYTICS" = '1' ] || [ -n "$CI" ]; then
+      exit 0
+    fi
+    mkdir -p "$repo_dir/.analytics"
+    printf '%s\\n' '826f9faa-9995-4f66-a01b-73b4f7aebdf1' > "$repo_dir/.analytics/install-id"
+    printf '%s\\n' 'ballin-scripts collects minimal anonymous command analytics.'
+    exit 0
+  fi
   if [ "$1" != 'symlink-binaries' ]; then
     exit 2
   fi
@@ -119,7 +133,14 @@ case "$1:$2" in
     ;;
   set:gu.id)
     printf '%s\\n' "$3" > "$gist_id_file"
-    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"%s"}}\\n' "$3" "$configured_host" > "$HOME/.ballin-scripts/ballin.config.json"
+    analytics_json=''
+    if [ -f "$HOME/.ballin-scripts/ballin.config.json" ]; then
+      config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
+      case "$config_json" in
+        *'"analytics":{"enabled":"false"}'*) analytics_json=',"analytics":{"enabled":"false"}' ;;
+      esac
+    fi
+    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"%s"}%s}\\n' "$3" "$configured_host" "$analytics_json" > "$HOME/.ballin-scripts/ballin.config.json"
     printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
     ;;
 esac
@@ -151,7 +172,7 @@ case "$1:$2" in
       exit 0
     fi
     if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:ballin_config' ]; then
-      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":null,"host":"github.example.test"}}'
+      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":null,"host":"github.example.test"},"analytics":{"enabled":"false"}}'
       exit 0
     fi
     exit 2
@@ -434,6 +455,8 @@ exit "$FAKE_NODE_STATUS"
     assert.equal(restoredConfig.up.gu, 'true');
     assert.equal(restoredConfig.gu.id, 'returning-gist-id');
     assert.equal(restoredConfig.gu.host, 'github.example.test');
+    assert.equal(restoredConfig.analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(path.join(repoDir, '.analytics', 'install-id')));
   });
 
   it('rejects readable returning Gists without the backup marker', () => {

@@ -10,5 +10,8 @@
   "gu": {
     "id": null,
     "host": "github.com"
+  },
+  "analytics": {
+    "enabled": "true"
   }
 }
