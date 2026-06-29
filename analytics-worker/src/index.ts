@@ -254,10 +254,6 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   if (request.method !== 'POST') {
     return emptyResponse(405);
   }
-  const rateLimitedResponse = await rateLimitEventRequest(env);
-  if (rateLimitedResponse) {
-    return rateLimitedResponse;
-  }
   if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
     return jsonResponse(400, { error: 'content-type must be application/json' });
   }
@@ -269,6 +265,10 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   }
   if (request.headers.get(ingestTokenHeader) !== env.INGEST_TOKEN) {
     return emptyResponse(401);
+  }
+  const rateLimitedResponse = await rateLimitEventRequest(env);
+  if (rateLimitedResponse) {
+    return rateLimitedResponse;
   }
   const body = await request.text();
   if (new TextEncoder().encode(body).byteLength > maxBodyBytes) {

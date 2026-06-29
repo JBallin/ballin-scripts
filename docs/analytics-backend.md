@@ -4,9 +4,9 @@
 analytics. The backend records only the minimal signals needed for active
 installs, top-level command usage, and command success or failure.
 
-The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). It is
-not deployed by default and does not require a Cloudflare account to work on the
-CLI.
+The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). Its
+package README covers Worker setup commands. It is not deployed by default and
+does not require a Cloudflare account to work on the CLI.
 
 ## Production Setup
 
