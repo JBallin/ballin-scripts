@@ -281,6 +281,13 @@ describe('config', () => {
   });
 
   describe('updateConfig', () => {
+    const updateConfigPath = path.join(__dirname, '..', 'config', 'updateConfig.ts');
+    const runUpdateConfig = () => spawnSync(process.execPath, [updateConfigPath], {
+      cwd: path.join(__dirname, '..'),
+      encoding: 'utf8',
+      env: process.env,
+    });
+
     it('updates the isolated fixture when required directly', () => {
       fs.writeFileSync(configPath, '{}', 'utf8');
 
@@ -297,11 +304,7 @@ describe('config', () => {
     it('updates the isolated fixture when invoked through updateConfig.ts', () => {
       fs.writeFileSync(configPath, '{}', 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.deepEqual(fetchConfig().configObj, defaultConfig);
@@ -314,15 +317,39 @@ describe('config', () => {
         },
       }), 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.deepEqual(fetchConfig().configObj.analytics, {
         enabled: 'false',
+      });
+    });
+
+    [
+      {
+        name: 'gu: null',
+        config: { ...defaultConfig, gu: null },
+        key: 'gu',
+      },
+      {
+        name: 'gu: "bad"',
+        config: { ...defaultConfig, gu: 'bad' },
+        key: 'gu',
+      },
+      {
+        name: 'analytics: false',
+        config: { ...defaultConfig, analytics: false },
+        key: 'analytics',
+      },
+    ].forEach(({ name, config, key }) => {
+      it(`replaces malformed object-shaped config section ${name}`, () => {
+        fs.writeFileSync(configPath, JSON.stringify(config), 'utf8');
+
+        const result = runUpdateConfig();
+
+        assert.equal(result.status, 0);
+        assert.deepEqual(fetchConfig().configObj, defaultConfig);
+        assert.include(result.stdout, `${key}: ${JSON.stringify(defaultConfig[key])}`);
       });
     });
 
@@ -336,11 +363,7 @@ describe('config', () => {
         },
       }), 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.equal(getConfig('gu.host'), 'github.example.test');
@@ -357,11 +380,7 @@ describe('config', () => {
         },
       }), 'utf8');
 
-      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
-        cwd: path.join(__dirname, '..'),
-        encoding: 'utf8',
-        env: process.env,
-      });
+      const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
       assert.equal(getConfig('gu.host'), 'github.com');
