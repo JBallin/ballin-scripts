@@ -67,26 +67,17 @@ them before continuing.
 
 ## Analytics
 
-After showing an install/update notice, `ballin-scripts` can send minimal
-anonymous command analytics. Setup creates a local anonymous install ID without
-sending an event; later command events include that ID so the backend can count
-active installs and hash it before storage. Events never include arguments,
-paths, usernames, Gist IDs, dotfiles, package lists, raw errors, environment
-values, arbitrary config values, or the local install ID file.
+`ballin-scripts` can send minimal anonymous command analytics after showing an
+install/update notice. Setup creates a local anonymous install ID, but does not
+send an event. Analytics do not include command arguments, paths, usernames,
+Gist IDs, dotfiles, package lists, raw errors, environment values, arbitrary
+config values, or the local install ID file.
 
 Disable analytics persistently:
 
 ```shell
 ballin_config set analytics.enabled false
 ```
-
-Disable analytics for one environment:
-
-```shell
-BALLIN_NO_ANALYTICS=1
-```
-
-Analytics are also disabled automatically in CI.
 
 ## `up` settings
 
