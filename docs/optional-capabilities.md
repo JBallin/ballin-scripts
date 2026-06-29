@@ -111,8 +111,7 @@ command output, environment variables, or config values.
 Backend: a small Cloudflare Worker with D1 stores server-hashed daily install
 IDs plus aggregate command, status, duration, version, Node, and OS counts. Rows
 older than 395 days are deleted. Production sends stay disabled until
-deployment, abuse controls, and final payload review are complete in
-[#185](https://github.com/JBallin/ballin-scripts/issues/185). See the
+deployment, abuse controls, and final payload review are complete. See the
 [analytics backend notes](analytics-backend.md).
 
 ## `up` settings

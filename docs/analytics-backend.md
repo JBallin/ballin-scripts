@@ -10,11 +10,11 @@ CLI.
 
 ## Current Production Status
 
-The CLI client and Worker skeleton are present, but production sends stay
-disabled until [#185](https://github.com/JBallin/ballin-scripts/issues/185)
-configures the endpoint and token. Before enabling them, confirm the Worker
-deployment, D1 binding, migrations, secrets, retention cleanup, and abuse
-controls, then re-check the implemented payload against the first-run notice and
+Production sends stay disabled until
+[#185](https://github.com/JBallin/ballin-scripts/issues/185) configures the
+endpoint and token. Before enabling them, confirm deployment, D1 binding,
+migrations, secrets, retention cleanup, abuse controls, and payload alignment
+with the first-run notice and
 [optional capabilities guide](optional-capabilities.md#analytics).
 
 ## Why Cloudflare Worker and D1

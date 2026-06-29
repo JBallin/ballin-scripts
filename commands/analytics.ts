@@ -77,9 +77,10 @@ const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', 
 const allowedOs = new Set(['darwin', 'linux', 'win32']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const analyticsNotice = [
-  'ballin-scripts collects minimal anonymous active-install analytics after this notice to understand active installs, top-level command usage, and success or failure.',
-  'Setup creates a random local install ID now; no analytics are sent during install. Later events include only: schema version, install ID, date bucket, command, status, duration bucket, app version, Node major, OS family, and coarse OS version.',
-  'The backend hashes the install ID and deletes analytics rows older than 395 days.',
+  'ballin-scripts collects minimal anonymous active-install analytics after this notice: active installs, top-level command usage, and success or failure.',
+  'Setup creates a random local install ID now; no analytics are sent during install.',
+  'Later events include only: schema version, install ID, date bucket, command, status, duration bucket, app version, Node major, OS family, and coarse OS version.',
+  'The backend hashes install IDs and deletes analytics rows older than 395 days.',
   'Never sent: command arguments, usernames, paths, Gist IDs or URLs, dotfiles, package lists, editor settings or extensions, raw errors, command output, environment variables, or config values.',
   'CI never sends analytics; analytics failures never affect command behavior.',
   'Disable: ballin_config set analytics.enabled false',
