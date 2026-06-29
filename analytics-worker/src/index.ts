@@ -8,6 +8,10 @@ type D1PreparedStatement = {
   run: () => Promise<unknown>;
 };
 
+type RateLimit = {
+  limit: (options: { key: string }) => Promise<{ success: boolean }>;
+};
+
 type ExecutionContext = {
   waitUntil: (promise: Promise<unknown>) => void;
 };
@@ -19,6 +23,7 @@ type ScheduledController = {
 
 type Env = {
   ANALYTICS_DB: D1Database;
+  ANALYTICS_RATE_LIMITER: RateLimit;
   INSTALL_ID_HASH_SECRET: string;
   INGEST_TOKEN: string;
 };
@@ -72,6 +77,7 @@ const ingestTokenHeader = 'x-ballin-analytics-token';
 const maxBodyBytes = 2048;
 const retentionDays = 395;
 const allowedDateSkewDays = 1;
+const eventRateLimitKey = 'v1-events';
 
 const jsonResponse = (status: number, body: { error: string }): Response => (
   new Response(JSON.stringify(body), {
@@ -239,9 +245,18 @@ const storeAnalyticsEvent = async (env: Env, event: AnalyticsEvent): Promise<voi
   ]);
 };
 
+const rateLimitEventRequest = async (env: Env): Promise<Response | null> => {
+  const { success } = await env.ANALYTICS_RATE_LIMITER.limit({ key: eventRateLimitKey });
+  return success ? null : emptyResponse(429);
+};
+
 const handleEventRequest = async (request: Request, env: Env): Promise<Response> => {
   if (request.method !== 'POST') {
     return emptyResponse(405);
+  }
+  const rateLimitedResponse = await rateLimitEventRequest(env);
+  if (rateLimitedResponse) {
+    return rateLimitedResponse;
   }
   if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
     return jsonResponse(400, { error: 'content-type must be application/json' });
