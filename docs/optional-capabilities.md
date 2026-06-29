@@ -77,12 +77,6 @@ Disable persistently:
 ballin_config set analytics.enabled false
 ```
 
-Disable for one environment:
-
-```shell
-BALLIN_NO_ANALYTICS=1
-```
-
 ## `up` settings
 
 Change a setting with `ballin_config set up.<name> true` or

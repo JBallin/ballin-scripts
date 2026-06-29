@@ -56,3 +56,5 @@ aggregate command/version/Node/OS counts, and deletes rows older than 395 days.
 
 Events are sent only when analytics are enabled and the CLI is configured with
 an analytics endpoint and token.
+
+For deployment details, see [Analytics backend](analytics-backend.md).
