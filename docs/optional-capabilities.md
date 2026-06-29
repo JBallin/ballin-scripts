@@ -68,8 +68,7 @@ them before continuing.
 ## Analytics
 
 After an install/update notice, `ballin-scripts` can send anonymous command
-analytics: command name, status, coarse duration, version/platform, date, and an
-anonymous install ID that is hashed before storage.
+analytics to help understand which tools are used and whether they succeed.
 
 Disable analytics persistently:
 
