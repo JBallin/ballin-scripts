@@ -45,6 +45,12 @@ if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
   fi
   printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
   shift
+  if [ "$1" = 'supports-command' ]; then
+    case "$2" in
+      configure|gist|setup-analytics|symlink-binaries) exit 0 ;;
+      *) exit 1 ;;
+    esac
+  fi
   if [ "$1" = 'configure' ]; then
     repo_dir="$2"
     docs_url="$3"
@@ -404,7 +410,7 @@ esac
     assert.notInclude(commandLog(), 'gh:gist');
   });
 
-  it('stops before Gist setup when the typed setup entrypoint is missing from an existing checkout', () => {
+  it('uses Bash Gist setup when the typed setup entrypoint is missing from an existing checkout', () => {
     installBaseCommands();
     installConfigCommand();
     installFakeGhCommand();
@@ -412,11 +418,12 @@ esac
 
     const result = runInstall();
 
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created 'ballin.config.json'");
-    assert.include(result.stdout, 'Unable to configure Gist backup');
-    assert.notInclude(result.stdout, `symlinked binaries into ${binDir}`);
-    assert.isFalse(fs.existsSync(path.join(binDir, 'ballin_config')));
+    assert.notInclude(result.stdout, 'Unable to configure Gist backup');
+    assert.include(result.stdout, `symlinked binaries into ${binDir}`);
+    assert.include(result.stdout, '😎 ballin!');
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
     assert.notInclude(commandLog(), 'node:install_setup');
   });
 
@@ -432,6 +439,12 @@ fi
 if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
   printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
   shift
+  if [ "$1" = 'supports-command' ]; then
+    case "$2" in
+      symlink-binaries) exit 0 ;;
+      *) exit 1 ;;
+    esac
+  fi
   if [ "$1" = 'symlink-binaries' ]; then
     repo_dir="$2"
     bin_dir="$3"
@@ -450,15 +463,16 @@ exit "$FAKE_NODE_STATUS"
 
     const result = runInstall();
 
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created 'ballin.config.json'");
     assert.deepEqual(
       JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
       JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
     );
     assert.include(commandLog(), 'node:install_setup');
-    assert.include(result.stdout, 'Unable to configure Gist backup');
-    assert.notInclude(result.stdout, `symlinked binaries into ${binDir}`);
+    assert.notInclude(result.stdout, 'Unable to configure Gist backup');
+    assert.include(result.stdout, `symlinked binaries into ${binDir}`);
+    assert.include(result.stdout, '😎 ballin!');
   });
 
   it('does not repeat unchanged setup guidance during an ordinary update', () => {

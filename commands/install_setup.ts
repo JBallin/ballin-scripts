@@ -32,6 +32,12 @@ const readPrompt = (prompt: string): string => {
 };
 
 const stripTrailingNewlines = (text: string): string => text.replace(/[\r\n]+$/u, '');
+const supportedCommands = new Set([
+  'configure',
+  'gist',
+  'setup-analytics',
+  'symlink-binaries',
+]);
 
 type ConfigObject = { [key: string]: unknown };
 
@@ -361,6 +367,11 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
 const runInstallSetupCli = (): void => {
   const [, , command, repoDir, option] = process.argv;
 
+  if (command === 'supports-command') {
+    process.exitCode = supportedCommands.has(repoDir) ? 0 : 1;
+    return;
+  }
+
   if (command === 'configure' && repoDir && option) {
     process.exitCode = configure(repoDir, option) ? 0 : 1;
     return;
@@ -383,7 +394,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|gist|symlink-binaries|setup-analytics> <repo-dir> [docs-url|bin-dir] [gu-host-existed]');
+    writeStdoutLine('Usage: install_setup.ts <configure|gist|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [gu-host-existed]');
     process.exitCode = 1;
     return;
   }

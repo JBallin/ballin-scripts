@@ -432,6 +432,26 @@ esac
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 
+  it('reports supported setup CLI commands', () => {
+    const supportedResult = spawnSync(process.execPath, [
+      installSetupPath,
+      'supports-command',
+      'gist',
+    ], {
+      encoding: 'utf8',
+    });
+    const unsupportedResult = spawnSync(process.execPath, [
+      installSetupPath,
+      'supports-command',
+      'old-command',
+    ], {
+      encoding: 'utf8',
+    });
+
+    assert.equal(supportedResult.status, 0, supportedResult.stderr);
+    assert.equal(unsupportedResult.status, 1);
+  });
+
   it('replaces existing command symlinks', () => {
     fs.mkdirSync(binDir, { recursive: true });
     fs.symlinkSync(path.join(testDir, 'old-ballin'), path.join(binDir, 'ballin'));
