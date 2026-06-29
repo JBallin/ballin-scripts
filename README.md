@@ -48,11 +48,10 @@ and tradeoffs.
 
 ## Fresh Mac setup
 
-On a new Mac, install `ballin-scripts` and point it at an existing backup Gist.
-The installer can adopt that Gist and restore saved `ballin_config` values,
-while the Gist snapshots provide the reference for recreating shell files, Git
-settings, package lists, editor settings, and other development-environment
-state.
+On a new Mac, install `ballin-scripts` and let the installer create the private
+backup Gist used by `gu`. Future snapshots provide the reference for recreating
+shell files, Git settings, package lists, editor settings, and other
+development-environment state.
 
 This is currently a backup and maintenance toolkit, not a full one-command
 machine restore system. The backed-up snapshots make rebuilds more repeatable
