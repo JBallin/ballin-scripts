@@ -95,6 +95,11 @@ case "$1:$2" in
       exit 2
     fi
     if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:.MyConfig.md' ]; then
+      if [ "$FAKE_MARKER_WITHOUT_TRAILING_NEWLINE" = '1' ]; then
+        printf '%s\\n' '### Backup of your dev environment'
+        printf '%s' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
+        exit 0
+      fi
       printf '%s\\n' '### Backup of your dev environment'
       printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
       printf '\\n'
@@ -388,6 +393,25 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
     assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
+    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
+  });
+
+  it('accepts an adopted backup marker without a trailing newline like Bash did', () => {
+    installConfigSources();
+    installGistConfigCommand();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({
+      env: { FAKE_MARKER_WITHOUT_TRAILING_NEWLINE: '1' },
+      input: '\ny\nreturning-gist-id\n',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
     assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
   });
 

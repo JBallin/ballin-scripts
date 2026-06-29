@@ -10,18 +10,25 @@ const backupMarker = '### Backup of your dev environment\n'
   + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n'
   + '\n';
 
-let inputLines: string[] | null = null;
-
 const readPrompt = (prompt: string): string => {
   process.stdout.write(prompt);
 
-  if (inputLines === null) {
-    inputLines = fs.readFileSync(0, 'utf8').split(/\r?\n/);
+  const input: string[] = [];
+  const buffer = Buffer.alloc(1);
+  while (fs.readSync(0, buffer, 0, 1, null) > 0) {
+    const character = buffer.toString('utf8');
+    if (character === '\n') {
+      break;
+    }
+    if (character !== '\r') {
+      input.push(character);
+    }
   }
 
-  const lines = inputLines as string[];
-  return lines.shift() ?? '';
+  return input.join('');
 };
+
+const stripTrailingNewlines = (text: string): string => text.replace(/[\r\n]+$/u, '');
 
 const configure = (repoDir: string, docsUrl: string): boolean => {
   const configPath = path.join(repoDir, 'ballin.config.json');
@@ -229,7 +236,10 @@ const configureGist = (repoDir: string, docsUrl: string, guHostExisted: boolean)
         cwd: repoDir,
       });
 
-      if (markerResult.status === 0 && markerResult.stdout === backupMarker) {
+      if (
+        markerResult.status === 0
+        && stripTrailingNewlines(markerResult.stdout) === stripTrailingNewlines(backupMarker)
+      ) {
         writeStdoutLine('\n👍 Storing your previous gist ID in your config:');
         if (!restoreAdoptedConfig(repoDir, docsUrl, guHost, gistId)) {
           return false;
