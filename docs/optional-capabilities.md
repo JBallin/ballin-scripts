@@ -71,13 +71,13 @@ them before continuing.
 installer shows a first-run notice. It is for maintenance visibility: active
 installs, top-level command usage, and command success or failure.
 
-Disable analytics persistently:
+Disable persistently:
 
 ```shell
 ballin_config set analytics.enabled false
 ```
 
-Disable analytics for one environment:
+Disable for one environment:
 
 ```shell
 BALLIN_NO_ANALYTICS=1
@@ -89,7 +89,7 @@ never change command output, side effects, or exit status. The installer creates
 a random local install ID under `.analytics/` so the backend can count active
 installs across days; the backend hashes it before storage.
 
-Allowed event fields:
+Sent fields:
 
 - schema version
 - random install ID
@@ -104,15 +104,14 @@ Allowed event fields:
 - OS family: `darwin`, `linux`, `win32`, or `unknown`
 - coarse OS version
 
-Analytics never send command arguments, usernames, local paths, Gist IDs or
-URLs, dotfile contents, package lists, editor settings or extensions, raw
-errors, command output, environment variables, or config values.
+Never sent: command arguments, usernames, local paths, Gist IDs or URLs,
+dotfile contents, package lists, editor settings or extensions, raw errors,
+command output, environment variables, or config values.
 
-The planned backend is a small Cloudflare Worker with D1. It stores
-server-hashed daily install IDs and aggregate command, status, duration,
-version, Node, and OS counts, then deletes rows older than 395 days. Production
-sends stay disabled until deployment, abuse controls, and final payload review
-are complete; that follow-up is tracked in
+Backend: a small Cloudflare Worker with D1 stores server-hashed daily install
+IDs plus aggregate command, status, duration, version, Node, and OS counts. Rows
+older than 395 days are deleted. Production sends stay disabled until
+deployment, abuse controls, and final payload review are complete in
 [#185](https://github.com/JBallin/ballin-scripts/issues/185). See the
 [analytics backend notes](analytics-backend.md).
 
