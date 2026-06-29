@@ -67,10 +67,9 @@ them before continuing.
 
 ## Analytics
 
-`ballin-scripts` can send minimal anonymous command analytics after showing an
-install/update notice. Events include the command name, status, coarse duration,
-app and system versions, date, and an anonymous install ID that is hashed before
-storage.
+After an install/update notice, `ballin-scripts` can send anonymous command
+analytics: command name, status, coarse duration, version/platform, date, and an
+anonymous install ID that is hashed before storage.
 
 Disable analytics persistently:
 
