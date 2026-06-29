@@ -91,7 +91,9 @@ rate limiting binding for `POST /v1/events`.
 
 ## Local Setup
 
-This repository does not require a live Cloudflare project yet. When ready:
+This repository does not require a live Cloudflare project yet. When ready, run
+these commands from `analytics-worker/`. If Wrangler is not installed globally,
+use `npx wrangler` in place of `wrangler`.
 
 1. Copy `wrangler.toml.example` to `wrangler.toml`.
 2. Create a D1 database:
