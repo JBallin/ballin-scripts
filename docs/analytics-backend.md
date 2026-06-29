@@ -8,6 +8,16 @@ The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). It is
 not deployed by default and does not require a Cloudflare account to work on the
 CLI.
 
+## Current Production Status
+
+The CLI client and Worker skeleton are present, but production analytics sends
+are still disabled until the endpoint and token are configured in the client.
+Before enabling them, re-check the first-run notice and
+[optional capabilities guide](optional-capabilities.md#analytics) against the
+implemented payload and confirm the Worker deployment, D1 binding, migrations,
+secrets, retention cleanup, and Cloudflare-side rate limiting or equivalent
+abuse controls.
+
 ## Why Cloudflare Worker and D1
 
 - The event schema is owned by this project and can reject anything outside the
@@ -52,4 +62,6 @@ Before enabling the CLI to send production events:
 - configure Cloudflare-side rate limiting or equivalent edge protection
 - deploy the Worker
 - configure the CLI endpoint in the client implementation
-- re-check that the client payload matches the documented allowlist
+- re-check that the client payload, first-run notice, and
+  `docs/optional-capabilities.md` analytics section match the documented
+  allowlist
