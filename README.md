@@ -7,7 +7,7 @@ with minimal manual setup. It backs up the files, package lists, editor settings
 and local configuration that define your setup, then automates routine updates.
 
 It is built for people who want a repeatable macOS development environment with
-low-friction maintenance.
+low-friction routine updates.
 
 Core commands:
 
@@ -30,13 +30,13 @@ when moving between Macs or rebuilding a development machine:
 See the [supported capabilities reference](docs/capabilities.md) for the exact
 snapshot files and update integrations.
 
-## Backup and maintenance behavior
+## Backup and update behavior
 
-The tools split backup from broader system maintenance:
+The tools split backup from broader system updates:
 
 - `gu` reads local development-environment state and uploads changed snapshots
   to the configured private Gist.
-- `up` runs maintenance tasks such as Homebrew upgrades, optional Node.js/npm
+- `up` runs update tasks such as Homebrew upgrades, optional Node.js/npm
   updates, optional macOS and App Store updates, optional `ballin-scripts`
   updates, and optional `gu` backups.
 - Installation adds the command shims to your shell path and configures the
@@ -53,7 +53,7 @@ backup Gist used by `gu`. Future snapshots provide the reference for recreating
 shell files, Git settings, package lists, editor settings, and other
 development-environment state.
 
-This is currently a backup and maintenance toolkit, not a full one-command
+This is currently a backup and update toolkit, not a full one-command
 machine restore system. The backed-up snapshots make rebuilds more repeatable
 and auditable.
 
@@ -117,8 +117,8 @@ No updates are available.
 
 ### Update with `up`
 
-`up` automates common maintenance tasks for a macOS development machine,
-including Homebrew maintenance, App Store and macOS updates, `ballin-scripts`
+`up` automates common update tasks for a macOS development machine,
+including Homebrew upgrades, App Store and macOS updates, `ballin-scripts`
 updates, optional Node.js/npm updates, and optional `gu` backups.
 
 ```shell
