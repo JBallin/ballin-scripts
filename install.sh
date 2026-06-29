@@ -2,7 +2,6 @@
 printf '%s\n' "🏀 let's ball..."
 
 repo_dir="$HOME/.ballin-scripts"
-ballin_config="$repo_dir/bin/ballin_config"
 docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md'
 analytics_docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md'
 required_node_version='24.12'
@@ -70,8 +69,11 @@ fi
 
 # Configuration must succeed before Gist credentials or command symlinks are touched.
 if [ -f "$repo_dir/commands/install_setup.ts" ] \
-  && node "$repo_dir/commands/install_setup.ts" configure "$repo_dir" "$docs_url"; then
-  :
+  && node "$repo_dir/commands/install_setup.ts" supports-command configure >/dev/null 2>&1; then
+  if ! node "$repo_dir/commands/install_setup.ts" configure "$repo_dir" "$docs_url"; then
+    printf '\n⚠️  ERROR: Unable to create or update ballin.config.json\n'
+    exit 1
+  fi
 else
   if ! (
     cd "$repo_dir/config"
@@ -98,101 +100,118 @@ else
   fi
 fi
 
+configure_gist_with_bash() (
+  cd "$repo_dir" || exit 1
+
+  ballin_config="$repo_dir/bin/ballin_config"
+  gu_host="$("$ballin_config" get gu.host)"
+  gu_id="$("$ballin_config" get gu.id)"
+
+  if [ -n "$BALLIN_GU_HOST" ]; then
+    "$ballin_config" set gu.host "$BALLIN_GU_HOST"
+    gu_host="$("$ballin_config" get gu.host)"
+  elif [ "$gu_id" = 'null' ] || [ "$gu_host_existed" = false ]; then
+    read -rp "🤔 What GitHub host should be used for Gist backups? [$gu_host] " input_host
+    if [ -n "$input_host" ]; then
+      "$ballin_config" set gu.host "$input_host"
+      gu_host="$("$ballin_config" get gu.host)"
+    fi
+  fi
+
+  export GH_HOST="$gu_host"
+
+  if [ ! -x "$(command -v gh)" ]; then
+    printf '\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.\n'
+    printf '\nInstall gh, authenticate it, then run this installer again.\n'
+    printf '\nSetup guide: %s\n' "$docs_url"
+    printf '\nRun after installing gh:\n  gh auth login --hostname %s\n' "$gu_host"
+    exit 1
+  fi
+
+  if ! gh auth status --hostname "$gu_host" > /dev/null 2>&1; then
+    printf '\n⚠️  ERROR: gh is not authenticated for %s.\n' "$gu_host"
+    printf '\nRun:\n  gh auth login --hostname %s\n' "$gu_host"
+    printf '\nThen run this installer again.\n'
+    exit 1
+  fi
+
+  if [ "$gu_id" != 'null' ]; then
+    exit 0
+  fi
+
+  gist_description='### Backup of your dev environment
+Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)
+'
+  expected_marker="$(printf '%s' "$gist_description")"
+  read -rp '🤔 Do you already have a ballin-scripts backup gist? [y/N] ' has_backup
+  if [ "$has_backup" = 'y' ] || [ "$has_backup" = 'Y' ]; then
+    printf '\n%s\n' 'Welcome Back!'
+    valid_gist_id=1
+    while [ "$valid_gist_id" = 1 ]; do
+      read -rp 'Enter your gist ID: ' gist_id
+      if [ "$(gh gist view "$gist_id" --raw --filename '.MyConfig.md' 2>/dev/null)" = "$expected_marker" ]; then
+        printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
+        previous_config='.ballin.config.restore.previous.tmp'
+        restore_config='.ballin.config.restore.tmp'
+        cp 'ballin.config.json' "$previous_config"
+        if gh gist view "$gist_id" --raw --filename ballin_config > "$restore_config"; then
+          cp "$restore_config" 'ballin.config.json'
+          if ! update_result=$(
+            cd "$repo_dir/config" || exit 1
+            node "$repo_dir/config/updateConfig.ts"
+          ); then
+            cp "$previous_config" 'ballin.config.json'
+            rm -f "$restore_config" "$previous_config"
+            exit 1
+          fi
+          printf '\n%s\n' '♻️  Restored ballin.config.json from your backup gist.'
+          if [ -n "$update_result" ]; then
+            printf '\n🙌 %s\n' "$update_result"
+            printf '\n👀 Docs: %s\n' "$docs_url"
+          fi
+        else
+          printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
+        fi
+        rm -f "$restore_config" "$previous_config"
+        "$ballin_config" set gu.id "$gist_id"
+        valid_gist_id=0
+      else
+        printf "\n⚠️  INVALID: Expected backup marker in gist '%s'.\n" "$gist_id"
+      fi
+    done
+  fi
+
+  if [ "$("$ballin_config" get gu.id)" = 'null' ]; then
+    printf '%s' "$gist_description" > '.MyConfig.md'
+    if ! gist_url="$(gh gist create '.MyConfig.md' --desc "$gist_description")"; then
+      rm -f '.MyConfig.md'
+      exit 1
+    fi
+    printf "\n💥 Created a secret gist titled '.MyConfig' at the following URL:\n%s\n" "$gist_url"
+    gist_id="${gist_url##*/}"
+    printf '\n%s\n' '🧳 Storing your new gist ID in your config...'
+    "$ballin_config" set gu.id "$gist_id"
+    rm -f '.MyConfig.md'
+    if [ -d '.gu-cache' ]; then
+      rm -rf '.gu-cache'
+      printf '\n%s\n' '🗑  Deleted existing .gu-cache folder'
+    fi
+  fi
+)
+
 
 #################################### GIST ####################################
-  if ! (
-    cd "$repo_dir" || exit
-    gu_host="$("$ballin_config" get gu.host)"
-    gu_id="$("$ballin_config" get gu.id)"
-    if [ -n "${BALLIN_GU_HOST:-}" ]; then
-      "$ballin_config" set gu.host "$BALLIN_GU_HOST"
-      gu_host="$("$ballin_config" get gu.host)"
-    elif [ "$gu_id" = 'null' ] || [ "$gu_host_existed" = false ]; then
-      echo ''
-      read -rp "🤔 What GitHub host should be used for Gist backups? [${gu_host}] " input_host
-      if [ -n "$input_host" ]; then
-        "$ballin_config" set gu.host "$input_host"
-        gu_host="$("$ballin_config" get gu.host)"
-      fi
-    fi
-    export GH_HOST="$gu_host"
-
-    if [ ! -x "$(command -v gh)" ]; then
-      printf '\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.\n'
-      printf '\nInstall gh, authenticate it, then run this installer again.\n'
-      printf '\nSetup guide: %s\n' "$docs_url"
-      printf '\nRun after installing gh:\n  gh auth login --hostname %s\n' "$gu_host"
+  if [ -f "$repo_dir/commands/install_setup.ts" ] \
+    && node "$repo_dir/commands/install_setup.ts" supports-command gist >/dev/null 2>&1; then
+    if ! node "$repo_dir/commands/install_setup.ts" gist "$repo_dir" "$docs_url" "$gu_host_existed"; then
+      printf '\n⚠️  ERROR: Unable to configure Gist backup\n'
       exit 1
-    elif ! gh auth status --hostname "$gu_host" > /dev/null 2>&1; then
-      printf '\n⚠️  ERROR: gh is not authenticated for %s.\n' "$gu_host"
-      printf '\nRun:\n  gh auth login --hostname %s\n' "$gu_host"
-      printf '\nThen run this installer again.\n'
-      exit 1
-    elif [ "$gu_id" = 'null' ]; then
-        l1='### Backup of your dev environment'
-        l2='Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
-        gist_description="$l1\n$l2\n"
-
-        echo ''
-        read -rp '🤔 Do you already have a ballin-scripts backup gist? [y/N] ' YN
-        if [[ $YN == 'y' || $YN == 'Y' ]]; then
-          unset YN
-          valid_gist_id=1
-          printf '\n%s\n' 'Welcome Back!'
-          while [ "$valid_gist_id" = 1 ]; do
-            read -rep 'Enter your gist ID: ' gist_id
-            if [ "$(gh gist view "$gist_id" --raw --filename '.MyConfig.md' 2>/dev/null)" = "$(printf '%b' "$gist_description")" ]; then
-              printf '\n%s\n' '👍 Storing your previous gist ID in your config:'
-              restore_config='.ballin.config.restore.tmp'
-              previous_config='.ballin.config.restore.previous.tmp'
-              cp 'ballin.config.json' "$previous_config"
-              if gh gist view "$gist_id" --raw --filename ballin_config > "$restore_config"; then
-                cp "$restore_config" 'ballin.config.json'
-                if ! update_result=$(node "$repo_dir/config/updateConfig.ts"); then
-                  cp "$previous_config" 'ballin.config.json'
-                  rm -f "$restore_config" "$previous_config"
-                  exit 1
-                fi
-                printf '\n%s\n' '♻️  Restored ballin.config.json from your backup gist.'
-                if [ -n "$update_result" ]; then
-                  printf '\n🙌 %s\n' "$update_result"
-                  printf '\n👀 Docs: %s\n' "$docs_url"
-                fi
-              else
-                printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
-              fi
-              rm -f "$restore_config" "$previous_config"
-              "$ballin_config" set gu.id "$gist_id"
-              valid_gist_id=0
-            else
-              printf "\n⚠️  INVALID: Expected backup marker in gist '%s'.\n" "$gist_id"
-            fi
-          done
-        fi
-        unset YN gist_id valid_gist_id
-
-        if [ "$("$ballin_config" get gu.id)" = 'null' ]; then
-          printf '%b' "$gist_description" > '.MyConfig.md'
-
-          gist_url=$(gh gist create '.MyConfig.md' --desc "$gist_description")
-          printf "\n💥 Created a secret gist titled '.MyConfig' at the following URL:\n%s\n" "$gist_url"
-
-          gist_id=${gist_url##*/}
-          printf '\n%s\n' '🧳 Storing your new gist ID in your config...'
-          "$ballin_config" set gu.id "$gist_id"
-
-          if [ -d '.gu-cache' ]; then
-            rm -rf '.gu-cache'
-            printf '\n%s\n' '🗑  Deleted existing .gu-cache folder'
-          fi
-
-          unset gist_url gist_id l1 l2 gist_description
-          rm '.MyConfig.md'
-        fi
     fi
-  ); then
-    printf '\n⚠️  ERROR: Unable to configure Gist backup\n'
-    exit 1
+  else
+    if ! configure_gist_with_bash; then
+      printf '\n⚠️  ERROR: Unable to configure Gist backup\n'
+      exit 1
+    fi
   fi
 
   ############################## ANALYTICS SETUP ###############################
