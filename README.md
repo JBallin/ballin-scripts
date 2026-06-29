@@ -7,7 +7,7 @@ with minimal manual setup. It backs up the files, package lists, editor settings
 and local configuration that define your setup, then automates routine updates.
 
 It is built for people who want a repeatable macOS development environment with
-low-friction routine updates.
+low-friction updates.
 
 Core commands:
 
