@@ -2,7 +2,6 @@
 printf '%s\n' "🏀 let's ball..."
 
 repo_dir="$HOME/.ballin-scripts"
-ballin_config="$repo_dir/bin/ballin_config"
 docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md'
 required_node_version='24.12'
 
