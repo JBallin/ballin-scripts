@@ -47,6 +47,10 @@ type AnalyticsRuntime = SenderOptions & {
   sender?: AnalyticsSender;
 };
 
+type CommandAnalyticsRuntime = AnalyticsRuntime & {
+  nowMs?: () => number;
+};
+
 type AnalyticsInstallIdOptions = {
   analyticsConfig?: AnalyticsConfig;
   env?: NodeJS.ProcessEnv;
@@ -167,6 +171,22 @@ const coarseOsVersion = (): string => {
   return minor && /^[0-9]+$/.test(minor) ? `${major}.${minor}` : major;
 };
 
+const durationBucketFromMs = (durationMs: number): string => {
+  if (durationMs < 1000) {
+    return '<1s';
+  }
+  if (durationMs < 10_000) {
+    return '1-10s';
+  }
+  if (durationMs < 60_000) {
+    return '10-60s';
+  }
+  if (durationMs < 600_000) {
+    return '1-10m';
+  }
+  return '10m+';
+};
+
 const buildAnalyticsPayload = (
   input: Required<Pick<AnalyticsRecordInput, 'command' | 'status' | 'durationBucket' | 'now'>>,
   installId: string,
@@ -279,13 +299,47 @@ const recordAnalyticsEvent = (input: AnalyticsRecordInput, runtime: AnalyticsRun
   }
 };
 
+const analyticsStatusFromExitCode = (exitCode: string | number | null | undefined): string => {
+  if (exitCode === undefined || exitCode === null || exitCode === 0 || exitCode === '0') {
+    return 'success';
+  }
+  return 'failure';
+};
+
+const runWithCommandAnalytics = (
+  command: string,
+  runCommand: () => void,
+  runtime: CommandAnalyticsRuntime = {},
+): void => {
+  const nowMs = runtime.nowMs ?? Date.now;
+  const startedAt = nowMs();
+  process.exitCode = undefined;
+  try {
+    runCommand();
+    recordAnalyticsEvent({
+      command,
+      status: analyticsStatusFromExitCode(process.exitCode),
+      durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
+    }, runtime);
+  } catch (error) {
+    recordAnalyticsEvent({
+      command,
+      status: 'failure',
+      durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
+    }, runtime);
+    throw error;
+  }
+};
+
 module.exports = {
   analyticsDisabledByEnv,
   analyticsNotice,
   buildAnalyticsPayload,
+  durationBucketFromMs,
   ensureAnalyticsInstallId,
   installIdPathForRepo,
   readLocalInstallId,
   recordAnalyticsEvent,
+  runWithCommandAnalytics,
   sendAnalyticsPayload,
 };

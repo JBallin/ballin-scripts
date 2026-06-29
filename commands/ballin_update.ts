@@ -1,5 +1,8 @@
 const path = require('path');
 const {
+  runWithCommandAnalytics,
+} = require('./analytics.ts');
+const {
   isDirectory,
   runCommand,
   runVisibleCommand,
@@ -73,7 +76,7 @@ const checkoutUpdateBranch = (repoDir: string): boolean => {
   return true;
 };
 
-const runBallinUpdateCli = (): void => {
+function runBallinUpdateCommand(): void {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
 
   writeStdoutLine('👟 getting fresh kicks...');
@@ -121,6 +124,10 @@ const runBallinUpdateCli = (): void => {
     cwd: repoDir,
     env: commandEnv(repoDir),
   });
+}
+
+const runBallinUpdateCli = (): void => {
+  runWithCommandAnalytics('ballin_update', runBallinUpdateCommand);
 };
 
 module.exports = {
