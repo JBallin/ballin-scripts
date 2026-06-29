@@ -152,7 +152,7 @@ Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)
         cp 'ballin.config.json' "$previous_config"
         if gh gist view "$gist_id" --raw --filename ballin_config > "$restore_config"; then
           cp "$restore_config" 'ballin.config.json'
-          if ! (
+          if ! update_result=$(
             cd "$repo_dir/config" || exit 1
             node "$repo_dir/config/updateConfig.ts"
           ); then
@@ -161,6 +161,10 @@ Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)
             exit 1
           fi
           printf '\n%s\n' '♻️  Restored ballin.config.json from your backup gist.'
+          if [ -n "$update_result" ]; then
+            printf '\n🙌 %s\n' "$update_result"
+            printf '\n👀 Docs: %s\n' "$docs_url"
+          fi
         else
           printf '\n%s\n' 'ℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.'
         fi

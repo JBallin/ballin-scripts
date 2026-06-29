@@ -551,6 +551,24 @@ exit "$FAKE_NODE_STATUS"
     assert.isFalse(fs.existsSync(path.join(repoDir, '.analytics', 'install-id')));
   });
 
+  it('formats migration output while adopting a backup gist through the Bash fallback', () => {
+    installBaseCommands();
+    installAdoptableConfigCommand();
+    installFakeGhCommand();
+    fs.unlinkSync(path.join(repoDir, 'commands', 'install_setup.ts'));
+
+    const result = runInstall({
+      env: { FAKE_UPDATE_OUTPUT: 'New configuration options have been added!\nup.nvm: false\n' },
+      input: '\ny\nreturning-gist-id\n',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
+    assert.include(result.stdout, 'New configuration options have been added!');
+    assert.include(result.stdout, '👀 Docs:');
+    assert.notInclude(commandLog(), 'node:install_setup');
+  });
+
   it('rejects readable returning Gists without the backup marker', () => {
     installBaseCommands();
     installAdoptableConfigCommand();
