@@ -173,5 +173,5 @@ gu read zshrc.sh
 | `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
 | `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
 | `ballin_config` | Reads and updates local `ballin-scripts` settings. |
-| `ballin_update` | Pulls the latest `ballin-scripts` changes and reruns typed setup. |
+| `ballin_update` | Pulls the latest `ballin-scripts` changes and refreshes local setup. |
 | `ballin_uninstall` | Removes installed command symlinks and the local checkout. |
