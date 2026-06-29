@@ -116,57 +116,63 @@ const restoreAdoptedConfig = (
   const restoreConfig = path.join(repoDir, '.ballin.config.restore.tmp');
   const previousConfig = path.join(repoDir, '.ballin.config.restore.previous.tmp');
   const configPath = path.join(repoDir, 'ballin.config.json');
+  let shouldRollback = false;
 
-  fs.copyFileSync(configPath, previousConfig);
+  try {
+    fs.copyFileSync(configPath, previousConfig);
 
-  const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', 'ballin_config'], {
-    cwd: repoDir,
-  });
-  if (gistResult.stderr) {
-    process.stderr.write(gistResult.stderr);
-  }
+    const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', 'ballin_config'], {
+      cwd: repoDir,
+    });
+    if (gistResult.stderr) {
+      process.stderr.write(gistResult.stderr);
+    }
 
-  if (gistResult.status !== 0 || gistResult.error) {
-    writeStdoutLine('\nℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.');
-    fs.rmSync(restoreConfig, { force: true });
-    fs.rmSync(previousConfig, { force: true });
+    if (gistResult.status !== 0 || gistResult.error) {
+      writeStdoutLine('\nℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.');
+      return true;
+    }
+
+    fs.writeFileSync(restoreConfig, gistResult.stdout);
+    shouldRollback = true;
+    fs.copyFileSync(restoreConfig, configPath);
+
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PWD: path.join(repoDir, 'config'),
+    };
+    delete childEnv.BALLIN_TEST_CONFIG_PATH;
+
+    const updateResult = runCommand(process.execPath, [path.join(repoDir, 'config', 'updateConfig.ts')], {
+      cwd: repoDir,
+      env: childEnv,
+    });
+    if (updateResult.stderr) {
+      process.stderr.write(updateResult.stderr);
+    }
+
+    if (updateResult.status !== 0 || updateResult.error) {
+      fs.copyFileSync(previousConfig, configPath);
+      shouldRollback = false;
+      return false;
+    }
+
+    shouldRollback = false;
+    writeStdoutLine('\n♻️  Restored ballin.config.json from your backup gist.');
+    const updateOutput = updateResult.stdout.trimEnd();
+    if (updateOutput) {
+      writeStdoutLine(`\n🙌 ${updateOutput}`);
+      writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
+    }
+
     return true;
-  }
-
-  fs.writeFileSync(restoreConfig, gistResult.stdout);
-  fs.copyFileSync(restoreConfig, configPath);
-
-  const childEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    PWD: path.join(repoDir, 'config'),
-  };
-  delete childEnv.BALLIN_TEST_CONFIG_PATH;
-
-  const updateResult = runCommand(process.execPath, [path.join(repoDir, 'config', 'updateConfig.ts')], {
-    cwd: repoDir,
-    env: childEnv,
-  });
-  if (updateResult.stderr) {
-    process.stderr.write(updateResult.stderr);
-  }
-
-  if (updateResult.status !== 0 || updateResult.error) {
-    fs.copyFileSync(previousConfig, configPath);
+  } finally {
+    if (shouldRollback && fs.existsSync(previousConfig)) {
+      fs.copyFileSync(previousConfig, configPath);
+    }
     fs.rmSync(restoreConfig, { force: true });
     fs.rmSync(previousConfig, { force: true });
-    return false;
   }
-
-  writeStdoutLine('\n♻️  Restored ballin.config.json from your backup gist.');
-  const updateOutput = updateResult.stdout.trimEnd();
-  if (updateOutput) {
-    writeStdoutLine(`\n🙌 ${updateOutput}`);
-    writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
-  }
-
-  fs.rmSync(restoreConfig, { force: true });
-  fs.rmSync(previousConfig, { force: true });
-  return true;
 };
 
 const configureGist = (repoDir: string, docsUrl: string, guHostExisted: boolean): boolean => {
