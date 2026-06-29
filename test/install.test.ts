@@ -5,231 +5,205 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
+const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+
 type RunInstallOptions = {
   env?: NodeJS.ProcessEnv;
-  input?: string;
 };
 
 describe('install', () => {
   let homeDir: string;
-  let binDir: string;
+  let toolDir: string;
   let repoDir: string;
   let commandLogPath: string;
 
-  const writeExecutable = (name: string, contents: string, directory = binDir) => {
+  const writeExecutable = (name: string, contents: string, directory = toolDir) => {
     const executablePath = path.join(directory, name);
     fs.writeFileSync(executablePath, contents, { mode: 0o755 });
     return executablePath;
   };
 
-  const linkCommand = (name: string, directory = binDir) => {
+  const linkCommand = (name: string) => {
     const commandPath = (process.env.PATH ?? '')
       .split(path.delimiter)
       .map((commandDirectory) => path.join(commandDirectory, name))
       .find((candidate) => fs.existsSync(candidate));
 
     assert.exists(commandPath, `${name} is required to run the install test harness`);
-    fs.symlinkSync(commandPath, path.join(directory, name));
+    fs.symlinkSync(commandPath, path.join(toolDir, name));
   };
 
-  const installBaseCommands = () => {
-    ['chmod', 'cp', 'ln', 'mkdir', 'rm'].forEach((command) => linkCommand(command));
+  const writeCurrentCheckout = ({ repoUpdate = true, installSetup = true } = {}) => {
+    fs.mkdirSync(path.join(repoDir, 'commands'), { recursive: true });
+    fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
+    if (repoUpdate) {
+      fs.writeFileSync(path.join(repoDir, 'commands', 'repo_update.ts'), '');
+    }
+    if (installSetup) {
+      fs.writeFileSync(path.join(repoDir, 'commands', 'install_setup.ts'), '');
+    }
+  };
+
+  const installGitStub = () => {
+    writeExecutable('git', `#!/usr/bin/env bash
+printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$1" in
+  clone)
+    if [ "$2:$3" != 'https://github.com/JBallin/ballin-scripts.git:.ballin-scripts' ]; then
+      exit 2
+    fi
+    mkdir -p "$HOME/.ballin-scripts/commands" "$HOME/.ballin-scripts/bin"
+    : > "$HOME/.ballin-scripts/commands/repo_update.ts"
+    : > "$HOME/.ballin-scripts/commands/install_setup.ts"
+    exit "$FAKE_GIT_CLONE_STATUS"
+    ;;
+  fetch)
+    exit "$FAKE_GIT_FETCH_STATUS"
+    ;;
+  checkout)
+    exit "$FAKE_GIT_CHECKOUT_STATUS"
+    ;;
+  merge)
+    if [ "$FAKE_GIT_MERGE_STATUS" = '0' ]; then
+      mkdir -p "$HOME/.ballin-scripts/commands"
+      : > "$HOME/.ballin-scripts/commands/repo_update.ts"
+      : > "$HOME/.ballin-scripts/commands/install_setup.ts"
+    fi
+    exit "$FAKE_GIT_MERGE_STATUS"
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+`);
+  };
+
+  const installNodeStub = () => {
     writeExecutable('node', `#!/usr/bin/env bash
 if [ "$1" = '-p' ]; then
   printf '%s\\n' "$FAKE_NODE_SUPPORTED"
   exit 0
 fi
-if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
-  printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-  shift
-  if [ "$1" = 'configure' ]; then
-    repo_dir="$2"
-    docs_url="$3"
-    if [ ! -f "$repo_dir/ballin.config.json" ]; then
-      if ! cp "$repo_dir/config/.defaultConfig.json" "$repo_dir/ballin.config.json"; then
-        exit 1
-      fi
-      printf "\\n🧠 Created 'ballin.config.json' file in root using default settings\\n"
-      exit 0
-    fi
-    printf '%s' "$FAKE_UPDATE_OUTPUT"
-    if [ -n "$FAKE_UPDATE_OUTPUT" ]; then
-      printf '\\n👀 Docs: %s\\n' "$docs_url"
-    fi
-    exit "$FAKE_NODE_STATUS"
-  fi
-  if [ "$1" = 'setup-analytics' ]; then
-    repo_dir="$2"
-    config_json=$(<"$repo_dir/ballin.config.json")
-    case "$config_json" in
-      *'"enabled":"false"'*) exit 0 ;;
-    esac
-    if [ "$BALLIN_NO_ANALYTICS" = '1' ] || [ -n "$CI" ]; then
-      exit 0
-    fi
-    mkdir -p "$repo_dir/.analytics"
-    printf '%s\\n' '826f9faa-9995-4f66-a01b-73b4f7aebdf1' > "$repo_dir/.analytics/install-id"
-    printf '%s\\n' 'ballin-scripts collects minimal anonymous command analytics.'
-    exit 0
-  fi
-  if [ "$1" != 'symlink-binaries' ]; then
-    exit 2
-  fi
-  repo_dir="$2"
-  bin_dir="$3"
-  if ! mkdir -p "$bin_dir"; then
-    printf '\\n⚠️  ERROR: Unable to create %s\\n' "$bin_dir"
-    exit 1
-  fi
-  for bin in "$repo_dir/bin/"*; do
-    if ! ln -sfn "$bin" "$bin_dir/\${bin##*/}"; then
-      printf '\\n⚠️  ERROR: Unable to symlink binaries into %s\\n' "$bin_dir"
-      exit 1
-    fi
-  done
-  printf '\\n💪 symlinked binaries into %s\\n' "$bin_dir"
-  exit 0
-fi
-printf '%s' "$FAKE_UPDATE_OUTPUT"
-exit "$FAKE_NODE_STATUS"
-`);
-  };
-
-  const installConfigCommand = () => {
-    writeExecutable('ballin_config', `#!/usr/bin/env bash
-printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-case "$1:$2" in
-  get:gu.host) printf '%s\\n' 'github.example.test' ;;
-  get:gu.id) printf '%s\\n' 'existing-gist-id' ;;
-esac
-`, path.join(repoDir, 'bin'));
-  };
-
-  const installAdoptableConfigCommand = () => {
-    writeExecutable('ballin_config', `#!/usr/bin/env bash
-printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-gist_id_file="$HOME/.configured-gist-id"
-host_file="$HOME/.configured-gu-host"
-configured_host='github.example.test'
-if [ -f "$host_file" ]; then
-  while IFS= read -r stored_host; do
-    configured_host="$stored_host"
-  done < "$host_file"
-fi
-case "$1:$2" in
-  get:gu.host) printf '%s\\n' "$configured_host" ;;
-  get:gu.id)
-    if [ -f "$gist_id_file" ]; then
-      while IFS= read -r gist_id; do
-        printf '%s\\n' "$gist_id"
-      done < "$gist_id_file"
-    else
-      printf '%s\\n' 'null'
-    fi
+case "$1" in
+  "$HOME/.ballin-scripts/commands/repo_update.ts")
+    printf 'node:repo_update %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+    exit "$FAKE_REPO_UPDATE_STATUS"
     ;;
-  set:gu.host)
-    printf '%s\\n' "$3" > "$host_file"
-    printf '%s\\n' "\\"gu.host\\" set to: \\"$3\\""
+  "$HOME/.ballin-scripts/commands/install_setup.ts")
+    printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+    exit "$FAKE_SETUP_STATUS"
     ;;
-  set:gu.id)
-    printf '%s\\n' "$3" > "$gist_id_file"
-    analytics_json=''
-    if [ -f "$HOME/.ballin-scripts/ballin.config.json" ]; then
-      config_json=$(<"$HOME/.ballin-scripts/ballin.config.json")
-      case "$config_json" in
-        *'"analytics":{"enabled":"false"}'*) analytics_json=',"analytics":{"enabled":"false"}' ;;
-      esac
-    fi
-    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"%s"}%s}\\n' "$3" "$configured_host" "$analytics_json" > "$HOME/.ballin-scripts/ballin.config.json"
-    printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
-    ;;
-esac
-`, path.join(repoDir, 'bin'));
-  };
-
-  const installFakeGhCommand = () => {
-    writeExecutable('gh', `#!/usr/bin/env bash
-printf 'gh:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-expected_host="\${FAKE_GH_HOST:-github.example.test}"
-case "$1:$2" in
-  auth:status)
-    if [ "$*" != "auth status --hostname $expected_host" ]; then exit 2; fi
-    exit "$FAKE_GH_AUTH_STATUS"
-    ;;
-  gist:view)
-    if [ "$GH_HOST" != "$expected_host" ]; then
-      printf '%s\\n' 'Unexpected GH_HOST' >&2
-      exit 2
-    fi
-    if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:.MyConfig.md' ]; then
-      printf '%s\\n' '### Backup of your dev environment'
-      printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
-      printf '\\n'
-      exit 0
-    fi
-    if [ "$3" = 'wrong-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:.MyConfig.md' ]; then
-      printf '%s\\n' 'not a ballin backup'
-      exit 0
-    fi
-    if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:ballin_config' ]; then
-      printf '%s\\n' '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":null,"host":"github.example.test"},"analytics":{"enabled":"false"}}'
-      exit 0
-    fi
+  *)
+    printf 'unexpected node command: %s\\n' "$*" >&2
     exit 2
     ;;
-  gist:create)
-    if [ "$GH_HOST" != "$expected_host" ]; then
-      printf '%s\\n' 'Unexpected GH_HOST' >&2
-      exit 2
-    fi
-    if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
-    printf '%s\\n' 'https://gist.github.com/new-gist-id'
-    ;;
-  *) exit 2 ;;
 esac
 `);
   };
 
-  const runInstall = ({ env = {}, input }: RunInstallOptions = {}) => spawnSync(installPath, [], {
+  const installBaseCommands = () => {
+    linkCommand('bash');
+    linkCommand('mkdir');
+    installGitStub();
+    installNodeStub();
+  };
+
+  const runInstall = ({ env = {} }: RunInstallOptions = {}) => spawnSync(installPath, [], {
     encoding: 'utf8',
-    input,
     env: {
       HOME: homeDir,
-      PATH: binDir,
+      PATH: toolDir,
       FAKE_COMMAND_LOG: commandLogPath,
+      FAKE_GIT_CLONE_STATUS: '0',
+      FAKE_GIT_FETCH_STATUS: '0',
+      FAKE_GIT_CHECKOUT_STATUS: '0',
+      FAKE_GIT_MERGE_STATUS: '0',
       FAKE_NODE_SUPPORTED: 'true',
-      FAKE_NODE_STATUS: '0',
-      FAKE_GH_AUTH_STATUS: '0',
+      FAKE_REPO_UPDATE_STATUS: '0',
+      FAKE_SETUP_STATUS: '0',
       ...env,
     },
   });
 
   const commandLog = () => (fs.existsSync(commandLogPath)
-    ? fs.readFileSync(commandLogPath, 'utf8')
-    : '');
+    ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter(Boolean)
+    : []);
+
+  const setupCommand = () => `node:install_setup ${repoDir}/commands/install_setup.ts setup ${repoDir} ${docsUrl}`;
 
   beforeEach(() => {
     homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-install-'));
-    binDir = path.join(homeDir, '.local', 'bin');
+    toolDir = path.join(homeDir, 'tools');
     repoDir = path.join(homeDir, '.ballin-scripts');
-    fs.mkdirSync(binDir, { recursive: true });
-    fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
-    fs.mkdirSync(path.join(repoDir, 'commands'));
-    fs.writeFileSync(path.join(repoDir, 'commands', 'install_setup.ts'), '');
-    fs.mkdirSync(path.join(repoDir, 'config'));
-    fs.copyFileSync(
-      path.join(__dirname, '..', 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-    );
     commandLogPath = path.join(homeDir, 'commands.log');
-    linkCommand('bash');
+    fs.mkdirSync(toolDir);
   });
 
   afterEach(() => {
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
+  it('clones a missing checkout and delegates fresh setup to typed code', () => {
+    installBaseCommands();
+
+    const result = runInstall();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, "🏀 let's ball...");
+    assert.deepEqual(commandLog(), [
+      'git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts',
+      setupCommand(),
+    ]);
+  });
+
+  it('updates an existing current checkout through the typed repo updater before setup', () => {
+    installBaseCommands();
+    writeCurrentCheckout();
+
+    const result = runInstall();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(commandLog(), [
+      `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
+      setupCommand(),
+    ]);
+  });
+
+  it('uses the minimal Bash update bridge for stale checkouts without typed repo update', () => {
+    installBaseCommands();
+    writeCurrentCheckout({ repoUpdate: false, installSetup: false });
+
+    const result = runInstall();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(commandLog(), [
+      'git:fetch origin +main:refs/remotes/origin/main',
+      'git:checkout main',
+      'git:merge origin/main',
+      setupCommand(),
+    ]);
+  });
+
+  it('fails clearly when the stale checkout bridge cannot update', () => {
+    installBaseCommands();
+    writeCurrentCheckout({ repoUpdate: false, installSetup: false });
+
+    const result = runInstall({ env: { FAKE_GIT_MERGE_STATUS: '24' } });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, `Unable to update ${repoDir} before setup`);
+    assert.include(result.stdout, `Update or delete ${repoDir}`);
+    assert.deepEqual(commandLog(), [
+      'git:fetch origin +main:refs/remotes/origin/main',
+      'git:checkout main',
+      'git:merge origin/main',
+    ]);
+  });
+
   it('stops with guidance when Node.js is unavailable', () => {
+    linkCommand('bash');
+    writeCurrentCheckout();
+
     const result = runInstall();
 
     assert.equal(result.status, 1);
@@ -238,11 +212,12 @@ esac
     assert.include(result.stdout, 'docs/README.md');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
-    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    assert.deepEqual(commandLog(), []);
   });
 
   it('stops with guidance when Node.js is below the supported version', () => {
     installBaseCommands();
+    writeCurrentCheckout();
 
     const result = runInstall({ env: { FAKE_NODE_SUPPORTED: 'false' } });
 
@@ -252,308 +227,19 @@ esac
     assert.include(result.stdout, 'docs/README.md');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
-    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
-    assert.equal(commandLog(), '');
+    assert.deepEqual(commandLog(), []);
   });
 
-  it('stops before configuration and Gist work when the command directory is missing from PATH', () => {
-    const pathDir = path.join(homeDir, 'test-path');
-    fs.mkdirSync(pathDir);
-    ['bash'].forEach((command) => linkCommand(command, pathDir));
-    writeExecutable('node', '#!/usr/bin/env bash\nexit 0\n', pathDir);
-
-    const result = runInstall({ env: { PATH: pathDir } });
-
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, `${binDir} doesn't seem to be in your path.`);
-    assert.include(result.stdout, `export PATH="${binDir}:$PATH"`);
-    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
-    assert.equal(commandLog(), '');
-  });
-
-  it('stops with guidance when GitHub CLI is unavailable', () => {
+  it('returns the typed setup status when setup fails', () => {
     installBaseCommands();
-    installAdoptableConfigCommand();
+    writeCurrentCheckout();
 
-    const result = runInstall();
+    const result = runInstall({ env: { FAKE_SETUP_STATUS: '27' } });
 
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'GitHub CLI is required for Gist backup setup');
-    assert.include(result.stdout, 'Install gh, authenticate it, then run this installer again');
-    assert.include(result.stdout, 'gh auth login --hostname github.example.test');
-    assert.include(result.stdout, 'docs/README.md');
-    assert.notInclude(commandLog(), 'gh:');
-    assert.notInclude(result.stdout, 'symlinked binaries');
-    assert.notInclude(result.stdout, '😎 ballin!');
-    assert.isFalse(fs.existsSync(path.join(binDir, 'ballin_config')));
-  });
-
-  it('stops with guidance when GitHub CLI is not authenticated', () => {
-    installBaseCommands();
-    installAdoptableConfigCommand();
-    installFakeGhCommand();
-
-    const result = runInstall({ env: { FAKE_GH_AUTH_STATUS: '4' } });
-
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'gh is not authenticated for github.example.test');
-    assert.include(result.stdout, 'gh auth login --hostname github.example.test');
-    assert.include(result.stdout, 'Then run this installer again');
-    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
-    assert.notInclude(commandLog(), 'gh:gist');
-    assert.notInclude(result.stdout, 'symlinked binaries');
-    assert.notInclude(result.stdout, '😎 ballin!');
-    assert.isFalse(fs.existsSync(path.join(binDir, 'ballin_config')));
-  });
-
-  it('performs an isolated initial setup and shows docs once', () => {
-    installBaseCommands();
-    installConfigCommand();
-    installFakeGhCommand();
-
-    const result = runInstall();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "Created 'ballin.config.json'");
-    assert.equal(result.stdout.match(/👀 Docs:/g).length, 1);
-    assert.include(result.stdout, `symlinked binaries into ${binDir}`);
-    assert.include(result.stdout, '😎 ballin!');
-    assert.deepEqual(
-      JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
-      JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
-    );
-    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
-    assert.include(commandLog(), 'node:install_setup');
-    assert.include(commandLog(), 'symlink-binaries');
-    assert.notInclude(commandLog(), 'gist:');
-    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
-    assert.notInclude(commandLog(), 'gh:gist');
-  });
-
-  it('falls back to Bash symlinking when the typed setup entrypoint is missing from an existing checkout', () => {
-    installBaseCommands();
-    installConfigCommand();
-    installFakeGhCommand();
-    fs.unlinkSync(path.join(repoDir, 'commands', 'install_setup.ts'));
-
-    const result = runInstall();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `symlinked binaries into ${binDir}`);
-    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
-    assert.notInclude(commandLog(), 'node:install_setup');
-  });
-
-  it('falls back to Bash config setup when the typed setup entrypoint does not support configure yet', () => {
-    installBaseCommands();
-    installConfigCommand();
-    installFakeGhCommand();
-    writeExecutable('node', `#!/usr/bin/env bash
-if [ "$1" = '-p' ]; then
-  printf '%s\\n' "$FAKE_NODE_SUPPORTED"
-  exit 0
-fi
-if [ "$1" = "$HOME/.ballin-scripts/commands/install_setup.ts" ]; then
-  printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-  shift
-  if [ "$1" = 'symlink-binaries' ]; then
-    repo_dir="$2"
-    bin_dir="$3"
-    mkdir -p "$bin_dir"
-    for bin in "$repo_dir/bin/"*; do
-      ln -sfn "$bin" "$bin_dir/\${bin##*/}"
-    done
-    printf '\\n💪 symlinked binaries into %s\\n' "$bin_dir"
-    exit 0
-  fi
-  exit 1
-fi
-printf '%s' "$FAKE_UPDATE_OUTPUT"
-exit "$FAKE_NODE_STATUS"
-`);
-
-    const result = runInstall();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "Created 'ballin.config.json'");
-    assert.deepEqual(
-      JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
-      JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
-    );
-    assert.include(commandLog(), 'node:install_setup');
-  });
-
-  it('does not repeat unchanged setup guidance during an ordinary update', () => {
-    installBaseCommands();
-    installConfigCommand();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-
-    const result = runInstall();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, '👀 Docs:');
-    assert.notInclude(result.stdout, "Created 'ballin.config.json'");
-    assert.notInclude(result.stdout, 'What GitHub host should be used for Gist backups?');
-    assert.include(result.stdout, '😎 ballin!');
-  });
-
-  it('prompts once when migration adds gu.host to an existing Gist config', () => {
-    installBaseCommands();
-    installAdoptableConfigCommand();
-    installFakeGhCommand();
-    fs.writeFileSync(path.join(homeDir, '.configured-gist-id'), 'existing-gist-id\n');
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{"gu":{"id":"existing-gist-id"}}\n');
-
-    const result = runInstall({
-      env: {
-        FAKE_GH_HOST: 'github.enterprise.test',
-        FAKE_UPDATE_OUTPUT: 'New configuration options have been added!\ngu.host: github.example.test\n',
-      },
-      input: 'github.enterprise.test\n',
-    });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(commandLog(), 'ballin_config:set gu.host github.enterprise.test\n');
-    assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
-    assert.notInclude(commandLog(), 'gh:gist');
-  });
-
-  it('reports newly added configuration and links to the guide', () => {
-    installBaseCommands();
-    installConfigCommand();
-    installFakeGhCommand();
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
-
-    const updateOutput = 'New configuration options have been added!\nup.nvm: false\n';
-    const result = runInstall({ env: { FAKE_UPDATE_OUTPUT: updateOutput } });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, updateOutput.trim());
-    assert.equal(result.stdout.match(/👀 Docs:/g).length, 1);
-    assert.include(result.stdout, 'docs/README.md');
-    assert.include(commandLog(), 'configure');
-  });
-
-  it('restores config values from an adopted backup gist', () => {
-    installBaseCommands();
-    installAdoptableConfigCommand();
-    installFakeGhCommand();
-
-    const result = runInstall({ input: '\ny\nreturning-gist-id\n' });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Storing your previous gist ID in your config');
-    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
-    assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
-    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
-    const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
-    assert.equal(restoredConfig.up.cleanup, 'false');
-    assert.equal(restoredConfig.up.gu, 'true');
-    assert.equal(restoredConfig.gu.id, 'returning-gist-id');
-    assert.equal(restoredConfig.gu.host, 'github.example.test');
-    assert.equal(restoredConfig.analytics.enabled, 'false');
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.analytics', 'install-id')));
-  });
-
-  it('rejects readable returning Gists without the backup marker', () => {
-    installBaseCommands();
-    installAdoptableConfigCommand();
-    installFakeGhCommand();
-
-    const result = runInstall({ input: '\ny\nwrong-gist-id\nreturning-gist-id\n' });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "INVALID: Expected backup marker in gist 'wrong-gist-id'");
-    assert.include(commandLog(), 'gh:gist view wrong-gist-id --raw --filename .MyConfig.md');
-    assert.notInclude(commandLog(), 'ballin_config:set gu.id wrong-gist-id');
-    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
-  });
-
-  it('stops before Gist and success output when config creation fails', () => {
-    installBaseCommands();
-    installConfigCommand();
-    fs.unlinkSync(path.join(binDir, 'cp'));
-    writeExecutable('cp', '#!/usr/bin/env bash\nexit 9\n');
-
-    const result = runInstall();
-
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Unable to create or update ballin.config.json');
-    assert.notInclude(commandLog(), 'ballin_config:');
-    assert.notInclude(commandLog(), 'gist:');
-    assert.notInclude(result.stdout, 'symlinked binaries');
-    assert.notInclude(result.stdout, '😎 ballin!');
-  });
-
-  it('stops before Gist and success output when config migration fails', () => {
-    installBaseCommands();
-    installConfigCommand();
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
-
-    const result = runInstall({ env: { FAKE_NODE_STATUS: '7' } });
-
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Unable to create or update ballin.config.json');
-    assert.notInclude(commandLog(), 'ballin_config:');
-    assert.notInclude(commandLog(), 'gist:');
-    assert.notInclude(result.stdout, 'symlinked binaries');
-    assert.notInclude(result.stdout, '😎 ballin!');
-  });
-
-  it('uses the Homebrew prefix as the command directory when brew is present', () => {
-    installBaseCommands();
-    installConfigCommand();
-    installFakeGhCommand();
-    writeExecutable('brew', `#!/usr/bin/env bash
-if [ "$1" = '--prefix' ]; then
-  printf '%s\\n' "$HOME/.local"
-  exit 0
-fi
-exit 2
-`);
-
-    const result = runInstall();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `symlinked binaries into ${binDir}`);
-  });
-
-  it('creates a new secret Gist when gh is authenticated and no backup is configured', () => {
-    installBaseCommands();
-    installAdoptableConfigCommand();
-    installFakeGhCommand();
-
-    const result = runInstall({ input: '\nn\n' });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
-    assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
-    assert.include(commandLog(), 'ballin_config:set gu.id new-gist-id\n');
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
-  });
-
-  it('uses an install-time custom Gist host from user input', () => {
-    installBaseCommands();
-    installAdoptableConfigCommand();
-    installFakeGhCommand();
-
-    const result = runInstall({
-      env: { FAKE_GH_HOST: 'github.enterprise.test' },
-      input: 'github.enterprise.test\nn\n',
-    });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(commandLog(), 'ballin_config:set gu.host github.enterprise.test\n');
-    assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
-    assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
-    const configuredHost = fs.readFileSync(path.join(homeDir, '.configured-gu-host'), 'utf8').trim();
-    assert.equal(configuredHost, 'github.enterprise.test');
-    const createdConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
-    assert.equal(createdConfig.gu.host, 'github.enterprise.test');
-    assert.equal(createdConfig.gu.id, 'new-gist-id');
+    assert.equal(result.status, 27);
+    assert.deepEqual(commandLog(), [
+      `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
+      setupCommand(),
+    ]);
   });
 });
