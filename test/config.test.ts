@@ -307,6 +307,25 @@ describe('config', () => {
       assert.deepEqual(fetchConfig().configObj, defaultConfig);
     });
 
+    it('adds missing nested analytics defaults without overwriting existing choices', () => {
+      fs.writeFileSync(configPath, JSON.stringify({
+        analytics: {
+          enabled: 'false',
+        },
+      }), 'utf8');
+
+      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'config', 'updateConfig.ts')], {
+        cwd: path.join(__dirname, '..'),
+        encoding: 'utf8',
+        env: process.env,
+      });
+
+      assert.equal(result.status, 0);
+      assert.deepEqual(fetchConfig().configObj.analytics, {
+        enabled: 'false',
+      });
+    });
+
     it('derives gu.host from a legacy Enterprise Gist URL', () => {
       fs.writeFileSync(configPath, JSON.stringify({
         up: defaultConfig.up,

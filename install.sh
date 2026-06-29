@@ -103,6 +103,11 @@ fi
     exit 1
   fi
 
+  ############################## ANALYTICS SETUP ###############################
+  if [ -f "$repo_dir/commands/install_setup.ts" ]; then
+    node "$repo_dir/commands/install_setup.ts" setup-analytics "$repo_dir" || :
+  fi
+
   ############################## SYMLINK BINARIES ##############################
   if [ -f "$repo_dir/commands/install_setup.ts" ]; then
     if ! node "$repo_dir/commands/install_setup.ts" symlink-binaries "$repo_dir" "$bin_dir"; then

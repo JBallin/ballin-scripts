@@ -65,6 +65,16 @@ host, and either adopts an existing backup Gist or creates a new one. When an
 adopted backup includes saved `ballin_config` values, the installer restores
 them before continuing.
 
+## Analytics
+
+`ballin-scripts` can send anonymous usage analytics.
+
+Disable analytics persistently:
+
+```shell
+ballin_config set analytics.enabled false
+```
+
 ## `up` settings
 
 Change a setting with `ballin_config set up.<name> true` or
