@@ -10,6 +10,12 @@ type ConfigValue = ConfigLeaf | ConfigObject;
 
 const { configObj: userConfig } = fetchConfig();
 const updates: string[] = [];
+const isConfigObject = (value: ConfigValue): value is ConfigObject => (
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+);
+const formatUpdateValue = (value: ConfigValue): string => (
+  isConfigObject(value) ? JSON.stringify(value) : `${value}`
+);
 
 const hostFromLegacyGistUrl = (url: ConfigValue): string | null => {
   if (typeof url !== 'string' || !url) {
@@ -34,9 +40,15 @@ Object.keys(defaultConfig).forEach((key) => {
   const defaultVal = defaultConfig[key] as ConfigValue;
   if (!(key in userConfig)) {
     userConfig[key] = defaultVal;
-    updates.push(`${key}: ${defaultVal}`);
+    updates.push(`${key}: ${formatUpdateValue(defaultVal)}`);
   }
-  if (typeof defaultVal === 'object' && (defaultVal as unknown) !== 'null') {
+  if (isConfigObject(defaultVal)) {
+    if (!isConfigObject(userConfig[key])) {
+      userConfig[key] = defaultVal;
+      updates.push(`${key}: ${formatUpdateValue(defaultVal)}`);
+      return;
+    }
+
     Object.keys(defaultVal as ConfigObject).forEach((nestedKey) => {
       const nestedUserConfig = userConfig[key] as ConfigObject;
       const nestedDefaultConfig = defaultVal as ConfigObject;
@@ -45,7 +57,7 @@ Object.keys(defaultConfig).forEach((key) => {
           ? hostFromLegacyGistUrl(nestedUserConfig.url) ?? nestedDefaultConfig[nestedKey]
           : nestedDefaultConfig[nestedKey];
         nestedUserConfig[nestedKey] = nestedDefaultVal;
-        updates.push(`${key}.${nestedKey}: ${nestedDefaultVal}`);
+        updates.push(`${key}.${nestedKey}: ${formatUpdateValue(nestedDefaultVal)}`);
       }
     });
   }
