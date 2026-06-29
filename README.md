@@ -11,7 +11,7 @@ low-friction maintenance.
 
 Core commands:
 
-- `up` updates and maintains the development environment.
+- `up` updates the development environment.
 - `gu` snapshots the development environment to a private Gist.
 
 ## What it manages
