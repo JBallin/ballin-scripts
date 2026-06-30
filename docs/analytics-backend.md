@@ -4,9 +4,9 @@
 analytics. The backend records only the minimal signals needed for active
 installs, top-level command usage, and command success or failure.
 
-The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). It is
-not deployed by default and does not require a Cloudflare account to work on the
-CLI.
+The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). Its
+package README covers Worker setup commands. It is not deployed by default and
+does not require a Cloudflare account to work on the CLI.
 
 ## Production Setup
 
@@ -22,7 +22,8 @@ notice and [Analytics](analytics.md).
 - D1 can count active installs from daily buckets and server-hashed install IDs.
 - The CLI does not need a runtime analytics SDK.
 - Retention is controlled by the Worker and D1 schema.
-- The deployment can stay tiny: one Worker, one D1 database, and two secrets.
+- The deployment can stay tiny: one Worker, one D1 database, one rate-limit
+  binding, and two secrets.
 
 ## Alternatives Considered
 
@@ -40,11 +41,10 @@ daily install and command-count data.
 
 ## Abuse Controls
 
-The skeleton requires an ingest token before accepting events and rejects
-oversized payloads. A distributed CLI cannot keep a token truly secret, so this
-is a deployment gate rather than the complete production abuse story. Before
-real production traffic is enabled, configure Cloudflare-side rate limiting or
-equivalent edge protection for `POST /v1/events`.
+The skeleton requires an ingest token before accepting events, rejects oversized
+payloads, and applies a Workers rate-limit binding to `POST /v1/events`. A
+distributed CLI cannot keep a token truly secret, so the token is only one part
+of the production abuse story.
 
 ## Production Checklist
 
@@ -55,7 +55,7 @@ Before enabling the CLI to send production events:
 - apply `analytics-worker/migrations/0001_initial.sql`
 - set `INSTALL_ID_HASH_SECRET`
 - set `INGEST_TOKEN`
-- configure Cloudflare-side rate limiting or equivalent edge protection
+- confirm the `ANALYTICS_RATE_LIMITER` binding is deployed
 - deploy the Worker
 - configure the CLI endpoint in the client implementation
 - re-check that the client payload, first-run notice, and `docs/analytics.md`

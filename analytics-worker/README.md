@@ -86,13 +86,14 @@ process request metadata operationally before the worker runs; the application
 schema does not read or persist it.
 
 The ingest token is a deployment gate for the backend skeleton, not a permanent
-abuse solution for a distributed CLI. Before production traffic is enabled,
-configure Cloudflare-side rate limiting or equivalent edge protection for
-`POST /v1/events`.
+abuse solution for a distributed CLI. The Worker also uses a Cloudflare Workers
+rate limiting binding for `POST /v1/events`.
 
 ## Local Setup
 
-This repository does not require a live Cloudflare project yet. When ready:
+This repository does not require a live Cloudflare project yet. When ready, run
+these commands from `analytics-worker/`. If Wrangler is not installed globally,
+use `npx wrangler` in place of `wrangler`.
 
 1. Copy `wrangler.toml.example` to `wrangler.toml`.
 2. Create a D1 database:
@@ -114,14 +115,13 @@ This repository does not require a live Cloudflare project yet. When ready:
    wrangler secret put INGEST_TOKEN
    ```
 
-6. Configure Cloudflare-side rate limiting for `POST /v1/events`.
-7. Apply migrations:
+6. Apply migrations:
 
    ```shell
    wrangler d1 migrations apply ballin-scripts-analytics
    ```
 
-8. Deploy:
+7. Deploy:
 
    ```shell
    wrangler deploy
