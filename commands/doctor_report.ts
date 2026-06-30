@@ -59,8 +59,8 @@ const formatDefaultDoctorReport = (report: DoctorReport): string => {
     return 'Your Ballin-managed environment is healthy.\n';
   }
 
-  const visibleStatus = report.status === 'fail' ? 'fail' : 'warn';
-  const visibleChecks = report.checks.filter(({ status }) => status === visibleStatus);
+  const visibleStatuses = report.status === 'fail' ? ['fail', 'warn'] : ['warn'];
+  const visibleChecks = report.checks.filter(({ status }) => visibleStatuses.includes(status));
   return `${visibleChecks.map((check) => formatDoctorCheck(check, 'Next: ')).join('\n')}\n`;
 };
 
