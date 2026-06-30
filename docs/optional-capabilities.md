@@ -82,22 +82,21 @@ them before continuing.
 
 ## Readiness checks
 
-Use `ballin doctor` to check Ballin-managed readiness, including Node.js,
-command shims, config, and Gist backup setup.
+Use `ballin doctor` to check whether the Ballin-managed environment looks ready,
+including Node.js, installed commands, settings, and Gist backup setup.
 
 ```shell
 ballin doctor
 ```
 
 The default output stays quiet unless something needs attention. Use
-`--verbose` to see every check:
+`--verbose` for details:
 
 ```shell
 ballin doctor --verbose
 ```
 
-Healthy and warning-only runs exit `0`; required failures exit `1`; invalid
-usage exits `2`. `ballin doctor` does not run `brew doctor`.
+`ballin doctor` does not run `brew doctor`.
 
 ## Analytics
 
