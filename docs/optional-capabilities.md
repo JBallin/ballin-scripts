@@ -83,16 +83,11 @@ them before continuing.
 ## Readiness checks
 
 Use `ballin doctor` to check whether the Ballin-managed environment looks ready,
-including Node.js, installed commands, settings, and Gist backup setup.
+including Node.js, installed commands, settings, and Gist backup setup. Add
+`--verbose` when you want the full check list.
 
 ```shell
 ballin doctor
-```
-
-The default output is concise. Use `--verbose` for details:
-
-```shell
-ballin doctor --verbose
 ```
 
 ## Analytics
