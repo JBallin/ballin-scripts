@@ -89,14 +89,11 @@ including Node.js, installed commands, settings, and Gist backup setup.
 ballin doctor
 ```
 
-The default output stays quiet unless something needs attention. Use
-`--verbose` for details:
+The default output is concise. Use `--verbose` for details:
 
 ```shell
 ballin doctor --verbose
 ```
-
-`ballin doctor` does not run `brew doctor`.
 
 ## Analytics
 
