@@ -443,17 +443,16 @@ describe('analytics client', () => {
     });
   });
 
-  it('records command-level failures when the command throws and rethrows', async () => {
+  it('records command-level failures when the command throws and rethrows synchronously', () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
     const payloads: AnalyticsPayload[] = [];
     let currentNow = 0;
-    let thrown: Error | undefined;
 
-    try {
-      await runWithCommandAnalytics('up', () => {
+    assert.throws(() => {
+      runWithCommandAnalytics('up', () => {
         currentNow = 60_000;
         throw new Error('simulated command failure');
       }, {
@@ -466,11 +465,8 @@ describe('analytics client', () => {
           payloads.push(payload);
         },
       });
-    } catch (error) {
-      thrown = error as Error;
-    }
+    }, 'simulated command failure');
 
-    assert.equal(thrown?.message, 'simulated command failure');
     assert.deepInclude(payloads[0], {
       command: 'up',
       status: 'failure',
@@ -544,19 +540,16 @@ describe('analytics client', () => {
     });
   });
 
-  it('bounds https sends with a short timeout and swallows request failures', async () => {
+  it('bounds https sends with a wall-clock timeout and swallows request failures', async () => {
     const originalRequest = https.request;
-    const timeoutHandler: { current?: () => void } = {};
     let destroyed = false;
+    let socketTimeoutRegistered = false;
 
-    https.request = (_options: RequestOptions, callback: (response: IncomingMessage) => void): ClientRequest => {
+    https.request = (): ClientRequest => {
       const request = new EventEmitter() as ClientRequest;
-      const response = new EventEmitter() as IncomingMessage;
-      response.resume = () => response;
-      callback(response);
 
       request.setTimeout = (_milliseconds: number, handler?: () => void) => {
-        timeoutHandler.current = handler;
+        socketTimeoutRegistered = Boolean(handler);
         return request;
       };
       request.end = (() => request) as ClientRequest['end'];
@@ -583,14 +576,14 @@ describe('analytics client', () => {
       }, {
         endpoint: 'https://analytics.example.test/v1/events',
         ingestToken: 'test-token',
-        timeoutMs: 25,
+        timeoutMs: 1,
       });
-      timeoutHandler.current?.();
       await analyticsDone;
     } finally {
       https.request = originalRequest;
     }
 
+    assert.isTrue(socketTimeoutRegistered);
     assert.isTrue(destroyed);
   });
 });

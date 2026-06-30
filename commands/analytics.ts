@@ -220,21 +220,32 @@ const requestOptions = (endpoint: string, ingestToken: string): RequestOptions =
 };
 
 const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise((resolve) => {
+  let wallClockTimeout: NodeJS.Timeout | undefined;
+  let settled = false;
+  const settle = (): void => {
+    if (!settled) {
+      settled = true;
+      if (wallClockTimeout) {
+        clearTimeout(wallClockTimeout);
+      }
+      resolve();
+    }
+  };
+
   if (!options.endpoint || !options.ingestToken) {
-    resolve();
+    settle();
     return;
   }
 
   try {
     const body = JSON.stringify(payload);
     const optionsWithHeaders = requestOptions(options.endpoint, options.ingestToken);
-    let settled = false;
-    const settle = (): void => {
-      if (!settled) {
-        settled = true;
-        resolve();
-      }
-    };
+    const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
+    let destroyRequest = () => {};
+    wallClockTimeout = setTimeout(() => {
+      destroyRequest();
+      settle();
+    }, timeoutMs);
     const request = https.request({
       ...optionsWithHeaders,
       headers: {
@@ -246,17 +257,20 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise(
       response.on('close', settle);
       response.resume();
     });
+    destroyRequest = () => {
+      request.destroy();
+    };
 
     request.on('error', settle);
     request.on('close', settle);
-    request.setTimeout(options.timeoutMs ?? defaultTimeoutMs, () => {
+    request.setTimeout(timeoutMs, () => {
       request.destroy();
       settle();
     });
     request.end(body);
   } catch {
     // Analytics must never affect command behavior.
-    resolve();
+    settle();
   }
 });
 
@@ -325,13 +339,12 @@ const runWithCommandAnalytics = (
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
     }, runtime);
   } catch (error) {
-    return recordAnalyticsEvent({
+    void recordAnalyticsEvent({
       command,
       status: 'failure',
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, runtime).then(() => {
-      throw error;
-    });
+    }, runtime);
+    throw error;
   }
 };
 
