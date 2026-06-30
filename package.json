@@ -4,6 +4,7 @@
   "description": "Useful scripts to save time",
   "scripts": {
     "lint": "eslint .",
+    "analytics:report": "node analytics-worker/report.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:analytics-worker": "tsc --noEmit --strict --target ES2023 --module ESNext --lib ES2023,WebWorker --ignoreConfig analytics-worker/src/index.ts",
     "test:unit": "mocha",

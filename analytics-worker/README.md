@@ -146,3 +146,40 @@ indefinite install history.
 ## Queries
 
 Example D1 queries for the key maintenance questions live in `queries/`.
+
+## Reporting
+
+Run the read-only production report from the repository root:
+
+```shell
+npm run analytics:report
+```
+
+By default, the report covers the last 30 UTC days ending today. To choose an
+inclusive date range:
+
+```shell
+npm run analytics:report -- --from 2026-06-01 --to 2026-06-30
+```
+
+The report uses local Wrangler authentication and
+`analytics-worker/wrangler.toml` to run remote D1 `SELECT` queries. It prints:
+
+- active installs by day
+- top-level command usage
+- command success, failure, and unknown counts
+- runtime/version trends from existing aggregate rows
+
+The report does not read or print Cloudflare secrets. Do not paste secret
+values into the report command. If Wrangler is not installed globally, the
+script falls back to `npx wrangler`.
+
+Reporting stays within the existing aggregate schema:
+
+- `install_days`
+- `command_events_daily`
+- `version_events_daily`
+
+It does not add telemetry fields or expose feature-level events, command
+arguments, local paths, Gist details, package/editor data, raw errors,
+environment variables, arbitrary config values, IP storage, or raw install IDs.

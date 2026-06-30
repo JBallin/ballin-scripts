@@ -11,7 +11,7 @@ const jsRules = {
   ...js.configs.recommended.rules,
   'no-console': 'error',
 };
-const tsFiles = ['commands/**/*.ts', 'config/**/*.ts', 'test/**/*.ts'];
+const tsFiles = ['analytics-worker/report.ts', 'commands/**/*.ts', 'config/**/*.ts', 'test/**/*.ts'];
 
 export default tseslint.config(
   {
