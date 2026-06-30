@@ -106,8 +106,17 @@ esac
     }
   });
 
-  it('reports healthy Ballin-managed environment checks through doctor', () => {
+  it('reports a concise healthy doctor result by default', () => {
     const result = runBallin(['doctor']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'Your Ballin-managed environment looks ready.\n');
+    assert.equal(result.stderr, '');
+    assert.equal(fs.readFileSync(commandLogPath, 'utf8'), 'auth status --hostname example.test\n');
+  });
+
+  it('reports full Ballin-managed environment checks through verbose doctor', () => {
+    const result = runBallin(['doctor', '--verbose']);
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Ballin doctor');
@@ -143,10 +152,22 @@ esac
     assert.include(result.stdout, 'Next: Run the installer to create or adopt a backup Gist.');
     assert.include(result.stdout, 'WARN  GitHub CLI: GitHub CLI is not discoverable on PATH.');
     assert.include(result.stdout, 'Next: Install GitHub CLI and authenticate it for your backup host.');
-    assert.include(result.stdout, 'INFO  GitHub CLI authentication: Skipping GitHub CLI authentication check because gh is not on PATH.');
-    assert.include(result.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
+    assert.notInclude(result.stdout, 'OK    Node.js runtime:');
+    assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
+    assert.notInclude(result.stdout, 'OK    Config readability:');
+    assert.notInclude(result.stdout, 'OK    Gist host:');
+    assert.notInclude(result.stdout, 'INFO  GitHub CLI authentication: Skipping GitHub CLI authentication check because gh is not on PATH.');
+    assert.notInclude(result.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
     assert.equal(result.stderr, '');
     assert.isFalse(fs.existsSync(commandLogPath));
+
+    const verboseResult = runBallin(['doctor', '--verbose']);
+
+    assert.equal(verboseResult.status, 0, verboseResult.stderr);
+    assert.include(verboseResult.stdout, 'OK    Node.js runtime:');
+    assert.include(verboseResult.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
+    assert.include(verboseResult.stdout, 'INFO  GitHub CLI authentication: Skipping GitHub CLI authentication check because gh is not on PATH.');
+    assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
   });
 
   it('fails doctor when a required health check fails', () => {
@@ -157,6 +178,11 @@ esac
     assert.equal(missingShim.status, 1);
     assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: up.');
     assert.include(missingShim.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
+    assert.notInclude(missingShim.stdout, 'OK    Node.js runtime:');
+    assert.notInclude(missingShim.stdout, 'OK    Config readability:');
+    assert.notInclude(missingShim.stdout, 'WARN');
+    assert.notInclude(missingShim.stdout, 'INFO');
+    assert.notInclude(missingShim.stdout, 'Result: Ballin-managed environment has errors.');
 
     fs.rmSync(configPath);
     const missingConfig = runBallin(['doctor']);
@@ -168,9 +194,13 @@ esac
 
   it('rejects invalid doctor usage', () => {
     const result = runBallin(['doctor', 'extra']);
+    const verboseWithExtra = runBallin(['doctor', '--verbose', 'extra']);
 
     assert.equal(result.status, 2);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'Usage: ballin doctor\n');
+    assert.equal(result.stderr, 'Usage: ballin doctor [--verbose]\n');
+    assert.equal(verboseWithExtra.status, 2);
+    assert.equal(verboseWithExtra.stdout, '');
+    assert.equal(verboseWithExtra.stderr, 'Usage: ballin doctor [--verbose]\n');
   });
 });

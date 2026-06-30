@@ -172,10 +172,14 @@ backup readiness.
 ballin doctor
 ```
 
-Healthy and warning-only runs exit `0`; warnings are concise next steps, not
-script-blocking failures. Runs with required check errors exit `1`. This command
-does not run `brew doctor`; Homebrew-specific readiness stays separate from the
-Ballin health check.
+Healthy runs print one concise readiness message. Warning-only runs exit `0`
+and show only warnings with next steps, not unrelated healthy checks. Runs with
+required check errors exit `1` and show failed checks with next steps. Use
+`ballin doctor --verbose` to see the full `OK`, `WARN`, `ERROR`, and `INFO`
+check list. Invalid doctor usage exits `2`.
+
+This command does not run `brew doctor`; Homebrew-specific readiness stays
+separate from the Ballin health check.
 
 ## Commands
 

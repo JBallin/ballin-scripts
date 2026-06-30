@@ -90,7 +90,7 @@ const formatDoctorCheck = (check: DoctorCheck): string => {
   return lines.join('\n');
 };
 
-const formatDoctorReport = (report: DoctorReport): string => {
+const formatVerboseDoctorReport = (report: DoctorReport): string => {
   const statusSummary = report.status === 'pass'
     ? 'Ballin-managed environment health looks good.'
     : report.status === 'warn'
@@ -107,9 +107,20 @@ const formatDoctorReport = (report: DoctorReport): string => {
   ].join('\n');
 };
 
+const formatDefaultDoctorReport = (report: DoctorReport): string => {
+  if (report.status === 'pass') {
+    return 'Your Ballin-managed environment looks ready.\n';
+  }
+
+  const visibleStatus = report.status === 'fail' ? 'fail' : 'warn';
+  const visibleChecks = report.checks.filter(({ status }) => status === visibleStatus);
+  return `${visibleChecks.map(formatDoctorCheck).join('\n')}\n`;
+};
+
 const runDoctorCommand = (args: string[]): void => {
-  if (args.length) {
-    writeStderr('Usage: ballin doctor\n');
+  const verbose = args.length === 1 && args[0] === '--verbose';
+  if (args.length > 0 && !verbose) {
+    writeStderr('Usage: ballin doctor [--verbose]\n');
     process.exitCode = 2;
     return;
   }
@@ -121,7 +132,7 @@ const runDoctorCommand = (args: string[]): void => {
     env: process.env,
   }) as DoctorReport;
 
-  writeStdout(formatDoctorReport(report));
+  writeStdout(verbose ? formatVerboseDoctorReport(report) : formatDefaultDoctorReport(report));
   process.exitCode = report.status === 'fail' ? 1 : 0;
 };
 
