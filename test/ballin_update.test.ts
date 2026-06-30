@@ -101,6 +101,7 @@ esac
     fs.mkdirSync(commandsDir, { recursive: true });
     fs.writeFileSync(path.join(commandsDir, 'install_setup.ts'), `const fs = require('fs');
 fs.appendFileSync(process.env.BALLIN_UPDATE_TEST_LOG, process.cwd() + '|install_setup:' + process.argv.slice(2).join(' ') + '\\n');
+process.stdout.write(process.env.FAKE_SETUP_STDOUT || '');
 if (process.env.FAKE_SETUP_SIGNAL) {
   process.kill(process.pid, process.env.FAKE_SETUP_SIGNAL);
 }
@@ -168,7 +169,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runUpdate();
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
@@ -176,6 +177,16 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       `${repoDir}|git:merge origin/main`,
       setupLog(),
     ]);
+  });
+
+  it('does not add a blank line before setup output', () => {
+    const result = runUpdate({
+      FAKE_SETUP_STDOUT: 'setup output\n',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '👟 getting fresh kicks...\nsetup output\n');
+    assert.equal(result.stderr, '');
   });
 
   it('lets fetch use stdin and stderr while keeping stdout quiet', () => {
@@ -186,7 +197,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     );
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n');
     assert.equal(result.stderr, 'credential prompt\n');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
@@ -206,7 +217,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runUpdate({}, symlinkPath);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
@@ -220,7 +231,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runUpdate({ FAKE_SETUP_STATUS: '27' });
 
     assert.equal(result.status, 27);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
@@ -236,7 +247,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runUpdate();
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n');
     assert.include(result.stderr, 'Cannot find module');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
@@ -249,7 +260,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runUpdate({ FAKE_SETUP_SIGNAL: 'SIGTERM' });
 
     assert.equal(result.status, 143);
-    assert.equal(result.stdout, '👟 getting fresh kicks...\n\n');
+    assert.equal(result.stdout, '👟 getting fresh kicks...\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
@@ -300,7 +311,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(
       result.stdout,
       '👟 getting fresh kicks...\n'
-        + 'git checkout main failed. stashing changes and trying again...\n\n',
+        + 'git checkout main failed. stashing changes and trying again...\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
@@ -365,7 +376,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stdout,
-      '👟 getting fresh kicks...\ngit merge failed. stashing changes and trying again...\n\n',
+      '👟 getting fresh kicks...\ngit merge failed. stashing changes and trying again...\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
@@ -389,7 +400,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stdout,
-      '👟 getting fresh kicks...\ngit merge failed. stashing changes and trying again...\n\n',
+      '👟 getting fresh kicks...\ngit merge failed. stashing changes and trying again...\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [

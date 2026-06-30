@@ -336,7 +336,7 @@ esac
     const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
-    assert.include(output, analyticsNotice);
+    assert.equal(output, `\n${analyticsNotice}\n`);
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 
@@ -449,7 +449,7 @@ esac
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, analyticsNoticeFor(docsUrl));
+    assert.equal(result.stdout, `\n${analyticsNoticeFor(docsUrl)}\n`);
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 

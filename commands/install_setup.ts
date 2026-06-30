@@ -56,7 +56,7 @@ const setupAnalyticsInstallId = (repoDir: string, configPath: string, docsUrl?: 
       docsUrl,
       env: process.env,
       repoDir,
-      noticeWriter: writeStdoutLine,
+      noticeWriter: (notice: string) => writeStdoutLine(`\n${notice}`),
     });
   } catch {
     // Analytics setup must never block install or update.
