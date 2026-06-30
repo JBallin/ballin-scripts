@@ -82,26 +82,22 @@ them before continuing.
 
 ## Readiness checks
 
-Use `ballin doctor` when you want to check whether the Ballin-managed
-environment looks ready: supported Node.js, installed command shims, readable
-config, and Gist backup readiness.
+Use `ballin doctor` to check Ballin-managed readiness, including Node.js,
+command shims, config, and Gist backup setup.
 
 ```shell
 ballin doctor
 ```
 
-Healthy runs print one concise readiness message. Warning-only runs exit `0`
-and show only warnings with next steps, not unrelated healthy checks. Runs with
-required check errors exit `1` and show failed checks with next steps.
-
-Use `--verbose` to see the full `OK`, `WARN`, `ERROR`, and `INFO` check list:
+The default output stays quiet unless something needs attention. Use
+`--verbose` to see every check:
 
 ```shell
 ballin doctor --verbose
 ```
 
-Invalid doctor usage exits `2`. `ballin doctor` does not run `brew doctor`;
-Homebrew-specific readiness stays separate from the Ballin health check.
+Healthy and warning-only runs exit `0`; required failures exit `1`; invalid
+usage exits `2`. `ballin doctor` does not run `brew doctor`.
 
 ## Analytics
 
