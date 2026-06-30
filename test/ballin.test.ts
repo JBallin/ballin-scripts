@@ -111,7 +111,7 @@ esac
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Your Ballin-managed environment looks ready.\n');
+    assert.equal(result.stdout, 'Your Ballin-managed environment is healthy.\n');
     assert.equal(result.stderr, '');
     assert.equal(fs.readFileSync(commandLogPath, 'utf8'), 'auth status --hostname example.test\n');
   });

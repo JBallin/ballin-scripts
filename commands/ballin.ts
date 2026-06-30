@@ -111,7 +111,7 @@ const formatVerboseDoctorReport = (report: DoctorReport): string => {
 
 const formatDefaultDoctorReport = (report: DoctorReport): string => {
   if (report.status === 'pass') {
-    return 'Your Ballin-managed environment looks ready.\n';
+    return 'Your Ballin-managed environment is healthy.\n';
   }
 
   const visibleStatus = report.status === 'fail' ? 'fail' : 'warn';
