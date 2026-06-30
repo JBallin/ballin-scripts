@@ -33,8 +33,6 @@
   <rect width="1280" height="640" fill="url(#background)"/>
   <rect width="1280" height="640" fill="url(#accent-haze)"/>
   <path d="M113 122h1054c15 0 27 12 27 27v342c0 15-12 27-27 27H113c-15 0-27-12-27-27V149c0-15 12-27 27-27Z" fill="#f4f1e8" fill-opacity="0.018" stroke="#f4f1e8" stroke-opacity="0.055"/>
-  <path d="M146 458h790" stroke="#f4f1e8" stroke-opacity="0.07"/>
-  <path d="M146 458h90" stroke="#9be675" stroke-opacity="0.82"/>
 
   <g filter="url(#soft-shadow)">
     <text x="146" y="314" class="wordmark" fill="#f4f1e8">ballin</text>
@@ -42,7 +40,10 @@
       <tspan x="151" dy="0">Back up your dotfiles and update your</tspan>
       <tspan x="151" dy="42">macOS development environment.</tspan>
     </text>
-    <text x="151" y="496" class="mono" fill="#8f948d" font-size="22" font-weight="500">ballin-scripts</text>
+    <text x="151" y="496" class="mono" font-size="22" font-weight="500">
+      <tspan fill="#9be675">&gt;_</tspan>
+      <tspan dx="12" fill="#8f948d">ballin-scripts</tspan>
+    </text>
   </g>
 
 </svg>
