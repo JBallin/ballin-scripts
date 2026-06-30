@@ -3,23 +3,21 @@
 *Back up your dotfiles and update your macOS development environment.*
 
 `ballin-scripts` helps you recreate and maintain a macOS development environment
-with minimal manual setup. It backs up dotfiles, editor settings, Homebrew
-state, npm globals, and related configuration to a private Gist, then automates
-routine updates.
+with minimal manual setup. It backs up the files, package lists, editor settings,
+and local configuration that define your setup, then automates routine updates.
 
-It is built for people who want their Mac setup to be repeatable: the files and
-package lists that define the environment are captured in one place, and the
-routine update path is available as a single command.
+It is built for people who want a repeatable macOS development environment with
+low-friction updates.
 
 Core commands:
 
 - `up` updates the development environment.
-- `gu` snapshots it to a private Gist.
+- `gu` snapshots the development environment to a private Gist.
 
 ## What it manages
 
-`ballin-scripts` focuses on the state that is easy to lose when moving between
-Macs or rebuilding a development machine:
+`ballin-scripts` backs up development-environment state that is easy to lose
+when moving between Macs or rebuilding a development machine:
 
 - shell startup files and common editor config files
 - Git config and global ignore files
@@ -32,13 +30,13 @@ Macs or rebuilding a development machine:
 See the [supported capabilities reference](docs/capabilities.md) for the exact
 snapshot files and update integrations.
 
-## What it changes
+## Backup and update behavior
 
-The tools split backup from broader system maintenance:
+The tools split backup from broader system updates:
 
 - `gu` reads local development-environment state and uploads changed snapshots
   to the configured private Gist.
-- `up` runs maintenance tasks such as Homebrew upgrades, optional Node.js/npm
+- `up` runs update tasks such as Homebrew upgrades, optional Node.js/npm
   updates, optional macOS and App Store updates, optional `ballin-scripts`
   updates, and optional `gu` backups.
 - Installation adds the command shims to your shell path and configures the
@@ -50,13 +48,12 @@ and tradeoffs.
 
 ## Fresh Mac setup
 
-On a new Mac, install `ballin-scripts` and point it at an existing backup Gist
-when prompted. The installer can adopt that Gist and restore saved
-`ballin_config` values, while the Gist snapshots provide the reference for
+On a new Mac, install `ballin-scripts` and let the installer create or adopt the
+private backup Gist used by `gu`. Future snapshots provide the reference for
 recreating shell files, Git settings, package lists, editor settings, and other
 development-environment state.
 
-This is currently a backup and maintenance toolkit, not a full one-command
+This is currently a backup and update toolkit, not a full one-command
 machine restore system. The backed-up snapshots make rebuilds more repeatable
 and auditable.
 
@@ -120,8 +117,8 @@ No updates are available.
 
 ### Update with `up`
 
-`up` automates common maintenance tasks for a macOS development machine,
-including Homebrew maintenance, App Store and macOS updates, `ballin-scripts`
+`up` automates common update tasks for a macOS development machine,
+including Homebrew upgrades, App Store and macOS updates, `ballin-scripts`
 updates, optional Node.js/npm updates, and optional `gu` backups.
 
 ```shell
@@ -165,11 +162,27 @@ Read one backed-up file from the Gist:
 gu read zshrc.sh
 ```
 
+### Check health with `ballin doctor`
+
+`ballin doctor` checks whether the Ballin-managed development environment is
+ready: supported Node.js, installed command shims, readable config, and Gist
+backup readiness.
+
+```shell
+ballin doctor
+```
+
+Healthy and warning-only runs exit `0`; warnings are concise next steps, not
+script-blocking failures. Runs with required check errors exit `1`. This command
+does not run `brew doctor`; Homebrew-specific readiness stays separate from the
+Ballin health check.
+
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
+| `ballin doctor` | Checks Ballin-managed environment health. |
 | `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
 | `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
 | `ballin_config` | Reads and updates local `ballin-scripts` settings. |

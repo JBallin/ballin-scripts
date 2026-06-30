@@ -1,11 +1,20 @@
 name = "ballin-scripts-analytics"
 main = "src/index.ts"
 compatibility_date = "2026-06-27"
+workers_dev = true
 
 [[d1_databases]]
 binding = "ANALYTICS_DB"
 database_name = "ballin-scripts-analytics"
 database_id = "replace-with-cloudflare-d1-database-id"
+
+[[ratelimits]]
+name = "ANALYTICS_RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 1_500
+  period = 60
 
 [triggers]
 crons = ["17 3 * * *"]
