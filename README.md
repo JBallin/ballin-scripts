@@ -167,7 +167,7 @@ gu read zshrc.sh
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
-| `ballin doctor` | Advanced readiness check for the Ballin-managed environment. |
+| `ballin doctor` | Checks whether the Ballin-managed environment looks ready. |
 | `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
 | `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
 | `ballin_config` | Reads and updates local `ballin-scripts` settings. |
