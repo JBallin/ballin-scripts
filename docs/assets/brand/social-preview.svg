@@ -13,13 +13,13 @@
       <stop offset="1" stop-color="#9be675" stop-opacity="0"/>
     </radialGradient>
     <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#050605" flood-opacity="0.22"/>
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#050605" flood-opacity="0.2"/>
     </filter>
     <style>
       .wordmark {
         font-family: "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
         font-size: 156px;
-        font-weight: 650;
+        font-weight: 640;
         letter-spacing: 0;
       }
 
@@ -36,13 +36,13 @@
 
   <g filter="url(#soft-shadow)">
     <text x="146" y="314" class="wordmark" fill="#f4f1e8">ballin</text>
-    <text x="151" y="384" class="mono" fill="#d9d6cc" font-size="29" font-weight="400">
+    <text x="151" y="389" class="mono" fill="#d9d6cc" font-size="28.5" font-weight="400">
       <tspan x="151" dy="0">Back up your dotfiles and update your</tspan>
-      <tspan x="151" dy="42">macOS development environment.</tspan>
+      <tspan x="151" dy="40">macOS development environment.</tspan>
     </text>
-    <text x="151" y="496" class="mono" font-size="22" font-weight="500">
-      <tspan fill="#9be675">&gt;_</tspan>
-      <tspan dx="8" fill="#8f948d">ballin-scripts</tspan>
+    <text x="151" y="496" class="mono" font-size="21.5" font-weight="500">
+      <tspan fill="#9be675" fill-opacity="0.92">&gt;_</tspan>
+      <tspan dx="7" fill="#858b84">ballin-scripts</tspan>
     </text>
   </g>
 
