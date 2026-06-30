@@ -42,6 +42,32 @@ secrets, and an `ANALYTICS_RATE_LIMITER` binding for `POST /v1/events`.
 The Worker deletes rows older than 395 days. That keeps roughly 13 months of
 daily install and command-count data.
 
+## Reporting
+
+Use the local read-only report for production D1 aggregates:
+
+```shell
+npm run analytics:report
+```
+
+To report on a specific inclusive UTC date range:
+
+```shell
+npm run analytics:report -- --from 2026-06-01 --to 2026-06-30
+```
+
+The report runs Wrangler D1 `SELECT` queries against the remote database using
+local Wrangler authentication and `analytics-worker/wrangler.toml`. It shows
+daily active installs, top-level command usage, command success/failure counts,
+and runtime/version trends. It does not require, accept, or print Cloudflare
+secret values.
+
+The report only reads the existing aggregate tables: `install_days`,
+`command_events_daily`, and `version_events_daily`. It does not introduce new
+telemetry fields or report feature-level events, command arguments, local paths,
+Gist details, package/editor data, raw errors, environment variables,
+arbitrary config values, IPs, or raw install IDs.
+
 ## Abuse Controls
 
 The skeleton requires an ingest token before accepting events, rejects oversized
