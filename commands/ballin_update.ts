@@ -1,5 +1,6 @@
 const path = require('path');
 const {
+  rethrowCommandError,
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
@@ -35,7 +36,7 @@ function runBallinUpdateCommand(): void {
 }
 
 const runBallinUpdateCli = (): void => {
-  void runWithCommandAnalytics('ballin_update', runBallinUpdateCommand);
+  void runWithCommandAnalytics('ballin_update', runBallinUpdateCommand).catch(rethrowCommandError);
 };
 
 module.exports = {

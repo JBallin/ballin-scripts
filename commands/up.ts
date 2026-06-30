@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  rethrowCommandError,
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
@@ -136,7 +137,7 @@ function runUpCommand(): void {
 }
 
 const runUpCli = (): void => {
-  void runWithCommandAnalytics('up', runUpCommand);
+  void runWithCommandAnalytics('up', runUpCommand).catch(rethrowCommandError);
 };
 
 module.exports = {

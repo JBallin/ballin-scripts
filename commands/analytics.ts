@@ -339,13 +339,20 @@ const runWithCommandAnalytics = (
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
     }, runtime);
   } catch (error) {
-    void recordAnalyticsEvent({
+    return recordAnalyticsEvent({
       command,
       status: 'failure',
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, runtime);
-    throw error;
+    }, runtime).then(() => {
+      throw error;
+    });
   }
+};
+
+const rethrowCommandError = (error: unknown): void => {
+  setImmediate(() => {
+    throw error;
+  });
 };
 
 module.exports = {
@@ -358,6 +365,7 @@ module.exports = {
   installIdPathForRepo,
   readLocalInstallId,
   recordAnalyticsEvent,
+  rethrowCommandError,
   runWithCommandAnalytics,
   sendAnalyticsPayload,
 };

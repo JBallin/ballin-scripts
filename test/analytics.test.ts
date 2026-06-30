@@ -6,6 +6,7 @@ const {
   analyticsDisabledByEnv,
   durationBucketFromMs,
   recordAnalyticsEvent,
+  rethrowCommandError,
   runWithCommandAnalytics,
   sendAnalyticsPayload,
 } = require('../commands/analytics.ts');
@@ -443,35 +444,74 @@ describe('analytics client', () => {
     });
   });
 
-  it('records command-level failures when the command throws and rethrows synchronously', () => {
+  it('records command-level failures when the command throws and rejects after flushing', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
     const payloads: AnalyticsPayload[] = [];
     let currentNow = 0;
+    let releaseSender = () => {};
+    let analyticsSettled = false;
+    let rejection: Error | undefined;
 
-    assert.throws(() => {
-      runWithCommandAnalytics('up', () => {
-        currentNow = 60_000;
-        throw new Error('simulated command failure');
-      }, {
-        endpoint: 'https://analytics.example.test/v1/events',
-        ingestToken: 'test-token',
-        env: {},
-        installIdPath: testInstallIdPath,
-        nowMs: () => currentNow,
-        sender: async (payload: AnalyticsPayload) => {
-          payloads.push(payload);
-        },
+    const analyticsDone = runWithCommandAnalytics('up', () => {
+      currentNow = 60_000;
+      throw new Error('simulated command failure');
+    }, {
+      endpoint: 'https://analytics.example.test/v1/events',
+      ingestToken: 'test-token',
+      env: {},
+      installIdPath: testInstallIdPath,
+      nowMs: () => currentNow,
+      sender: (payload: AnalyticsPayload) => new Promise<void>((resolve) => {
+        payloads.push(payload);
+        releaseSender = () => resolve();
+      }),
+    });
+
+    void analyticsDone
+      .then(() => {
+        analyticsSettled = true;
+      })
+      .catch((error: Error) => {
+        analyticsSettled = true;
+        rejection = error;
       });
-    }, 'simulated command failure');
 
+    await Promise.resolve();
+    assert.isFalse(analyticsSettled);
     assert.deepInclude(payloads[0], {
       command: 'up',
       status: 'failure',
       durationBucket: '1-10m',
     });
+    releaseSender();
+    await analyticsDone.catch(() => {});
+
+    assert.isTrue(analyticsSettled);
+    assert.equal(rejection?.message, 'simulated command failure');
+  });
+
+  it('rethrows command errors through the event loop', () => {
+    const originalSetImmediate = global.setImmediate;
+    let scheduled: (() => void) | undefined;
+    const error = new Error('simulated command failure');
+
+    global.setImmediate = ((callback: () => void) => {
+      scheduled = callback;
+      return {} as NodeJS.Immediate;
+    }) as typeof setImmediate;
+
+    try {
+      rethrowCommandError(error);
+      assert.isFunction(scheduled);
+      assert.throws(() => {
+        scheduled?.();
+      }, 'simulated command failure');
+    } finally {
+      global.setImmediate = originalSetImmediate;
+    }
   });
 
   it('sends through https and resolves after the response ends', async () => {
