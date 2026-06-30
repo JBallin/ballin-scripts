@@ -8,8 +8,8 @@
       <stop offset="1" stop-color="#0b0d0c"/>
     </linearGradient>
     <radialGradient id="accent-haze" cx="0.82" cy="0.2" r="0.72">
-      <stop offset="0" stop-color="#9be675" stop-opacity="0.09"/>
-      <stop offset="0.42" stop-color="#9be675" stop-opacity="0.025"/>
+      <stop offset="0" stop-color="#9be675" stop-opacity="0.078"/>
+      <stop offset="0.42" stop-color="#9be675" stop-opacity="0.022"/>
       <stop offset="1" stop-color="#9be675" stop-opacity="0"/>
     </radialGradient>
     <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
@@ -42,7 +42,7 @@
     </text>
     <text x="151" y="496" class="mono" font-size="22" font-weight="500">
       <tspan fill="#9be675">&gt;_</tspan>
-      <tspan dx="12" fill="#8f948d">ballin-scripts</tspan>
+      <tspan dx="8" fill="#8f948d">ballin-scripts</tspan>
     </text>
   </g>
 
