@@ -148,7 +148,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
 }
 
 const runBallinCli = (): void => {
-  runWithCommandAnalytics('ballin', runBallinCommand);
+  void runWithCommandAnalytics('ballin', runBallinCommand);
 };
 
 module.exports = {

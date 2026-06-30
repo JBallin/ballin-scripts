@@ -714,7 +714,7 @@ function runGuCommand(args = process.argv.slice(2)): void {
 }
 
 const runGuCli = (args = process.argv.slice(2)): void => {
-  runWithCommandAnalytics('gu', () => runGuCommand(args));
+  void runWithCommandAnalytics('gu', () => runGuCommand(args));
 };
 
 module.exports = {

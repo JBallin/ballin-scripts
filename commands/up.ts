@@ -136,7 +136,7 @@ function runUpCommand(): void {
 }
 
 const runUpCli = (): void => {
-  runWithCommandAnalytics('up', runUpCommand);
+  void runWithCommandAnalytics('up', runUpCommand);
 };
 
 module.exports = {

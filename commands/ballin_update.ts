@@ -35,7 +35,7 @@ function runBallinUpdateCommand(): void {
 }
 
 const runBallinUpdateCli = (): void => {
-  runWithCommandAnalytics('ballin_update', runBallinUpdateCommand);
+  void runWithCommandAnalytics('ballin_update', runBallinUpdateCommand);
 };
 
 module.exports = {
