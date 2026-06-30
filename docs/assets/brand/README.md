@@ -8,7 +8,7 @@ This folder stores editable brand sources and exported assets for Ballin.
 - Export: `social-preview.png`
 - Size: `1280x640`
 - Primary identity: lowercase `ballin`
-- Supporting copy: `Back up your dotfiles and update your macOS development environment.`
+- Supporting copy: `Back up your dotfiles and update your macOS development environment`
 
 Keep the SVG editable. Treat the PNG as the GitHub upload artifact.
 
