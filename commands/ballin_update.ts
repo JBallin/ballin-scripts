@@ -23,7 +23,6 @@ function runBallinUpdateCommand(): void {
     return;
   }
 
-  writeStdoutLine();
   process.exitCode = runVisibleCommand(process.execPath, [
     'commands/install_setup.ts',
     'setup',
