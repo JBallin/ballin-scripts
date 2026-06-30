@@ -27,6 +27,12 @@ type AnalyticsPayload = {
   osVersion: string;
 };
 
+type SenderOptions = {
+  endpoint?: string;
+  ingestToken?: string;
+  timeoutMs?: number;
+};
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -172,6 +178,30 @@ describe('analytics client', () => {
     assert.equal(payloads[0].installId, fixedInstallId);
     assert.deepEqual(updatedAnalytics, {
       enabled: 'true',
+    });
+  });
+
+  it('uses production endpoint and token defaults when runtime overrides are absent', () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const senderOptions: SenderOptions[] = [];
+
+    recordAnalyticsEvent({
+      command: 'up',
+      now: fixedNow,
+    }, {
+      env: {},
+      installIdPath: testInstallIdPath,
+      sender: (_payload: AnalyticsPayload, options: SenderOptions) => {
+        senderOptions.push(options);
+      },
+    });
+
+    assert.deepInclude(senderOptions[0], {
+      endpoint: 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events',
+      ingestToken: '6jC_OqsMynyQc3FKXgUN7aP3bbDQ_H_DMhGDrw7t6RE',
     });
   });
 

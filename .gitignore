@@ -2,3 +2,5 @@
 ballin.config.json
 /.gu-cache
 /.analytics
+/analytics-worker/.wrangler/
+/analytics-worker/wrangler.toml

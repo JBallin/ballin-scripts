@@ -78,6 +78,8 @@ const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', 
 const allowedOs = new Set(['darwin', 'linux', 'win32']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
+const productionAnalyticsIngestToken = '6jC_OqsMynyQc3FKXgUN7aP3bbDQ_H_DMhGDrw7t6RE';
 const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
   'ballin-scripts collects minimal anonymous usage analytics after this notice.',
   'Disable: ballin_config set analytics.enabled false',
@@ -290,8 +292,8 @@ const recordAnalyticsEvent = (input: AnalyticsRecordInput, runtime: AnalyticsRun
       now: input.now ?? new Date(),
     }, installId);
     (runtime.sender ?? sendAnalyticsPayload)(payload, {
-      endpoint: runtime.endpoint,
-      ingestToken: runtime.ingestToken,
+      endpoint: runtime.endpoint ?? productionAnalyticsEndpoint,
+      ingestToken: runtime.ingestToken ?? productionAnalyticsIngestToken,
       timeoutMs: runtime.timeoutMs ?? defaultTimeoutMs,
     });
   } catch {

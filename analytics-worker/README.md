@@ -1,8 +1,8 @@
 # Analytics Worker
 
-This is the proposed backend for the minimal `ballin-scripts` active-install
-analytics described in issue #166. It is intentionally isolated from the CLI so
-the command package does not gain runtime analytics SDK dependencies.
+This is the backend for the minimal `ballin-scripts` active-install analytics.
+It is intentionally isolated from the CLI so the command package does not gain
+runtime analytics SDK dependencies.
 
 The backend is a Cloudflare Worker with a D1 database binding. It accepts a
 single narrow event shape, hashes the client install ID before storage, and
@@ -85,17 +85,21 @@ The worker should ignore request IP for analytics purposes. Cloudflare may still
 process request metadata operationally before the worker runs; the application
 schema does not read or persist it.
 
-The ingest token is a deployment gate for the backend skeleton, not a permanent
-abuse solution for a distributed CLI. The Worker also uses a Cloudflare Workers
-rate limiting binding for `POST /v1/events`.
+The ingest token is a public client gate once it is shipped in the CLI, not a
+secret abuse solution for a distributed CLI. The Worker also uses a Cloudflare
+Workers rate limiting binding for `POST /v1/events`.
 
-## Local Setup
+## Production Setup
 
-This repository does not require a live Cloudflare project yet. When ready, run
-these commands from `analytics-worker/`. If Wrangler is not installed globally,
-use `npx wrangler` in place of `wrangler`.
+Run these commands from `analytics-worker/`. If Wrangler is not installed
+globally, use `npx wrangler` in place of `wrangler`.
 
-1. Copy `wrangler.toml.example` to `wrangler.toml`.
+1. Copy `wrangler.toml.example` to the ignored local deployment config:
+
+   ```shell
+   cp wrangler.toml.example wrangler.toml
+   ```
+
 2. Create a D1 database:
 
    ```shell
@@ -118,7 +122,7 @@ use `npx wrangler` in place of `wrangler`.
 6. Apply migrations:
 
    ```shell
-   wrangler d1 migrations apply ballin-scripts-analytics
+   wrangler d1 migrations apply ballin-scripts-analytics --remote
    ```
 
 7. Deploy:
@@ -126,6 +130,12 @@ use `npx wrangler` in place of `wrangler`.
    ```shell
    wrangler deploy
    ```
+
+The production endpoint is:
+
+```text
+https://ballin-scripts-analytics.jballin.workers.dev/v1/events
+```
 
 ## Retention
 
