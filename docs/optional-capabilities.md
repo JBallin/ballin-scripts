@@ -110,7 +110,7 @@ Change a setting with `ballin_config set up.<name> true` or
 | Setting | Default | Behavior |
 | --- | --- | --- |
 | `up.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
-| `up.ballin` | `true` | Updates `ballin-scripts` when `up` runs. |
+| `up.ballin` | `true` | Updates `ballin-scripts` when `up` runs, then checks Ballin readiness if the update succeeds. |
 | `up.gu` | `false` | Runs `gu` to back up your development environment. Enable it when you want each update to also modify your backup gist. |
 | `up.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `up.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
