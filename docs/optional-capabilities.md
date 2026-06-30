@@ -80,6 +80,16 @@ host, and either adopts an existing backup Gist or creates a new one. When an
 adopted backup includes saved `ballin_config` values, the installer restores
 them before continuing.
 
+## Readiness checks
+
+Use `ballin doctor` to check whether the Ballin-managed environment is healthy,
+including Node.js, installed commands, settings, and Gist backup setup. Add
+`--verbose` when you want the full check list.
+
+```shell
+ballin doctor
+```
+
 ## Analytics
 
 `ballin-scripts` can send minimal anonymous usage analytics after a first-run

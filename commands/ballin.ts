@@ -28,6 +28,7 @@ const format = {
   reset: '\x1b[1mreset\x1b[0m',
   open: '\x1b[1mopen\x1b[0m',
   read: '\x1b[1mread\x1b[0m',
+  verbose: '\x1b[1m--verbose\x1b[0m',
 };
 
 const examples = {
@@ -48,6 +49,7 @@ Commands:
                           ${format.reset} (to defaults)
     ballin_uninstall      remove ballin-scripts
     ballin doctor         check Ballin-managed environment health
+                          ${format.verbose} show full readiness details
 
 Scripts:
 
@@ -80,17 +82,17 @@ const writeStderr = (text: string): void => {
   process.stderr.write(text);
 };
 
-const formatDoctorCheck = (check: DoctorCheck): string => {
+const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): string => {
   const lines = [
     `${statusLabels[check.status].padEnd(5)} ${check.label}: ${check.summary}`,
   ];
   if (check.status === 'warn' || check.status === 'fail') {
-    lines.push(`      Next: ${nextSteps[check.id] ?? 'Review the check output above.'}`);
+    lines.push(`${nextPrefix}${nextSteps[check.id] ?? 'Review the check output above.'}`);
   }
   return lines.join('\n');
 };
 
-const formatDoctorReport = (report: DoctorReport): string => {
+const formatVerboseDoctorReport = (report: DoctorReport): string => {
   const statusSummary = report.status === 'pass'
     ? 'Ballin-managed environment health looks good.'
     : report.status === 'warn'
@@ -100,16 +102,27 @@ const formatDoctorReport = (report: DoctorReport): string => {
   return [
     'Ballin doctor',
     '',
-    ...report.checks.map(formatDoctorCheck),
+    ...report.checks.map((check) => formatDoctorCheck(check)),
     '',
     `Result: ${statusSummary}`,
     '',
   ].join('\n');
 };
 
+const formatDefaultDoctorReport = (report: DoctorReport): string => {
+  if (report.status === 'pass') {
+    return 'Your Ballin-managed environment is healthy.\n';
+  }
+
+  const visibleStatus = report.status === 'fail' ? 'fail' : 'warn';
+  const visibleChecks = report.checks.filter(({ status }) => status === visibleStatus);
+  return `${visibleChecks.map((check) => formatDoctorCheck(check, 'Next: ')).join('\n')}\n`;
+};
+
 const runDoctorCommand = (args: string[]): void => {
-  if (args.length) {
-    writeStderr('Usage: ballin doctor\n');
+  const verbose = args.length === 1 && args[0] === '--verbose';
+  if (args.length > 0 && !verbose) {
+    writeStderr('Usage: ballin doctor [--verbose]\n');
     process.exitCode = 2;
     return;
   }
@@ -121,7 +134,7 @@ const runDoctorCommand = (args: string[]): void => {
     env: process.env,
   }) as DoctorReport;
 
-  writeStdout(formatDoctorReport(report));
+  writeStdout(verbose ? formatVerboseDoctorReport(report) : formatDefaultDoctorReport(report));
   process.exitCode = report.status === 'fail' ? 1 : 0;
 };
 
