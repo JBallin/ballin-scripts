@@ -4,6 +4,21 @@ This guide covers choices for the required Node.js setup, plus optional tools
 and settings that extend `ballin-scripts`. The defaults keep updates predictable
 while letting you opt in to broader automation.
 
+## Working with settings
+
+Use `ballin_config` to read and update local settings. Settings use dot paths,
+such as `up.cleanup` or `analytics.enabled`.
+
+```shell
+ballin_config
+ballin_config get up.cleanup
+ballin_config set up.cleanup false
+ballin_config reset
+```
+
+`ballin_config` prints the full config, `get` prints one value, `set` updates an
+existing setting, and `reset` restores the default config.
+
 ## Node.js
 
 Node.js is required by `ballin-scripts`; install it using whichever method fits
