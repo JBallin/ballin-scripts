@@ -82,12 +82,24 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
   }
 };
 
+const nodeVersionForEnv = (env: NodeJS.ProcessEnv): string | undefined => {
+  const result = runCommand('node', ['-p', 'process.versions.node'], {
+    env,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.status !== 0 || result.error) {
+    return undefined;
+  }
+  return result.stdout.trim() || undefined;
+};
+
 const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
   const repoDir = path.join(__dirname, '..');
   const report = collectSetupReadiness({
     repoDir,
     configPath: env.BALLIN_TEST_CONFIG_PATH || undefined,
     env,
+    nodeVersion: nodeVersionForEnv(env),
   }) as DoctorReport;
 
   process.stdout.write(formatDefaultDoctorReport(report));

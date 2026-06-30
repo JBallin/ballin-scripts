@@ -20,8 +20,8 @@ describe('up', () => {
   let configPath: string;
   let logPath: string;
 
-  const writeTestExecutable = (name: string, contents: string) => {
-    fs.writeFileSync(path.join(binDir, name), contents, { mode: 0o755 });
+  const writeTestExecutable = (name: string, contents: string, directory = binDir) => {
+    fs.writeFileSync(path.join(directory, name), contents, { mode: 0o755 });
   };
 
   const installCommandStub = (
@@ -233,6 +233,41 @@ esac
     assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog(), [
       'ballin_update|,|',
+      'gh|,|auth status --hostname example.test',
+    ]);
+  });
+
+  it('checks Ballin readiness with the Node.js runtime from the updated nvm PATH', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const nvmBinDir = path.join(tempDir, 'nvm-bin');
+    fs.mkdirSync(nvmBinDir);
+    installPathUpdatingNvmStub(nvmDir, nvmBinDir);
+    writeTestExecutable('node', `#!/usr/bin/env bash
+printf 'node|%s|%s\\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
+if [ "$*" = '-p process.versions.node' ]; then
+  printf '%s\\n' '99.0.0'
+  exit 0
+fi
+if [ "$1" = '-e' ]; then
+  ${JSON.stringify(process.execPath)} -e "$2"
+  exit "$?"
+fi
+exit 2
+`, nvmBinDir);
+    installHealthyReadinessCommands();
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_BALLIN: 'true',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Checking Ballin readiness');
+    assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.deepEqual(commandLog().slice(1), [
+      'node|,|-e process.stdout.write(JSON.stringify(process.env))',
+      'ballin_update|,|',
+      'node|,|-p process.versions.node',
       'gh|,|auth status --hostname example.test',
     ]);
   });
