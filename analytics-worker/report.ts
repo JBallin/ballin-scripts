@@ -65,6 +65,13 @@ const isValidDateBucket = (value: string): boolean => {
   return !Number.isNaN(parsed.getTime()) && dateBucket(parsed) === value;
 };
 
+const requiredOptionValue = (value: string | undefined, option: string): string => {
+  if (!value || value.startsWith('--')) {
+    throw new Error(`${option} requires a value`);
+  }
+  return value;
+};
+
 const parseArgs = (args: string[]): ParsedArgs => {
   const parsed: ParsedArgs = {
     database: defaultDatabase,
@@ -77,13 +84,13 @@ const parseArgs = (args: string[]): ParsedArgs => {
       parsed.help = true;
     } else if (arg === '--from') {
       index += 1;
-      parsed.from = args[index];
+      parsed.from = requiredOptionValue(args[index], arg);
     } else if (arg === '--to') {
       index += 1;
-      parsed.to = args[index];
+      parsed.to = requiredOptionValue(args[index], arg);
     } else if (arg === '--database') {
       index += 1;
-      parsed.database = args[index] ?? '';
+      parsed.database = requiredOptionValue(args[index], arg);
     } else {
       throw new Error(`Unknown analytics report option: ${arg}`);
     }

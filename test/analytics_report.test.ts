@@ -234,4 +234,10 @@ describe('analytics D1 report', () => {
       to: '2026-06-30',
     });
   });
+
+  it('rejects missing CLI option values', () => {
+    assert.throws(() => optionsFromArgs(['--from']), '--from requires a value');
+    assert.throws(() => optionsFromArgs(['--to', '--database', 'custom-db']), '--to requires a value');
+    assert.throws(() => optionsFromArgs(['--database']), '--database requires a value');
+  });
 });
