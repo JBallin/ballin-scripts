@@ -4,16 +4,19 @@
 analytics. The backend records only the minimal signals needed for active
 installs, top-level command usage, and command success or failure.
 
-The backend skeleton lives in [`analytics-worker/`](../analytics-worker/). Its
-package README covers Worker setup commands. It is not deployed by default and
-does not require a Cloudflare account to work on the CLI.
+The backend lives in [`analytics-worker/`](../analytics-worker/). Its package
+README covers Worker setup and maintenance commands.
 
 ## Production Setup
 
-Production sends stay disabled until the CLI endpoint and token are configured.
-Before enabling them, confirm deployment, D1 binding, migrations, secrets,
-retention cleanup, abuse controls, and payload alignment with the first-run
-notice and [Analytics](analytics.md).
+Production sends use the deployed workers.dev endpoint:
+
+```text
+https://ballin-scripts-analytics.jballin.workers.dev/v1/events
+```
+
+The Worker has a D1 binding, scheduled retention cleanup, two Cloudflare
+secrets, and an `ANALYTICS_RATE_LIMITER` binding for `POST /v1/events`.
 
 ## Why Cloudflare Worker and D1
 
@@ -48,15 +51,17 @@ of the production abuse story.
 
 ## Production Checklist
 
-Before enabling the CLI to send production events:
+For production setup or recreation:
 
-- create the Cloudflare Worker project
 - create the D1 database
-- apply `analytics-worker/migrations/0001_initial.sql`
+- copy `analytics-worker/wrangler.toml.example` to ignored local
+  `analytics-worker/wrangler.toml`
+- set the D1 database ID in local `analytics-worker/wrangler.toml`
 - set `INSTALL_ID_HASH_SECRET`
 - set `INGEST_TOKEN`
-- confirm the `ANALYTICS_RATE_LIMITER` binding is deployed
+- apply `analytics-worker/migrations/0001_initial.sql` with `--remote`
 - deploy the Worker
-- configure the CLI endpoint in the client implementation
-- re-check that the client payload, first-run notice, and `docs/analytics.md`
-  match the documented allowlist
+- confirm the deployed Worker returns `204` for a valid event, `401` for a
+  missing or bad token, and `400` for unsupported fields or invalid enums
+- query D1 to confirm only hashed install/day rows and aggregate counts are
+  stored
