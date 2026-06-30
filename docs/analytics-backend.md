@@ -62,6 +62,12 @@ daily active installs, top-level command usage, command success/failure counts,
 and runtime/version trends. It does not require, accept, or print Cloudflare
 secret values.
 
+Before running the report from a new checkout, copy
+`analytics-worker/wrangler.toml.example` to the ignored local
+`analytics-worker/wrangler.toml`, fill in the D1 `database_id`, and authenticate
+Wrangler for the Cloudflare account. The D1 database ID is not a secret by
+itself; Cloudflare still authorizes remote reads through Wrangler auth.
+
 The report only reads the existing aggregate tables: `install_days`,
 `command_events_daily`, and `version_events_daily`. It does not introduce new
 telemetry fields or report feature-level events, command arguments, local paths,

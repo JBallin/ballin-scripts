@@ -1,4 +1,7 @@
 const { assert } = require('chai');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const {
   dateRangeFromArgs,
   defaultDatabase,
@@ -192,12 +195,15 @@ describe('analytics D1 report', () => {
 
   it('surfaces Wrangler failures without running real commands in tests', () => {
     const calls: SpawnCall[] = [];
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
+    fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
 
     assert.throws(() => {
       runWrangler('SELECT 1', {
         database: defaultDatabase,
         from: '2026-06-01',
-        rootDir: '/repo',
+        rootDir,
         to: '2026-06-30',
       }, (command: string, args: string[]) => {
         calls.push({ args, command });
@@ -215,6 +221,32 @@ describe('analytics D1 report', () => {
 
     assert.deepEqual(calls.map((call) => call.command), ['wrangler']);
     assert.include(calls[0].args, '--remote');
+  });
+
+  it('explains the required local Wrangler config before running commands', () => {
+    const calls: SpawnCall[] = [];
+
+    assert.throws(() => {
+      runWrangler('SELECT 1', {
+        database: defaultDatabase,
+        from: '2026-06-01',
+        rootDir: '/repo',
+        to: '2026-06-30',
+      }, (command: string, args: string[]) => {
+        calls.push({ args, command });
+        return {
+          error: undefined,
+          output: [],
+          pid: 1,
+          signal: null,
+          status: 0,
+          stderr: '',
+          stdout: '[]',
+        };
+      });
+    }, 'Missing analytics Worker config: /repo/analytics-worker/wrangler.toml');
+
+    assert.deepEqual(calls, []);
   });
 
   it('parses CLI options for custom date ranges and databases', () => {
