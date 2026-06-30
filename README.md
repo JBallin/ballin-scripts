@@ -162,31 +162,12 @@ Read one backed-up file from the Gist:
 gu read zshrc.sh
 ```
 
-### Check health with `ballin doctor`
-
-`ballin doctor` checks whether the Ballin-managed development environment is
-ready: supported Node.js, installed command shims, readable config, and Gist
-backup readiness.
-
-```shell
-ballin doctor
-```
-
-Healthy runs print one concise readiness message. Warning-only runs exit `0`
-and show only warnings with next steps, not unrelated healthy checks. Runs with
-required check errors exit `1` and show failed checks with next steps. Use
-`ballin doctor --verbose` to see the full `OK`, `WARN`, `ERROR`, and `INFO`
-check list. Invalid doctor usage exits `2`.
-
-This command does not run `brew doctor`; Homebrew-specific readiness stays
-separate from the Ballin health check.
-
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
-| `ballin doctor` | Checks Ballin-managed environment health. |
+| `ballin doctor` | Advanced readiness check for the Ballin-managed environment. |
 | `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
 | `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
 | `ballin_config` | Reads and updates local `ballin-scripts` settings. |

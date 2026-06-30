@@ -80,6 +80,29 @@ host, and either adopts an existing backup Gist or creates a new one. When an
 adopted backup includes saved `ballin_config` values, the installer restores
 them before continuing.
 
+## Readiness checks
+
+Use `ballin doctor` when you want to check whether the Ballin-managed
+environment looks ready: supported Node.js, installed command shims, readable
+config, and Gist backup readiness.
+
+```shell
+ballin doctor
+```
+
+Healthy runs print one concise readiness message. Warning-only runs exit `0`
+and show only warnings with next steps, not unrelated healthy checks. Runs with
+required check errors exit `1` and show failed checks with next steps.
+
+Use `--verbose` to see the full `OK`, `WARN`, `ERROR`, and `INFO` check list:
+
+```shell
+ballin doctor --verbose
+```
+
+Invalid doctor usage exits `2`. `ballin doctor` does not run `brew doctor`;
+Homebrew-specific readiness stays separate from the Ballin health check.
+
 ## Analytics
 
 `ballin-scripts` can send minimal anonymous usage analytics after a first-run

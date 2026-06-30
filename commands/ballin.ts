@@ -28,6 +28,7 @@ const format = {
   reset: '\x1b[1mreset\x1b[0m',
   open: '\x1b[1mopen\x1b[0m',
   read: '\x1b[1mread\x1b[0m',
+  verbose: '\x1b[1m--verbose\x1b[0m',
 };
 
 const examples = {
@@ -48,6 +49,7 @@ Commands:
                           ${format.reset} (to defaults)
     ballin_uninstall      remove ballin-scripts
     ballin doctor         check Ballin-managed environment health
+                          ${format.verbose} show full readiness details
 
 Scripts:
 

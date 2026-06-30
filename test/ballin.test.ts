@@ -20,6 +20,7 @@ describe('ballin', () => {
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'A Collection of Ballin Scripts!');
     assert.include(result.stdout, 'ballin doctor');
+    assert.include(result.stdout, '--verbose');
     assert.include(result.stdout, 'ballin_update');
     assert.include(result.stdout, 'ballin_config');
     assert.include(result.stdout, 'ballin_uninstall');
