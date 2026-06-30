@@ -170,7 +170,8 @@ The report uses local Wrangler authentication and
 - command success, failure, and unknown counts
 - runtime/version trends from existing aggregate rows
 
-On a new checkout, create the ignored local config first:
+In a checkout that has not been configured for Worker access, create the ignored
+local config first:
 
 ```shell
 cp analytics-worker/wrangler.toml.example analytics-worker/wrangler.toml

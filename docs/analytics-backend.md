@@ -57,16 +57,11 @@ npm run analytics:report -- --from 2026-06-01 --to 2026-06-30
 ```
 
 The report runs Wrangler D1 `SELECT` queries against the remote database using
-local Wrangler authentication and `analytics-worker/wrangler.toml`. It shows
-daily active installs, top-level command usage, command success/failure counts,
-and runtime/version trends. It does not require, accept, or print Cloudflare
-secret values.
-
-Before running the report from a new checkout, copy
-`analytics-worker/wrangler.toml.example` to the ignored local
-`analytics-worker/wrangler.toml`, fill in the D1 `database_id`, and authenticate
-Wrangler for the Cloudflare account. The D1 database ID is not a secret by
-itself; Cloudflare still authorizes remote reads through Wrangler auth.
+local Wrangler authentication and the ignored local
+`analytics-worker/wrangler.toml` described in the Worker README. It shows daily
+active installs, top-level command usage, command success/failure counts, and
+runtime/version trends. It does not require, accept, or print Cloudflare secret
+values.
 
 The report only reads the existing aggregate tables: `install_days`,
 `command_events_daily`, and `version_events_daily`. It does not introduce new
