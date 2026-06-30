@@ -170,6 +170,17 @@ The report uses local Wrangler authentication and
 - command success, failure, and unknown counts
 - runtime/version trends from existing aggregate rows
 
+On a machine where this repository has not been configured for Worker access,
+create the ignored local config first:
+
+```shell
+cp analytics-worker/wrangler.toml.example analytics-worker/wrangler.toml
+```
+
+Then fill in the D1 `database_id` and make sure Wrangler is authenticated for
+the Cloudflare account. The database ID is not a secret by itself; remote reads
+are still controlled by Wrangler auth.
+
 The report does not read or print Cloudflare secrets. Do not paste secret
 values into the report command. If Wrangler is not installed globally, the
 script falls back to `npx wrangler`.

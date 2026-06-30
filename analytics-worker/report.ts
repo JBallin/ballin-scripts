@@ -224,12 +224,25 @@ const wranglerArgsFor = (sql: string, options: ReportOptions): string[] => {
   ];
 };
 
+const wranglerConfigPath = (rootDir: string): string => (
+  path.join(rootDir, 'analytics-worker', 'wrangler.toml')
+);
+
 const runWrangler = (
   sql: string,
   options: ReportOptions,
   spawnRunner: SpawnRunner = spawnSync,
 ): D1Row[] => {
   const rootDir = options.rootDir ?? path.join(__dirname, '..');
+  const configPath = wranglerConfigPath(rootDir);
+  if (!fs.existsSync(configPath)) {
+    throw new Error([
+      `Missing analytics Worker config: ${configPath}`,
+      'Copy analytics-worker/wrangler.toml.example to analytics-worker/wrangler.toml,',
+      'fill in the D1 database_id, and make sure Wrangler is authenticated.',
+    ].join('\n'));
+  }
+
   const wranglerArgs = wranglerArgsFor(sql, options);
   let result = spawnRunner('wrangler', wranglerArgs, {
     cwd: rootDir,
