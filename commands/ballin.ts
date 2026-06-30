@@ -82,12 +82,12 @@ const writeStderr = (text: string): void => {
   process.stderr.write(text);
 };
 
-const formatDoctorCheck = (check: DoctorCheck): string => {
+const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): string => {
   const lines = [
     `${statusLabels[check.status].padEnd(5)} ${check.label}: ${check.summary}`,
   ];
   if (check.status === 'warn' || check.status === 'fail') {
-    lines.push(`      Next: ${nextSteps[check.id] ?? 'Review the check output above.'}`);
+    lines.push(`${nextPrefix}${nextSteps[check.id] ?? 'Review the check output above.'}`);
   }
   return lines.join('\n');
 };
@@ -102,7 +102,7 @@ const formatVerboseDoctorReport = (report: DoctorReport): string => {
   return [
     'Ballin doctor',
     '',
-    ...report.checks.map(formatDoctorCheck),
+    ...report.checks.map((check) => formatDoctorCheck(check)),
     '',
     `Result: ${statusSummary}`,
     '',
@@ -116,7 +116,7 @@ const formatDefaultDoctorReport = (report: DoctorReport): string => {
 
   const visibleStatus = report.status === 'fail' ? 'fail' : 'warn';
   const visibleChecks = report.checks.filter(({ status }) => status === visibleStatus);
-  return `${visibleChecks.map(formatDoctorCheck).join('\n')}\n`;
+  return `${visibleChecks.map((check) => formatDoctorCheck(check, 'Next: ')).join('\n')}\n`;
 };
 
 const runDoctorCommand = (args: string[]): void => {

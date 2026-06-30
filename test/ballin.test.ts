@@ -150,9 +150,10 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
-    assert.include(result.stdout, 'Next: Run the installer to create or adopt a backup Gist.');
+    assert.include(result.stdout, '\nNext: Run the installer to create or adopt a backup Gist.');
     assert.include(result.stdout, 'WARN  GitHub CLI: GitHub CLI is not discoverable on PATH.');
-    assert.include(result.stdout, 'Next: Install GitHub CLI and authenticate it for your backup host.');
+    assert.include(result.stdout, '\nNext: Install GitHub CLI and authenticate it for your backup host.');
+    assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
     assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
     assert.notInclude(result.stdout, 'OK    Config readability:');
@@ -167,6 +168,7 @@ esac
     assert.equal(verboseResult.status, 0, verboseResult.stderr);
     assert.include(verboseResult.stdout, 'OK    Node.js runtime:');
     assert.include(verboseResult.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
+    assert.include(verboseResult.stdout, '      Next: Run the installer to create or adopt a backup Gist.');
     assert.include(verboseResult.stdout, 'INFO  GitHub CLI authentication: Skipping GitHub CLI authentication check because gh is not on PATH.');
     assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
   });
@@ -178,7 +180,8 @@ esac
 
     assert.equal(missingShim.status, 1);
     assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: up.');
-    assert.include(missingShim.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
+    assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
+    assert.notInclude(missingShim.stdout, '      Next:');
     assert.notInclude(missingShim.stdout, 'OK    Node.js runtime:');
     assert.notInclude(missingShim.stdout, 'OK    Config readability:');
     assert.notInclude(missingShim.stdout, 'WARN');
