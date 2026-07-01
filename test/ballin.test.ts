@@ -175,16 +175,27 @@ esac
 
   it('fails doctor when a required health check fails', () => {
     fs.rmSync(path.join(binDir, 'up'));
+    writeConfig({
+      up: {},
+      gu: {
+        id: null,
+        host: 'example.test',
+      },
+      analytics: {
+        enabled: 'false',
+      },
+    });
 
     const missingShim = runBallin(['doctor']);
 
     assert.equal(missingShim.status, 1);
     assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: up.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
+    assert.include(missingShim.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
+    assert.include(missingShim.stdout, '\nNext: Run the installer to create or adopt a backup Gist.');
     assert.notInclude(missingShim.stdout, '      Next:');
     assert.notInclude(missingShim.stdout, 'OK    Node.js runtime:');
     assert.notInclude(missingShim.stdout, 'OK    Config readability:');
-    assert.notInclude(missingShim.stdout, 'WARN');
     assert.notInclude(missingShim.stdout, 'INFO');
     assert.notInclude(missingShim.stdout, 'Result: Ballin-managed environment has errors.');
 
