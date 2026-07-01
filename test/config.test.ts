@@ -237,13 +237,55 @@ describe('config', () => {
 
   it('CLI reset restores the default config', () => {
     setConfig('gu.id', 'changed-id');
+    const changedConfig = fetchConfigJSON();
 
     const result = runConfigCli(['reset']);
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Config has been reset...\nFROM:');
+    assert.include(result.stdout, changedConfig);
     assert.isNull(getConfig('gu.id'));
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
+  });
+
+  it('CLI reset recreates the default config when the config file is missing', () => {
+    fs.rmSync(configPath);
+
+    const result = runConfigCli(['reset']);
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Config has been reset...\nFROM:');
+    assert.include(result.stdout, `Unable to read ${configPath}.`);
+    assert.deepEqual(fetchConfig().configObj, defaultConfig);
+    assert.equal(result.stderr, '');
+  });
+
+  it('CLI reset recreates the default config when the config file is malformed JSON', () => {
+    fs.writeFileSync(configPath, '{not json\n', 'utf8');
+
+    const result = runConfigCli(['reset']);
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Config has been reset...\nFROM:\n{not json\nTO:\n');
+    assert.deepEqual(fetchConfig().configObj, defaultConfig);
+    assert.equal(result.stderr, '');
+  });
+
+  [
+    ['array', '[]\n'],
+    ['null', 'null\n'],
+    ['string', '"not object"\n'],
+  ].forEach(([name, configContents]) => {
+    it(`CLI reset recreates the default config when the config parses to ${name}`, () => {
+      fs.writeFileSync(configPath, configContents, 'utf8');
+
+      const result = runConfigCli(['reset']);
+
+      assert.equal(result.status, 0);
+      assert.include(result.stdout, `Config has been reset...\nFROM:\n${configContents}TO:\n`);
+      assert.deepEqual(fetchConfig().configObj, defaultConfig);
+      assert.equal(result.stderr, '');
+    });
   });
 
   it('CLI invalid action exits cleanly in test mode', () => {
