@@ -20,7 +20,7 @@ const statusLabels: Record<DoctorStatus, string> = {
 const nextSteps: Record<string, string> = {
   'runtime.node': 'Install a supported Node.js version and reopen your shell.',
   'commands.path': 'Run the installer again or add the Ballin command directory to PATH.',
-  'config.read': 'Recreate ballin.config.json from config/.defaultConfig.json.',
+  'config.read': 'Run ballin_config reset to recreate the config.',
   'gu.host': 'Set the backup host with ballin_config set gu.host <host>.',
   'gu.gist': 'Run the installer to create or adopt a backup Gist.',
   'gu.gh': 'Install GitHub CLI and authenticate it for your backup host.',

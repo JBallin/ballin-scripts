@@ -204,7 +204,7 @@ esac
 
     assert.equal(missingConfig.status, 1);
     assert.include(missingConfig.stdout, 'ERROR Config readability: Unable to read');
-    assert.include(missingConfig.stdout, 'Next: Recreate ballin.config.json from config/.defaultConfig.json.');
+    assert.include(missingConfig.stdout, 'Next: Run ballin_config reset to recreate the config.');
   });
 
   it('rejects invalid doctor usage', () => {

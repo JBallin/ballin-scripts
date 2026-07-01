@@ -9,6 +9,9 @@ type NestedValueResult = {
   value?: ConfigValue;
   missingKeys?: string;
 };
+type ResetPreviousConfigResult = {
+  display: string;
+};
 
 const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
 const configPath = process.env.BALLIN_TEST_CONFIG_PATH || userConfigPath;
@@ -36,6 +39,14 @@ const fetchConfig = () => {
   const configJSON = fs.readFileSync(configPath, 'utf8');
   const configObj = JSON.parse(configJSON) as ConfigObject;
   return { configObj, configJSON };
+};
+
+const readPreviousConfigForReset = (): ResetPreviousConfigResult => {
+  try {
+    return { display: fs.readFileSync(configPath, 'utf8') };
+  } catch {
+    return { display: `Unable to read ${configPath}.\n` };
+  }
 };
 
 // Return the value, or the first path prefix that cannot be resolved.
@@ -68,7 +79,7 @@ const getConfig = (keys?: string, val?: string): ConfigValue | string => {
 };
 
 const resetConfig = () => {
-  const prevConfig = getConfig();
+  const { display: prevConfig } = readPreviousConfigForReset();
   const defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8');
   fs.writeFileSync(configPath, defaultConfig, 'utf8');
   return configMessages.reset(prevConfig, defaultConfig);
