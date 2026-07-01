@@ -160,6 +160,38 @@ esac
     ]);
   });
 
+  it('reports a Homebrew substep failure after running later integrations', () => {
+    writeTestExecutable('brew', `#!/usr/bin/env bash
+printf 'brew|%s|%s\\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
+if [ "$1" = 'cleanup' ]; then
+  printf '%s\\n' 'simulated cleanup failure'
+  exit 42
+fi
+exit 0
+`);
+    installCommandStub('ballin_update');
+    installHealthyReadinessCommands();
+
+    const result = runUp({
+      TEST_UP_NVM: 'false',
+      TEST_UP_CLEANUP: 'true',
+      TEST_UP_BALLIN: 'true',
+    });
+
+    assert.equal(result.status, 42);
+    assert.include(result.stdout, 'simulated cleanup failure');
+    assert.include(result.stdout, 'Checking Homebrew installation');
+    assert.include(result.stdout, 'Updating ballin-scripts');
+    assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.deepEqual(commandLog(), [
+      'brew|1,1|upgrade',
+      'brew|1,1|cleanup',
+      'brew|1,1|doctor',
+      'ballin_update|1,1|',
+      'gh|1,1|auth status --hostname example.test',
+    ]);
+  });
+
   it('passes exported Homebrew flags to later integrations', () => {
     installCommandStub('brew');
     installCommandStub('ballin_update');
@@ -302,7 +334,7 @@ exit 2
       TEST_UP_BALLIN: 'true',
     });
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 23);
     assert.include(result.stdout, 'simulated update failure');
     assert.notInclude(result.stdout, 'Checking Ballin readiness');
     assert.notInclude(result.stdout, 'Your Ballin-managed environment is healthy.');
@@ -339,7 +371,7 @@ exit 2
       TEST_UP_GU: 'true',
     });
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 23);
     assert.include(result.stdout, 'simulated npm failure');
     assert.deepEqual(commandLog(), [
       'npm|,|update -g',
@@ -434,6 +466,33 @@ kill -TERM "$$"
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.equal(fs.readFileSync(logPath, 'utf8'), 'install --lts\n');
+  });
+
+  it('reports nvm install failures after running later integrations', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    fs.mkdirSync(nvmDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(nvmDir, 'nvm.sh'),
+      `nvm() {
+  printf '%s\\n' "$*" >> "$NVM_TEST_LOG"
+  return 24
+}
+`,
+    );
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
+`);
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 24);
+    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.deepEqual(commandLog().slice(1), [
+      'gu still ran',
+    ]);
   });
 
   it('keeps nvm PATH changes for the npm update', () => {

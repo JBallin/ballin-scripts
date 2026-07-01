@@ -18,9 +18,15 @@ const {
   removeTempFile,
   runCommand,
   runVisibleCommand,
+  spawnResultStatus,
   writeStderrLine,
 } = require('./commandHelpers.ts');
 import type { DoctorReport } from './doctor_report.ts';
+
+type NvmInstallResult = {
+  env: NodeJS.ProcessEnv | null;
+  status: number;
+};
 
 const configValue = (key: string, env = process.env): string => {
   const result = runCommand('ballin_config', ['get', key], {
@@ -49,12 +55,12 @@ const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
   }
 };
 
-const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
+const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
   const envPath = makeTempFile('ballin-up-env-');
   try {
     const result = runCommand('bash', [
       '-c',
-      '. "$NVM_DIR/nvm.sh"; nvm install --lts; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UP_ENV_PATH"',
+      '. "$NVM_DIR/nvm.sh"; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UP_ENV_PATH"; exit "$nvm_status"',
     ], {
       env: {
         ...env,
@@ -64,20 +70,32 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
     });
 
     if (result.error) {
-      reportSpawnError('bash', result.error);
-      return null;
+      return {
+        env: null,
+        status: reportSpawnError('bash', result.error),
+      };
     }
-    if (result.status !== 0 || !fs.existsSync(envPath)) {
-      return null;
+    const status = spawnResultStatus(result);
+    if (status !== 0 || !fs.existsSync(envPath)) {
+      return {
+        env: null,
+        status,
+      };
     }
 
     const nextEnv = parseEnvOutput(fs.readFileSync(envPath, 'utf8'));
     if (!nextEnv) {
-      return null;
+      return {
+        env: null,
+        status,
+      };
     }
 
     delete nextEnv.BALLIN_UP_ENV_PATH;
-    return nextEnv;
+    return {
+      env: nextEnv,
+      status,
+    };
   } finally {
     removeTempFile(envPath);
   }
@@ -108,6 +126,19 @@ const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
 
 function runUpCommand(): void {
   let childEnv = process.env;
+  let exitStatus = 0;
+
+  const runIntegrationCommand = (
+    command: string,
+    args: string[] = [],
+    options: { env?: NodeJS.ProcessEnv } = {},
+  ): number => {
+    const status = runVisibleCommand(command, args, options);
+    if (status !== 0) {
+      exitStatus = status;
+    }
+    return status;
+  };
 
   if (commandExists('brew')) {
     progress('Updating Homebrew packages');
@@ -116,15 +147,15 @@ function runUpCommand(): void {
       HOMEBREW_NO_ENV_HINTS: '1',
       HOMEBREW_NO_ASK: '1',
     };
-    runVisibleCommand('brew', ['upgrade'], { env: childEnv });
+    runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
 
     if (configValue('up.cleanup', childEnv) === 'true') {
       progress('Cleaning up Homebrew packages');
-      runVisibleCommand('brew', ['cleanup'], { env: childEnv });
+      runIntegrationCommand('brew', ['cleanup'], { env: childEnv });
     }
 
     progress('Checking Homebrew installation');
-    runVisibleCommand('brew', ['doctor'], { env: childEnv });
+    runIntegrationCommand('brew', ['doctor'], { env: childEnv });
   }
 
   if (configValue('up.nvm', childEnv) === 'true') {
@@ -132,7 +163,11 @@ function runUpCommand(): void {
     const nvmDir = process.env.NVM_DIR ?? '';
     const nvmScript = path.join(nvmDir, 'nvm.sh');
     if (nvmDir && fs.existsSync(nvmScript) && fs.statSync(nvmScript).size > 0) {
-      childEnv = runNvmInstall(childEnv) ?? childEnv;
+      const result = runNvmInstall(childEnv);
+      if (result.status !== 0) {
+        exitStatus = result.status;
+      }
+      childEnv = result.env ?? childEnv;
     } else {
       writeStderrLine();
       writeStderrLine('⚠️  Skipping Node.js LTS update: unable to load nvm.');
@@ -142,22 +177,22 @@ function runUpCommand(): void {
 
   if (commandExists('npm', { env: childEnv }) && configValue('up.npm', childEnv) === 'true') {
     progress('Updating global npm packages');
-    runVisibleCommand('npm', ['update', '-g'], { env: childEnv });
+    runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
   }
 
   if (commandExists('mas', { env: childEnv })) {
     progress('Updating App Store apps');
-    runVisibleCommand('mas', ['upgrade'], { env: childEnv });
+    runIntegrationCommand('mas', ['upgrade'], { env: childEnv });
   }
 
   if (commandExists('softwareupdate', { env: childEnv }) && configValue('up.softwareupdate', childEnv) === 'true') {
     progress('Installing macOS updates');
-    runVisibleCommand('softwareupdate', ['-ia'], { env: childEnv });
+    runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
   }
 
   if (configValue('up.ballin', childEnv) === 'true') {
     progress('Updating ballin-scripts');
-    const updateStatus = runVisibleCommand('ballin_update', [], { env: childEnv });
+    const updateStatus = runIntegrationCommand('ballin_update', [], { env: childEnv });
     if (updateStatus === 0) {
       progress('Checking Ballin readiness');
       reportBallinReadiness(childEnv);
@@ -166,7 +201,11 @@ function runUpCommand(): void {
 
   if (configValue('up.gu', childEnv) === 'true') {
     progress('Backing up development environment');
-    process.exitCode = runVisibleCommand('gu', [], { env: childEnv });
+    runIntegrationCommand('gu', [], { env: childEnv });
+  }
+
+  if (exitStatus !== 0) {
+    process.exitCode = exitStatus;
   }
 }
 

@@ -6,7 +6,9 @@ setting is available.
 
 ## `up`
 
-`up` updates the local development environment through these integrations:
+`up` updates the local development environment through these integrations. If
+an integration command fails, `up` still runs any later integrations and exits
+nonzero at the end.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
