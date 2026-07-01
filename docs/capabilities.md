@@ -6,9 +6,10 @@ setting is available.
 
 ## `up`
 
-`up` updates the local development environment through these integrations. It
-keeps running later integrations after a failed Homebrew, Node.js LTS, npm,
-App Store, macOS, Ballin update, or backup command, then exits nonzero.
+`up` updates the local development environment through these integrations. If
+any Homebrew, Node.js LTS, npm, App Store, macOS, ballin-scripts update, or
+backup command fails, `up` still runs any later integrations and exits nonzero
+at the end.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
