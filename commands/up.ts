@@ -108,6 +108,19 @@ const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
 
 function runUpCommand(): void {
   let childEnv = process.env;
+  let exitStatus = 0;
+
+  const runIntegrationCommand = (
+    command: string,
+    args: string[] = [],
+    options: { env?: NodeJS.ProcessEnv } = {},
+  ): number => {
+    const status = runVisibleCommand(command, args, options);
+    if (status !== 0) {
+      exitStatus = status;
+    }
+    return status;
+  };
 
   if (commandExists('brew')) {
     progress('Updating Homebrew packages');
@@ -116,15 +129,15 @@ function runUpCommand(): void {
       HOMEBREW_NO_ENV_HINTS: '1',
       HOMEBREW_NO_ASK: '1',
     };
-    runVisibleCommand('brew', ['upgrade'], { env: childEnv });
+    runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
 
     if (configValue('up.cleanup', childEnv) === 'true') {
       progress('Cleaning up Homebrew packages');
-      runVisibleCommand('brew', ['cleanup'], { env: childEnv });
+      runIntegrationCommand('brew', ['cleanup'], { env: childEnv });
     }
 
     progress('Checking Homebrew installation');
-    runVisibleCommand('brew', ['doctor'], { env: childEnv });
+    runIntegrationCommand('brew', ['doctor'], { env: childEnv });
   }
 
   if (configValue('up.nvm', childEnv) === 'true') {
@@ -142,22 +155,22 @@ function runUpCommand(): void {
 
   if (commandExists('npm', { env: childEnv }) && configValue('up.npm', childEnv) === 'true') {
     progress('Updating global npm packages');
-    runVisibleCommand('npm', ['update', '-g'], { env: childEnv });
+    runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
   }
 
   if (commandExists('mas', { env: childEnv })) {
     progress('Updating App Store apps');
-    runVisibleCommand('mas', ['upgrade'], { env: childEnv });
+    runIntegrationCommand('mas', ['upgrade'], { env: childEnv });
   }
 
   if (commandExists('softwareupdate', { env: childEnv }) && configValue('up.softwareupdate', childEnv) === 'true') {
     progress('Installing macOS updates');
-    runVisibleCommand('softwareupdate', ['-ia'], { env: childEnv });
+    runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
   }
 
   if (configValue('up.ballin', childEnv) === 'true') {
     progress('Updating ballin-scripts');
-    const updateStatus = runVisibleCommand('ballin_update', [], { env: childEnv });
+    const updateStatus = runIntegrationCommand('ballin_update', [], { env: childEnv });
     if (updateStatus === 0) {
       progress('Checking Ballin readiness');
       reportBallinReadiness(childEnv);
@@ -166,7 +179,11 @@ function runUpCommand(): void {
 
   if (configValue('up.gu', childEnv) === 'true') {
     progress('Backing up development environment');
-    process.exitCode = runVisibleCommand('gu', [], { env: childEnv });
+    runIntegrationCommand('gu', [], { env: childEnv });
+  }
+
+  if (exitStatus !== 0) {
+    process.exitCode = exitStatus;
   }
 }
 

@@ -7,6 +7,8 @@ setting is available.
 ## `up`
 
 `up` updates the local development environment through these integrations:
+It keeps running later integrations after a failed integration command, then
+exits nonzero if any integration command failed.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
