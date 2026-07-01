@@ -4,6 +4,12 @@ const {
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
+  formatDefaultDoctorReport,
+} = require('./doctor_report.ts');
+const {
+  collectSetupReadiness,
+} = require('./setup_readiness.ts');
+const {
   commandExists,
   makeTempFile,
   progress,
@@ -13,6 +19,7 @@ const {
   runVisibleCommand,
   writeStderrLine,
 } = require('./commandHelpers.ts');
+import type { DoctorReport } from './doctor_report.ts';
 
 const configValue = (key: string, env = process.env): string => {
   const result = runCommand('ballin_config', ['get', key], {
@@ -75,6 +82,29 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
   }
 };
 
+const nodeVersionForEnv = (env: NodeJS.ProcessEnv): string | undefined => {
+  const result = runCommand('node', ['-p', 'process.versions.node'], {
+    env,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.status !== 0 || result.error) {
+    return undefined;
+  }
+  return result.stdout.trim() || undefined;
+};
+
+const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
+  const repoDir = path.join(__dirname, '..');
+  const report = collectSetupReadiness({
+    repoDir,
+    configPath: env.BALLIN_TEST_CONFIG_PATH || undefined,
+    env,
+    nodeVersion: nodeVersionForEnv(env),
+  }) as DoctorReport;
+
+  process.stdout.write(formatDefaultDoctorReport(report));
+};
+
 function runUpCommand(): void {
   let childEnv = process.env;
 
@@ -126,7 +156,11 @@ function runUpCommand(): void {
 
   if (configValue('up.ballin', childEnv) === 'true') {
     progress('Updating ballin-scripts');
-    runVisibleCommand('ballin_update', [], { env: childEnv });
+    const updateStatus = runVisibleCommand('ballin_update', [], { env: childEnv });
+    if (updateStatus === 0) {
+      progress('Checking Ballin readiness');
+      reportBallinReadiness(childEnv);
+    }
   }
 
   if (configValue('up.gu', childEnv) === 'true') {
