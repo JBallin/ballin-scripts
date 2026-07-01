@@ -6,13 +6,13 @@ const {
   analyticsDisabledByEnv,
   durationBucketFromMs,
   recordAnalyticsEvent,
+  rethrowCommandError,
   runWithCommandAnalytics,
   sendAnalyticsPayload,
 } = require('../commands/analytics.ts');
 
 import type { ClientRequest, IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
-import type { Socket } from 'net';
 
 type AnalyticsPayload = {
   schemaVersion: 1;
@@ -77,17 +77,17 @@ const writeRawInstallId = (installId: string): void => {
 const recordWithSender = (
   input: Record<string, unknown>,
   runtime: Record<string, unknown> = {},
-): { payloads: AnalyticsPayload[]; notices: string[]; order: string[] } => {
+): Promise<{ payloads: AnalyticsPayload[]; notices: string[]; order: string[] }> => {
   const payloads: AnalyticsPayload[] = [];
   const notices: string[] = [];
   const order: string[] = [];
 
-  recordAnalyticsEvent(input, {
+  return recordAnalyticsEvent(input, {
     endpoint: 'https://analytics.example.test/v1/events',
     ingestToken: 'test-token',
     env: {},
     installIdPath: testInstallIdPath,
-    sender: (payload: AnalyticsPayload) => {
+    sender: async (payload: AnalyticsPayload) => {
       order.push('send');
       payloads.push(payload);
     },
@@ -96,9 +96,9 @@ const recordWithSender = (
       notices.push(message);
     },
     ...runtime,
+  }).then(() => {
+    return { payloads, notices, order };
   });
-
-  return { payloads, notices, order };
 };
 
 describe('analytics client', () => {
@@ -122,13 +122,13 @@ describe('analytics client', () => {
     assert.isFalse(analyticsDisabledByEnv({ BALLIN_NO_ANALYTICS: '0' }));
   });
 
-  it('does not send when analytics are disabled in config', () => {
+  it('does not send when analytics are disabled in config', async () => {
     setAnalyticsConfig({
       enabled: 'false',
     });
     writeInstallId();
 
-    const { payloads, notices } = recordWithSender({
+    const { payloads, notices } = await recordWithSender({
       command: 'up',
       now: fixedNow,
     });
@@ -137,34 +137,34 @@ describe('analytics client', () => {
     assert.deepEqual(notices, []);
   });
 
-  it('does not send when environment opt-outs are set', () => {
+  it('does not send when environment opt-outs are set', async () => {
     const optOuts = [
       { BALLIN_NO_ANALYTICS: '1' },
       { CI: 'true' },
     ];
 
-    optOuts.forEach((env) => {
+    for (const env of optOuts) {
       setAnalyticsConfig({
         enabled: 'true',
       });
       writeInstallId();
 
-      const { payloads } = recordWithSender({
+      const { payloads } = await recordWithSender({
         command: 'up',
         now: fixedNow,
       }, { env });
 
       assert.deepEqual(payloads, []);
-    });
+    }
   });
 
-  it('reads the local install ID and includes it in the payload', () => {
+  it('reads the local install ID and includes it in the payload', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
 
-    const { payloads, notices, order } = recordWithSender({
+    const { payloads, notices, order } = await recordWithSender({
       command: 'up',
       status: 'success',
       durationBucket: '<1s',
@@ -181,20 +181,20 @@ describe('analytics client', () => {
     });
   });
 
-  it('uses production endpoint and token defaults when runtime overrides are absent', () => {
+  it('uses production endpoint and token defaults when runtime overrides are absent', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
     const senderOptions: SenderOptions[] = [];
 
-    recordAnalyticsEvent({
+    await recordAnalyticsEvent({
       command: 'up',
       now: fixedNow,
     }, {
       env: {},
       installIdPath: testInstallIdPath,
-      sender: (_payload: AnalyticsPayload, options: SenderOptions) => {
+      sender: async (_payload: AnalyticsPayload, options: SenderOptions) => {
         senderOptions.push(options);
       },
     });
@@ -205,12 +205,12 @@ describe('analytics client', () => {
     });
   });
 
-  it('skips sending when the local install ID is missing', () => {
+  it('skips sending when the local install ID is missing', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
 
-    const { payloads, notices } = recordWithSender({
+    const { payloads, notices } = await recordWithSender({
       command: 'up',
       now: fixedNow,
     });
@@ -219,13 +219,13 @@ describe('analytics client', () => {
     assert.deepEqual(notices, []);
   });
 
-  it('skips sending and does not rewrite an invalid local install ID', () => {
+  it('skips sending and does not rewrite an invalid local install ID', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeRawInstallId('not-a-uuid\n');
 
-    const { payloads, notices } = recordWithSender({
+    const { payloads, notices } = await recordWithSender({
       command: 'up',
       now: fixedNow,
     });
@@ -235,32 +235,30 @@ describe('analytics client', () => {
     assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
   });
 
-  it('never throws when analytics config or sender behavior fails', () => {
+  it('never throws when analytics config or sender behavior fails', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
 
-    assert.doesNotThrow(() => {
-      recordAnalyticsEvent({
-        command: 'up',
-        now: fixedNow,
-      }, {
-        installIdPath: testInstallIdPath,
-        sender: () => {
-          throw new Error('network unavailable');
-        },
-      });
+    await recordAnalyticsEvent({
+      command: 'up',
+      now: fixedNow,
+    }, {
+      installIdPath: testInstallIdPath,
+      sender: async () => {
+        throw new Error('network unavailable');
+      },
     });
   });
 
-  it('sends only the allowlisted payload fields', () => {
+  it('sends only the allowlisted payload fields', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
 
-    const { payloads } = recordWithSender({
+    const { payloads } = await recordWithSender({
       command: 'ballin_config',
       status: 'failure',
       durationBucket: '1-10s',
@@ -286,22 +284,22 @@ describe('analytics client', () => {
     assert.match(payload.osVersion, /^[0-9]+(?:\.[0-9]+)?$|^unknown$/);
   });
 
-  it('skips unsupported commands and invalid enum values', () => {
+  it('skips unsupported commands and invalid enum values', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
 
-    const unsupportedCommand = recordWithSender({
+    const unsupportedCommand = await recordWithSender({
       command: 'git',
       now: fixedNow,
     });
-    const unsupportedStatus = recordWithSender({
+    const unsupportedStatus = await recordWithSender({
       command: 'up',
       status: 'maybe',
       now: fixedNow,
     });
-    const unsupportedDuration = recordWithSender({
+    const unsupportedDuration = await recordWithSender({
       command: 'up',
       durationBucket: '42s',
       now: fixedNow,
@@ -324,7 +322,7 @@ describe('analytics client', () => {
     assert.equal(durationBucketFromMs(600_000), '10m+');
   });
 
-  it('records one command-level success event after the command finishes', () => {
+  it('records one command-level success event after the command finishes and flushes', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
@@ -332,11 +330,13 @@ describe('analytics client', () => {
     const events: string[] = [];
     const payloads: AnalyticsPayload[] = [];
     let currentNow = 10_000;
+    let releaseSender = () => {};
+    let analyticsSettled = false;
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
 
     try {
-      runWithCommandAnalytics('ballin', () => {
+      const analyticsDone = runWithCommandAnalytics('ballin', () => {
         events.push('command');
         currentNow = 10_800;
       }, {
@@ -345,16 +345,28 @@ describe('analytics client', () => {
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => currentNow,
-        sender: (payload: AnalyticsPayload) => {
-          events.push('send');
+        sender: (payload: AnalyticsPayload) => new Promise<void>((resolve) => {
+          events.push('send-start');
           payloads.push(payload);
-        },
+          releaseSender = () => resolve();
+        }),
       });
+
+      void analyticsDone.then(() => {
+        analyticsSettled = true;
+      });
+
+      assert.deepEqual(events, ['command', 'send-start']);
+      await Promise.resolve();
+      assert.isFalse(analyticsSettled);
+      releaseSender();
+      await analyticsDone;
+      assert.isTrue(analyticsSettled);
     } finally {
       process.exitCode = previousExitCode;
     }
 
-    assert.deepEqual(events, ['command', 'send']);
+    assert.deepEqual(events, ['command', 'send-start']);
     assert.deepInclude(payloads[0], {
       command: 'ballin',
       status: 'success',
@@ -362,7 +374,7 @@ describe('analytics client', () => {
     });
   });
 
-  it('records command-level failures from exitCode without changing it', () => {
+  it('records command-level failures from exitCode without changing it', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
@@ -373,7 +385,7 @@ describe('analytics client', () => {
     process.exitCode = undefined;
 
     try {
-      runWithCommandAnalytics('gu', () => {
+      await runWithCommandAnalytics('gu', () => {
         currentNow = 13_000;
         process.exitCode = 17;
       }, {
@@ -382,7 +394,7 @@ describe('analytics client', () => {
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => currentNow,
-        sender: (payload: AnalyticsPayload) => {
+        sender: async (payload: AnalyticsPayload) => {
           payloads.push(payload);
         },
       });
@@ -399,7 +411,7 @@ describe('analytics client', () => {
     });
   });
 
-  it('isolates command-level status from a stale process exitCode', () => {
+  it('isolates command-level status from a stale process exitCode', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
@@ -409,13 +421,13 @@ describe('analytics client', () => {
     process.exitCode = 17;
 
     try {
-      runWithCommandAnalytics('ballin_update', () => {}, {
+      await runWithCommandAnalytics('ballin_update', () => {}, {
         endpoint: 'https://analytics.example.test/v1/events',
         ingestToken: 'test-token',
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => 1000,
-        sender: (payload: AnalyticsPayload) => {
+        sender: async (payload: AnalyticsPayload) => {
           payloads.push(payload);
         },
       });
@@ -432,78 +444,107 @@ describe('analytics client', () => {
     });
   });
 
-  it('records command-level failures when the command throws and rethrows', () => {
+  it('records command-level failures when the command throws and rejects after flushing', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
     const payloads: AnalyticsPayload[] = [];
     let currentNow = 0;
+    let releaseSender = () => {};
+    let analyticsSettled = false;
+    let rejection: Error | undefined;
 
-    assert.throws(() => {
-      runWithCommandAnalytics('up', () => {
-        currentNow = 60_000;
-        throw new Error('simulated command failure');
-      }, {
-        endpoint: 'https://analytics.example.test/v1/events',
-        ingestToken: 'test-token',
-        env: {},
-        installIdPath: testInstallIdPath,
-        nowMs: () => currentNow,
-        sender: (payload: AnalyticsPayload) => {
-          payloads.push(payload);
-        },
+    const analyticsDone = runWithCommandAnalytics('up', () => {
+      currentNow = 60_000;
+      throw new Error('simulated command failure');
+    }, {
+      endpoint: 'https://analytics.example.test/v1/events',
+      ingestToken: 'test-token',
+      env: {},
+      installIdPath: testInstallIdPath,
+      nowMs: () => currentNow,
+      sender: (payload: AnalyticsPayload) => new Promise<void>((resolve) => {
+        payloads.push(payload);
+        releaseSender = () => resolve();
+      }),
+    });
+
+    void analyticsDone
+      .then(() => {
+        analyticsSettled = true;
+      })
+      .catch((error: Error) => {
+        analyticsSettled = true;
+        rejection = error;
       });
-    }, 'simulated command failure');
 
+    await Promise.resolve();
+    assert.isFalse(analyticsSettled);
     assert.deepInclude(payloads[0], {
       command: 'up',
       status: 'failure',
       durationBucket: '1-10m',
     });
+    releaseSender();
+    await analyticsDone.catch(() => {});
+
+    assert.isTrue(analyticsSettled);
+    assert.equal(rejection?.message, 'simulated command failure');
   });
 
-  it('sends through https with a short timeout and swallows request failures', () => {
+  it('rethrows command errors through the event loop', () => {
+    const originalSetImmediate = global.setImmediate;
+    let scheduled: (() => void) | undefined;
+    const error = new Error('simulated command failure');
+
+    global.setImmediate = ((callback: () => void) => {
+      scheduled = callback;
+      return {} as NodeJS.Immediate;
+    }) as typeof setImmediate;
+
+    try {
+      rethrowCommandError(error);
+      assert.isFunction(scheduled);
+      assert.throws(() => {
+        scheduled?.();
+      }, 'simulated command failure');
+    } finally {
+      global.setImmediate = originalSetImmediate;
+    }
+  });
+
+  it('sends through https and resolves after the response ends', async () => {
     const originalRequest = https.request;
     let capturedOptions: RequestOptions | null = null;
     let capturedBody = '';
     let timeoutMs = 0;
-    const timeoutHandler: { current?: () => void } = {};
-    let destroyed = false;
-    let socketUnrefCalled = false;
 
     https.request = (options: RequestOptions, callback: (response: IncomingMessage) => void): ClientRequest => {
       capturedOptions = options;
+      const request = new EventEmitter() as ClientRequest;
       const response = new EventEmitter() as IncomingMessage;
       response.resume = () => response;
       callback(response);
 
-      const request = new EventEmitter() as ClientRequest;
       request.setTimeout = (milliseconds: number, handler?: () => void) => {
         timeoutMs = milliseconds;
-        timeoutHandler.current = handler;
+        assert.isFunction(handler);
         return request;
       };
       request.end = ((body?: unknown) => {
         capturedBody = typeof body === 'string' || Buffer.isBuffer(body) ? body.toString() : '';
-        const socket = {
-          unref: () => {
-            socketUnrefCalled = true;
-            return socket;
-          },
-        } as Socket;
-        request.emit('socket', socket);
+        response.emit('end');
         return request;
       }) as ClientRequest['end'];
       request.destroy = () => {
-        destroyed = true;
         return request;
       };
       return request;
     };
 
     try {
-      sendAnalyticsPayload({
+      await sendAnalyticsPayload({
         schemaVersion: 1,
         installId: fixedInstallId,
         dateBucket: '2026-06-27',
@@ -519,16 +560,11 @@ describe('analytics client', () => {
         ingestToken: 'test-token',
         timeoutMs: 25,
       });
-      if (timeoutHandler.current) {
-        timeoutHandler.current();
-      }
     } finally {
       https.request = originalRequest;
     }
 
     assert.equal(timeoutMs, 25);
-    assert.isTrue(destroyed);
-    assert.isTrue(socketUnrefCalled);
     assert.include(capturedBody, '"command":"up"');
     assert.isNotNull(capturedOptions);
     const options = capturedOptions as unknown as RequestOptions;
@@ -542,5 +578,52 @@ describe('analytics client', () => {
       'content-type': 'application/json',
       'x-ballin-analytics-token': 'test-token',
     });
+  });
+
+  it('bounds https sends with a wall-clock timeout and swallows request failures', async () => {
+    const originalRequest = https.request;
+    let destroyed = false;
+    let socketTimeoutRegistered = false;
+
+    https.request = (): ClientRequest => {
+      const request = new EventEmitter() as ClientRequest;
+
+      request.setTimeout = (_milliseconds: number, handler?: () => void) => {
+        socketTimeoutRegistered = Boolean(handler);
+        return request;
+      };
+      request.end = (() => request) as ClientRequest['end'];
+      request.destroy = () => {
+        destroyed = true;
+        request.emit('error', new Error('simulated request failure'));
+        return request;
+      };
+      return request;
+    };
+
+    try {
+      const analyticsDone = sendAnalyticsPayload({
+        schemaVersion: 1,
+        installId: fixedInstallId,
+        dateBucket: '2026-06-27',
+        command: 'up',
+        status: 'success',
+        durationBucket: '<1s',
+        appVersion: '1.0.0',
+        nodeMajor: '24',
+        os: 'darwin',
+        osVersion: '15',
+      }, {
+        endpoint: 'https://analytics.example.test/v1/events',
+        ingestToken: 'test-token',
+        timeoutMs: 1,
+      });
+      await analyticsDone;
+    } finally {
+      https.request = originalRequest;
+    }
+
+    assert.isTrue(socketTimeoutRegistered);
+    assert.isTrue(destroyed);
   });
 });

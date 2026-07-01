@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
+  rethrowCommandError,
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
@@ -714,7 +715,7 @@ function runGuCommand(args = process.argv.slice(2)): void {
 }
 
 const runGuCli = (args = process.argv.slice(2)): void => {
-  runWithCommandAnalytics('gu', () => runGuCommand(args));
+  void runWithCommandAnalytics('gu', () => runGuCommand(args)).catch(rethrowCommandError);
 };
 
 module.exports = {

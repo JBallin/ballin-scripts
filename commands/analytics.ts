@@ -5,9 +5,8 @@ const os = require('os');
 const path = require('path');
 const { fetchConfig } = require('../config/index.ts');
 
-import type { ClientRequest, IncomingMessage } from 'http';
+import type { IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
-import type { Socket } from 'net';
 
 type AnalyticsConfig = {
   enabled?: string;
@@ -39,7 +38,7 @@ type SenderOptions = {
   timeoutMs?: number;
 };
 
-type AnalyticsSender = (payload: AnalyticsPayload, options: SenderOptions) => void;
+type AnalyticsSender = (payload: AnalyticsPayload, options: SenderOptions) => Promise<void>;
 
 type AnalyticsRuntime = SenderOptions & {
   env?: NodeJS.ProcessEnv;
@@ -220,24 +219,33 @@ const requestOptions = (endpoint: string, ingestToken: string): RequestOptions =
   };
 };
 
-const ignoreRequestFailure = (request: ClientRequest): void => {
-  request.on('error', () => {});
-};
+const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise((resolve) => {
+  let wallClockTimeout: NodeJS.Timeout | undefined;
+  let settled = false;
+  const settle = (): void => {
+    if (!settled) {
+      settled = true;
+      if (wallClockTimeout) {
+        clearTimeout(wallClockTimeout);
+      }
+      resolve();
+    }
+  };
 
-const unrefRequestSocket = (request: ClientRequest): void => {
-  request.on('socket', (socket: Socket) => {
-    socket.unref();
-  });
-};
-
-const sendAnalyticsPayload: AnalyticsSender = (payload, options) => {
   if (!options.endpoint || !options.ingestToken) {
+    settle();
     return;
   }
 
   try {
     const body = JSON.stringify(payload);
     const optionsWithHeaders = requestOptions(options.endpoint, options.ingestToken);
+    const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
+    let destroyRequest = () => {};
+    wallClockTimeout = setTimeout(() => {
+      destroyRequest();
+      settle();
+    }, timeoutMs);
     const request = https.request({
       ...optionsWithHeaders,
       headers: {
@@ -245,21 +253,28 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => {
         'content-length': Buffer.byteLength(body),
       },
     }, (response: IncomingMessage) => {
+      response.on('end', settle);
+      response.on('close', settle);
       response.resume();
     });
-
-    ignoreRequestFailure(request);
-    unrefRequestSocket(request);
-    request.setTimeout(options.timeoutMs ?? defaultTimeoutMs, () => {
+    destroyRequest = () => {
       request.destroy();
+    };
+
+    request.on('error', settle);
+    request.on('close', settle);
+    request.setTimeout(timeoutMs, () => {
+      request.destroy();
+      settle();
     });
     request.end(body);
   } catch {
     // Analytics must never affect command behavior.
+    settle();
   }
-};
+});
 
-const recordAnalyticsEvent = (input: AnalyticsRecordInput, runtime: AnalyticsRuntime = {}): void => {
+const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: AnalyticsRuntime = {}): Promise<void> => {
   try {
     const env = runtime.env ?? process.env;
     if (analyticsDisabledByEnv(env)) {
@@ -291,7 +306,7 @@ const recordAnalyticsEvent = (input: AnalyticsRecordInput, runtime: AnalyticsRun
       durationBucket,
       now: input.now ?? new Date(),
     }, installId);
-    (runtime.sender ?? sendAnalyticsPayload)(payload, {
+    await (runtime.sender ?? sendAnalyticsPayload)(payload, {
       endpoint: runtime.endpoint ?? productionAnalyticsEndpoint,
       ingestToken: runtime.ingestToken ?? productionAnalyticsIngestToken,
       timeoutMs: runtime.timeoutMs ?? defaultTimeoutMs,
@@ -312,25 +327,32 @@ const runWithCommandAnalytics = (
   command: string,
   runCommand: () => void,
   runtime: CommandAnalyticsRuntime = {},
-): void => {
+): Promise<void> => {
   const nowMs = runtime.nowMs ?? Date.now;
   const startedAt = nowMs();
   process.exitCode = undefined;
   try {
     runCommand();
-    recordAnalyticsEvent({
+    return recordAnalyticsEvent({
       command,
       status: analyticsStatusFromExitCode(process.exitCode),
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
     }, runtime);
   } catch (error) {
-    recordAnalyticsEvent({
+    return recordAnalyticsEvent({
       command,
       status: 'failure',
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, runtime);
-    throw error;
+    }, runtime).then(() => {
+      throw error;
+    });
   }
+};
+
+const rethrowCommandError = (error: unknown): void => {
+  setImmediate(() => {
+    throw error;
+  });
 };
 
 module.exports = {
@@ -343,6 +365,7 @@ module.exports = {
   installIdPathForRepo,
   readLocalInstallId,
   recordAnalyticsEvent,
+  rethrowCommandError,
   runWithCommandAnalytics,
   sendAnalyticsPayload,
 };
