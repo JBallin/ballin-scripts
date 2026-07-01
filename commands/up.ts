@@ -18,9 +18,15 @@ const {
   removeTempFile,
   runCommand,
   runVisibleCommand,
+  spawnResultStatus,
   writeStderrLine,
 } = require('./commandHelpers.ts');
 import type { DoctorReport } from './doctor_report.ts';
+
+type NvmInstallResult = {
+  env: NodeJS.ProcessEnv | null;
+  status: number;
+};
 
 const configValue = (key: string, env = process.env): string => {
   const result = runCommand('ballin_config', ['get', key], {
@@ -49,12 +55,12 @@ const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
   }
 };
 
-const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
+const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
   const envPath = makeTempFile('ballin-up-env-');
   try {
     const result = runCommand('bash', [
       '-c',
-      '. "$NVM_DIR/nvm.sh"; nvm install --lts; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UP_ENV_PATH"',
+      '. "$NVM_DIR/nvm.sh"; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UP_ENV_PATH"; exit "$nvm_status"',
     ], {
       env: {
         ...env,
@@ -64,20 +70,32 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null => {
     });
 
     if (result.error) {
-      reportSpawnError('bash', result.error);
-      return null;
+      return {
+        env: null,
+        status: reportSpawnError('bash', result.error),
+      };
     }
-    if (result.status !== 0 || !fs.existsSync(envPath)) {
-      return null;
+    const status = spawnResultStatus(result);
+    if (status !== 0 || !fs.existsSync(envPath)) {
+      return {
+        env: null,
+        status,
+      };
     }
 
     const nextEnv = parseEnvOutput(fs.readFileSync(envPath, 'utf8'));
     if (!nextEnv) {
-      return null;
+      return {
+        env: null,
+        status,
+      };
     }
 
     delete nextEnv.BALLIN_UP_ENV_PATH;
-    return nextEnv;
+    return {
+      env: nextEnv,
+      status,
+    };
   } finally {
     removeTempFile(envPath);
   }
@@ -145,7 +163,11 @@ function runUpCommand(): void {
     const nvmDir = process.env.NVM_DIR ?? '';
     const nvmScript = path.join(nvmDir, 'nvm.sh');
     if (nvmDir && fs.existsSync(nvmScript) && fs.statSync(nvmScript).size > 0) {
-      childEnv = runNvmInstall(childEnv) ?? childEnv;
+      const result = runNvmInstall(childEnv);
+      if (result.status !== 0) {
+        exitStatus = result.status;
+      }
+      childEnv = result.env ?? childEnv;
     } else {
       writeStderrLine();
       writeStderrLine('⚠️  Skipping Node.js LTS update: unable to load nvm.');

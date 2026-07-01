@@ -468,6 +468,33 @@ kill -TERM "$$"
     assert.equal(fs.readFileSync(logPath, 'utf8'), 'install --lts\n');
   });
 
+  it('reports nvm install failures after running later integrations', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    fs.mkdirSync(nvmDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(nvmDir, 'nvm.sh'),
+      `nvm() {
+  printf '%s\\n' "$*" >> "$NVM_TEST_LOG"
+  return 24
+}
+`,
+    );
+    writeTestExecutable('gu', `#!/usr/bin/env bash
+printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
+`);
+
+    const result = runUp({
+      NVM_DIR: nvmDir,
+      TEST_UP_GU: 'true',
+    });
+
+    assert.equal(result.status, 24);
+    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.deepEqual(commandLog().slice(1), [
+      'gu still ran',
+    ]);
+  });
+
   it('keeps nvm PATH changes for the npm update', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     const nvmBinDir = path.join(tempDir, 'nvm-bin');
