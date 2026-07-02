@@ -6,18 +6,19 @@ while letting you opt in to broader automation.
 
 ## Working with settings
 
-Use `ballin_config` to read and update local settings. Settings use dot paths,
+Use `ballin config` to read and update local settings. Settings use dot paths,
 such as `up.cleanup` or `analytics.enabled`.
 
 ```shell
-ballin_config
-ballin_config get up.cleanup
-ballin_config set up.cleanup false
-ballin_config reset
+ballin config
+ballin config get up.cleanup
+ballin config set up.cleanup false
+ballin config reset
 ```
 
-`ballin_config` prints the full config, `get` prints one value, `set` updates an
-existing setting, and `reset` restores the default config.
+`ballin config` prints the full config, `get` prints one value, `set` updates
+an existing setting, and `reset` restores the default config. The existing
+`ballin_config` command remains supported for direct use.
 
 ## Node.js
 
@@ -37,18 +38,18 @@ nvm install --lts
 Installed commands use the `node` found on your shell `PATH`, so make sure new
 terminal sessions use a supported Node.js version too.
 
-After installing `ballin-scripts`, optionally let `up` install newer LTS
-releases:
+After installing `ballin-scripts`, optionally let `ballin update` install newer
+LTS releases:
 
 ```shell
-ballin_config set up.nvm true
+ballin config set up.nvm true
 ```
 
 `up.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
 `false` because enabling it opts into newer LTS releases, and installing a new
 Node.js version does not migrate your globally installed npm packages
-automatically. If nvm cannot be loaded, `up` warns and continues with its
-remaining updates.
+automatically. If nvm cannot be loaded, `ballin update` warns and continues
+with its remaining updates.
 
 For a simpler setup, install Homebrew's current Node.js release instead:
 
@@ -68,8 +69,9 @@ Store support:
 brew install mas
 ```
 
-When `mas` is available, `up` updates installed App Store apps and `gu` includes
-the installed-app list in your backup. No configuration setting is required.
+When `mas` is available, `ballin update` updates installed App Store apps and
+`ballin backup` includes the installed-app list in your backup. No configuration
+setting is required.
 
 ## Gist backups
 
@@ -99,13 +101,13 @@ how long it is kept.
 Disable persistently:
 
 ```shell
-ballin_config set analytics.enabled false
+ballin config set analytics.enabled false
 ```
 
-## `up` settings
+## `ballin update` settings
 
-Change a setting with `ballin_config set up.<name> true` or
-`ballin_config set up.<name> false`.
+Change a setting with `ballin config set up.<name> true` or
+`ballin config set up.<name> false`.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |

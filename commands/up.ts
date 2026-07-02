@@ -214,5 +214,6 @@ const runUpCli = (): void => {
 };
 
 module.exports = {
+  runUpCommand,
   runUpCli,
 };

@@ -719,5 +719,6 @@ const runGuCli = (args = process.argv.slice(2)): void => {
 };
 
 module.exports = {
+  runGuCommand,
   runGuCli,
 };

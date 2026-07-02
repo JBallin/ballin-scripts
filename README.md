@@ -11,8 +11,13 @@ low-friction updates.
 
 Core commands:
 
-- `up` updates the development environment.
-- `gu` snapshots the development environment to a private Gist.
+- `ballin update` updates the development environment.
+- `ballin backup` snapshots the development environment to a private Gist.
+
+Shortcuts:
+
+- `up` is the fast shortcut for `ballin update`.
+- `gu` is the fast shortcut for `ballin backup`.
 
 ## What it manages
 
@@ -34,15 +39,15 @@ snapshot files and update integrations.
 
 The tools split backup from broader system updates:
 
-- `gu` reads local development-environment state and uploads changed snapshots
-  to the configured private Gist.
-- `up` runs update tasks such as Homebrew upgrades, optional Node.js/npm
+- `ballin backup` reads local development-environment state and uploads changed
+  snapshots to the configured private Gist.
+- `ballin update` runs update tasks such as Homebrew upgrades, optional Node.js/npm
   updates, optional macOS and App Store updates, optional `ballin-scripts`
-  updates, and optional `gu` backups.
+  updates, and optional backups.
 - Installation adds the command shims to your shell path and configures the
-  private Gist used by `gu`.
+  private Gist used by backups.
 
-Optional update behavior is controlled through `ballin_config`; see the
+Optional update behavior is controlled through `ballin config`; see the
 [optional capabilities guide](docs/optional-capabilities.md) for the defaults
 and tradeoffs.
 
@@ -70,12 +75,12 @@ settings, optional integrations, and the full list of managed capabilities.
 
 ## Example output
 
-With optional integrations enabled, `up` updates the machine and finishes by
-backing up the development environment. Output varies by installed tools and
-settings.
+With optional integrations enabled, `ballin update` updates the machine and
+finishes by backing up the development environment. Output varies by installed
+tools and settings.
 
 ```shell
-$ up
+$ ballin update
 
 ==> Updating Homebrew packages
 
@@ -115,51 +120,55 @@ No updates are available.
 
 ## Usage
 
-### Update with `up`
+### Update with `ballin update`
 
-`up` automates common update tasks for a macOS development machine,
+`ballin update` automates common update tasks for a macOS development machine,
 including Homebrew upgrades, App Store and macOS updates, `ballin-scripts`
-updates, optional Node.js/npm updates, and optional `gu` backups.
+updates, optional Node.js/npm updates, and optional backups.
 
 ```shell
-up
+ballin update
 ```
 
-Most optional behavior is controlled through `ballin_config`:
+`up` remains a first-class shortcut for the same workflow.
+
+Most optional behavior is controlled through `ballin config`:
 
 ```shell
-ballin_config set up.gu true
-ballin_config set up.npm false
+ballin config set up.gu true
+ballin config set up.npm false
 ```
 
 See the [optional capabilities guide](docs/optional-capabilities.md) for update
 settings, and the [supported capabilities reference](docs/capabilities.md) for
 the full list of update integrations.
 
-### Back up with `gu`
+### Back up with `ballin backup`
 
-`gu` uploads changed snapshots to a configured private Gist. It can include
-shell dotfiles, Git config, Homebrew formulae and casks, global npm packages,
-nvm settings, editor settings, editor extensions, bash completions, and Mac App
-Store apps when the supporting tools are installed.
+`ballin backup` uploads changed snapshots to a configured private Gist. It can
+include shell dotfiles, Git config, Homebrew formulae and casks, global npm
+packages, nvm settings, editor settings, editor extensions, bash completions,
+and Mac App Store apps when the supporting tools are installed.
 
 See the [supported capabilities reference](docs/capabilities.md) for the full
 list of backup snapshots.
 
 ```shell
-gu
+ballin backup
 ```
+
+`gu` remains a first-class shortcut for the same workflow.
 
 Open the configured backup Gist:
 
 ```shell
-gu open
+ballin backup open
 ```
 
 Read one backed-up file from the Gist:
 
 ```shell
-gu read zshrc.sh
+ballin backup read zshrc.sh
 ```
 
 ## Commands
@@ -167,9 +176,14 @@ gu read zshrc.sh
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
+| `ballin update` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
+| `ballin backup` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
 | `ballin doctor` | Checks whether the Ballin-managed environment is healthy. |
-| `up` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
-| `gu` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
-| `ballin_config` | Reads and updates local `ballin-scripts` settings. |
-| `ballin_update` | Updates `ballin-scripts` itself and refreshes installed commands and configuration. |
-| `ballin_uninstall` | Removes installed command symlinks and the local checkout. |
+| `ballin config` | Reads and updates local Ballin settings. |
+| `ballin self-update` | Updates the local `ballin-scripts` checkout and refreshes installed commands and configuration. |
+| `ballin uninstall` | Removes installed command symlinks and the local checkout. |
+| `up` | Shortcut for `ballin update`. |
+| `gu` | Shortcut for `ballin backup`. |
+
+The existing utility commands `ballin_config`, `ballin_update`, and
+`ballin_uninstall` remain supported for direct use.
