@@ -18,19 +18,54 @@ describe('ballin', () => {
 
   const assertHelpOutput = (result: StringSpawnResult) => {
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'A Collection of Ballin Scripts!');
-    assert.include(result.stdout, 'ballin doctor');
+    assert.include(result.stdout, 'Ballin');
+    assert.include(result.stdout, 'Back up your dotfiles and update your macOS development environment.');
+    assert.include(result.stdout, 'Usage:');
+    assert.include(result.stdout, 'ballin <command> [options]');
+    assert.include(result.stdout, 'update');
+    assert.include(result.stdout, 'backup');
+    assert.include(result.stdout, 'doctor');
+    assert.include(result.stdout, 'config');
+    assert.include(result.stdout, 'self-update');
+    assert.include(result.stdout, 'uninstall');
     assert.include(result.stdout, '--verbose');
-    assert.include(result.stdout, 'ballin_update');
-    assert.include(result.stdout, 'ballin_config');
-    assert.include(result.stdout, 'ballin_uninstall');
-    assert.include(result.stdout, 'gu');
-    assert.include(result.stdout, 'up');
+    assert.include(result.stdout, 'up                    same as: ballin update');
+    assert.include(result.stdout, 'gu                    same as: ballin backup');
     assert.equal(result.stderr, '');
   };
 
   const writeExecutable = (name: string, contents = '#!/bin/bash\nexit 0\n') => {
     fs.writeFileSync(path.join(binDir, name), contents, { mode: 0o755 });
+  };
+
+  const commandLog = (): string[] => {
+    if (!fs.existsSync(commandLogPath)) {
+      return [];
+    }
+    return fs.readFileSync(commandLogPath, 'utf8').trimEnd().split('\n').filter(Boolean);
+  };
+
+  const writeUpConfigCommand = (overrides: Record<string, string> = {}) => {
+    const cases = Object.entries({
+      'up.cleanup': 'false',
+      'up.nvm': 'false',
+      'up.npm': 'false',
+      'up.softwareupdate': 'false',
+      'up.ballin': 'false',
+      'up.gu': 'false',
+      ...overrides,
+    }).map(([key, value]) => `${key}) printf '%s\\n' '${value}' ;;`).join('\n  ');
+
+    writeExecutable('ballin_config', `#!/bin/bash
+if [ "$1" != 'get' ]; then
+  printf '%s\\n' 'unexpected ballin_config action' >&2
+  exit 2
+fi
+case "$2" in
+  ${cases}
+  *) printf '%s\\n' 'false' ;;
+esac
+`);
   };
 
   const writeConfig = (config: unknown) => {
@@ -105,6 +140,68 @@ esac
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it('shows help through conventional help spellings', () => {
+    assertHelpOutput(runBallin(['--help']));
+    assertHelpOutput(runBallin(['help']));
+  });
+
+  it('rejects unknown commands without running a workflow', () => {
+    const result = runBallin(['upd']);
+
+    assert.equal(result.status, 2);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'Unknown Ballin command: upd\nTry: ballin --help\n');
+  });
+
+  it('routes update through the existing up workflow and preserves its exit status', () => {
+    writeUpConfigCommand({ 'up.gu': 'true' });
+    writeExecutable('gu', `#!/bin/bash
+printf '%s\\n' 'gu from ballin update'
+printf '%s\\n' 'gu-called' >> "$FAKE_COMMAND_LOG"
+exit 17
+`);
+
+    const result = runBallin(['update']);
+
+    assert.equal(result.status, 17);
+    assert.include(result.stdout, 'Backing up development environment');
+    assert.include(result.stdout, 'gu from ballin update');
+    assert.deepEqual(commandLog(), ['gu-called']);
+  });
+
+  it('routes backup through the existing gu command implementation', () => {
+    writeExecutable('ballin', `#!/bin/bash
+printf '%s\\n' 'fake ballin help from gu'
+`);
+
+    const result = runBallin(['backup', 'help']);
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, 'fake ballin help from gu\n');
+    assert.equal(result.stderr, '');
+  });
+
+  it('routes config through the existing config command implementation', () => {
+    const result = runBallin(['config', 'get', 'gu.id']);
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, 'test-gist-id\n');
+    assert.equal(result.stderr, '');
+  });
+
+  it('rejects extra arguments for no-argument command aliases', () => {
+    const update = runBallin(['update', 'extra']);
+    const selfUpdate = runBallin(['self-update', 'extra']);
+    const uninstall = runBallin(['uninstall', 'extra']);
+
+    assert.equal(update.status, 2);
+    assert.equal(update.stderr, 'Usage: ballin update\n');
+    assert.equal(selfUpdate.status, 2);
+    assert.equal(selfUpdate.stderr, 'Usage: ballin self-update\n');
+    assert.equal(uninstall.status, 2);
+    assert.equal(uninstall.stderr, 'Usage: ballin uninstall\n');
   });
 
   it('reports a concise healthy doctor result by default', () => {
