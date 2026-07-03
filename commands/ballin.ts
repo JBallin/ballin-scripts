@@ -72,16 +72,14 @@ Commands:
 
 Shortcuts:
 
-    up                    same as: ballin update
-    gu                    same as: ballin backup
+    up                    alias for: ballin update
+    gu                    alias for: ballin backup
 
 Examples:
 
     ballin update
     ballin backup
     ballin doctor
-    up
-    gu
 
 `;
 const writeStdout = (text: string): void => {

@@ -29,8 +29,8 @@ describe('ballin', () => {
     assert.include(result.stdout, 'self-update');
     assert.include(result.stdout, 'uninstall');
     assert.include(result.stdout, '--verbose');
-    assert.include(result.stdout, 'up                    same as: ballin update');
-    assert.include(result.stdout, 'gu                    same as: ballin backup');
+    assert.include(result.stdout, 'up                    alias for: ballin update');
+    assert.include(result.stdout, 'gu                    alias for: ballin backup');
     assert.equal(result.stderr, '');
   };
 

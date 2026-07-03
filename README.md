@@ -14,10 +14,7 @@ Core commands:
 - `ballin update` updates the development environment.
 - `ballin backup` snapshots the development environment to a private Gist.
 
-Shortcuts:
-
-- `up` is the fast shortcut for `ballin update`.
-- `gu` is the fast shortcut for `ballin backup`.
+Shortcuts: `up` aliases `ballin update`; `gu` aliases `ballin backup`.
 
 ## What it manages
 
@@ -54,9 +51,9 @@ and tradeoffs.
 ## Fresh Mac setup
 
 On a new Mac, install `ballin-scripts` and let the installer create or adopt the
-private backup Gist used by `gu`. Future snapshots provide the reference for
-recreating shell files, Git settings, package lists, editor settings, and other
-development-environment state.
+private backup Gist used by `ballin backup`. Future snapshots provide the
+reference for recreating shell files, Git settings, package lists, editor
+settings, and other development-environment state.
 
 This is currently a backup and update toolkit, not a full one-command
 machine restore system. The backed-up snapshots make rebuilds more repeatable
@@ -130,8 +127,6 @@ updates, optional Node.js/npm updates, and optional backups.
 ballin update
 ```
 
-`up` remains a first-class shortcut for the same workflow.
-
 Most optional behavior is controlled through `ballin config`:
 
 ```shell
@@ -157,8 +152,6 @@ list of backup snapshots.
 ballin backup
 ```
 
-`gu` remains a first-class shortcut for the same workflow.
-
 Open the configured backup Gist:
 
 ```shell
@@ -182,8 +175,6 @@ ballin backup read zshrc.sh
 | `ballin config` | Reads and updates local Ballin settings. |
 | `ballin self-update` | Updates the local `ballin-scripts` checkout and refreshes installed commands and configuration. |
 | `ballin uninstall` | Removes installed command symlinks and the local checkout. |
-| `up` | Shortcut for `ballin update`. |
-| `gu` | Shortcut for `ballin backup`. |
 
 The existing utility commands `ballin_config`, `ballin_update`, and
 `ballin_uninstall` remain supported for direct use.
