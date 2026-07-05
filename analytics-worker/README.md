@@ -126,12 +126,17 @@ globally, use `npx wrangler` in place of `wrangler`.
    wrangler d1 migrations apply ballin-scripts-analytics --remote
    ```
 
-7. Add these GitHub repository secrets so Actions can deploy the Worker:
+7. Create the `analytics-worker-production` GitHub deployment environment, set
+   its deployment branch rule to `main`, and add these environment secrets so
+   Actions can deploy the Worker:
 
    - `CLOUDFLARE_API_TOKEN`, from a Cloudflare Account API Token created with
      the `Edit Cloudflare Workers` template
    - `CLOUDFLARE_ACCOUNT_ID`
    - `CLOUDFLARE_D1_DATABASE_ID`
+
+   Keep these values as environment secrets rather than repository secrets so
+   other workflows and manually dispatched branch runs cannot access them.
 
 8. Confirm the `Deploy Analytics Worker` GitHub Actions workflow completes
    after Worker-impacting changes land on `main`.

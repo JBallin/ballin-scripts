@@ -88,10 +88,11 @@ For production setup or recreation:
 - set the D1 database ID in local `analytics-worker/wrangler.toml`
 - set `INSTALL_ID_HASH_SECRET`
 - set `INGEST_TOKEN`
-- add GitHub repository secrets `CLOUDFLARE_API_TOKEN`,
-  `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`; use a Cloudflare
-  Account API Token created with the `Edit Cloudflare Workers` template for
-  `CLOUDFLARE_API_TOKEN`
+- create the `analytics-worker-production` GitHub deployment environment, limit
+  its deployment branch rule to `main`, and add environment secrets
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
+  `CLOUDFLARE_D1_DATABASE_ID`; use a Cloudflare Account API Token created with
+  the `Edit Cloudflare Workers` template for `CLOUDFLARE_API_TOKEN`
 - apply `analytics-worker/migrations/0001_initial.sql` with `--remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
   change landed on `main`
