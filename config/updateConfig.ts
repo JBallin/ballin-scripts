@@ -10,6 +10,7 @@ type ConfigValue = ConfigLeaf | ConfigObject;
 
 const { configObj: userConfig } = fetchConfig();
 const updates: string[] = [];
+let configChanged = false;
 const isConfigObject = (value: ConfigValue): value is ConfigObject => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
@@ -17,35 +18,18 @@ const formatUpdateValue = (value: ConfigValue): string => (
   isConfigObject(value) ? JSON.stringify(value) : `${value}`
 );
 
-const hostFromLegacyGistUrl = (url: ConfigValue): string | null => {
-  if (typeof url !== 'string' || !url) {
-    return null;
-  }
-
-  try {
-    const hostname = new URL(url).hostname;
-    if (hostname === 'gist.github.com') {
-      return 'github.com';
-    }
-    if (hostname.startsWith('gist.')) {
-      return hostname.slice('gist.'.length);
-    }
-    return hostname;
-  } catch {
-    return null;
-  }
-};
-
 Object.keys(defaultConfig).forEach((key) => {
   const defaultVal = defaultConfig[key] as ConfigValue;
   if (!(key in userConfig)) {
     userConfig[key] = defaultVal;
     updates.push(`${key}: ${formatUpdateValue(defaultVal)}`);
+    configChanged = true;
   }
   if (isConfigObject(defaultVal)) {
     if (!isConfigObject(userConfig[key])) {
       userConfig[key] = defaultVal;
       updates.push(`${key}: ${formatUpdateValue(defaultVal)}`);
+      configChanged = true;
       return;
     }
 
@@ -53,18 +37,20 @@ Object.keys(defaultConfig).forEach((key) => {
       const nestedUserConfig = userConfig[key] as ConfigObject;
       const nestedDefaultConfig = defaultVal as ConfigObject;
       if (!(nestedKey in nestedUserConfig)) {
-        const nestedDefaultVal = key === 'gu' && nestedKey === 'host'
-          ? hostFromLegacyGistUrl(nestedUserConfig.url) ?? nestedDefaultConfig[nestedKey]
-          : nestedDefaultConfig[nestedKey];
+        const nestedDefaultVal = nestedDefaultConfig[nestedKey];
         nestedUserConfig[nestedKey] = nestedDefaultVal;
         updates.push(`${key}.${nestedKey}: ${formatUpdateValue(nestedDefaultVal)}`);
+        configChanged = true;
       }
     });
   }
 });
 
-if (updates.length) {
+if (configChanged) {
   fs.writeFileSync(configPath, stringify(userConfig), 'utf-8');
+}
+
+if (updates.length) {
   console.log('New configuration options have been added! Here are the updates:');
   updates.forEach((update) => {
     console.log(update);

@@ -84,9 +84,9 @@ const readJsonObject = (filePath: string): ConfigObject | null => {
   }
 };
 
-const configHasGuHost = (repoDir: string): boolean => {
+const configHasBackupHost = (repoDir: string): boolean => {
   const config = readJsonObject(configPathFor(repoDir));
-  return isConfigObject(config?.gu) && Object.prototype.hasOwnProperty.call(config.gu, 'host');
+  return isConfigObject(config?.backup) && Object.prototype.hasOwnProperty.call(config.backup, 'host');
 };
 
 const updateConfig = (repoDir: string, docsUrl: string): boolean => {
@@ -215,30 +215,30 @@ const restoreAdoptedConfig = (
   }
 };
 
-const configureGist = (repoDir: string, docsUrl: string, guHostExisted: boolean): boolean => {
+const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: boolean): boolean => {
   const ballinConfig = path.join(repoDir, 'bin', 'ballin_config');
-  let guHost = configValue(ballinConfig, 'gu.host');
-  let guId = configValue(ballinConfig, 'gu.id');
+  let guHost = configValue(ballinConfig, 'backup.host');
+  let guId = configValue(ballinConfig, 'backup.id');
 
   if (guHost === null || guId === null) {
     return false;
   }
 
   if (process.env.BALLIN_GU_HOST) {
-    if (!setConfigValue(ballinConfig, 'gu.host', process.env.BALLIN_GU_HOST)) {
+    if (!setConfigValue(ballinConfig, 'backup.host', process.env.BALLIN_GU_HOST)) {
       return false;
     }
-    guHost = configValue(ballinConfig, 'gu.host');
+    guHost = configValue(ballinConfig, 'backup.host');
     if (guHost === null) {
       return false;
     }
-  } else if (guId === 'null' || !guHostExisted) {
+  } else if (guId === 'null' || !backupHostExisted) {
     const inputHost = readPrompt(`\n🤔 What GitHub host should be used for Gist backups? [${guHost}] `);
     if (inputHost) {
-      if (!setConfigValue(ballinConfig, 'gu.host', inputHost)) {
+      if (!setConfigValue(ballinConfig, 'backup.host', inputHost)) {
         return false;
       }
-      guHost = configValue(ballinConfig, 'gu.host');
+      guHost = configValue(ballinConfig, 'backup.host');
       if (guHost === null) {
         return false;
       }
@@ -290,7 +290,7 @@ const configureGist = (repoDir: string, docsUrl: string, guHostExisted: boolean)
         if (!restoreAdoptedConfig(repoDir, docsUrl, guHost, gistId)) {
           return false;
         }
-        if (!setConfigValue(ballinConfig, 'gu.id', gistId)) {
+        if (!setConfigValue(ballinConfig, 'backup.id', gistId)) {
           return false;
         }
         validGistId = true;
@@ -300,7 +300,7 @@ const configureGist = (repoDir: string, docsUrl: string, guHostExisted: boolean)
     }
   }
 
-  guId = configValue(ballinConfig, 'gu.id');
+  guId = configValue(ballinConfig, 'backup.id');
   if (guId === null) {
     return false;
   }
@@ -325,7 +325,7 @@ const configureGist = (repoDir: string, docsUrl: string, guHostExisted: boolean)
 
       const createdGistId = gistUrl.split('/').pop() ?? gistUrl;
       writeStdoutLine('\n🧳 Storing your new gist ID in your config...');
-      if (!setConfigValue(ballinConfig, 'gu.id', createdGistId)) {
+      if (!setConfigValue(ballinConfig, 'backup.id', createdGistId)) {
         return false;
       }
 
@@ -400,14 +400,14 @@ const setup = (repoDir: string, docsUrl: string, analyticsDocsUrl?: string): boo
   }
 
   const configExisted = fs.existsSync(configPathFor(repoDir));
-  const guHostExisted = configExisted && configHasGuHost(repoDir);
+  const backupHostExisted = configExisted && configHasBackupHost(repoDir);
 
   if (!configure(repoDir, docsUrl)) {
     writeStdoutLine('\n⚠️  ERROR: Unable to create or update ballin.config.json');
     return false;
   }
 
-  if (!configureGist(repoDir, docsUrl, guHostExisted)) {
+  if (!configureGist(repoDir, docsUrl, backupHostExisted)) {
     writeStdoutLine('\n⚠️  ERROR: Unable to configure Gist backup');
     return false;
   }
@@ -440,8 +440,8 @@ const runInstallSetupCli = (): void => {
   }
 
   if (command === 'gist' && repoDir && option) {
-    const guHostExisted = process.argv[5] === 'true';
-    process.exitCode = configureGist(repoDir, option, guHostExisted) ? 0 : 1;
+    const backupHostExisted = process.argv[5] === 'true';
+    process.exitCode = configureGist(repoDir, option, backupHostExisted) ? 0 : 1;
     return;
   }
 
@@ -461,7 +461,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|gist|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [gu-host-existed]');
+    writeStdoutLine('Usage: install_setup.ts <configure|gist|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [backup-host-existed]');
     process.exitCode = 1;
     return;
   }

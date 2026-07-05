@@ -207,7 +207,7 @@ const readConfig = (configPath: string): {
     };
   }
 
-  const requiredSections = ['up', 'gu', 'analytics'];
+  const requiredSections = ['update', 'backup', 'analytics'];
   const missingSections = requiredSections.filter((section) => !hasOwn(parsed, section));
   return {
     config: parsed,
@@ -230,20 +230,20 @@ const guConfigChecks = (
 ): SetupReadinessCheck[] => {
   if (!config) {
     return [{
-      id: 'gu.config',
+      id: 'backup.config',
       label: 'Gist backup config',
       status: 'info',
       summary: 'Skipping Gist backup config checks until config is readable.',
     }];
   }
 
-  const guConfig = isConfigObject(config.gu) ? config.gu : null;
-  const host = guConfig && typeof guConfig.host === 'string' ? guConfig.host.trim() : '';
-  const id = guConfig && typeof guConfig.id === 'string' ? guConfig.id.trim() : '';
+  const backupConfig = isConfigObject(config.backup) ? config.backup : null;
+  const host = backupConfig && typeof backupConfig.host === 'string' ? backupConfig.host.trim() : '';
+  const id = backupConfig && typeof backupConfig.id === 'string' ? backupConfig.id.trim() : '';
   const hasConfiguredId = Boolean(id) && id !== 'null';
   const checks: SetupReadinessCheck[] = [
     {
-      id: 'gu.host',
+      id: 'backup.host',
       label: 'Gist host',
       status: host ? 'pass' : 'fail',
       summary: host
@@ -252,7 +252,7 @@ const guConfigChecks = (
       data: { host: host || null },
     },
     {
-      id: 'gu.gist',
+      id: 'backup.gist',
       label: 'Gist ID',
       status: hasConfiguredId ? 'pass' : 'warn',
       summary: hasConfiguredId
@@ -264,7 +264,7 @@ const guConfigChecks = (
 
   const ghAvailable = commandExists('gh', { env });
   checks.push({
-    id: 'gu.gh',
+    id: 'backup.gh',
     label: 'GitHub CLI',
     status: ghAvailable ? 'pass' : 'warn',
     summary: ghAvailable
@@ -275,17 +275,17 @@ const guConfigChecks = (
 
   if (!host) {
     checks.push({
-      id: 'gu.auth',
+      id: 'backup.auth',
       label: 'GitHub CLI authentication',
       status: 'info',
-      summary: 'Skipping GitHub CLI authentication check until gu.host is configured.',
+      summary: 'Skipping GitHub CLI authentication check until backup.host is configured.',
     });
     return checks;
   }
 
   if (!ghAvailable) {
     checks.push({
-      id: 'gu.auth',
+      id: 'backup.auth',
       label: 'GitHub CLI authentication',
       status: 'info',
       summary: 'Skipping GitHub CLI authentication check because gh is not on PATH.',
@@ -303,7 +303,7 @@ const guConfigChecks = (
   });
   const exitStatus = authResult.error ? 1 : spawnResultStatus(authResult);
   checks.push({
-    id: 'gu.auth',
+    id: 'backup.auth',
     label: 'GitHub CLI authentication',
     status: authResult.status === 0 && !authResult.error ? 'pass' : 'warn',
     summary: authResult.status === 0 && !authResult.error

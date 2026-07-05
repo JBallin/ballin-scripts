@@ -1,13 +1,13 @@
 {
-  "up": {
+  "update": {
     "cleanup": "true",
-    "ballin": "true",
-    "gu": "false",
+    "selfUpdate": "true",
+    "backup": "false",
     "softwareupdate": "true",
     "npm": "false",
     "nvm": "false"
   },
-  "gu": {
+  "backup": {
     "id": null,
     "host": "github.com"
   },
