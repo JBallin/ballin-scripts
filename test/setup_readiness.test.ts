@@ -93,8 +93,8 @@ describe('setup readiness', () => {
     requiredCommandShims.forEach((command: string) => writeExecutable(command));
     writeExecutable('gh');
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: 'test-gist-id',
         host: 'example.test',
       },
@@ -133,12 +133,12 @@ describe('setup readiness', () => {
     fs.writeFileSync(configPath, '{not json\n');
     assert.include(checkById(collect(), 'config.read').summary, 'not valid JSON');
 
-    writeConfig({ gu: { id: null, host: 'example.test' } });
+    writeConfig({ backup: { id: null, host: 'example.test' } });
     const sectionCheck = checkById(collect(), 'config.read');
 
     assert.equal(checkById(readableConfig, 'config.read').status, 'pass');
     assert.equal(sectionCheck.status, 'warn');
-    assert.deepEqual(sectionCheck.data?.missingSections, ['up', 'analytics']);
+    assert.deepEqual(sectionCheck.data?.missingSections, ['update', 'analytics']);
   });
 
   it('reports successful Gist readiness signals without mutating anything', () => {
@@ -147,10 +147,10 @@ describe('setup readiness', () => {
     const report = collect();
 
     assert.equal(report.status, 'pass');
-    assert.equal(checkById(report, 'gu.host').status, 'pass');
-    assert.equal(checkById(report, 'gu.gist').status, 'pass');
-    assert.equal(checkById(report, 'gu.gh').status, 'pass');
-    assert.equal(checkById(report, 'gu.auth').status, 'pass');
+    assert.equal(checkById(report, 'backup.host').status, 'pass');
+    assert.equal(checkById(report, 'backup.gist').status, 'pass');
+    assert.equal(checkById(report, 'backup.gh').status, 'pass');
+    assert.equal(checkById(report, 'backup.auth').status, 'pass');
     assert.deepEqual(commandLog, ['gh auth status --hostname example.test']);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
     assert.notInclude(commandLog.join('\n'), 'gist create');
@@ -161,8 +161,8 @@ describe('setup readiness', () => {
   it('reports unconfigured Gist ID and missing gh as non-mutating warnings', () => {
     fs.rmSync(path.join(binDir, 'gh'));
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: null,
         host: 'example.test',
       },
@@ -172,29 +172,29 @@ describe('setup readiness', () => {
     const report = collect();
 
     assert.equal(report.status, 'warn');
-    assert.equal(checkById(report, 'gu.gist').status, 'warn');
-    assert.equal(checkById(report, 'gu.gh').status, 'warn');
-    assert.equal(checkById(report, 'gu.auth').status, 'info');
+    assert.equal(checkById(report, 'backup.gist').status, 'warn');
+    assert.equal(checkById(report, 'backup.gh').status, 'warn');
+    assert.equal(checkById(report, 'backup.auth').status, 'info');
     assert.deepEqual(commandLog, []);
   });
 
   it('reports missing Gist host and failed gh auth', () => {
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: 'test-gist-id',
       },
       analytics: {},
     });
 
     const missingHost = collect();
-    assert.equal(checkById(missingHost, 'gu.host').status, 'fail');
-    assert.equal(checkById(missingHost, 'gu.auth').status, 'info');
+    assert.equal(checkById(missingHost, 'backup.host').status, 'fail');
+    assert.equal(checkById(missingHost, 'backup.auth').status, 'info');
     assert.deepEqual(commandLog, []);
 
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: 'test-gist-id',
         host: 'example.test',
       },
@@ -203,7 +203,7 @@ describe('setup readiness', () => {
     authStatus = 4;
     const authFailed = collect();
 
-    assert.equal(checkById(authFailed, 'gu.auth').status, 'warn');
+    assert.equal(checkById(authFailed, 'backup.auth').status, 'warn');
     assert.equal(authFailed.status, 'warn');
     assert.deepEqual(commandLog, ['gh auth status --hostname example.test']);
   });

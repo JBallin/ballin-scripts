@@ -108,7 +108,7 @@ const setConfig = (keys?: string, val?: ConfigValue, other?: string[]) => {
   }
   const prevVal = nestedObj[keyToSet];
 
-  // Objects are containers, but null is a valid leaf value (for example, gu.id).
+  // Objects are containers, but null is a valid leaf value (for example, backup.id).
   if (typeof prevVal === 'object' && prevVal !== null) {
     return configMessages.setObjErr(keys, prevVal);
   }

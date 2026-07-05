@@ -24,11 +24,11 @@ const currentConfigJSON = fetchConfigJSON();
 const invalidPathCases = [
   ['missing', 'missing'],
   ['test.nested', 'test'],
-  ['gu.missing.nested', 'gu.missing'],
-  ['up.cleanup.nested', 'up.cleanup.nested'],
-  ['up.cleanup.nested.deeper', 'up.cleanup.nested'],
-  ['gu.id.nested', 'gu.id.nested'],
-  ['gu.id.nested.deeper', 'gu.id.nested'],
+  ['backup.missing.nested', 'backup.missing'],
+  ['update.cleanup.nested', 'update.cleanup.nested'],
+  ['update.cleanup.nested.deeper', 'update.cleanup.nested'],
+  ['backup.id.nested', 'backup.id.nested'],
+  ['backup.id.nested.deeper', 'backup.id.nested'],
   ['constructor', 'constructor'],
   ['__proto__.nested', '__proto__'],
 ];
@@ -88,17 +88,17 @@ describe('config', () => {
   });
 
   describe('getConfig', () => {
-    it('("up") should return an Object', () => {
-      assert.isObject(getConfig('up'));
+    it('("update") should return an Object', () => {
+      assert.isObject(getConfig('update'));
     });
-    it('("gu.id") should return null by default', () => {
-      assert.isNull(getConfig('gu.id'));
+    it('("backup.id") should return null by default', () => {
+      assert.isNull(getConfig('backup.id'));
     });
-    it('("gu.host") should return github.com by default', () => {
-      assert.equal(getConfig('gu.host'), 'github.com');
+    it('("backup.host") should return github.com by default', () => {
+      assert.equal(getConfig('backup.host'), 'github.com');
     });
-    it('("up.cleanup") should return true or false', () => {
-      assert.include(['true', 'false'], getConfig('up.cleanup'));
+    it('("update.cleanup") should return true or false', () => {
+      assert.include(['true', 'false'], getConfig('update.cleanup'));
     });
     it('() should return a String', () => {
       assert.isString(getConfig());
@@ -132,11 +132,11 @@ describe('config', () => {
       assert.equal(fetchConfigJSON(), initialConfig);
     });
 
-    it('should set up.cleanup', () => {
-      setTest('up.cleanup', 'test');
+    it('should set update.cleanup', () => {
+      setTest('update.cleanup', 'test');
     });
-    it('should set gu.id', () => {
-      setTest('gu.id', '123');
+    it('should set backup.id', () => {
+      setTest('backup.id', '123');
     });
     it('should give error if given no arguments', () => {
       assert.equal(setConfig(), configMessages.setArgsErr);
@@ -145,14 +145,14 @@ describe('config', () => {
       assert.equal(setConfig('a', 'b', ['c']), configMessages.setArgsErr);
     });
     it('should return the keys/value it set', () => {
-      const keys = 'up.cleanup';
+      const keys = 'update.cleanup';
       const val = 'true';
       assert.equal(setConfig(keys, val), `"${keys}" set to: "${val}"`);
     });
     it('should give error if trying to write to an object', () => {
-      const keys = 'up';
+      const keys = 'update';
       const val = 'true';
-      assert.include(setConfig(keys, val), 'INVALID: "up" is not a bottom-level value, it returns');
+      assert.include(setConfig(keys, val), 'INVALID: "update" is not a bottom-level value, it returns');
     });
     invalidPathCases.forEach(([keys, missingKeys]) => {
       it(`should reject invalid path "${keys}" without changing config`, () => {
@@ -183,9 +183,9 @@ describe('config', () => {
 
   it('CLI invalid get/set commands exit cleanly without changing config', () => {
     const configBeforeSet = fetchConfigJSON();
-    const getResult = runConfigCli(['get', 'up.nvm.nested']);
-    const setResult = runConfigCli(['set', 'up.nvm.nested', 'test']);
-    const expectedOutput = `${configMessages.getKeysDneErr('up.nvm.nested')}\n`;
+    const getResult = runConfigCli(['get', 'update.nvm.nested']);
+    const setResult = runConfigCli(['set', 'update.nvm.nested', 'test']);
+    const expectedOutput = `${configMessages.getKeysDneErr('update.nvm.nested')}\n`;
 
     assert.equal(getResult.status, 0);
     assert.equal(getResult.stdout, expectedOutput);
@@ -205,7 +205,7 @@ describe('config', () => {
   });
 
   it('CLI remains executable through its shebang', () => {
-    const result = spawnSync(cliPath, ['get', 'gu.id'], {
+    const result = spawnSync(cliPath, ['get', 'backup.id'], {
       encoding: 'utf8',
       env: process.env,
     });
@@ -222,7 +222,7 @@ describe('config', () => {
     try {
       fs.symlinkSync(cliPath, symlinkPath);
 
-      const result = spawnSync(symlinkPath, ['get', 'gu.id'], {
+      const result = spawnSync(symlinkPath, ['get', 'backup.id'], {
         encoding: 'utf8',
         env: process.env,
       });
@@ -236,7 +236,7 @@ describe('config', () => {
   });
 
   it('CLI reset restores the default config', () => {
-    setConfig('gu.id', 'changed-id');
+    setConfig('backup.id', 'changed-id');
     const changedConfig = fetchConfigJSON();
 
     const result = runConfigCli(['reset']);
@@ -244,7 +244,7 @@ describe('config', () => {
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Config has been reset...\nFROM:');
     assert.include(result.stdout, changedConfig);
-    assert.isNull(getConfig('gu.id'));
+    assert.isNull(getConfig('backup.id'));
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
   });
 
@@ -306,19 +306,19 @@ describe('config', () => {
     it('("set") should return a setConfig error', () => {
       assert.equal(configAction('set'), configMessages.setArgsErr);
     });
-    it('("get", "gu.id") should return null by default', () => {
-      assert.isNull(configAction('get', 'gu.id'));
+    it('("get", "backup.id") should return null by default', () => {
+      assert.isNull(configAction('get', 'backup.id'));
     });
     it('("wrong") should return an invalid error', () => {
       assert.equal(configAction('wrong'), configMessages.actionErr);
     });
-    it('("set", "gu.id", "123") should set gu.id to "123"', () => {
-      setTest('gu.id', '123', setConfigAction);
+    it('("set", "backup.id", "123") should set backup.id to "123"', () => {
+      setTest('backup.id', '123', setConfigAction);
     });
     it('("reset") should reset config', () => {
-      setTest('gu.id', '123', setConfigAction);
+      setTest('backup.id', '123', setConfigAction);
       assert.include(configAction('reset'), 'Config has been reset...\nFROM:');
-      assert.isNull(getConfig('gu.id'));
+      assert.isNull(getConfig('backup.id'));
     });
   });
 
@@ -369,14 +369,19 @@ describe('config', () => {
 
     [
       {
-        name: 'gu: null',
-        config: { ...defaultConfig, gu: null },
-        key: 'gu',
+        name: 'backup: null',
+        config: { ...defaultConfig, backup: null },
+        key: 'backup',
       },
       {
-        name: 'gu: "bad"',
-        config: { ...defaultConfig, gu: 'bad' },
-        key: 'gu',
+        name: 'backup: "bad"',
+        config: { ...defaultConfig, backup: 'bad' },
+        key: 'backup',
+      },
+      {
+        name: 'update: false',
+        config: { ...defaultConfig, update: false },
+        key: 'update',
       },
       {
         name: 'analytics: false',
@@ -395,9 +400,16 @@ describe('config', () => {
       });
     });
 
-    it('derives gu.host from a legacy Enterprise Gist URL', () => {
+    it('derives backup.host from a legacy Enterprise Gist URL', () => {
       fs.writeFileSync(configPath, JSON.stringify({
-        up: defaultConfig.up,
+        up: {
+          cleanup: 'false',
+          ballin: 'false',
+          gu: 'true',
+          softwareupdate: 'false',
+          npm: 'true',
+          nvm: 'true',
+        },
         gu: {
           id: 'enterprise-gist-id',
           url: 'https://gist.github.example.test',
@@ -408,14 +420,20 @@ describe('config', () => {
       const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
-      assert.equal(getConfig('gu.host'), 'github.example.test');
-      assert.equal(getConfig('gu.url'), 'https://gist.github.example.test');
-      assert.equal(getConfig('gu.token_file'), '.legacy-gist-token');
+      assert.equal(getConfig('update.cleanup'), 'false');
+      assert.equal(getConfig('update.selfUpdate'), 'false');
+      assert.equal(getConfig('update.backup'), 'true');
+      assert.equal(getConfig('update.softwareupdate'), 'false');
+      assert.equal(getConfig('update.npm'), 'true');
+      assert.equal(getConfig('update.nvm'), 'true');
+      assert.equal(getConfig('backup.id'), 'enterprise-gist-id');
+      assert.equal(getConfig('backup.host'), 'github.example.test');
+      assert.notProperty(fetchConfig().configObj, 'up');
+      assert.notProperty(fetchConfig().configObj, 'gu');
     });
 
     it('maps the legacy github.com Gist URL to the GitHub host', () => {
       fs.writeFileSync(configPath, JSON.stringify({
-        up: defaultConfig.up,
         gu: {
           id: 'github-gist-id',
           url: 'https://gist.github.com',
@@ -425,7 +443,43 @@ describe('config', () => {
       const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
-      assert.equal(getConfig('gu.host'), 'github.com');
+      assert.equal(getConfig('backup.host'), 'github.com');
+    });
+
+    it('preserves renamed config values when legacy sections also exist', () => {
+      fs.writeFileSync(configPath, JSON.stringify({
+        update: {
+          cleanup: 'new-cleanup',
+          selfUpdate: 'new-self-update',
+        },
+        backup: {
+          id: 'new-gist-id',
+          host: 'new.example.test',
+        },
+        up: {
+          cleanup: 'old-cleanup',
+          ballin: 'old-self-update',
+          gu: 'old-backup',
+        },
+        gu: {
+          id: 'old-gist-id',
+          host: 'old.example.test',
+        },
+        analytics: {
+          enabled: 'false',
+        },
+      }), 'utf8');
+
+      const result = runUpdateConfig();
+
+      assert.equal(result.status, 0);
+      assert.equal(getConfig('update.cleanup'), 'new-cleanup');
+      assert.equal(getConfig('update.selfUpdate'), 'new-self-update');
+      assert.equal(getConfig('update.backup'), 'old-backup');
+      assert.equal(getConfig('backup.id'), 'new-gist-id');
+      assert.equal(getConfig('backup.host'), 'new.example.test');
+      assert.notProperty(fetchConfig().configObj, 'up');
+      assert.notProperty(fetchConfig().configObj, 'gu');
     });
   });
 });
