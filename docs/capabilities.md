@@ -37,5 +37,5 @@ can snapshot:
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
 | Brackets | `brackets_settings.json`, `brackets_keymap.json`, `brackets_extensions`, `brackets_disabled_extensions` | Brackets support files in `HOME`. |
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
-| Ballin config | `ballin_config` | Local `ballin.config.json` snapshot filename. |
+| Ballin config | `ballin_config` | Local `ballin.config.json` file. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |

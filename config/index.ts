@@ -119,7 +119,7 @@ const setConfig = (keys?: string, val?: ConfigValue, other?: string[]) => {
 
 const configAction = (request?: string, keys?: string, value?: string, other?: string[]) => {
   if (request === 'reset') return resetConfig();
-  // Send config automatically when no explicit request is provided.
+  // Send full config when no explicit request is provided.
   if (request === 'get' || !request) return getConfig(keys, value);
   if (request === 'set') return setConfig(keys, value, other);
   if (process.env.NODE_ENV !== 'test') {

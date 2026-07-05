@@ -87,6 +87,8 @@ const readJsonObject = (filePath: string): ConfigObject | null => {
   }
 };
 
+// Installer setup can target an arbitrary checkout, while config/index.ts binds
+// its config path at module load. Keep these repoDir-scoped helpers local.
 const getNestedConfigValue = (config: ConfigObject, keyPath: string): ConfigValue | undefined => {
   const keys = keyPath.split('.');
   let value: ConfigValue = config;
