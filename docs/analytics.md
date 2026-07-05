@@ -32,8 +32,8 @@ command output, side effects, or exit status.
 - schema version
 - random install ID
 - date bucket, such as `YYYY-MM-DD`
-- command name for currently instrumented top-level commands; canonical
-  `ballin <command>` calls report as `ballin`
+- command name for currently instrumented top-level commands, such as `ballin`,
+  `ballin update`, `ballin backup`, and direct utility commands while supported
 - status: `success`, `failure`, or `unknown`
 - coarse duration bucket: `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
   `10m+`

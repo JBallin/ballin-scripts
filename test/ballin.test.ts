@@ -6,6 +6,9 @@ const path = require('path');
 const {
   requiredCommandShims,
 } = require('../commands/setup_readiness.ts');
+const {
+  analyticsCommandForBallinArgs,
+} = require('../commands/ballin.ts');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
@@ -143,6 +146,19 @@ esac
   it('shows help through conventional help spellings', () => {
     assertHelpOutput(runBallin(['--help']));
     assertHelpOutput(runBallin(['help']));
+  });
+
+  it('uses canonical subcommand names for analytics', () => {
+    assert.equal(analyticsCommandForBallinArgs([]), 'ballin');
+    assert.equal(analyticsCommandForBallinArgs(['--help']), 'ballin');
+    assert.equal(analyticsCommandForBallinArgs(['help']), 'ballin');
+    assert.equal(analyticsCommandForBallinArgs(['update']), 'ballin update');
+    assert.equal(analyticsCommandForBallinArgs(['backup', 'read', 'zshrc.sh']), 'ballin backup');
+    assert.equal(analyticsCommandForBallinArgs(['config', 'get', 'up.cleanup']), 'ballin config');
+    assert.equal(analyticsCommandForBallinArgs(['doctor', '--verbose']), 'ballin doctor');
+    assert.equal(analyticsCommandForBallinArgs(['self-update']), 'ballin self-update');
+    assert.equal(analyticsCommandForBallinArgs(['uninstall']), 'ballin uninstall');
+    assert.equal(analyticsCommandForBallinArgs(['upd']), 'ballin');
   });
 
   it('rejects unknown commands without running a workflow', () => {

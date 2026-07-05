@@ -290,21 +290,26 @@ describe('analytics client', () => {
     });
     writeInstallId();
 
+    const supportedCanonicalSubcommand = await recordWithSender({
+      command: 'ballin update',
+      now: fixedNow,
+    });
     const unsupportedCommand = await recordWithSender({
       command: 'git',
       now: fixedNow,
     });
     const unsupportedStatus = await recordWithSender({
-      command: 'up',
+      command: 'ballin update',
       status: 'maybe',
       now: fixedNow,
     });
     const unsupportedDuration = await recordWithSender({
-      command: 'up',
+      command: 'ballin update',
       durationBucket: '42s',
       now: fixedNow,
     });
 
+    assert.deepEqual(supportedCanonicalSubcommand.payloads.map(({ command }) => command), ['ballin update']);
     assert.deepEqual(unsupportedCommand.payloads, []);
     assert.deepEqual(unsupportedStatus.payloads, []);
     assert.deepEqual(unsupportedDuration.payloads, []);

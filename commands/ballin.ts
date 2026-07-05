@@ -41,8 +41,8 @@ const format = {
 };
 
 const examples = {
-  get: '(ex: get analytics.enabled)',
-  set: '(ex: set analytics.enabled false)',
+  get: '(ex: get up.cleanup)',
+  set: '(ex: set up.cleanup false)',
 };
 
 const ballinHelp = `
@@ -153,10 +153,28 @@ function runBallinCommand(args = process.argv.slice(2)): void {
   }
 }
 
+const canonicalAnalyticsCommands = new Set([
+  'backup',
+  'config',
+  'doctor',
+  'self-update',
+  'uninstall',
+  'update',
+]);
+
+const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => {
+  const [command] = args;
+  if (canonicalAnalyticsCommands.has(command)) {
+    return `ballin ${command}`;
+  }
+  return 'ballin';
+};
+
 const runBallinCli = (): void => {
-  void runWithCommandAnalytics('ballin', runBallinCommand).catch(rethrowCommandError);
+  void runWithCommandAnalytics(analyticsCommandForBallinArgs(), runBallinCommand).catch(rethrowCommandError);
 };
 
 module.exports = {
+  analyticsCommandForBallinArgs,
   runBallinCli,
 };

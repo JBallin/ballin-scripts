@@ -167,6 +167,3 @@ ballin backup read zshrc.sh
 | `ballin config` | Reads and updates local Ballin settings. |
 | `ballin self-update` | Updates the local `ballin-scripts` checkout and refreshes installed commands and configuration. |
 | `ballin uninstall` | Removes installed command symlinks and the local checkout. |
-
-The existing utility commands `ballin_config`, `ballin_update`, and
-`ballin_uninstall` remain supported for direct use.

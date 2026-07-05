@@ -17,8 +17,7 @@ ballin config reset
 ```
 
 `ballin config` prints the full config, `get` prints one value, `set` updates
-an existing setting, and `reset` restores the default config. The existing
-`ballin_config` command remains supported for direct use.
+an existing setting, and `reset` restores the default config.
 
 ## Node.js
 

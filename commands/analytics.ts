@@ -66,6 +66,12 @@ const schemaVersion = 1;
 const defaultTimeoutMs = 750;
 const allowedCommands = new Set([
   'ballin',
+  'ballin backup',
+  'ballin config',
+  'ballin doctor',
+  'ballin self-update',
+  'ballin uninstall',
+  'ballin update',
   'ballin_config',
   'ballin_uninstall',
   'ballin_update',
