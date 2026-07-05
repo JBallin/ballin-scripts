@@ -41,8 +41,8 @@ const format = {
 };
 
 const examples = {
-  get: '(ex: get up.cleanup)',
-  set: '(ex: set up.cleanup true)',
+  get: '(ex: get analytics.enabled)',
+  set: '(ex: set analytics.enabled false)',
 };
 
 const ballinHelp = `

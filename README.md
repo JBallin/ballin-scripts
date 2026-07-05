@@ -125,14 +125,8 @@ updates, optional Node.js/npm updates, and optional backups.
 ballin update
 ```
 
-Most optional behavior is controlled through `ballin config`:
-
-```shell
-ballin config set up.gu true
-ballin config set up.npm false
-```
-
-See the [optional capabilities guide](docs/optional-capabilities.md) for update
+Most optional behavior is controlled through `ballin config`; see the
+[optional capabilities guide](docs/optional-capabilities.md) for update
 settings, and the [supported capabilities reference](docs/capabilities.md) for
 the full list of update integrations.
 
