@@ -40,7 +40,7 @@ jobs:
             | xargs -0 -r shellcheck
 
       - name: Run actionlint
-        run: docker run --rm -v "${PWD}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color .github/workflows/*.yml
+        run: docker run --rm -v "${PWD}:/repo:ro" --workdir /repo rhysd/actionlint:1.7.12 -color .github/workflows/*.yml
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
