@@ -53,7 +53,7 @@ Example payload:
   "schemaVersion": 1,
   "installId": "826f9faa-9995-4f66-a01b-73b4f7aebdf1",
   "dateBucket": "2026-06-27",
-  "command": "up",
+  "command": "ballin update",
   "status": "success",
   "durationBucket": "10-60s",
   "appVersion": "1.0.0",
@@ -75,8 +75,9 @@ The event is rejected unless:
 
 - `installId` is a lowercase UUID
 - `dateBucket` is today, yesterday, or tomorrow in UTC
-- `command` is one of `ballin`, `ballin_config`, `ballin_uninstall`,
-  `ballin_update`, `gu`, or `up`
+- `command` is one of the currently instrumented Ballin commands, including
+  `ballin`, `ballin update`, `ballin backup`, `ballin config`,
+  `ballin doctor`, `ballin self-update`, and `ballin uninstall`
 - `appVersion` is a released numeric version such as `1.0.0`
 - the JSON body is 2048 bytes or smaller
 - the JSON body contains no fields outside the documented schema
