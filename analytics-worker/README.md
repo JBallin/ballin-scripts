@@ -151,8 +151,8 @@ and can also be run manually from GitHub Actions, but production deploys are
 guarded by the `analytics-worker-production` environment and a `main` ref check.
 
 Remote D1 migrations remain manual. The deploy workflow stops before deploying
-when a push includes `analytics-worker/migrations/`; after applying the remote
-migration, rerun the workflow manually from `main`.
+when `analytics-worker/migrations/` changed since the last successful deploy;
+after applying the remote migration, rerun the workflow manually from `main`.
 
 ```shell
 wrangler d1 migrations apply ballin-scripts-analytics --remote

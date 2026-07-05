@@ -100,6 +100,5 @@ For production setup or recreation:
   stored
 
 Deploy failures are visible in GitHub Actions. Remote D1 migrations remain
-manual and should use `--remote`; migration-changing pushes stop before
-publishing until the remote migration is applied and the deploy workflow is
-rerun from `main`.
+manual and should use `--remote`; migration changes stop publishing until the
+remote migration is applied and the deploy workflow succeeds from `main`.

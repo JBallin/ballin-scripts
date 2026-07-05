@@ -13,6 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -50,8 +51,59 @@ jobs:
         env:
           BEFORE_SHA: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if git diff --name-only "${BEFORE_SHA}" "${CURRENT_SHA}" -- analytics-worker/migrations/ \
+          base_sha="${BEFORE_SHA}"
+          last_success_sha="$(node <<'NODE'
+          const https = require('https');
+
+          const apiUrl = new URL(
+            `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/actions/workflows/deploy-analytics-worker.yml/runs`,
+          );
+          apiUrl.searchParams.set('branch', 'main');
+          apiUrl.searchParams.set('status', 'success');
+          apiUrl.searchParams.set('per_page', '10');
+
+          const request = https.get(apiUrl, {
+            headers: {
+              accept: 'application/vnd.github+json',
+              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              'user-agent': 'ballin-scripts-deploy',
+            },
+          }, (response) => {
+            let body = '';
+            response.setEncoding('utf8');
+            response.on('data', (chunk) => {
+              body += chunk;
+            });
+            response.on('end', () => {
+              if (response.statusCode >= 400) {
+                return;
+              }
+              let data;
+              try {
+                data = JSON.parse(body);
+              } catch {
+                return;
+              }
+              const lastSuccess = (data.workflow_runs || []).find((run) => (
+                run.head_sha && run.head_sha !== process.env.CURRENT_SHA
+              ));
+              if (lastSuccess) {
+                process.stdout.write(lastSuccess.head_sha);
+              }
+            });
+          });
+
+          request.on('error', () => {});
+          NODE
+          )"
+
+          if [ -n "${last_success_sha}" ]; then
+            base_sha="${last_success_sha}"
+          fi
+
+          if git diff --name-only "${base_sha}" "${CURRENT_SHA}" -- analytics-worker/migrations/ \
             | grep -q .; then
             echo "::error::Remote D1 migrations remain manual. Apply migrations with wrangler d1 migrations apply ballin-scripts-analytics --remote, then rerun this workflow from main."
             exit 1
