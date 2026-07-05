@@ -42,6 +42,7 @@ type AnalyticsSender = (payload: AnalyticsPayload, options: SenderOptions) => Pr
 
 type AnalyticsRuntime = SenderOptions & {
   analyticsConfig?: AnalyticsConfig;
+  appVersion?: string;
   env?: NodeJS.ProcessEnv;
   installId?: string | null;
   installIdPath?: string;
@@ -138,6 +139,7 @@ const preserveLocalAnalyticsState = (runtime: CommandAnalyticsRuntime): Analytic
     return {
       ...runtime,
       analyticsConfig: readAnalyticsConfig().analytics,
+      appVersion: loadAppVersion(),
       installId: readLocalInstallId(runtime.installIdPath),
     };
   } catch {
@@ -210,6 +212,7 @@ const durationBucketFromMs = (durationMs: number): string => {
 const buildAnalyticsPayload = (
   input: Required<Pick<AnalyticsRecordInput, 'command' | 'status' | 'durationBucket' | 'now'>>,
   installId: string,
+  appVersion = loadAppVersion(),
 ): AnalyticsPayload => ({
   schemaVersion,
   installId,
@@ -217,7 +220,7 @@ const buildAnalyticsPayload = (
   command: input.command,
   status: input.status,
   durationBucket: input.durationBucket,
-  appVersion: loadAppVersion(),
+  appVersion,
   nodeMajor: nodeMajor(),
   os: osFamily(),
   osVersion: coarseOsVersion(),
@@ -324,7 +327,7 @@ const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: Analyt
       status,
       durationBucket,
       now: input.now ?? new Date(),
-    }, installId);
+    }, installId, runtime.appVersion);
     await (runtime.sender ?? sendAnalyticsPayload)(payload, {
       endpoint: runtime.endpoint ?? productionAnalyticsEndpoint,
       ingestToken: runtime.ingestToken ?? productionAnalyticsIngestToken,

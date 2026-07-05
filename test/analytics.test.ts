@@ -441,6 +441,7 @@ describe('analytics client', () => {
 
     assert.deepInclude(payloads[0], {
       command: 'ballin uninstall',
+      appVersion: '1.0.0',
       installId: fixedInstallId,
       status: 'success',
     });
