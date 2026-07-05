@@ -36,6 +36,7 @@ type SenderOptions = {
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const packageJson = require('../package.json');
 const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 const fixedNow = new Date('2026-06-27T20:15:00.000Z');
 const allowedPayloadKeys = [
@@ -441,7 +442,7 @@ describe('analytics client', () => {
 
     assert.deepInclude(payloads[0], {
       command: 'ballin uninstall',
-      appVersion: '1.0.0',
+      appVersion: packageJson.version,
       installId: fixedInstallId,
       status: 'success',
     });
