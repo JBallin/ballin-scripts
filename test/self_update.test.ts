@@ -4,14 +4,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const updatePath = path.join(__dirname, '..', 'bin', 'ballin_update');
+const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
-type SpawnUpdateOverrides = Omit<
+type SpawnSelfUpdateOverrides = Omit<
   import('child_process').SpawnSyncOptionsWithStringEncoding,
   'encoding' | 'env'
 >;
 
-describe('ballin_update', () => {
+describe('ballin self-update', () => {
   let testDir: string;
   let homeDir: string;
   let repoDir: string;
@@ -33,7 +33,7 @@ describe('ballin_update', () => {
 
   const linkCommand = (name: string) => {
     const sourcePath = commandPath(name);
-    assert.exists(sourcePath, `${name} is required to run the ballin_update test harness`);
+    assert.exists(sourcePath, `${name} is required to run the ballin self-update test harness`);
     fs.symlinkSync(sourcePath, path.join(toolDir, name));
   };
 
@@ -109,16 +109,17 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
 `);
   };
 
-  const runUpdate = (
+  const runSelfUpdate = (
     env: NodeJS.ProcessEnv = {},
-    commandPath = updatePath,
-    spawnOptions: SpawnUpdateOverrides = {},
-  ) => spawnSync(commandPath, [], {
+    commandPath = ballinPath,
+    spawnOptions: SpawnSelfUpdateOverrides = {},
+  ) => spawnSync(commandPath, ['self-update'], {
     ...spawnOptions,
     encoding: 'utf8',
     env: {
       HOME: homeDir,
       PATH: toolDir,
+      BALLIN_NO_ANALYTICS: '1',
       BALLIN_UPDATE_TEST_LOG: commandLogPath,
       FAKE_GIT_MERGE_COUNT_PATH: mergeCountPath,
       FAKE_GIT_CHECKOUT_COUNT_PATH: checkoutCountPath,
@@ -166,7 +167,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('fetches, merges, then runs the setup from the installed repository', () => {
-    const result = runUpdate();
+    const result = runSelfUpdate();
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n');
@@ -180,7 +181,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('does not add a blank line before setup output', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_SETUP_STDOUT: 'setup output\n',
     });
 
@@ -190,9 +191,9 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('lets fetch use stdin and stderr while keeping stdout quiet', () => {
-    const result = runUpdate(
+    const result = runSelfUpdate(
       { FAKE_GIT_FETCH_READ_STDIN: '1' },
-      updatePath,
+      ballinPath,
       { input: 'secret-token\n' },
     );
 
@@ -210,11 +211,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
 
   it('remains executable through the installed symlink model', () => {
     const installBinDir = path.join(testDir, 'installed-bin');
-    const symlinkPath = path.join(installBinDir, 'ballin_update');
+    const symlinkPath = path.join(installBinDir, 'ballin');
     fs.mkdirSync(installBinDir);
-    fs.symlinkSync(updatePath, symlinkPath);
+    fs.symlinkSync(ballinPath, symlinkPath);
 
-    const result = runUpdate({}, symlinkPath);
+    const result = runSelfUpdate({}, symlinkPath);
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n');
@@ -228,7 +229,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('returns the setup status when setup fails after a successful merge', () => {
-    const result = runUpdate({ FAKE_SETUP_STATUS: '27' });
+    const result = runSelfUpdate({ FAKE_SETUP_STATUS: '27' });
 
     assert.equal(result.status, 27);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n');
@@ -244,7 +245,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   it('reports a missing setup through Node when the typed setup file is unavailable', () => {
     fs.rmSync(path.join(repoDir, 'commands', 'install_setup.ts'));
 
-    const result = runUpdate();
+    const result = runSelfUpdate();
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n');
@@ -257,7 +258,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('uses a shell-style signal exit status when the setup is signaled', () => {
-    const result = runUpdate({ FAKE_SETUP_SIGNAL: 'SIGTERM' });
+    const result = runSelfUpdate({ FAKE_SETUP_SIGNAL: 'SIGTERM' });
 
     assert.equal(result.status, 143);
     assert.equal(result.stdout, '👟 getting fresh kicks...\n');
@@ -271,7 +272,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stops before merge and setup when fetch fails', () => {
-    const result = runUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
+    const result = runSelfUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '👟 getting fresh kicks...\ngit fetch origin main failed\n');
@@ -284,7 +285,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   it('stops before git commands when the installed repository is missing', () => {
     fs.rmSync(repoDir, { recursive: true, force: true });
 
-    const result = runUpdate();
+    const result = runSelfUpdate();
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, `👟 getting fresh kicks...\ninstall directory not found: ${repoDir}\n`);
@@ -296,7 +297,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     fs.rmSync(repoDir, { recursive: true, force: true });
     fs.writeFileSync(repoDir, '');
 
-    const result = runUpdate();
+    const result = runSelfUpdate();
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, `👟 getting fresh kicks...\ninstall directory not found: ${repoDir}\n`);
@@ -305,7 +306,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stashes, retries checkout main, merges, and runs setup when initial checkout is blocked', () => {
-    const result = runUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '27' });
+    const result = runSelfUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '27' });
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
@@ -326,7 +327,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stops before merge and setup when checkout recovery cannot stash changes', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
       FAKE_GIT_STASH_STATUS: '28',
     });
@@ -348,7 +349,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stops before merge and setup when checkout still fails after stashing', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
       FAKE_GIT_RETRY_CHECKOUT_STATUS: '28',
     });
@@ -371,7 +372,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stashes, checks out main, retries merge, and runs setup after an initial merge failure', () => {
-    const result = runUpdate({ FAKE_GIT_FIRST_MERGE_STATUS: '24' });
+    const result = runSelfUpdate({ FAKE_GIT_FIRST_MERGE_STATUS: '24' });
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
@@ -392,7 +393,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('aborts an in-progress failed merge before stashing changes during recovery', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_MERGE_IN_PROGRESS: '1',
     });
@@ -417,7 +418,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stops before stashing when aborting an in-progress failed merge fails', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_MERGE_IN_PROGRESS: '1',
       FAKE_GIT_MERGE_ABORT_STATUS: '29',
@@ -441,7 +442,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stops before setup when the retry merge fails', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_RETRY_MERGE_STATUS: '25',
     });
@@ -466,7 +467,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stops before retry merge and setup when the fallback stash path fails', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_STASH_STATUS: '26',
     });
@@ -489,7 +490,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   });
 
   it('stops before retry merge and setup when the fallback checkout fails', () => {
-    const result = runUpdate({
+    const result = runSelfUpdate({
       FAKE_GIT_FIRST_MERGE_STATUS: '24',
       FAKE_GIT_RETRY_CHECKOUT_STATUS: '27',
     });

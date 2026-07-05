@@ -21,7 +21,7 @@ const stringify = (obj: ConfigObject) => JSON.stringify(obj, null, 2);
 const hasOwn = (obj: ConfigObject, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
 
 const configMessages = {
-  actionErr: 'INVALID: ballin_config accepts "", "get", "set", or "reset"',
+  actionErr: 'INVALID: ballin config accepts "", "get", "set", or "reset"',
   getKeysDneErr: (keys: string) => `INVALID: "${keys}" doesn't exist in config`,
   reset: (prevConfig: ConfigValue, defaultConfig: string) => (
     `Config has been reset...\nFROM:\n${prevConfig}TO:\n${defaultConfig}`
@@ -119,7 +119,7 @@ const setConfig = (keys?: string, val?: ConfigValue, other?: string[]) => {
 
 const configAction = (request?: string, keys?: string, value?: string, other?: string[]) => {
   if (request === 'reset') return resetConfig();
-  // send config auto if not given a request with ballin_config command
+  // Send full config when no explicit request is provided.
   if (request === 'get' || !request) return getConfig(keys, value);
   if (request === 'set') return setConfig(keys, value, other);
   if (process.env.NODE_ENV !== 'test') {

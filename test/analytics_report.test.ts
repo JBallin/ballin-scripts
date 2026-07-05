@@ -73,7 +73,7 @@ describe('analytics D1 report', () => {
       ],
       commandStatus: [
         {
-          command: 'up',
+          command: 'ballin update',
           total: 5,
           successes: 3,
           failures: 1,
@@ -98,7 +98,7 @@ describe('analytics D1 report', () => {
 
     assert.include(output, 'Analytics report (2026-06-01 to 2026-06-03)');
     assert.include(output, '2026-06-02  0');
-    assert.include(output, 'up       5      3        1        1        20.0%');
+    assert.include(output, 'ballin update  5      3        1        1        20.0%');
     assert.include(output, '2026-06-01  1.0.0        24          darwin  15          5');
   });
 
@@ -131,7 +131,7 @@ describe('analytics D1 report', () => {
       }
       if (sql.includes('command_events_daily')) {
         return [{
-          command: 'gu',
+          command: 'ballin backup',
           failures: 0,
           successes: 2,
           total: 2,
@@ -150,20 +150,20 @@ describe('analytics D1 report', () => {
 
     assert.lengthOf(sqlStatements, 3);
     assert.include(report, '2026-06-01  4');
-    assert.include(report, 'gu       2      2        0        0        0.0%');
+    assert.include(report, 'ballin backup  2      2        0        0        0.0%');
   });
 
   it('parses Wrangler D1 JSON result rows', () => {
     const rows = parseD1Json(JSON.stringify([
       {
         results: [
-          { command: 'up', total: 3 },
+          { command: 'ballin update', total: 3 },
         ],
         success: true,
       },
     ]));
 
-    assert.deepEqual(rows, [{ command: 'up', total: 3 }]);
+    assert.deepEqual(rows, [{ command: 'ballin update', total: 3 }]);
   });
 
   it('rejects unsuccessful Wrangler D1 JSON responses', () => {

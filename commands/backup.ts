@@ -6,6 +6,9 @@ const {
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
+  getConfig,
+} = require('../config/index.ts');
+const {
   commandExists,
   ensureDir,
   makeTempFile,
@@ -42,7 +45,7 @@ type ConfigValueResult = {
   spawnStatus?: number;
 };
 
-type GuConfigResult = {
+type BackupConfigResult = {
   config: { id: string; host: string } | null;
   exitStatus: number;
 };
@@ -71,9 +74,10 @@ type CommandOptions = {
 };
 
 const emptySnapshotContent = 'empty\n';
+const configSnapshotFileName = 'ballin_config';
 
 const fileSuggestions = `
-  ballin_config
+  ${configSnapshotFileName}
   bash_completions
   bash_profile.sh
   bashrc.sh
@@ -133,23 +137,23 @@ const reportSpawnError = (command: string, error: Error): number => {
 };
 
 const configValue = (key: string): ConfigValueResult => {
-  const result = runCommand('ballin_config', ['get', key], {
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  if (result.error) {
+  try {
+    const value = getConfig(key);
+    if (typeof value === 'string' && value.startsWith('INVALID:')) {
+      return { value: '' };
+    }
     return {
-      value: '',
-      spawnStatus: reportSpawnError('ballin_config', result.error),
+      value: value === null ? '' : String(value).trim(),
     };
-  }
-  if (result.status !== 0) {
+  } catch (error) {
+    if (error instanceof Error) {
+      writeStderrLine(`Unable to read config: ${error.message}`);
+    }
     return { value: '' };
   }
-  const value = result.stdout.trim();
-  return { value: value === 'null' ? '' : value };
 };
 
-const guConfig = (): GuConfigResult => {
+const backupConfig = (): BackupConfigResult => {
   const idResult = configValue('backup.id');
   const hostResult = configValue('backup.host');
   const id = idResult.value;
@@ -160,10 +164,10 @@ const guConfig = (): GuConfigResult => {
   }
 
   if (!id) {
-    writeStderrLine('gu: missing config value backup.id');
+    writeStderrLine('ballin backup: missing config value backup.id');
   }
   if (!host) {
-    writeStderrLine('gu: missing config value backup.host');
+    writeStderrLine('ballin backup: missing config value backup.host');
   }
   return {
     config: null,
@@ -229,8 +233,8 @@ const ghAuthStatus = (host: string): CommandCheckResult => {
     };
   }
   if (result.status !== 0) {
-    writeStderrLine(`gu: GitHub CLI authentication is required for ${host}`);
-    writeStderrLine(`gu: run 'gh auth login --hostname ${host}'`);
+    writeStderrLine(`ballin backup: GitHub CLI authentication is required for ${host}`);
+    writeStderrLine(`ballin backup: run 'gh auth login --hostname ${host}'`);
     return { ok: false, exitStatus: shellStyleExitStatus(result) };
   }
   return { ok: true, exitStatus: 0 };
@@ -262,7 +266,7 @@ const uploadGistFile = (host: string, id: string, filePath: string, isNew: boole
   const addArgs = ['gist', 'edit', id, '--add', filePath];
   const editArgs = ['gist', 'edit', id, '--filename', path.basename(filePath), filePath];
   const args = isNew ? addArgs : editArgs;
-  const stderrFile = makeTempFile('ballin-gu-upload-stderr-');
+  const stderrFile = makeTempFile('ballin-backup-upload-stderr-');
   const stderrFd = fs.openSync(stderrFile, 'w');
   let result: ReturnType<typeof runCommand>;
   try {
@@ -325,7 +329,7 @@ const readGistFileToStdout = (host: string, id: string, fileName: string): boole
 
 const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boolean => {
   const outputFd = fs.openSync(inputFile, 'w');
-  const stderrFile = makeTempFile('ballin-gu-stderr-');
+  const stderrFile = makeTempFile('ballin-backup-stderr-');
   const stderrFd = fs.openSync(stderrFile, 'w');
   let result: ReturnType<typeof runCommand>;
   try {
@@ -386,7 +390,7 @@ const snapshotIsEmpty = (filePath: string): boolean => (
 );
 
 const createSnapshotUploadFile = (sourceFile: string, fileName: string): string => {
-  const tempFile = makeTempFile('ballin-gu-upload-');
+  const tempFile = makeTempFile('ballin-backup-upload-');
   const uploadFile = path.join(path.dirname(tempFile), fileName);
   fs.copyFileSync(sourceFile, uploadFile);
   return uploadFile;
@@ -438,7 +442,7 @@ const updateSnapshot = (
   let resultState: SnapshotResultState = 'updated';
   let isEmpty = false;
 
-  const inputFile = makeTempFile('ballin-gu-input-');
+  const inputFile = makeTempFile('ballin-backup-input-');
   try {
     if (!captureSnapshotInput(snapshot, inputFile)) {
       return false;
@@ -538,7 +542,7 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
   addFile('.zshrc', 'zshrc.sh');
 
   const brewAvailable = commandExists('brew');
-  let bashCompletionDir = process.env.BALLIN_GU_BASH_COMPLETION_DIR ?? '';
+  let bashCompletionDir = process.env.BALLIN_BACKUP_BASH_COMPLETION_DIR ?? '';
   if (!bashCompletionDir && brewAvailable) {
     const brewPrefix = readCommandOutput('brew', ['--prefix'], {
       env: {
@@ -612,7 +616,7 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
 
   addFile('.vimrc', 'vimrc');
   addFile('.nanorc', 'nanorc');
-  addFile(path.join('.ballin-scripts', 'ballin.config.json'), 'ballin_config');
+  addFile(path.join('.ballin-scripts', 'ballin.config.json'), configSnapshotFileName);
 
   if (commandExists('mas')) {
     addShellCommand('mas', 'mas list');
@@ -621,13 +625,13 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
   return snapshots;
 };
 
-function runGuCommand(args = process.argv.slice(2)): void {
+function runBackupCommand(args = process.argv.slice(2)): void {
   const homeDir = process.env.HOME ?? '';
   const command = args[0];
 
   if (command === 'help') {
     if (args.length !== 1) {
-      writeStderrLine('gu help: expected no arguments');
+      writeStderrLine('ballin backup help: expected no arguments');
       process.exitCode = 1;
       return;
     }
@@ -636,13 +640,13 @@ function runGuCommand(args = process.argv.slice(2)): void {
   }
 
   if (command && !['open', 'read'].includes(command)) {
-    writeStderrLine(`gu: unknown command '${command}'`);
+    writeStderrLine(`ballin backup: unknown command '${command}'`);
     process.exitCode = 1;
     return;
   }
 
   if (command === 'open' && args.length !== 1) {
-    writeStderrLine('gu open: expected no arguments');
+    writeStderrLine('ballin backup open: expected no arguments');
     process.exitCode = 1;
     return;
   }
@@ -654,12 +658,12 @@ function runGuCommand(args = process.argv.slice(2)): void {
   }
 
   if (command === 'read' && args.length !== 2) {
-    writeStderrLine('gu read: expected exactly one filename');
+    writeStderrLine('ballin backup read: expected exactly one filename');
     process.exitCode = 1;
     return;
   }
 
-  const { config, exitStatus } = guConfig();
+  const { config, exitStatus } = backupConfig();
   if (!config) {
     process.exitCode = exitStatus;
     return;
@@ -683,7 +687,7 @@ function runGuCommand(args = process.argv.slice(2)): void {
 
   const gistReadable = verifyGistReadable(config.host, config.id);
   if (!gistReadable.ok) {
-    writeStdoutLine("Error retrieving your gist, please run 'ballin_update'.");
+    writeStdoutLine("Error retrieving your gist, please run 'ballin self-update'.");
     process.exitCode = gistReadable.exitStatus;
     return;
   }
@@ -698,13 +702,13 @@ function runGuCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  const cacheDir = path.join(homeDir, '.ballin-scripts', '.gu-cache');
+  const cacheDir = path.join(homeDir, '.ballin-scripts', '.backup-cache');
   ensureDir(cacheDir);
 
   let failed = false;
   collectSnapshots(homeDir).forEach((snapshot) => {
     if (!updateSnapshot(config.host, config.id, cacheDir, snapshot)) {
-      writeStderrLine(`gu: failed to snapshot ${snapshot.fileName}`);
+      writeStderrLine(`ballin backup: failed to snapshot ${snapshot.fileName}`);
       failed = true;
     }
   });
@@ -714,11 +718,11 @@ function runGuCommand(args = process.argv.slice(2)): void {
   }
 }
 
-const runGuCli = (args = process.argv.slice(2)): void => {
-  void runWithCommandAnalytics('gu', () => runGuCommand(args)).catch(rethrowCommandError);
+const runBackupCli = (args = process.argv.slice(2)): void => {
+  void runWithCommandAnalytics('ballin backup', () => runBackupCommand(args)).catch(rethrowCommandError);
 };
 
 module.exports = {
-  runGuCommand,
-  runGuCli,
+  runBackupCommand,
+  runBackupCli,
 };

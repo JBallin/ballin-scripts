@@ -39,7 +39,7 @@ const removeOwnedLink = (linkPath: string, targetPath: string): void => {
   }
 };
 
-const runBallinUninstallCli = (): void => {
+const runUninstallCommand = (): void => {
   const homeDir = process.env.HOME ?? '';
   const repoDir = path.join(homeDir, '.ballin-scripts');
   const systemRoot = process.env.BALLIN_UNINSTALL_TEST_SYSTEM_ROOT ?? '';
@@ -80,5 +80,5 @@ const runBallinUninstallCli = (): void => {
 
 module.exports = {
   relocateSystemPath,
-  runBallinUninstallCli,
+  runUninstallCommand,
 };

@@ -6,7 +6,7 @@ const path = require('path');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const snapshotFileName = 'zshrc.sh';
-// Expose only the basic commands gu needs; package managers remain unavailable.
+// Expose only the basic commands backup needs; package managers remain unavailable.
 const requiredCommands = [
   'bash',
   'cat',
@@ -21,7 +21,7 @@ const requiredCommands = [
 ];
 type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
 
-type RunGuOptions = {
+type RunBackupOptions = {
   args?: string[];
   failedPaths?: string[];
   emitUnderlyingStderr?: boolean;
@@ -37,10 +37,11 @@ type RunGuOptions = {
   commandPath?: string;
 };
 
-describe('gu', () => {
+describe('ballin backup', () => {
   let testHomeDir: string;
   let testBinDir: string;
-  let guCacheDir: string;
+  let backupCacheDir: string;
+  let configPath: string;
   let fakeGistDir: string;
   let gistReadLogPath: string;
   let scratchDir: string;
@@ -56,7 +57,7 @@ describe('gu', () => {
       .map((directory) => path.join(directory, command))
       .find((candidate) => fs.existsSync(candidate));
 
-    assert.exists(commandPath, `${command} is required to run the gu test harness`);
+    assert.exists(commandPath, `${command} is required to run the backup test harness`);
     fs.symlinkSync(commandPath, path.join(testBinDir, command));
   };
 
@@ -64,20 +65,17 @@ describe('gu', () => {
     fs.writeFileSync(path.join(testBinDir, name), contents, { mode: 0o755 });
   };
 
-  const installFakeBallinConfigCommand = () => {
-    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
-if [ "$1" != 'get' ]; then
-  printf '%s\\n' 'Unexpected ballin_config action' >&2
-  exit 2
-elif [ "$2" = 'backup.id' ]; then
-  printf '%s\\n' 'test-gist-id'
-elif [ "$2" = 'backup.host' ]; then
-  printf '%s\\n' 'example.test'
-else
-  printf '%s\\n' 'Unexpected ballin_config call' >&2
-  exit 2
-fi
-`);
+  const writeBackupConfig = (id: string | null = 'test-gist-id', host: string | null = 'example.test') => {
+    fs.writeFileSync(configPath, `${JSON.stringify({
+      update: {},
+      backup: {
+        id,
+        ...(host === null ? {} : { host }),
+      },
+      analytics: {
+        enabled: 'false',
+      },
+    })}\n`);
   };
 
   const installFakeGhCommand = () => {
@@ -170,36 +168,12 @@ printf '%s\\n' "$*" >> "$FAKE_OPEN_LOG"
 `);
   };
 
-  const installFailingBallinConfigCommand = () => {
-    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
-printf 'ballin_config failed for %s\\n' "$2" >&2
-exit 42
-`);
+  const writeInvalidConfig = () => {
+    fs.writeFileSync(configPath, '{not json\n');
   };
 
-  const installDefaultIdBallinConfigCommand = () => {
-    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
-if [ "$1" != 'get' ]; then
-  printf '%s\\n' 'Unexpected ballin_config action' >&2
-  exit 2
-elif [ "$2" = 'backup.id' ]; then
-  printf '%s\\n' 'null'
-elif [ "$2" = 'backup.host' ]; then
-  printf '%s\\n' 'example.test'
-else
-  printf '%s\\n' 'Unexpected ballin_config call' >&2
-  exit 2
-fi
-`);
-  };
-
-  const removeBallinConfigCommand = () => {
-    fs.rmSync(path.join(testBinDir, 'ballin_config'));
-  };
-
-  const makeBallinConfigCommandPermissionDenied = () => {
-    fs.writeFileSync(path.join(testBinDir, 'ballin_config'), 'not executable\n', { mode: 0o644 });
-    fs.chmodSync(path.join(testBinDir, 'ballin_config'), 0o644);
+  const removeConfig = () => {
+    fs.rmSync(configPath);
   };
 
   const removeGhCommand = () => {
@@ -256,9 +230,10 @@ done
   };
 
   beforeEach(() => {
-    testHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-gu-'));
+    testHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-backup-'));
     testBinDir = path.join(testHomeDir, 'bin');
-    guCacheDir = path.join(testHomeDir, '.ballin-scripts', '.gu-cache');
+    backupCacheDir = path.join(testHomeDir, '.ballin-scripts', '.backup-cache');
+    configPath = path.join(testHomeDir, 'ballin.config.json');
     fakeGistDir = path.join(testHomeDir, 'fake-gist');
     gistReadLogPath = path.join(testHomeDir, 'fake-gist-reads.log');
     scratchDir = path.join(testHomeDir, 'tmp');
@@ -276,7 +251,7 @@ done
     ].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
     requiredCommands.forEach(linkRequiredCommand);
     realCatPath = installControllableCatCommand();
-    installFakeBallinConfigCommand();
+    writeBackupConfig();
     installFakeGhCommand();
     installFakeOpenCommand();
   });
@@ -286,7 +261,7 @@ done
   });
 
   // Pass a complete child environment so real tools and credentials are not inherited.
-  const runGu = ({
+  const runBackup = ({
     args = [],
     failedPaths = [],
     emitUnderlyingStderr = false,
@@ -300,7 +275,7 @@ done
     ghEditMissingFile = false,
     ghUploadFail = false,
     commandPath = ballinPath,
-  }: RunGuOptions = {}) => spawnSync(commandPath, ['backup', ...args], {
+  }: RunBackupOptions = {}) => spawnSync(commandPath, ['backup', ...args], {
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
     env: {
@@ -308,8 +283,10 @@ done
       PATH: testBinDir,
       TMPDIR: scratchDir,
       ...(completionDir === undefined ? {} : {
-        BALLIN_GU_BASH_COMPLETION_DIR: completionDir,
+        BALLIN_BACKUP_BASH_COMPLETION_DIR: completionDir,
       }),
+      BALLIN_TEST_CONFIG_PATH: configPath,
+      BALLIN_NO_ANALYTICS: '1',
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
@@ -332,18 +309,18 @@ done
   });
 
   const snapshotPath = () => path.join(testHomeDir, '.zshrc');
-  const cachedSnapshotPath = () => path.join(guCacheDir, snapshotFileName);
+  const cachedSnapshotPath = () => path.join(backupCacheDir, snapshotFileName);
   const fakeGistFilePath = () => path.join(fakeGistDir, snapshotFileName);
   const writeSnapshot = (content: string) => fs.writeFileSync(snapshotPath(), content);
-  const seedGuCache = (content: string) => {
-    fs.mkdirSync(guCacheDir, { recursive: true });
+  const seedBackupCache = (content: string) => {
+    fs.mkdirSync(backupCacheDir, { recursive: true });
     fs.writeFileSync(cachedSnapshotPath(), content);
   };
   const seedFakeGist = (content: string) => fs.writeFileSync(fakeGistFilePath(), content);
   const seedFakeGistFile = (fileName: string, content: string) => {
     fs.writeFileSync(path.join(fakeGistDir, fileName), content);
   };
-  const assertGuSucceeded = (result: StringSpawnResult) => {
+  const assertBackupSucceeded = (result: StringSpawnResult) => {
     assert.equal(result.status, 0);
     assert.equal(result.stderr, '');
     assert.deepEqual(fs.readdirSync(scratchDir), []);
@@ -370,58 +347,53 @@ done
   };
 
   it('opens the configured Gist through gh', () => {
-    const result = runGu({ args: ['open'] });
+    const result = runBackup({ args: ['open'] });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '');
     assert.deepEqual(openCalls(), ['gist view test-gist-id --web']);
   });
 
   it('opens the configured Gist without requiring a readable Gist', () => {
-    const result = runGu({ args: ['open'], ghInitialReadFail: true });
+    const result = runBackup({ args: ['open'], ghInitialReadFail: true });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '');
     assert.deepEqual(openCalls(), ['gist view test-gist-id --web']);
     assert.deepEqual(gistReads(), []);
   });
 
   it('fails open when extra arguments are provided', () => {
-    const result = runGu({ args: ['open', 'extra'] });
+    const result = runBackup({ args: ['open', 'extra'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'gu open: expected no arguments\n');
+    assert.equal(result.stderr, 'ballin backup open: expected no arguments\n');
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
   });
 
   it('fails open when Gist config cannot be read', () => {
-    installFailingBallinConfigCommand();
+    writeInvalidConfig();
 
-    const result = runGu({ args: ['open'] });
+    const result = runBackup({ args: ['open'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(
-      result.stderr,
-      'ballin_config failed for backup.id\n'
-        + 'ballin_config failed for backup.host\n'
-        + 'gu: missing config value backup.id\n'
-        + 'gu: missing config value backup.host\n',
-    );
+    assert.include(result.stderr, 'ballin backup: missing config value backup.id\n');
+    assert.include(result.stderr, 'ballin backup: missing config value backup.host\n');
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
   });
 
   it('treats a default null Gist ID as missing when opening', () => {
-    installDefaultIdBallinConfigCommand();
+    writeBackupConfig(null);
 
-    const result = runGu({ args: ['open'] });
+    const result = runBackup({ args: ['open'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'gu: missing config value backup.id\n');
+    assert.equal(result.stderr, 'ballin backup: missing config value backup.id\n');
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
   });
@@ -431,9 +403,9 @@ done
     fs.symlinkSync(ballinPath, linkPath);
     seedFakeGistFile('vimrc', 'set number\n');
 
-    const result = runGu({ args: ['read', 'vimrc'], commandPath: linkPath });
+    const result = runBackup({ args: ['read', 'vimrc'], commandPath: linkPath });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, 'set number\n');
   });
 
@@ -444,7 +416,7 @@ if [ "$*" = 'gist view test-gist-id --web' ]; then kill -TERM "$$"; fi
 exit 2
 `);
 
-    const result = runGu({ args: ['open'] });
+    const result = runBackup({ args: ['open'] });
 
     assert.equal(result.status, 143);
     assert.equal(result.stdout, '');
@@ -454,7 +426,7 @@ exit 2
   it('reports missing gh before opening', () => {
     removeGhCommand();
 
-    const result = runGu({ args: ['open'] });
+    const result = runBackup({ args: ['open'] });
 
     assert.equal(result.status, 127);
     assert.equal(result.stdout, '');
@@ -464,7 +436,7 @@ exit 2
   it('reports permission-denied gh before opening', () => {
     makeGhCommandPermissionDenied();
 
-    const result = runGu({ args: ['open'] });
+    const result = runBackup({ args: ['open'] });
 
     assert.equal(result.status, 126);
     assert.equal(result.stdout, '');
@@ -472,48 +444,48 @@ exit 2
   });
 
   it('prints help through the ballin command', () => {
-    const result = runGu({ args: ['help'] });
+    const result = runBackup({ args: ['help'] });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.include(result.stdout, 'Ballin');
     assert.include(result.stdout, 'ballin backup');
   });
 
   it('prints help without requiring a readable Gist', () => {
-    const result = runGu({ args: ['help'], ghInitialReadFail: true });
+    const result = runBackup({ args: ['help'], ghInitialReadFail: true });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.include(result.stdout, 'Ballin');
     assert.include(result.stdout, 'ballin backup');
     assert.deepEqual(gistReads(), []);
   });
 
   it('fails help when extra arguments are provided', () => {
-    const result = runGu({ args: ['help', 'extra'] });
+    const result = runBackup({ args: ['help', 'extra'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'gu help: expected no arguments\n');
+    assert.equal(result.stderr, 'ballin backup help: expected no arguments\n');
     assert.deepEqual(ballinCalls(), []);
     assert.deepEqual(gistReads(), []);
   });
 
   it('fails unknown commands instead of ignoring them', () => {
-    const result = runGu({ args: ['typo'] });
+    const result = runBackup({ args: ['typo'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, "gu: unknown command 'typo'\n");
+    assert.equal(result.stderr, "ballin backup: unknown command 'typo'\n");
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
   it('fails unknown commands before checking Gist readability', () => {
-    const result = runGu({ args: ['typo'], ghInitialReadFail: true });
+    const result = runBackup({ args: ['typo'], ghInitialReadFail: true });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, "gu: unknown command 'typo'\n");
+    assert.equal(result.stderr, "ballin backup: unknown command 'typo'\n");
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -521,19 +493,19 @@ exit 2
   it('reads a named Gist file', () => {
     seedFakeGistFile('vimrc', 'set number\n');
 
-    const result = runGu({ args: ['read', 'vimrc'] });
+    const result = runBackup({ args: ['read', 'vimrc'] });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, 'set number\n');
     assert.deepEqual(gistReads(), ['vimrc']);
   });
 
   it('fails read when extra arguments are provided', () => {
-    const result = runGu({ args: ['read', 'vimrc', 'extra'] });
+    const result = runBackup({ args: ['read', 'vimrc', 'extra'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'gu read: expected exactly one filename\n');
+    assert.equal(result.stderr, 'ballin backup read: expected exactly one filename\n');
     assert.deepEqual(gistReads(), []);
   });
 
@@ -541,9 +513,9 @@ exit 2
     const largeSnapshot = `${'r'.repeat(1024 * 1024 + 1)}\n`;
     seedFakeGistFile('vimrc', largeSnapshot);
 
-    const result = runGu({ args: ['read', 'vimrc'] });
+    const result = runBackup({ args: ['read', 'vimrc'] });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout.length, largeSnapshot.length);
     assert.equal(result.stdout.slice(0, 1), 'r');
     assert.equal(result.stdout.slice(-1), '\n');
@@ -551,7 +523,7 @@ exit 2
   });
 
   it('prints options when a requested Gist file is missing', () => {
-    const result = runGu({ args: ['read', 'missing_file'] });
+    const result = runBackup({ args: ['read', 'missing_file'] });
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
@@ -561,7 +533,7 @@ exit 2
   });
 
   it('prints options when read is missing a filename', () => {
-    const result = runGu({ args: ['read'] });
+    const result = runBackup({ args: ['read'] });
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
@@ -570,7 +542,7 @@ exit 2
   });
 
   it('reports a missing read filename before checking Gist readability', () => {
-    const result = runGu({ args: ['read'], ghInitialReadFail: true });
+    const result = runBackup({ args: ['read'], ghInitialReadFail: true });
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
@@ -580,39 +552,39 @@ exit 2
   });
 
   it('uses the initial Gist retrieval failure status before snapshotting', () => {
-    const result = runGu({ ghInitialReadFail: true });
+    const result = runBackup({ ghInitialReadFail: true });
 
     assert.equal(result.status, 17);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin self-update'.\n");
     assert.equal(result.stderr, 'simulated initial gh gist read failure\n');
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
   it('uses a shell-style signal exit status for initial Gist retrieval', () => {
-    const result = runGu({ ghInitialReadSignal: true });
+    const result = runBackup({ ghInitialReadSignal: true });
 
     assert.equal(result.status, 143);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin_update'.\n");
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin self-update'.\n");
     assert.equal(result.stderr, '');
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
   it('reports gh authentication failures before snapshotting', () => {
-    const result = runGu({ ghAuthFail: true });
+    const result = runBackup({ ghAuthFail: true });
 
     assert.equal(result.status, 4);
     assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
       'simulated gh auth failure\n'
-        + 'gu: GitHub CLI authentication is required for example.test\n'
-        + "gu: run 'gh auth login --hostname example.test'\n",
+        + 'ballin backup: GitHub CLI authentication is required for example.test\n'
+        + "ballin backup: run 'gh auth login --hostname example.test'\n",
     );
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -620,12 +592,12 @@ exit 2
   it('reports missing gh before snapshotting', () => {
     removeGhCommand();
 
-    const result = runGu();
+    const result = runBackup();
 
     assert.equal(result.status, 127);
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, 'gh: command not found\n');
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -633,69 +605,54 @@ exit 2
   it('reports permission-denied gh before snapshotting', () => {
     makeGhCommandPermissionDenied();
 
-    const result = runGu();
+    const result = runBackup();
 
     assert.equal(result.status, 126);
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, 'gh: Permission denied\n');
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('preserves config stderr when config reads fail', () => {
-    installFailingBallinConfigCommand();
+  it('stops before snapshotting when config reads fail', () => {
+    writeInvalidConfig();
 
-    const result = runGu();
+    const result = runBackup();
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(
-      result.stderr,
-      'ballin_config failed for backup.id\n'
-        + 'ballin_config failed for backup.host\n'
-        + 'gu: missing config value backup.id\n'
-        + 'gu: missing config value backup.host\n',
-    );
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.include(result.stderr, 'ballin backup: missing config value backup.id\n');
+    assert.include(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('reports missing ballin_config reads before snapshotting', () => {
-    removeBallinConfigCommand();
+  it('reports missing config reads before snapshotting', () => {
+    removeConfig();
 
-    const result = runGu();
+    const result = runBackup();
 
-    assert.equal(result.status, 127);
+    assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(
-      result.stderr,
-      'ballin_config: command not found\n'
-        + 'ballin_config: command not found\n'
-        + 'gu: missing config value backup.id\n'
-        + 'gu: missing config value backup.host\n',
-    );
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.include(result.stderr, 'Unable to read');
+    assert.include(result.stderr, 'ballin backup: missing config value backup.id\n');
+    assert.include(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('reports permission-denied ballin_config reads before snapshotting', () => {
-    makeBallinConfigCommandPermissionDenied();
+  it('reports missing backup host before snapshotting', () => {
+    writeBackupConfig('test-gist-id', null);
 
-    const result = runGu();
+    const result = runBackup();
 
-    assert.equal(result.status, 126);
+    assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(
-      result.stderr,
-      'ballin_config: Permission denied\n'
-        + 'ballin_config: Permission denied\n'
-        + 'gu: missing config value backup.id\n'
-        + 'gu: missing config value backup.host\n',
-    );
-    assert.isFalse(fs.existsSync(guCacheDir));
+    assert.equal(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -717,9 +674,9 @@ if [ "$*" != '--list-extensions' ]; then exit 2; fi
 printf '%s\\n' 'publisher.insiders-extension'
 `);
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       '💾 vs_settings',
       '💾 vs_keybindings',
@@ -728,22 +685,22 @@ printf '%s\\n' 'publisher.insiders-extension'
       '💾 vsI_keybindings',
       '💾 vsI_extensions',
     ]);
-    assert.equal(fs.readFileSync(path.join(guCacheDir, 'vs_settings'), 'utf8'), '{"fontSize":14}\n');
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'vs_settings'), 'utf8'), '{"fontSize":14}\n');
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'vs_keybindings'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'vs_keybindings'), 'utf8'),
       '[{"key":"cmd+k"}]\n',
     );
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'vs_extensions'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'vs_extensions'), 'utf8'),
       'publisher.stable-extension\n',
     );
-    assert.equal(fs.readFileSync(path.join(guCacheDir, 'vsI_settings'), 'utf8'), '{"fontSize":15}\n');
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'vsI_settings'), 'utf8'), '{"fontSize":15}\n');
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'vsI_keybindings'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'vsI_keybindings'), 'utf8'),
       '[{"key":"cmd+i"}]\n',
     );
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'vsI_extensions'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'vsI_extensions'), 'utf8'),
       'publisher.insiders-extension\n',
     );
     assert.deepEqual(gistUploads(), [
@@ -765,9 +722,9 @@ printf '%s\\n' 'publisher.insiders-extension'
     fs.writeFileSync(path.join(bracketsDir, 'extensions', 'user', 'beautify'), '');
     fs.writeFileSync(path.join(bracketsDir, 'extensions', 'disabled', 'legacy-lint'), '');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       '💾 brackets_settings',
       '💾 brackets_keymap',
@@ -775,16 +732,16 @@ printf '%s\\n' 'publisher.insiders-extension'
       '💾 brackets_disabled_extensions',
     ]);
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'brackets_settings.json'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'brackets_settings.json'), 'utf8'),
       '{"linting.enabled":true}\n',
     );
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'brackets_keymap.json'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'brackets_keymap.json'), 'utf8'),
       '{"Ctrl-E":"edit"}\n',
     );
-    assert.equal(fs.readFileSync(path.join(guCacheDir, 'brackets_extensions'), 'utf8'), 'beautify\n');
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'brackets_extensions'), 'utf8'), 'beautify\n');
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'brackets_disabled_extensions'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'brackets_disabled_extensions'), 'utf8'),
       'legacy-lint\n',
     );
     assert.deepEqual(gistUploads(), [
@@ -805,18 +762,18 @@ if [ "$*" != 'list' ]; then exit 2; fi
 printf '%s\\n' '123456 Example App'
 `);
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       '💾 npm_global',
       '💾 mas',
     ]);
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'npm_global'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'npm_global'), 'utf8'),
       '/fake/npm\n+-- eslint@1.0.0\n',
     );
-    assert.equal(fs.readFileSync(path.join(guCacheDir, 'mas'), 'utf8'), '123456 Example App\n');
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'mas'), 'utf8'), '123456 Example App\n');
     assert.deepEqual(gistUploads(), ['npm_global', 'mas']);
   });
 
@@ -830,12 +787,12 @@ printf '%s\\n' '123456 Example App'
       installFakeBrewCommand();
       writeBashCompletions(brewPrefix, ['git', 'npm']);
 
-      const result = runGu({ brewPrefix });
+      const result = runBackup({ brewPrefix });
 
-      assertGuSucceeded(result);
+      assertBackupSucceeded(result);
       assert.include(result.stdout, '💾 bash_completions\n');
       assert.equal(
-        fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
+        fs.readFileSync(path.join(backupCacheDir, 'bash_completions'), 'utf8'),
         'git\nnpm\n',
       );
       assert.equal(brewCalls().filter((call: string) => call.endsWith('|--prefix')).length, 1);
@@ -846,11 +803,11 @@ printf '%s\\n' '123456 Example App'
   it('skips bash completions when the active Homebrew completion directory is missing', () => {
     installFakeBrewCommand();
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.notInclude(result.stdout, 'bash_completions');
-    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'bash_completions')));
   });
 
   it('snapshots only the active prefix when multiple Homebrew prefixes coexist', () => {
@@ -860,11 +817,11 @@ printf '%s\\n' '123456 Example App'
     writeBashCompletions(activePrefix, ['active-tool']);
     writeBashCompletions(inactivePrefix, ['inactive-tool']);
 
-    const result = runGu({ brewPrefix: activePrefix });
+    const result = runBackup({ brewPrefix: activePrefix });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'bash_completions'), 'utf8'),
       'active-tool\n',
     );
     assert.equal(gistUploads().filter((name: string) => name === 'bash_completions').length, 1);
@@ -875,12 +832,12 @@ printf '%s\\n' '123456 Example App'
     const completionDir = path.join(appleSiliconPrefix, 'etc', 'bash_completion.d');
     writeBashCompletions(appleSiliconPrefix, ['apple-silicon-tool']);
 
-    const result = runGu({ completionDir });
+    const result = runBackup({ completionDir });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '💾 bash_completions\n');
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'bash_completions'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'bash_completions'), 'utf8'),
       'apple-silicon-tool\n',
     );
     assert.deepEqual(brewCalls(), []);
@@ -890,11 +847,11 @@ printf '%s\\n' '123456 Example App'
     writeBashCompletions(path.join(testHomeDir, 'opt', 'homebrew'), ['apple-silicon-tool']);
     writeBashCompletions(path.join(testHomeDir, 'usr', 'local'), ['intel-tool']);
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.notInclude(result.stdout, 'bash_completions');
-    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'bash_completions')));
     assert.deepEqual(brewCalls(), []);
   });
 
@@ -902,13 +859,13 @@ printf '%s\\n' '123456 Example App'
     installNonExecutableBrewCommand();
     writeBashCompletions(path.join(testHomeDir, 'opt', 'homebrew'), ['apple-silicon-tool']);
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '');
     assert.deepEqual(brewCalls(), []);
-    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
-    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'brew_list')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'bash_completions')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'brew_list')));
   });
 
   it('skips bash completions instead of guessing a prefix when brew prefix discovery fails', () => {
@@ -916,20 +873,20 @@ printf '%s\\n' '123456 Example App'
     writeBashCompletions(path.join(testHomeDir, 'opt', 'homebrew'), ['apple-silicon-tool']);
     writeBashCompletions(path.join(testHomeDir, 'usr', 'local'), ['intel-tool']);
 
-    const result = runGu({ brewPrefixFail: true });
+    const result = runBackup({ brewPrefixFail: true });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.notInclude(result.stdout, 'bash_completions');
-    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'bash_completions')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'bash_completions')));
     assert.equal(brewCalls().filter((call: string) => call.endsWith('|--prefix')).length, 1);
   });
 
   it('captures Homebrew inventory with flags while suppressing successful services stderr', () => {
     installFakeBrewCommand();
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       '💾 brew_list',
       '💾 brew_leaves',
@@ -946,7 +903,7 @@ printf '%s\\n' '123456 Example App'
       '1|1|bundle dump --file=-',
     ]);
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'brew_services'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'brew_services'), 'utf8'),
       'service-one started\n',
     );
     assert.deepEqual(gistUploads(), [
@@ -961,12 +918,12 @@ printf '%s\\n' '123456 Example App'
   it('surfaces failed brew services stderr and preserves other inventory snapshots', () => {
     installFakeBrewCommand();
 
-    const result = runGu({ brewServicesFail: true });
+    const result = runBackup({ brewServicesFail: true });
 
     assert.equal(result.status, 1);
     assert.include(result.stderr, 'simulated services warning\n');
-    assert.include(result.stderr, 'gu: failed to snapshot brew_services\n');
-    assert.isFalse(fs.existsSync(path.join(guCacheDir, 'brew_services')));
+    assert.include(result.stderr, 'ballin backup: failed to snapshot brew_services\n');
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'brew_services')));
     assert.deepEqual(gistUploads(), [
       'brew_list',
       'brew_leaves',
@@ -979,9 +936,9 @@ printf '%s\\n' '123456 Example App'
   it('creates and uploads the first snapshot when cache and Gist are missing', () => {
     writeSnapshot('alias hello="world"\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '💾 zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'alias hello="world"\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'alias hello="world"\n');
@@ -992,9 +949,9 @@ printf '%s\\n' '123456 Example App'
   it('uses the current new-file icon for a first empty snapshot', () => {
     writeSnapshot('');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '💾 zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'empty\n');
@@ -1006,9 +963,9 @@ printf '%s\\n' '123456 Example App'
     writeSnapshot('export EDITOR=vim\n');
     seedFakeGist('export EDITOR=vim\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✔ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export EDITOR=vim\n');
     assert.deepEqual(gistReads(), [snapshotFileName]);
@@ -1020,9 +977,9 @@ printf '%s\\n' '123456 Example App'
     writeSnapshot(largeSnapshot);
     seedFakeGist(largeSnapshot);
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✔ zshrc\n');
     assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
     assert.deepEqual(gistReads(), [snapshotFileName]);
@@ -1033,9 +990,9 @@ printf '%s\\n' '123456 Example App'
     writeSnapshot('new value\n');
     seedFakeGist('old value\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
@@ -1045,22 +1002,22 @@ printf '%s\\n' '123456 Example App'
 
   it('reports unchanged non-empty output without uploading it', () => {
     writeSnapshot('set -o vi\n');
-    seedGuCache('set -o vi\n');
+    seedBackupCache('set -o vi\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✔ zshrc\n');
     assert.deepEqual(gistUploads(), []);
   });
 
   it('reports and uploads changed non-empty output', () => {
     writeSnapshot('export COLOR=blue\n');
-    seedGuCache('export COLOR=red\n');
+    seedBackupCache('export COLOR=red\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
@@ -1068,11 +1025,11 @@ printf '%s\\n' '123456 Example App'
 
   it('recreates a missing remote file when the local cache is warm', () => {
     writeSnapshot('export COLOR=blue\n');
-    seedGuCache('export COLOR=red\n');
+    seedBackupCache('export COLOR=red\n');
 
-    const result = runGu({ ghEditMissingFile: true });
+    const result = runBackup({ ghEditMissingFile: true });
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
@@ -1081,13 +1038,13 @@ printf '%s\\n' '123456 Example App'
 
   it('reports a failure when a Gist upload fails', () => {
     writeSnapshot('export COLOR=blue\n');
-    seedGuCache('export COLOR=red\n');
+    seedBackupCache('export COLOR=red\n');
     seedFakeGist('export COLOR=red\n');
 
-    const result = runGu({ ghUploadFail: true });
+    const result = runBackup({ ghUploadFail: true });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'simulated gh gist upload failure\ngu: failed to snapshot zshrc.sh\n');
+    assert.equal(result.stderr, 'simulated gh gist upload failure\nballin backup: failed to snapshot zshrc.sh\n');
     assert.deepEqual(fs.readdirSync(scratchDir), []);
     assert.equal(result.stdout, '');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=red\n');
@@ -1097,14 +1054,14 @@ printf '%s\\n' '123456 Example App'
 
   it('retries a changed snapshot after a failed Gist upload', () => {
     writeSnapshot('export COLOR=blue\n');
-    seedGuCache('export COLOR=red\n');
+    seedBackupCache('export COLOR=red\n');
     seedFakeGist('export COLOR=red\n');
 
-    const failedResult = runGu({ ghUploadFail: true });
-    const retriedResult = runGu();
+    const failedResult = runBackup({ ghUploadFail: true });
+    const retriedResult = runBackup();
 
     assert.equal(failedResult.status, 1);
-    assertGuSucceeded(retriedResult);
+    assertBackupSucceeded(retriedResult);
     assert.equal(retriedResult.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
@@ -1115,9 +1072,9 @@ printf '%s\\n' '123456 Example App'
     const largeSnapshot = `${'x'.repeat(1024 * 1024 + 1)}\n`;
     writeSnapshot(largeSnapshot);
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '💾 zshrc\n');
     assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
     assert.equal(fs.statSync(fakeGistFilePath()).size, largeSnapshot.length);
@@ -1131,7 +1088,7 @@ printf 'publisher.large-stderr\\n'
 printf '%*s\\n' 1048577 '' >&2
 `);
 
-    const result = runGu();
+    const result = runBackup();
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, '💾 vs_extensions\n');
@@ -1139,7 +1096,7 @@ printf '%*s\\n' 1048577 '' >&2
     assert.equal(result.stderr.slice(0, 1), ' ');
     assert.equal(result.stderr.slice(-1), '\n');
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'vs_extensions'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'vs_extensions'), 'utf8'),
       'publisher.large-stderr\n',
     );
     assert.include(gistUploads(), 'vs_extensions');
@@ -1148,11 +1105,11 @@ printf '%*s\\n' 1048577 '' >&2
 
   it('reports and uploads non-empty output becoming empty', () => {
     writeSnapshot('');
-    seedGuCache('old content\n');
+    seedBackupCache('old content\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✖︎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
@@ -1160,22 +1117,22 @@ printf '%*s\\n' 1048577 '' >&2
 
   it('hides unchanged empty output and does not upload it', () => {
     writeSnapshot('');
-    seedGuCache('empty\n');
+    seedBackupCache('empty\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '');
     assert.deepEqual(gistUploads(), []);
   });
 
   it('preserves the current changed icon when empty becomes non-empty', () => {
     writeSnapshot('restored\n');
-    seedGuCache('empty\n');
+    seedBackupCache('empty\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
@@ -1183,9 +1140,9 @@ printf '%*s\\n' 1048577 '' >&2
   it('preserves multiple trailing blank lines', () => {
     writeSnapshot('line\n\n\n');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'line\n\n\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'line\n\n\n');
   });
@@ -1193,9 +1150,9 @@ printf '%*s\\n' 1048577 '' >&2
   it('normalizes output missing its final newline', () => {
     writeSnapshot('line');
 
-    const result = runGu();
+    const result = runBackup();
 
-    assertGuSucceeded(result);
+    assertBackupSucceeded(result);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'line\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'line\n');
   });
@@ -1203,11 +1160,11 @@ printf '%*s\\n' 1048577 '' >&2
   it('uploads a normalized snapshot only once when a later run is unchanged', () => {
     writeSnapshot('stable without newline');
 
-    const firstResult = runGu();
-    const secondResult = runGu();
+    const firstResult = runBackup();
+    const secondResult = runBackup();
 
-    assertGuSucceeded(firstResult);
-    assertGuSucceeded(secondResult);
+    assertBackupSucceeded(firstResult);
+    assertBackupSucceeded(secondResult);
     assert.equal(secondResult.stdout, '✔ zshrc\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
@@ -1216,10 +1173,10 @@ printf '%*s\\n' 1048577 '' >&2
     const gitconfigPath = path.join(testHomeDir, '.gitconfig');
     writeSnapshot('new zsh value\n');
     fs.writeFileSync(gitconfigPath, 'new git value\n');
-    seedGuCache('old zsh value\n');
+    seedBackupCache('old zsh value\n');
     seedFakeGist('old zsh value\n');
 
-    const result = runGu({
+    const result = runBackup({
       failedPaths: ['.zshrc'],
       emitUnderlyingStderr: true,
     });
@@ -1229,12 +1186,12 @@ printf '%*s\\n' 1048577 '' >&2
     assert.equal(
       result.stderr,
       'cat: simulated failure reading .zshrc\n'
-        + 'gu: failed to snapshot zshrc.sh\n',
+        + 'ballin backup: failed to snapshot zshrc.sh\n',
     );
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old zsh value\n');
     assert.equal(
-      fs.readFileSync(path.join(guCacheDir, 'gitconfig'), 'utf8'),
+      fs.readFileSync(path.join(backupCacheDir, 'gitconfig'), 'utf8'),
       'new git value\n',
     );
     assert.deepEqual(gistUploads(), ['gitconfig']);
@@ -1244,11 +1201,11 @@ printf '%*s\\n' 1048577 '' >&2
   it('reports a silent command failure without leaving failed Gist hydration behind', () => {
     writeSnapshot('not captured\n');
 
-    const result = runGu({ failedPaths: ['.zshrc'] });
+    const result = runBackup({ failedPaths: ['.zshrc'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'gu: failed to snapshot zshrc.sh\n');
+    assert.equal(result.stderr, 'ballin backup: failed to snapshot zshrc.sh\n');
     assert.isFalse(fs.existsSync(cachedSnapshotPath()));
     assert.isFalse(fs.existsSync(fakeGistFilePath()));
     assert.deepEqual(gistReads(), [snapshotFileName]);
@@ -1258,14 +1215,14 @@ printf '%*s\\n' 1048577 '' >&2
 
   it('recovers cleanly on the next successful invocation', () => {
     writeSnapshot('recovered\n');
-    seedGuCache('before failure\n');
+    seedBackupCache('before failure\n');
     seedFakeGist('before failure\n');
 
-    const failedResult = runGu({ failedPaths: ['.zshrc'] });
-    const recoveredResult = runGu();
+    const failedResult = runBackup({ failedPaths: ['.zshrc'] });
+    const recoveredResult = runBackup();
 
     assert.equal(failedResult.status, 1);
-    assertGuSucceeded(recoveredResult);
+    assertBackupSucceeded(recoveredResult);
     assert.equal(recoveredResult.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'recovered\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'recovered\n');
@@ -1277,14 +1234,14 @@ printf '%*s\\n' 1048577 '' >&2
     writeSnapshot('zsh value\n');
     fs.writeFileSync(gitconfigPath, 'git value\n');
 
-    const result = runGu({ failedPaths: ['.zshrc', '.gitconfig'] });
+    const result = runBackup({ failedPaths: ['.zshrc', '.gitconfig'] });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
-      'gu: failed to snapshot zshrc.sh\n'
-        + 'gu: failed to snapshot gitconfig\n',
+      'ballin backup: failed to snapshot zshrc.sh\n'
+        + 'ballin backup: failed to snapshot gitconfig\n',
     );
     assert.deepEqual(gistUploads(), []);
     assert.deepEqual(fs.readdirSync(scratchDir), []);

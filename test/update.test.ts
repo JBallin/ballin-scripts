@@ -14,7 +14,7 @@ type InstallCommandStubOptions = {
   directory?: string;
 };
 
-describe('up', () => {
+describe('ballin update', () => {
   let tempDir: string;
   let binDir: string;
   let configPath: string;
@@ -29,7 +29,7 @@ describe('up', () => {
     { output = '', status = 0, directory = binDir }: InstallCommandStubOptions = {},
   ) => {
     fs.writeFileSync(path.join(directory, name), `#!/usr/bin/env bash
-printf '%s|%s|%s\\n' "${name}" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
+printf '%s|%s|%s\\n' "${name}" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
 ${output ? `printf '%s\\n' '${output}'` : ''}
 exit ${status}
 `, { mode: 0o755 });
@@ -49,26 +49,22 @@ exit ${status}
   };
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-up-'));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-update-'));
     binDir = path.join(tempDir, 'bin');
     configPath = path.join(tempDir, 'ballin.config.json');
     logPath = path.join(tempDir, 'commands.log');
     fs.mkdirSync(binDir);
     fs.symlinkSync('/bin/bash', path.join(binDir, 'bash'));
     fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
-    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
-case "$2" in
-  update.cleanup) printf '%s\\n' "\${TEST_UP_CLEANUP:-false}" ;;
-  update.nvm) printf '%s\\n' "\${TEST_UP_NVM:-false}" ;;
-  update.npm) printf '%s\\n' "\${TEST_UP_NPM:-false}" ;;
-  update.softwareupdate) printf '%s\\n' "\${TEST_UP_SOFTWAREUPDATE:-false}" ;;
-  update.selfUpdate) printf '%s\\n' "\${TEST_UP_BALLIN:-false}" ;;
-  update.backup) printf '%s\\n' "\${TEST_UP_GU:-false}" ;;
-  *) printf '%s\\n' 'false' ;;
-esac
-`);
     writeConfig({
-      update: {},
+      update: {
+        cleanup: 'false',
+        nvm: 'true',
+        npm: 'false',
+        softwareupdate: 'false',
+        selfUpdate: 'false',
+        backup: 'false',
+      },
       backup: {
         id: 'test-gist-id',
         host: 'example.test',
@@ -83,18 +79,42 @@ esac
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  const runUp = (env: NodeJS.ProcessEnv = {}) => spawnSync(ballinPath, ['update'], {
-    encoding: 'utf8',
-    env: {
-      HOME: tempDir,
-      PATH: binDir,
-      NVM_TEST_LOG: logPath,
-      UP_TEST_LOG: logPath,
-      BALLIN_TEST_CONFIG_PATH: configPath,
-      TEST_UP_NVM: 'true',
-      ...env,
-    },
-  });
+  const writeUpdateConfig = (env: NodeJS.ProcessEnv = {}) => {
+    writeConfig({
+      update: {
+        cleanup: env.TEST_UPDATE_CLEANUP ?? 'false',
+        nvm: env.TEST_UPDATE_NVM ?? 'true',
+        npm: env.TEST_UPDATE_NPM ?? 'false',
+        softwareupdate: env.TEST_UPDATE_SOFTWAREUPDATE ?? 'false',
+        selfUpdate: env.TEST_UPDATE_BALLIN ?? 'false',
+        backup: env.TEST_UPDATE_BACKUP ?? 'false',
+      },
+      backup: {
+        id: 'test-gist-id',
+        host: 'example.test',
+      },
+      analytics: {
+        enabled: 'false',
+      },
+    });
+  };
+
+  const runUpdate = (env: NodeJS.ProcessEnv = {}) => {
+    writeUpdateConfig(env);
+    return spawnSync(ballinPath, ['update'], {
+      encoding: 'utf8',
+      env: {
+        HOME: tempDir,
+        PATH: binDir,
+        NVM_TEST_LOG: logPath,
+        UPDATE_TEST_LOG: logPath,
+        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_TEST_CONFIG_PATH: configPath,
+        BALLIN_TEST_BALLIN_PATH: path.join(binDir, 'ballin'),
+        ...env,
+      },
+    });
+  };
 
   const installNvmStub = (nvmDir: string) => {
     fs.mkdirSync(nvmDir, { recursive: true });
@@ -128,14 +148,16 @@ esac
     const symlinkPath = path.join(installBinDir, 'ballin');
     fs.mkdirSync(installBinDir);
     fs.symlinkSync(ballinPath, symlinkPath);
+    writeUpdateConfig({ TEST_UPDATE_NVM: 'false' });
 
     const result = spawnSync(symlinkPath, ['update'], {
       encoding: 'utf8',
       env: {
         HOME: tempDir,
         PATH: binDir,
-        TEST_UP_NVM: 'false',
-        UP_TEST_LOG: logPath,
+        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_TEST_CONFIG_PATH: configPath,
+        UPDATE_TEST_LOG: logPath,
       },
     });
 
@@ -147,7 +169,7 @@ esac
   it('sets Homebrew flags, preserves output, cleans conditionally, and runs doctor', () => {
     installCommandStub('brew', { output: 'visible Homebrew output' });
 
-    const result = runUp({ TEST_UP_NVM: 'false', TEST_UP_CLEANUP: 'true' });
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_CLEANUP: 'true' });
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'visible Homebrew output');
@@ -162,20 +184,20 @@ esac
 
   it('reports a Homebrew substep failure after running later integrations', () => {
     writeTestExecutable('brew', `#!/usr/bin/env bash
-printf 'brew|%s|%s\\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
+printf 'brew|%s|%s\\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
 if [ "$1" = 'cleanup' ]; then
   printf '%s\\n' 'simulated cleanup failure'
   exit 42
 fi
 exit 0
 `);
-    installCommandStub('ballin_update');
+    installCommandStub('ballin');
     installHealthyReadinessCommands();
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_CLEANUP: 'true',
-      TEST_UP_BALLIN: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_CLEANUP: 'true',
+      TEST_UPDATE_BALLIN: 'true',
     });
 
     assert.equal(result.status, 42);
@@ -187,26 +209,26 @@ exit 0
       'brew|1,1|upgrade',
       'brew|1,1|cleanup',
       'brew|1,1|doctor',
-      'ballin_update|1,1|',
+      'ballin|1,1|self-update',
       'gh|1,1|auth status --hostname example.test',
     ]);
   });
 
   it('passes exported Homebrew flags to later integrations', () => {
     installCommandStub('brew');
-    installCommandStub('ballin_update');
+    installCommandStub('ballin');
     installHealthyReadinessCommands();
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_BALLIN: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BALLIN: 'true',
     });
 
     assert.equal(result.status, 0);
     assert.deepEqual(commandLog(), [
       'brew|1,1|upgrade',
       'brew|1,1|doctor',
-      'ballin_update|1,1|',
+      'ballin|1,1|self-update',
       'gh|1,1|auth status --hostname example.test',
     ]);
   });
@@ -214,7 +236,7 @@ exit 0
   it('skips cleanup when disabled while preserving upgrade and doctor output', () => {
     installCommandStub('brew', { output: 'brew command output' });
 
-    const result = runUp({ TEST_UP_NVM: 'false' });
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false' });
 
     assert.equal(result.status, 0);
     assert.notInclude(result.stdout, 'Cleaning up Homebrew packages');
@@ -226,37 +248,37 @@ exit 0
   });
 
   it('runs enabled npm, macOS update, ballin update, and backup integrations', () => {
-    ['npm', 'softwareupdate', 'ballin_update'].forEach((command) => {
+    ['npm', 'softwareupdate'].forEach((command) => {
       installCommandStub(command);
     });
     installCommandStub('ballin');
     installHealthyReadinessCommands();
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_NPM: 'true',
-      TEST_UP_SOFTWAREUPDATE: 'true',
-      TEST_UP_BALLIN: 'true',
-      TEST_UP_GU: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_NPM: 'true',
+      TEST_UPDATE_SOFTWAREUPDATE: 'true',
+      TEST_UPDATE_BALLIN: 'true',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 0);
     assert.deepEqual(commandLog(), [
       'npm|,|update -g',
       'softwareupdate|,|-ia',
-      'ballin_update|,|',
+      'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
       'ballin|,|backup',
     ]);
   });
 
   it('checks Ballin readiness after a successful ballin update', () => {
-    installCommandStub('ballin_update', { output: 'updated ballin-scripts' });
+    installCommandStub('ballin', { output: 'updated ballin-scripts' });
     installHealthyReadinessCommands();
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_BALLIN: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BALLIN: 'true',
     });
 
     assert.equal(result.status, 0);
@@ -265,7 +287,7 @@ exit 0
     assert.include(result.stdout, 'Checking Ballin readiness');
     assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog(), [
-      'ballin_update|,|',
+      'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
     ]);
   });
@@ -276,7 +298,7 @@ exit 0
     fs.mkdirSync(nvmBinDir);
     installPathUpdatingNvmStub(nvmDir, nvmBinDir);
     writeTestExecutable('node', `#!/usr/bin/env bash
-printf 'node|%s|%s\\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UP_TEST_LOG"
+printf 'node|%s|%s\\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
 if [ "$*" = '-p process.versions.node' ]; then
   printf '%s\\n' '99.0.0'
   exit 0
@@ -289,9 +311,9 @@ exit 2
 `, nvmBinDir);
     installHealthyReadinessCommands();
 
-    const result = runUp({
+    const result = runUpdate({
       NVM_DIR: nvmDir,
-      TEST_UP_BALLIN: 'true',
+      TEST_UPDATE_BALLIN: 'true',
     });
 
     assert.equal(result.status, 0);
@@ -299,40 +321,45 @@ exit 2
     assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog().slice(1), [
       'node|,|-e process.stdout.write(JSON.stringify(process.env))',
-      'ballin_update|,|',
+      'ballin|,|self-update',
       'node|,|-p process.versions.node',
       'gh|,|auth status --hostname example.test',
     ]);
   });
 
   it('keeps Ballin readiness failures informational after update', () => {
-    installCommandStub('ballin_update');
+    const selfUpdatePath = path.join(tempDir, 'self-update-ballin');
+    fs.writeFileSync(selfUpdatePath, `#!/usr/bin/env bash
+printf '%s|%s|%s\\n' "ballin" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
+exit 0
+`, { mode: 0o755 });
     installHealthyReadinessCommands();
-    fs.rmSync(path.join(binDir, 'ballin_uninstall'));
+    fs.rmSync(path.join(binDir, 'ballin'));
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_BALLIN: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BALLIN: 'true',
+      BALLIN_TEST_BALLIN_PATH: selfUpdatePath,
     });
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Checking Ballin readiness');
-    assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin_uninstall.');
+    assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
     assert.include(result.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
     assert.notInclude(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog(), [
-      'ballin_update|,|',
+      'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
     ]);
   });
 
   it('skips Ballin readiness when ballin update fails', () => {
-    installCommandStub('ballin_update', { output: 'simulated update failure', status: 23 });
+    installCommandStub('ballin', { output: 'simulated update failure', status: 23 });
     installHealthyReadinessCommands();
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_BALLIN: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BALLIN: 'true',
     });
 
     assert.equal(result.status, 23);
@@ -340,16 +367,16 @@ exit 2
     assert.notInclude(result.stdout, 'Checking Ballin readiness');
     assert.notInclude(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog(), [
-      'ballin_update|,|',
+      'ballin|,|self-update',
     ]);
   });
 
   it('does not run disabled optional integrations even when commands exist', () => {
-    ['npm', 'softwareupdate', 'ballin_update', 'ballin'].forEach((command) => {
+    ['npm', 'softwareupdate', 'ballin'].forEach((command) => {
       installCommandStub(command);
     });
 
-    const result = runUp({ TEST_UP_NVM: 'false' });
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false' });
 
     assert.equal(result.status, 0);
     assert.deepEqual(commandLog(), []);
@@ -361,43 +388,49 @@ exit 2
 
   it('keeps later integrations isolated when an optional command fails', () => {
     installCommandStub('npm', { output: 'simulated npm failure', status: 23 });
-    installCommandStub('ballin_update');
+    installCommandStub('ballin');
     installCommandStub('ballin');
     installHealthyReadinessCommands();
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_NPM: 'true',
-      TEST_UP_BALLIN: 'true',
-      TEST_UP_GU: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_NPM: 'true',
+      TEST_UPDATE_BALLIN: 'true',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 23);
     assert.include(result.stdout, 'simulated npm failure');
     assert.deepEqual(commandLog(), [
       'npm|,|update -g',
-      'ballin_update|,|',
+      'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
       'ballin|,|backup',
     ]);
   });
 
   it('still uses final backup status after informational Ballin readiness', () => {
-    installCommandStub('ballin_update');
-    installCommandStub('ballin', { output: 'simulated backup failure', status: 17 });
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s|%s|%s\\n' "ballin" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
+if [ "$1" = 'backup' ]; then
+  printf '%s\\n' 'simulated backup failure'
+  exit 17
+fi
+exit 0
+`);
     installHealthyReadinessCommands();
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_BALLIN: 'true',
-      TEST_UP_GU: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BALLIN: 'true',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 17);
     assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
-      'ballin_update|,|',
+      'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
       'ballin|,|backup',
     ]);
@@ -406,9 +439,9 @@ exit 2
   it('uses backup as the final exit status when backup is enabled', () => {
     installCommandStub('ballin', { output: 'simulated backup failure', status: 17 });
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_GU: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 17);
@@ -423,9 +456,9 @@ exit 2
 kill -TERM "$$"
 `);
 
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_GU: 'true',
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 143);
@@ -436,7 +469,7 @@ kill -TERM "$$"
     const nvmDir = path.join(tempDir, 'custom-nvm');
     installNvmStub(nvmDir);
 
-    const result = runUp({ NVM_DIR: nvmDir });
+    const result = runUpdate({ NVM_DIR: nvmDir });
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Updating Node.js LTS');
@@ -455,12 +488,12 @@ kill -TERM "$$"
 `,
     );
     writeTestExecutable('ballin', `#!/usr/bin/env bash
-printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
+printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 `);
 
-    const result = runUp({
+    const result = runUpdate({
       NVM_DIR: nvmDir,
-      TEST_UP_GU: 'true',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 24);
@@ -477,9 +510,9 @@ printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
     installPathUpdatingNvmStub(nvmDir, nvmBinDir);
     installCommandStub('npm', { directory: nvmBinDir });
 
-    const result = runUp({
+    const result = runUpdate({
       NVM_DIR: nvmDir,
-      TEST_UP_NPM: 'true',
+      TEST_UPDATE_NPM: 'true',
     });
 
     assert.equal(result.status, 0);
@@ -500,12 +533,12 @@ printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
     installCommandStub('npm', { directory: nvmBinDir });
     writeTestExecutable('ballin', `#!/usr/bin/env bash
 if [ "$*" != 'backup' ]; then exit 2; fi
-printf 'backup-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
+printf 'backup-npm|%s\\n' "$(command -v npm)" >> "$UPDATE_TEST_LOG"
 `);
 
-    const result = runUp({
+    const result = runUpdate({
       NVM_DIR: nvmDir,
-      TEST_UP_GU: 'true',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 0);
@@ -524,12 +557,12 @@ printf 'backup-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
 exit 42
 `, { mode: 0o755 });
     writeTestExecutable('ballin', `#!/usr/bin/env bash
-printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
+printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 `);
 
-    const result = runUp({
+    const result = runUpdate({
       NVM_DIR: nvmDir,
-      TEST_UP_GU: 'true',
+      TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 0);
@@ -540,13 +573,13 @@ printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
   });
 
   it('warns when nvm is enabled but cannot be loaded', () => {
-    const result = runUp();
+    const result = runUpdate();
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.include(result.stderr, 'unable to load nvm');
     assert.include(result.stderr, 'Set NVM_DIR');
-    assert.include(result.stderr, 'ballin_config set update.nvm false');
+    assert.include(result.stderr, 'ballin config set update.nvm false');
     assert.isFalse(fs.existsSync(logPath));
   });
 
@@ -554,7 +587,7 @@ printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
     const nvmDir = path.join(tempDir, 'custom-nvm');
     installNvmStub(nvmDir);
 
-    const result = runUp({ NVM_DIR: nvmDir, TEST_UP_NVM: 'false' });
+    const result = runUpdate({ NVM_DIR: nvmDir, TEST_UPDATE_NVM: 'false' });
 
     assert.equal(result.status, 0);
     assert.notInclude(result.stdout, 'Updating Node.js LTS');
@@ -562,26 +595,39 @@ printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
     assert.isFalse(fs.existsSync(logPath));
   });
 
-  it('surfaces ballin_config stderr when config reads fail', () => {
-    writeTestExecutable('ballin_config', `#!/usr/bin/env bash
-printf '%s\\n' 'broken config' >&2
-exit 42
-`);
+  it('surfaces config read failures', () => {
+    fs.writeFileSync(configPath, '{not json\n');
 
-    const result = runUp();
+    const result = spawnSync(ballinPath, ['update'], {
+      encoding: 'utf8',
+      env: {
+        HOME: tempDir,
+        PATH: binDir,
+        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_TEST_CONFIG_PATH: configPath,
+      },
+    });
 
     assert.equal(result.status, 0);
-    assert.include(result.stderr, 'broken config');
+    assert.isNotEmpty(result.stderr);
     assert.deepEqual(commandLog(), []);
   });
 
-  it('reports missing ballin_config reads like the shell did', () => {
-    fs.rmSync(path.join(binDir, 'ballin_config'));
+  it('reports missing config reads', () => {
+    fs.rmSync(configPath);
 
-    const result = runUp();
+    const result = spawnSync(ballinPath, ['update'], {
+      encoding: 'utf8',
+      env: {
+        HOME: tempDir,
+        PATH: binDir,
+        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_TEST_CONFIG_PATH: configPath,
+      },
+    });
 
     assert.equal(result.status, 0);
-    assert.include(result.stderr, 'ballin_config: command not found');
+    assert.include(result.stderr, 'Unable to read');
     assert.deepEqual(commandLog(), []);
   });
 });

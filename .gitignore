@@ -1,6 +1,6 @@
 /node_modules
 ballin.config.json
-/.gu-cache
+/.backup-cache
 /.analytics
 /analytics-worker/.wrangler/
 /analytics-worker/wrangler.toml
