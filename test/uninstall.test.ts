@@ -3,15 +3,15 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { relocateSystemPath } = require('../commands/ballin_uninstall.ts');
+const { relocateSystemPath } = require('../commands/uninstall.ts');
 
-const uninstallPath = path.join(__dirname, '..', 'bin', 'ballin_uninstall');
+const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 type RunUninstallOptions = {
   brewPrefix?: string;
   commandPath?: string;
 };
 
-describe('ballin_uninstall', () => {
+describe('ballin uninstall', () => {
   let testDir: string;
   let homeDir: string;
   let repoDir: string;
@@ -35,7 +35,7 @@ describe('ballin_uninstall', () => {
     return filePath;
   };
 
-  const runUninstall = ({ brewPrefix, commandPath: command = uninstallPath }: RunUninstallOptions = {}) => {
+  const runUninstall = ({ brewPrefix, commandPath: command = ballinPath }: RunUninstallOptions = {}) => {
     if (brewPrefix) {
       writeExecutable('brew', `#!/usr/bin/env bash
 if [ "$1" = '--prefix' ]; then
@@ -46,11 +46,12 @@ exit 2
 `);
     }
 
-    return spawnSync(command, [], {
+    return spawnSync(command, ['uninstall'], {
       encoding: 'utf8',
       env: {
         HOME: homeDir,
         PATH: toolDir,
+        BALLIN_NO_ANALYTICS: '1',
         BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: systemRoot,
       },
     });
@@ -88,29 +89,30 @@ exit 2
   it('removes only owned user-local links, then removes the repository', () => {
     const userBin = path.join(homeDir, '.local', 'bin');
     const ballin = createCommand('ballin');
-    createCommand('gu');
-    createCommand('up');
+    const legacyConfig = createCommand('ballin_config');
     fs.symlinkSync(ballin, path.join(userBin, 'ballin'));
-    fs.writeFileSync(path.join(userBin, 'gu'), 'keep me\n');
-    fs.symlinkSync(path.join(testDir, 'unrelated'), path.join(userBin, 'up'));
+    fs.symlinkSync(legacyConfig, path.join(userBin, 'ballin_config'));
+    fs.writeFileSync(path.join(userBin, 'unrelated-file'), 'keep me\n');
+    fs.symlinkSync(path.join(testDir, 'unrelated'), path.join(userBin, 'unrelated-link'));
 
     const result = runUninstall();
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
-    assert.isTrue(fs.statSync(path.join(userBin, 'gu')).isFile());
-    assert.isTrue(fs.lstatSync(path.join(userBin, 'up')).isSymbolicLink());
+    assert.isFalse(fs.existsSync(path.join(userBin, 'ballin_config')));
+    assert.isTrue(fs.statSync(path.join(userBin, 'unrelated-file')).isFile());
+    assert.isTrue(fs.lstatSync(path.join(userBin, 'unrelated-link')).isSymbolicLink());
     assert.isFalse(fs.existsSync(repoDir));
   });
 
   it('remains executable through the installed symlink model', () => {
     const installBinDir = path.join(testDir, 'installed-bin');
-    const symlinkPath = path.join(installBinDir, 'ballin_uninstall');
+    const symlinkPath = path.join(installBinDir, 'ballin');
     const userBin = path.join(homeDir, '.local', 'bin');
     const ballin = createCommand('ballin');
     fs.mkdirSync(installBinDir);
-    fs.symlinkSync(uninstallPath, symlinkPath);
+    fs.symlinkSync(ballinPath, symlinkPath);
     fs.symlinkSync(ballin, path.join(userBin, 'ballin'));
 
     const result = runUninstall({ commandPath: symlinkPath });

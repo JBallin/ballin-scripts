@@ -78,7 +78,7 @@ setting is required.
 the configured backup Gist. During install, `ballin-scripts` prompts for the
 GitHub host, including GitHub Enterprise hosts, checks `gh` authentication for
 that host, and either adopts an existing backup Gist or creates a new one. When
-an adopted backup includes saved `ballin_config` values, the installer restores
+an adopted backup includes saved `ballin.config.json` values, the installer restores
 them before continuing.
 
 ## Readiness checks

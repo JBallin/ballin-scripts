@@ -116,13 +116,13 @@ describe('setup readiness', () => {
   });
 
   it('reports missing and non-executable command shims on PATH', () => {
-    fs.rmSync(path.join(binDir, 'ballin_update'));
+    fs.rmSync(path.join(binDir, 'ballin'));
 
     const report = collect();
     const commandCheck = checkById(report, 'commands.path');
 
     assert.equal(commandCheck.status, 'fail');
-    assert.deepEqual(commandCheck.data?.missing, ['ballin_update']);
+    assert.deepEqual(commandCheck.data?.missing, ['ballin']);
   });
 
   it('reports config readability and top-level section availability', () => {
@@ -155,7 +155,7 @@ describe('setup readiness', () => {
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
     assert.notInclude(commandLog.join('\n'), 'gist create');
     assert.notInclude(commandLog.join('\n'), 'gist edit');
-    assert.notInclude(commandLog.join('\n'), 'ballin_config set');
+    assert.notInclude(commandLog.join('\n'), 'ballin config set');
   });
 
   it('reports unconfigured Gist ID and missing gh as non-mutating warnings', () => {

@@ -13,6 +13,7 @@ const {
 const backupMarker = '### Backup of your dev environment\n'
   + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n'
   + '\n';
+const configSnapshotFileName = 'ballin_config';
 
 const readPrompt = (prompt: string): string => {
   process.stdout.write(prompt);
@@ -41,7 +42,9 @@ const supportedCommands = new Set([
   'symlink-binaries',
 ]);
 
-type ConfigObject = { [key: string]: unknown };
+type ConfigObject = { [key: string]: ConfigValue };
+type ConfigLeaf = string | number | boolean | null;
+type ConfigValue = ConfigLeaf | ConfigObject;
 
 const isConfigObject = (value: unknown): value is ConfigObject => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -82,6 +85,53 @@ const readJsonObject = (filePath: string): ConfigObject | null => {
   } catch {
     return null;
   }
+};
+
+const getNestedConfigValue = (config: ConfigObject, keyPath: string): ConfigValue | undefined => {
+  const keys = keyPath.split('.');
+  let value: ConfigValue = config;
+
+  for (const key of keys) {
+    if (value === null || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, key)) {
+      return undefined;
+    }
+    value = value[key];
+  }
+
+  return value;
+};
+
+const setNestedConfigValue = (config: ConfigObject, keyPath: string, value: ConfigLeaf): boolean => {
+  const keys = keyPath.split('.');
+  const keyToSet = keys.pop();
+  let container: ConfigValue = config;
+
+  if (!keyToSet) {
+    return false;
+  }
+
+  for (const key of keys) {
+    if (
+      container === null
+      || typeof container !== 'object'
+      || !Object.prototype.hasOwnProperty.call(container, key)
+    ) {
+      return false;
+    }
+    container = container[key];
+  }
+
+  if (
+    container === null
+    || typeof container !== 'object'
+    || !Object.prototype.hasOwnProperty.call(container, keyToSet)
+    || (typeof container[keyToSet] === 'object' && container[keyToSet] !== null)
+  ) {
+    return false;
+  }
+
+  container[keyToSet] = value;
+  return true;
 };
 
 const configHasBackupHost = (repoDir: string): boolean => {
@@ -133,26 +183,26 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
   return updateConfig(repoDir, docsUrl);
 };
 
-const configValue = (ballinConfig: string, key: string): string | null => {
-  const result = runCommand(ballinConfig, ['get', key]);
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-  }
-  if (result.status !== 0 || result.error) {
+const configValue = (configPath: string, key: string): string | null => {
+  const config = readJsonObject(configPath);
+  if (!config) {
     return null;
   }
-  return result.stdout.trimEnd();
+  const value = getNestedConfigValue(config, key);
+  if (value === undefined || (typeof value === 'object' && value !== null)) {
+    return null;
+  }
+  return value === null ? 'null' : String(value);
 };
 
-const setConfigValue = (ballinConfig: string, key: string, value: string): boolean => {
-  const result = runCommand(ballinConfig, ['set', key, value]);
-  if (result.stdout) {
-    process.stdout.write(result.stdout);
+const setConfigValue = (configPath: string, key: string, value: string): boolean => {
+  const config = readJsonObject(configPath);
+  if (!config || !setNestedConfigValue(config, key, value)) {
+    return false;
   }
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-  }
-  return result.status === 0 && !result.error;
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+  process.stdout.write(`"${key}" set to: ${JSON.stringify(value)}\n`);
+  return true;
 };
 
 const runGh = (
@@ -181,7 +231,7 @@ const restoreAdoptedConfig = (
   try {
     fs.copyFileSync(configPath, previousConfig);
 
-    const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', 'ballin_config'], {
+    const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', configSnapshotFileName], {
       cwd: repoDir,
     });
     if (gistResult.stderr) {
@@ -189,7 +239,7 @@ const restoreAdoptedConfig = (
     }
 
     if (gistResult.status !== 0 || gistResult.error) {
-      writeStdoutLine('\nℹ️  No ballin_config snapshot was found in that gist; keeping the local config defaults.');
+      writeStdoutLine(`\nℹ️  No ${configSnapshotFileName} snapshot was found in that gist; keeping the local config defaults.`);
       return true;
     }
 
@@ -216,30 +266,30 @@ const restoreAdoptedConfig = (
 };
 
 const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: boolean): boolean => {
-  const ballinConfig = path.join(repoDir, 'bin', 'ballin_config');
-  let guHost = configValue(ballinConfig, 'backup.host');
-  let guId = configValue(ballinConfig, 'backup.id');
+  const ballinConfig = configPathFor(repoDir);
+  let backupHost = configValue(ballinConfig, 'backup.host');
+  let backupId = configValue(ballinConfig, 'backup.id');
 
-  if (guHost === null || guId === null) {
+  if (backupHost === null || backupId === null) {
     return false;
   }
 
-  if (process.env.BALLIN_GU_HOST) {
-    if (!setConfigValue(ballinConfig, 'backup.host', process.env.BALLIN_GU_HOST)) {
+  if (process.env.BALLIN_BACKUP_HOST) {
+    if (!setConfigValue(ballinConfig, 'backup.host', process.env.BALLIN_BACKUP_HOST)) {
       return false;
     }
-    guHost = configValue(ballinConfig, 'backup.host');
-    if (guHost === null) {
+    backupHost = configValue(ballinConfig, 'backup.host');
+    if (backupHost === null) {
       return false;
     }
-  } else if (guId === 'null' || !backupHostExisted) {
-    const inputHost = readPrompt(`\n🤔 What GitHub host should be used for Gist backups? [${guHost}] `);
+  } else if (backupId === 'null' || !backupHostExisted) {
+    const inputHost = readPrompt(`\n🤔 What GitHub host should be used for Gist backups? [${backupHost}] `);
     if (inputHost) {
       if (!setConfigValue(ballinConfig, 'backup.host', inputHost)) {
         return false;
       }
-      guHost = configValue(ballinConfig, 'backup.host');
-      if (guHost === null) {
+      backupHost = configValue(ballinConfig, 'backup.host');
+      if (backupHost === null) {
         return false;
       }
     }
@@ -249,26 +299,26 @@ const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: bool
     writeStdoutLine('\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.');
     writeStdoutLine('\nInstall gh, authenticate it, then run this installer again.');
     writeStdoutLine(`\nSetup guide: ${docsUrl}`);
-    writeStdoutLine(`\nRun after installing gh:\n  gh auth login --hostname ${guHost}`);
+    writeStdoutLine(`\nRun after installing gh:\n  gh auth login --hostname ${backupHost}`);
     return false;
   }
 
-  const authResult = runCommand('gh', ['auth', 'status', '--hostname', guHost], {
+  const authResult = runCommand('gh', ['auth', 'status', '--hostname', backupHost], {
     cwd: repoDir,
     env: {
       ...process.env,
-      GH_HOST: guHost,
+      GH_HOST: backupHost,
     },
   });
 
   if (authResult.status !== 0 || authResult.error) {
-    writeStdoutLine(`\n⚠️  ERROR: gh is not authenticated for ${guHost}.`);
-    writeStdoutLine(`\nRun:\n  gh auth login --hostname ${guHost}`);
+    writeStdoutLine(`\n⚠️  ERROR: gh is not authenticated for ${backupHost}.`);
+    writeStdoutLine(`\nRun:\n  gh auth login --hostname ${backupHost}`);
     writeStdoutLine('\nThen run this installer again.');
     return false;
   }
 
-  if (guId !== 'null') {
+  if (backupId !== 'null') {
     return true;
   }
 
@@ -278,7 +328,7 @@ const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: bool
     let validGistId = false;
     while (!validGistId) {
       const gistId = readPrompt('Enter your gist ID: ');
-      const markerResult = runGh(guHost, ['gist', 'view', gistId, '--raw', '--filename', '.MyConfig.md'], {
+      const markerResult = runGh(backupHost, ['gist', 'view', gistId, '--raw', '--filename', '.MyConfig.md'], {
         cwd: repoDir,
       });
 
@@ -287,7 +337,7 @@ const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: bool
         && stripTrailingNewlines(markerResult.stdout) === stripTrailingNewlines(backupMarker)
       ) {
         writeStdoutLine('\n👍 Storing your previous gist ID in your config:');
-        if (!restoreAdoptedConfig(repoDir, docsUrl, guHost, gistId)) {
+        if (!restoreAdoptedConfig(repoDir, docsUrl, backupHost, gistId)) {
           return false;
         }
         if (!setConfigValue(ballinConfig, 'backup.id', gistId)) {
@@ -300,17 +350,17 @@ const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: bool
     }
   }
 
-  guId = configValue(ballinConfig, 'backup.id');
-  if (guId === null) {
+  backupId = configValue(ballinConfig, 'backup.id');
+  if (backupId === null) {
     return false;
   }
 
-  if (guId === 'null') {
+  if (backupId === 'null') {
     const markerPath = path.join(repoDir, '.MyConfig.md');
     fs.writeFileSync(markerPath, backupMarker);
 
     try {
-      const createResult = runGh(guHost, ['gist', 'create', '.MyConfig.md', '--desc', backupMarker], {
+      const createResult = runGh(backupHost, ['gist', 'create', '.MyConfig.md', '--desc', backupMarker], {
         cwd: repoDir,
       });
       if (createResult.stderr) {
@@ -329,10 +379,10 @@ const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: bool
         return false;
       }
 
-      const guCacheDir = path.join(repoDir, '.gu-cache');
-      if (fs.existsSync(guCacheDir) && fs.statSync(guCacheDir).isDirectory()) {
-        fs.rmSync(guCacheDir, { recursive: true, force: true });
-        writeStdoutLine('\n🗑  Deleted existing .gu-cache folder');
+      const backupCacheDir = path.join(repoDir, '.backup-cache');
+      if (fs.existsSync(backupCacheDir) && fs.statSync(backupCacheDir).isDirectory()) {
+        fs.rmSync(backupCacheDir, { recursive: true, force: true });
+        writeStdoutLine('\n🗑  Deleted existing .backup-cache folder');
       }
     } finally {
       fs.rmSync(markerPath, { force: true });

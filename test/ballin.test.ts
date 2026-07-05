@@ -46,31 +46,29 @@ describe('ballin', () => {
     return fs.readFileSync(commandLogPath, 'utf8').trimEnd().split('\n').filter(Boolean);
   };
 
-  const writeUpConfigCommand = (overrides: Record<string, string> = {}) => {
-    const cases = Object.entries({
-      'update.cleanup': 'false',
-      'update.nvm': 'false',
-      'update.npm': 'false',
-      'update.softwareupdate': 'false',
-      'update.selfUpdate': 'false',
-      'update.backup': 'false',
-      ...overrides,
-    }).map(([key, value]) => `${key}) printf '%s\\n' '${value}' ;;`).join('\n  ');
-
-    writeExecutable('ballin_config', `#!/bin/bash
-if [ "$1" != 'get' ]; then
-  printf '%s\\n' 'unexpected ballin_config action' >&2
-  exit 2
-fi
-case "$2" in
-  ${cases}
-  *) printf '%s\\n' 'false' ;;
-esac
-`);
-  };
-
   const writeConfig = (config: unknown) => {
     fs.writeFileSync(configPath, `${JSON.stringify(config)}\n`);
+  };
+
+  const writeUpdateConfig = (overrides: Record<string, string> = {}) => {
+    writeConfig({
+      update: {
+        cleanup: 'false',
+        nvm: 'false',
+        npm: 'false',
+        softwareupdate: 'false',
+        selfUpdate: 'false',
+        backup: 'false',
+        ...overrides,
+      },
+      backup: {
+        id: 'test-gist-id',
+        host: 'example.test',
+      },
+      analytics: {
+        enabled: 'false',
+      },
+    });
   };
 
   const runBallin = (args: string[] = []): StringSpawnResult => spawnSync(process.execPath, [
@@ -82,6 +80,7 @@ esac
       ...process.env,
       BALLIN_NO_ANALYTICS: '1',
       BALLIN_TEST_CONFIG_PATH: configPath,
+      BALLIN_TEST_BALLIN_PATH: path.join(binDir, 'ballin'),
       FAKE_COMMAND_LOG: commandLogPath,
       PATH: binDir,
     },
@@ -169,8 +168,8 @@ esac
     assert.equal(result.stderr, 'Unknown Ballin command: upd\nTry: ballin --help\n');
   });
 
-  it('routes update through the existing up workflow and preserves its exit status', () => {
-    writeUpConfigCommand({ 'update.backup': 'true' });
+  it('routes update through the update workflow and preserves its exit status', () => {
+    writeUpdateConfig({ backup: 'true' });
     writeExecutable('ballin', `#!/bin/bash
 if [ "$*" != 'backup' ]; then exit 2; fi
 printf '%s\\n' 'ballin backup from ballin update'
@@ -186,7 +185,7 @@ exit 17
     assert.deepEqual(commandLog(), ['ballin-backup-called']);
   });
 
-  it('routes backup through the existing gu command implementation', () => {
+  it('routes backup through the backup command implementation', () => {
     const result = runBallin(['backup', 'help']);
 
     assert.equal(result.status, 0);
@@ -283,7 +282,7 @@ exit 17
   });
 
   it('fails doctor when a required health check fails', () => {
-    fs.rmSync(path.join(binDir, 'ballin_uninstall'));
+    fs.rmSync(path.join(binDir, 'ballin'));
     writeConfig({
       update: {},
       backup: {
@@ -298,7 +297,7 @@ exit 17
     const missingShim = runBallin(['doctor']);
 
     assert.equal(missingShim.status, 1);
-    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin_uninstall.');
+    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
     assert.include(missingShim.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
     assert.include(missingShim.stdout, '\nNext: Run the installer to create or adopt a backup Gist.');
@@ -313,7 +312,7 @@ exit 17
 
     assert.equal(missingConfig.status, 1);
     assert.include(missingConfig.stdout, 'ERROR Config readability: Unable to read');
-    assert.include(missingConfig.stdout, 'Next: Run ballin_config reset to recreate the config.');
+    assert.include(missingConfig.stdout, 'Next: Run ballin config reset to recreate the config.');
   });
 
   it('rejects invalid doctor usage', () => {

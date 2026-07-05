@@ -130,7 +130,7 @@ describe('analytics client', () => {
     writeInstallId();
 
     const { payloads, notices } = await recordWithSender({
-      command: 'up',
+      command: 'ballin update',
       now: fixedNow,
     });
 
@@ -151,7 +151,7 @@ describe('analytics client', () => {
       writeInstallId();
 
       const { payloads } = await recordWithSender({
-        command: 'up',
+        command: 'ballin update',
         now: fixedNow,
       }, { env });
 
@@ -212,7 +212,7 @@ describe('analytics client', () => {
     });
 
     const { payloads, notices } = await recordWithSender({
-      command: 'up',
+      command: 'ballin update',
       now: fixedNow,
     });
 
@@ -227,7 +227,7 @@ describe('analytics client', () => {
     writeRawInstallId('not-a-uuid\n');
 
     const { payloads, notices } = await recordWithSender({
-      command: 'up',
+      command: 'ballin update',
       now: fixedNow,
     });
 
@@ -243,7 +243,7 @@ describe('analytics client', () => {
     writeInstallId();
 
     await recordAnalyticsEvent({
-      command: 'up',
+      command: 'ballin update',
       now: fixedNow,
     }, {
       installIdPath: testInstallIdPath,
@@ -260,7 +260,7 @@ describe('analytics client', () => {
     writeInstallId();
 
     const { payloads } = await recordWithSender({
-      command: 'ballin_config',
+      command: 'ballin config',
       status: 'failure',
       durationBucket: '1-10s',
       args: ['get', 'backup.id'],
@@ -275,7 +275,7 @@ describe('analytics client', () => {
       schemaVersion: 1,
       installId: fixedInstallId,
       dateBucket: '2026-06-27',
-      command: 'ballin_config',
+      command: 'ballin config',
       status: 'failure',
       durationBucket: '1-10s',
     });
@@ -458,7 +458,7 @@ describe('analytics client', () => {
     process.exitCode = 17;
 
     try {
-      await runWithCommandAnalytics('ballin_update', () => {}, {
+      await runWithCommandAnalytics('ballin self-update', () => {}, {
         endpoint: 'https://analytics.example.test/v1/events',
         ingestToken: 'test-token',
         env: {},
@@ -475,7 +475,7 @@ describe('analytics client', () => {
     }
 
     assert.deepInclude(payloads[0], {
-      command: 'ballin_update',
+      command: 'ballin self-update',
       status: 'success',
       durationBucket: '<1s',
     });
@@ -643,7 +643,7 @@ describe('analytics client', () => {
         schemaVersion: 1,
         installId: fixedInstallId,
         dateBucket: '2026-06-27',
-        command: 'up',
+        command: 'ballin update',
         status: 'success',
         durationBucket: '<1s',
         appVersion: '1.0.0',
