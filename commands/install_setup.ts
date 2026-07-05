@@ -4,6 +4,9 @@ const {
   ensureAnalyticsInstallId,
 } = require('./analytics.ts');
 const {
+  createConfigStore,
+} = require('../config/store.ts');
+const {
   commandExists,
   readCommandOutput,
   runCommand,
@@ -87,55 +90,6 @@ const readJsonObject = (filePath: string): ConfigObject | null => {
   }
 };
 
-// Installer setup can target an arbitrary checkout, while config/index.ts binds
-// its config path at module load. Keep these repoDir-scoped helpers local.
-const getNestedConfigValue = (config: ConfigObject, keyPath: string): ConfigValue | undefined => {
-  const keys = keyPath.split('.');
-  let value: ConfigValue = config;
-
-  for (const key of keys) {
-    if (value === null || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, key)) {
-      return undefined;
-    }
-    value = value[key];
-  }
-
-  return value;
-};
-
-const setNestedConfigValue = (config: ConfigObject, keyPath: string, value: ConfigLeaf): boolean => {
-  const keys = keyPath.split('.');
-  const keyToSet = keys.pop();
-  let container: ConfigValue = config;
-
-  if (!keyToSet) {
-    return false;
-  }
-
-  for (const key of keys) {
-    if (
-      container === null
-      || typeof container !== 'object'
-      || !Object.prototype.hasOwnProperty.call(container, key)
-    ) {
-      return false;
-    }
-    container = container[key];
-  }
-
-  if (
-    container === null
-    || typeof container !== 'object'
-    || !Object.prototype.hasOwnProperty.call(container, keyToSet)
-    || (typeof container[keyToSet] === 'object' && container[keyToSet] !== null)
-  ) {
-    return false;
-  }
-
-  container[keyToSet] = value;
-  return true;
-};
-
 const configHasBackupHost = (repoDir: string): boolean => {
   const config = readJsonObject(configPathFor(repoDir));
   return isConfigObject(config?.backup) && Object.prototype.hasOwnProperty.call(config.backup, 'host');
@@ -186,23 +140,17 @@ const configure = (repoDir: string, docsUrl: string): boolean => {
 };
 
 const configValue = (configPath: string, key: string): string | null => {
-  const config = readJsonObject(configPath);
-  if (!config) {
-    return null;
-  }
-  const value = getNestedConfigValue(config, key);
-  if (value === undefined || (typeof value === 'object' && value !== null)) {
+  const value = createConfigStore({ configPath }).readLeafValue(key);
+  if (value === undefined) {
     return null;
   }
   return value === null ? 'null' : String(value);
 };
 
 const setConfigValue = (configPath: string, key: string, value: string): boolean => {
-  const config = readJsonObject(configPath);
-  if (!config || !setNestedConfigValue(config, key, value)) {
+  if (!createConfigStore({ configPath }).writeLeafValue(key, value)) {
     return false;
   }
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
   process.stdout.write(`"${key}" set to: ${JSON.stringify(value)}\n`);
   return true;
 };

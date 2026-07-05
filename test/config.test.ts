@@ -5,6 +5,9 @@ const os = require('os');
 const path = require('path');
 const defaultConfig = require('../config/.defaultConfig.json');
 const configModule = require('../config/index.ts');
+const {
+  createConfigStore,
+} = require('../config/store.ts');
 
 const {
   getConfig,
@@ -13,6 +16,7 @@ const {
   configPath,
   fetchConfig,
   configMessages,
+  stringify,
 } = configModule;
 
 type SpawnArgs = string[];
@@ -85,6 +89,73 @@ describe('config', () => {
   });
   afterEach('Reset config', () => {
     fs.writeFileSync(configPath, savedConfig, 'utf8');
+  });
+
+  describe('path-scoped config store', () => {
+    let tempDir: string;
+    let explicitConfigPath: string;
+    const explicitDefaultConfigPath = path.join(__dirname, '..', 'config', '.defaultConfig.json');
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-store-'));
+      explicitConfigPath = path.join(tempDir, 'ballin.config.json');
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const writeExplicitConfig = (config: unknown) => {
+      fs.writeFileSync(explicitConfigPath, stringify(config), 'utf8');
+      return createConfigStore({
+        configPath: explicitConfigPath,
+        defaultConfigPath: explicitDefaultConfigPath,
+      });
+    };
+
+    it('reads and writes an explicit config path independently from the default fixture', () => {
+      const store = writeExplicitConfig({
+        ...defaultConfig,
+        backup: {
+          ...defaultConfig.backup,
+          id: 'explicit-gist-id',
+        },
+      });
+
+      assert.notEqual(explicitConfigPath, configPath);
+      assert.equal(store.readLeafValue('backup.id'), 'explicit-gist-id');
+      assert.isNull(getConfig('backup.id'));
+      assert.isTrue(store.writeLeafValue('backup.host', 'github.explicit.test'));
+      assert.equal(JSON.parse(fs.readFileSync(explicitConfigPath, 'utf8')).backup.host, 'github.explicit.test');
+      assert.equal(getConfig('backup.host'), 'github.com');
+    });
+
+    it('preserves nested path validation for explicit-path reads and writes', () => {
+      const store = writeExplicitConfig(defaultConfig);
+      const configBeforeWrite = fs.readFileSync(explicitConfigPath, 'utf8');
+
+      assert.isUndefined(store.readLeafValue('missing'));
+      assert.isUndefined(store.readLeafValue('constructor'));
+      assert.isUndefined(store.readLeafValue('__proto__.nested'));
+      assert.isUndefined(store.readLeafValue('update'));
+      assert.isFalse(store.writeLeafValue('missing', 'value'));
+      assert.isFalse(store.writeLeafValue('constructor', 'value'));
+      assert.isFalse(store.writeLeafValue('__proto__.nested', 'value'));
+      assert.isFalse(store.writeLeafValue('update', 'value'));
+      assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), configBeforeWrite);
+    });
+
+    it('returns leaf values and rejects malformed explicit config files without mutating them', () => {
+      const store = writeExplicitConfig(defaultConfig);
+
+      assert.isNull(store.readLeafValue('backup.id'));
+      assert.equal(store.readLeafValue('backup.host'), 'github.com');
+
+      fs.writeFileSync(explicitConfigPath, '{not json\n', 'utf8');
+      assert.isUndefined(store.readLeafValue('backup.host'));
+      assert.isFalse(store.writeLeafValue('backup.host', 'github.example.test'));
+      assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), '{not json\n');
+    });
   });
 
   describe('getConfig', () => {
