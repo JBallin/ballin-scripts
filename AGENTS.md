@@ -25,16 +25,16 @@ surface.
 
 ## Testing and safety
 
-- Do not run install, uninstall, `up`, `gu`, Homebrew, Gist, GitHub, npm-global,
+- Do not run install, uninstall, `ballin update`, `ballin backup`, Homebrew, Gist, GitHub, npm-global,
   `softwareupdate`, symlink, or other network-affecting operations against the
   real user environment.
-- Tests for install, uninstall, `up`, `gu`, Homebrew, Gist, GitHub, npm-global,
+- Tests for install, uninstall, `ballin update`, `ballin backup`, Homebrew, Gist, GitHub, npm-global,
   `softwareupdate`, symlink, or other network-affecting operations must use
   temporary directories, fixture files, complete child-process environments, and
   command stubs instead of the real user environment.
-- Do not manually smoke-test `bin/ballin_uninstall`, `bin/ballin_update`,
-  `install.sh`, `bin/up`, or `bin/gu` against the live checkout. If a direct
-  invocation is needed, run it through the test harness with temp roots such as
+- Do not manually smoke-test `install.sh` or `bin/ballin` with `uninstall`,
+  `update`, or `backup` against the live checkout. If a direct invocation is
+  needed, run it through the test harness with temp roots such as
   `BALLIN_UNINSTALL_TEST_SYSTEM_ROOT`, isolated config, and stubbed external
   commands.
 - Follow the existing `spawnSync` harness style, using hooks like
@@ -58,4 +58,4 @@ surface.
 - Keep `config/.defaultConfig.json`, `config/updateConfig.ts`, and config tests
   in sync when adding or changing settings.
 - `docs/optional-capabilities.md` covers Node.js setup, optional integrations,
-  and `up` settings; update it when those user-facing choices change.
+  and `ballin update` settings; update it when those user-facing choices change.

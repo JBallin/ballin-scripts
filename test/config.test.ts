@@ -18,7 +18,7 @@ const {
 type SpawnArgs = string[];
 
 const fetchConfigJSON = () => fetchConfig().configJSON;
-const cliPath = path.join(__dirname, '..', 'bin', 'ballin_config');
+const cliPath = path.join(__dirname, '..', 'bin', 'ballin');
 
 const currentConfigJSON = fetchConfigJSON();
 const invalidPathCases = [
@@ -40,7 +40,7 @@ const setTest = (keys: string, value: string, action = setConfig) => {
 
 const setConfigAction = (keys: string, value: string) => configAction('set', keys, value);
 
-const runConfigCli = (args: SpawnArgs = []) => spawnSync(process.execPath, [cliPath, ...args], {
+const runConfigCli = (args: SpawnArgs = []) => spawnSync(process.execPath, [cliPath, 'config', ...args], {
   encoding: 'utf8',
   env: process.env,
 });
@@ -205,7 +205,7 @@ describe('config', () => {
   });
 
   it('CLI remains executable through its shebang', () => {
-    const result = spawnSync(cliPath, ['get', 'backup.id'], {
+    const result = spawnSync(cliPath, ['config', 'get', 'backup.id'], {
       encoding: 'utf8',
       env: process.env,
     });
@@ -217,12 +217,12 @@ describe('config', () => {
 
   it('CLI remains executable through the installed symlink model', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-bin-'));
-    const symlinkPath = path.join(tempDir, 'ballin_config');
+    const symlinkPath = path.join(tempDir, 'ballin');
 
     try {
       fs.symlinkSync(cliPath, symlinkPath);
 
-      const result = spawnSync(symlinkPath, ['get', 'backup.id'], {
+      const result = spawnSync(symlinkPath, ['config', 'get', 'backup.id'], {
         encoding: 'utf8',
         env: process.env,
       });

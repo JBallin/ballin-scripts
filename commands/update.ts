@@ -5,6 +5,9 @@ const {
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
+  getConfig,
+} = require('../config/index.ts');
+const {
   formatDefaultDoctorReport,
 } = require('./doctor_report.ts');
 const {
@@ -28,19 +31,19 @@ type NvmInstallResult = {
   status: number;
 };
 
-const configValue = (key: string, env = process.env): string => {
-  const result = runCommand('ballin_config', ['get', key], {
-    env,
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  if (result.error) {
-    reportSpawnError('ballin_config', result.error);
+const configValue = (key: string): string => {
+  try {
+    const value = getConfig(key);
+    if (typeof value === 'string' && value.startsWith('INVALID:')) {
+      return '';
+    }
+    return value === null ? '' : String(value).trim();
+  } catch (error) {
+    if (error instanceof Error) {
+      writeStderrLine(`Unable to read config: ${error.message}`);
+    }
     return '';
   }
-  if (result.status !== 0) {
-    return '';
-  }
-  return result.stdout.trim();
 };
 
 const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
@@ -56,15 +59,15 @@ const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
 };
 
 const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
-  const envPath = makeTempFile('ballin-up-env-');
+  const envPath = makeTempFile('ballin-update-env-');
   try {
     const result = runCommand('bash', [
       '-c',
-      '. "$NVM_DIR/nvm.sh"; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UP_ENV_PATH"; exit "$nvm_status"',
+      '. "$NVM_DIR/nvm.sh"; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UPDATE_ENV_PATH"; exit "$nvm_status"',
     ], {
       env: {
         ...env,
-        BALLIN_UP_ENV_PATH: envPath,
+        BALLIN_UPDATE_ENV_PATH: envPath,
       },
       stdio: 'inherit',
     });
@@ -91,7 +94,7 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
       };
     }
 
-    delete nextEnv.BALLIN_UP_ENV_PATH;
+    delete nextEnv.BALLIN_UPDATE_ENV_PATH;
     return {
       env: nextEnv,
       status,
@@ -112,6 +115,10 @@ const nodeVersionForEnv = (env: NodeJS.ProcessEnv): string | undefined => {
   return result.stdout.trim() || undefined;
 };
 
+const ballinCommandPath = (): string => (
+  process.env.BALLIN_TEST_BALLIN_PATH || path.join(__dirname, '..', 'bin', 'ballin')
+);
+
 const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
   const repoDir = path.join(__dirname, '..');
   const report = collectSetupReadiness({
@@ -124,7 +131,7 @@ const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
   process.stdout.write(formatDefaultDoctorReport(report));
 };
 
-function runUpCommand(): void {
+function runUpdateCommand(): void {
   let childEnv = process.env;
   let exitStatus = 0;
 
@@ -149,7 +156,7 @@ function runUpCommand(): void {
     };
     runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
 
-    if (configValue('update.cleanup', childEnv) === 'true') {
+    if (configValue('update.cleanup') === 'true') {
       progress('Cleaning up Homebrew packages');
       runIntegrationCommand('brew', ['cleanup'], { env: childEnv });
     }
@@ -158,7 +165,7 @@ function runUpCommand(): void {
     runIntegrationCommand('brew', ['doctor'], { env: childEnv });
   }
 
-  if (configValue('update.nvm', childEnv) === 'true') {
+  if (configValue('update.nvm') === 'true') {
     progress('Updating Node.js LTS');
     const nvmDir = process.env.NVM_DIR ?? '';
     const nvmScript = path.join(nvmDir, 'nvm.sh');
@@ -171,11 +178,11 @@ function runUpCommand(): void {
     } else {
       writeStderrLine();
       writeStderrLine('⚠️  Skipping Node.js LTS update: unable to load nvm.');
-      writeStderrLine('Set NVM_DIR to your nvm installation or disable this update with: ballin_config set update.nvm false');
+      writeStderrLine('Set NVM_DIR to your nvm installation or disable this update with: ballin config set update.nvm false');
     }
   }
 
-  if (commandExists('npm', { env: childEnv }) && configValue('update.npm', childEnv) === 'true') {
+  if (commandExists('npm', { env: childEnv }) && configValue('update.npm') === 'true') {
     progress('Updating global npm packages');
     runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
   }
@@ -185,23 +192,23 @@ function runUpCommand(): void {
     runIntegrationCommand('mas', ['upgrade'], { env: childEnv });
   }
 
-  if (commandExists('softwareupdate', { env: childEnv }) && configValue('update.softwareupdate', childEnv) === 'true') {
+  if (commandExists('softwareupdate', { env: childEnv }) && configValue('update.softwareupdate') === 'true') {
     progress('Installing macOS updates');
     runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
   }
 
-  if (configValue('update.selfUpdate', childEnv) === 'true') {
+  if (configValue('update.selfUpdate') === 'true') {
     progress('Updating ballin-scripts');
-    const updateStatus = runIntegrationCommand('ballin_update', [], { env: childEnv });
+    const updateStatus = runIntegrationCommand(ballinCommandPath(), ['self-update'], { env: childEnv });
     if (updateStatus === 0) {
       progress('Checking Ballin readiness');
       reportBallinReadiness(childEnv);
     }
   }
 
-  if (configValue('update.backup', childEnv) === 'true') {
+  if (configValue('update.backup') === 'true') {
     progress('Backing up development environment');
-    runIntegrationCommand('ballin', ['backup'], { env: childEnv });
+    runIntegrationCommand(ballinCommandPath(), ['backup'], { env: childEnv });
   }
 
   if (exitStatus !== 0) {
@@ -209,11 +216,11 @@ function runUpCommand(): void {
   }
 }
 
-const runUpCli = (): void => {
-  void runWithCommandAnalytics('up', runUpCommand).catch(rethrowCommandError);
+const runUpdateCli = (): void => {
+  void runWithCommandAnalytics('ballin update', runUpdateCommand).catch(rethrowCommandError);
 };
 
 module.exports = {
-  runUpCommand,
-  runUpCli,
+  runUpdateCommand,
+  runUpdateCli,
 };
