@@ -128,7 +128,8 @@ globally, use `npx wrangler` in place of `wrangler`.
 
 7. Add these GitHub repository secrets so Actions can deploy the Worker:
 
-   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_API_TOKEN`, from a Cloudflare Account API Token created with
+     the `Edit Cloudflare Workers` template
    - `CLOUDFLARE_ACCOUNT_ID`
    - `CLOUDFLARE_D1_DATABASE_ID`
 

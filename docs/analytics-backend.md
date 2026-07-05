@@ -89,7 +89,9 @@ For production setup or recreation:
 - set `INSTALL_ID_HASH_SECRET`
 - set `INGEST_TOKEN`
 - add GitHub repository secrets `CLOUDFLARE_API_TOKEN`,
-  `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`
+  `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`; use a Cloudflare
+  Account API Token created with the `Edit Cloudflare Workers` template for
+  `CLOUDFLARE_API_TOKEN`
 - apply `analytics-worker/migrations/0001_initial.sql` with `--remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
   change landed on `main`
