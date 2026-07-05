@@ -14,7 +14,7 @@ const {
 
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
 
-function runBallinUpdateCommand(): void {
+function runSelfUpdateCommand(): void {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
 
   writeStdoutLine('👟 getting fresh kicks...');
@@ -35,11 +35,11 @@ function runBallinUpdateCommand(): void {
   });
 }
 
-const runBallinUpdateCli = (): void => {
-  void runWithCommandAnalytics('ballin_update', runBallinUpdateCommand).catch(rethrowCommandError);
+const runSelfUpdateCli = (): void => {
+  void runWithCommandAnalytics('ballin self-update', runSelfUpdateCommand).catch(rethrowCommandError);
 };
 
 module.exports = {
-  runBallinUpdateCommand,
-  runBallinUpdateCli,
+  runSelfUpdateCommand,
+  runSelfUpdateCli,
 };

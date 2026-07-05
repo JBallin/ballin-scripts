@@ -46,9 +46,6 @@ type CollectSetupReadinessOptions = {
 
 const requiredCommandShims = [
   'ballin',
-  'ballin_config',
-  'ballin_uninstall',
-  'ballin_update',
 ];
 
 const isConfigObject = (value: unknown): value is ConfigObject => (

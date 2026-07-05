@@ -53,9 +53,6 @@ const allowedCommands = new Set([
   'ballin self-update',
   'ballin uninstall',
   'ballin update',
-  'ballin_config',
-  'ballin_uninstall',
-  'ballin_update',
 ]);
 const allowedPayloadKeys = new Set([
   'schemaVersion',

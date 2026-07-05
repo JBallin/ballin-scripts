@@ -76,9 +76,6 @@ const allowedCommands = new Set([
   'ballin self-update',
   'ballin uninstall',
   'ballin update',
-  'ballin_config',
-  'ballin_uninstall',
-  'ballin_update',
 ]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
@@ -89,7 +86,7 @@ const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.wo
 const productionAnalyticsIngestToken = '6jC_OqsMynyQc3FKXgUN7aP3bbDQ_H_DMhGDrw7t6RE';
 const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
   'ballin-scripts collects minimal anonymous usage analytics after this notice.',
-  'Disable: ballin_config set analytics.enabled false',
+  'Disable: ballin config set analytics.enabled false',
   `Details: ${docsUrl}`,
 ].join('\n');
 const analyticsNotice = analyticsNoticeFor();

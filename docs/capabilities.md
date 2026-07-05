@@ -28,7 +28,7 @@ can snapshot:
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
 | Shell startup files | `bash_profile.sh`, `bashrc.sh`, `profile.sh`, `zprofile.sh`, `zshrc.sh` | Matching dotfiles in `HOME`. |
-| Bash completions | `bash_completions` | Homebrew completion directory or `BALLIN_GU_BASH_COMPLETION_DIR`. |
+| Bash completions | `bash_completions` | Homebrew completion directory or `BALLIN_BACKUP_BASH_COMPLETION_DIR`. |
 | Homebrew inventory | `brew_list`, `brew_leaves`, `brew_cask`, `brew_services`, `Brewfile` | `brew` on `PATH`. |
 | Git config | `gitconfig`, `gitignore_global` | Matching dotfiles in `HOME`. |
 | Global npm packages | `npm_global` | `npm` on `PATH`. |
@@ -37,5 +37,5 @@ can snapshot:
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
 | Brackets | `brackets_settings.json`, `brackets_keymap.json`, `brackets_extensions`, `brackets_disabled_extensions` | Brackets support files in `HOME`. |
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
-| Ballin config | `ballin_config` | Local `ballin.config.json`. |
+| Ballin config | `ballin_config` | Local `ballin.config.json` file. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |

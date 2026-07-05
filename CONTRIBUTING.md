@@ -10,7 +10,7 @@
 
 ```shell
 $ cd /path/to/ballin-scripts
-$ ballin_update # Update project/config
+$ ballin self-update # Update project/config
 $ git checkout -b $BRANCH_NAME
 $ nvm use # If you use nvm
 $ npm install
@@ -23,4 +23,4 @@ For more repo context, see [AGENTS.md](AGENTS.md).
 
 ## Suggestions Welcome
 
-Please open issues (or PR's) with any suggestions for additions to `gu`/`up` or anything else.
+Please open issues (or PR's) with any suggestions for additions to `ballin backup`, `ballin update`, or anything else.

@@ -7,11 +7,11 @@ const {
   runConfigCli,
 } = require('../config/cli.ts');
 const {
-  runBallinUpdateCommand,
-} = require('./ballin_update.ts');
+  runSelfUpdateCommand,
+} = require('./self_update.ts');
 const {
-  runBallinUninstallCli,
-} = require('./ballin_uninstall.ts');
+  runUninstallCommand,
+} = require('./uninstall.ts');
 const {
   collectSetupReadiness,
 } = require('./setup_readiness.ts');
@@ -20,11 +20,11 @@ const {
   formatVerboseDoctorReport,
 } = require('./doctor_report.ts');
 const {
-  runGuCommand,
-} = require('./gu.ts');
+  runBackupCommand,
+} = require('./backup.ts');
 const {
-  runUpCommand,
-} = require('./up.ts');
+  runUpdateCommand,
+} = require('./update.ts');
 import type { DoctorReport } from './doctor_report.ts';
 
 const format = {
@@ -126,14 +126,14 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       writeStdout(ballinHelp);
       return;
     case 'update':
-      runNoArgCommand('ballin update', commandArgs, runUpCommand);
+      runNoArgCommand('ballin update', commandArgs, runUpdateCommand);
       return;
     case 'backup':
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
         writeStdout(ballinHelp);
         return;
       }
-      runGuCommand(commandArgs);
+      runBackupCommand(commandArgs);
       return;
     case 'doctor':
       runDoctorCommand(commandArgs);
@@ -142,10 +142,10 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       runConfigCli(commandArgs);
       return;
     case 'self-update':
-      runNoArgCommand('ballin self-update', commandArgs, runBallinUpdateCommand);
+      runNoArgCommand('ballin self-update', commandArgs, runSelfUpdateCommand);
       return;
     case 'uninstall':
-      runNoArgCommand('ballin uninstall', commandArgs, runBallinUninstallCli);
+      runNoArgCommand('ballin uninstall', commandArgs, runUninstallCommand);
       return;
     default:
       writeStderr(`Unknown Ballin command: ${command}\nTry: ballin --help\n`);
