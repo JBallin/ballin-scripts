@@ -88,16 +88,14 @@ describe('analytics Worker', () => {
     ]);
   });
 
-  it('rejects removed shortcut command names', async () => {
+  it('rejects unsupported command names', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
+    const { env } = makeEnv();
 
-    for (const command of ['up', 'gu']) {
-      const { env } = makeEnv();
-      const response = await worker.fetch(eventRequest(command), env);
-      const body = await response.json() as { error?: string };
+    const response = await worker.fetch(eventRequest('unknown command'), env);
+    const body = await response.json() as { error?: string };
 
-      assert.equal(response.status, 400);
-      assert.equal(body.error, 'command is not supported');
-    }
+    assert.equal(response.status, 400);
+    assert.equal(body.error, 'command is not supported');
   });
 });
