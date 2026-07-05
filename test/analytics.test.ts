@@ -263,7 +263,7 @@ describe('analytics client', () => {
       command: 'ballin_config',
       status: 'failure',
       durationBucket: '1-10s',
-      args: ['get', 'gu.id'],
+      args: ['get', 'backup.id'],
       path: '/Users/example',
       rawError: 'secret',
       now: fixedNow,

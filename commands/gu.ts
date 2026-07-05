@@ -150,8 +150,8 @@ const configValue = (key: string): ConfigValueResult => {
 };
 
 const guConfig = (): GuConfigResult => {
-  const idResult = configValue('gu.id');
-  const hostResult = configValue('gu.host');
+  const idResult = configValue('backup.id');
+  const hostResult = configValue('backup.host');
   const id = idResult.value;
   const host = hostResult.value;
 
@@ -160,10 +160,10 @@ const guConfig = (): GuConfigResult => {
   }
 
   if (!id) {
-    writeStderrLine('gu: missing config value gu.id');
+    writeStderrLine('gu: missing config value backup.id');
   }
   if (!host) {
-    writeStderrLine('gu: missing config value gu.host');
+    writeStderrLine('gu: missing config value backup.host');
   }
   return {
     config: null,

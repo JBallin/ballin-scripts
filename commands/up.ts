@@ -149,7 +149,7 @@ function runUpCommand(): void {
     };
     runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
 
-    if (configValue('up.cleanup', childEnv) === 'true') {
+    if (configValue('update.cleanup', childEnv) === 'true') {
       progress('Cleaning up Homebrew packages');
       runIntegrationCommand('brew', ['cleanup'], { env: childEnv });
     }
@@ -158,7 +158,7 @@ function runUpCommand(): void {
     runIntegrationCommand('brew', ['doctor'], { env: childEnv });
   }
 
-  if (configValue('up.nvm', childEnv) === 'true') {
+  if (configValue('update.nvm', childEnv) === 'true') {
     progress('Updating Node.js LTS');
     const nvmDir = process.env.NVM_DIR ?? '';
     const nvmScript = path.join(nvmDir, 'nvm.sh');
@@ -171,11 +171,11 @@ function runUpCommand(): void {
     } else {
       writeStderrLine();
       writeStderrLine('⚠️  Skipping Node.js LTS update: unable to load nvm.');
-      writeStderrLine('Set NVM_DIR to your nvm installation or disable this update with: ballin_config set up.nvm false');
+      writeStderrLine('Set NVM_DIR to your nvm installation or disable this update with: ballin_config set update.nvm false');
     }
   }
 
-  if (commandExists('npm', { env: childEnv }) && configValue('up.npm', childEnv) === 'true') {
+  if (commandExists('npm', { env: childEnv }) && configValue('update.npm', childEnv) === 'true') {
     progress('Updating global npm packages');
     runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
   }
@@ -185,12 +185,12 @@ function runUpCommand(): void {
     runIntegrationCommand('mas', ['upgrade'], { env: childEnv });
   }
 
-  if (commandExists('softwareupdate', { env: childEnv }) && configValue('up.softwareupdate', childEnv) === 'true') {
+  if (commandExists('softwareupdate', { env: childEnv }) && configValue('update.softwareupdate', childEnv) === 'true') {
     progress('Installing macOS updates');
     runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
   }
 
-  if (configValue('up.ballin', childEnv) === 'true') {
+  if (configValue('update.selfUpdate', childEnv) === 'true') {
     progress('Updating ballin-scripts');
     const updateStatus = runIntegrationCommand('ballin_update', [], { env: childEnv });
     if (updateStatus === 0) {
@@ -199,7 +199,7 @@ function runUpCommand(): void {
     }
   }
 
-  if (configValue('up.gu', childEnv) === 'true') {
+  if (configValue('update.backup', childEnv) === 'true') {
     progress('Backing up development environment');
     runIntegrationCommand('ballin', ['backup'], { env: childEnv });
   }

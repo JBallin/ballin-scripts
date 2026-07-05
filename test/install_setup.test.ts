@@ -127,8 +127,8 @@ if [ -f "$host_file" ]; then
   done < "$host_file"
 fi
 case "$1:$2" in
-  get:gu.host) printf '%s\\n' "$configured_host" ;;
-  get:gu.id)
+  get:backup.host) printf '%s\\n' "$configured_host" ;;
+  get:backup.id)
     if [ -f "$gist_id_file" ]; then
       while IFS= read -r gist_id; do
         printf '%s\\n' "$gist_id"
@@ -137,11 +137,11 @@ case "$1:$2" in
       printf '%s\\n' 'null'
     fi
     ;;
-  set:gu.host)
+  set:backup.host)
     printf '%s\\n' "$3" > "$host_file"
-    printf '%s\\n' "\\"gu.host\\" set to: \\"$3\\""
+    printf '%s\\n' "\\"backup.host\\" set to: \\"$3\\""
     ;;
-  set:gu.id)
+  set:backup.id)
     printf '%s\\n' "$3" > "$gist_id_file"
     analytics_json=''
     if [ -f "$TEST_REPO_DIR/ballin.config.json" ]; then
@@ -150,8 +150,8 @@ case "$1:$2" in
         *'"analytics":{"enabled":"false"}'*) analytics_json=',"analytics":{"enabled":"false"}' ;;
       esac
     fi
-    printf '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":"%s","host":"%s"}%s}\\n' "$3" "$configured_host" "$analytics_json" > "$TEST_REPO_DIR/ballin.config.json"
-    printf '%s\\n' "\\"gu.id\\" set to: \\"$3\\""
+    printf '{"update":{"cleanup":"false","selfUpdate":"true","backup":"true","softwareupdate":"false","npm":"true","nvm":"true"},"backup":{"id":"%s","host":"%s"}%s}\\n' "$3" "$configured_host" "$analytics_json" > "$TEST_REPO_DIR/ballin.config.json"
+    printf '%s\\n' "\\"backup.id\\" set to: \\"$3\\""
     ;;
 esac
 `, sourceBinDir);
@@ -161,9 +161,9 @@ esac
     writeExecutable('ballin_config', `#!/bin/bash
 printf 'ballin_config:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 case "$1:$2" in
-  get:gu.host) printf '%s\\n' '${host}' ;;
-  get:gu.id) printf '%s\\n' '${id}' ;;
-  set:gu.host|set:gu.id) printf '%s\\n' "\\"$2\\" set to: \\"$3\\"" ;;
+  get:backup.host) printf '%s\\n' '${host}' ;;
+  get:backup.id) printf '%s\\n' '${id}' ;;
+  set:backup.host|set:backup.id) printf '%s\\n' "\\"$2\\" set to: \\"$3\\"" ;;
 esac
 `, sourceBinDir);
   };
@@ -239,7 +239,7 @@ esac
       FAKE_COMMAND_LOG: commandLogPath,
       FAKE_GH_AUTH_STATUS: '0',
       FAKE_GIST_CONFIG_STATUS: '0',
-      FAKE_RESTORED_CONFIG: '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":null,"host":"github.example.test"}}',
+      FAKE_RESTORED_CONFIG: '{"update":{"cleanup":"false","selfUpdate":"true","backup":"true","softwareupdate":"false","npm":"true","nvm":"true"},"backup":{"id":null,"host":"github.example.test"}}',
       TEST_DIR: testDir,
       TEST_REPO_DIR: repoDir,
       ...env,
@@ -323,7 +323,7 @@ esac
     assert.isTrue(result);
     assert.include(
       fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'),
-      '"up"',
+      '"update"',
     );
   });
 
@@ -562,12 +562,12 @@ esac
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(commandLog(), 'ballin_config:set gu.host github.enterprise.test\n');
+    assert.include(commandLog(), 'ballin_config:set backup.host github.enterprise.test\n');
     assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
   });
 
-  it('prompts for a host when config migration adds gu.host', () => {
+  it('prompts for a host when config migration adds backup.host', () => {
     installConfigSources();
     installGistConfigCommand();
     installFakeGhCommand();
@@ -584,7 +584,7 @@ esac
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(commandLog(), 'ballin_config:set gu.host github.enterprise.test\n');
+    assert.include(commandLog(), 'ballin_config:set backup.host github.enterprise.test\n');
     assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
     assert.notInclude(commandLog(), 'gh:gist');
   });
@@ -603,8 +603,8 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "INVALID: Expected backup marker in gist 'wrong-gist-id'");
     assert.include(commandLog(), 'gh:gist view wrong-gist-id --raw --filename .MyConfig.md');
-    assert.notInclude(commandLog(), 'ballin_config:set gu.id wrong-gist-id');
-    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
+    assert.notInclude(commandLog(), 'ballin_config:set backup.id wrong-gist-id');
+    assert.include(commandLog(), 'ballin_config:set backup.id returning-gist-id\n');
   });
 
   it('restores config values from an adopted backup Gist', () => {
@@ -621,7 +621,20 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
     assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
-    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
+    assert.include(commandLog(), 'ballin_config:set backup.id returning-gist-id\n');
+    const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
+    assert.deepEqual(restoredConfig.update, {
+      cleanup: 'false',
+      selfUpdate: 'true',
+      backup: 'true',
+      softwareupdate: 'false',
+      npm: 'true',
+      nvm: 'true',
+    });
+    assert.deepEqual(restoredConfig.backup, {
+      id: 'returning-gist-id',
+      host: 'github.example.test',
+    });
   });
 
   it('accepts an adopted backup marker without a trailing newline like Bash did', () => {
@@ -640,14 +653,14 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
-    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
+    assert.include(commandLog(), 'ballin_config:set backup.id returning-gist-id\n');
   });
 
   it('rolls back local config when a restored Gist config cannot migrate', () => {
     installConfigSources();
     installGistConfigCommand();
     installFakeGhCommand();
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{"gu":{"id":null,"host":"github.example.test"},"local":"keep"}\n');
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{"backup":{"id":null,"host":"github.example.test"},"local":"keep"}\n');
 
     const result = runGistSetup({
       env: { FAKE_RESTORED_CONFIG: '{"gu":' },
@@ -657,9 +670,9 @@ esac
     assert.equal(result.status, 1);
     assert.equal(
       fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'),
-      '{"gu":{"id":null,"host":"github.example.test"},"local":"keep"}\n',
+      '{"backup":{"id":null,"host":"github.example.test"},"local":"keep"}\n',
     );
-    assert.notInclude(commandLog(), 'ballin_config:set gu.id returning-gist-id');
+    assert.notInclude(commandLog(), 'ballin_config:set backup.id returning-gist-id');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
   });
@@ -680,7 +693,7 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'No ballin_config snapshot was found in that gist');
-    assert.include(commandLog(), 'ballin_config:set gu.id returning-gist-id\n');
+    assert.include(commandLog(), 'ballin_config:set backup.id returning-gist-id\n');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
   });
@@ -701,7 +714,7 @@ esac
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
     assert.include(result.stdout, 'Deleted existing .gu-cache folder');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
-    assert.include(commandLog(), 'ballin_config:set gu.id new-gist-id\n');
+    assert.include(commandLog(), 'ballin_config:set backup.id new-gist-id\n');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.gu-cache')));
   });
@@ -711,7 +724,7 @@ esac
     installStaticConfigCommand();
     installFakeGhCommand();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
-      gu: { id: 'existing-gist-id', host: 'github.example.test' },
+      backup: { id: 'existing-gist-id', host: 'github.example.test' },
       analytics: { enabled: 'false' },
     }));
 
@@ -771,7 +784,7 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
-    assert.include(commandLog(), 'ballin_config:set gu.id new-gist-id\n');
+    assert.include(commandLog(), 'ballin_config:set backup.id new-gist-id\n');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
   });
 });

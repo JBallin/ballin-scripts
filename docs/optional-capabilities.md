@@ -7,12 +7,12 @@ while letting you opt in to broader automation.
 ## Working with settings
 
 Use `ballin config` to read and update local settings. Settings use dot paths,
-such as `up.cleanup` or `analytics.enabled`.
+such as `update.cleanup` or `analytics.enabled`.
 
 ```shell
 ballin config
-ballin config get up.cleanup
-ballin config set up.cleanup false
+ballin config get update.cleanup
+ballin config set update.cleanup false
 ballin config reset
 ```
 
@@ -41,10 +41,10 @@ After installing `ballin-scripts`, optionally let `ballin update` install newer
 LTS releases:
 
 ```shell
-ballin config set up.nvm true
+ballin config set update.nvm true
 ```
 
-`up.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
+`update.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
 `false` because enabling it opts into newer LTS releases, and installing a new
 Node.js version does not migrate your globally installed npm packages
 automatically. If nvm cannot be loaded, `ballin update` warns and continues
@@ -57,7 +57,7 @@ brew install node
 ```
 
 With this option, Homebrew manages Node.js updates along with your other formulae.
-The `up.nvm` setting does not apply.
+The `update.nvm` setting does not apply.
 
 ## Mac App Store apps
 
@@ -105,14 +105,14 @@ ballin config set analytics.enabled false
 
 ## `ballin update` settings
 
-Change a setting with `ballin config set up.<name> true` or
-`ballin config set up.<name> false`.
+Change a setting with `ballin config set update.<name> true` or
+`ballin config set update.<name> false`.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
-| `up.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
-| `up.ballin` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
-| `up.gu` | `false` | Runs `ballin backup` to back up your development environment. Enable it when you want each update to also modify your backup gist. |
-| `up.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
-| `up.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
-| `up.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |
+| `update.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
+| `update.selfUpdate` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
+| `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Enable it when you want each update to also modify your backup gist. |
+| `update.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
+| `update.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
+| `update.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |
