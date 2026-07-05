@@ -39,12 +39,6 @@ const removeOwnedLink = (linkPath: string, targetPath: string): void => {
   }
 };
 
-const legacyBinNames = [
-  'ballin_config',
-  'ballin_update',
-  'ballin_uninstall',
-];
-
 const runUninstallCommand = (): void => {
   const homeDir = process.env.HOME ?? '';
   const repoDir = path.join(homeDir, '.ballin-scripts');
@@ -70,7 +64,7 @@ const runUninstallCommand = (): void => {
 
   const repoBinDir = path.join(repoDir, 'bin');
   if (fs.existsSync(repoBinDir)) {
-    [...fs.readdirSync(repoBinDir), ...legacyBinNames].forEach((binName: string) => {
+    fs.readdirSync(repoBinDir).forEach((binName: string) => {
       const targetPath = path.join(repoBinDir, binName);
       binDirs.forEach((binDir) => {
         removeOwnedLink(path.join(binDir, binName), targetPath);

@@ -89,9 +89,7 @@ exit 2
   it('removes only owned user-local links, then removes the repository', () => {
     const userBin = path.join(homeDir, '.local', 'bin');
     const ballin = createCommand('ballin');
-    const legacyConfig = createCommand('ballin_config');
     fs.symlinkSync(ballin, path.join(userBin, 'ballin'));
-    fs.symlinkSync(legacyConfig, path.join(userBin, 'ballin_config'));
     fs.writeFileSync(path.join(userBin, 'unrelated-file'), 'keep me\n');
     fs.symlinkSync(path.join(testDir, 'unrelated'), path.join(userBin, 'unrelated-link'));
 
@@ -100,7 +98,6 @@ exit 2
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
-    assert.isFalse(fs.existsSync(path.join(userBin, 'ballin_config')));
     assert.isTrue(fs.statSync(path.join(userBin, 'unrelated-file')).isFile());
     assert.isTrue(fs.lstatSync(path.join(userBin, 'unrelated-link')).isSymbolicLink());
     assert.isFalse(fs.existsSync(repoDir));
