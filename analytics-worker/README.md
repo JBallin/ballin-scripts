@@ -154,6 +154,10 @@ migration that should affect production:
 wrangler d1 migrations apply ballin-scripts-analytics --remote
 ```
 
+The deploy workflow stops before deploying when a push includes files under
+`analytics-worker/migrations/`. After applying the remote migration, rerun the
+workflow manually from the `main` branch.
+
 Manual deploys remain available for emergency or local maintenance:
 
 ```shell

@@ -15,8 +15,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-analytics-worker
+  cancel-in-progress: true
+
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -36,6 +41,18 @@ jobs:
 
       - name: Run validation
         run: npm test
+
+      - name: Check for manual D1 migrations
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          if git diff --name-only "${BEFORE_SHA}" "${CURRENT_SHA}" -- analytics-worker/migrations/ \
+            | grep -q .; then
+            echo "::error::Remote D1 migrations remain manual. Apply migrations with wrangler d1 migrations apply ballin-scripts-analytics --remote, then rerun this workflow from main."
+            exit 1
+          fi
 
       - name: Create Wrangler config
         working-directory: analytics-worker
