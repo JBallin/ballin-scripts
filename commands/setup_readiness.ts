@@ -49,8 +49,6 @@ const requiredCommandShims = [
   'ballin_config',
   'ballin_uninstall',
   'ballin_update',
-  'gu',
-  'up',
 ];
 
 const isConfigObject = (value: unknown): value is ConfigObject => (

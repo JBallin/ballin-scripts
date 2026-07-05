@@ -69,8 +69,6 @@ const allowedCommands = new Set([
   'ballin_config',
   'ballin_uninstall',
   'ballin_update',
-  'gu',
-  'up',
 ]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);

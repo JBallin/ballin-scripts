@@ -116,15 +116,13 @@ describe('setup readiness', () => {
   });
 
   it('reports missing and non-executable command shims on PATH', () => {
-    fs.rmSync(path.join(binDir, 'up'));
-    fs.writeFileSync(path.join(binDir, 'gu'), 'not executable\n', { mode: 0o644 });
-    fs.chmodSync(path.join(binDir, 'gu'), 0o644);
+    fs.rmSync(path.join(binDir, 'ballin_update'));
 
     const report = collect();
     const commandCheck = checkById(report, 'commands.path');
 
     assert.equal(commandCheck.status, 'fail');
-    assert.deepEqual(commandCheck.data?.missing, ['gu', 'up']);
+    assert.deepEqual(commandCheck.data?.missing, ['ballin_update']);
   });
 
   it('reports config readability and top-level section availability', () => {

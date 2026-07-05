@@ -29,8 +29,6 @@ describe('ballin', () => {
     assert.include(result.stdout, 'self-update');
     assert.include(result.stdout, 'uninstall');
     assert.include(result.stdout, '--verbose');
-    assert.include(result.stdout, 'up                    alias for: ballin update');
-    assert.include(result.stdout, 'gu                    alias for: ballin backup');
     assert.equal(result.stderr, '');
   };
 
@@ -157,9 +155,10 @@ esac
 
   it('routes update through the existing up workflow and preserves its exit status', () => {
     writeUpConfigCommand({ 'up.gu': 'true' });
-    writeExecutable('gu', `#!/bin/bash
-printf '%s\\n' 'gu from ballin update'
-printf '%s\\n' 'gu-called' >> "$FAKE_COMMAND_LOG"
+    writeExecutable('ballin', `#!/bin/bash
+if [ "$*" != 'backup' ]; then exit 2; fi
+printf '%s\\n' 'ballin backup from ballin update'
+printf '%s\\n' 'ballin-backup-called' >> "$FAKE_COMMAND_LOG"
 exit 17
 `);
 
@@ -167,19 +166,16 @@ exit 17
 
     assert.equal(result.status, 17);
     assert.include(result.stdout, 'Backing up development environment');
-    assert.include(result.stdout, 'gu from ballin update');
-    assert.deepEqual(commandLog(), ['gu-called']);
+    assert.include(result.stdout, 'ballin backup from ballin update');
+    assert.deepEqual(commandLog(), ['ballin-backup-called']);
   });
 
   it('routes backup through the existing gu command implementation', () => {
-    writeExecutable('ballin', `#!/bin/bash
-printf '%s\\n' 'fake ballin help from gu'
-`);
-
     const result = runBallin(['backup', 'help']);
 
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, 'fake ballin help from gu\n');
+    assert.include(result.stdout, 'Ballin');
+    assert.include(result.stdout, 'ballin backup');
     assert.equal(result.stderr, '');
   });
 
@@ -271,7 +267,7 @@ printf '%s\\n' 'fake ballin help from gu'
   });
 
   it('fails doctor when a required health check fails', () => {
-    fs.rmSync(path.join(binDir, 'up'));
+    fs.rmSync(path.join(binDir, 'ballin_uninstall'));
     writeConfig({
       up: {},
       gu: {
@@ -286,7 +282,7 @@ printf '%s\\n' 'fake ballin help from gu'
     const missingShim = runBallin(['doctor']);
 
     assert.equal(missingShim.status, 1);
-    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: up.');
+    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin_uninstall.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
     assert.include(missingShim.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
     assert.include(missingShim.stdout, '\nNext: Run the installer to create or adopt a backup Gist.');

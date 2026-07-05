@@ -8,7 +8,7 @@ setting is available.
 
 `ballin update` updates the local development environment through these
 integrations. If an integration command fails, it still runs any later
-integrations and exits nonzero at the end. `up` aliases the same workflow.
+integrations and exits nonzero at the end.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
@@ -22,8 +22,8 @@ integrations and exits nonzero at the end. `up` aliases the same workflow.
 
 ## `ballin backup`
 
-`ballin backup` backs up changed snapshots to the configured private Gist. `gu`
-aliases the same workflow. It can snapshot:
+`ballin backup` backs up changed snapshots to the configured private Gist. It
+can snapshot:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |

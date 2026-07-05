@@ -33,8 +33,7 @@ command output, side effects, or exit status.
 - random install ID
 - date bucket, such as `YYYY-MM-DD`
 - command name for currently instrumented top-level commands; canonical
-  `ballin <command>` calls report as `ballin`, while shortcuts such as `up` and
-  `gu` report their shortcut names
+  `ballin <command>` calls report as `ballin`
 - status: `success`, `failure`, or `unknown`
 - coarse duration bucket: `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
   `10m+`

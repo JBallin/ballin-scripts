@@ -165,7 +165,7 @@ describe('analytics client', () => {
     writeInstallId();
 
     const { payloads, notices, order } = await recordWithSender({
-      command: 'up',
+      command: 'ballin',
       status: 'success',
       durationBucket: '<1s',
       now: fixedNow,
@@ -189,7 +189,7 @@ describe('analytics client', () => {
     const senderOptions: SenderOptions[] = [];
 
     await recordAnalyticsEvent({
-      command: 'up',
+      command: 'ballin',
       now: fixedNow,
     }, {
       env: {},
@@ -385,7 +385,7 @@ describe('analytics client', () => {
     process.exitCode = undefined;
 
     try {
-      await runWithCommandAnalytics('gu', () => {
+      await runWithCommandAnalytics('ballin', () => {
         currentNow = 13_000;
         process.exitCode = 17;
       }, {
@@ -405,7 +405,7 @@ describe('analytics client', () => {
     }
 
     assert.deepInclude(payloads[0], {
-      command: 'gu',
+      command: 'ballin',
       status: 'failure',
       durationBucket: '10-60s',
     });
@@ -455,7 +455,7 @@ describe('analytics client', () => {
     let analyticsSettled = false;
     let rejection: Error | undefined;
 
-    const analyticsDone = runWithCommandAnalytics('up', () => {
+    const analyticsDone = runWithCommandAnalytics('ballin', () => {
       currentNow = 60_000;
       throw new Error('simulated command failure');
     }, {
@@ -482,7 +482,7 @@ describe('analytics client', () => {
     await Promise.resolve();
     assert.isFalse(analyticsSettled);
     assert.deepInclude(payloads[0], {
-      command: 'up',
+      command: 'ballin',
       status: 'failure',
       durationBucket: '1-10m',
     });
@@ -548,7 +548,7 @@ describe('analytics client', () => {
         schemaVersion: 1,
         installId: fixedInstallId,
         dateBucket: '2026-06-27',
-        command: 'up',
+        command: 'ballin',
         status: 'success',
         durationBucket: '<1s',
         appVersion: '1.0.0',
@@ -565,7 +565,7 @@ describe('analytics client', () => {
     }
 
     assert.equal(timeoutMs, 25);
-    assert.include(capturedBody, '"command":"up"');
+    assert.include(capturedBody, '"command":"ballin"');
     assert.isNotNull(capturedOptions);
     const options = capturedOptions as unknown as RequestOptions;
     assert.deepInclude(options, {

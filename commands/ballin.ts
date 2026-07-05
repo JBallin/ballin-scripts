@@ -70,11 +70,6 @@ Commands:
     self-update           update Ballin's local checkout, shims, and config
     uninstall             remove Ballin command shims and local checkout
 
-Shortcuts:
-
-    up                    alias for: ballin update
-    gu                    alias for: ballin backup
-
 Examples:
 
     ballin update
@@ -134,6 +129,10 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       runNoArgCommand('ballin update', commandArgs, runUpCommand);
       return;
     case 'backup':
+      if (commandArgs.length === 1 && commandArgs[0] === 'help') {
+        writeStdout(ballinHelp);
+        return;
+      }
       runGuCommand(commandArgs);
       return;
     case 'doctor':

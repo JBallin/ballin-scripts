@@ -14,8 +14,6 @@ Core commands:
 - `ballin update` updates the development environment.
 - `ballin backup` snapshots the development environment to a private Gist.
 
-Shortcuts: `up` aliases `ballin update`; `gu` aliases `ballin backup`.
-
 ## What it manages
 
 `ballin-scripts` backs up development-environment state that is easy to lose
