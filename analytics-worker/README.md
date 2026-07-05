@@ -56,7 +56,7 @@ Example payload:
   "command": "ballin update",
   "status": "success",
   "durationBucket": "10-60s",
-  "appVersion": "1.0.0",
+  "appVersion": "2.0.0",
   "nodeMajor": "24",
   "os": "darwin",
   "osVersion": "15"
