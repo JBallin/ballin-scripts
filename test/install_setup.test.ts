@@ -234,6 +234,23 @@ esac
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
   });
 
+  it('removes owned stale legacy command symlinks while symlinking repository binaries', () => {
+    const ownedLegacyConfig = path.join(binDir, 'ballin_config');
+    const ownedLegacyUpdate = path.join(binDir, 'ballin_update');
+    const unrelatedLegacyUninstall = path.join(binDir, 'ballin_uninstall');
+    fs.symlinkSync(path.join(sourceBinDir, 'ballin_config'), ownedLegacyConfig);
+    fs.symlinkSync(path.join(sourceBinDir, 'ballin_update'), ownedLegacyUpdate);
+    fs.symlinkSync(path.join(testDir, 'unrelated-ballin_uninstall'), unrelatedLegacyUninstall);
+
+    const result = withoutStdout(() => symlinkBinaries(repoDir, binDir));
+
+    assert.isTrue(result);
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
+    assert.isFalse(fs.existsSync(ownedLegacyConfig));
+    assert.isFalse(fs.existsSync(ownedLegacyUpdate));
+    assert.isTrue(fs.lstatSync(unrelatedLegacyUninstall).isSymbolicLink());
+  });
+
   it('creates the default config through setup code', () => {
     installConfigSources();
 

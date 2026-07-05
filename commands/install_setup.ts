@@ -14,6 +14,11 @@ const backupMarker = '### Backup of your dev environment\n'
   + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n'
   + '\n';
 const configSnapshotFileName = 'ballin_config';
+const legacyBinNames = [
+  'ballin_config',
+  'ballin_update',
+  'ballin_uninstall',
+];
 
 const readPrompt = (prompt: string): string => {
   process.stdout.write(prompt);
@@ -403,6 +408,18 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
   }
 
   try {
+    legacyBinNames.forEach((binName) => {
+      const targetPath = path.join(binDir, binName);
+      try {
+        if (fs.lstatSync(targetPath).isSymbolicLink()
+          && fs.readlinkSync(targetPath) === path.join(sourceBinDir, binName)) {
+          fs.rmSync(targetPath, { force: true });
+        }
+      } catch {
+        // Missing or unreadable legacy targets are handled like absent targets.
+      }
+    });
+
     for (const binName of fs.readdirSync(sourceBinDir)) {
       const sourcePath = path.join(sourceBinDir, binName);
       const targetPath = path.join(binDir, binName);
