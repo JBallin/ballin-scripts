@@ -416,6 +416,36 @@ describe('analytics client', () => {
     });
   });
 
+  it('can preserve local analytics state before a command removes it', async () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const payloads: AnalyticsPayload[] = [];
+
+    await runWithCommandAnalytics('ballin uninstall', () => {
+      setAnalyticsConfig({
+        enabled: 'false',
+      });
+      fs.rmSync(testInstallIdPath, { force: true });
+    }, {
+      endpoint: 'https://analytics.example.test/v1/events',
+      ingestToken: 'test-token',
+      env: {},
+      installIdPath: testInstallIdPath,
+      preserveLocalState: true,
+      sender: async (payload: AnalyticsPayload) => {
+        payloads.push(payload);
+      },
+    });
+
+    assert.deepInclude(payloads[0], {
+      command: 'ballin uninstall',
+      installId: fixedInstallId,
+      status: 'success',
+    });
+  });
+
   it('isolates command-level status from a stale process exitCode', async () => {
     setAnalyticsConfig({
       enabled: 'true',

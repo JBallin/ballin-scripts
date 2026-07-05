@@ -41,13 +41,16 @@ type SenderOptions = {
 type AnalyticsSender = (payload: AnalyticsPayload, options: SenderOptions) => Promise<void>;
 
 type AnalyticsRuntime = SenderOptions & {
+  analyticsConfig?: AnalyticsConfig;
   env?: NodeJS.ProcessEnv;
+  installId?: string | null;
   installIdPath?: string;
   sender?: AnalyticsSender;
 };
 
 type CommandAnalyticsRuntime = AnalyticsRuntime & {
   nowMs?: () => number;
+  preserveLocalState?: boolean;
 };
 
 type AnalyticsInstallIdOptions = {
@@ -127,6 +130,18 @@ const readLocalInstallId = (installIdPath = installIdPathForRepo()): string | nu
     return installIdPattern.test(installId) ? installId : null;
   } catch {
     return null;
+  }
+};
+
+const preserveLocalAnalyticsState = (runtime: CommandAnalyticsRuntime): AnalyticsRuntime => {
+  try {
+    return {
+      ...runtime,
+      analyticsConfig: readAnalyticsConfig().analytics,
+      installId: readLocalInstallId(runtime.installIdPath),
+    };
+  } catch {
+    return runtime;
   }
 };
 
@@ -294,12 +309,12 @@ const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: Analyt
       return;
     }
 
-    const { analytics } = readAnalyticsConfig();
+    const analytics = runtime.analyticsConfig ?? readAnalyticsConfig().analytics;
     if (analytics.enabled !== 'true') {
       return;
     }
 
-    const installId = readLocalInstallId(runtime.installIdPath);
+    const installId = runtime.installId ?? readLocalInstallId(runtime.installIdPath);
     if (!installId) {
       return;
     }
@@ -334,6 +349,7 @@ const runWithCommandAnalytics = (
 ): Promise<void> => {
   const nowMs = runtime.nowMs ?? Date.now;
   const startedAt = nowMs();
+  const analyticsRuntime = runtime.preserveLocalState ? preserveLocalAnalyticsState(runtime) : runtime;
   process.exitCode = undefined;
   try {
     runCommand();
@@ -341,13 +357,13 @@ const runWithCommandAnalytics = (
       command,
       status: analyticsStatusFromExitCode(process.exitCode),
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, runtime);
+    }, analyticsRuntime);
   } catch (error) {
     return recordAnalyticsEvent({
       command,
       status: 'failure',
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, runtime).then(() => {
+    }, analyticsRuntime).then(() => {
       throw error;
     });
   }

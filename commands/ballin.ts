@@ -171,7 +171,12 @@ const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => 
 };
 
 const runBallinCli = (): void => {
-  void runWithCommandAnalytics(analyticsCommandForBallinArgs(), runBallinCommand).catch(rethrowCommandError);
+  const args = process.argv.slice(2);
+  void runWithCommandAnalytics(
+    analyticsCommandForBallinArgs(args),
+    () => runBallinCommand(args),
+    { preserveLocalState: args[0] === 'uninstall' },
+  ).catch(rethrowCommandError);
 };
 
 module.exports = {

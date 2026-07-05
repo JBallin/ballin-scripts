@@ -66,25 +66,26 @@ const payloadForCommand = (command: string) => ({
   osVersion: '15',
 });
 
-const eventRequest = (command: string) => new Request('https://analytics.example.test/v1/events', {
+const eventRequest = (payload: ReturnType<typeof payloadForCommand>) => new Request('https://analytics.example.test/v1/events', {
   method: 'POST',
   headers: {
     'content-type': 'application/json',
     'x-ballin-analytics-token': 'test-token',
   },
-  body: JSON.stringify(payloadForCommand(command)),
+  body: JSON.stringify(payload),
 });
 
 describe('analytics Worker', () => {
   it('accepts canonical Ballin command names', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, runs } = makeEnv();
+    const payload = payloadForCommand('ballin update');
 
-    const response = await worker.fetch(eventRequest('ballin update'), env);
+    const response = await worker.fetch(eventRequest(payload), env);
 
     assert.equal(response.status, 204);
     assert.includeDeepMembers(runs.map(({ values }) => values), [
-      [payloadForCommand('ballin update').dateBucket, 'ballin update', '1.0.0', '24', 'darwin', '15'],
+      [payload.dateBucket, 'ballin update', '1.0.0', '24', 'darwin', '15'],
     ]);
   });
 
@@ -92,7 +93,7 @@ describe('analytics Worker', () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env } = makeEnv();
 
-    const response = await worker.fetch(eventRequest('unknown command'), env);
+    const response = await worker.fetch(eventRequest(payloadForCommand('unknown command')), env);
     const body = await response.json() as { error?: string };
 
     assert.equal(response.status, 400);
