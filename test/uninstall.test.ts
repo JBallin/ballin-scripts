@@ -88,6 +88,8 @@ exit 2
   it('removes only owned user-local links, then removes the repository', () => {
     const userBin = path.join(homeDir, '.local', 'bin');
     const ballin = createCommand('ballin');
+    createCommand('gu');
+    createCommand('up');
     fs.symlinkSync(ballin, path.join(userBin, 'ballin'));
     fs.writeFileSync(path.join(userBin, 'gu'), 'keep me\n');
     fs.symlinkSync(path.join(testDir, 'unrelated'), path.join(userBin, 'up'));
@@ -99,19 +101,6 @@ exit 2
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isTrue(fs.statSync(path.join(userBin, 'gu')).isFile());
     assert.isTrue(fs.lstatSync(path.join(userBin, 'up')).isSymbolicLink());
-    assert.isFalse(fs.existsSync(repoDir));
-  });
-
-  it('removes owned legacy up and gu links even after repo shims are gone', () => {
-    const userBin = path.join(homeDir, '.local', 'bin');
-    fs.symlinkSync(path.join(repoDir, 'bin', 'up'), path.join(userBin, 'up'));
-    fs.symlinkSync(path.join(repoDir, 'bin', 'gu'), path.join(userBin, 'gu'));
-
-    const result = runUninstall();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.isFalse(fs.existsSync(path.join(userBin, 'up')));
-    assert.isFalse(fs.existsSync(path.join(userBin, 'gu')));
     assert.isFalse(fs.existsSync(repoDir));
   });
 

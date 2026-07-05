@@ -485,22 +485,6 @@ esac
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
   });
 
-  it('removes owned legacy up and gu shims during symlink setup', () => {
-    fs.mkdirSync(binDir, { recursive: true });
-    fs.symlinkSync(path.join(sourceBinDir, 'up'), path.join(binDir, 'up'));
-    fs.symlinkSync(path.join(sourceBinDir, 'gu'), path.join(binDir, 'gu'));
-    fs.writeFileSync(path.join(binDir, 'gu-file'), 'keep me\n');
-    fs.symlinkSync(path.join(testDir, 'other-up'), path.join(binDir, 'other-up'));
-
-    const result = withoutStdout(() => symlinkBinaries(repoDir, binDir));
-
-    assert.isTrue(result);
-    assert.isFalse(fs.existsSync(path.join(binDir, 'up')));
-    assert.isFalse(fs.existsSync(path.join(binDir, 'gu')));
-    assert.isTrue(fs.existsSync(path.join(binDir, 'gu-file')));
-    assert.equal(fs.readlinkSync(path.join(binDir, 'other-up')), path.join(testDir, 'other-up'));
-  });
-
   it('fails when a command target cannot be replaced', () => {
     fs.mkdirSync(path.join(binDir, 'ballin'), { recursive: true });
 

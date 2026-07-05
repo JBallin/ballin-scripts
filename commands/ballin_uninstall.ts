@@ -11,7 +11,6 @@ const addUnique = (items: string[], candidate: string): void => {
     items.push(candidate);
   }
 };
-const legacyCommandShims = ['gu', 'up'];
 
 const relocateSystemPath = (systemRoot: string, absolutePath: string): string => (
   systemRoot ? path.join(systemRoot, absolutePath) : absolutePath
@@ -64,14 +63,14 @@ const runBallinUninstallCli = (): void => {
   }
 
   const repoBinDir = path.join(repoDir, 'bin');
-  const binNames = fs.existsSync(repoBinDir) ? fs.readdirSync(repoBinDir) : [];
-  legacyCommandShims.forEach((binName) => addUnique(binNames, binName));
-  binNames.forEach((binName: string) => {
-    const targetPath = path.join(repoBinDir, binName);
-    binDirs.forEach((binDir) => {
-      removeOwnedLink(path.join(binDir, binName), targetPath);
+  if (fs.existsSync(repoBinDir)) {
+    fs.readdirSync(repoBinDir).forEach((binName: string) => {
+      const targetPath = path.join(repoBinDir, binName);
+      binDirs.forEach((binDir) => {
+        removeOwnedLink(path.join(binDir, binName), targetPath);
+      });
     });
-  });
+  }
 
   writeStdoutLine('Deleted symlinked binaries');
   fs.rmSync(repoDir, { recursive: true, force: true });

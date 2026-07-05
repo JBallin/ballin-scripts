@@ -40,7 +40,6 @@ const supportedCommands = new Set([
   'setup-analytics',
   'symlink-binaries',
 ]);
-const legacyCommandShims = ['gu', 'up'];
 
 type ConfigObject = { [key: string]: unknown };
 
@@ -354,18 +353,6 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
   }
 
   try {
-    legacyCommandShims.forEach((binName) => {
-      const targetPath = path.join(binDir, binName);
-      try {
-        if (fs.lstatSync(targetPath).isSymbolicLink()
-          && fs.readlinkSync(targetPath) === path.join(sourceBinDir, binName)) {
-          fs.unlinkSync(targetPath);
-        }
-      } catch {
-        // Missing or unrelated legacy shims do not affect current setup.
-      }
-    });
-
     for (const binName of fs.readdirSync(sourceBinDir)) {
       const sourcePath = path.join(sourceBinDir, binName);
       const targetPath = path.join(binDir, binName);
