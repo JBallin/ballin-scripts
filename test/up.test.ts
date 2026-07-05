@@ -7,7 +7,7 @@ const {
   requiredCommandShims,
 } = require('../commands/setup_readiness.ts');
 
-const upPath = path.join(__dirname, '..', 'bin', 'up');
+const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 type InstallCommandStubOptions = {
   output?: string;
   status?: number;
@@ -83,7 +83,7 @@ esac
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  const runUp = (env: NodeJS.ProcessEnv = {}) => spawnSync(upPath, [], {
+  const runUp = (env: NodeJS.ProcessEnv = {}) => spawnSync(ballinPath, ['update'], {
     encoding: 'utf8',
     env: {
       HOME: tempDir,
@@ -125,11 +125,11 @@ esac
 
   it('remains executable through the installed symlink model', () => {
     const installBinDir = path.join(tempDir, 'installed-bin');
-    const symlinkPath = path.join(installBinDir, 'up');
+    const symlinkPath = path.join(installBinDir, 'ballin');
     fs.mkdirSync(installBinDir);
-    fs.symlinkSync(upPath, symlinkPath);
+    fs.symlinkSync(ballinPath, symlinkPath);
 
-    const result = spawnSync(symlinkPath, [], {
+    const result = spawnSync(symlinkPath, ['update'], {
       encoding: 'utf8',
       env: {
         HOME: tempDir,
@@ -225,10 +225,11 @@ exit 0
     assert.equal(result.stdout.match(/brew command output/g).length, 2);
   });
 
-  it('runs enabled npm, macOS update, ballin update, and gu integrations', () => {
-    ['npm', 'softwareupdate', 'ballin_update', 'gu'].forEach((command) => {
+  it('runs enabled npm, macOS update, ballin update, and backup integrations', () => {
+    ['npm', 'softwareupdate', 'ballin_update'].forEach((command) => {
       installCommandStub(command);
     });
+    installCommandStub('ballin');
     installHealthyReadinessCommands();
 
     const result = runUp({
@@ -245,7 +246,7 @@ exit 0
       'softwareupdate|,|-ia',
       'ballin_update|,|',
       'gh|,|auth status --hostname example.test',
-      'gu|,|',
+      'ballin|,|backup',
     ]);
   });
 
@@ -307,7 +308,7 @@ exit 2
   it('keeps Ballin readiness failures informational after update', () => {
     installCommandStub('ballin_update');
     installHealthyReadinessCommands();
-    fs.rmSync(path.join(binDir, 'up'));
+    fs.rmSync(path.join(binDir, 'ballin_uninstall'));
 
     const result = runUp({
       TEST_UP_NVM: 'false',
@@ -316,7 +317,7 @@ exit 2
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Checking Ballin readiness');
-    assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: up.');
+    assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin_uninstall.');
     assert.include(result.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
     assert.notInclude(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog(), [
@@ -344,7 +345,7 @@ exit 2
   });
 
   it('does not run disabled optional integrations even when commands exist', () => {
-    ['npm', 'softwareupdate', 'ballin_update', 'gu'].forEach((command) => {
+    ['npm', 'softwareupdate', 'ballin_update', 'ballin'].forEach((command) => {
       installCommandStub(command);
     });
 
@@ -361,7 +362,7 @@ exit 2
   it('keeps later integrations isolated when an optional command fails', () => {
     installCommandStub('npm', { output: 'simulated npm failure', status: 23 });
     installCommandStub('ballin_update');
-    installCommandStub('gu');
+    installCommandStub('ballin');
     installHealthyReadinessCommands();
 
     const result = runUp({
@@ -377,13 +378,13 @@ exit 2
       'npm|,|update -g',
       'ballin_update|,|',
       'gh|,|auth status --hostname example.test',
-      'gu|,|',
+      'ballin|,|backup',
     ]);
   });
 
-  it('still uses final gu status after informational Ballin readiness', () => {
+  it('still uses final backup status after informational Ballin readiness', () => {
     installCommandStub('ballin_update');
-    installCommandStub('gu', { output: 'simulated gu failure', status: 17 });
+    installCommandStub('ballin', { output: 'simulated backup failure', status: 17 });
     installHealthyReadinessCommands();
 
     const result = runUp({
@@ -394,16 +395,16 @@ exit 2
 
     assert.equal(result.status, 17);
     assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
-    assert.include(result.stdout, 'simulated gu failure');
+    assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
       'ballin_update|,|',
       'gh|,|auth status --hostname example.test',
-      'gu|,|',
+      'ballin|,|backup',
     ]);
   });
 
-  it('uses gu as the final exit status when gu is enabled', () => {
-    installCommandStub('gu', { output: 'simulated gu failure', status: 17 });
+  it('uses backup as the final exit status when backup is enabled', () => {
+    installCommandStub('ballin', { output: 'simulated backup failure', status: 17 });
 
     const result = runUp({
       TEST_UP_NVM: 'false',
@@ -411,14 +412,14 @@ exit 2
     });
 
     assert.equal(result.status, 17);
-    assert.include(result.stdout, 'simulated gu failure');
+    assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
-      'gu|,|',
+      'ballin|,|backup',
     ]);
   });
 
-  it('uses a shell-style signal exit status for final gu', () => {
-    writeTestExecutable('gu', `#!/usr/bin/env bash
+  it('uses a shell-style signal exit status for final backup', () => {
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
 kill -TERM "$$"
 `);
 
@@ -429,32 +430,6 @@ kill -TERM "$$"
 
     assert.equal(result.status, 143);
     assert.include(result.stdout, 'Backing up development environment');
-  });
-
-  it('reports missing unguarded integrations like the shell did', () => {
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_GU: 'true',
-    });
-
-    assert.equal(result.status, 127);
-    assert.include(result.stdout, 'Backing up development environment');
-    assert.include(result.stderr, 'gu: command not found');
-    assert.deepEqual(commandLog(), []);
-  });
-
-  it('reports permission-denied unguarded integrations like the shell did', () => {
-    fs.writeFileSync(path.join(binDir, 'gu'), '#!/usr/bin/env bash\n', { mode: 0o644 });
-
-    const result = runUp({
-      TEST_UP_NVM: 'false',
-      TEST_UP_GU: 'true',
-    });
-
-    assert.equal(result.status, 126);
-    assert.include(result.stdout, 'Backing up development environment');
-    assert.include(result.stderr, 'gu: Permission denied');
-    assert.deepEqual(commandLog(), []);
   });
 
   it('loads nvm from NVM_DIR and updates Node.js LTS', () => {
@@ -479,8 +454,8 @@ kill -TERM "$$"
 }
 `,
     );
-    writeTestExecutable('gu', `#!/usr/bin/env bash
-printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
 `);
 
     const result = runUp({
@@ -491,7 +466,7 @@ printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
     assert.equal(result.status, 24);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.deepEqual(commandLog().slice(1), [
-      'gu still ran',
+      'backup still ran',
     ]);
   });
 
@@ -516,15 +491,16 @@ printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
     ]);
   });
 
-  it('keeps nvm PATH changes for later gu backups', () => {
+  it('keeps nvm PATH changes for later backups', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     const nvmBinDir = path.join(tempDir, 'nvm-bin');
     const nvmNpmPath = path.join(nvmBinDir, 'npm');
     fs.mkdirSync(nvmBinDir);
     installPathUpdatingNvmStub(nvmDir, nvmBinDir);
     installCommandStub('npm', { directory: nvmBinDir });
-    writeTestExecutable('gu', `#!/usr/bin/env bash
-printf 'gu-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+if [ "$*" != 'backup' ]; then exit 2; fi
+printf 'backup-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
 `);
 
     const result = runUp({
@@ -535,7 +511,7 @@ printf 'gu-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.deepEqual(commandLog().slice(1), [
-      `gu-npm|${nvmNpmPath}`,
+      `backup-npm|${nvmNpmPath}`,
     ]);
   });
 
@@ -547,8 +523,8 @@ printf 'gu-npm|%s\\n' "$(command -v npm)" >> "$UP_TEST_LOG"
     fs.writeFileSync(path.join(brokenNodeDir, 'node'), `#!/usr/bin/env bash
 exit 42
 `, { mode: 0o755 });
-    writeTestExecutable('gu', `#!/usr/bin/env bash
-printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
 `);
 
     const result = runUp({
@@ -559,7 +535,7 @@ printf '%s\\n' 'gu still ran' >> "$UP_TEST_LOG"
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.deepEqual(commandLog().slice(1), [
-      'gu still ran',
+      'backup still ran',
     ]);
   });
 

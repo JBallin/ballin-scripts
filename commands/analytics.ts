@@ -41,13 +41,17 @@ type SenderOptions = {
 type AnalyticsSender = (payload: AnalyticsPayload, options: SenderOptions) => Promise<void>;
 
 type AnalyticsRuntime = SenderOptions & {
+  analyticsConfig?: AnalyticsConfig;
+  appVersion?: string;
   env?: NodeJS.ProcessEnv;
+  installId?: string | null;
   installIdPath?: string;
   sender?: AnalyticsSender;
 };
 
 type CommandAnalyticsRuntime = AnalyticsRuntime & {
   nowMs?: () => number;
+  preserveLocalState?: boolean;
 };
 
 type AnalyticsInstallIdOptions = {
@@ -66,11 +70,15 @@ const schemaVersion = 1;
 const defaultTimeoutMs = 750;
 const allowedCommands = new Set([
   'ballin',
+  'ballin backup',
+  'ballin config',
+  'ballin doctor',
+  'ballin self-update',
+  'ballin uninstall',
+  'ballin update',
   'ballin_config',
   'ballin_uninstall',
   'ballin_update',
-  'gu',
-  'up',
 ]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
@@ -123,6 +131,19 @@ const readLocalInstallId = (installIdPath = installIdPathForRepo()): string | nu
     return installIdPattern.test(installId) ? installId : null;
   } catch {
     return null;
+  }
+};
+
+const preserveLocalAnalyticsState = (runtime: CommandAnalyticsRuntime): AnalyticsRuntime => {
+  try {
+    return {
+      ...runtime,
+      analyticsConfig: readAnalyticsConfig().analytics,
+      appVersion: loadAppVersion(),
+      installId: readLocalInstallId(runtime.installIdPath),
+    };
+  } catch {
+    return runtime;
   }
 };
 
@@ -191,6 +212,7 @@ const durationBucketFromMs = (durationMs: number): string => {
 const buildAnalyticsPayload = (
   input: Required<Pick<AnalyticsRecordInput, 'command' | 'status' | 'durationBucket' | 'now'>>,
   installId: string,
+  appVersion = loadAppVersion(),
 ): AnalyticsPayload => ({
   schemaVersion,
   installId,
@@ -198,7 +220,7 @@ const buildAnalyticsPayload = (
   command: input.command,
   status: input.status,
   durationBucket: input.durationBucket,
-  appVersion: loadAppVersion(),
+  appVersion,
   nodeMajor: nodeMajor(),
   os: osFamily(),
   osVersion: coarseOsVersion(),
@@ -290,12 +312,12 @@ const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: Analyt
       return;
     }
 
-    const { analytics } = readAnalyticsConfig();
+    const analytics = runtime.analyticsConfig ?? readAnalyticsConfig().analytics;
     if (analytics.enabled !== 'true') {
       return;
     }
 
-    const installId = readLocalInstallId(runtime.installIdPath);
+    const installId = runtime.installId ?? readLocalInstallId(runtime.installIdPath);
     if (!installId) {
       return;
     }
@@ -305,7 +327,7 @@ const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: Analyt
       status,
       durationBucket,
       now: input.now ?? new Date(),
-    }, installId);
+    }, installId, runtime.appVersion);
     await (runtime.sender ?? sendAnalyticsPayload)(payload, {
       endpoint: runtime.endpoint ?? productionAnalyticsEndpoint,
       ingestToken: runtime.ingestToken ?? productionAnalyticsIngestToken,
@@ -330,6 +352,7 @@ const runWithCommandAnalytics = (
 ): Promise<void> => {
   const nowMs = runtime.nowMs ?? Date.now;
   const startedAt = nowMs();
+  const analyticsRuntime = runtime.preserveLocalState ? preserveLocalAnalyticsState(runtime) : runtime;
   process.exitCode = undefined;
   try {
     runCommand();
@@ -337,13 +360,13 @@ const runWithCommandAnalytics = (
       command,
       status: analyticsStatusFromExitCode(process.exitCode),
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, runtime);
+    }, analyticsRuntime);
   } catch (error) {
     return recordAnalyticsEvent({
       command,
       status: 'failure',
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, runtime).then(() => {
+    }, analyticsRuntime).then(() => {
       throw error;
     });
   }

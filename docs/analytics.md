@@ -7,16 +7,16 @@ usage, and command success or failure.
 Disable persistently:
 
 ```shell
-ballin_config set analytics.enabled false
+ballin config set analytics.enabled false
 ```
 
 Disable for one command:
 
 ```shell
-BALLIN_NO_ANALYTICS=1 up
+BALLIN_NO_ANALYTICS=1 ballin update
 ```
 
-Replace `up` with the command you are running.
+Replace `ballin update` with the command you are running.
 
 Disable for a shell session or profile:
 
@@ -32,8 +32,8 @@ command output, side effects, or exit status.
 - schema version
 - random install ID
 - date bucket, such as `YYYY-MM-DD`
-- command name for currently instrumented top-level commands: `up`, `gu`,
-  `ballin_update`, and `ballin`
+- command name for currently instrumented Ballin commands, such as `ballin`,
+  `ballin update`, and `ballin backup`
 - status: `success`, `failure`, or `unknown`
 - coarse duration bucket: `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
   `10m+`

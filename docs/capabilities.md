@@ -4,11 +4,11 @@ This reference lists the update and backup surfaces that `ballin-scripts`
 currently manages. Optional tools are used only when the matching command or
 setting is available.
 
-## `up`
+## `ballin update`
 
-`up` updates the local development environment through these integrations. If
-an integration command fails, `up` still runs any later integrations and exits
-nonzero at the end.
+`ballin update` updates the local development environment through these
+integrations. If an integration command fails, it still runs any later
+integrations and exits nonzero at the end.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
@@ -17,12 +17,13 @@ nonzero at the end.
 | Global npm packages | Runs `npm update -g`. | `up.npm=true` and `npm` on `PATH`. |
 | Mac App Store apps | Runs `mas upgrade`. | `mas` on `PATH`. |
 | macOS updates | Runs `softwareupdate -ia`. | `up.softwareupdate=true` and `softwareupdate` on `PATH`. |
-| ballin-scripts | Runs `ballin_update`. | `up.ballin=true`. |
-| Backups | Runs `gu` as the final update step. | `up.gu=true`. |
+| ballin-scripts | Runs Ballin self-update. | `up.ballin=true`. |
+| Backups | Runs `ballin backup` as the final update step. | `up.gu=true`. |
 
-## `gu`
+## `ballin backup`
 
-`gu` backs up changed snapshots to the configured private Gist. It can snapshot:
+`ballin backup` backs up changed snapshots to the configured private Gist. It
+can snapshot:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -36,5 +37,5 @@ nonzero at the end.
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
 | Brackets | `brackets_settings.json`, `brackets_keymap.json`, `brackets_extensions`, `brackets_disabled_extensions` | Brackets support files in `HOME`. |
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
-| ballin-scripts config | `ballin_config` | Local `ballin.config.json`. |
+| Ballin config | `ballin_config` | Local `ballin.config.json`. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |

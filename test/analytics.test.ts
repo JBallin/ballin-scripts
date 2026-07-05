@@ -36,6 +36,7 @@ type SenderOptions = {
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const packageJson = require('../package.json');
 const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 const fixedNow = new Date('2026-06-27T20:15:00.000Z');
 const allowedPayloadKeys = [
@@ -165,7 +166,7 @@ describe('analytics client', () => {
     writeInstallId();
 
     const { payloads, notices, order } = await recordWithSender({
-      command: 'up',
+      command: 'ballin',
       status: 'success',
       durationBucket: '<1s',
       now: fixedNow,
@@ -189,7 +190,7 @@ describe('analytics client', () => {
     const senderOptions: SenderOptions[] = [];
 
     await recordAnalyticsEvent({
-      command: 'up',
+      command: 'ballin',
       now: fixedNow,
     }, {
       env: {},
@@ -290,21 +291,26 @@ describe('analytics client', () => {
     });
     writeInstallId();
 
+    const supportedCanonicalSubcommand = await recordWithSender({
+      command: 'ballin update',
+      now: fixedNow,
+    });
     const unsupportedCommand = await recordWithSender({
       command: 'git',
       now: fixedNow,
     });
     const unsupportedStatus = await recordWithSender({
-      command: 'up',
+      command: 'ballin update',
       status: 'maybe',
       now: fixedNow,
     });
     const unsupportedDuration = await recordWithSender({
-      command: 'up',
+      command: 'ballin update',
       durationBucket: '42s',
       now: fixedNow,
     });
 
+    assert.deepEqual(supportedCanonicalSubcommand.payloads.map(({ command }) => command), ['ballin update']);
     assert.deepEqual(unsupportedCommand.payloads, []);
     assert.deepEqual(unsupportedStatus.payloads, []);
     assert.deepEqual(unsupportedDuration.payloads, []);
@@ -385,7 +391,7 @@ describe('analytics client', () => {
     process.exitCode = undefined;
 
     try {
-      await runWithCommandAnalytics('gu', () => {
+      await runWithCommandAnalytics('ballin', () => {
         currentNow = 13_000;
         process.exitCode = 17;
       }, {
@@ -405,9 +411,40 @@ describe('analytics client', () => {
     }
 
     assert.deepInclude(payloads[0], {
-      command: 'gu',
+      command: 'ballin',
       status: 'failure',
       durationBucket: '10-60s',
+    });
+  });
+
+  it('can preserve local analytics state before a command removes it', async () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const payloads: AnalyticsPayload[] = [];
+
+    await runWithCommandAnalytics('ballin uninstall', () => {
+      setAnalyticsConfig({
+        enabled: 'false',
+      });
+      fs.rmSync(testInstallIdPath, { force: true });
+    }, {
+      endpoint: 'https://analytics.example.test/v1/events',
+      ingestToken: 'test-token',
+      env: {},
+      installIdPath: testInstallIdPath,
+      preserveLocalState: true,
+      sender: async (payload: AnalyticsPayload) => {
+        payloads.push(payload);
+      },
+    });
+
+    assert.deepInclude(payloads[0], {
+      command: 'ballin uninstall',
+      appVersion: packageJson.version,
+      installId: fixedInstallId,
+      status: 'success',
     });
   });
 
@@ -455,7 +492,7 @@ describe('analytics client', () => {
     let analyticsSettled = false;
     let rejection: Error | undefined;
 
-    const analyticsDone = runWithCommandAnalytics('up', () => {
+    const analyticsDone = runWithCommandAnalytics('ballin', () => {
       currentNow = 60_000;
       throw new Error('simulated command failure');
     }, {
@@ -482,7 +519,7 @@ describe('analytics client', () => {
     await Promise.resolve();
     assert.isFalse(analyticsSettled);
     assert.deepInclude(payloads[0], {
-      command: 'up',
+      command: 'ballin',
       status: 'failure',
       durationBucket: '1-10m',
     });
@@ -548,7 +585,7 @@ describe('analytics client', () => {
         schemaVersion: 1,
         installId: fixedInstallId,
         dateBucket: '2026-06-27',
-        command: 'up',
+        command: 'ballin',
         status: 'success',
         durationBucket: '<1s',
         appVersion: '1.0.0',
@@ -565,7 +602,7 @@ describe('analytics client', () => {
     }
 
     assert.equal(timeoutMs, 25);
-    assert.include(capturedBody, '"command":"up"');
+    assert.include(capturedBody, '"command":"ballin"');
     assert.isNotNull(capturedOptions);
     const options = capturedOptions as unknown as RequestOptions;
     assert.deepInclude(options, {

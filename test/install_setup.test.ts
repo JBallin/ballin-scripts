@@ -255,8 +255,10 @@ esac
 
     fs.mkdirSync(sourceBinDir, { recursive: true });
     fs.mkdirSync(binDir, { recursive: true });
-    fs.writeFileSync(path.join(sourceBinDir, 'ballin'), '#!/usr/bin/env node\n');
-    fs.writeFileSync(path.join(sourceBinDir, 'gu'), '#!/usr/bin/env node\n');
+    fs.readdirSync(path.join(repoRoot, 'bin')).forEach((command: string) => {
+      fs.copyFileSync(path.join(repoRoot, 'bin', command), path.join(sourceBinDir, command));
+      fs.chmodSync(path.join(sourceBinDir, command), 0o755);
+    });
   });
 
   afterEach(() => {
@@ -268,9 +270,9 @@ esac
 
     assert.isTrue(result);
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
-    assert.isTrue(fs.lstatSync(path.join(binDir, 'gu')).isSymbolicLink());
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin_config')).isSymbolicLink());
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
-    assert.equal(fs.readlinkSync(path.join(binDir, 'gu')), path.join(sourceBinDir, 'gu'));
+    assert.equal(fs.readlinkSync(path.join(binDir, 'ballin_config')), path.join(sourceBinDir, 'ballin_config'));
   });
 
   it('creates the default config through setup code', () => {
@@ -502,7 +504,7 @@ esac
 
     const result = runGistSetup();
 
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 1, result.stderr);
     assert.include(result.stdout, 'GitHub CLI is required for Gist backup setup');
     assert.include(result.stdout, 'gh auth login --hostname github.example.test');
     assert.notInclude(commandLog(), 'gh:');

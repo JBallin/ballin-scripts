@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const guPath = path.join(__dirname, '..', 'bin', 'gu');
+const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const snapshotFileName = 'zshrc.sh';
 // Expose only the basic commands gu needs; package managers remain unavailable.
 const requiredCommands = [
@@ -211,13 +211,6 @@ fi
     fs.chmodSync(path.join(testBinDir, 'gh'), 0o644);
   };
 
-  const installFakeBallinCommand = () => {
-    writeTestExecutable('ballin', `#!/usr/bin/env bash
-printf '%s\\n' "$*" >> "$FAKE_BALLIN_LOG"
-printf '%s\\n' 'fake ballin help'
-`);
-  };
-
   const installFakeBrewCommand = () => {
     writeTestExecutable('brew', `#!/usr/bin/env bash
 printf '%s|%s|%s\\n' "$HOMEBREW_NO_AUTO_UPDATE" "$HOMEBREW_NO_ENV_HINTS" "$*" >> "$FAKE_BREW_LOG"
@@ -286,7 +279,6 @@ done
     installFakeBallinConfigCommand();
     installFakeGhCommand();
     installFakeOpenCommand();
-    installFakeBallinCommand();
   });
 
   afterEach(() => {
@@ -307,8 +299,8 @@ done
     ghInitialReadSignal = false,
     ghEditMissingFile = false,
     ghUploadFail = false,
-    commandPath = guPath,
-  }: RunGuOptions = {}) => spawnSync(commandPath, args, {
+    commandPath = ballinPath,
+  }: RunGuOptions = {}) => spawnSync(commandPath, ['backup', ...args], {
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
     env: {
@@ -435,8 +427,8 @@ done
   });
 
   it('remains executable through the installed symlink model', () => {
-    const linkPath = path.join(testBinDir, 'gu-link');
-    fs.symlinkSync(guPath, linkPath);
+    const linkPath = path.join(testBinDir, 'ballin-link');
+    fs.symlinkSync(ballinPath, linkPath);
     seedFakeGistFile('vimrc', 'set number\n');
 
     const result = runGu({ args: ['read', 'vimrc'], commandPath: linkPath });
@@ -483,16 +475,16 @@ exit 2
     const result = runGu({ args: ['help'] });
 
     assertGuSucceeded(result);
-    assert.equal(result.stdout, 'fake ballin help\n');
-    assert.deepEqual(ballinCalls(), ['']);
+    assert.include(result.stdout, 'Ballin');
+    assert.include(result.stdout, 'ballin backup');
   });
 
   it('prints help without requiring a readable Gist', () => {
     const result = runGu({ args: ['help'], ghInitialReadFail: true });
 
     assertGuSucceeded(result);
-    assert.equal(result.stdout, 'fake ballin help\n');
-    assert.deepEqual(ballinCalls(), ['']);
+    assert.include(result.stdout, 'Ballin');
+    assert.include(result.stdout, 'ballin backup');
     assert.deepEqual(gistReads(), []);
   });
 

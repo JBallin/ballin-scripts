@@ -6,18 +6,18 @@ while letting you opt in to broader automation.
 
 ## Working with settings
 
-Use `ballin_config` to read and update local settings. Settings use dot paths,
+Use `ballin config` to read and update local settings. Settings use dot paths,
 such as `up.cleanup` or `analytics.enabled`.
 
 ```shell
-ballin_config
-ballin_config get up.cleanup
-ballin_config set up.cleanup false
-ballin_config reset
+ballin config
+ballin config get up.cleanup
+ballin config set up.cleanup false
+ballin config reset
 ```
 
-`ballin_config` prints the full config, `get` prints one value, `set` updates an
-existing setting, and `reset` restores the default config.
+`ballin config` prints the full config, `get` prints one value, `set` updates
+an existing setting, and `reset` restores the default config.
 
 ## Node.js
 
@@ -37,18 +37,18 @@ nvm install --lts
 Installed commands use the `node` found on your shell `PATH`, so make sure new
 terminal sessions use a supported Node.js version too.
 
-After installing `ballin-scripts`, optionally let `up` install newer LTS
-releases:
+After installing `ballin-scripts`, optionally let `ballin update` install newer
+LTS releases:
 
 ```shell
-ballin_config set up.nvm true
+ballin config set up.nvm true
 ```
 
 `up.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
 `false` because enabling it opts into newer LTS releases, and installing a new
 Node.js version does not migrate your globally installed npm packages
-automatically. If nvm cannot be loaded, `up` warns and continues with its
-remaining updates.
+automatically. If nvm cannot be loaded, `ballin update` warns and continues
+with its remaining updates.
 
 For a simpler setup, install Homebrew's current Node.js release instead:
 
@@ -68,16 +68,17 @@ Store support:
 brew install mas
 ```
 
-When `mas` is available, `up` updates installed App Store apps and `gu` includes
-the installed-app list in your backup. No configuration setting is required.
+When `mas` is available, `ballin update` updates installed App Store apps and
+`ballin backup` includes the installed-app list in your backup. No configuration
+setting is required.
 
 ## Gist backups
 
-`gu` uses [GitHub CLI](https://cli.github.com/) to read and update the
-configured backup Gist. During install, `ballin-scripts` prompts for the GitHub
-host, including GitHub Enterprise hosts, checks `gh` authentication for that
-host, and either adopts an existing backup Gist or creates a new one. When an
-adopted backup includes saved `ballin_config` values, the installer restores
+`ballin backup` uses [GitHub CLI](https://cli.github.com/) to read and update
+the configured backup Gist. During install, `ballin-scripts` prompts for the
+GitHub host, including GitHub Enterprise hosts, checks `gh` authentication for
+that host, and either adopts an existing backup Gist or creates a new one. When
+an adopted backup includes saved `ballin_config` values, the installer restores
 them before continuing.
 
 ## Readiness checks
@@ -99,19 +100,19 @@ how long it is kept.
 Disable persistently:
 
 ```shell
-ballin_config set analytics.enabled false
+ballin config set analytics.enabled false
 ```
 
-## `up` settings
+## `ballin update` settings
 
-Change a setting with `ballin_config set up.<name> true` or
-`ballin_config set up.<name> false`.
+Change a setting with `ballin config set up.<name> true` or
+`ballin config set up.<name> false`.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
 | `up.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
-| `up.ballin` | `true` | Updates `ballin-scripts` when `up` runs, then checks Ballin readiness if the update succeeds. |
-| `up.gu` | `false` | Runs `gu` to back up your development environment. Enable it when you want each update to also modify your backup gist. |
+| `up.ballin` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
+| `up.gu` | `false` | Runs `ballin backup` to back up your development environment. Enable it when you want each update to also modify your backup gist. |
 | `up.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `up.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
 | `up.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |

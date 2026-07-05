@@ -47,11 +47,15 @@ type ParseOptions = {
 
 const allowedCommands = new Set([
   'ballin',
+  'ballin backup',
+  'ballin config',
+  'ballin doctor',
+  'ballin self-update',
+  'ballin uninstall',
+  'ballin update',
   'ballin_config',
   'ballin_uninstall',
   'ballin_update',
-  'gu',
-  'up',
 ]);
 const allowedPayloadKeys = new Set([
   'schemaVersion',

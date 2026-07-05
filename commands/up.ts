@@ -201,7 +201,7 @@ function runUpCommand(): void {
 
   if (configValue('up.gu', childEnv) === 'true') {
     progress('Backing up development environment');
-    runIntegrationCommand('gu', [], { env: childEnv });
+    runIntegrationCommand('ballin', ['backup'], { env: childEnv });
   }
 
   if (exitStatus !== 0) {
@@ -214,5 +214,6 @@ const runUpCli = (): void => {
 };
 
 module.exports = {
+  runUpCommand,
   runUpCli,
 };

@@ -40,5 +40,6 @@ const runBallinUpdateCli = (): void => {
 };
 
 module.exports = {
+  runBallinUpdateCommand,
   runBallinUpdateCli,
 };
