@@ -1,0 +1,68 @@
+name: Deploy Analytics Worker
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - analytics-worker/**
+      - .github/workflows/deploy-analytics-worker.yml
+      - .github/workflows/ci.yml
+      - package.json
+      - package-lock.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          check-latest: true
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run validation
+        run: npm test
+
+      - name: Create Wrangler config
+        working-directory: analytics-worker
+        env:
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_D1_DATABASE_ID}" ]; then
+            echo "::error::CLOUDFLARE_D1_DATABASE_ID is not configured"
+            exit 1
+          fi
+          cp wrangler.toml.example wrangler.toml
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'wrangler.toml';
+          const value = fs
+            .readFileSync(path, 'utf8')
+            .replace(
+              'replace-with-cloudflare-d1-database-id',
+              process.env.CLOUDFLARE_D1_DATABASE_ID,
+            );
+          fs.writeFileSync(path, value);
+          NODE
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          workingDirectory: analytics-worker

@@ -126,11 +126,38 @@ globally, use `npx wrangler` in place of `wrangler`.
    wrangler d1 migrations apply ballin-scripts-analytics --remote
    ```
 
-7. Deploy:
+7. Add these GitHub repository secrets so Actions can deploy the Worker:
 
-   ```shell
-   wrangler deploy
-   ```
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - `CLOUDFLARE_D1_DATABASE_ID`
+
+8. Confirm the `Deploy Analytics Worker` GitHub Actions workflow completes
+   after Worker-impacting changes land on `main`.
+
+The deploy workflow runs `npm test`, creates an ignored runner-local
+`wrangler.toml` from `wrangler.toml.example`, fills in the D1 database ID from
+`CLOUDFLARE_D1_DATABASE_ID`, and runs `wrangler deploy` from this directory. It
+does not set or rotate the existing Cloudflare Worker secrets
+`INSTALL_ID_HASH_SECRET` or `INGEST_TOKEN`.
+
+The workflow runs automatically on pushes to `main` that touch Worker-impacting
+paths, including `analytics-worker/**`, the deploy workflow, CI workflow, and
+package metadata. It can also be run manually from GitHub Actions with
+`workflow_dispatch`.
+
+Remote D1 migrations remain manual. Run this command after adding or changing a
+migration that should affect production:
+
+```shell
+wrangler d1 migrations apply ballin-scripts-analytics --remote
+```
+
+Manual deploys remain available for emergency or local maintenance:
+
+```shell
+wrangler deploy
+```
 
 The production endpoint is:
 
