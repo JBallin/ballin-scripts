@@ -12,13 +12,13 @@ integrations and exits nonzero at the end.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
-| Homebrew packages | Runs `brew upgrade`, optional `brew cleanup`, and `brew doctor`. | `brew` on `PATH`; `up.cleanup` controls cleanup. |
-| Node.js LTS | Runs `nvm install --lts`. | `up.nvm=true`, `NVM_DIR` set, and `nvm.sh` present. |
-| Global npm packages | Runs `npm update -g`. | `up.npm=true` and `npm` on `PATH`. |
+| Homebrew packages | Runs `brew upgrade`, optional `brew cleanup`, and `brew doctor`. | `brew` on `PATH`; `update.cleanup` controls cleanup. |
+| Node.js LTS | Runs `nvm install --lts`. | `update.nvm=true`, `NVM_DIR` set, and `nvm.sh` present. |
+| Global npm packages | Runs `npm update -g`. | `update.npm=true` and `npm` on `PATH`. |
 | Mac App Store apps | Runs `mas upgrade`. | `mas` on `PATH`. |
-| macOS updates | Runs `softwareupdate -ia`. | `up.softwareupdate=true` and `softwareupdate` on `PATH`. |
-| ballin-scripts | Runs Ballin self-update. | `up.ballin=true`. |
-| Backups | Runs `ballin backup` as the final update step. | `up.gu=true`. |
+| macOS updates | Runs `softwareupdate -ia`. | `update.softwareupdate=true` and `softwareupdate` on `PATH`. |
+| ballin-scripts | Runs Ballin self-update. | `update.selfUpdate=true`. |
+| Backups | Runs `ballin backup` as the final update step. | `update.backup=true`. |
 
 ## `ballin backup`
 

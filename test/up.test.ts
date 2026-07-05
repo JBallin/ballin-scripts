@@ -58,18 +58,18 @@ exit ${status}
     fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
     writeTestExecutable('ballin_config', `#!/usr/bin/env bash
 case "$2" in
-  up.cleanup) printf '%s\\n' "\${TEST_UP_CLEANUP:-false}" ;;
-  up.nvm) printf '%s\\n' "\${TEST_UP_NVM:-false}" ;;
-  up.npm) printf '%s\\n' "\${TEST_UP_NPM:-false}" ;;
-  up.softwareupdate) printf '%s\\n' "\${TEST_UP_SOFTWAREUPDATE:-false}" ;;
-  up.ballin) printf '%s\\n' "\${TEST_UP_BALLIN:-false}" ;;
-  up.gu) printf '%s\\n' "\${TEST_UP_GU:-false}" ;;
+  update.cleanup) printf '%s\\n' "\${TEST_UP_CLEANUP:-false}" ;;
+  update.nvm) printf '%s\\n' "\${TEST_UP_NVM:-false}" ;;
+  update.npm) printf '%s\\n' "\${TEST_UP_NPM:-false}" ;;
+  update.softwareupdate) printf '%s\\n' "\${TEST_UP_SOFTWAREUPDATE:-false}" ;;
+  update.selfUpdate) printf '%s\\n' "\${TEST_UP_BALLIN:-false}" ;;
+  update.backup) printf '%s\\n' "\${TEST_UP_GU:-false}" ;;
   *) printf '%s\\n' 'false' ;;
 esac
 `);
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: 'test-gist-id',
         host: 'example.test',
       },
@@ -546,7 +546,7 @@ printf '%s\\n' 'backup still ran' >> "$UP_TEST_LOG"
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.include(result.stderr, 'unable to load nvm');
     assert.include(result.stderr, 'Set NVM_DIR');
-    assert.include(result.stderr, 'ballin_config set up.nvm false');
+    assert.include(result.stderr, 'ballin_config set update.nvm false');
     assert.isFalse(fs.existsSync(logPath));
   });
 

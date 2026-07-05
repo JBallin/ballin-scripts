@@ -48,12 +48,12 @@ describe('ballin', () => {
 
   const writeUpConfigCommand = (overrides: Record<string, string> = {}) => {
     const cases = Object.entries({
-      'up.cleanup': 'false',
-      'up.nvm': 'false',
-      'up.npm': 'false',
-      'up.softwareupdate': 'false',
-      'up.ballin': 'false',
-      'up.gu': 'false',
+      'update.cleanup': 'false',
+      'update.nvm': 'false',
+      'update.npm': 'false',
+      'update.softwareupdate': 'false',
+      'update.selfUpdate': 'false',
+      'update.backup': 'false',
       ...overrides,
     }).map(([key, value]) => `${key}) printf '%s\\n' '${value}' ;;`).join('\n  ');
 
@@ -106,8 +106,8 @@ case "$1:$2" in
 esac
 `);
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: 'test-gist-id',
         host: 'example.test',
       },
@@ -154,7 +154,7 @@ esac
     assert.equal(analyticsCommandForBallinArgs(['help']), 'ballin');
     assert.equal(analyticsCommandForBallinArgs(['update']), 'ballin update');
     assert.equal(analyticsCommandForBallinArgs(['backup', 'read', 'zshrc.sh']), 'ballin backup');
-    assert.equal(analyticsCommandForBallinArgs(['config', 'get', 'up.cleanup']), 'ballin config');
+    assert.equal(analyticsCommandForBallinArgs(['config', 'get', 'update.cleanup']), 'ballin config');
     assert.equal(analyticsCommandForBallinArgs(['doctor', '--verbose']), 'ballin doctor');
     assert.equal(analyticsCommandForBallinArgs(['self-update']), 'ballin self-update');
     assert.equal(analyticsCommandForBallinArgs(['uninstall']), 'ballin uninstall');
@@ -170,7 +170,7 @@ esac
   });
 
   it('routes update through the existing up workflow and preserves its exit status', () => {
-    writeUpConfigCommand({ 'up.gu': 'true' });
+    writeUpConfigCommand({ 'update.backup': 'true' });
     writeExecutable('ballin', `#!/bin/bash
 if [ "$*" != 'backup' ]; then exit 2; fi
 printf '%s\\n' 'ballin backup from ballin update'
@@ -196,7 +196,7 @@ exit 17
   });
 
   it('routes config through the existing config command implementation', () => {
-    const result = runBallin(['config', 'get', 'gu.id']);
+    const result = runBallin(['config', 'get', 'backup.id']);
 
     assert.equal(result.status, 0);
     assert.equal(result.stdout, 'test-gist-id\n');
@@ -245,8 +245,8 @@ exit 17
   it('reports doctor warnings without failing the command', () => {
     fs.rmSync(path.join(binDir, 'gh'));
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: null,
         host: 'example.test',
       },
@@ -285,8 +285,8 @@ exit 17
   it('fails doctor when a required health check fails', () => {
     fs.rmSync(path.join(binDir, 'ballin_uninstall'));
     writeConfig({
-      up: {},
-      gu: {
+      update: {},
+      backup: {
         id: null,
         host: 'example.test',
       },

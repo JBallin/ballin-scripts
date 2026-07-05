@@ -41,8 +41,8 @@ const format = {
 };
 
 const examples = {
-  get: '(ex: get up.cleanup)',
-  set: '(ex: set up.cleanup false)',
+  get: '(ex: get update.cleanup)',
+  set: '(ex: set update.cleanup false)',
 };
 
 const ballinHelp = `

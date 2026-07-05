@@ -69,9 +69,9 @@ describe('gu', () => {
 if [ "$1" != 'get' ]; then
   printf '%s\\n' 'Unexpected ballin_config action' >&2
   exit 2
-elif [ "$2" = 'gu.id' ]; then
+elif [ "$2" = 'backup.id' ]; then
   printf '%s\\n' 'test-gist-id'
-elif [ "$2" = 'gu.host' ]; then
+elif [ "$2" = 'backup.host' ]; then
   printf '%s\\n' 'example.test'
 else
   printf '%s\\n' 'Unexpected ballin_config call' >&2
@@ -182,9 +182,9 @@ exit 42
 if [ "$1" != 'get' ]; then
   printf '%s\\n' 'Unexpected ballin_config action' >&2
   exit 2
-elif [ "$2" = 'gu.id' ]; then
+elif [ "$2" = 'backup.id' ]; then
   printf '%s\\n' 'null'
-elif [ "$2" = 'gu.host' ]; then
+elif [ "$2" = 'backup.host' ]; then
   printf '%s\\n' 'example.test'
 else
   printf '%s\\n' 'Unexpected ballin_config call' >&2
@@ -405,10 +405,10 @@ done
     assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
-      'ballin_config failed for gu.id\n'
-        + 'ballin_config failed for gu.host\n'
-        + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.host\n',
+      'ballin_config failed for backup.id\n'
+        + 'ballin_config failed for backup.host\n'
+        + 'gu: missing config value backup.id\n'
+        + 'gu: missing config value backup.host\n',
     );
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
@@ -421,7 +421,7 @@ done
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'gu: missing config value gu.id\n');
+    assert.equal(result.stderr, 'gu: missing config value backup.id\n');
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
   });
@@ -652,10 +652,10 @@ exit 2
     assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
-      'ballin_config failed for gu.id\n'
-        + 'ballin_config failed for gu.host\n'
-        + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.host\n',
+      'ballin_config failed for backup.id\n'
+        + 'ballin_config failed for backup.host\n'
+        + 'gu: missing config value backup.id\n'
+        + 'gu: missing config value backup.host\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
@@ -673,8 +673,8 @@ exit 2
       result.stderr,
       'ballin_config: command not found\n'
         + 'ballin_config: command not found\n'
-        + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.host\n',
+        + 'gu: missing config value backup.id\n'
+        + 'gu: missing config value backup.host\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
@@ -692,8 +692,8 @@ exit 2
       result.stderr,
       'ballin_config: Permission denied\n'
         + 'ballin_config: Permission denied\n'
-        + 'gu: missing config value gu.id\n'
-        + 'gu: missing config value gu.host\n',
+        + 'gu: missing config value backup.id\n'
+        + 'gu: missing config value backup.host\n',
     );
     assert.isFalse(fs.existsSync(guCacheDir));
     assert.deepEqual(gistReads(), []);
