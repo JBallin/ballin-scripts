@@ -239,7 +239,7 @@ esac
       FAKE_COMMAND_LOG: commandLogPath,
       FAKE_GH_AUTH_STATUS: '0',
       FAKE_GIST_CONFIG_STATUS: '0',
-      FAKE_RESTORED_CONFIG: '{"up":{"cleanup":"false","ballin":"true","gu":"true","softwareupdate":"false","npm":"true","nvm":"true"},"gu":{"id":null,"host":"github.example.test"}}',
+      FAKE_RESTORED_CONFIG: '{"update":{"cleanup":"false","selfUpdate":"true","backup":"true","softwareupdate":"false","npm":"true","nvm":"true"},"backup":{"id":null,"host":"github.example.test"}}',
       TEST_DIR: testDir,
       TEST_REPO_DIR: repoDir,
       ...env,
@@ -635,8 +635,6 @@ esac
       id: 'returning-gist-id',
       host: 'github.example.test',
     });
-    assert.notProperty(restoredConfig, 'up');
-    assert.notProperty(restoredConfig, 'gu');
   });
 
   it('accepts an adopted backup marker without a trailing newline like Bash did', () => {

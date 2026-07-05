@@ -400,53 +400,7 @@ describe('config', () => {
       });
     });
 
-    it('derives backup.host from a legacy Enterprise Gist URL', () => {
-      fs.writeFileSync(configPath, JSON.stringify({
-        up: {
-          cleanup: 'false',
-          ballin: 'false',
-          gu: 'true',
-          softwareupdate: 'false',
-          npm: 'true',
-          nvm: 'true',
-        },
-        gu: {
-          id: 'enterprise-gist-id',
-          url: 'https://gist.github.example.test',
-          token_file: '.legacy-gist-token',
-        },
-      }), 'utf8');
-
-      const result = runUpdateConfig();
-
-      assert.equal(result.status, 0);
-      assert.equal(getConfig('update.cleanup'), 'false');
-      assert.equal(getConfig('update.selfUpdate'), 'false');
-      assert.equal(getConfig('update.backup'), 'true');
-      assert.equal(getConfig('update.softwareupdate'), 'false');
-      assert.equal(getConfig('update.npm'), 'true');
-      assert.equal(getConfig('update.nvm'), 'true');
-      assert.equal(getConfig('backup.id'), 'enterprise-gist-id');
-      assert.equal(getConfig('backup.host'), 'github.example.test');
-      assert.notProperty(fetchConfig().configObj, 'up');
-      assert.notProperty(fetchConfig().configObj, 'gu');
-    });
-
-    it('maps the legacy github.com Gist URL to the GitHub host', () => {
-      fs.writeFileSync(configPath, JSON.stringify({
-        gu: {
-          id: 'github-gist-id',
-          url: 'https://gist.github.com',
-        },
-      }), 'utf8');
-
-      const result = runUpdateConfig();
-
-      assert.equal(result.status, 0);
-      assert.equal(getConfig('backup.host'), 'github.com');
-    });
-
-    it('preserves renamed config values when legacy sections also exist', () => {
+    it('preserves renamed config values when adding missing defaults', () => {
       fs.writeFileSync(configPath, JSON.stringify({
         update: {
           cleanup: 'new-cleanup',
@@ -455,15 +409,6 @@ describe('config', () => {
         backup: {
           id: 'new-gist-id',
           host: 'new.example.test',
-        },
-        up: {
-          cleanup: 'old-cleanup',
-          ballin: 'old-self-update',
-          gu: 'old-backup',
-        },
-        gu: {
-          id: 'old-gist-id',
-          host: 'old.example.test',
         },
         analytics: {
           enabled: 'false',
@@ -475,11 +420,9 @@ describe('config', () => {
       assert.equal(result.status, 0);
       assert.equal(getConfig('update.cleanup'), 'new-cleanup');
       assert.equal(getConfig('update.selfUpdate'), 'new-self-update');
-      assert.equal(getConfig('update.backup'), 'old-backup');
+      assert.equal(getConfig('update.backup'), defaultConfig.update.backup);
       assert.equal(getConfig('backup.id'), 'new-gist-id');
       assert.equal(getConfig('backup.host'), 'new.example.test');
-      assert.notProperty(fetchConfig().configObj, 'up');
-      assert.notProperty(fetchConfig().configObj, 'gu');
     });
   });
 });
