@@ -588,7 +588,7 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
   }
 
   if (commandExists('pipx')) {
-    addShellCommand('pipx', 'pipx list --json --skip-maintenance');
+    addShellCommand('pipx', 'pipx list --json');
   }
 
   if (commandExists('uv')) {

@@ -215,7 +215,7 @@ esac
   const installFakePythonToolCommands = () => {
     writeTestExecutable('pipx', `#!/usr/bin/env bash
 printf 'pipx|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
-if [ "$*" != 'list --json --skip-maintenance' ]; then exit 2; fi
+if [ "$*" != 'list --json' ]; then exit 2; fi
 printf '%s\\n' '{"venvs":{"black":{"metadata":{"main_package":{"package":"black","package_version":"25.1.0"}}}}}'
 `);
     writeTestExecutable('uv', `#!/usr/bin/env bash
@@ -828,7 +828,7 @@ printf '%s\\n' '123456 Example App'
       '💾 pyenv_versions',
     ]);
     assert.deepEqual(pythonToolCalls(), [
-      'pipx|list --json --skip-maintenance',
+      'pipx|list --json',
       'uv|tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
       'pyenv|versions --bare',
     ]);
