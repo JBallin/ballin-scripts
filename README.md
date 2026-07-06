@@ -57,6 +57,21 @@ This is currently a backup and update toolkit, not a full one-command
 machine restore system. The backed-up snapshots make rebuilds more repeatable
 and auditable.
 
+## Before you install
+
+The installer is interactive and stops with setup guidance if something required
+is missing. Before running it, expect to have:
+
+- macOS, a shell that can run the Bash installer, and Node.js available on your
+  shell `PATH`.
+- GitHub CLI installed and authenticated for the GitHub host that should hold
+  your private backup Gist.
+- Homebrew installed if you want the standard command location and full
+  `ballin update` Homebrew behavior.
+
+Optional integrations and setup tradeoffs are covered in the
+[optional capabilities guide](docs/optional-capabilities.md).
+
 ## Installation
 
 Install with:
