@@ -47,6 +47,7 @@ describe('ballin backup', () => {
   let scratchDir: string;
   let gistUploadLogPath: string;
   let brewLogPath: string;
+  let pythonToolLogPath: string;
   let openLogPath: string;
   let ballinLogPath: string;
   let realCatPath: string;
@@ -211,6 +212,24 @@ esac
     fs.writeFileSync(path.join(testBinDir, 'brew'), 'not executable\n', { mode: 0o644 });
   };
 
+  const installFakePythonToolCommands = () => {
+    writeTestExecutable('pipx', `#!/usr/bin/env bash
+printf 'pipx|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
+if [ "$*" != 'list --json' ]; then exit 2; fi
+printf '%s\\n' '{"venvs":{"black":{"metadata":{"main_package":{"package":"black","package_version":"25.1.0"}}}}}'
+`);
+    writeTestExecutable('uv', `#!/usr/bin/env bash
+printf 'uv|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
+if [ "$*" != 'tool list --show-version-specifiers --show-with --show-extras --show-python --no-progress --color never --no-config' ]; then exit 2; fi
+printf '%s\\n' 'ruff v0.14.8 (Python 3.13.7)'
+`);
+    writeTestExecutable('pyenv', `#!/usr/bin/env bash
+printf 'pyenv|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
+if [ "$*" != 'versions --bare' ]; then exit 2; fi
+printf '%s\\n' '3.12.12' '3.13.11'
+`);
+  };
+
   const installControllableCatCommand = () => {
     const catPath = fs.realpathSync(path.join(testBinDir, 'cat'));
     fs.unlinkSync(path.join(testBinDir, 'cat'));
@@ -239,6 +258,7 @@ done
     scratchDir = path.join(testHomeDir, 'tmp');
     gistUploadLogPath = path.join(testHomeDir, 'fake-gist-uploads.log');
     brewLogPath = path.join(testHomeDir, 'fake-brew.log');
+    pythonToolLogPath = path.join(testHomeDir, 'fake-python-tools.log');
     openLogPath = path.join(testHomeDir, 'fake-open.log');
     ballinLogPath = path.join(testHomeDir, 'fake-ballin.log');
 
@@ -297,6 +317,7 @@ done
       FAKE_GH_EDIT_MISSING_FILE: ghEditMissingFile ? 'true' : 'false',
       FAKE_GH_UPLOAD_FAIL: ghUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
+      FAKE_PYTHON_TOOL_LOG: pythonToolLogPath,
       FAKE_OPEN_LOG: openLogPath,
       FAKE_BALLIN_LOG: ballinLogPath,
       FAKE_BREW_PREFIX: brewPrefix,
@@ -331,6 +352,7 @@ done
   const gistReads = () => readLogLines(gistReadLogPath);
   const gistUploads = () => readLogLines(gistUploadLogPath);
   const brewCalls = () => readLogLines(brewLogPath);
+  const pythonToolCalls = () => readLogLines(pythonToolLogPath);
   const openCalls = () => readLogLines(openLogPath);
   const ballinCalls = () => readLogLines(ballinLogPath);
 
@@ -528,6 +550,9 @@ exit 2
     assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
     assert.include(result.stdout, 'ballin_config');
+    assert.include(result.stdout, 'pipx');
+    assert.include(result.stdout, 'uv_tools');
+    assert.include(result.stdout, 'pyenv_versions');
     assert.include(result.stdout, 'vsI_settings');
     assert.deepEqual(gistReads(), ['missing_file']);
   });
@@ -538,6 +563,9 @@ exit 2
     assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
     assert.include(result.stdout, '\nOptions: ');
+    assert.include(result.stdout, 'pipx');
+    assert.include(result.stdout, 'uv_tools');
+    assert.include(result.stdout, 'pyenv_versions');
     assert.deepEqual(gistReads(), []);
   });
 
@@ -775,6 +803,42 @@ printf '%s\\n' '123456 Example App'
     );
     assert.equal(fs.readFileSync(path.join(backupCacheDir, 'mas'), 'utf8'), '123456 Example App\n');
     assert.deepEqual(gistUploads(), ['npm_global', 'mas']);
+  });
+
+  it('skips Python tooling snapshots when commands are unavailable', () => {
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.equal(result.stdout, '');
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'pipx')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'uv_tools')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'pyenv_versions')));
+    assert.deepEqual(pythonToolCalls(), []);
+  });
+
+  it('snapshots Python tooling inventories when commands are available', () => {
+    installFakePythonToolCommands();
+
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      '💾 pipx',
+      '💾 uv_tools',
+      '💾 pyenv_versions',
+    ]);
+    assert.deepEqual(pythonToolCalls(), [
+      'pipx|list --json',
+      'uv|tool list --show-version-specifiers --show-with --show-extras --show-python --no-progress --color never --no-config',
+      'pyenv|versions --bare',
+    ]);
+    assert.equal(
+      fs.readFileSync(path.join(backupCacheDir, 'pipx'), 'utf8'),
+      '{"venvs":{"black":{"metadata":{"main_package":{"package":"black","package_version":"25.1.0"}}}}}\n',
+    );
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'uv_tools'), 'utf8'), 'ruff v0.14.8 (Python 3.13.7)\n');
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'pyenv_versions'), 'utf8'), '3.12.12\n3.13.11\n');
+    assert.deepEqual(gistUploads(), ['pipx', 'uv_tools', 'pyenv_versions']);
   });
 
   ([

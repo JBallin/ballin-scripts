@@ -23,6 +23,7 @@ when moving between Macs or rebuilding a development machine:
 - Git config and global ignore files
 - Homebrew formulae, casks, services, and Brewfile output
 - global npm packages and Node.js version preference
+- Python tool inventories from pipx, uv, and pyenv
 - VS Code and VS Code Insiders settings, keybindings, and extensions
 - optional Mac App Store app inventory through `mas`
 - local `ballin-scripts` configuration
@@ -143,8 +144,9 @@ the full list of update integrations.
 
 `ballin backup` uploads changed snapshots to a configured private Gist. It can
 include shell dotfiles, Git config, Homebrew formulae and casks, global npm
-packages, nvm settings, editor settings, editor extensions, bash completions,
-and Mac App Store apps when the supporting tools are installed.
+packages, Python tool inventories, nvm settings, editor settings, editor
+extensions, bash completions, and Mac App Store apps when the supporting tools
+are installed.
 
 See the [supported capabilities reference](docs/capabilities.md) for the full
 list of backup snapshots.
