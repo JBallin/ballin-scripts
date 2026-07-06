@@ -74,7 +74,7 @@ Broader explanatory copy can discuss repeatable rebuilds and auditable setup
 with nuance. Visual assets and short hero copy should stay concrete and avoid
 future-state restore claims.
 
-Useful product/help-output candidates that are not canonical yet:
+Non-canonical product/help-output candidates:
 
 - `Keep your macOS development environment backed up and current.`
 - `Preserve, update, and verify your macOS development environment.`
@@ -133,7 +133,7 @@ Avoid:
 - workflow diagrams and architecture illustrations as primary visuals
 - generic SaaS visuals
 - feature overload
-- Apple hardware advertising
+- Apple hardware advertising or product-glamour-shot compositions
 - mascot-first branding
 
 ## Asset hierarchy
@@ -143,7 +143,7 @@ Different assets have different jobs:
 - Social preview: recognition and first impression. Keep it simple, polished,
   and identity-first.
 - README hero: legitimacy, trust, and workflow fit. It can be more atmospheric
-  than the social preview, but should remain quiet and documentation-supporting.
+  than the social preview, but should be quieter and support the documentation.
 - README and docs: explanation. Detailed product behavior belongs in text, not
   inside image assets.
 
@@ -160,6 +160,9 @@ The README hero should optimize for the feeling that a macOS development
 environment is quietly handled and ready to work in. Copy explains what Ballin
 does; the visual should create trust, atmosphere, and workflow fit.
 
+The README hero supports the written README. It should not replace the README's
+explanation or try to show Ballin's internal product state.
+
 A calm macOS developer workspace is an appropriate direction because Ballin is
 macOS-specific. The failure mode is making Apple hardware the hero instead of
 Ballin.
@@ -169,8 +172,12 @@ If workspace imagery is used:
 - keep Ballin as the identity anchor
 - use macOS developer cues as context, not as product advertising
 - avoid cluttered desk scenes
-- avoid fake UI, dashboards, status cards, or workflow diagrams
+- avoid raw CLI output, fake UI, dashboards, status cards, checklists, or
+  workflow diagrams
 - avoid dense terminal screenshots and feature overload
+- avoid command-name-centered artwork
+- avoid literal product-state cards such as "development environment under
+  control"
 - avoid making a symbolic object the focal point if it competes with the
   wordmark or makes the viewer ask what the object is
 
@@ -218,6 +225,8 @@ docs/assets/brand/readme-hero.svg
 docs/assets/brand/readme-hero.png
 ```
 
+README hero images should use a wide `1600x400` format.
+
 Treat editable source files as canonical. Treat PNGs as generated, shareable,
 or upload-ready images derived from those sources. Keep asset file lists and
 regeneration steps in `docs/assets/brand/README.md`; keep identity and copy
@@ -238,8 +247,8 @@ Avoid short copy or visuals that imply:
 - universal reproducibility
 - automatic restore/replay behavior that does not exist yet
 
-Future restore, replay, or bootstrap capabilities should be documented only
-after the product supports them, and short brand copy should remain more
+Restore, replay, or bootstrap capabilities belong in short brand copy only
+after the product supports them. Short brand copy should remain more
 conservative than long-form docs.
 
 ## Rejected and non-canonical directions
@@ -253,7 +262,7 @@ identity without a new decision:
 - fake dashboards or fake product UI
 - workflow diagrams and architecture illustrations
 - abstract maintenance objects as the core identity
-- symbolic focal objects that compete with `>_ ballin`
+- symbolic focal objects that compete with the Ballin identity
 - mascot-first branding
 - feature-heavy hero graphics
 - generated identicon/avatar systems as the primary brand
