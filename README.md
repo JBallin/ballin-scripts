@@ -59,12 +59,9 @@ and auditable.
 
 ## Before you install
 
-The installer is interactive and stops with setup guidance if something required
-is missing. A typical first run assumes macOS with Git, Node.js LTS, and
-GitHub CLI available for private backup Gist setup.
-
-Homebrew is recommended for the standard command location and full
-`ballin update` Homebrew behavior.
+The installer is interactive and guides you through missing setup. For the
+smoothest first run, use macOS with Git, Node.js LTS, GitHub CLI, and Homebrew
+available.
 
 Optional integrations and setup tradeoffs are covered in the
 [optional capabilities guide](docs/optional-capabilities.md).
