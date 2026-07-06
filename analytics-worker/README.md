@@ -196,11 +196,14 @@ It does not add telemetry fields or expose feature-level events, command
 arguments, local paths, Gist details, package/editor data, raw errors,
 environment variables, arbitrary config values, IP storage, or raw install IDs.
 
-## Canonical Command Reset
+## Resetting Aggregates
 
-After the Ballin 2 CLI rename, analytics should use a clean canonical-command
-baseline instead of mixing historical `up` / `gu` rows with `ballin <command>`
-rows. The reset clears all aggregate analytics tables:
+`npm run analytics:reset` clears the aggregate analytics tables when an
+operator wants a fresh reporting baseline. The first expected use is the Ballin
+2 CLI rename, where a clean canonical-command baseline is more useful than
+mixing historical `up` / `gu` rows with `ballin <command>` rows.
+
+The reset clears all aggregate analytics tables:
 
 - `install_days`
 - `command_events_daily`
@@ -214,13 +217,14 @@ Preview the current production row counts before deleting anything:
 npm run analytics:reset -- --dry-run
 ```
 
-Reset the production aggregates only after confirming the Ballin 2 baseline:
+Reset the production aggregates only after confirming that historical aggregate
+data is no longer needed:
 
 ```shell
-npm run analytics:reset -- --confirm RESET_ANALYTICS_AFTER_CLI_RENAME
+npm run analytics:reset -- --confirm RESET_ANALYTICS_AGGREGATES
 ```
 
-Verify that the report no longer shows stale historical command rows:
+Verify the fresh reporting baseline:
 
 ```shell
 npm run analytics:report
@@ -229,6 +233,3 @@ npm run analytics:report
 The reset command uses local Wrangler authentication and the ignored
 `analytics-worker/wrangler.toml` file, like the report command. If Wrangler is
 not installed globally, the script falls back to `npx wrangler`.
-
-Production reset date: not yet performed. When the production reset is run,
-replace this sentence with the UTC date and operator note for the cleanup.

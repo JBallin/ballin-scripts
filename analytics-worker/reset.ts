@@ -21,7 +21,7 @@ type SpawnRunner = (
 ) => SpawnSyncReturns<string>;
 
 const defaultDatabase = 'ballin-scripts-analytics';
-const confirmationPhrase = 'RESET_ANALYTICS_AFTER_CLI_RENAME';
+const confirmationPhrase = 'RESET_ANALYTICS_AGGREGATES';
 const aggregateTables = [
   'install_days',
   'command_events_daily',

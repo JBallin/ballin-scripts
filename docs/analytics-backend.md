@@ -69,11 +69,12 @@ telemetry fields or report feature-level events, command arguments, local paths,
 Gist details, package/editor data, raw errors, environment variables,
 arbitrary config values, IPs, or raw install IDs.
 
-## Ballin 2 Command Baseline Reset
+## Resetting Aggregates
 
-For the Ballin 2 canonical CLI rename, the chosen cleanup path is a clean reset
-instead of mapping old `up` / `gu` rows into reports. This keeps analytics
-reports focused on the current `ballin <command>` model.
+Use `npm run analytics:reset` when production analytics should start from a
+fresh reporting baseline. The first expected use is the Ballin 2 canonical CLI
+rename, where the chosen cleanup path is a clean reset instead of mapping old
+`up` / `gu` rows into reports.
 
 The reset scope is the full aggregate schema:
 
@@ -92,17 +93,14 @@ npm run analytics:reset -- --dry-run
 Clear production aggregate rows:
 
 ```shell
-npm run analytics:reset -- --confirm RESET_ANALYTICS_AFTER_CLI_RENAME
+npm run analytics:reset -- --confirm RESET_ANALYTICS_AGGREGATES
 ```
 
-Confirm the canonical baseline after reset:
+Confirm the fresh reporting baseline after reset:
 
 ```shell
 npm run analytics:report
 ```
-
-Production reset date: not yet performed. After the production reset runs,
-record the UTC date here with a short operator note.
 
 ## Abuse Controls
 
