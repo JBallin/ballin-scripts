@@ -155,7 +155,7 @@ ballin backup
 
 Backup status markers:
 
-- `💾` newly saved or newly meaningful snapshot
+- `✚` newly saved or newly meaningful snapshot
 - `✎` existing snapshot content changed
 - `✖︎` existing snapshot became empty
 - `✔` unchanged non-empty snapshot
