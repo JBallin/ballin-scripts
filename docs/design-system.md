@@ -24,6 +24,10 @@ guidance while preserving the job of each surface:
 - Primary visual wordmark: lowercase `ballin`
 - Signature/contextual lockup: `>_ ballin`
 
+For repository-specific assets, `>_ ballin-scripts` may be used when the asset
+is explicitly representing the repository or package rather than the product
+identity alone.
+
 Use Ballin for user-facing product language. Use `ballin-scripts` when precision
 matters for the repository, package, local checkout, install paths, or
 self-update behavior.
@@ -43,8 +47,7 @@ Brand principles
   -> Tagline
   -> Elevator pitch
   -> README opening
-  -> Resume / LinkedIn
-  -> Website / blog / talks
+  -> Profiles / website / talks
 ```
 
 Canonical copy:
@@ -67,8 +70,8 @@ Surface guidance:
   implementation detail for first-time readers.
 - README onboarding should prefer practical clarity, such as prerequisites
   and install expectations, over a more promotional tagline.
-- Resume, LinkedIn, website, blog, and talk descriptions should derive from the
-  product truth rather than introducing a new position.
+- Profile, website, blog, and talk descriptions should derive from the product
+  truth rather than introducing a new position.
 
 Broader explanatory copy can discuss repeatable rebuilds and auditable setup
 with nuance. Visual assets and short hero copy should stay concrete and avoid
@@ -79,8 +82,9 @@ Non-canonical product/help-output candidates:
 - `Keep your macOS development environment backed up and current.`
 - `Preserve, update, and verify your macOS development environment.`
 
-Do not promote these candidates without intentionally updating the relevant
-downstream surfaces.
+Keep these available for copy review, but do not promote them without
+intentionally updating the relevant downstream surfaces. The current capability
+tagline remains more concrete and action-oriented.
 
 ## Voice
 
@@ -225,12 +229,23 @@ docs/assets/brand/readme-hero.svg
 docs/assets/brand/readme-hero.png
 ```
 
-README hero images should use a wide `1600x400` format.
+README hero images should use a wide format. The current default target is
+`1600x400` unless a surface requires a different aspect ratio.
 
 Treat editable source files as canonical. Treat PNGs as generated, shareable,
 or upload-ready images derived from those sources. Keep asset file lists and
 regeneration steps in `docs/assets/brand/README.md`; keep identity and copy
 guidance here.
+
+## Accessibility and rendering
+
+Brand assets should remain readable in the contexts where they appear.
+
+- Use sufficient contrast for text and key visual elements.
+- Avoid relying on tiny text as the main design element.
+- Include useful alt text when adding README images.
+- Check README assets in GitHub rendering before merging.
+- Prefer simple compositions that still work when scaled down.
 
 ## Claim guardrails
 
