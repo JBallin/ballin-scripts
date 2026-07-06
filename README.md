@@ -57,6 +57,15 @@ This is currently a backup and update toolkit, not a full one-command
 machine restore system. The backed-up snapshots make rebuilds more repeatable
 and auditable.
 
+## Before you install
+
+The installer is interactive and guides you through missing setup. For the
+smoothest first run, use macOS with current Node.js LTS, authenticated GitHub
+CLI, and Homebrew available.
+
+Optional integrations and setup tradeoffs are covered in the
+[optional capabilities guide](docs/optional-capabilities.md).
+
 ## Installation
 
 Install with:
