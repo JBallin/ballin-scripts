@@ -90,11 +90,9 @@ const countSql = aggregateTables.map((tableName) => (
   `SELECT '${tableName}' AS table_name, count(*) AS rows FROM ${tableName}`
 )).join('\nUNION ALL\n');
 
-const resetSql = [
-  'BEGIN TRANSACTION;',
-  ...aggregateTables.map((tableName) => `DELETE FROM ${tableName};`),
-  'COMMIT;',
-].join('\n');
+const resetSql = aggregateTables
+  .map((tableName) => `DELETE FROM ${tableName};`)
+  .join('\n');
 
 const wranglerArgsFor = (sql: string, options: ResetOptions): string[] => {
   const rootDir = options.rootDir ?? path.join(__dirname, '..');
