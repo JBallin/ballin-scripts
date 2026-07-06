@@ -48,6 +48,7 @@ jobs:
 
       - name: Check for manual D1 migrations
         if: github.event_name == 'push'
+        shell: bash
         env:
           BEFORE_SHA: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
@@ -113,8 +114,12 @@ jobs:
             base_sha="${last_success_sha}"
           fi
 
-          if git diff --name-only "${base_sha}" "${CURRENT_SHA}" -- analytics-worker/migrations/ \
-            | grep -q .; then
+          if ! migration_changes="$(git diff --name-only "${base_sha}" "${CURRENT_SHA}" -- analytics-worker/migrations/)"; then
+            echo "::error::Could not diff analytics-worker migrations between ${base_sha} and ${CURRENT_SHA}. Refusing to deploy until the migration guard can verify whether remote D1 migrations are needed."
+            exit 1
+          fi
+
+          if [ -n "${migration_changes}" ]; then
             echo "::error::Remote D1 migrations remain manual. Apply migrations with wrangler d1 migrations apply ballin-scripts-analytics --remote, then rerun this workflow from main."
             exit 1
           fi
