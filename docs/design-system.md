@@ -5,12 +5,16 @@ messaging, visual direction, and brand asset guidance. It is meant to guide
 future README, docs, CLI help, social preview, hero, website, and profile copy
 work without reopening broad visual exploration.
 
-Use this document to decide what Ballin should say and feel like. Use the
-downstream issue for each surface to decide how that guidance gets applied:
+Use this document to decide what Ballin should say and feel like. README,
+CLI help, brand assets, website copy, and profile copy should apply this
+guidance while preserving the job of each surface:
 
-- README onboarding and install flow: issue #219
-- README hero/banner asset: issue #193
-- Restore, replay, and bootstrap language: issue #197
+- README onboarding and install flow should prioritize practical first-run
+  clarity.
+- README hero/banner assets should prioritize legitimacy, trust, and workflow
+  fit.
+- Restore, replay, and bootstrap language should stay conservative until those
+  capabilities exist.
 
 ## Naming
 
@@ -143,14 +147,12 @@ Different assets have different jobs:
 - README and docs: explanation. Detailed product behavior belongs in text, not
   inside image assets.
 
-The current social preview is the completed identity-first asset. The README
-hero remains future work and should consume this guidance rather than reopen
-the full design exploration.
+The social preview is the identity-first asset. README hero work should consume
+this guidance rather than reopen broad visual exploration.
 
-README onboarding and top-copy improvements remain separate from this asset
-hierarchy. Issue #219 should use the copy system here when evaluating whether to
-adjust the README opening, prerequisites, installation wording, documentation
-links, or troubleshooting pointers.
+README onboarding and top-copy changes should use the copy system here when
+evaluating the README opening, prerequisites, installation wording,
+documentation links, or troubleshooting pointers.
 
 ## README hero guidance
 
@@ -194,9 +196,9 @@ from the hero.
 
 If removing the strip makes the hero calmer and stronger, remove it.
 
-## Source and export conventions
+## Source and generated image conventions
 
-Editable sources and exported brand assets live under:
+Editable source files and generated brand images live under:
 
 ```text
 docs/assets/brand/
@@ -217,8 +219,9 @@ docs/assets/brand/readme-hero.png
 ```
 
 Treat editable source files as canonical. Treat PNGs as generated, shareable,
-or upload-ready exports. Keep asset file lists and export steps in
-`docs/assets/brand/README.md`; keep identity and copy guidance here.
+or upload-ready images derived from those sources. Keep asset file lists and
+regeneration steps in `docs/assets/brand/README.md`; keep identity and copy
+guidance here.
 
 ## Claim guardrails
 
