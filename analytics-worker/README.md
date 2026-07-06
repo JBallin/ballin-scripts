@@ -40,12 +40,6 @@ The worker must not store:
 
 `POST /v1/events`
 
-Required header:
-
-```text
-X-Ballin-Analytics-Token: <configured ingest token>
-```
-
 Example payload:
 
 ```json
@@ -67,7 +61,7 @@ Responses:
 
 - `204` when the event is accepted
 - `400` for invalid JSON or invalid event fields
-- `401` when the ingest token is missing or invalid
+- `429` when rate limits are exceeded
 - `404` for unknown paths
 - `405` for unsupported methods
 
@@ -86,9 +80,13 @@ The worker should ignore request IP for analytics purposes. Cloudflare may still
 process request metadata operationally before the worker runs; the application
 schema does not read or persist it.
 
-The ingest token is a public client gate once it is shipped in the CLI, not a
-secret abuse solution for a distributed CLI. The Worker also uses a Cloudflare
-Workers rate limiting binding for `POST /v1/events`.
+The endpoint accepts public client telemetry. Valid events can be spoofed, so
+aggregate analytics are directional and not security-trustworthy. The Worker
+limits abuse with strict schema validation, low-cardinality fields, body-size and
+date-skew checks, server-side install ID hashing, and Cloudflare Workers rate
+limits. Request source metadata is used only as a transient rate-limit key and is
+not stored, queried, logged, or reported by the application. Older clients may
+still send `X-Ballin-Analytics-Token`; the Worker ignores that legacy header.
 
 ## Production Setup
 
@@ -114,19 +112,13 @@ globally, use `npx wrangler` in place of `wrangler`.
    wrangler secret put INSTALL_ID_HASH_SECRET
    ```
 
-5. Set the ingest token:
-
-   ```shell
-   wrangler secret put INGEST_TOKEN
-   ```
-
-6. Apply migrations:
+5. Apply migrations:
 
    ```shell
    wrangler d1 migrations apply ballin-scripts-analytics --remote
    ```
 
-7. Create the `analytics-worker-production` GitHub deployment environment, allow
+6. Create the `analytics-worker-production` GitHub deployment environment, allow
    deployments only from `main`, and add these environment secrets:
 
    - `CLOUDFLARE_API_TOKEN`, from a Cloudflare Account API Token created with
@@ -134,7 +126,7 @@ globally, use `npx wrangler` in place of `wrangler`.
    - `CLOUDFLARE_ACCOUNT_ID`
    - `CLOUDFLARE_D1_DATABASE_ID`
 
-8. Confirm the `Deploy Analytics Worker` GitHub Actions workflow completes
+7. Confirm the `Deploy Analytics Worker` GitHub Actions workflow completes
    after Worker-impacting changes land on `main`.
 
 ## Automatic Deploys
@@ -142,8 +134,8 @@ globally, use `npx wrangler` in place of `wrangler`.
 The deploy workflow runs `npm test`, creates an ignored runner-local
 `wrangler.toml` from `wrangler.toml.example`, fills in the D1 database ID from
 `CLOUDFLARE_D1_DATABASE_ID`, and runs `wrangler deploy` from this directory. It
-does not set or rotate the existing Cloudflare Worker secrets
-`INSTALL_ID_HASH_SECRET` or `INGEST_TOKEN`.
+does not set or rotate the existing Cloudflare Worker hash secret
+`INSTALL_ID_HASH_SECRET`.
 
 Keep the Cloudflare values as environment secrets rather than repository
 secrets. The workflow runs automatically on Worker-impacting pushes to `main`
@@ -202,6 +194,9 @@ The report uses local Wrangler authentication and
 - top-level command usage
 - command success, failure, and unknown counts
 - runtime/version trends from existing aggregate rows
+
+Reports are directional maintenance signals. Because ingestion is public client
+telemetry, aggregate counts are not security-trustworthy.
 
 On a machine where this repository has not been configured for Worker access,
 create the ignored local config first:

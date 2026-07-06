@@ -34,7 +34,6 @@ type AnalyticsRecordInput = {
 
 type SenderOptions = {
   endpoint?: string;
-  ingestToken?: string;
   timeoutMs?: number;
 };
 
@@ -83,7 +82,6 @@ const allowedOs = new Set(['darwin', 'linux', 'win32']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
-const productionAnalyticsIngestToken = '6jC_OqsMynyQc3FKXgUN7aP3bbDQ_H_DMhGDrw7t6RE';
 const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
   'ballin-scripts collects minimal anonymous usage analytics after this notice.',
   'Disable: ballin config set analytics.enabled false',
@@ -223,7 +221,7 @@ const buildAnalyticsPayload = (
   osVersion: coarseOsVersion(),
 });
 
-const requestOptions = (endpoint: string, ingestToken: string): RequestOptions => {
+const requestOptions = (endpoint: string): RequestOptions => {
   const url = new URL(endpoint);
   return {
     method: 'POST',
@@ -233,7 +231,6 @@ const requestOptions = (endpoint: string, ingestToken: string): RequestOptions =
     path: `${url.pathname}${url.search}`,
     headers: {
       'content-type': 'application/json',
-      'x-ballin-analytics-token': ingestToken,
     },
   };
 };
@@ -251,14 +248,14 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise(
     }
   };
 
-  if (!options.endpoint || !options.ingestToken) {
+  if (!options.endpoint) {
     settle();
     return;
   }
 
   try {
     const body = JSON.stringify(payload);
-    const optionsWithHeaders = requestOptions(options.endpoint, options.ingestToken);
+    const optionsWithHeaders = requestOptions(options.endpoint);
     const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
     let destroyRequest = () => {};
     wallClockTimeout = setTimeout(() => {
@@ -327,7 +324,6 @@ const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: Analyt
     }, installId, runtime.appVersion);
     await (runtime.sender ?? sendAnalyticsPayload)(payload, {
       endpoint: runtime.endpoint ?? productionAnalyticsEndpoint,
-      ingestToken: runtime.ingestToken ?? productionAnalyticsIngestToken,
       timeoutMs: runtime.timeoutMs ?? defaultTimeoutMs,
     });
   } catch {
