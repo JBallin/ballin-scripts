@@ -215,12 +215,12 @@ esac
   const installFakePythonToolCommands = () => {
     writeTestExecutable('pipx', `#!/usr/bin/env bash
 printf 'pipx|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
-if [ "$*" != 'list --json' ]; then exit 2; fi
+if [ "$*" != 'list --json --skip-maintenance' ]; then exit 2; fi
 printf '%s\\n' '{"venvs":{"black":{"metadata":{"main_package":{"package":"black","package_version":"25.1.0"}}}}}'
 `);
     writeTestExecutable('uv', `#!/usr/bin/env bash
 printf 'uv|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
-if [ "$*" != 'tool list --show-version-specifiers --show-with --show-extras --show-python --no-progress --color never --no-config' ]; then exit 2; fi
+if [ "$*" != 'tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config' ]; then exit 2; fi
 printf '%s\\n' 'ruff v0.14.8 (Python 3.13.7)'
 `);
     writeTestExecutable('pyenv', `#!/usr/bin/env bash
@@ -828,8 +828,8 @@ printf '%s\\n' '123456 Example App'
       '💾 pyenv_versions',
     ]);
     assert.deepEqual(pythonToolCalls(), [
-      'pipx|list --json',
-      'uv|tool list --show-version-specifiers --show-with --show-extras --show-python --no-progress --color never --no-config',
+      'pipx|list --json --skip-maintenance',
+      'uv|tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
       'pyenv|versions --bare',
     ]);
     assert.equal(

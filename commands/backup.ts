@@ -588,13 +588,13 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
   }
 
   if (commandExists('pipx')) {
-    addShellCommand('pipx', 'pipx list --json');
+    addShellCommand('pipx', 'pipx list --json --skip-maintenance');
   }
 
   if (commandExists('uv')) {
     addShellCommand(
       'uv_tools',
-      'uv tool list --show-version-specifiers --show-with --show-extras --show-python --no-progress --color never --no-config',
+      'uv tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
     );
   }
 
