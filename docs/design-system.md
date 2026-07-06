@@ -36,14 +36,12 @@ Prompt and cursor motifs are useful accents, but they do not need to appear in
 every asset. Avoid mascot-first, badge-first, or complex logo-first branding for
 now.
 
-Compact avatar, favicon, and icon-mark assets should wait until there is a real
-small-size consumer, such as a website favicon, docs-site icon, app icon,
-profile/avatar surface, or repeated square-mark use case. If a compact mark is
-needed later, start from a secondary custom mark derived from the wordmark-led
-system: likely a restrained lowercase `b` or `b_` cursor motif using the
-graphite, off-white, and green accent palette. The compact mark should identify
-Ballin only where the full wordmark does not fit; it should not replace or
-compete with the lowercase `ballin` wordmark.
+Compact avatar, favicon, and icon-mark assets should start from a secondary
+custom mark derived from the wordmark-led system: likely a restrained lowercase
+`b` or `b_` cursor motif using the graphite, off-white, and green accent
+palette. The compact mark should identify Ballin only where the full wordmark
+does not fit; it should not replace or compete with the lowercase `ballin`
+wordmark.
 
 ## Copy system
 
