@@ -230,10 +230,11 @@ environment variables, arbitrary config values, IP storage, or raw install IDs.
 
 ## Resetting Aggregates
 
-`npm run analytics:reset` clears the aggregate analytics tables when an
-operator wants a fresh reporting baseline. The first expected use is the Ballin
-2 CLI rename, where a clean canonical-command baseline is more useful than
-mixing historical `up` / `gu` rows with `ballin <command>` rows.
+`analytics-worker/reset.ts` clears the aggregate analytics tables when an
+operator wants a fresh reporting baseline. It is a rare maintenance utility,
+not a normal project workflow. The first expected use is the Ballin 2 CLI
+rename, where a clean canonical-command baseline is more useful than mixing
+historical `up` / `gu` rows with `ballin <command>` rows.
 
 The reset clears all aggregate analytics tables:
 
@@ -246,14 +247,14 @@ There is no raw event table.
 Preview the current production row counts before deleting anything:
 
 ```shell
-npm run analytics:reset -- --dry-run
+node analytics-worker/reset.ts --dry-run
 ```
 
 Reset the production aggregates only after confirming that historical aggregate
 data is no longer needed:
 
 ```shell
-npm run analytics:reset -- --confirm RESET_ANALYTICS_AGGREGATES
+node analytics-worker/reset.ts --confirm RESET_ANALYTICS_AGGREGATES
 ```
 
 Verify the fresh reporting baseline:
