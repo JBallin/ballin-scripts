@@ -17,6 +17,12 @@ if [ ! -d "$repo_dir" ]; then
   repo_existed=false
 fi
 
+if ! command -v git >/dev/null 2>&1 || ! git --version >/dev/null 2>&1; then
+  printf '\n⚠️  ERROR: Git is required before install can continue.\n'
+  printf '\nInstall Git, then run this installer again.\n'
+  exit 1
+fi
+
 if ! (
   cd "$HOME" || exit
   if [ "$repo_existed" = false ]; then
