@@ -15,8 +15,9 @@ Production sends use the deployed workers.dev endpoint:
 https://ballin-scripts-analytics.jballin.workers.dev/v1/events
 ```
 
-The Worker has a D1 binding, scheduled retention cleanup, two Cloudflare
-secrets, and an `ANALYTICS_RATE_LIMITER` binding for `POST /v1/events`.
+The Worker has a D1 binding, scheduled retention cleanup, an
+`INSTALL_ID_HASH_SECRET`, and an `ANALYTICS_RATE_LIMITER` binding for
+`POST /v1/events`.
 Worker-impacting changes deploy from `main` through the `Deploy Analytics
 Worker` GitHub Actions workflow.
 
@@ -28,7 +29,7 @@ Worker` GitHub Actions workflow.
 - The CLI does not need a runtime analytics SDK.
 - Retention is controlled by the Worker and D1 schema.
 - The deployment can stay tiny: one Worker, one D1 database, one rate-limit
-  binding, and two secrets.
+  binding, and one hash secret.
 
 ## Alternatives Considered
 
@@ -64,6 +65,10 @@ local Wrangler authentication and the ignored local
 active installs, top-level command usage, command success/failure counts, and
 runtime/version trends. It does not require, accept, or print Cloudflare secret
 values.
+
+Analytics ingestion is public client telemetry. Valid events can be spoofed, so
+reports are directional maintenance signals rather than security-trustworthy
+counts.
 
 The report only reads the existing aggregate tables: `install_days`,
 `command_events_daily`, and `version_events_daily`. It does not introduce new
@@ -107,10 +112,13 @@ npm run analytics:report
 
 ## Abuse Controls
 
-The skeleton requires an ingest token before accepting events, rejects oversized
-payloads, and applies a Workers rate-limit binding to `POST /v1/events`. A
-distributed CLI cannot keep a token truly secret, so the token is only one part
-of the production abuse story.
+The Worker accepts public client events and relies on layered abuse controls
+instead of a client-shipped secret. It rejects oversized payloads and unsupported
+fields, validates dates and low-cardinality runtime values, hashes install IDs
+before storage, applies global/source rate limits before parsing, and applies an
+install-hash rate limit before D1 writes. Request source metadata is used only as
+a transient Cloudflare rate-limit key; it is not stored, queried, logged, or
+reported by the application.
 
 ## Production Checklist
 
@@ -121,15 +129,14 @@ For production setup or recreation:
   `analytics-worker/wrangler.toml`
 - set the D1 database ID in local `analytics-worker/wrangler.toml`
 - set `INSTALL_ID_HASH_SECRET`
-- set `INGEST_TOKEN`
 - create the `analytics-worker-production` GitHub deployment environment with a
   `main` branch rule and environment secrets `CLOUDFLARE_API_TOKEN`,
   `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`
 - apply `analytics-worker/migrations/0001_initial.sql` with `--remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
   change landed on `main`
-- confirm the deployed Worker returns `204` for a valid event, `401` for a
-  missing or bad token, and `400` for unsupported fields or invalid enums
+- confirm the deployed Worker returns `204` for a valid event, `400` for
+  unsupported fields or invalid enums, and `429` when rate limits are exceeded
 - query D1 to confirm only hashed install/day rows and aggregate counts are
   stored
 

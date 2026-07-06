@@ -29,7 +29,6 @@ type AnalyticsPayload = {
 
 type SenderOptions = {
   endpoint?: string;
-  ingestToken?: string;
   timeoutMs?: number;
 };
 
@@ -85,7 +84,6 @@ const recordWithSender = (
 
   return recordAnalyticsEvent(input, {
     endpoint: 'https://analytics.example.test/v1/events',
-    ingestToken: 'test-token',
     env: {},
     installIdPath: testInstallIdPath,
     sender: async (payload: AnalyticsPayload) => {
@@ -182,7 +180,7 @@ describe('analytics client', () => {
     });
   });
 
-  it('uses production endpoint and token defaults when runtime overrides are absent', async () => {
+  it('uses the production endpoint default without a bundled ingest token', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
@@ -202,8 +200,8 @@ describe('analytics client', () => {
 
     assert.deepInclude(senderOptions[0], {
       endpoint: 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events',
-      ingestToken: '6jC_OqsMynyQc3FKXgUN7aP3bbDQ_H_DMhGDrw7t6RE',
     });
+    assert.notProperty(senderOptions[0], 'ingestToken');
   });
 
   it('skips sending when the local install ID is missing', async () => {
@@ -347,7 +345,6 @@ describe('analytics client', () => {
         currentNow = 10_800;
       }, {
         endpoint: 'https://analytics.example.test/v1/events',
-        ingestToken: 'test-token',
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => currentNow,
@@ -396,7 +393,6 @@ describe('analytics client', () => {
         process.exitCode = 17;
       }, {
         endpoint: 'https://analytics.example.test/v1/events',
-        ingestToken: 'test-token',
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => currentNow,
@@ -431,7 +427,6 @@ describe('analytics client', () => {
       fs.rmSync(testInstallIdPath, { force: true });
     }, {
       endpoint: 'https://analytics.example.test/v1/events',
-      ingestToken: 'test-token',
       env: {},
       installIdPath: testInstallIdPath,
       preserveLocalState: true,
@@ -460,7 +455,6 @@ describe('analytics client', () => {
     try {
       await runWithCommandAnalytics('ballin self-update', () => {}, {
         endpoint: 'https://analytics.example.test/v1/events',
-        ingestToken: 'test-token',
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => 1000,
@@ -497,7 +491,6 @@ describe('analytics client', () => {
       throw new Error('simulated command failure');
     }, {
       endpoint: 'https://analytics.example.test/v1/events',
-      ingestToken: 'test-token',
       env: {},
       installIdPath: testInstallIdPath,
       nowMs: () => currentNow,
@@ -594,7 +587,6 @@ describe('analytics client', () => {
         osVersion: '15',
       }, {
         endpoint: 'https://analytics.example.test/v1/events',
-        ingestToken: 'test-token',
         timeoutMs: 25,
       });
     } finally {
@@ -613,8 +605,8 @@ describe('analytics client', () => {
     });
     assert.deepInclude(options.headers, {
       'content-type': 'application/json',
-      'x-ballin-analytics-token': 'test-token',
     });
+    assert.notProperty(options.headers, 'x-ballin-analytics-token');
   });
 
   it('bounds https sends with a wall-clock timeout and swallows request failures', async () => {
@@ -652,7 +644,6 @@ describe('analytics client', () => {
         osVersion: '15',
       }, {
         endpoint: 'https://analytics.example.test/v1/events',
-        ingestToken: 'test-token',
         timeoutMs: 1,
       });
       await analyticsDone;

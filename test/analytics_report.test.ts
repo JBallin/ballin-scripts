@@ -97,6 +97,7 @@ describe('analytics D1 report', () => {
     });
 
     assert.include(output, 'Analytics report (2026-06-01 to 2026-06-03)');
+    assert.include(output, 'Caveat: analytics are public client telemetry; aggregate counts are directional and not security-trustworthy.');
     assert.include(output, '2026-06-02  0');
     assert.include(output, 'ballin update  5      3        1        1        20.0%');
     assert.include(output, '2026-06-01  1.0.0        24          darwin  15          5');
