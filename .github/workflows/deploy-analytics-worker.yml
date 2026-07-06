@@ -1,0 +1,155 @@
+name: Deploy Analytics Worker
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - analytics-worker/**
+      - .github/workflows/deploy-analytics-worker.yml
+      - .github/workflows/ci.yml
+      - package.json
+      - package-lock.json
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: deploy-analytics-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: analytics-worker-production
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          check-latest: true
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run validation
+        run: npm test
+
+      - name: Check for manual D1 migrations
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          base_sha="${BEFORE_SHA}"
+          last_success_sha="$(node <<'NODE'
+          const https = require('https');
+          const lookupFailed = '__LOOKUP_FAILED__';
+
+          const apiUrl = new URL(
+            `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/actions/workflows/deploy-analytics-worker.yml/runs`,
+          );
+          apiUrl.searchParams.set('branch', 'main');
+          apiUrl.searchParams.set('status', 'success');
+          apiUrl.searchParams.set('per_page', '10');
+
+          const request = https.get(apiUrl, {
+            headers: {
+              accept: 'application/vnd.github+json',
+              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              'user-agent': 'ballin-scripts-deploy',
+            },
+          }, (response) => {
+            let body = '';
+            response.setEncoding('utf8');
+            response.on('data', (chunk) => {
+              body += chunk;
+            });
+            response.on('end', () => {
+              if (response.statusCode >= 400) {
+                process.stdout.write(lookupFailed);
+                return;
+              }
+              let data;
+              try {
+                data = JSON.parse(body);
+              } catch {
+                process.stdout.write(lookupFailed);
+                return;
+              }
+              const lastSuccess = (data.workflow_runs || []).find((run) => (
+                run.head_sha && run.head_sha !== process.env.CURRENT_SHA
+              ));
+              if (lastSuccess) {
+                process.stdout.write(lastSuccess.head_sha);
+              }
+            });
+          });
+
+          request.on('error', () => {
+            process.stdout.write(lookupFailed);
+          });
+          NODE
+          )"
+
+          if [ "${last_success_sha}" = "__LOOKUP_FAILED__" ]; then
+            echo "::error::Could not inspect prior deploy history. Refusing to deploy until the migration guard can verify whether remote D1 migrations are needed."
+            exit 1
+          fi
+
+          if [ -n "${last_success_sha}" ]; then
+            base_sha="${last_success_sha}"
+          fi
+
+          if ! migration_changes="$(git diff --name-only "${base_sha}" "${CURRENT_SHA}" -- analytics-worker/migrations/)"; then
+            echo "::error::Could not diff analytics-worker migrations between ${base_sha} and ${CURRENT_SHA}. Refusing to deploy until the migration guard can verify whether remote D1 migrations are needed."
+            exit 1
+          fi
+
+          if [ -n "${migration_changes}" ]; then
+            echo "::error::Remote D1 migrations remain manual. Apply migrations with wrangler d1 migrations apply ballin-scripts-analytics --remote, then rerun this workflow from main."
+            exit 1
+          fi
+
+      - name: Create Wrangler config
+        working-directory: analytics-worker
+        env:
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_D1_DATABASE_ID}" ]; then
+            echo "::error::CLOUDFLARE_D1_DATABASE_ID is not configured"
+            exit 1
+          fi
+          cp wrangler.toml.example wrangler.toml
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'wrangler.toml';
+          const value = fs
+            .readFileSync(path, 'utf8')
+            .replace(
+              'replace-with-cloudflare-d1-database-id',
+              process.env.CLOUDFLARE_D1_DATABASE_ID,
+            );
+          fs.writeFileSync(path, value);
+          NODE
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          workingDirectory: analytics-worker
