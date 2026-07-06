@@ -19,8 +19,7 @@ fi
 
 if ! command -v git >/dev/null 2>&1 || ! git --version >/dev/null 2>&1; then
   printf '\n⚠️  ERROR: Git is required before install can continue.\n'
-  printf '\nInstall Git or accept the macOS Command Line Tools setup prompt.'
-  printf '\nThen run this installer again.\n'
+  printf '\nInstall Git, then run this installer again.\n'
   exit 1
 fi
 

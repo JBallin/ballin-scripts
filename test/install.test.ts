@@ -232,7 +232,7 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Git is required before install can continue');
-    assert.include(result.stdout, 'macOS Command Line Tools');
+    assert.include(result.stdout, 'Install Git, then run this installer again');
     assert.include(result.stdout, 'run this installer again');
     assert.deepEqual(commandLog(), []);
   });
@@ -246,7 +246,7 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Git is required before install can continue');
-    assert.include(result.stdout, 'macOS Command Line Tools');
+    assert.include(result.stdout, 'Install Git, then run this installer again');
     assert.include(result.stdout, 'run this installer again');
     assert.deepEqual(commandLog(), []);
   });
