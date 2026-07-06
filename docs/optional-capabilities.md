@@ -81,6 +81,10 @@ that host, and either adopts an existing backup Gist or creates a new one. When
 an adopted backup includes a saved `ballin_config` snapshot, the installer restores
 them before continuing.
 
+Setup creates backup Gists as secret. To share one publicly, make it public in
+GitHub after reviewing it: public backups can expose paths, usernames, tool
+choices, package lists, and other local config, and cannot be made secret again.
+
 ## Readiness checks
 
 Use `ballin doctor` to check whether the Ballin-managed environment is healthy,
