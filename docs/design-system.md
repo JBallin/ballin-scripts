@@ -5,6 +5,13 @@ messaging, visual direction, and brand asset guidance. It is meant to guide
 future README, docs, CLI help, social preview, hero, website, and profile-copy
 work without reopening broad visual exploration.
 
+Use this document to decide what Ballin should say and feel like. Use downstream
+issues to decide how a specific surface should apply it:
+
+- README onboarding and install flow: issue #219
+- README hero/banner asset: issue #193
+- Restore, replay, and bootstrap language: issue #197
+
 ## Naming
 
 - Repository and package identity: `ballin-scripts`
@@ -41,10 +48,23 @@ Canonical copy:
 - Product truth: `Ballin keeps a macOS development environment backed up and current.`
 - Capability tagline: `Back up your dotfiles and update your macOS development environment.`
 - Short hero line: `Back up dotfiles. Keep your tools current.`
+- Elevator pitch: Ballin backs up development-environment state and automates
+  routine macOS developer-tool updates.
 
 The capability tagline is currently used by the `ballin` help/overview output.
 Treat CLI help as a downstream product surface that should stay aligned with
 this document.
+
+Surface guidance:
+
+- CLI help/overview should make the product purpose clear before listing
+  commands.
+- README opening copy should apply the product truth while adding enough
+  implementation detail for first-time readers.
+- README onboarding work should prefer practical clarity, such as prerequisites
+  and install expectations, over a more promotional tagline.
+- Resume, LinkedIn, website, blog, and talk descriptions should derive from the
+  product truth rather than introducing a new position.
 
 Broader explanatory copy can discuss repeatable rebuilds and auditable setup
 with nuance. Visual assets and short hero copy should stay concrete and avoid
@@ -57,6 +77,28 @@ Useful product/help-output candidates that are not canonical yet:
 
 Do not promote these candidates without intentionally updating the relevant
 downstream surfaces.
+
+## Voice
+
+Ballin copy should be direct, concrete, and calm. Prefer plain capability
+language over marketing claims. Explain benefits through what the tool actually
+does: backing up development-environment state, automating routine updates, and
+making rebuilds more repeatable and auditable.
+
+Prefer:
+
+- backed up and current
+- private backups
+- routine updates
+- Ballin-managed environment
+- repeatable and auditable, when there is room for nuance
+
+Avoid:
+
+- hype-first claims
+- vague "magic" language
+- "sync" language that implies cross-device or bidirectional behavior
+- restore/replay language before that behavior exists
 
 ## Visual identity
 
@@ -104,6 +146,11 @@ Different assets have different jobs:
 The current social preview is the completed identity-first asset. The README
 hero remains future work and should consume this guidance rather than reopen
 the full design exploration.
+
+README onboarding and top-copy improvements remain separate from this asset
+hierarchy. Issue #219 should use the copy system here when evaluating whether to
+adjust the README opening, prerequisites, installation wording, documentation
+links, or troubleshooting pointers.
 
 ## README hero guidance
 
