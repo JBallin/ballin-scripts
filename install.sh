@@ -17,7 +17,7 @@ if [ ! -d "$repo_dir" ]; then
   repo_existed=false
 fi
 
-if [ ! -x "$(command -v git)" ]; then
+if ! command -v git >/dev/null 2>&1 || ! git --version >/dev/null 2>&1; then
   printf '\n⚠️  ERROR: Git is required before install can continue.\n'
   printf '\nInstall Git or accept the macOS Command Line Tools setup prompt.'
   printf '\nThen run this installer again.\n'

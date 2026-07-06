@@ -47,9 +47,12 @@ describe('install', () => {
 
   const installGitStub = () => {
     writeExecutable('git', `#!/usr/bin/env bash
-printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 case "$1" in
+  --version)
+    exit "$FAKE_GIT_VERSION_STATUS"
+    ;;
   clone)
+    printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
     if [ "$2:$3" != 'https://github.com/JBallin/ballin-scripts.git:.ballin-scripts' ]; then
       exit 2
     fi
@@ -59,12 +62,15 @@ case "$1" in
     exit "$FAKE_GIT_CLONE_STATUS"
     ;;
   fetch)
+    printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
     exit "$FAKE_GIT_FETCH_STATUS"
     ;;
   checkout)
+    printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
     exit "$FAKE_GIT_CHECKOUT_STATUS"
     ;;
   merge)
+    printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
     if [ "$FAKE_GIT_MERGE_STATUS" = '0' ]; then
       mkdir -p "$HOME/.ballin-scripts/commands"
       : > "$HOME/.ballin-scripts/commands/repo_update.ts"
@@ -115,6 +121,7 @@ esac
       HOME: homeDir,
       PATH: toolDir,
       FAKE_COMMAND_LOG: commandLogPath,
+      FAKE_GIT_VERSION_STATUS: '0',
       FAKE_GIT_CLONE_STATUS: '0',
       FAKE_GIT_FETCH_STATUS: '0',
       FAKE_GIT_CHECKOUT_STATUS: '0',
@@ -222,6 +229,20 @@ esac
     writeCurrentCheckout();
 
     const result = runInstall();
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Git is required before install can continue');
+    assert.include(result.stdout, 'macOS Command Line Tools');
+    assert.include(result.stdout, 'run this installer again');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('stops with guidance before clone or update when Git cannot run', () => {
+    linkCommand('bash');
+    installGitStub();
+    writeCurrentCheckout();
+
+    const result = runInstall({ env: { FAKE_GIT_VERSION_STATUS: '69' } });
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Git is required before install can continue');
