@@ -147,9 +147,7 @@ packages, nvm settings, editor settings, editor extensions, bash completions,
 and Mac App Store apps when the supporting tools are installed.
 
 See the [supported capabilities reference](docs/capabilities.md) for the full
-list of backup snapshots, and the
-[optional capabilities guide](docs/optional-capabilities.md#gist-backups) for
-Gist visibility tradeoffs.
+list of backup snapshots.
 
 ```shell
 ballin backup

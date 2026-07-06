@@ -81,12 +81,10 @@ that host, and either adopts an existing backup Gist or creates a new one. When
 an adopted backup includes a saved `ballin_config` snapshot, the installer restores
 them before continuing.
 
-New backup Gists are created as secret Gists by default. If you intentionally
-want to share your dotfiles, GitHub lets you make a secret Gist public later by
-editing the Gist visibility. Review the contents first: public backup Gists may
-expose personal paths, usernames, tool choices, editor settings, package lists,
-and other local configuration details. Public Gists cannot be converted back to
-secret.
+New backup Gists are created as secret Gists. If you want to share your dotfiles
+publicly, GitHub lets you make a secret Gist public later. Review the contents
+first: public backups can expose paths, usernames, tool choices, package lists,
+and other local config, and public Gists cannot be converted back to secret.
 
 ## Readiness checks
 
