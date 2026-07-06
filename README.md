@@ -60,15 +60,13 @@ and auditable.
 ## Before you install
 
 The installer is interactive and stops with setup guidance if something required
-is missing. Before running it, expect to have:
+is missing. Before running it, have the main pieces ready:
 
-- macOS, a shell that can run the Bash installer, and Git plus Node.js 24.12
-  or newer available on your shell `PATH`.
-- GitHub CLI installed and authenticated for the GitHub host that should hold
-  your private backup Gist.
-- Homebrew installed if you want the standard command location and full
-  `ballin update` Homebrew behavior. Without Homebrew, `~/.local/bin` must
-  already be on your shell `PATH`.
+- macOS with Git and Node.js 24.12 or newer on your shell `PATH`.
+- GitHub CLI authenticated for the host that should hold your private backup
+  Gist.
+- Homebrew, unless you already keep `~/.local/bin` on your shell `PATH` for
+  installed commands.
 
 Optional integrations and setup tradeoffs are covered in the
 [optional capabilities guide](docs/optional-capabilities.md).
