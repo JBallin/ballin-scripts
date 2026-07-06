@@ -1126,14 +1126,14 @@ printf '%*s\\n' 1048577 '' >&2
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('preserves the current changed icon when empty becomes non-empty', () => {
+  it('uses the new-file icon when empty becomes non-empty', () => {
     writeSnapshot('restored\n');
     seedBackupCache('empty\n');
 
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '💾 zshrc\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 

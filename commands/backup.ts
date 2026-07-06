@@ -400,11 +400,12 @@ const classifySnapshotResult = (
   isNew: boolean,
   isChanged: boolean,
   isEmpty: boolean,
+  wasEmpty: boolean,
 ): SnapshotResultState => {
   if (!isChanged) {
     return 'unchanged';
   }
-  if (isNew) {
+  if (isNew || wasEmpty) {
     return 'created';
   }
   if (isEmpty) {
@@ -456,7 +457,8 @@ const updateSnapshot = (
     }
 
     isEmpty = snapshotIsEmpty(inputFile);
-    resultState = classifySnapshotResult(isNew, isChanged, isEmpty);
+    const wasEmpty = !isNew && fileExists(cacheFile) && snapshotIsEmpty(cacheFile);
+    resultState = classifySnapshotResult(isNew, isChanged, isEmpty, wasEmpty);
 
     if (isChanged) {
       const uploadFile = createSnapshotUploadFile(inputFile, snapshot.fileName);
