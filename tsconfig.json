@@ -15,6 +15,7 @@
   },
   "include": [
     "analytics-worker/report.ts",
+    "analytics-worker/reset.ts",
     "commands/**/*.ts",
     "config/**/*.ts",
     "test/**/*.ts"

@@ -69,6 +69,41 @@ telemetry fields or report feature-level events, command arguments, local paths,
 Gist details, package/editor data, raw errors, environment variables,
 arbitrary config values, IPs, or raw install IDs.
 
+## Ballin 2 Command Baseline Reset
+
+For the Ballin 2 canonical CLI rename, the chosen cleanup path is a clean reset
+instead of mapping old `up` / `gu` rows into reports. This keeps analytics
+reports focused on the current `ballin <command>` model.
+
+The reset scope is the full aggregate schema:
+
+- `install_days`
+- `command_events_daily`
+- `version_events_daily`
+
+There is no raw event table to preserve or delete.
+
+Preview production row counts:
+
+```shell
+npm run analytics:reset -- --dry-run
+```
+
+Clear production aggregate rows:
+
+```shell
+npm run analytics:reset -- --confirm RESET_ANALYTICS_AFTER_CLI_RENAME
+```
+
+Confirm the canonical baseline after reset:
+
+```shell
+npm run analytics:report
+```
+
+Production reset date: not yet performed. After the production reset runs,
+record the UTC date here with a short operator note.
+
 ## Abuse Controls
 
 The skeleton requires an ingest token before accepting events, rejects oversized
