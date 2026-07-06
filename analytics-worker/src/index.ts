@@ -25,7 +25,6 @@ type Env = {
   ANALYTICS_DB: D1Database;
   ANALYTICS_RATE_LIMITER: RateLimit;
   INSTALL_ID_HASH_SECRET: string;
-  INGEST_TOKEN: string;
 };
 
 type AnalyticsEvent = {
@@ -71,14 +70,15 @@ const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', 
 const allowedOs = new Set(['darwin', 'linux', 'win32', 'unknown']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const dateBucketPattern = /^\d{4}-\d{2}-\d{2}$/;
-const versionPattern = /^[0-9]+(?:\.[0-9]+){0,2}$/;
-const majorVersionPattern = /^[0-9]+$/;
-const coarseOsVersionPattern = /^[0-9]+(?:\.[0-9]+)?$|^unknown$/;
-const ingestTokenHeader = 'x-ballin-analytics-token';
+const versionPattern = /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/;
+const majorVersionPattern = /^[0-9]{1,3}$/;
+const coarseOsVersionPattern = /^[0-9]{1,3}(?:\.[0-9]{1,3})?$|^unknown$/;
 const maxBodyBytes = 2048;
 const retentionDays = 395;
 const allowedDateSkewDays = 1;
-const eventRateLimitKey = 'v1-events';
+const globalEventRateLimitKey = 'v1-events:global';
+const sourceEventRateLimitKeyPrefix = 'v1-events:source';
+const installEventRateLimitKeyPrefix = 'v1-events:install';
 
 const jsonResponse = (status: number, body: { error: string }): Response => (
   new Response(JSON.stringify(body), {
@@ -110,6 +110,34 @@ const hasOnlyAllowedPayloadKeys = (payload: Record<string, unknown>): boolean =>
 const stringField = (payload: Record<string, unknown>, key: string): string | null => {
   const value = payload[key];
   return typeof value === 'string' && value.length > 0 ? value : null;
+};
+
+const boundedRateLimitKeyPart = (value: string | null): string => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return 'unknown';
+  }
+  return trimmed.toLowerCase().replace(/[^a-z0-9.:_-]/g, '_').slice(0, 128);
+};
+
+const sourceRateLimitKey = (request: Request): string => {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0] ?? null;
+  const source = request.headers.get('cf-connecting-ip') ?? forwardedFor;
+  return `${sourceEventRateLimitKeyPrefix}:${boundedRateLimitKeyPart(source)}`;
+};
+
+const installRateLimitKey = (installIdHash: string): string => (
+  `${installEventRateLimitKeyPrefix}:${installIdHash}`
+);
+
+const contentLengthExceedsLimit = (request: Request): boolean => {
+  const contentLength = request.headers.get('content-length');
+  if (!contentLength) {
+    return false;
+  }
+
+  const byteLength = Number(contentLength);
+  return Number.isFinite(byteLength) && byteLength > maxBodyBytes;
 };
 
 const validateDateBucket = (dateBucket: string): boolean => {
@@ -208,9 +236,7 @@ const hashInstallId = async (installId: string, secret: string): Promise<string>
     .join('');
 };
 
-const storeAnalyticsEvent = async (env: Env, event: AnalyticsEvent): Promise<void> => {
-  const installIdHash = await hashInstallId(event.installId, env.INSTALL_ID_HASH_SECRET);
-
+const storeAnalyticsEvent = async (env: Env, event: AnalyticsEvent, installIdHash: string): Promise<void> => {
   await env.ANALYTICS_DB.batch([
     env.ANALYTICS_DB.prepare(`
       INSERT OR IGNORE INTO install_days (date_bucket, install_id_hash)
@@ -246,9 +272,14 @@ const storeAnalyticsEvent = async (env: Env, event: AnalyticsEvent): Promise<voi
   ]);
 };
 
-const rateLimitEventRequest = async (env: Env): Promise<Response | null> => {
-  const { success } = await env.ANALYTICS_RATE_LIMITER.limit({ key: eventRateLimitKey });
-  return success ? null : emptyResponse(429);
+const rateLimitEventRequest = async (env: Env, keys: string[]): Promise<Response | null> => {
+  for (const key of keys) {
+    const { success } = await env.ANALYTICS_RATE_LIMITER.limit({ key });
+    if (!success) {
+      return emptyResponse(429);
+    }
+  }
+  return null;
 };
 
 const handleEventRequest = async (request: Request, env: Env): Promise<Response> => {
@@ -261,13 +292,13 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   if (!env.INSTALL_ID_HASH_SECRET) {
     return jsonResponse(500, { error: 'analytics backend is not configured' });
   }
-  if (!env.INGEST_TOKEN) {
-    return jsonResponse(500, { error: 'analytics ingest gate is not configured' });
+  if (contentLengthExceedsLimit(request)) {
+    return jsonResponse(400, { error: 'request body is too large' });
   }
-  if (request.headers.get(ingestTokenHeader) !== env.INGEST_TOKEN) {
-    return emptyResponse(401);
-  }
-  const rateLimitedResponse = await rateLimitEventRequest(env);
+  const rateLimitedResponse = await rateLimitEventRequest(env, [
+    globalEventRateLimitKey,
+    sourceRateLimitKey(request),
+  ]);
   if (rateLimitedResponse) {
     return rateLimitedResponse;
   }
@@ -288,7 +319,15 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
     return jsonResponse(400, { error: event });
   }
 
-  await storeAnalyticsEvent(env, event);
+  const installIdHash = await hashInstallId(event.installId, env.INSTALL_ID_HASH_SECRET);
+  const installRateLimitedResponse = await rateLimitEventRequest(env, [
+    installRateLimitKey(installIdHash),
+  ]);
+  if (installRateLimitedResponse) {
+    return installRateLimitedResponse;
+  }
+
+  await storeAnalyticsEvent(env, event, installIdHash);
   return emptyResponse(204);
 };
 

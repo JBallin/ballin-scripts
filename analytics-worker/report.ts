@@ -48,6 +48,7 @@ const usage = [
   '',
   'Prints a read-only production D1 report from the existing analytics aggregates.',
 ].join('\n');
+const publicTelemetryCaveat = 'Caveat: analytics are public client telemetry; aggregate counts are directional and not security-trustworthy.';
 
 const dateBucket = (date: Date): string => date.toISOString().slice(0, 10);
 
@@ -360,6 +361,7 @@ const formatRuntimeTrends = (rows: D1Row[]): string => {
 
 const renderReport = (rows: ReportRows, options: ReportOptions): string => [
   `Analytics report (${options.from} to ${options.to})`,
+  publicTelemetryCaveat,
   '',
   formatActiveInstalls(rows.activeInstalls, options),
   '',
