@@ -227,3 +227,42 @@ Reporting stays within the existing aggregate schema:
 It does not add telemetry fields or expose feature-level events, command
 arguments, local paths, Gist details, package/editor data, raw errors,
 environment variables, arbitrary config values, IP storage, or raw install IDs.
+
+## Resetting Aggregates
+
+`analytics-worker/reset.ts` clears the aggregate analytics tables when an
+operator wants a fresh reporting baseline. It is a rare maintenance utility,
+not a normal project workflow. The first expected use is the Ballin 2 CLI
+rename, where a clean canonical-command baseline is more useful than mixing
+historical `up` / `gu` rows with `ballin <command>` rows.
+
+The reset clears all aggregate analytics tables:
+
+- `install_days`
+- `command_events_daily`
+- `version_events_daily`
+
+There is no raw event table.
+
+Preview the current production row counts before deleting anything:
+
+```shell
+node analytics-worker/reset.ts --dry-run
+```
+
+Reset the production aggregates only after confirming that historical aggregate
+data is no longer needed:
+
+```shell
+node analytics-worker/reset.ts --confirm RESET_ANALYTICS_AGGREGATES
+```
+
+Verify the fresh reporting baseline:
+
+```shell
+npm run analytics:report
+```
+
+The reset command uses local Wrangler authentication and the ignored
+`analytics-worker/wrangler.toml` file, like the report command. If Wrangler is
+not installed globally, the script falls back to `npx wrangler`.

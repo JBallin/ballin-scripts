@@ -71,6 +71,40 @@ telemetry fields or report feature-level events, command arguments, local paths,
 Gist details, package/editor data, raw errors, environment variables,
 arbitrary config values, IPs, or raw install IDs.
 
+## Resetting Aggregates
+
+Use `analytics-worker/reset.ts` when production analytics should start from a
+fresh reporting baseline. It is a rare maintenance utility, not a normal
+project workflow. The first expected use is the Ballin 2 canonical CLI rename,
+where the chosen cleanup path is a clean reset instead of mapping old `up` /
+`gu` rows into reports.
+
+The reset scope is the full aggregate schema:
+
+- `install_days`
+- `command_events_daily`
+- `version_events_daily`
+
+There is no raw event table to preserve or delete.
+
+Preview production row counts:
+
+```shell
+node analytics-worker/reset.ts --dry-run
+```
+
+Clear production aggregate rows:
+
+```shell
+node analytics-worker/reset.ts --confirm RESET_ANALYTICS_AGGREGATES
+```
+
+Confirm the fresh reporting baseline after reset:
+
+```shell
+npm run analytics:report
+```
+
 ## Abuse Controls
 
 The skeleton requires an ingest token before accepting events, rejects oversized
