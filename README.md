@@ -17,15 +17,9 @@ Core commands:
 ## What it manages
 
 `ballin-scripts` backs up development-environment state that is easy to lose
-when moving between Macs or rebuilding a development machine:
-
-- shell startup files and common editor config files
-- Git config and global ignore files
-- Homebrew formulae, casks, services, and Brewfile output
-- global npm packages and Node.js version preference
-- VS Code and VS Code Insiders settings, keybindings, and extensions
-- optional Mac App Store app inventory through `mas`
-- local `ballin-scripts` configuration
+when moving between Macs or rebuilding a development machine, including
+dotfiles, package and tool inventories, editor settings, and local Ballin
+configuration.
 
 See the [supported capabilities reference](docs/capabilities.md) for the exact
 snapshot files and update integrations.
@@ -142,9 +136,8 @@ the full list of update integrations.
 ### Back up with `ballin backup`
 
 `ballin backup` uploads changed snapshots to a configured private Gist. It can
-include shell dotfiles, Git config, Homebrew formulae and casks, global npm
-packages, nvm settings, editor settings, editor extensions, bash completions,
-and Mac App Store apps when the supporting tools are installed.
+include local files and optional tool output from the supported backup
+surfaces.
 
 See the [supported capabilities reference](docs/capabilities.md) for the full
 list of backup snapshots.
