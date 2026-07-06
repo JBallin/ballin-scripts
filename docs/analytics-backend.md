@@ -17,6 +17,8 @@ https://ballin-scripts-analytics.jballin.workers.dev/v1/events
 
 The Worker has a D1 binding, scheduled retention cleanup, two Cloudflare
 secrets, and an `ANALYTICS_RATE_LIMITER` binding for `POST /v1/events`.
+Worker-impacting changes deploy from `main` through the `Deploy Analytics
+Worker` GitHub Actions workflow.
 
 ## Why Cloudflare Worker and D1
 
@@ -86,9 +88,17 @@ For production setup or recreation:
 - set the D1 database ID in local `analytics-worker/wrangler.toml`
 - set `INSTALL_ID_HASH_SECRET`
 - set `INGEST_TOKEN`
+- create the `analytics-worker-production` GitHub deployment environment with a
+  `main` branch rule and environment secrets `CLOUDFLARE_API_TOKEN`,
+  `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`
 - apply `analytics-worker/migrations/0001_initial.sql` with `--remote`
-- deploy the Worker
+- confirm the `Deploy Analytics Worker` workflow completed after the relevant
+  change landed on `main`
 - confirm the deployed Worker returns `204` for a valid event, `401` for a
   missing or bad token, and `400` for unsupported fields or invalid enums
 - query D1 to confirm only hashed install/day rows and aggregate counts are
   stored
+
+Deploy failures are visible in GitHub Actions. Remote D1 migrations remain
+manual and should use `--remote`; migration changes stop publishing until the
+remote migration is applied and the deploy workflow succeeds from `main`.
