@@ -1,0 +1,235 @@
+# Ballin design system
+
+This document is the durable source of truth for Ballin identity, product
+messaging, visual direction, and brand asset guidance. It is meant to guide
+future README, docs, CLI help, social preview, hero, website, and profile-copy
+work without reopening broad visual exploration.
+
+## Naming
+
+- Repository and package identity: `ballin-scripts`
+- Product name in prose: Ballin
+- CLI identity: `ballin`
+- Primary visual wordmark: lowercase `ballin`
+- Signature/contextual lockup: `>_ ballin`
+
+Use Ballin for user-facing product language. Use `ballin-scripts` when precision
+matters for the repository, package, local checkout, install paths, or
+self-update behavior.
+
+Prompt and cursor motifs are useful accents, but they do not need to appear in
+every asset. Avoid mascot-first, badge-first, or complex logo-first branding for
+now.
+
+## Copy system
+
+Downstream copy should derive from upstream guidance instead of inventing new
+positioning for each surface:
+
+```text
+Brand principles
+  -> Product truth
+  -> Tagline
+  -> Elevator pitch
+  -> README opening
+  -> Resume / LinkedIn
+  -> Website / blog / talks
+```
+
+Canonical copy:
+
+- Product truth: `Ballin keeps a macOS development environment backed up and current.`
+- Capability tagline: `Back up your dotfiles and update your macOS development environment.`
+- Short hero line: `Back up dotfiles. Keep your tools current.`
+
+The capability tagline is currently used by the `ballin` help/overview output.
+Treat CLI help as a downstream product surface that should stay aligned with
+this document.
+
+Broader explanatory copy can discuss repeatable rebuilds and auditable setup
+with nuance. Visual assets and short hero copy should stay concrete and avoid
+future-state restore claims.
+
+Useful product/help-output candidates that are not canonical yet:
+
+- `Keep your macOS development environment backed up and current.`
+- `Preserve, update, and verify your macOS development environment.`
+
+Do not promote these candidates without intentionally updating the relevant
+downstream surfaces.
+
+## Visual identity
+
+Ballin should feel premium, calm, restrained, developer-native, macOS-first,
+quietly reliable, crafted, approachable, and technically serious.
+
+Prefer:
+
+- confidence over excitement
+- craftsmanship over marketing
+- clarity over cleverness
+- a wordmark-led identity
+- dark graphite or slate backgrounds
+- off-white typography
+- restrained green accents
+- generous negative space
+- subtle texture and premium material feel
+- terminal-inspired details, not terminal-dominated layouts
+
+The visual identity should feel closer to thoughtful macOS developer tooling
+than hacker, cyberpunk, or generic SaaS art.
+
+Avoid:
+
+- cyberpunk or neon overload
+- fake dashboards or fake product UI
+- dense terminal screenshots or help-output art
+- workflow diagrams and architecture illustrations as primary visuals
+- generic SaaS visuals
+- feature overload
+- Apple hardware advertising
+- mascot-first branding
+
+## Asset hierarchy
+
+Different assets have different jobs:
+
+- Social preview: recognition and first impression. Keep it simple, polished,
+  and identity-first.
+- README hero: legitimacy, trust, and workflow fit. It can be more atmospheric
+  than the social preview, but should remain quiet and documentation-supporting.
+- README and docs: explanation. Detailed product behavior belongs in text, not
+  inside image assets.
+
+The current social preview is the completed identity-first asset. The README
+hero remains future work and should consume this guidance rather than reopen
+the full design exploration.
+
+## README hero guidance
+
+The README hero should optimize for the feeling that a macOS development
+environment is quietly handled and ready to work in. Copy explains what Ballin
+does; the visual should create trust, atmosphere, and workflow fit.
+
+A calm macOS developer workspace is an appropriate direction because Ballin is
+macOS-specific. The failure mode is making Apple hardware the hero instead of
+Ballin.
+
+If workspace imagery is used:
+
+- keep Ballin as the identity anchor
+- use macOS developer cues as context, not as product advertising
+- avoid cluttered desk scenes
+- avoid fake UI, dashboards, status cards, or workflow diagrams
+- avoid dense terminal screenshots and feature overload
+- avoid making a symbolic object the focal point if it competes with the
+  wordmark or makes the viewer ask what the object is
+
+Do not include installation commands in README hero artwork.
+
+### Feature strips
+
+A README hero may include a very small feature strip if it improves the
+composition, but it is optional.
+
+If used, prefer short capability-level labels only. Avoid descriptions, install
+commands, or future-state claims.
+
+Preferred v1 labels:
+
+```text
+CLI first · Private backups · Routine updates · macOS native
+```
+
+Avoid labels such as `Always current`, `Restore-ready`, `Rebuild anywhere`, or
+`Install in 60 seconds` because they can overstate current behavior or distract
+from the hero.
+
+If removing the strip makes the hero calmer and stronger, remove it.
+
+## Source and export conventions
+
+Editable sources and exported brand assets live under:
+
+```text
+docs/assets/brand/
+```
+
+Current social preview assets:
+
+```text
+docs/assets/brand/social-preview.svg
+docs/assets/brand/social-preview.png
+```
+
+Future README hero assets may use:
+
+```text
+docs/assets/brand/readme-hero.svg
+docs/assets/brand/readme-hero.png
+```
+
+Treat editable source files as canonical. Treat PNGs as generated, shareable,
+or upload-ready exports. Keep source/export mechanics in
+`docs/assets/brand/README.md`; keep identity and copy guidance here.
+
+## Claim guardrails
+
+Ballin is currently a backup and update toolkit. It is not a full one-command
+machine restore system.
+
+Avoid short copy or visuals that imply:
+
+- one-click restore
+- recreate anywhere
+- same environment everywhere
+- full machine restore
+- restore everything
+- universal reproducibility
+- automatic restore/replay behavior that does not exist yet
+
+Future restore, replay, or bootstrap capabilities should be documented only
+after the product supports them, and short brand copy should remain more
+conservative than long-form docs.
+
+## Rejected and non-canonical directions
+
+These directions were useful exploration paths but should not become the core
+identity without a new decision:
+
+- "collection of scripts" positioning
+- cyberpunk terminal art
+- dense CLI help screenshots
+- fake dashboards or fake product UI
+- workflow diagrams and architecture illustrations
+- abstract maintenance objects as the core identity
+- symbolic focal objects that compete with `>_ ballin`
+- mascot-first branding
+- feature-heavy hero graphics
+- generated identicon/avatar systems as the primary brand
+- a top-level `BRAND.md`
+- `/assets` as the brand asset location
+- teal/cyan plus orange color tokens as the primary palette
+- a lowercase `b` mark as the primary identity
+- immediate generated favicon, avatar, or icon assets
+- generated exploration images as a committed archive
+
+The stable direction is calmer, more premium, more macOS-developer-native, and
+wordmark-led.
+
+## North star
+
+Optimize for this reaction:
+
+```text
+This feels like a premium macOS developer tool.
+```
+
+Not:
+
+```text
+This has impressive graphics.
+```
+
+Every design decision should reinforce the feeling that Ballin quietly handles
+development-environment maintenance so the developer can focus on building.
