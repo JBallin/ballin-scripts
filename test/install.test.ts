@@ -203,6 +203,7 @@ esac
 
   it('stops with guidance when Node.js is unavailable', () => {
     linkCommand('bash');
+    installGitStub();
     writeCurrentCheckout();
 
     const result = runInstall();
@@ -212,6 +213,19 @@ esac
     assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
     assert.include(result.stdout, 'docs/README.md');
     assert.include(result.stdout, 'brew install node');
+    assert.include(result.stdout, 'run this installer again');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('stops with guidance before clone or update when Git is unavailable', () => {
+    linkCommand('bash');
+    writeCurrentCheckout();
+
+    const result = runInstall();
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Git is required before install can continue');
+    assert.include(result.stdout, 'macOS Command Line Tools');
     assert.include(result.stdout, 'run this installer again');
     assert.deepEqual(commandLog(), []);
   });
