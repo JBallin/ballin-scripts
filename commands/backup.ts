@@ -429,7 +429,7 @@ const writeSnapshotStatus = (
   } else if (resultState === 'removed') {
     writeStdoutLine(`✖︎ ${fileWithoutExtension}`);
   } else {
-    writeStdoutLine(`✚ ${fileWithoutExtension}`);
+    writeStdoutLine(`✎ ${fileWithoutExtension}`);
   }
 };
 

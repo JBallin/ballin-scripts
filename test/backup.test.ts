@@ -993,7 +993,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
     assert.deepEqual(gistReads(), [snapshotFileName]);
@@ -1018,7 +1018,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
@@ -1030,7 +1030,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup({ ghEditMissingFile: true });
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
@@ -1062,7 +1062,7 @@ printf '%s\\n' '123456 Example App'
 
     assert.equal(failedResult.status, 1);
     assertBackupSucceeded(retriedResult);
-    assert.equal(retriedResult.stdout, '✚ zshrc\n');
+    assert.equal(retriedResult.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
@@ -1223,7 +1223,7 @@ printf '%*s\\n' 1048577 '' >&2
 
     assert.equal(failedResult.status, 1);
     assertBackupSucceeded(recoveredResult);
-    assert.equal(recoveredResult.stdout, '✚ zshrc\n');
+    assert.equal(recoveredResult.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'recovered\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'recovered\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);

@@ -153,6 +153,14 @@ list of backup snapshots.
 ballin backup
 ```
 
+Backup status markers:
+
+- `💾` newly saved or newly meaningful snapshot
+- `✎` existing snapshot content changed
+- `✖︎` existing snapshot became empty
+- `✔` unchanged non-empty snapshot
+- unchanged empty snapshots do not print a line
+
 Open the configured backup Gist:
 
 ```shell
