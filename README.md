@@ -60,13 +60,12 @@ and auditable.
 ## Before you install
 
 The installer is interactive and stops with setup guidance if something required
-is missing. Before running it, have the main pieces ready:
+is missing. A typical first run assumes macOS with Git, a supported Node.js,
+and GitHub CLI available for private backup Gist setup.
 
-- macOS with Git and Node.js 24.12 or newer on your shell `PATH`.
-- GitHub CLI authenticated for the host that should hold your private backup
-  Gist.
-- Homebrew, unless you already keep `~/.local/bin` on your shell `PATH` for
-  installed commands.
+Homebrew gives Ballin the standard command location and full `ballin update`
+Homebrew behavior. Without Homebrew, keep `~/.local/bin` on your shell `PATH`
+for installed commands.
 
 Optional integrations and setup tradeoffs are covered in the
 [optional capabilities guide](docs/optional-capabilities.md).
