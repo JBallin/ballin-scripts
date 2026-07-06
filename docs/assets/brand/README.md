@@ -17,8 +17,8 @@ this folder and the steps for regenerating image files from editable sources.
 Keep the SVG editable. Treat the PNG as the GitHub upload artifact.
 
 The social preview follows the wordmark-led direction documented in the design
-system. README hero work can reuse the matte graphite background, off-white
-type, and subtle green accent without adding a larger brand kit.
+system. README hero assets use the same identity system, including matte
+graphite backgrounds, off-white type, and subtle green accents.
 
 When refreshing the PNG, render the SVG at exactly `1280x640` and overwrite
 `social-preview.png`. Avoid thumbnail rendering tools that pad or crop the source

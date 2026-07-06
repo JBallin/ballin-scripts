@@ -2,7 +2,7 @@
 
 This document is the durable source of truth for Ballin identity, product
 messaging, visual direction, and brand asset guidance. It is meant to guide
-future README, docs, CLI help, social preview, hero, website, and profile copy
+README, docs, CLI help, social preview, hero, website, and profile copy
 work without reopening broad visual exploration.
 
 Use this document to decide what Ballin should say and feel like. README,
@@ -65,7 +65,7 @@ Surface guidance:
   commands.
 - README opening copy should apply the product truth while adding enough
   implementation detail for first-time readers.
-- README onboarding work should prefer practical clarity, such as prerequisites
+- README onboarding should prefer practical clarity, such as prerequisites
   and install expectations, over a more promotional tagline.
 - Resume, LinkedIn, website, blog, and talk descriptions should derive from the
   product truth rather than introducing a new position.
@@ -147,8 +147,8 @@ Different assets have different jobs:
 - README and docs: explanation. Detailed product behavior belongs in text, not
   inside image assets.
 
-The social preview is the identity-first asset. README hero work should consume
-this guidance rather than reopen broad visual exploration.
+The social preview is the identity-first asset. The README hero is informed by
+this guidance rather than broad visual exploration.
 
 README onboarding and top-copy changes should use the copy system here when
 evaluating the README opening, prerequisites, installation wording,
@@ -211,7 +211,7 @@ docs/assets/brand/social-preview.svg
 docs/assets/brand/social-preview.png
 ```
 
-Future README hero assets may use:
+README hero assets use the same folder:
 
 ```text
 docs/assets/brand/readme-hero.svg
