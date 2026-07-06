@@ -2,8 +2,8 @@
 
 This folder stores editable brand sources and exported assets for Ballin.
 Use the [design system](../../design-system.md) for product identity, messaging,
-visual principles, and copy guidance. This file only documents the files in this
-folder and how to refresh exported assets.
+visual principles, and copy guidance. This README only documents the assets in
+this folder and the steps for refreshing exports.
 
 ## GitHub social preview
 

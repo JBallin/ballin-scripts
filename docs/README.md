@@ -3,7 +3,7 @@
 Start here when setting up or auditing what `ballin-scripts` manages.
 
 - [Design system](design-system.md): Ballin identity, product messaging,
-  visual guidance, and brand asset conventions.
+  visual guidance, and brand source/export conventions.
 - [Optional capabilities](optional-capabilities.md): Node.js setup, optional
   tool setup, analytics opt-out, and configurable `ballin update` settings.
 - [Analytics](analytics.md): analytics consent, payload, opt-out, and retention.

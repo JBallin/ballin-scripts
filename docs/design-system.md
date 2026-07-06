@@ -2,11 +2,11 @@
 
 This document is the durable source of truth for Ballin identity, product
 messaging, visual direction, and brand asset guidance. It is meant to guide
-future README, docs, CLI help, social preview, hero, website, and profile-copy
+future README, docs, CLI help, social preview, hero, website, and profile copy
 work without reopening broad visual exploration.
 
-Use this document to decide what Ballin should say and feel like. Use downstream
-issues to decide how a specific surface should apply it:
+Use this document to decide what Ballin should say and feel like. Use the
+downstream issue for each surface to decide how that guidance gets applied:
 
 - README onboarding and install flow: issue #219
 - README hero/banner asset: issue #193
@@ -49,7 +49,7 @@ Canonical copy:
 - Capability tagline: `Back up your dotfiles and update your macOS development environment.`
 - Short hero line: `Back up dotfiles. Keep your tools current.`
 - Elevator pitch: Ballin backs up development-environment state and automates
-  routine macOS developer-tool updates.
+  routine updates for macOS developer tools.
 
 The capability tagline is currently used by the `ballin` help/overview output.
 Treat CLI help as a downstream product surface that should stay aligned with
@@ -217,7 +217,7 @@ docs/assets/brand/readme-hero.png
 ```
 
 Treat editable source files as canonical. Treat PNGs as generated, shareable,
-or upload-ready exports. Keep source/export mechanics in
+or upload-ready exports. Keep asset file lists and export steps in
 `docs/assets/brand/README.md`; keep identity and copy guidance here.
 
 ## Claim guardrails
