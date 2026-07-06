@@ -60,8 +60,8 @@ and auditable.
 ## Before you install
 
 The installer is interactive and guides you through missing setup. Before
-running it, use macOS with Git installed, current Node.js LTS, authenticated
-GitHub CLI, and Homebrew available.
+running it, use macOS with current Node.js LTS, authenticated GitHub CLI, and
+Homebrew available.
 
 Optional integrations and setup tradeoffs are covered in the
 [optional capabilities guide](docs/optional-capabilities.md).
