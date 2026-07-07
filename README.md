@@ -20,30 +20,20 @@ The installer adds command shims to your shell path, configures the backup Gist,
 and guides you through missing setup. For the smoothest first run, use macOS
 with Node.js LTS, Homebrew, and an authenticated GitHub CLI.
 
-Install with:
+Run the [install script](https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh):
 
 ```shell
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-Inspect first:
-
-```shell
-curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh -o /tmp/ballin-install.sh
-less /tmp/ballin-install.sh
-bash /tmp/ballin-install.sh
-```
-
-After installation:
+Then create the initial backup:
 
 ```shell
 ballin doctor
 ballin backup
-ballin update
 ```
 
-`ballin doctor` checks the managed environment. `ballin backup` creates the
-initial snapshot. `ballin update` handles ongoing maintenance.
+Use `ballin update` for ongoing maintenance.
 
 ## Example output
 
