@@ -22,8 +22,8 @@ integrations and exits nonzero at the end.
 
 ## `ballin backup`
 
-`ballin backup` backs up changed snapshots to the configured private Gist. It
-can snapshot:
+`ballin backup` backs up changed snapshots to the configured secret GitHub Gist.
+It can snapshot:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -40,3 +40,16 @@ can snapshot:
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
 | Ballin config | `ballin_config` | Local `ballin.config.json` file. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
+
+### Output markers
+
+`ballin backup` prints one line per meaningful snapshot result:
+
+| Marker | Meaning |
+| --- | --- |
+| `✚` | Newly saved or newly meaningful snapshot. |
+| `✎` | Existing snapshot content changed. |
+| `✖︎` | Existing snapshot became empty. |
+| `✔` | Unchanged non-empty snapshot. |
+
+Unchanged empty snapshots do not print a line.
