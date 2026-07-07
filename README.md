@@ -18,8 +18,7 @@ Core commands:
 
 `ballin-scripts` backs up development-environment state that is easy to lose
 when moving between Macs or rebuilding a development machine, including
-dotfiles, package and tool inventories, editor settings, and local Ballin
-configuration.
+dotfiles, package and tool lists, and editor settings.
 
 See the [supported capabilities reference](docs/capabilities.md) for the exact
 snapshot files and update integrations.
@@ -136,11 +135,11 @@ the full list of update integrations.
 ### Back up with `ballin backup`
 
 `ballin backup` uploads changed snapshots to a configured private Gist. It can
-include local files and optional tool output from the supported backup
-surfaces.
+include local files and package, tool, and editor state when the supporting
+tools are installed.
 
 See the [supported capabilities reference](docs/capabilities.md) for the full
-list of snapshot files, optional tool output, and requirements.
+list of backup snapshots.
 
 ```shell
 ballin backup
