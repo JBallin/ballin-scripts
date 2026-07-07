@@ -22,8 +22,8 @@ integrations and exits nonzero at the end.
 
 ## `ballin backup`
 
-`ballin backup` backs up changed snapshots to the configured backup Gist. It
-can snapshot:
+`ballin backup` backs up changed snapshots to the configured secret GitHub Gist.
+It can snapshot:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -32,6 +32,7 @@ can snapshot:
 | Homebrew inventory | `brew_list`, `brew_leaves`, `brew_cask`, `brew_services`, `Brewfile` | `brew` on `PATH`. |
 | Git config | `gitconfig`, `gitignore_global` | Matching dotfiles in `HOME`. |
 | Global npm packages | `npm_global` | `npm` on `PATH`. |
+| Python tooling | `pipx`, `uv_tools`, `pyenv_versions` | `pipx`, `uv`, or `pyenv` on `PATH`. |
 | Node version preference | `nvmrc` | `.nvmrc` in `HOME`. |
 | VS Code | `vs_settings`, `vs_keybindings`, `vs_extensions` | VS Code user files; `code` for extension list. |
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
@@ -39,3 +40,16 @@ can snapshot:
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
 | Ballin config | `ballin_config` | Local `ballin.config.json` file. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
+
+### Output markers
+
+`ballin backup` prints one line per meaningful snapshot result:
+
+| Marker | Meaning |
+| --- | --- |
+| `✚` | Newly saved or newly meaningful snapshot. |
+| `✎` | Existing snapshot content changed. |
+| `✖︎` | Existing snapshot became empty. |
+| `✔` | Unchanged non-empty snapshot. |
+
+Unchanged empty snapshots do not print a line.

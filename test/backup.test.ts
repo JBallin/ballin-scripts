@@ -47,6 +47,7 @@ describe('ballin backup', () => {
   let scratchDir: string;
   let gistUploadLogPath: string;
   let brewLogPath: string;
+  let pythonToolLogPath: string;
   let openLogPath: string;
   let ballinLogPath: string;
   let realCatPath: string;
@@ -211,6 +212,26 @@ esac
     fs.writeFileSync(path.join(testBinDir, 'brew'), 'not executable\n', { mode: 0o644 });
   };
 
+  const installFakePythonToolCommands = () => {
+    writeTestExecutable('pipx', `#!/usr/bin/env bash
+printf 'pipx|%s|%s\\n' "$PIPX_DISABLE_SHARED_LIBS_AUTO_UPGRADE" "$*" >> "$FAKE_PYTHON_TOOL_LOG"
+if [ "$*" != 'list --json' ]; then exit 2; fi
+printf '%s\\n' 'nothing has been installed with pipx' >&2
+printf '%s\\n' '{"venvs":{"black":{"metadata":{"main_package":{"package":"black","package_version":"25.1.0"}}}}}'
+`);
+    writeTestExecutable('uv', `#!/usr/bin/env bash
+printf 'uv|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
+if [ "$*" != 'tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config' ]; then exit 2; fi
+printf '%s\\n' 'No tools installed' >&2
+printf '%s\\n' 'ruff v0.14.8 (Python 3.13.7)'
+`);
+    writeTestExecutable('pyenv', `#!/usr/bin/env bash
+printf 'pyenv|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
+if [ "$*" != 'versions --bare' ]; then exit 2; fi
+printf '%s\\n' '3.12.12' '3.13.11'
+`);
+  };
+
   const installControllableCatCommand = () => {
     const catPath = fs.realpathSync(path.join(testBinDir, 'cat'));
     fs.unlinkSync(path.join(testBinDir, 'cat'));
@@ -239,6 +260,7 @@ done
     scratchDir = path.join(testHomeDir, 'tmp');
     gistUploadLogPath = path.join(testHomeDir, 'fake-gist-uploads.log');
     brewLogPath = path.join(testHomeDir, 'fake-brew.log');
+    pythonToolLogPath = path.join(testHomeDir, 'fake-python-tools.log');
     openLogPath = path.join(testHomeDir, 'fake-open.log');
     ballinLogPath = path.join(testHomeDir, 'fake-ballin.log');
 
@@ -297,6 +319,7 @@ done
       FAKE_GH_EDIT_MISSING_FILE: ghEditMissingFile ? 'true' : 'false',
       FAKE_GH_UPLOAD_FAIL: ghUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
+      FAKE_PYTHON_TOOL_LOG: pythonToolLogPath,
       FAKE_OPEN_LOG: openLogPath,
       FAKE_BALLIN_LOG: ballinLogPath,
       FAKE_BREW_PREFIX: brewPrefix,
@@ -331,6 +354,7 @@ done
   const gistReads = () => readLogLines(gistReadLogPath);
   const gistUploads = () => readLogLines(gistUploadLogPath);
   const brewCalls = () => readLogLines(brewLogPath);
+  const pythonToolCalls = () => readLogLines(pythonToolLogPath);
   const openCalls = () => readLogLines(openLogPath);
   const ballinCalls = () => readLogLines(ballinLogPath);
 
@@ -528,6 +552,9 @@ exit 2
     assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
     assert.include(result.stdout, 'ballin_config');
+    assert.include(result.stdout, 'pipx');
+    assert.include(result.stdout, 'uv_tools');
+    assert.include(result.stdout, 'pyenv_versions');
     assert.include(result.stdout, 'vsI_settings');
     assert.deepEqual(gistReads(), ['missing_file']);
   });
@@ -538,6 +565,9 @@ exit 2
     assert.equal(result.status, 1);
     assert.include(result.stdout, "Error: 'read' needs a filename.");
     assert.include(result.stdout, '\nOptions: ');
+    assert.include(result.stdout, 'pipx');
+    assert.include(result.stdout, 'uv_tools');
+    assert.include(result.stdout, 'pyenv_versions');
     assert.deepEqual(gistReads(), []);
   });
 
@@ -678,12 +708,12 @@ printf '%s\\n' 'publisher.insiders-extension'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '💾 vs_settings',
-      '💾 vs_keybindings',
-      '💾 vs_extensions',
-      '💾 vsI_settings',
-      '💾 vsI_keybindings',
-      '💾 vsI_extensions',
+      '✚ vs_settings',
+      '✚ vs_keybindings',
+      '✚ vs_extensions',
+      '✚ vsI_settings',
+      '✚ vsI_keybindings',
+      '✚ vsI_extensions',
     ]);
     assert.equal(fs.readFileSync(path.join(backupCacheDir, 'vs_settings'), 'utf8'), '{"fontSize":14}\n');
     assert.equal(
@@ -726,10 +756,10 @@ printf '%s\\n' 'publisher.insiders-extension'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '💾 brackets_settings',
-      '💾 brackets_keymap',
-      '💾 brackets_extensions',
-      '💾 brackets_disabled_extensions',
+      '✚ brackets_settings',
+      '✚ brackets_keymap',
+      '✚ brackets_extensions',
+      '✚ brackets_disabled_extensions',
     ]);
     assert.equal(
       fs.readFileSync(path.join(backupCacheDir, 'brackets_settings.json'), 'utf8'),
@@ -766,8 +796,8 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '💾 npm_global',
-      '💾 mas',
+      '✚ npm_global',
+      '✚ mas',
     ]);
     assert.equal(
       fs.readFileSync(path.join(backupCacheDir, 'npm_global'), 'utf8'),
@@ -775,6 +805,42 @@ printf '%s\\n' '123456 Example App'
     );
     assert.equal(fs.readFileSync(path.join(backupCacheDir, 'mas'), 'utf8'), '123456 Example App\n');
     assert.deepEqual(gistUploads(), ['npm_global', 'mas']);
+  });
+
+  it('skips Python tooling snapshots when commands are unavailable', () => {
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.equal(result.stdout, '');
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'pipx')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'uv_tools')));
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'pyenv_versions')));
+    assert.deepEqual(pythonToolCalls(), []);
+  });
+
+  it('snapshots Python tooling inventories when commands are available', () => {
+    installFakePythonToolCommands();
+
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      '✚ pipx',
+      '✚ uv_tools',
+      '✚ pyenv_versions',
+    ]);
+    assert.deepEqual(pythonToolCalls(), [
+      'pipx|1|list --json',
+      'uv|tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
+      'pyenv|versions --bare',
+    ]);
+    assert.equal(
+      fs.readFileSync(path.join(backupCacheDir, 'pipx'), 'utf8'),
+      '{"venvs":{"black":{"metadata":{"main_package":{"package":"black","package_version":"25.1.0"}}}}}\n',
+    );
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'uv_tools'), 'utf8'), 'ruff v0.14.8 (Python 3.13.7)\n');
+    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'pyenv_versions'), 'utf8'), '3.12.12\n3.13.11\n');
+    assert.deepEqual(gistUploads(), ['pipx', 'uv_tools', 'pyenv_versions']);
   });
 
   ([
@@ -790,7 +856,7 @@ printf '%s\\n' '123456 Example App'
       const result = runBackup({ brewPrefix });
 
       assertBackupSucceeded(result);
-      assert.include(result.stdout, '💾 bash_completions\n');
+      assert.include(result.stdout, '✚ bash_completions\n');
       assert.equal(
         fs.readFileSync(path.join(backupCacheDir, 'bash_completions'), 'utf8'),
         'git\nnpm\n',
@@ -835,7 +901,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup({ completionDir });
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '💾 bash_completions\n');
+    assert.equal(result.stdout, '✚ bash_completions\n');
     assert.equal(
       fs.readFileSync(path.join(backupCacheDir, 'bash_completions'), 'utf8'),
       'apple-silicon-tool\n',
@@ -888,11 +954,11 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '💾 brew_list',
-      '💾 brew_leaves',
-      '💾 brew_cask',
-      '💾 brew_services',
-      '💾 Brewfile',
+      '✚ brew_list',
+      '✚ brew_leaves',
+      '✚ brew_cask',
+      '✚ brew_services',
+      '✚ Brewfile',
     ]);
     assert.deepEqual(brewCalls(), [
       '1|1|--prefix',
@@ -939,20 +1005,20 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'alias hello="world"\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'alias hello="world"\n');
     assert.deepEqual(gistReads(), [snapshotFileName]);
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
-  it('uses the current new-file icon for a first empty snapshot', () => {
+  it('uses the final new-file marker for a first empty snapshot', () => {
     writeSnapshot('');
 
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'empty\n');
     assert.deepEqual(gistReads(), [snapshotFileName]);
@@ -993,7 +1059,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
     assert.deepEqual(gistReads(), [snapshotFileName]);
@@ -1018,7 +1084,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
@@ -1030,7 +1096,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup({ ghEditMissingFile: true });
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✚ zshrc\n');
+    assert.equal(result.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
@@ -1062,7 +1128,7 @@ printf '%s\\n' '123456 Example App'
 
     assert.equal(failedResult.status, 1);
     assertBackupSucceeded(retriedResult);
-    assert.equal(retriedResult.stdout, '✚ zshrc\n');
+    assert.equal(retriedResult.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
@@ -1075,7 +1141,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
     assert.equal(fs.statSync(fakeGistFilePath()).size, largeSnapshot.length);
     assert.deepEqual(gistUploads(), [snapshotFileName]);
@@ -1091,7 +1157,7 @@ printf '%*s\\n' 1048577 '' >&2
     const result = runBackup();
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, '💾 vs_extensions\n');
+    assert.include(result.stdout, '✚ vs_extensions\n');
     assert.equal(result.stderr.length, 1024 * 1024 + 2);
     assert.equal(result.stderr.slice(0, 1), ' ');
     assert.equal(result.stderr.slice(-1), '\n');
@@ -1126,14 +1192,14 @@ printf '%*s\\n' 1048577 '' >&2
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('uses the new-file icon when empty becomes non-empty', () => {
+  it('uses the new-file marker when empty becomes non-empty', () => {
     writeSnapshot('restored\n');
     seedBackupCache('empty\n');
 
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '💾 zshrc\n');
+    assert.equal(result.stdout, '✚ zshrc\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
@@ -1182,7 +1248,7 @@ printf '%*s\\n' 1048577 '' >&2
     });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, '💾 gitconfig\n');
+    assert.equal(result.stdout, '✚ gitconfig\n');
     assert.equal(
       result.stderr,
       'cat: simulated failure reading .zshrc\n'
@@ -1223,7 +1289,7 @@ printf '%*s\\n' 1048577 '' >&2
 
     assert.equal(failedResult.status, 1);
     assertBackupSucceeded(recoveredResult);
-    assert.equal(recoveredResult.stdout, '✚ zshrc\n');
+    assert.equal(recoveredResult.stdout, '✎ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'recovered\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'recovered\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
