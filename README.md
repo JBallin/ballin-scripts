@@ -140,7 +140,7 @@ include local files and optional tool output from the supported backup
 surfaces.
 
 See the [supported capabilities reference](docs/capabilities.md) for the full
-list of backup snapshots.
+list of snapshot files, optional tool output, and requirements.
 
 ```shell
 ballin backup
