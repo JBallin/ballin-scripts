@@ -16,8 +16,8 @@ lists, editor settings, and local tool state, then automates routine updates.
 ## Installation
 
 The installer adds command shims, configures the backup Gist, and guides you
-through missing setup. For the smoothest first run, use macOS with Node.js LTS,
-Homebrew, and an authenticated GitHub CLI.
+through missing setup. For the smoothest first run, have Node.js LTS, Homebrew,
+and an authenticated GitHub CLI available.
 
 Run the [install script](https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh):
 
@@ -79,8 +79,8 @@ full disk backup or one-command restore system.
 
 Backups are stored in a configured secret GitHub Gist. Secret Gists are
 unlisted, but anyone with the URL can view them. Treat the Gist URL and
-snapshots as sensitive: paths, usernames, package choices, editor settings, and
-local configuration can reveal details about your setup.
+snapshots as sensitive: they can reveal paths, usernames, package choices,
+editor settings, and local configuration.
 
 `ballin-scripts` is not a secrets manager. Review snapshots before sharing the
 Gist URL or making the Gist public.
