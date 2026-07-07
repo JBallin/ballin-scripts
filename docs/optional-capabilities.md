@@ -90,10 +90,6 @@ again.
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
-On a new Mac, install `ballin-scripts` and adopt the existing backup Gist. Use
-the saved snapshots as a rebuild reference; `ballin-scripts` is not a full disk
-backup or one-command machine restore system.
-
 ## Readiness checks
 
 Use `ballin doctor` to check whether the Ballin-managed environment is healthy,
