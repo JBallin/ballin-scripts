@@ -16,9 +16,9 @@ Core commands:
 
 ## What it manages
 
-`ballin-scripts` backs up development-environment state that is easy to lose
-when moving between Macs or rebuilding a development machine, including
-dotfiles, package and tool lists, and editor settings.
+`ballin-scripts` manages development-environment state that is easy to lose
+or tedious to maintain by backing up dotfiles, package and tool lists, and
+editor settings, then automating routine update tasks.
 
 See the [supported capabilities reference](docs/capabilities.md) for the exact
 snapshot files and update integrations.
