@@ -96,7 +96,10 @@ const fileSuggestions = `
   nanorc
   npm_global
   nvmrc
+  pipx
   profile.sh
+  pyenv_versions
+  uv_tools
   vimrc
   vs_extensions
   vs_keybindings
@@ -582,6 +585,29 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
 
   if (commandExists('npm')) {
     addShellCommand('npm_global', 'npm list -g --depth=0');
+  }
+
+  if (commandExists('pipx')) {
+    addShellCommand('pipx', 'pipx list --json', homeDir, {
+      env: {
+        ...process.env,
+        PIPX_DISABLE_SHARED_LIBS_AUTO_UPGRADE: '1',
+      },
+      suppressStderrOnSuccess: true,
+    });
+  }
+
+  if (commandExists('uv')) {
+    addShellCommand(
+      'uv_tools',
+      'uv tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
+      homeDir,
+      { suppressStderrOnSuccess: true },
+    );
+  }
+
+  if (commandExists('pyenv')) {
+    addShellCommand('pyenv_versions', 'pyenv versions --bare');
   }
 
   addFile('.nvmrc', 'nvmrc');
