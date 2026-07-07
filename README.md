@@ -2,39 +2,31 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
-`ballin-scripts` helps you recreate and maintain a macOS development environment
-with minimal manual setup. It stores snapshots of shell configuration, Git
+`ballin-scripts` helps developers maintain and recreate macOS development
+environments with minimal manual setup. It snapshots shell and Git
 configuration, Homebrew package lists, editor settings, and local tool state,
 then automates routine updates.
 
-It is built for people who want a repeatable macOS development environment with
-low-friction updates.
-
-## What this is
+## Scope
 
 `ballin-scripts` is a backup and update toolkit for repeatable macOS
 development environments. It is not a full disk backup, a secrets manager, or a
 one-command machine restore system.
 
-## Backup and update behavior
-
-The tools split backup from broader system updates:
-
-- `ballin backup` reads local development-environment state and uploads changed
-  snapshots to the configured secret GitHub Gist.
+- `ballin backup` snapshots local development-environment state to the
+  configured secret GitHub Gist.
 - `ballin update` runs update tasks such as Homebrew upgrades, optional Node.js/npm
   updates, optional macOS and App Store updates, optional `ballin-scripts`
   updates, and optional backups.
-- Installation adds command shims to your shell path and configures the
-  secret Gist used by backups.
+- The installer adds command shims to your shell path and configures the backup
+  Gist.
 
 ## Privacy and security
 
-Backups are stored in the configured secret GitHub Gist. Secret Gists are
-unlisted, but anyone with the URL can view them. Treat backup snapshots as
-developer-environment metadata: paths, usernames, package and tool choices,
-editor settings, and local configuration can reveal details about your setup.
-Review snapshots before sharing the Gist URL or making the Gist public.
+Backups are stored in a configured secret GitHub Gist. Secret Gists are
+unlisted, but anyone with the URL can view them. Treat both the Gist URL and
+backup snapshots as sensitive: paths, usernames, package choices, editor
+settings, and local configuration can reveal details about your setup.
 
 ## Installation
 
@@ -56,9 +48,6 @@ less /tmp/ballin-install.sh
 bash /tmp/ballin-install.sh
 ```
 
-See the [documentation index](docs/README.md) for Node.js setup, update
-settings, optional integrations, and managed capabilities.
-
 After installation:
 
 ```shell
@@ -67,22 +56,18 @@ ballin backup
 ballin update
 ```
 
-`ballin doctor` checks the Ballin-managed environment. Run `ballin backup` once
-to create the initial snapshot, then use `ballin update` for ongoing
-maintenance.
+`ballin doctor` checks the managed environment. `ballin backup` creates the
+initial snapshot. `ballin update` handles ongoing maintenance.
 
 ## Fresh Mac setup
 
-On a new Mac, install `ballin-scripts` and let the installer create or adopt the
-secret Gist used by backups. If you adopt an existing backup, use
-`ballin backup open` or `ballin backup read <file>` to inspect saved snapshots
-and use them as a rebuild reference.
+On a new Mac, install `ballin-scripts` and create or adopt the backup Gist. If
+you adopt an existing backup, inspect saved snapshots with `ballin backup open`
+or `ballin backup read <file>` and use them as a rebuild reference.
 
 ## Example output
 
-With optional integrations enabled, `ballin update` updates the machine and can
-finish by backing up the development environment. Output varies by installed
-tools and settings.
+`ballin update` output depends on installed tools and enabled integrations.
 
 ```shell
 $ ballin update
@@ -107,63 +92,21 @@ Your system is ready to brew.
 ✔ mas
 ```
 
-## Usage
-
-### Update with `ballin update`
-
-`ballin update` automates common update tasks for a macOS development machine,
-including Homebrew upgrades, App Store and macOS updates, `ballin-scripts`
-updates, optional Node.js/npm updates, and optional backups.
-
-```shell
-ballin update
-```
-
-Most optional behavior is controlled through `ballin config`; see the
-[optional capabilities guide](docs/optional-capabilities.md) for update
-settings, and the [supported capabilities reference](docs/capabilities.md) for
-the full list of update integrations.
-
-### Back up with `ballin backup`
-
-`ballin backup` uploads changed snapshots to the configured secret Gist. It can
-include local files and tool state when the supporting tools are installed.
-
-See the [supported capabilities reference](docs/capabilities.md) for the full
-list of backup snapshots.
-
-```shell
-ballin backup
-```
-
-Backup status markers:
-
-- `✚` newly saved or newly meaningful snapshot
-- `✎` existing snapshot content changed
-- `✖︎` existing snapshot became empty
-- `✔` unchanged non-empty snapshot
-- unchanged empty snapshots do not print a line
-
-Open the configured backup Gist:
-
-```shell
-ballin backup open
-```
-
-Read one backed-up file from the Gist:
-
-```shell
-ballin backup read zshrc.sh
-```
-
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
-| `ballin update` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
-| `ballin backup` | Backs up dotfiles, editor settings, package lists, and tool state to a secret Gist. |
-| `ballin doctor` | Checks whether the Ballin-managed environment is healthy. |
+| `ballin doctor` | Checks the managed environment. |
+| `ballin update` | Runs configured update tasks. |
+| `ballin backup` | Updates backup snapshots in the configured secret Gist. |
+| `ballin backup open` | Opens the configured backup Gist. |
+| `ballin backup read <file>` | Prints one backed-up file from the Gist. |
 | `ballin config` | Reads and updates local Ballin settings. |
-| `ballin self-update` | Updates the local `ballin-scripts` checkout and refreshes installed commands and configuration. |
+| `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
 | `ballin uninstall` | Removes installed command symlinks and the local checkout. |
+
+## Documentation
+
+See the [documentation index](docs/README.md) for Node.js setup, update
+settings, optional integrations, and managed capabilities.
