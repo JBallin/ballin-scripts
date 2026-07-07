@@ -2,9 +2,10 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
-`ballin-scripts` helps developers keep macOS setup repeatable, inspectable, and
-easy to maintain. It snapshots shell and Git configuration, Homebrew package
-lists, editor settings, and local tool state, then automates routine updates.
+`ballin-scripts` helps developers keep macOS development environments repeatable
+and inspectable. It snapshots shell and Git configuration, Homebrew package
+lists, editor settings, and local tool state, then automates routine
+maintenance.
 
 ## What it does
 
@@ -53,9 +54,8 @@ Your system is ready to brew.
 
 ## New Mac setup
 
-On a new Mac, install `ballin-scripts` and create or adopt the backup Gist.
-Inspect existing snapshots with `ballin backup open` or
-`ballin backup read <file>`, then use them as a rebuild reference.
+On a new Mac, install `ballin-scripts` and create or adopt the backup Gist. Use
+existing snapshots as a rebuild reference.
 
 `ballin-scripts` makes rebuilds more repeatable and auditable, but it is not a
 full disk backup or one-command restore system.
@@ -78,13 +78,12 @@ full disk backup or one-command restore system.
 
 Backups are stored in a configured secret GitHub Gist. Secret Gists are
 unlisted, but anyone with the URL can view them. Treat the Gist URL and
-snapshots as sensitive: they can reveal paths, usernames, package choices,
-editor settings, and local configuration.
+snapshots as sensitive.
 
-`ballin-scripts` is not a secrets manager. Review snapshots before sharing the
+`ballin-scripts` is not a secrets manager; review snapshots before sharing the
 Gist URL or making the Gist public.
 
 ## Documentation
 
-See the [documentation index](docs/README.md) for Node.js setup, update settings,
+See the [documentation](docs/README.md) for Node.js setup, update settings,
 optional integrations, and managed capabilities.
