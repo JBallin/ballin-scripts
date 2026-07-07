@@ -3,8 +3,9 @@
 *Back up your dotfiles and update your macOS development environment.*
 
 `ballin-scripts` helps you recreate and maintain a macOS development environment
-with minimal manual setup. It stores a private backup of the state that defines
-your setup, then automates routine updates.
+with minimal manual setup. It stores a private backup of state such as shell
+configuration, Git configuration, Homebrew package lists, editor settings, and
+local tool state, then automates routine updates.
 
 It is built for people who want a repeatable macOS development environment with
 low-friction updates.
@@ -13,6 +14,25 @@ Core commands:
 
 - `ballin update` updates the development environment.
 - `ballin backup` snapshots the development environment to a private Gist.
+
+## Quick start
+
+```shell
+bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+ballin doctor
+ballin backup
+ballin update
+```
+
+`ballin doctor` checks whether the Ballin-managed environment is healthy.
+Run `ballin backup` once to create the initial snapshot, then use
+`ballin update` for ongoing maintenance.
+
+## What this is
+
+`ballin-scripts` is a backup and update toolkit for repeatable macOS
+development environments. It is not a full disk backup, a secrets manager, or a
+complete one-command machine restore system.
 
 ## Backup and update behavior
 
@@ -26,20 +46,26 @@ The tools split backup from broader system updates:
 - Installation adds the command shims to your shell path and configures the
   private Gist used by backups.
 
-Optional update behavior is controlled through `ballin config`; see the
-[optional capabilities guide](docs/optional-capabilities.md) for the defaults
-and tradeoffs.
+Optional update behavior is controlled through `ballin config`.
 
 ## Fresh Mac setup
 
 On a new Mac, install `ballin-scripts` and let the installer create or adopt the
-private backup Gist used by `ballin backup`. Future snapshots provide the
-reference for recreating shell files, Git settings, package lists, editor
+private backup Gist used by `ballin backup`. If you adopt an existing backup,
+use `ballin backup open` or `ballin backup read <file>` to inspect saved
+snapshots while you recreate shell files, Git settings, package lists, editor
 settings, and other development-environment state.
 
 This is currently a backup and update toolkit, not a full one-command
 machine restore system. The backed-up snapshots make rebuilds more repeatable
 and auditable.
+
+## Privacy and security
+
+Backups are stored in the configured private GitHub Gist. Treat them as
+developer-environment metadata: paths, usernames, package and tool choices,
+editor settings, and local configuration can reveal details about your setup.
+Review snapshots before sharing a Gist or making it public.
 
 ## Before you install
 
@@ -55,7 +81,15 @@ Optional integrations and setup tradeoffs are covered in the
 Install with:
 
 ```shell
-bash <(curl -s https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+```
+
+To inspect the installer first:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh -o /tmp/ballin-install.sh
+less /tmp/ballin-install.sh
+bash /tmp/ballin-install.sh
 ```
 
 See the [documentation index](docs/README.md) for Node.js setup, update
@@ -63,8 +97,8 @@ settings, optional integrations, and the full list of managed capabilities.
 
 ## Example output
 
-With optional integrations enabled, `ballin update` updates the machine and
-finishes by backing up the development environment. Output varies by installed
+With optional integrations enabled, `ballin update` updates the machine and can
+finish by backing up the development environment. Output varies by installed
 tools and settings.
 
 ```shell
@@ -77,23 +111,16 @@ $ ballin update
 ==> Checking Homebrew installation
 Your system is ready to brew.
 
-==> Updating Node.js LTS
-Installing latest LTS version.
-v24.18.0 is already installed.
-Now using node v24.18.0 (npm v11.16.0)
-
 ==> Updating App Store apps
 
 ==> Installing macOS updates
-Software Update Tool
-
-Finding available software
-No updates are available.
+...
 
 ==> Backing up development environment
 ✔ zprofile
 ✔ zshrc
 ✔ bash_completions
+...
 ✔ brew_list
 ✔ brew_leaves
 ✔ brew_cask
@@ -101,8 +128,6 @@ No updates are available.
 ✔ gitconfig
 ✔ npm_global
 ✔ vs_settings
-✔ vs_extensions
-✔ ballin_config
 ✔ mas
 ```
 
