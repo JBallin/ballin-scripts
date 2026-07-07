@@ -145,14 +145,19 @@ Avoid:
 Different assets have different jobs:
 
 - Social preview: recognition and first impression. Keep it simple, polished,
-  and identity-first.
+  and identity-first. It must hold up at small card and thumbnail sizes.
 - README hero: legitimacy, trust, and workflow fit. It can be more atmospheric
   than the social preview, but should be quieter and support the documentation.
 - README and docs: explanation. Detailed product behavior belongs in text, not
   inside image assets.
 
-The social preview is the identity-first asset. The README hero is informed by
-this guidance rather than broad visual exploration.
+The social preview is the identity-first asset. Even when it uses a raster
+background plate, keep the composition simpler than the README hero: low-detail
+texture, strong negative space, large editable typography, and no fake UI,
+feature strips, objects, or readable background text.
+
+The README hero is informed by this guidance rather than broad visual
+exploration.
 
 README onboarding and top-copy changes should use the copy system here when
 evaluating the README opening, prerequisites, installation wording,
@@ -224,7 +229,9 @@ High-fidelity brand or marketing imagery may combine a raster background plate
 with editable SVG typography when realistic lighting, texture, or material
 quality matters. Use this as the default direction for future atmospheric
 assets, including future social preview or README hero refreshes, unless the
-asset is better served by a simple fully vector treatment.
+asset is better served by a simple fully vector treatment. Social previews
+should use this workflow only when the raster plate stays quiet enough to
+preserve thumbnail legibility.
 
 In that workflow:
 
@@ -235,6 +242,7 @@ In that workflow:
 Current social preview assets:
 
 ```text
+docs/assets/brand/social-preview-background.png
 docs/assets/brand/social-preview.svg
 docs/assets/brand/social-preview.png
 ```
