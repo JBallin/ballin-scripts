@@ -428,11 +428,11 @@ const writeSnapshotStatus = (
       writeStdoutLine(`✔ ${fileWithoutExtension}`);
     }
   } else if (resultState === 'created') {
-    writeStdoutLine(`💾 ${fileWithoutExtension}`);
+    writeStdoutLine(`✚ ${fileWithoutExtension}`);
   } else if (resultState === 'removed') {
     writeStdoutLine(`✖︎ ${fileWithoutExtension}`);
   } else {
-    writeStdoutLine(`✚ ${fileWithoutExtension}`);
+    writeStdoutLine(`✎ ${fileWithoutExtension}`);
   }
 };
 
