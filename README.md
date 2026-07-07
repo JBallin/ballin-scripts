@@ -2,10 +2,10 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
-`ballin-scripts` helps developers keep macOS development environments repeatable
-and inspectable. It snapshots shell and Git configuration, Homebrew package
-lists, editor settings, and local tool state, then automates routine
-maintenance.
+`ballin-scripts` helps developers maintain repeatable, inspectable macOS
+development environments. It snapshots shell and Git configuration, Homebrew
+package lists, editor settings, and local tool state, then automates routine
+updates.
 
 ## What it does
 
