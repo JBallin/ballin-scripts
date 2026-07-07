@@ -215,6 +215,18 @@ Editable source files and generated brand images live under:
 docs/assets/brand/
 ```
 
+High-fidelity brand or marketing imagery may combine a raster background plate
+with editable SVG typography when realistic lighting, texture, or material
+quality matters. Use this as the default direction for future atmospheric
+assets, including future social preview or README hero refreshes, unless the
+asset is better served by a simple fully vector treatment.
+
+In that workflow:
+
+- preserve the raster background plate as a committed source asset
+- keep typography, wordmarks, and lockups editable in SVG
+- export the final surface PNG from the composed SVG
+
 Current social preview assets:
 
 ```text
@@ -234,11 +246,9 @@ README hero images should use a wide format. The current default target is
 `1600x400` unless a surface requires a different aspect ratio.
 
 Treat editable source files as canonical. Treat final PNGs as generated,
-shareable, or upload-ready images derived from those sources. The README hero
-may use a high-fidelity raster background plate with editable SVG typography
-when that better fits its atmospheric role. Keep asset file lists and
-regeneration steps in `docs/assets/brand/README.md`; keep identity and copy
-guidance here.
+shareable, or upload-ready images derived from those sources. Keep asset file
+lists and regeneration steps in `docs/assets/brand/README.md`; keep identity and
+copy guidance here.
 
 ## Accessibility and rendering
 
