@@ -823,9 +823,9 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '💾 pipx',
-      '💾 uv_tools',
-      '💾 pyenv_versions',
+      '✚ pipx',
+      '✚ uv_tools',
+      '✚ pyenv_versions',
     ]);
     assert.deepEqual(pythonToolCalls(), [
       'pipx|list --json',
