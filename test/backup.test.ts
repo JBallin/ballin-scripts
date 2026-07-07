@@ -214,13 +214,15 @@ esac
 
   const installFakePythonToolCommands = () => {
     writeTestExecutable('pipx', `#!/usr/bin/env bash
-printf 'pipx|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
+printf 'pipx|%s|%s\\n' "$PIPX_DISABLE_SHARED_LIBS_AUTO_UPGRADE" "$*" >> "$FAKE_PYTHON_TOOL_LOG"
 if [ "$*" != 'list --json' ]; then exit 2; fi
+printf '%s\\n' 'nothing has been installed with pipx' >&2
 printf '%s\\n' '{"venvs":{"black":{"metadata":{"main_package":{"package":"black","package_version":"25.1.0"}}}}}'
 `);
     writeTestExecutable('uv', `#!/usr/bin/env bash
 printf 'uv|%s\\n' "$*" >> "$FAKE_PYTHON_TOOL_LOG"
 if [ "$*" != 'tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config' ]; then exit 2; fi
+printf '%s\\n' 'No tools installed' >&2
 printf '%s\\n' 'ruff v0.14.8 (Python 3.13.7)'
 `);
     writeTestExecutable('pyenv', `#!/usr/bin/env bash
@@ -828,7 +830,7 @@ printf '%s\\n' '123456 Example App'
       '✚ pyenv_versions',
     ]);
     assert.deepEqual(pythonToolCalls(), [
-      'pipx|list --json',
+      'pipx|1|list --json',
       'uv|tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
       'pyenv|versions --bare',
     ]);
