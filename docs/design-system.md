@@ -225,6 +225,7 @@ docs/assets/brand/social-preview.png
 README hero assets use the same folder:
 
 ```text
+docs/assets/brand/readme-hero-background.png
 docs/assets/brand/readme-hero.svg
 docs/assets/brand/readme-hero.png
 ```
@@ -232,8 +233,10 @@ docs/assets/brand/readme-hero.png
 README hero images should use a wide format. The current default target is
 `1600x400` unless a surface requires a different aspect ratio.
 
-Treat editable source files as canonical. Treat PNGs as generated, shareable,
-or upload-ready images derived from those sources. Keep asset file lists and
+Treat editable source files as canonical. Treat final PNGs as generated,
+shareable, or upload-ready images derived from those sources. The README hero
+may use a high-fidelity raster background plate with editable SVG typography
+when that better fits its atmospheric role. Keep asset file lists and
 regeneration steps in `docs/assets/brand/README.md`; keep identity and copy
 guidance here.
 

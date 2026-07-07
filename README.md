@@ -2,6 +2,12 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
+![Ballin README hero showing the Ballin identity and the line Back up dotfiles. Keep your tools current.](docs/assets/brand/readme-hero.png)
+
+<p align="center">
+CLI first · Private backups · Routine updates · macOS native
+</p>
+
 `ballin-scripts` helps you recreate and maintain a macOS development environment
 with minimal manual setup. It backs up the files, package lists, editor settings,
 and local configuration that define your setup, then automates routine updates.

@@ -23,3 +23,25 @@ graphite backgrounds, off-white type, and subtle green accents.
 When refreshing the PNG, render the SVG at exactly `1280x640` and overwrite
 `social-preview.png`. Avoid thumbnail rendering tools that pad or crop the source
 artwork.
+
+## README hero
+
+- Background: `readme-hero-background.png`
+- Source: `readme-hero.svg`
+- Generated image: `readme-hero.png`
+- Size: `1600x400`
+- Usage: README hero
+- Primary identity: `>_ ballin`
+- Supporting copy: `Back up dotfiles. Keep your tools current.`
+
+Unlike the social preview, the README hero intentionally combines a
+high-fidelity AI-generated raster background with editable vector typography.
+Keep `readme-hero-background.png` as the unchanged background plate, keep
+`readme-hero.svg` as the editable typography and composition layer, and treat
+`readme-hero.png` as the generated README artifact exported from the composed
+SVG. The background plate is `2508x627`; the composed README export is
+`1600x400`.
+
+When refreshing the PNG, render the SVG at exactly `1600x400` and overwrite
+`readme-hero.png`. Avoid thumbnail rendering tools that pad or crop the source
+artwork.
