@@ -10,9 +10,8 @@ lists, editor settings, and local tool state, then automates routine updates.
 
 - `ballin backup` snapshots local development-environment state to a configured
   secret GitHub Gist.
-- `ballin update` runs common maintenance tasks such as Homebrew upgrades,
-  optional Node.js/npm updates, optional macOS and App Store updates, optional
-  `ballin-scripts` updates, and optional backups.
+- `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
+  Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
 
 ## Installation
 
@@ -25,16 +24,6 @@ Run the [install script](https://raw.githubusercontent.com/JBallin/ballin-script
 ```shell
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
-
-Then verify setup and create the initial backup:
-
-```shell
-ballin doctor
-ballin backup
-```
-
-`ballin doctor` checks the managed environment. `ballin backup` creates the
-initial snapshot. Use `ballin update` for ongoing maintenance.
 
 ## Example output
 
@@ -63,7 +52,7 @@ Your system is ready to brew.
 ✔ mas
 ```
 
-## Fresh Mac setup
+## New Mac setup
 
 On a new Mac, install `ballin-scripts` and create or adopt the backup Gist.
 Inspect existing snapshots with `ballin backup open` or
@@ -78,18 +67,13 @@ full disk backup or one-command restore system.
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
 | `ballin doctor` | Checks the managed environment. |
-| `ballin backup` | Updates snapshots in the configured secret Gist. |
+| `ballin backup` | Updates snapshots in the configured backup Gist. |
 | `ballin backup open` | Opens the configured backup Gist. |
 | `ballin backup read <file>` | Prints a backed-up file from the Gist. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin config` | Reads and updates local Ballin settings. |
-| `ballin self-update` | Updates the local checkout and refreshes installed commands/configuration. |
+| `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
 | `ballin uninstall` | Removes installed command shims and the local checkout. |
-
-## Documentation
-
-See the [documentation index](docs/README.md) for Node.js setup, update settings,
-optional integrations, and managed capabilities.
 
 ## Privacy and security
 
@@ -100,3 +84,8 @@ local configuration can reveal details about your setup.
 
 `ballin-scripts` is not a secrets manager. Review snapshots before sharing the
 Gist URL or making the Gist public.
+
+## Documentation
+
+See the [documentation index](docs/README.md) for Node.js setup, update settings,
+optional integrations, and managed capabilities.
