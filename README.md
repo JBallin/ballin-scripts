@@ -4,10 +4,6 @@
 
 ![Ballin README hero showing the Ballin identity and the line Back up dotfiles. Keep your tools current.](docs/assets/brand/readme-hero.png)
 
-<p align="center">
-CLI first · Private backups · Routine updates · macOS native
-</p>
-
 `ballin-scripts` helps you recreate and maintain a macOS development environment
 with minimal manual setup. It backs up the files, package lists, editor settings,
 and local configuration that define your setup, then automates routine updates.
@@ -18,7 +14,7 @@ low-friction updates.
 Core commands:
 
 - `ballin update` updates the development environment.
-- `ballin backup` snapshots the development environment to a private Gist.
+- `ballin backup` snapshots the development environment to a configured backup Gist.
 
 ## What it manages
 
@@ -41,12 +37,12 @@ snapshot files and update integrations.
 The tools split backup from broader system updates:
 
 - `ballin backup` reads local development-environment state and uploads changed
-  snapshots to the configured private Gist.
+  snapshots to the configured backup Gist.
 - `ballin update` runs update tasks such as Homebrew upgrades, optional Node.js/npm
   updates, optional macOS and App Store updates, optional `ballin-scripts`
   updates, and optional backups.
 - Installation adds the command shims to your shell path and configures the
-  private Gist used by backups.
+  backup Gist used by backups.
 
 Optional update behavior is controlled through `ballin config`; see the
 [optional capabilities guide](docs/optional-capabilities.md) for the defaults
@@ -55,7 +51,7 @@ and tradeoffs.
 ## Fresh Mac setup
 
 On a new Mac, install `ballin-scripts` and let the installer create or adopt the
-private backup Gist used by `ballin backup`. Future snapshots provide the
+backup Gist used by `ballin backup`. Future snapshots provide the
 reference for recreating shell files, Git settings, package lists, editor
 settings, and other development-environment state.
 
@@ -147,7 +143,7 @@ the full list of update integrations.
 
 ### Back up with `ballin backup`
 
-`ballin backup` uploads changed snapshots to a configured private Gist. It can
+`ballin backup` uploads changed snapshots to a configured backup Gist. It can
 include shell dotfiles, Git config, Homebrew formulae and casks, global npm
 packages, nvm settings, editor settings, editor extensions, bash completions,
 and Mac App Store apps when the supporting tools are installed.
@@ -177,7 +173,7 @@ ballin backup read zshrc.sh
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
 | `ballin update` | Updates Homebrew, macOS, App Store apps, optional Node.js/npm tools, `ballin-scripts`, and optional backups. |
-| `ballin backup` | Backs up dotfiles, editor settings, package lists, and tool state to a private Gist. |
+| `ballin backup` | Backs up dotfiles, editor settings, package lists, and tool state to a configured backup Gist. |
 | `ballin doctor` | Checks whether the Ballin-managed environment is healthy. |
 | `ballin config` | Reads and updates local Ballin settings. |
 | `ballin self-update` | Updates the local `ballin-scripts` checkout and refreshes installed commands and configuration. |

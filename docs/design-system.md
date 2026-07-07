@@ -96,7 +96,7 @@ making rebuilds more repeatable and auditable.
 Prefer:
 
 - backed up and current
-- private backups
+- backup snapshots
 - routine updates
 - Ballin-managed environment
 - repeatable and auditable, when there is room for nuance
@@ -192,18 +192,23 @@ Do not include installation commands in README hero artwork.
 A README hero may include a very small feature strip if it improves the
 composition, but it is optional.
 
-If used, prefer short capability-level labels only. Avoid descriptions, install
-commands, or future-state claims.
+README Hero v1 intentionally omits the strip because the image is calmer and
+stronger without it.
 
-Preferred v1 labels:
+If a future asset uses a strip, prefer short capability-level labels only. Avoid
+descriptions, install commands, or future-state claims.
+
+Avoid labels such as `Private backups`, `Always current`, `Restore-ready`,
+`Rebuild anywhere`, or `Install in 60 seconds` because they can overstate current
+behavior or distract from the hero. `Private backups` should be avoided because
+Ballin currently stores backup snapshots in a GitHub secret Gist. Secret Gists
+are unlisted, but they are not private access-controlled storage.
+
+A possible future-safe label set, if a strip is ever needed, is:
 
 ```text
-CLI first · Private backups · Routine updates · macOS native
+CLI first · Backup snapshots · Routine updates · macOS native
 ```
-
-Avoid labels such as `Always current`, `Restore-ready`, `Rebuild anywhere`, or
-`Install in 60 seconds` because they can overstate current behavior or distract
-from the hero.
 
 If removing the strip makes the hero calmer and stronger, remove it.
 

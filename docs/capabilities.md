@@ -22,7 +22,7 @@ integrations and exits nonzero at the end.
 
 ## `ballin backup`
 
-`ballin backup` backs up changed snapshots to the configured private Gist. It
+`ballin backup` backs up changed snapshots to the configured backup Gist. It
 can snapshot:
 
 | Area | Snapshot files | Requirement |
