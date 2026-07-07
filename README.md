@@ -7,32 +7,24 @@ environments with minimal manual setup. It snapshots shell and Git
 configuration, Homebrew package lists, editor settings, and local tool state,
 then automates routine updates.
 
-## Scope
+It is designed for developers who want their Mac setup to be repeatable,
+inspectable, and easy to keep current.
 
-`ballin-scripts` is a backup and update toolkit for repeatable macOS
-development environments. It is not a full disk backup, a secrets manager, or a
-one-command machine restore system.
+## What it does
 
-- `ballin backup` snapshots local development-environment state to the
-  configured secret GitHub Gist.
-- `ballin update` runs update tasks such as Homebrew upgrades, optional Node.js/npm
-  updates, optional macOS and App Store updates, optional `ballin-scripts`
-  updates, and optional backups.
+- `ballin backup` snapshots local development-environment state to a configured
+  secret GitHub Gist.
+- `ballin update` runs common maintenance tasks such as Homebrew upgrades,
+  optional Node.js/npm updates, optional macOS and App Store updates, optional
+  `ballin-scripts` updates, and optional backups.
 - The installer adds command shims to your shell path and configures the backup
   Gist.
-
-## Privacy and security
-
-Backups are stored in a configured secret GitHub Gist. Secret Gists are
-unlisted, but anyone with the URL can view them. Treat both the Gist URL and
-backup snapshots as sensitive: paths, usernames, package choices, editor
-settings, and local configuration can reveal details about your setup.
 
 ## Installation
 
 The installer is interactive and guides you through missing setup. For the
-smoothest first run, use macOS with current Node.js LTS, authenticated GitHub
-CLI, and Homebrew available.
+smoothest first run, use macOS with Node.js LTS, Homebrew, and an authenticated
+GitHub CLI.
 
 Install with:
 
@@ -40,7 +32,7 @@ Install with:
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-To inspect the installer first:
+Inspect first:
 
 ```shell
 curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh -o /tmp/ballin-install.sh
@@ -58,12 +50,6 @@ ballin update
 
 `ballin doctor` checks the managed environment. `ballin backup` creates the
 initial snapshot. `ballin update` handles ongoing maintenance.
-
-## Fresh Mac setup
-
-On a new Mac, install `ballin-scripts` and create or adopt the backup Gist. If
-you adopt an existing backup, inspect saved snapshots with `ballin backup open`
-or `ballin backup read <file>` and use them as a rebuild reference.
 
 ## Example output
 
@@ -92,21 +78,40 @@ Your system is ready to brew.
 ✔ mas
 ```
 
+## Fresh Mac setup
+
+On a new Mac, install `ballin-scripts` and create or adopt the backup Gist. If
+you adopt an existing backup, inspect saved snapshots with `ballin backup open`
+or `ballin backup read <file>` and use them as a rebuild reference.
+
+`ballin-scripts` makes rebuilds more repeatable and auditable, but it is not a
+full disk backup or one-command machine restore system.
+
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
 | `ballin doctor` | Checks the managed environment. |
-| `ballin update` | Runs configured update tasks. |
 | `ballin backup` | Updates backup snapshots in the configured secret Gist. |
 | `ballin backup open` | Opens the configured backup Gist. |
 | `ballin backup read <file>` | Prints one backed-up file from the Gist. |
+| `ballin update` | Runs configured update tasks. |
 | `ballin config` | Reads and updates local Ballin settings. |
-| `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
-| `ballin uninstall` | Removes installed command symlinks and the local checkout. |
+| `ballin self-update` | Updates the local checkout and refreshes installed commands/configuration. |
+| `ballin uninstall` | Removes installed command shims and the local checkout. |
 
 ## Documentation
 
-See the [documentation index](docs/README.md) for Node.js setup, update
-settings, optional integrations, and managed capabilities.
+See the [documentation index](docs/README.md) for Node.js setup, update settings,
+optional integrations, and managed capabilities.
+
+## Privacy and security
+
+Backups are stored in a configured secret GitHub Gist. Secret Gists are
+unlisted, but anyone with the URL can view them. Treat the Gist URL and backup
+snapshots as sensitive: paths, usernames, package choices, editor settings, and
+local configuration can reveal details about your setup.
+
+`ballin-scripts` is not a secrets manager. Review snapshots before sharing the
+Gist URL or making the Gist public.
