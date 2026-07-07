@@ -82,8 +82,17 @@ an adopted backup includes a saved `ballin_config` snapshot, the installer resto
 them before continuing.
 
 Setup creates backup Gists as secret. To share one publicly, make it public in
-GitHub after reviewing it: public backups can expose paths, usernames, tool
-choices, package lists, and other local config, and cannot be made secret again.
+GitHub after reviewing it: secret Gists are unlisted, but anyone with the URL
+can view them. Backup snapshots can expose paths, usernames, tool choices,
+package lists, and other local config, and public Gists cannot be made secret
+again.
+
+Use `ballin backup open` to open the configured backup Gist, or
+`ballin backup read <file>` to print one saved snapshot.
+
+On a new Mac, install `ballin-scripts` and adopt the existing backup Gist. Use
+the saved snapshots as a rebuild reference; `ballin-scripts` is not a full disk
+backup or one-command machine restore system.
 
 ## Readiness checks
 
