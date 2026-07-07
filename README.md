@@ -78,9 +78,9 @@ full disk backup or one-command restore system.
 
 ## Privacy and security
 
-Backups are stored in a configured [secret GitHub Gist](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists). Secret Gists are unlisted,
-but anyone with the URL can view them. Treat the Gist URL and snapshots as
-sensitive.
+Backups are stored in a configured secret GitHub Gist. Secret Gists are
+unlisted, but anyone with the URL can view them. Treat the Gist URL and
+snapshots as sensitive.
 
 `ballin-scripts` is not a secrets manager; review snapshots before sharing the
 Gist URL or making the Gist public.
