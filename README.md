@@ -3,8 +3,8 @@
 *Back up your dotfiles and update your macOS development environment.*
 
 `ballin-scripts` helps you recreate and maintain a macOS development environment
-with minimal manual setup. It backs up the files, package lists, editor settings,
-and local configuration that define your setup, then automates routine updates.
+with minimal manual setup. It stores a private backup of the state that defines
+your setup, then automates routine updates.
 
 It is built for people who want a repeatable macOS development environment with
 low-friction updates.
@@ -16,9 +16,9 @@ Core commands:
 
 ## What it manages
 
-`ballin-scripts` manages development-environment state that is easy to lose
-or tedious to maintain by backing up dotfiles, package and tool lists, and
-editor settings, then automating routine update tasks.
+`ballin-scripts` covers two related jobs: preserving development-environment
+state and keeping common tooling up to date. Backups focus on dotfiles, package
+and tool lists, and editor settings; updates handle routine maintenance tasks.
 
 See the [supported capabilities reference](docs/capabilities.md) for the exact
 snapshot files and update integrations.
