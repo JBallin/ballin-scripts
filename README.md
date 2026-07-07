@@ -14,15 +14,6 @@ Core commands:
 - `ballin update` updates the development environment.
 - `ballin backup` snapshots the development environment to a private Gist.
 
-## What it manages
-
-`ballin-scripts` covers two related jobs: preserving development-environment
-state and keeping common tooling up to date. Backups focus on dotfiles, package
-and tool lists, and editor settings; updates handle routine maintenance tasks.
-
-See the [supported capabilities reference](docs/capabilities.md) for the exact
-snapshot files and update integrations.
-
 ## Backup and update behavior
 
 The tools split backup from broader system updates:
