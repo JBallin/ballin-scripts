@@ -32,6 +32,7 @@ can snapshot:
 | Homebrew inventory | `brew_list`, `brew_leaves`, `brew_cask`, `brew_services`, `Brewfile` | `brew` on `PATH`. |
 | Git config | `gitconfig`, `gitignore_global` | Matching dotfiles in `HOME`. |
 | Global npm packages | `npm_global` | `npm` on `PATH`. |
+| Python tooling | `pipx`, `uv_tools`, `pyenv_versions` | `pipx`, `uv`, or `pyenv` on `PATH`. |
 | Node version preference | `nvmrc` | `.nvmrc` in `HOME`. |
 | VS Code | `vs_settings`, `vs_keybindings`, `vs_extensions` | VS Code user files; `code` for extension list. |
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
