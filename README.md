@@ -10,15 +10,11 @@ local tool state, then automates routine updates.
 It is built for people who want a repeatable macOS development environment with
 low-friction updates.
 
-Core commands:
-
-- `ballin update` updates the development environment.
-- `ballin backup` snapshots the development environment to a private Gist.
-
 ## Quick start
 
+Install `ballin-scripts`, then run the first health check and backup:
+
 ```shell
-bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ballin doctor
 ballin backup
 ballin update
@@ -53,12 +49,7 @@ Optional update behavior is controlled through `ballin config`.
 On a new Mac, install `ballin-scripts` and let the installer create or adopt the
 private backup Gist used by `ballin backup`. If you adopt an existing backup,
 use `ballin backup open` or `ballin backup read <file>` to inspect saved
-snapshots while you recreate shell files, Git settings, package lists, editor
-settings, and other development-environment state.
-
-This is currently a backup and update toolkit, not a full one-command
-machine restore system. The backed-up snapshots make rebuilds more repeatable
-and auditable.
+snapshots and use them as a rebuild reference.
 
 ## Privacy and security
 
@@ -67,16 +58,11 @@ developer-environment metadata: paths, usernames, package and tool choices,
 editor settings, and local configuration can reveal details about your setup.
 Review snapshots before sharing a Gist or making it public.
 
-## Before you install
+## Installation
 
 The installer is interactive and guides you through missing setup. For the
 smoothest first run, use macOS with current Node.js LTS, authenticated GitHub
 CLI, and Homebrew available.
-
-Optional integrations and setup tradeoffs are covered in the
-[optional capabilities guide](docs/optional-capabilities.md).
-
-## Installation
 
 Install with:
 
@@ -93,7 +79,7 @@ bash /tmp/ballin-install.sh
 ```
 
 See the [documentation index](docs/README.md) for Node.js setup, update
-settings, optional integrations, and the full list of managed capabilities.
+settings, optional integrations, and managed capabilities.
 
 ## Example output
 
@@ -119,14 +105,7 @@ Your system is ready to brew.
 ==> Backing up development environment
 ✔ zprofile
 ✔ zshrc
-✔ bash_completions
 ...
-✔ brew_list
-✔ brew_leaves
-✔ brew_cask
-✔ Brewfile
-✔ gitconfig
-✔ npm_global
 ✔ vs_settings
 ✔ mas
 ```
@@ -151,8 +130,7 @@ the full list of update integrations.
 ### Back up with `ballin backup`
 
 `ballin backup` uploads changed snapshots to a configured private Gist. It can
-include local files and package, tool, and editor state when the supporting
-tools are installed.
+include local files and tool state when the supporting tools are installed.
 
 See the [supported capabilities reference](docs/capabilities.md) for the full
 list of backup snapshots.
