@@ -96,7 +96,7 @@ making rebuilds more repeatable and auditable.
 Prefer:
 
 - backed up and current
-- private backups
+- backup snapshots
 - routine updates
 - Ballin-managed environment
 - repeatable and auditable, when there is room for nuance
@@ -192,18 +192,23 @@ Do not include installation commands in README hero artwork.
 A README hero may include a very small feature strip if it improves the
 composition, but it is optional.
 
-If used, prefer short capability-level labels only. Avoid descriptions, install
-commands, or future-state claims.
+README Hero v1 intentionally omits the strip because the image is calmer and
+stronger without it.
 
-Preferred v1 labels:
+If a future asset uses a strip, prefer short capability-level labels only. Avoid
+descriptions, install commands, or future-state claims.
+
+Avoid labels such as `Private backups`, `Always current`, `Restore-ready`,
+`Rebuild anywhere`, or `Install in 60 seconds` because they can overstate current
+behavior or distract from the hero. `Private backups` should be avoided because
+Ballin currently stores backup snapshots in a GitHub secret Gist. Secret Gists
+are unlisted, but they are not private access-controlled storage.
+
+A possible future-safe label set, if a strip is ever needed, is:
 
 ```text
-CLI first · Private backups · Routine updates · macOS native
+CLI first · Backup snapshots · Routine updates · macOS native
 ```
-
-Avoid labels such as `Always current`, `Restore-ready`, `Rebuild anywhere`, or
-`Install in 60 seconds` because they can overstate current behavior or distract
-from the hero.
 
 If removing the strip makes the hero calmer and stronger, remove it.
 
@@ -215,6 +220,18 @@ Editable source files and generated brand images live under:
 docs/assets/brand/
 ```
 
+High-fidelity brand or marketing imagery may combine a raster background plate
+with editable SVG typography when realistic lighting, texture, or material
+quality matters. Use this as the default direction for future atmospheric
+assets, including future social preview or README hero refreshes, unless the
+asset is better served by a simple fully vector treatment.
+
+In that workflow:
+
+- preserve the raster background plate as a committed source asset
+- keep typography, wordmarks, and lockups editable in SVG
+- export the final surface PNG from the composed SVG
+
 Current social preview assets:
 
 ```text
@@ -225,6 +242,7 @@ docs/assets/brand/social-preview.png
 README hero assets use the same folder:
 
 ```text
+docs/assets/brand/readme-hero-background.png
 docs/assets/brand/readme-hero.svg
 docs/assets/brand/readme-hero.png
 ```
@@ -232,10 +250,10 @@ docs/assets/brand/readme-hero.png
 README hero images should use a wide format. The current default target is
 `1600x400` unless a surface requires a different aspect ratio.
 
-Treat editable source files as canonical. Treat PNGs as generated, shareable,
-or upload-ready images derived from those sources. Keep asset file lists and
-regeneration steps in `docs/assets/brand/README.md`; keep identity and copy
-guidance here.
+Treat editable source files as canonical. Treat final PNGs as generated,
+shareable, or upload-ready images derived from those sources. Keep asset file
+lists and regeneration steps in `docs/assets/brand/README.md`; keep identity and
+copy guidance here.
 
 ## Accessibility and rendering
 

@@ -58,7 +58,7 @@ Usage:
 Commands:
 
     update                update the Ballin-managed macOS development environment
-    backup                backup Ballin-managed environment state to the configured private Gist
+    backup                backup Ballin-managed environment state to the configured backup Gist
                           ${format.open} open the configured backup Gist
                           ${format.read} ${format.fileName} read a backed-up file
     doctor                check whether the Ballin-managed environment is healthy

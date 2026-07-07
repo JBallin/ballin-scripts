@@ -2,6 +2,8 @@
 
 *Back up your dotfiles and update your macOS development environment.*
 
+![Ballin README hero showing the Ballin identity and the line Back up dotfiles. Keep your tools current.](docs/assets/brand/readme-hero.png)
+
 `ballin-scripts` helps developers maintain repeatable, inspectable macOS
 development environments. It snapshots shell and Git configuration, Homebrew
 package lists, editor settings, and local tool state, then automates routine
