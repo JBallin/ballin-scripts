@@ -29,7 +29,8 @@ space, and a restrained green prompt accent.
 
 When refreshing the PNG, render the SVG at exactly `1280x640` and overwrite
 `social-preview.png`. Avoid thumbnail rendering tools that pad or crop the source
-artwork.
+artwork. Use high-effort PNG compression and keep the upload artifact under
+GitHub's `1 MB` social-preview limit.
 
 ## README hero
 
