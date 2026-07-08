@@ -1,6 +1,6 @@
 # Ballin Scripts
 
-*Back up your dotfiles and update your macOS development environment.*
+*Back up your dotfiles and update your macOS development environment*
 
 ![Ballin README hero showing the Ballin identity and the line Back up dotfiles. Keep your tools current.](docs/assets/brand/readme-hero.png)
 
