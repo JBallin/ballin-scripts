@@ -22,7 +22,7 @@ The installer adds command shims, configures the backup Gist, and guides you
 through missing setup. For the smoothest first run, have Node.js LTS, Homebrew,
 and an authenticated GitHub CLI available.
 
-Run the [install script](https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh):
+Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
 ```shell
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
