@@ -1,49 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
   <title id="title">Ballin GitHub social preview</title>
-  <desc id="desc">A matte graphite social preview with the lowercase ballin wordmark and the line Back up your dotfiles and update your macOS development environment</desc>
+  <desc id="desc">A dark graphite social preview with a green prompt accent, the Ballin wordmark, and the line Back up dotfiles. Keep your tools current.</desc>
   <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#161918"/>
-      <stop offset="0.58" stop-color="#101312"/>
-      <stop offset="1" stop-color="#0b0d0c"/>
+    <linearGradient id="type-field" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#050605" stop-opacity="0.62"/>
+      <stop offset="0.52" stop-color="#050605" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#050605" stop-opacity="0"/>
     </linearGradient>
-    <radialGradient id="accent-haze" cx="0.82" cy="0.2" r="0.72">
-      <stop offset="0" stop-color="#9be675" stop-opacity="0.078"/>
-      <stop offset="0.42" stop-color="#9be675" stop-opacity="0.022"/>
-      <stop offset="1" stop-color="#9be675" stop-opacity="0"/>
+    <radialGradient id="vignette" cx="0.24" cy="0.48" r="0.86">
+      <stop offset="0" stop-color="#f4f1e8" stop-opacity="0.025"/>
+      <stop offset="0.52" stop-color="#050605" stop-opacity="0"/>
+      <stop offset="1" stop-color="#050605" stop-opacity="0.38"/>
     </radialGradient>
-    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#050605" flood-opacity="0.2"/>
+    <filter id="type-shadow" x="-10%" y="-22%" width="125%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="15" flood-color="#050605" flood-opacity="0.44"/>
     </filter>
     <style>
       .wordmark {
         font-family: "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
         font-size: 156px;
-        font-weight: 640;
+        font-weight: 650;
         letter-spacing: 0;
       }
 
-      .mono {
+      .prompt {
         font-family: "SF Mono", "Menlo", "Cascadia Mono", "Roboto Mono", monospace;
+        font-size: 57px;
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+
+      .copy {
+        font-family: "SF Pro Text", "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+        font-size: 37px;
+        font-weight: 430;
         letter-spacing: 0;
       }
     </style>
   </defs>
 
-  <rect width="1280" height="640" fill="url(#background)"/>
-  <rect width="1280" height="640" fill="url(#accent-haze)"/>
-  <path d="M113 122h1054c15 0 27 12 27 27v342c0 15-12 27-27 27H113c-15 0-27-12-27-27V149c0-15 12-27 27-27Z" fill="#f4f1e8" fill-opacity="0.018" stroke="#f4f1e8" stroke-opacity="0.055"/>
+  <image href="social-preview-background.png" x="0" y="0" width="1280" height="640" preserveAspectRatio="xMidYMid slice"/>
+  <rect width="1280" height="640" fill="url(#type-field)"/>
+  <rect width="1280" height="640" fill="url(#vignette)"/>
 
-  <g filter="url(#soft-shadow)">
-    <text x="146" y="314" class="wordmark" fill="#f4f1e8">ballin</text>
-    <text x="151" y="389" class="mono" fill="#d9d6cc" font-size="28.5" font-weight="400">
-      <tspan x="151" dy="0">Back up your dotfiles and update your</tspan>
-      <tspan x="151" dy="40">macOS development environment</tspan>
-    </text>
-    <text x="151" y="496" class="mono" font-size="21.5" font-weight="500">
-      <tspan fill="#9be675" fill-opacity="0.92">&gt;_</tspan>
-      <tspan dx="7" fill="#858b84">ballin-scripts</tspan>
-    </text>
+  <g filter="url(#type-shadow)">
+    <text x="145" y="289" class="prompt" fill="#9be675" fill-opacity="0.95">&gt;_</text>
+    <text x="240" y="291" class="wordmark" fill="#f4f1e8">ballin</text>
+    <text x="148" y="384" class="copy" fill="#f4f1e8" fill-opacity="0.94">Back up dotfiles.</text>
+    <text x="148" y="432" class="copy" fill="#f4f1e8" fill-opacity="0.94">Keep your tools current.</text>
   </g>
-
 </svg>

@@ -8,26 +8,29 @@ this folder and the steps for regenerating image files from editable sources.
 
 ## GitHub social preview
 
+- Background: `social-preview-background.png`
 - Source: `social-preview.svg`
 - Generated image: `social-preview.png`
 - Size: `1280x640`
-- Primary identity: lowercase `ballin`
-- Supporting copy: `Back up your dotfiles and update your macOS development environment`
+- Primary identity: `>_ ballin`
+- Supporting copy: `Back up dotfiles. Keep your tools current.`
 
-Keep the SVG editable. Treat the PNG as the GitHub upload artifact.
+The social preview follows the high-fidelity raster background plus editable SVG
+typography workflow documented in the design system. Keep
+`social-preview-background.png` as the unchanged AI-generated background plate,
+keep `social-preview.svg` as the editable typography and composition layer, and
+treat `social-preview.png` as the GitHub upload artifact. The background plate
+and composed export are both `1280x640`.
 
 The social preview follows the wordmark-led direction documented in the design
-system. README hero assets use the same identity system, including matte
-graphite backgrounds, off-white type, and subtle green accents.
+system. It intentionally stays simpler and more identity-first than the README
+hero, with a low-detail graphite background, off-white type, strong negative
+space, and a restrained green prompt accent.
 
 When refreshing the PNG, render the SVG at exactly `1280x640` and overwrite
 `social-preview.png`. Avoid thumbnail rendering tools that pad or crop the source
-artwork.
-
-Future high-fidelity social preview refreshes may follow the raster background
-plate plus editable SVG typography workflow documented in the design system.
-The current social preview remains the existing fully vector asset until that
-refresh is intentionally designed.
+artwork. Use high-effort PNG compression and keep the upload artifact under
+GitHub's `1 MB` social-preview limit.
 
 ## README hero
 
