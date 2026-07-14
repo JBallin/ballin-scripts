@@ -71,7 +71,10 @@ describe('ballin', () => {
     });
   };
 
-  const runBallin = (args: string[] = []): StringSpawnResult => spawnSync(process.execPath, [
+  const runBallin = (
+    args: string[] = [],
+    env: NodeJS.ProcessEnv = {},
+  ): StringSpawnResult => spawnSync(process.execPath, [
     ballinPath,
     ...args,
   ], {
@@ -83,6 +86,7 @@ describe('ballin', () => {
       BALLIN_TEST_BALLIN_PATH: path.join(binDir, 'ballin'),
       FAKE_COMMAND_LOG: commandLogPath,
       PATH: binDir,
+      ...env,
     },
   });
 
@@ -100,6 +104,10 @@ case "$1:$2" in
   auth:status)
     if [ "$*" != "auth status --hostname example.test" ]; then exit 2; fi
     exit "\${FAKE_GH_AUTH_STATUS:-0}"
+    ;;
+  gist:view)
+    if [ "$*" != "gist view test-gist-id --files" ]; then exit 2; fi
+    exit "\${FAKE_GH_GIST_STATUS:-0}"
     ;;
   *) exit 2 ;;
 esac
@@ -221,7 +229,10 @@ exit 17
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, 'Your Ballin-managed environment is healthy.\n');
     assert.equal(result.stderr, '');
-    assert.equal(fs.readFileSync(commandLogPath, 'utf8'), 'auth status --hostname example.test\n');
+    assert.deepEqual(commandLog(), [
+      'auth status --hostname example.test',
+      'gist view test-gist-id --files',
+    ]);
   });
 
   it('reports full Ballin-managed environment checks through verbose doctor', () => {
@@ -236,49 +247,95 @@ exit 17
     assert.include(result.stdout, 'OK    Gist ID:');
     assert.include(result.stdout, 'OK    GitHub CLI:');
     assert.include(result.stdout, 'OK    GitHub CLI authentication:');
+    assert.include(
+      result.stdout,
+      'OK    Configured Gist readability: The configured backup Gist exists and is readable. Write permission was not checked.',
+    );
     assert.include(result.stdout, 'Result: Ballin-managed environment health looks good.');
     assert.equal(result.stderr, '');
-    assert.equal(fs.readFileSync(commandLogPath, 'utf8'), 'auth status --hostname example.test\n');
+    assert.deepEqual(commandLog(), [
+      'auth status --hostname example.test',
+      'gist view test-gist-id --files',
+    ]);
   });
 
   it('reports doctor warnings without failing the command', () => {
-    fs.rmSync(path.join(binDir, 'gh'));
     writeConfig({
       update: {},
       backup: {
-        id: null,
+        id: 'test-gist-id',
         host: 'example.test',
-      },
-      analytics: {
-        enabled: 'false',
       },
     });
 
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
-    assert.include(result.stdout, '\nNext: Run the installer to create or adopt a backup Gist.');
-    assert.include(result.stdout, 'WARN  GitHub CLI: GitHub CLI is not discoverable on PATH.');
-    assert.include(result.stdout, '\nNext: Install GitHub CLI and authenticate it for your backup host.');
+    assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
+    assert.include(result.stdout, '\nNext: Run ballin config reset to recreate the config.');
     assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
     assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
-    assert.notInclude(result.stdout, 'OK    Config readability:');
     assert.notInclude(result.stdout, 'OK    Gist host:');
-    assert.notInclude(result.stdout, 'INFO  GitHub CLI authentication: Skipping GitHub CLI authentication check because gh is not on PATH.');
     assert.notInclude(result.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
     assert.equal(result.stderr, '');
-    assert.isFalse(fs.existsSync(commandLogPath));
 
     const verboseResult = runBallin(['doctor', '--verbose']);
 
     assert.equal(verboseResult.status, 0, verboseResult.stderr);
     assert.include(verboseResult.stdout, 'OK    Node.js runtime:');
-    assert.include(verboseResult.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
-    assert.include(verboseResult.stdout, '      Next: Run the installer to create or adopt a backup Gist.');
-    assert.include(verboseResult.stdout, 'INFO  GitHub CLI authentication: Skipping GitHub CLI authentication check because gh is not on PATH.');
+    assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
+    assert.include(verboseResult.stdout, 'OK    Configured Gist readability:');
     assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
+  });
+
+  it('fails doctor for unusable backup prerequisites and unreadable Gists', () => {
+    writeConfig({
+      update: {},
+      backup: {
+        id: null,
+        host: 'example.test',
+      },
+      analytics: {},
+    });
+    const missingId = runBallin(['doctor']);
+    assert.equal(missingId.status, 1);
+    assert.include(missingId.stdout, 'ERROR Gist ID: Backup Gist ID is not configured yet.');
+    assert.notInclude(missingId.stdout, 'Configured Gist readability:');
+
+    fs.rmSync(path.join(binDir, 'gh'));
+    const missingGh = runBallin(['doctor']);
+    assert.equal(missingGh.status, 1);
+    assert.include(missingGh.stdout, 'ERROR GitHub CLI: GitHub CLI is not discoverable on PATH.');
+
+    writeExecutable('gh', `#!/bin/bash
+printf '%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+case "$1:$2" in
+  auth:status) exit "\${FAKE_GH_AUTH_STATUS:-0}" ;;
+  gist:view) exit "\${FAKE_GH_GIST_STATUS:-0}" ;;
+  *) exit 2 ;;
+esac
+`);
+    writeConfig({
+      update: {},
+      backup: {
+        id: 'test-gist-id',
+        host: 'example.test',
+      },
+      analytics: {},
+    });
+
+    const failedAuth = runBallin(['doctor'], { FAKE_GH_AUTH_STATUS: '4' });
+    assert.equal(failedAuth.status, 1);
+    assert.include(failedAuth.stdout, 'ERROR GitHub CLI authentication:');
+    assert.notInclude(failedAuth.stdout, 'Configured Gist readability:');
+
+    const unreadableGist = runBallin(['doctor'], { FAKE_GH_GIST_STATUS: '4' });
+    assert.equal(unreadableGist.status, 1);
+    assert.include(
+      unreadableGist.stdout,
+      'ERROR Configured Gist readability: The configured backup Gist could not be read.',
+    );
   });
 
   it('fails doctor when a required health check fails', () => {
@@ -299,7 +356,7 @@ exit 17
     assert.equal(missingShim.status, 1);
     assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
-    assert.include(missingShim.stdout, 'WARN  Gist ID: Backup Gist ID is not configured yet.');
+    assert.include(missingShim.stdout, 'ERROR Gist ID: Backup Gist ID is not configured yet.');
     assert.include(missingShim.stdout, '\nNext: Run the installer to create or adopt a backup Gist.');
     assert.notInclude(missingShim.stdout, '      Next:');
     assert.notInclude(missingShim.stdout, 'OK    Node.js runtime:');

@@ -99,9 +99,7 @@ exit ${status}
     });
   };
 
-  const runUpdate = (env: NodeJS.ProcessEnv = {}) => {
-    writeUpdateConfig(env);
-    return spawnSync(ballinPath, ['update'], {
+  const spawnUpdate = (env: NodeJS.ProcessEnv = {}) => spawnSync(ballinPath, ['update'], {
       encoding: 'utf8',
       env: {
         HOME: tempDir,
@@ -114,6 +112,10 @@ exit ${status}
         ...env,
       },
     });
+
+  const runUpdate = (env: NodeJS.ProcessEnv = {}) => {
+    writeUpdateConfig(env);
+    return spawnUpdate(env);
   };
 
   const installNvmStub = (nvmDir: string) => {
@@ -211,6 +213,7 @@ exit 0
       'brew|1,1|doctor',
       'ballin|1,1|self-update',
       'gh|1,1|auth status --hostname example.test',
+      'gh|1,1|gist view test-gist-id --files',
     ]);
   });
 
@@ -230,6 +233,7 @@ exit 0
       'brew|1,1|doctor',
       'ballin|1,1|self-update',
       'gh|1,1|auth status --hostname example.test',
+      'gh|1,1|gist view test-gist-id --files',
     ]);
   });
 
@@ -268,6 +272,7 @@ exit 0
       'softwareupdate|,|-ia',
       'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
+      'gh|,|gist view test-gist-id --files',
       'ballin|,|backup',
     ]);
   });
@@ -289,6 +294,7 @@ exit 0
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
+      'gh|,|gist view test-gist-id --files',
     ]);
   });
 
@@ -324,10 +330,11 @@ exit 2
       'ballin|,|self-update',
       'node|,|-p process.versions.node',
       'gh|,|auth status --hostname example.test',
+      'gh|,|gist view test-gist-id --files',
     ]);
   });
 
-  it('keeps Ballin readiness failures informational after update', () => {
+  it('records Ballin readiness failures and still runs configured backup', () => {
     const selfUpdatePath = path.join(tempDir, 'self-update-ballin');
     fs.writeFileSync(selfUpdatePath, `#!/usr/bin/env bash
 printf '%s|%s|%s\\n' "ballin" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
@@ -339,10 +346,11 @@ exit 0
     const result = runUpdate({
       TEST_UPDATE_NVM: 'false',
       TEST_UPDATE_BALLIN: 'true',
+      TEST_UPDATE_BACKUP: 'true',
       BALLIN_TEST_BALLIN_PATH: selfUpdatePath,
     });
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 1);
     assert.include(result.stdout, 'Checking Ballin readiness');
     assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
     assert.include(result.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
@@ -350,6 +358,8 @@ exit 0
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
+      'gh|,|gist view test-gist-id --files',
+      'ballin|,|backup',
     ]);
   });
 
@@ -405,11 +415,12 @@ exit 0
       'npm|,|update -g',
       'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
+      'gh|,|gist view test-gist-id --files',
       'ballin|,|backup',
     ]);
   });
 
-  it('still uses final backup status after informational Ballin readiness', () => {
+  it('still uses final backup status after Ballin readiness', () => {
     writeTestExecutable('ballin', `#!/usr/bin/env bash
 printf '%s|%s|%s\\n' "ballin" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
 if [ "$1" = 'backup' ]; then
@@ -432,6 +443,7 @@ exit 0
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
       'gh|,|auth status --hostname example.test',
+      'gh|,|gist view test-gist-id --files',
       'ballin|,|backup',
     ]);
   });
@@ -548,7 +560,7 @@ printf 'backup-npm|%s\\n' "$(command -v npm)" >> "$UPDATE_TEST_LOG"
     ]);
   });
 
-  it('keeps running later integrations when nvm env capture fails', () => {
+  it('records a failure and keeps running later integrations when nvm env capture fails', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     const brokenNodeDir = path.join(tempDir, 'broken-node');
     fs.mkdirSync(brokenNodeDir);
@@ -565,17 +577,18 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
       TEST_UPDATE_BACKUP: 'true',
     });
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 1);
     assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.include(result.stderr, 'Unable to capture the updated Node.js environment');
     assert.deepEqual(commandLog().slice(1), [
       'backup still ran',
     ]);
   });
 
-  it('warns when nvm is enabled but cannot be loaded', () => {
+  it('fails when nvm is enabled but cannot be loaded', () => {
     const result = runUpdate();
 
-    assert.equal(result.status, 0);
+    assert.equal(result.status, 1);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.include(result.stderr, 'unable to load nvm');
     assert.include(result.stderr, 'Set NVM_DIR');
@@ -595,6 +608,198 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.isFalse(fs.existsSync(logPath));
   });
 
+  it('exits successfully when a valid configuration has no applicable work', () => {
+    writeConfig({
+      update: {
+        cleanup: false,
+        nvm: false,
+        npm: false,
+        softwareupdate: false,
+        selfUpdate: false,
+        backup: false,
+        unknownFutureSetting: 'ignored',
+      },
+    });
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('uses bundled update defaults in memory when the update section is missing', () => {
+    writeConfig({
+      backup: {
+        id: 'test-gist-id',
+        host: 'example.test',
+      },
+      analytics: {},
+    });
+    installCommandStub('softwareupdate');
+    installHealthyReadinessCommands();
+    const beforeConfig = fs.readFileSync(configPath, 'utf8');
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stderr,
+      'Warning: using bundled defaults for missing settings: update.cleanup, update.nvm, update.npm, update.softwareupdate, update.selfUpdate, update.backup.\n',
+    );
+    assert.deepEqual(commandLog(), [
+      'softwareupdate|,|-ia',
+      'ballin|,|self-update',
+      'gh|,|auth status --hostname example.test',
+      'gh|,|gist view test-gist-id --files',
+    ]);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
+  });
+
+  it('uses a missing setting default without persisting when self-update is disabled', () => {
+    writeConfig({
+      update: {
+        cleanup: false,
+        nvm: false,
+        npm: false,
+        softwareupdate: false,
+        selfUpdate: false,
+      },
+    });
+    const beforeConfig = fs.readFileSync(configPath, 'utf8');
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 0);
+    assert.equal(
+      result.stderr,
+      'Warning: using bundled defaults for missing settings: update.backup.\n',
+    );
+    assert.deepEqual(commandLog(), []);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
+  });
+
+  it('keeps in-memory defaults authoritative when a defaulted self-update is unavailable', () => {
+    writeConfig({
+      update: {
+        cleanup: false,
+        nvm: false,
+        npm: false,
+        softwareupdate: false,
+        backup: false,
+      },
+    });
+    const beforeConfig = fs.readFileSync(configPath, 'utf8');
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 127);
+    assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
+    assert.include(result.stderr, 'ballin: command not found');
+    assert.include(result.stdout, 'Updating ballin-scripts');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
+  });
+
+  it('keeps in-memory defaults authoritative when a defaulted self-update fails', () => {
+    writeConfig({
+      update: {
+        cleanup: false,
+        nvm: false,
+        npm: false,
+        softwareupdate: false,
+        backup: false,
+      },
+    });
+    installCommandStub('ballin', { status: 23 });
+    const beforeConfig = fs.readFileSync(configPath, 'utf8');
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 23);
+    assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
+    assert.deepEqual(commandLog(), ['ballin|,|self-update']);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
+  });
+
+  [
+    {
+      name: 'nvm',
+      env: { TEST_UPDATE_NVM: 'true' },
+      diagnostic: 'unable to load nvm',
+    },
+    {
+      name: 'npm',
+      env: { TEST_UPDATE_NVM: 'false', TEST_UPDATE_NPM: 'true' },
+      diagnostic: 'npm is not available on PATH',
+    },
+    {
+      name: 'softwareupdate',
+      env: { TEST_UPDATE_NVM: 'false', TEST_UPDATE_SOFTWAREUPDATE: 'true' },
+      diagnostic: 'softwareupdate is not available on PATH',
+    },
+  ].forEach(({ name, env, diagnostic }) => {
+    it(`records enabled but unavailable ${name} as a failure and continues through backup`, () => {
+      installCommandStub('ballin');
+
+      const result = runUpdate({ ...env, TEST_UPDATE_BACKUP: 'true' });
+
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, diagnostic);
+      assert.deepEqual(commandLog(), ['ballin|,|backup']);
+    });
+  });
+
+  it('returns the last nonzero status after multiple independent failures', () => {
+    installCommandStub('npm', { output: 'simulated npm failure', status: 23 });
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s|%s|%s\\n' "ballin" "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
+printf '%s\\n' 'simulated backup failure'
+exit 17
+`);
+
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_NPM: 'true',
+      TEST_UPDATE_BACKUP: 'true',
+    });
+
+    assert.equal(result.status, 17);
+    assert.include(result.stdout, 'simulated npm failure');
+    assert.include(result.stdout, 'simulated backup failure');
+    assert.deepEqual(commandLog(), [
+      'npm|,|update -g',
+      'ballin|,|backup',
+    ]);
+  });
+
+  it('rejects non-object configuration structures before running integrations', () => {
+    writeConfig([]);
+    const arrayResult = spawnUpdate();
+    assert.equal(arrayResult.status, 1);
+    assert.include(arrayResult.stderr, 'Ballin config must contain a JSON object.');
+
+    writeConfig({ update: null });
+    const updateResult = spawnUpdate();
+    assert.equal(updateResult.status, 1);
+    assert.include(updateResult.stderr, 'Ballin config update section must contain a JSON object.');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('rejects invalid known update booleans before running integrations', () => {
+    writeConfig({
+      update: {
+        cleanup: 'yes',
+      },
+    });
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Ballin config update.cleanup must be true or false.');
+    assert.deepEqual(commandLog(), []);
+  });
+
   it('surfaces config read failures', () => {
     fs.writeFileSync(configPath, '{not json\n');
 
@@ -608,8 +813,19 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
       },
     });
 
-    assert.equal(result.status, 0);
-    assert.isNotEmpty(result.stderr);
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Ballin config is not valid JSON.');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('reports unreadable config before running integrations', () => {
+    fs.chmodSync(configPath, 0o000);
+
+    const result = spawnUpdate();
+
+    fs.chmodSync(configPath, 0o600);
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to read Ballin config');
     assert.deepEqual(commandLog(), []);
   });
 
@@ -626,8 +842,8 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
       },
     });
 
-    assert.equal(result.status, 0);
-    assert.include(result.stderr, 'Unable to read');
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to read Ballin config');
     assert.deepEqual(commandLog(), []);
   });
 });
