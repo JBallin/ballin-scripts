@@ -1,6 +1,6 @@
 # Documentation
 
-Start here when setting up or auditing what `ballin-scripts` manages.
+Start here when setting up or auditing what Ballin manages.
 
 ## User guides
 
