@@ -1,6 +1,6 @@
 # Analytics Worker
 
-This is the backend for the minimal `ballin-scripts` active-install analytics.
+This is the backend for Ballin's minimal active-install analytics.
 It is intentionally isolated from the CLI so the command package does not gain
 runtime analytics SDK dependencies.
 

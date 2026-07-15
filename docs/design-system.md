@@ -28,9 +28,9 @@ For repository-specific assets, `>_ ballin-scripts` may be used when the asset
 is explicitly representing the repository or package rather than the product
 identity alone.
 
-Use Ballin for user-facing product language. Use `ballin-scripts` when precision
-matters for the repository, package, local checkout, install paths, or
-self-update behavior.
+Use Ballin for user-facing product or tool language, `ballin` for the executable
+and command examples, and `ballin-scripts` when precision matters for the
+repository, package, local checkout, install paths, or self-update behavior.
 
 Prompt and cursor motifs are useful accents, but they do not need to appear in
 every asset. Avoid mascot-first, badge-first, or complex logo-first branding for
