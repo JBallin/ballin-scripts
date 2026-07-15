@@ -6,7 +6,7 @@
 
 `ballin-scripts` helps developers maintain repeatable, inspectable macOS
 development environments. It snapshots shell and Git configuration, Homebrew
-package lists, editor settings, and local tool state, then automates routine
+state, editor settings, and local tool inventories while automating routine
 updates.
 
 ## What it does

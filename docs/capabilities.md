@@ -49,6 +49,13 @@ It can snapshot:
 | Ballin config | `ballin_config` | Local `ballin.config.json` file. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
 
+For Homebrew, Ballin generates the saved `Brewfile` from the current Mac through
+Homebrew Bundle by running `brew bundle dump --file=-`. It stores the Brewfile
+alongside separate inventories for formulae, leaves, casks, and services. This
+capability is capture/reference only: `ballin backup` does not use the Brewfile
+to check, install, clean up, or upgrade packages, or to run another apply/restore
+workflow.
+
 ### Output markers
 
 `ballin backup` prints one line per meaningful snapshot result:

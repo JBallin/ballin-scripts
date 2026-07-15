@@ -88,6 +88,11 @@ as sensitive. To make one discoverable, make it public in GitHub after reviewing
 it: backup snapshots can expose paths, usernames, tool choices, package lists,
 and other local config, and public Gists cannot be made secret again.
 
+When Ballin saves changed snapshots to the Gist, GitHub preserves the Gist's
+native revision history and diffs, so you can inspect changes between backup
+revisions through GitHub. Ballin does not currently provide its own history
+navigation, rollback, restore, or revision-selection commands.
+
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
