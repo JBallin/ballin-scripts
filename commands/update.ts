@@ -5,7 +5,7 @@ const {
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
-  getConfig,
+  configPath,
 } = require('../config/index.ts');
 const {
   formatDefaultDoctorReport,
@@ -27,23 +27,110 @@ const {
 import type { DoctorReport } from './doctor_report.ts';
 
 type NvmInstallResult = {
+  captureFailed: boolean;
   env: NodeJS.ProcessEnv | null;
   status: number;
 };
 
-const configValue = (key: string): string => {
-  try {
-    const value = getConfig(key);
-    if (typeof value === 'string' && value.startsWith('INVALID:')) {
-      return '';
-    }
-    return value === null ? '' : String(value).trim();
-  } catch (error) {
-    if (error instanceof Error) {
-      writeStderrLine(`Unable to read config: ${error.message}`);
-    }
-    return '';
+type ConfigObject = Record<string, unknown>;
+type UpdateSetting = 'cleanup' | 'nvm' | 'npm' | 'softwareupdate' | 'selfUpdate' | 'backup';
+type UpdateSettings = Record<UpdateSetting, boolean>;
+
+const updateSettingKeys: UpdateSetting[] = [
+  'cleanup',
+  'nvm',
+  'npm',
+  'softwareupdate',
+  'selfUpdate',
+  'backup',
+];
+
+const isConfigObject = (value: unknown): value is ConfigObject => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const hasOwn = (value: ConfigObject, key: string): boolean => (
+  Object.prototype.hasOwnProperty.call(value, key)
+);
+
+const parseBooleanSetting = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
   }
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return null;
+};
+
+const readConfigObject = (filePath: string, description: string): ConfigObject => {
+  let contents: string;
+  try {
+    contents = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    const message = error instanceof Error ? `: ${error.message}` : '';
+    throw new Error(`Unable to read ${description}${message}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    throw new Error(`${description} is not valid JSON.`);
+  }
+  if (!isConfigObject(parsed)) {
+    throw new Error(`${description} must contain a JSON object.`);
+  }
+  return parsed;
+};
+
+const resolveUpdateSettings = (): UpdateSettings => {
+  const defaultConfigPath = path.join(__dirname, '..', 'config', '.defaultConfig.json');
+  const defaults = readConfigObject(defaultConfigPath, 'bundled default config');
+  if (!isConfigObject(defaults.update)) {
+    throw new Error('Bundled default config must contain an update object.');
+  }
+
+  const defaultSettings = {} as UpdateSettings;
+  updateSettingKeys.forEach((key) => {
+    if (!hasOwn(defaults.update as ConfigObject, key)) {
+      throw new Error(`Bundled default config is missing update.${key}.`);
+    }
+    const value = parseBooleanSetting((defaults.update as ConfigObject)[key]);
+    if (value === null) {
+      throw new Error(`Bundled default update.${key} must be true or false.`);
+    }
+    defaultSettings[key] = value;
+  });
+
+  const userConfig = readConfigObject(configPath, 'Ballin config');
+  const hasUpdateSection = hasOwn(userConfig, 'update');
+  if (hasUpdateSection && !isConfigObject(userConfig.update)) {
+    throw new Error('Ballin config update section must contain a JSON object.');
+  }
+  const userUpdate = hasUpdateSection ? userConfig.update as ConfigObject : {};
+  const settings = { ...defaultSettings };
+  const defaultedKeys: string[] = [];
+
+  updateSettingKeys.forEach((key) => {
+    if (!hasOwn(userUpdate, key)) {
+      defaultedKeys.push(`update.${key}`);
+      return;
+    }
+    const value = parseBooleanSetting(userUpdate[key]);
+    if (value === null) {
+      throw new Error(`Ballin config update.${key} must be true or false.`);
+    }
+    settings[key] = value;
+  });
+
+  if (defaultedKeys.length > 0) {
+    writeStderrLine(`Warning: using bundled defaults for missing settings: ${defaultedKeys.join(', ')}.`);
+  }
+  return settings;
 };
 
 const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
@@ -74,6 +161,7 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
 
     if (result.error) {
       return {
+        captureFailed: false,
         env: null,
         status: reportSpawnError('bash', result.error),
       };
@@ -81,21 +169,24 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
     const status = spawnResultStatus(result);
     if (status !== 0 || !fs.existsSync(envPath)) {
       return {
+        captureFailed: status === 0,
         env: null,
-        status,
+        status: status === 0 ? 1 : status,
       };
     }
 
     const nextEnv = parseEnvOutput(fs.readFileSync(envPath, 'utf8'));
     if (!nextEnv) {
       return {
+        captureFailed: true,
         env: null,
-        status,
+        status: 1,
       };
     }
 
     delete nextEnv.BALLIN_UPDATE_ENV_PATH;
     return {
+      captureFailed: false,
       env: nextEnv,
       status,
     };
@@ -119,7 +210,7 @@ const ballinCommandPath = (): string => (
   process.env.BALLIN_TEST_BALLIN_PATH || path.join(__dirname, '..', 'bin', 'ballin')
 );
 
-const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
+const reportBallinReadiness = (env: NodeJS.ProcessEnv): number => {
   const repoDir = path.join(__dirname, '..');
   const report = collectSetupReadiness({
     repoDir,
@@ -129,11 +220,28 @@ const reportBallinReadiness = (env: NodeJS.ProcessEnv): void => {
   }) as DoctorReport;
 
   process.stdout.write(formatDefaultDoctorReport(report));
+  return report.status === 'fail' ? 1 : 0;
 };
 
 function runUpdateCommand(): void {
+  let settings: UpdateSettings;
+  try {
+    settings = resolveUpdateSettings();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown configuration error.';
+    writeStderrLine(`Unable to resolve update configuration: ${message}`);
+    process.exitCode = 1;
+    return;
+  }
+
   let childEnv = process.env;
   let exitStatus = 0;
+
+  const recordFailure = (status: number): void => {
+    if (status !== 0) {
+      exitStatus = status;
+    }
+  };
 
   const runIntegrationCommand = (
     command: string,
@@ -141,9 +249,7 @@ function runUpdateCommand(): void {
     options: { env?: NodeJS.ProcessEnv } = {},
   ): number => {
     const status = runVisibleCommand(command, args, options);
-    if (status !== 0) {
-      exitStatus = status;
-    }
+    recordFailure(status);
     return status;
   };
 
@@ -156,7 +262,7 @@ function runUpdateCommand(): void {
     };
     runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
 
-    if (configValue('update.cleanup') === 'true') {
+    if (settings.cleanup) {
       progress('Cleaning up Homebrew packages');
       runIntegrationCommand('brew', ['cleanup'], { env: childEnv });
     }
@@ -165,26 +271,33 @@ function runUpdateCommand(): void {
     runIntegrationCommand('brew', ['doctor'], { env: childEnv });
   }
 
-  if (configValue('update.nvm') === 'true') {
+  if (settings.nvm) {
     progress('Updating Node.js LTS');
     const nvmDir = process.env.NVM_DIR ?? '';
     const nvmScript = path.join(nvmDir, 'nvm.sh');
     if (nvmDir && fs.existsSync(nvmScript) && fs.statSync(nvmScript).size > 0) {
       const result = runNvmInstall(childEnv);
-      if (result.status !== 0) {
-        exitStatus = result.status;
+      recordFailure(result.status);
+      if (result.captureFailed) {
+        writeStderrLine('Unable to capture the updated Node.js environment after running nvm.');
       }
       childEnv = result.env ?? childEnv;
     } else {
       writeStderrLine();
-      writeStderrLine('⚠️  Skipping Node.js LTS update: unable to load nvm.');
+      writeStderrLine('Unable to update Node.js LTS: unable to load nvm.');
       writeStderrLine('Set NVM_DIR to your nvm installation or disable this update with: ballin config set update.nvm false');
+      recordFailure(1);
     }
   }
 
-  if (commandExists('npm', { env: childEnv }) && configValue('update.npm') === 'true') {
-    progress('Updating global npm packages');
-    runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
+  if (settings.npm) {
+    if (commandExists('npm', { env: childEnv })) {
+      progress('Updating global npm packages');
+      runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
+    } else {
+      writeStderrLine('Unable to update global npm packages: npm is not available on PATH.');
+      recordFailure(1);
+    }
   }
 
   if (commandExists('mas', { env: childEnv })) {
@@ -192,21 +305,26 @@ function runUpdateCommand(): void {
     runIntegrationCommand('mas', ['upgrade'], { env: childEnv });
   }
 
-  if (commandExists('softwareupdate', { env: childEnv }) && configValue('update.softwareupdate') === 'true') {
-    progress('Installing macOS updates');
-    runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
+  if (settings.softwareupdate) {
+    if (commandExists('softwareupdate', { env: childEnv })) {
+      progress('Installing macOS updates');
+      runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
+    } else {
+      writeStderrLine('Unable to install macOS updates: softwareupdate is not available on PATH.');
+      recordFailure(1);
+    }
   }
 
-  if (configValue('update.selfUpdate') === 'true') {
+  if (settings.selfUpdate) {
     progress('Updating ballin-scripts');
     const updateStatus = runIntegrationCommand(ballinCommandPath(), ['self-update'], { env: childEnv });
     if (updateStatus === 0) {
       progress('Checking Ballin readiness');
-      reportBallinReadiness(childEnv);
+      recordFailure(reportBallinReadiness(childEnv));
     }
   }
 
-  if (configValue('update.backup') === 'true') {
+  if (settings.backup) {
     progress('Backing up development environment');
     runIntegrationCommand(ballinCommandPath(), ['backup'], { env: childEnv });
   }

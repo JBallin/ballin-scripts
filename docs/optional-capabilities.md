@@ -47,8 +47,9 @@ ballin config set update.nvm true
 `update.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
 `false` because enabling it opts into newer LTS releases, and installing a new
 Node.js version does not migrate your globally installed npm packages
-automatically. If nvm cannot be loaded, `ballin update` warns and continues
-with its remaining updates.
+automatically. If nvm cannot be loaded, `ballin update` reports the failure and
+continues with its remaining updates. A failure to capture nvm's updated
+environment is handled the same way; later stages use the previous environment.
 
 For a simpler setup, install Homebrew's current Node.js release instead:
 
@@ -95,11 +96,22 @@ navigation, rollback, restore, or revision-selection commands.
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
+Use one active writer per backup Gist. Ballin does not currently synchronize or
+merge snapshots from multiple machines. Changed files are also uploaded with
+separate Gist edits, so an interrupted run can leave a logical backup only
+partly uploaded. Conflict detection and a staged single-request backup are
+tracked in [#282](https://github.com/JBallin/ballin-scripts/issues/282).
+
 ## Readiness checks
 
 Use `ballin doctor` to check whether the Ballin-managed environment is healthy,
-including Node.js, installed commands, settings, and Gist backup setup. Add
-`--verbose` when you want the full check list.
+including Node.js, installed commands, settings, and known Gist backup
+prerequisites. For backups, doctor checks the configured host and Gist ID,
+`gh` availability, accepted authentication, and whether the configured Gist is
+readable. Readability does not verify write permission, freshness,
+completeness, cache consistency, or the absence of partial backup runs. Add
+`--verbose` when you want the full check list and the explicit read-only
+limitation.
 
 ```shell
 ballin doctor
@@ -121,6 +133,15 @@ ballin config set analytics.enabled false
 
 Change a setting with `ballin config set update.<name> true` or
 `ballin config set update.<name> false`.
+
+`ballin update` validates these settings before running any integration. If an
+older or partial config omits known update settings, their bundled defaults are
+used in memory for the current run and listed in one warning. The config is not
+rewritten, and correct behavior does not depend on self-update being enabled or
+succeeding. Invalid JSON, invalid config structures, and non-boolean known
+settings fail the command before integrations run. Enabled stages continue
+independently after failures; if several fail, the command returns the last
+nonzero stage status.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |

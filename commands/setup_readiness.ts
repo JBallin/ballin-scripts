@@ -226,12 +226,20 @@ const guConfigChecks = (
   runCommand: RunCommand,
 ): SetupReadinessCheck[] => {
   if (!config) {
-    return [{
-      id: 'backup.config',
-      label: 'Gist backup config',
-      status: 'info',
-      summary: 'Skipping Gist backup config checks until config is readable.',
-    }];
+    return [
+      {
+        id: 'backup.config',
+        label: 'Gist backup config',
+        status: 'info',
+        summary: 'Skipping Gist backup config checks until config is readable.',
+      },
+      {
+        id: 'backup.read',
+        label: 'Configured Gist readability',
+        status: 'info',
+        summary: 'Skipping configured Gist readability check until config is readable.',
+      },
+    ];
   }
 
   const backupConfig = isConfigObject(config.backup) ? config.backup : null;
@@ -251,7 +259,7 @@ const guConfigChecks = (
     {
       id: 'backup.gist',
       label: 'Gist ID',
-      status: hasConfiguredId ? 'pass' : 'warn',
+      status: hasConfiguredId ? 'pass' : 'fail',
       summary: hasConfiguredId
         ? 'Backup Gist ID is configured.'
         : 'Backup Gist ID is not configured yet.',
@@ -263,7 +271,7 @@ const guConfigChecks = (
   checks.push({
     id: 'backup.gh',
     label: 'GitHub CLI',
-    status: ghAvailable ? 'pass' : 'warn',
+    status: ghAvailable ? 'pass' : 'fail',
     summary: ghAvailable
       ? 'GitHub CLI is discoverable on PATH.'
       : 'GitHub CLI is not discoverable on PATH.',
@@ -277,6 +285,12 @@ const guConfigChecks = (
       status: 'info',
       summary: 'Skipping GitHub CLI authentication check until backup.host is configured.',
     });
+    checks.push({
+      id: 'backup.read',
+      label: 'Configured Gist readability',
+      status: 'info',
+      summary: 'Skipping configured Gist readability check until backup.host is configured.',
+    });
     return checks;
   }
 
@@ -286,6 +300,13 @@ const guConfigChecks = (
       label: 'GitHub CLI authentication',
       status: 'info',
       summary: 'Skipping GitHub CLI authentication check because gh is not on PATH.',
+      data: { host },
+    });
+    checks.push({
+      id: 'backup.read',
+      label: 'Configured Gist readability',
+      status: 'info',
+      summary: 'Skipping configured Gist readability check because gh is not on PATH.',
       data: { host },
     });
     return checks;
@@ -299,14 +320,47 @@ const guConfigChecks = (
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   const exitStatus = authResult.error ? 1 : spawnResultStatus(authResult);
+  const authenticated = !authResult.error && exitStatus === 0;
   checks.push({
     id: 'backup.auth',
     label: 'GitHub CLI authentication',
-    status: authResult.status === 0 && !authResult.error ? 'pass' : 'warn',
-    summary: authResult.status === 0 && !authResult.error
+    status: authenticated ? 'pass' : 'fail',
+    summary: authenticated
       ? `GitHub CLI is authenticated for ${host}.`
       : `GitHub CLI is not authenticated for ${host}.`,
     data: { host, exitStatus },
+  });
+
+  if (!authenticated || !hasConfiguredId) {
+    checks.push({
+      id: 'backup.read',
+      label: 'Configured Gist readability',
+      status: 'info',
+      summary: !authenticated
+        ? 'Skipping configured Gist readability check until GitHub CLI authentication succeeds.'
+        : 'Skipping configured Gist readability check until a backup Gist ID is configured.',
+      data: { host },
+    });
+    return checks;
+  }
+
+  const readResult = runCommand('gh', ['gist', 'view', id, '--files'], {
+    env: {
+      ...env,
+      GH_HOST: host,
+    },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  const readExitStatus = readResult.error ? 1 : spawnResultStatus(readResult);
+  const readable = !readResult.error && readExitStatus === 0;
+  checks.push({
+    id: 'backup.read',
+    label: 'Configured Gist readability',
+    status: readable ? 'pass' : 'fail',
+    summary: readable
+      ? 'The configured backup Gist exists and is readable. Write permission was not checked.'
+      : 'The configured backup Gist could not be read.',
+    data: { host, exitStatus: readExitStatus },
   });
 
   return checks;
