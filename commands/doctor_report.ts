@@ -25,6 +25,7 @@ const nextSteps: Record<string, string> = {
   'backup.gist': 'Run the installer to create or adopt a backup Gist.',
   'backup.gh': 'Install GitHub CLI and authenticate it for your backup host.',
   'backup.auth': 'Run gh auth login for the configured backup host.',
+  'backup.read': 'Confirm the configured Gist ID is readable on the backup host.',
 };
 
 const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): string => {

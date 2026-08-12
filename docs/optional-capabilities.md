@@ -47,8 +47,9 @@ ballin config set update.nvm true
 `update.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
 `false` because enabling it opts into newer LTS releases, and installing a new
 Node.js version does not migrate your globally installed npm packages
-automatically. If nvm cannot be loaded, `ballin update` warns and continues
-with its remaining updates.
+automatically. If nvm cannot be loaded, `ballin update` reports the failure and
+continues with its remaining updates. A failure to capture nvm's updated
+environment is handled the same way; later stages use the previous environment.
 
 For a simpler setup, install Homebrew's current Node.js release instead:
 
@@ -79,7 +80,7 @@ the configured backup Gist. During install, Ballin prompts for the
 GitHub host, including GitHub Enterprise hosts, checks `gh` authentication for
 that host, and either adopts an existing backup Gist or creates a new one. When
 an adopted backup includes a saved `ballin_config` snapshot, the installer restores
-them before continuing.
+it before continuing.
 
 Setup creates backup Gists as [secret Gists](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists). Secret Gists are unlisted and not
 searchable, but anyone with the URL can view them, so treat the backup Gist URL
@@ -95,11 +96,21 @@ navigation, rollback, restore, or revision-selection commands.
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
+Use one active writer per backup Gist. Ballin does not synchronize or merge
+snapshots from multiple machines. It also uploads each changed file with a
+separate Gist edit, so an interrupted run can leave a backup only partly
+uploaded. The staged single-request backup work is tracked in
+[#282](https://github.com/JBallin/ballin-scripts/issues/282).
+
 ## Readiness checks
 
 Use `ballin doctor` to check whether the Ballin-managed environment is healthy,
-including Node.js, installed commands, settings, and Gist backup setup. Add
-`--verbose` when you want the full check list.
+including Node.js, installed commands, settings, and known Gist backup
+prerequisites. For backups, doctor checks the configured host and Gist ID,
+`gh` availability, whether `gh auth status` succeeds for that host, and whether
+the Gist is readable. These checks do not verify write permission, freshness,
+completeness, cache consistency, or the absence of partial backup runs. Use
+`--verbose` to see every check and the explicit write-permission limitation.
 
 ```shell
 ballin doctor
@@ -122,11 +133,19 @@ ballin config set analytics.enabled false
 Change a setting with `ballin config set update.<name> true` or
 `ballin config set update.<name> false`.
 
+`ballin update` validates these settings before running any integration. Missing
+known settings use bundled defaults in memory for the current run and appear in
+one warning. The config file remains unchanged, and this behavior does not
+depend on self-update. Malformed JSON, invalid config structure, or known values
+other than booleans and canonical `"true"` or `"false"` strings fail before any
+integration runs. Later stages continue after failures; if several fail, the
+command returns the last nonzero stage status.
+
 | Setting | Default | Behavior |
 | --- | --- | --- |
 | `update.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
 | `update.selfUpdate` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
-| `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Enable it when you want each update to also modify your backup gist. |
+| `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Enable it when you want each update to also modify your backup Gist. |
 | `update.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `update.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
 | `update.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |

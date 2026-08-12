@@ -1,23 +1,28 @@
 # Supported capabilities
 
-This reference lists the update and backup surfaces that Ballin
-currently manages. Optional tools are used only when the matching command or
-setting is available.
+This reference lists Ballin's update and backup capabilities. Auto-discovered
+integrations run when available; configured integrations fail when enabled but
+unavailable.
 
 ## `ballin update`
 
-`ballin update` updates the local development environment through these
-integrations. If an integration command fails, it still runs any later
-integrations and exits nonzero at the end.
+`ballin update` runs these integrations in order. A failure does not stop later
+integrations. The command exits nonzero after all configured stages finish,
+using the last nonzero stage status when several stages fail.
+
+Before starting, Ballin loads and validates the update settings once. Missing
+known settings use bundled defaults in memory and produce one warning; the
+config file remains unchanged. Malformed JSON, invalid config structure, or
+invalid known setting values fail before any integration runs.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
 | Homebrew packages | Runs `brew upgrade`, optional `brew cleanup`, and `brew doctor`. | `brew` on `PATH`; `update.cleanup` controls cleanup. |
-| Node.js LTS | Runs `nvm install --lts`. | `update.nvm=true`, `NVM_DIR` set, and `nvm.sh` present. |
-| Global npm packages | Runs `npm update -g`. | `update.npm=true` and `npm` on `PATH`. |
+| Node.js LTS | Runs `nvm install --lts`; a missing nvm installation or failure to capture its updated environment records a failure while later stages continue. | `update.nvm=true`, `NVM_DIR` set, and `nvm.sh` present. |
+| Global npm packages | Runs `npm update -g`; a missing `npm` command records a failure while later stages continue. | `update.npm=true` and `npm` on `PATH`. |
 | Mac App Store apps | Runs `mas upgrade`. | `mas` on `PATH`. |
-| macOS updates | Runs `softwareupdate -ia`. | `update.softwareupdate=true` and `softwareupdate` on `PATH`. |
-| ballin-scripts | Runs Ballin self-update. | `update.selfUpdate=true`. |
+| macOS updates | Runs `softwareupdate -ia`; a missing command records a failure while later stages continue. | `update.softwareupdate=true` and `softwareupdate` on `PATH`. |
+| ballin-scripts | Runs Ballin self-update, then checks readiness. A failed check records a failure while a configured backup still runs. | `update.selfUpdate=true`. |
 | Backups | Runs `ballin backup` as the final update step. | `update.backup=true`. |
 
 ## `ballin backup`
@@ -60,3 +65,15 @@ workflow.
 | `✔` | Unchanged non-empty snapshot. |
 
 Unchanged empty snapshots do not print a line.
+
+### Current consistency boundary
+
+Use one active writer per backup Gist. Ballin does not synchronize or merge
+snapshots from multiple machines, so one machine can overwrite another's
+changes.
+
+A backup currently uploads each changed file with a separate Gist edit. A
+failure between edits can leave the backup spread across revisions or only
+partly uploaded. The staged single-request backup work—including conflict
+detection and cache updates only after remote success—is tracked in
+[#282](https://github.com/JBallin/ballin-scripts/issues/282).
