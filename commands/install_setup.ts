@@ -272,7 +272,7 @@ const configureGist = (repoDir: string, docsUrl: string, backupHostExisted: bool
     return true;
   }
 
-  const hasBackup = readPrompt('\n🤔 Do you already have a ballin-scripts backup gist? [y/N] ');
+  const hasBackup = readPrompt('\n🤔 Do you already have a Ballin backup Gist? [y/N] ');
   if (hasBackup === 'y' || hasBackup === 'Y') {
     writeStdoutLine('\nWelcome Back!');
     let validGistId = false;
