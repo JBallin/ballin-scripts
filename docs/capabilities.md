@@ -12,8 +12,8 @@ using the last nonzero stage status when several stages fail.
 
 Before starting, Ballin loads and validates the update settings once. Missing
 known settings use bundled defaults in memory and produce one warning; the
-config file remains unchanged. Invalid JSON, config structures, or known
-setting values fail before any integration runs.
+config file remains unchanged. Malformed JSON, invalid config structure, or
+invalid known setting values fail before any integration runs.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ setting values fail before any integration runs.
 | Global npm packages | Runs `npm update -g`; a missing `npm` command records a failure while later stages continue. | `update.npm=true` and `npm` on `PATH`. |
 | Mac App Store apps | Runs `mas upgrade`. | `mas` on `PATH`. |
 | macOS updates | Runs `softwareupdate -ia`; a missing command records a failure while later stages continue. | `update.softwareupdate=true` and `softwareupdate` on `PATH`. |
-| ballin-scripts | Runs Ballin self-update, then records a failed readiness result while continuing to a configured backup. | `update.selfUpdate=true`. |
+| ballin-scripts | Runs Ballin self-update, then checks readiness. A failed check records a failure while a configured backup still runs. | `update.selfUpdate=true`. |
 | Backups | Runs `ballin backup` as the final update step. | `update.backup=true`. |
 
 ## `ballin backup`

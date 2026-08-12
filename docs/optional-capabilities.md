@@ -80,7 +80,7 @@ the configured backup Gist. During install, Ballin prompts for the
 GitHub host, including GitHub Enterprise hosts, checks `gh` authentication for
 that host, and either adopts an existing backup Gist or creates a new one. When
 an adopted backup includes a saved `ballin_config` snapshot, the installer restores
-them before continuing.
+it before continuing.
 
 Setup creates backup Gists as [secret Gists](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists). Secret Gists are unlisted and not
 searchable, but anyone with the URL can view them, so treat the backup Gist URL
@@ -136,8 +136,8 @@ Change a setting with `ballin config set update.<name> true` or
 `ballin update` validates these settings before running any integration. Missing
 known settings use bundled defaults in memory for the current run and appear in
 one warning. The config file remains unchanged, and this behavior does not
-depend on self-update. Invalid JSON, config structures, or known values other
-than booleans and canonical `"true"` or `"false"` strings fail before any
+depend on self-update. Malformed JSON, invalid config structure, or known values
+other than booleans and canonical `"true"` or `"false"` strings fail before any
 integration runs. Later stages continue after failures; if several fail, the
 command returns the last nonzero stage status.
 
