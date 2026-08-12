@@ -1,22 +1,19 @@
 # Supported capabilities
 
-This reference lists the update and backup surfaces that Ballin
-currently manages. Optional tools run according to the discovery and setting
-rules below; configured integrations that are enabled but unavailable are
-reported as failures.
+This reference lists Ballin's update and backup capabilities. Auto-discovered
+integrations run when available; configured integrations fail when enabled but
+unavailable.
 
 ## `ballin update`
 
-`ballin update` updates the local development environment through these
-integrations. If an integration command fails, it still runs any later
-integrations and exits nonzero at the end. When more than one stage fails, the
-last nonzero stage status is returned.
+`ballin update` runs these integrations in order. A failure does not stop later
+integrations. The command exits nonzero after all configured stages finish,
+using the last nonzero stage status when several stages fail.
 
-Update settings are loaded and validated once before any integrations run.
-Missing settings in an older or partial `update` section use bundled defaults
-in memory for that run and produce one warning; `ballin update` does not rewrite
-the config. Invalid config structures or setting values fail before any
-integration runs.
+Before starting, Ballin loads and validates the update settings once. Missing
+known settings use bundled defaults in memory and produce one warning; the
+config file remains unchanged. Invalid JSON, config structures, or known
+setting values fail before any integration runs.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
@@ -71,12 +68,12 @@ Unchanged empty snapshots do not print a line.
 
 ### Current consistency boundary
 
-Use one active writer per backup Gist. Multiple machines can point at the same
-Gist, but Ballin does not currently synchronize or merge their snapshots, so a
-machine can overwrite another machine's changes.
+Use one active writer per backup Gist. Ballin does not synchronize or merge
+snapshots from multiple machines, so one machine can overwrite another's
+changes.
 
-A backup currently uploads changed files with separate Gist edits. A failure
-between edits can leave one logical backup spread across multiple revisions or
-only partly uploaded. Staged collection, conflict detection, a single-request
-upload, and cache updates after remote success are tracked in
+A backup currently uploads each changed file with a separate Gist edit. A
+failure between edits can leave the backup spread across revisions or only
+partly uploaded. The staged single-request backup work—including conflict
+detection and cache updates only after remote success—is tracked in
 [#282](https://github.com/JBallin/ballin-scripts/issues/282).
