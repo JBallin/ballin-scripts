@@ -1,6 +1,6 @@
 # Supported capabilities
 
-This reference lists the update and backup surfaces that `ballin-scripts`
+This reference lists the update and backup surfaces that Ballin
 currently manages. Optional tools run according to the discovery and setting
 rules below; configured integrations that are enabled but unavailable are
 reported as failures.
