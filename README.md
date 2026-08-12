@@ -1,10 +1,10 @@
-# Ballin Scripts
+# Ballin
 
 *Back up your dotfiles and update your macOS development environment*
 
 ![Ballin README hero showing the Ballin identity and the line Back up dotfiles. Keep your tools current.](docs/assets/brand/readme-hero.png)
 
-`ballin-scripts` helps developers maintain repeatable, inspectable macOS
+Ballin helps developers maintain repeatable, inspectable macOS
 development environments. It snapshots shell and Git configuration, Homebrew
 state, editor settings, and local tool inventories while automating routine
 updates.
@@ -56,10 +56,10 @@ Your system is ready to brew.
 
 ## New Mac setup
 
-On a new Mac, install `ballin-scripts` and create or adopt the backup Gist. Use
+On a new Mac, install Ballin and create or adopt the backup Gist. Use
 existing snapshots as a rebuild reference.
 
-`ballin-scripts` makes rebuilds more repeatable and auditable, but it is not a
+Ballin makes rebuilds more repeatable and auditable, but it is not a
 full disk backup or one-command restore system.
 
 ## Commands
@@ -82,7 +82,7 @@ Backups are stored in a configured secret GitHub Gist. Secret Gists are
 unlisted, but anyone with the URL can view them. Treat the Gist URL and
 snapshots as sensitive.
 
-`ballin-scripts` is not a secrets manager; review snapshots before sharing the
+Ballin is not a secrets manager; review snapshots before sharing the
 Gist URL or making the Gist public.
 
 ## Documentation

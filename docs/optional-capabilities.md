@@ -1,7 +1,7 @@
 # Optional capabilities
 
 This guide covers choices for the required Node.js setup, plus optional tools
-and settings that extend `ballin-scripts`. The defaults keep updates predictable
+and settings that extend Ballin. The defaults keep updates predictable
 while letting you opt in to broader automation.
 
 ## Working with settings
@@ -21,7 +21,7 @@ an existing setting, and `reset` restores the default config.
 
 ## Node.js
 
-Node.js is required by `ballin-scripts`; install it using whichever method fits
+Node.js is required by Ballin; install it using whichever method fits
 your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
 with the latest Node.js long-term support (LTS) release. It supports switching
 versions, project-specific `.nvmrc` files, and a user-local installation.
@@ -37,7 +37,7 @@ nvm install --lts
 Installed commands use the `node` found on your shell `PATH`, so make sure new
 terminal sessions use a supported Node.js version too.
 
-After installing `ballin-scripts`, optionally let `ballin update` install newer
+After installing Ballin, optionally let `ballin update` install newer
 LTS releases:
 
 ```shell
@@ -75,7 +75,7 @@ setting is required.
 ## Gist backups
 
 `ballin backup` uses [GitHub CLI](https://cli.github.com/) to read and update
-the configured backup Gist. During install, `ballin-scripts` prompts for the
+the configured backup Gist. During install, Ballin prompts for the
 GitHub host, including GitHub Enterprise hosts, checks `gh` authentication for
 that host, and either adopts an existing backup Gist or creates a new one. When
 an adopted backup includes a saved `ballin_config` snapshot, the installer restores
@@ -107,7 +107,7 @@ ballin doctor
 
 ## Analytics
 
-`ballin-scripts` can send minimal anonymous usage analytics after a first-run
+Ballin can send minimal anonymous usage analytics after a first-run
 notice. See [Analytics](analytics.md) for what is sent, what is never sent, and
 how long it is kept.
 

@@ -298,6 +298,7 @@ esac
 
     assert.isTrue(result);
     assert.equal(output, `\n${analyticsNotice}\n`);
+    assert.include(output, 'Ballin collects minimal anonymous usage analytics after this notice.');
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 
@@ -574,6 +575,7 @@ esac
     const result = runGistSetup({ input: '\ny\nreturning-gist-id\n' });
 
     assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Do you already have a Ballin backup Gist? [y/N]');
     assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
     assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
     const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));

@@ -83,7 +83,7 @@ const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
-  'ballin-scripts collects minimal anonymous usage analytics after this notice.',
+  'Ballin collects minimal anonymous usage analytics after this notice.',
   'Disable: ballin config set analytics.enabled false',
   `Details: ${docsUrl}`,
 ].join('\n');
