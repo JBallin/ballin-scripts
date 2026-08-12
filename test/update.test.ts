@@ -212,8 +212,8 @@ exit 0
       'brew|1,1|cleanup',
       'brew|1,1|doctor',
       'ballin|1,1|self-update',
-      'gh|1,1|auth status --hostname example.test',
-      'gh|1,1|gist view test-gist-id --files',
+      'gh|1,1|auth status --active --hostname example.test',
+      'gh|1,1|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -232,8 +232,8 @@ exit 0
       'brew|1,1|upgrade',
       'brew|1,1|doctor',
       'ballin|1,1|self-update',
-      'gh|1,1|auth status --hostname example.test',
-      'gh|1,1|gist view test-gist-id --files',
+      'gh|1,1|auth status --active --hostname example.test',
+      'gh|1,1|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -271,8 +271,8 @@ exit 0
       'npm|,|update -g',
       'softwareupdate|,|-ia',
       'ballin|,|self-update',
-      'gh|,|auth status --hostname example.test',
-      'gh|,|gist view test-gist-id --files',
+      'gh|,|auth status --active --hostname example.test',
+      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -293,8 +293,8 @@ exit 0
     assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
-      'gh|,|auth status --hostname example.test',
-      'gh|,|gist view test-gist-id --files',
+      'gh|,|auth status --active --hostname example.test',
+      'gh|,|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -329,8 +329,8 @@ exit 2
       'node|,|-e process.stdout.write(JSON.stringify(process.env))',
       'ballin|,|self-update',
       'node|,|-p process.versions.node',
-      'gh|,|auth status --hostname example.test',
-      'gh|,|gist view test-gist-id --files',
+      'gh|,|auth status --active --hostname example.test',
+      'gh|,|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -357,8 +357,8 @@ exit 0
     assert.notInclude(result.stdout, 'Your Ballin-managed environment is healthy.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
-      'gh|,|auth status --hostname example.test',
-      'gh|,|gist view test-gist-id --files',
+      'gh|,|auth status --active --hostname example.test',
+      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -414,8 +414,8 @@ exit 0
     assert.deepEqual(commandLog(), [
       'npm|,|update -g',
       'ballin|,|self-update',
-      'gh|,|auth status --hostname example.test',
-      'gh|,|gist view test-gist-id --files',
+      'gh|,|auth status --active --hostname example.test',
+      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -442,8 +442,8 @@ exit 0
     assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
-      'gh|,|auth status --hostname example.test',
-      'gh|,|gist view test-gist-id --files',
+      'gh|,|auth status --active --hostname example.test',
+      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -651,8 +651,8 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.deepEqual(commandLog(), [
       'softwareupdate|,|-ia',
       'ballin|,|self-update',
-      'gh|,|auth status --hostname example.test',
-      'gh|,|gist view test-gist-id --files',
+      'gh|,|auth status --active --hostname example.test',
+      'gh|,|gist view --files -- test-gist-id',
     ]);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
   });
@@ -819,11 +819,11 @@ exit 17
   });
 
   it('reports unreadable config before running integrations', () => {
-    fs.chmodSync(configPath, 0o000);
+    fs.rmSync(configPath);
+    fs.symlinkSync(path.join(tempDir, 'missing-config-target'), configPath);
 
     const result = spawnUpdate();
 
-    fs.chmodSync(configPath, 0o600);
     assert.equal(result.status, 1);
     assert.include(result.stderr, 'Unable to read Ballin config');
     assert.deepEqual(commandLog(), []);

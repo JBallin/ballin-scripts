@@ -312,7 +312,7 @@ const guConfigChecks = (
     return checks;
   }
 
-  const authResult = runCommand('gh', ['auth', 'status', '--hostname', host], {
+  const authResult = runCommand('gh', ['auth', 'status', '--active', '--hostname', host], {
     env: {
       ...env,
       GH_HOST: host,
@@ -344,7 +344,7 @@ const guConfigChecks = (
     return checks;
   }
 
-  const readResult = runCommand('gh', ['gist', 'view', id, '--files'], {
+  const readResult = runCommand('gh', ['gist', 'view', '--files', '--', id], {
     env: {
       ...env,
       GH_HOST: host,

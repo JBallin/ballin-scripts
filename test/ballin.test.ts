@@ -102,11 +102,11 @@ describe('ballin', () => {
 printf '%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 case "$1:$2" in
   auth:status)
-    if [ "$*" != "auth status --hostname example.test" ]; then exit 2; fi
+    if [ "$*" != "auth status --active --hostname example.test" ]; then exit 2; fi
     exit "\${FAKE_GH_AUTH_STATUS:-0}"
     ;;
   gist:view)
-    if [ "$*" != "gist view test-gist-id --files" ]; then exit 2; fi
+    if [ "$*" != "gist view --files -- test-gist-id" ]; then exit 2; fi
     exit "\${FAKE_GH_GIST_STATUS:-0}"
     ;;
   *) exit 2 ;;
@@ -230,8 +230,8 @@ exit 17
     assert.equal(result.stdout, 'Your Ballin-managed environment is healthy.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      'auth status --hostname example.test',
-      'gist view test-gist-id --files',
+      'auth status --active --hostname example.test',
+      'gist view --files -- test-gist-id',
     ]);
   });
 
@@ -254,8 +254,8 @@ exit 17
     assert.include(result.stdout, 'Result: Ballin-managed environment health looks good.');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      'auth status --hostname example.test',
-      'gist view test-gist-id --files',
+      'auth status --active --hostname example.test',
+      'gist view --files -- test-gist-id',
     ]);
   });
 

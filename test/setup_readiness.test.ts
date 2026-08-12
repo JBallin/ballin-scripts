@@ -164,8 +164,8 @@ describe('setup readiness', () => {
       'The configured backup Gist exists and is readable. Write permission was not checked.',
     );
     assert.deepEqual(commandLog, [
-      'gh auth status --hostname example.test',
-      'gh gist view test-gist-id --files',
+      'gh auth status --active --hostname example.test',
+      'gh gist view --files -- test-gist-id',
     ]);
     assert.deepEqual(commandHosts, ['example.test', 'example.test']);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
@@ -212,7 +212,7 @@ describe('setup readiness', () => {
     assert.equal(checkById(report, 'backup.auth').status, 'pass');
     assert.equal(checkById(report, 'backup.read').status, 'info');
     assert.include(checkById(report, 'backup.read').summary, 'until a backup Gist ID is configured');
-    assert.deepEqual(commandLog, ['gh auth status --hostname example.test']);
+    assert.deepEqual(commandLog, ['gh auth status --active --hostname example.test']);
   });
 
   it('reports missing Gist host and failed gh auth', () => {
@@ -244,7 +244,7 @@ describe('setup readiness', () => {
     assert.equal(checkById(authFailed, 'backup.auth').status, 'fail');
     assert.equal(checkById(authFailed, 'backup.read').status, 'info');
     assert.equal(authFailed.status, 'fail');
-    assert.deepEqual(commandLog, ['gh auth status --hostname example.test']);
+    assert.deepEqual(commandLog, ['gh auth status --active --hostname example.test']);
   });
 
   it('fails when the configured Gist cannot be read', () => {
@@ -257,9 +257,28 @@ describe('setup readiness', () => {
     assert.equal(readCheck.status, 'fail');
     assert.equal(readCheck.summary, 'The configured backup Gist could not be read.');
     assert.deepEqual(commandLog, [
-      'gh auth status --hostname example.test',
-      'gh gist view test-gist-id --files',
+      'gh auth status --active --hostname example.test',
+      'gh gist view --files -- test-gist-id',
     ]);
     assert.deepEqual(commandHosts, ['example.test', 'example.test']);
+  });
+
+  it('terminates gh flags before reading a configured Gist ID', () => {
+    writeConfig({
+      update: {},
+      backup: {
+        id: '--help',
+        host: 'example.test',
+      },
+      analytics: {},
+    });
+
+    const report = collect();
+
+    assert.equal(checkById(report, 'backup.read').status, 'pass');
+    assert.deepEqual(commandLog, [
+      'gh auth status --active --hostname example.test',
+      'gh gist view --files -- --help',
+    ]);
   });
 });
