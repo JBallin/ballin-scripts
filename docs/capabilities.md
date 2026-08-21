@@ -72,27 +72,20 @@ print partial success markers.
 
 ### Backup consistency and conflicts
 
-`ballin backup` is a staged single-request backup. It captures and normalizes
-every available snapshot before reading current remote content. If any
-collector fails, Ballin still attempts the later collectors and reports their
-failures, but changes neither the Gist nor the backup cache.
-
-Ballin checks cached, remote, and local content before uploading safely changed
-files in at most one request. If it detects conflicting changes or cannot read
-remote state safely, it stops without changing the Gist or cache.
+`ballin backup` collects every available snapshot before changing the Gist. If
+collection fails, remote content cannot be read safely, or changes conflict,
+Ballin reports the problem and leaves the Gist and backup cache unchanged.
 
 Conflicts identify every affected snapshot. Inspect remote content with
 `ballin backup read <file>` or the Gist UI, decide which content should win,
 reconcile the local environment or remote Gist so the contents match, and rerun
-`ballin backup` to establish the cache.
+`ballin backup`.
 
-Cache files and result markers are updated only after the remote outcome is
-known. A failed or interrupted request leaves caches unchanged so rerunning the
-command rechecks current remote state.
+Ballin prints success markers only after the Gist update and local cache update
+succeed.
 
-Use one active writer per backup Gist. Ballin does not synchronize, merge, or
-eliminate the race in which another writer changes the Gist between Ballin's
-read and write.
+Use one active writer per backup Gist. Ballin does not synchronize or merge
+changes from multiple writers.
 
 See [Backup design](backup-design.md) for the underlying safety model and
 GitHub constraints.
