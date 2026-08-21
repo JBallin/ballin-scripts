@@ -687,11 +687,9 @@ const updateGist = (host: string, id: string, snapshots: EvaluatedSnapshot[]): b
     if (result.status === 0 && !result.error && !result.signal) {
       return true;
     }
-    if (result.signal || result.error || result.status === null) {
-      writeStderrLine('ballin backup: the Gist update outcome is unknown; backup caches were left unchanged');
-    } else {
-      writeStderrLine('ballin backup: the Gist update failed; backup caches were left unchanged');
-    }
+    writeStderrLine(
+      'ballin backup: the Gist update failed or its outcome is unknown; backup caches were left unchanged',
+    );
     writeStderrLine('ballin backup: rerun ballin backup to re-read and reconcile current remote state');
     return false;
   } catch (error) {

@@ -1316,7 +1316,8 @@ printf '%s\\n' '123456 Example App'
     assert.equal(
       result.stderr,
       'simulated gh api upload failure\n'
-        + 'ballin backup: the Gist update failed; backup caches were left unchanged\n'
+        + 'ballin backup: the Gist update failed or its outcome is unknown; '
+        + 'backup caches were left unchanged\n'
         + 'ballin backup: rerun ballin backup to re-read and reconcile current remote state\n',
     );
     assert.deepEqual(fs.readdirSync(scratchDir), []);
@@ -1446,6 +1447,21 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistReads(), [snapshotFileName]);
   });
 
+  it('preserves caches when a truncated remote file raw read is interrupted', () => {
+    const largeSnapshot = `${'r'.repeat(1024 * 1024 + 1)}\n`;
+    writeSnapshot(largeSnapshot);
+    seedBackupCache(largeSnapshot);
+
+    const result = runBackup({ ghRawReadSignals: [snapshotFileName] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, `failed to read remote snapshot ${snapshotFileName}`);
+    assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assert.deepEqual(gistUploads(), []);
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+  });
+
   it('leaves caches stale after an ambiguous PATCH and reconciles on retry', () => {
     writeSnapshot('new value\n');
     seedBackupCache('old value\n');
@@ -1454,7 +1470,7 @@ printf '%s\\n' '123456 Example App'
 
     assert.equal(ambiguousResult.status, 1);
     assert.equal(ambiguousResult.stdout, '');
-    assert.include(ambiguousResult.stderr, 'Gist update outcome is unknown');
+    assert.include(ambiguousResult.stderr, 'Gist update failed or its outcome is unknown');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
 
@@ -1466,25 +1482,29 @@ printf '%s\\n' '123456 Example App'
     assert.lengthOf(gistPatchCalls(), 1);
   });
 
-  it('reports cache promotion failure after remote success and recovers without another PATCH', () => {
-    writeSnapshot('new value\n');
-    fs.mkdirSync(cachedSnapshotPath(), { recursive: true });
+  it('recovers from a partial multi-file cache promotion without another PATCH', () => {
+    writeSnapshot('new zsh value\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'new git value\n');
+    fs.mkdirSync(cachedFilePath('gitconfig'), { recursive: true });
 
     const failedPromotion = runBackup();
 
     assert.equal(failedPromotion.status, 1);
     assert.equal(failedPromotion.stdout, '');
-    assert.include(failedPromotion.stderr, `failed to promote cache for ${snapshotFileName}`);
+    assert.include(failedPromotion.stderr, 'failed to promote cache for gitconfig');
     assert.include(failedPromotion.stderr, 'Gist outcome is known');
-    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
-    assert.isTrue(fs.statSync(cachedSnapshotPath()).isDirectory());
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new zsh value\n');
+    assert.equal(fs.readFileSync(path.join(fakeGistDir, 'gitconfig'), 'utf8'), 'new git value\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh value\n');
+    assert.isTrue(fs.statSync(cachedFilePath('gitconfig')).isDirectory());
 
-    fs.rmSync(cachedSnapshotPath(), { recursive: true });
+    fs.rmSync(cachedFilePath('gitconfig'), { recursive: true });
     const recoveredResult = runBackup();
 
     assertBackupSucceeded(recoveredResult);
-    assert.equal(recoveredResult.stdout, '✔ zshrc\n');
-    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
+    assert.equal(recoveredResult.stdout, '✔ zshrc\n✔ gitconfig\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh value\n');
+    assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'new git value\n');
     assert.lengthOf(gistPatchCalls(), 1);
   });
 

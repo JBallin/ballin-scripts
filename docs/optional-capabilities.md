@@ -96,22 +96,20 @@ navigation, rollback, restore, or revision-selection commands.
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
-Ballin stages every collector before reading current remote snapshot content.
-It then compares the local cache as the last-known remote base with current
-remote and staged local content. Safe changes are sent in at most one
-changed-file request; conflicts stop the complete run without changing the
-Gist or cache. A missing cache does not authorize overwriting different remote
-content, and a cached file that was deleted remotely is also a conflict.
+Ballin stages each backup, checks the current Gist, and sends safe changes in
+at most one request. Conflicts stop the complete run without changing the Gist
+or cache.
 
 For conflict recovery, inspect the named remote snapshots with
 `ballin backup read <file>` or the Gist UI, reconcile local and remote content
-so it matches, and rerun `ballin backup`. Failed or interrupted requests leave
-caches unchanged for the same re-read and reconciliation path.
+so they match, and rerun `ballin backup`. Failed or interrupted requests also
+leave caches unchanged so a retry rechecks the Gist.
 
-Use one active writer per backup Gist. The staged request is not documented as
+Use one active writer per backup Gist. The request is not documented as
 transactional, and Ballin does not synchronize, merge, or eliminate another
-writer's read/write race. See [Gist backup API evidence](gist-backup-api.md)
-for the verified transport and payload boundaries.
+writer's read/write race. See
+[Supported capabilities](capabilities.md#backup-consistency-and-conflicts) for
+detailed backup behavior and limitations.
 
 ## Readiness checks
 

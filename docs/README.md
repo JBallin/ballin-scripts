@@ -16,5 +16,3 @@ Start here when setting up or auditing what Ballin manages.
   visual guidance, and brand asset conventions.
 - [Analytics backend](analytics-backend.md): backend deployment and data-policy
   notes for usage analytics.
-- [Gist backup API evidence](gist-backup-api.md): verified transport behavior,
-  failure boundaries, and consistency limitations for staged backups.

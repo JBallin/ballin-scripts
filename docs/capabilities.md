@@ -102,5 +102,3 @@ rerunning the command.
 Use one active writer per backup Gist. A multi-file request is not documented
 as transactional, and Ballin does not synchronize, merge, or eliminate the
 race in which another writer changes the Gist between Ballin's read and write.
-See the [Gist backup API evidence](gist-backup-api.md) for the verified
-transport boundary.
