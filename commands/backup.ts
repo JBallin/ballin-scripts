@@ -531,6 +531,14 @@ const readRemoteSnapshots = (
         removeRemoteSnapshots(remoteSnapshots);
         return null;
       }
+      if (
+        fileMetadata.truncated !== undefined
+        && typeof fileMetadata.truncated !== 'boolean'
+      ) {
+        writeStderrLine(`ballin backup: invalid truncation metadata for remote snapshot ${fileName}`);
+        removeRemoteSnapshots(remoteSnapshots);
+        return null;
+      }
 
       const remoteFile = makeTempFile('ballin-backup-remote-');
       let readSucceeded = false;

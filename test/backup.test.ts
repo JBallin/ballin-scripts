@@ -33,6 +33,7 @@ type RunBackupOptions = {
   ghInitialReadFail?: boolean;
   ghInitialReadSignal?: boolean;
   ghMetadataInvalid?: boolean;
+  ghFileTruncationInvalid?: boolean;
   ghMetadataTruncated?: boolean;
   ghRawReadFailures?: string[];
   ghRawReadSignals?: string[];
@@ -126,7 +127,7 @@ if [ "$1" = 'api' ]; then
       printf '%s\\n' '{invalid'
       exit 0
     fi
-    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = { filename: name, size, truncated: size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
+    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = { filename: name, size, truncated: process.env.FAKE_GH_FILE_TRUNCATION_INVALID === "true" ? "invalid" : size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
     exit $?
   fi
   if [ "$5" = 'PATCH' ] && [ "$7" = '--input' ] && [ "$9" = '--silent' ] && [ "$#" -eq 9 ]; then
@@ -335,6 +336,7 @@ done
     ghInitialReadFail = false,
     ghInitialReadSignal = false,
     ghMetadataInvalid = false,
+    ghFileTruncationInvalid = false,
     ghMetadataTruncated = false,
     ghRawReadFailures = [],
     ghRawReadSignals = [],
@@ -365,6 +367,7 @@ done
       FAKE_GH_INITIAL_READ_FAIL: ghInitialReadFail ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_SIGNAL: ghInitialReadSignal ? 'true' : 'false',
       FAKE_GH_METADATA_INVALID: ghMetadataInvalid ? 'true' : 'false',
+      FAKE_GH_FILE_TRUNCATION_INVALID: ghFileTruncationInvalid ? 'true' : 'false',
       FAKE_GH_METADATA_TRUNCATED: ghMetadataTruncated ? 'true' : 'false',
       FAKE_GH_RAW_READ_FAILURES: ghRawReadFailures.join(':'),
       FAKE_GH_RAW_READ_SIGNALS: ghRawReadSignals.join(':'),
@@ -1428,6 +1431,19 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.include(result.stderr, 'remote Gist file list was truncated');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base value\n');
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('fails closed when a remote file has invalid truncation metadata', () => {
+    writeSnapshot('local value\n');
+    seedBackupCache('base value\n');
+
+    const result = runBackup({ ghFileTruncationInvalid: true });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, `invalid truncation metadata for remote snapshot ${snapshotFileName}`);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base value\n');
     assert.deepEqual(gistUploads(), []);
   });
