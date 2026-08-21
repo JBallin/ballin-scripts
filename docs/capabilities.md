@@ -102,3 +102,6 @@ rerunning the command.
 Use one active writer per backup Gist. Ballin does not synchronize, merge, or
 eliminate the race in which another writer changes the Gist between Ballin's
 read and write.
+
+See [Backup design](backup-design.md) for the underlying safety model and
+GitHub constraints.
