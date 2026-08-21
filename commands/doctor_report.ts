@@ -57,7 +57,7 @@ const formatVerboseDoctorReport = (report: DoctorReport): string => {
 
 const formatDefaultDoctorReport = (report: DoctorReport): string => {
   if (report.status === 'pass') {
-    return 'Your Ballin-managed environment is healthy.\n';
+    return '😎 You\'re ballin.\n';
   }
 
   const visibleStatuses = report.status === 'fail' ? ['fail', 'warn'] : ['warn'];
