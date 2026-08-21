@@ -96,9 +96,9 @@ navigation, rollback, restore, or revision-selection commands.
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
-Ballin stages each backup and checks the current Gist before sending safe
-changes in at most one request. Conflicts stop the complete run without
-changing the Gist or cache.
+Ballin checks the current Gist before updating it. If changes conflict, the
+command identifies the affected snapshots and stops without changing the Gist
+or cache.
 
 For conflict recovery, inspect the named remote snapshots with
 `ballin backup read <file>` or the Gist UI, reconcile local and remote content
