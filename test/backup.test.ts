@@ -32,7 +32,12 @@ type RunBackupOptions = {
   ghAuthFail?: boolean;
   ghInitialReadFail?: boolean;
   ghInitialReadSignal?: boolean;
-  ghEditMissingFile?: boolean;
+  ghMetadataInvalid?: boolean;
+  ghMetadataTruncated?: boolean;
+  ghRawReadFailures?: string[];
+  ghRawReadSignals?: string[];
+  ghExpectedHost?: string;
+  ghUploadAmbiguous?: boolean;
   ghUploadFail?: boolean;
   commandPath?: string;
 };
@@ -44,6 +49,8 @@ describe('ballin backup', () => {
   let configPath: string;
   let fakeGistDir: string;
   let gistReadLogPath: string;
+  let gistRequestLogPath: string;
+  let gistPayloadPath: string;
   let scratchDir: string;
   let gistUploadLogPath: string;
   let brewLogPath: string;
@@ -82,12 +89,12 @@ describe('ballin backup', () => {
   const installFakeGhCommand = () => {
     // Store the fake remote Gist as ordinary files inside the temporary test home.
     writeTestExecutable('gh', `#!/usr/bin/env bash
-if [ "$GH_HOST" != 'example.test' ] && [ "$1:$2" != 'auth:status' ]; then
+if [ "$GH_HOST" != "$FAKE_GH_EXPECTED_HOST" ] && [ "$1:$2" != 'auth:status' ]; then
   printf '%s\\n' 'Unexpected GH_HOST' >&2
   exit 2
 fi
 if [ "$1:$2" = 'auth:status' ]; then
-  if [ "$*" != 'auth status --hostname example.test' ]; then
+  if [ "$*" != "auth status --hostname $FAKE_GH_EXPECTED_HOST" ]; then
     printf '%s\\n' 'Unexpected gh auth arguments' >&2
     exit 2
   fi
@@ -97,7 +104,49 @@ if [ "$1:$2" = 'auth:status' ]; then
   fi
   exit 0
 fi
-if [ "$1:$2" != 'gist:view' ] && [ "$1:$2" != 'gist:edit' ]; then
+if [ "$1" = 'api' ]; then
+  if [ "$2" != '--hostname' ] || [ "$3" != "$FAKE_GH_EXPECTED_HOST" ] || [ "$4" != '--method' ]; then
+    printf '%s\\n' 'Unexpected gh api routing arguments' >&2
+    exit 2
+  fi
+  if [ "$6" != 'gists/test-gist-id' ]; then
+    printf '%s\\n' 'Unexpected Gist API endpoint' >&2
+    exit 2
+  fi
+  printf '%s\\n' "$*" >> "$FAKE_GH_REQUEST_LOG"
+  if [ "$5" = 'GET' ] && [ "$#" -eq 6 ]; then
+    if [ "$FAKE_GH_INITIAL_READ_FAIL" = 'true' ]; then
+      printf '%s\\n' 'simulated initial gh gist read failure' >&2
+      exit 17
+    fi
+    if [ "$FAKE_GH_INITIAL_READ_SIGNAL" = 'true' ]; then
+      kill -TERM "$$"
+    fi
+    if [ "$FAKE_GH_METADATA_INVALID" = 'true' ]; then
+      printf '%s\\n' '{invalid'
+      exit 0
+    fi
+    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = { filename: name, size, truncated: size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
+    exit $?
+  fi
+  if [ "$5" = 'PATCH' ] && [ "$7" = '--input' ] && [ "$9" = '--silent' ] && [ "$#" -eq 9 ]; then
+    if [ "$FAKE_GH_UPLOAD_FAIL" = 'true' ]; then
+      printf '%s\\n' 'simulated gh api upload failure' >&2
+      exit 19
+    fi
+    cp "$8" "$FAKE_GH_PAYLOAD_PATH"
+    node -e 'const fs = require("fs"); const path = require("path"); const [payloadPath, dir, log] = process.argv.slice(1); const payload = JSON.parse(fs.readFileSync(payloadPath, "utf8")); if (!payload.files || Array.isArray(payload.files)) throw new Error("missing files payload"); for (const [name, value] of Object.entries(payload.files)) { if (value === null || typeof value !== "object" || typeof value.content !== "string") throw new Error("invalid file payload"); fs.writeFileSync(path.join(dir, name), value.content); fs.appendFileSync(log, name + "\\n"); }' "$8" "$FAKE_GIST_STORAGE_DIR" "$FAKE_GIST_UPLOAD_LOG"
+    patch_status=$?
+    if [ "$patch_status" -ne 0 ]; then exit "$patch_status"; fi
+    if [ "$FAKE_GH_UPLOAD_AMBIGUOUS" = 'true' ]; then
+      kill -TERM "$$"
+    fi
+    exit 0
+  fi
+  printf '%s\\n' 'Unexpected gh api arguments' >&2
+  exit 2
+fi
+if [ "$1:$2" != 'gist:view' ]; then
   printf '%s\\n' 'Unexpected gh call' >&2
   exit 2
 fi
@@ -129,36 +178,25 @@ if [ "$1:$2" = 'gist:view' ]; then
     exit 2
   fi
   printf '%s\\n' "$6" >> "$FAKE_GIST_READ_LOG"
+  IFS=':' read -r -a raw_read_failures <<< "$FAKE_GH_RAW_READ_FAILURES"
+  for failed_file in "\${raw_read_failures[@]}"; do
+    if [ -n "$failed_file" ] && [ "$6" = "$failed_file" ]; then
+      printf '%s\\n' 'simulated raw Gist read failure' >&2
+      exit 21
+    fi
+  done
+  IFS=':' read -r -a raw_read_signals <<< "$FAKE_GH_RAW_READ_SIGNALS"
+  for signaled_file in "\${raw_read_signals[@]}"; do
+    if [ -n "$signaled_file" ] && [ "$6" = "$signaled_file" ]; then
+      kill -TERM "$$"
+    fi
+  done
   fake_gist_file="$FAKE_GIST_STORAGE_DIR/$6"
   if [ -f "$fake_gist_file" ]; then
     cat "$fake_gist_file"
   else
     exit 1
   fi
-elif [ "$1:$2" = 'gist:edit' ]; then
-  if [ "$4" = '--add' ] && [ "$#" -eq 5 ]; then
-    cache_file="$5"
-  elif [ "$4" = '--filename' ] && [ "$#" -eq 6 ]; then
-    if [ "$FAKE_GH_EDIT_MISSING_FILE" = 'true' ]; then
-      printf '%s\\n' 'gist has no file' >&2
-      exit 20
-    fi
-    cache_file="$6"
-    if [ "$5" != "\${cache_file##*/}" ]; then
-      printf '%s\\n' 'Unexpected gh gist edit filename' >&2
-      exit 2
-    fi
-  else
-    printf '%s\\n' 'Unexpected gh gist edit arguments' >&2
-    exit 2
-  fi
-  if [ "$FAKE_GH_UPLOAD_FAIL" = 'true' ]; then
-    printf '%s\\n' 'simulated gh gist upload failure' >&2
-    exit 19
-  fi
-  file_name="\${cache_file##*/}"
-  cp "$cache_file" "$FAKE_GIST_STORAGE_DIR/$file_name"
-  printf '%s\\n' "$file_name" >> "$FAKE_GIST_UPLOAD_LOG"
 fi
 `);
   };
@@ -257,6 +295,8 @@ done
     configPath = path.join(testHomeDir, 'ballin.config.json');
     fakeGistDir = path.join(testHomeDir, 'fake-gist');
     gistReadLogPath = path.join(testHomeDir, 'fake-gist-reads.log');
+    gistRequestLogPath = path.join(testHomeDir, 'fake-gist-requests.log');
+    gistPayloadPath = path.join(testHomeDir, 'fake-gist-payload.json');
     scratchDir = path.join(testHomeDir, 'tmp');
     gistUploadLogPath = path.join(testHomeDir, 'fake-gist-uploads.log');
     brewLogPath = path.join(testHomeDir, 'fake-brew.log');
@@ -294,7 +334,12 @@ done
     ghAuthFail = false,
     ghInitialReadFail = false,
     ghInitialReadSignal = false,
-    ghEditMissingFile = false,
+    ghMetadataInvalid = false,
+    ghMetadataTruncated = false,
+    ghRawReadFailures = [],
+    ghRawReadSignals = [],
+    ghExpectedHost = 'example.test',
+    ghUploadAmbiguous = false,
     ghUploadFail = false,
     commandPath = ballinPath,
   }: RunBackupOptions = {}) => spawnSync(commandPath, ['backup', ...args], {
@@ -312,11 +357,18 @@ done
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
+      FAKE_GH_REQUEST_LOG: gistRequestLogPath,
+      FAKE_GH_PAYLOAD_PATH: gistPayloadPath,
       FAKE_GH_WEB_LOG: openLogPath,
+      FAKE_GH_EXPECTED_HOST: ghExpectedHost,
       FAKE_GH_AUTH_FAIL: ghAuthFail ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_FAIL: ghInitialReadFail ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_SIGNAL: ghInitialReadSignal ? 'true' : 'false',
-      FAKE_GH_EDIT_MISSING_FILE: ghEditMissingFile ? 'true' : 'false',
+      FAKE_GH_METADATA_INVALID: ghMetadataInvalid ? 'true' : 'false',
+      FAKE_GH_METADATA_TRUNCATED: ghMetadataTruncated ? 'true' : 'false',
+      FAKE_GH_RAW_READ_FAILURES: ghRawReadFailures.join(':'),
+      FAKE_GH_RAW_READ_SIGNALS: ghRawReadSignals.join(':'),
+      FAKE_GH_UPLOAD_AMBIGUOUS: ghUploadAmbiguous ? 'true' : 'false',
       FAKE_GH_UPLOAD_FAIL: ghUploadFail ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_PYTHON_TOOL_LOG: pythonToolLogPath,
@@ -332,16 +384,27 @@ done
   });
 
   const snapshotPath = () => path.join(testHomeDir, '.zshrc');
-  const cachedSnapshotPath = () => path.join(backupCacheDir, snapshotFileName);
+  const cachedFilePath = (fileName: string) => path.join(backupCacheDir, fileName);
+  const cachedSnapshotPath = () => cachedFilePath(snapshotFileName);
   const fakeGistFilePath = () => path.join(fakeGistDir, snapshotFileName);
   const writeSnapshot = (content: string) => fs.writeFileSync(snapshotPath(), content);
-  const seedBackupCache = (content: string) => {
+  const seedFakeGist = (content: string) => fs.writeFileSync(fakeGistFilePath(), content);
+  const seedBackupCache = (content: string, seedRemote = true) => {
     fs.mkdirSync(backupCacheDir, { recursive: true });
     fs.writeFileSync(cachedSnapshotPath(), content);
+    if (seedRemote) {
+      seedFakeGist(content);
+    }
   };
-  const seedFakeGist = (content: string) => fs.writeFileSync(fakeGistFilePath(), content);
   const seedFakeGistFile = (fileName: string, content: string) => {
     fs.writeFileSync(path.join(fakeGistDir, fileName), content);
+  };
+  const seedCacheFile = (fileName: string, content: string, seedRemote = true) => {
+    fs.mkdirSync(backupCacheDir, { recursive: true });
+    fs.writeFileSync(cachedFilePath(fileName), content);
+    if (seedRemote) {
+      seedFakeGistFile(fileName, content);
+    }
   };
   const assertBackupSucceeded = (result: StringSpawnResult) => {
     assert.equal(result.status, 0);
@@ -353,6 +416,9 @@ done
   );
   const gistReads = () => readLogLines(gistReadLogPath);
   const gistUploads = () => readLogLines(gistUploadLogPath);
+  const gistRequests = () => readLogLines(gistRequestLogPath);
+  const gistPatchCalls = () => gistRequests().filter((call: string) => call.includes('--method PATCH'));
+  const gistPayload = () => JSON.parse(fs.readFileSync(gistPayloadPath, 'utf8'));
   const brewCalls = () => readLogLines(brewLogPath);
   const pythonToolCalls = () => readLogLines(pythonToolLogPath);
   const openCalls = () => readLogLines(openLogPath);
@@ -581,24 +647,32 @@ exit 2
     assert.deepEqual(gistReads(), []);
   });
 
-  it('uses the initial Gist retrieval failure status before snapshotting', () => {
+  it('stages locally before a Gist metadata failure without mutating cache or remote state', () => {
+    writeSnapshot('staged locally\n');
     const result = runBackup({ ghInitialReadFail: true });
 
-    assert.equal(result.status, 17);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin self-update'.\n");
-    assert.equal(result.stderr, 'simulated initial gh gist read failure\n');
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'simulated initial gh gist read failure\n'
+        + 'ballin backup: failed to read current Gist state\n',
+    );
     assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('uses a shell-style signal exit status for initial Gist retrieval', () => {
+  it('treats an interrupted Gist metadata read as a failed closed run', () => {
+    writeSnapshot('new local value\n');
+    seedBackupCache('cached base\n');
     const result = runBackup({ ghInitialReadSignal: true });
 
-    assert.equal(result.status, 143);
-    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin self-update'.\n");
-    assert.equal(result.stderr, '');
-    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'ballin backup: failed to read current Gist state\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'cached base\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'cached base\n');
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -981,7 +1055,7 @@ printf '%s\\n' '123456 Example App'
     ]);
   });
 
-  it('surfaces failed brew services stderr and preserves other inventory snapshots', () => {
+  it('surfaces a failed collector and commits none of the other staged inventories', () => {
     installFakeBrewCommand();
 
     const result = runBackup({ brewServicesFail: true });
@@ -989,13 +1063,9 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.status, 1);
     assert.include(result.stderr, 'simulated services warning\n');
     assert.include(result.stderr, 'ballin backup: failed to snapshot brew_services\n');
-    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'brew_services')));
-    assert.deepEqual(gistUploads(), [
-      'brew_list',
-      'brew_leaves',
-      'brew_cask',
-      'Brewfile',
-    ]);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.deepEqual(gistUploads(), []);
+    assert.deepEqual(fs.readdirSync(fakeGistDir), []);
     assert.deepEqual(fs.readdirSync(scratchDir), []);
   });
 
@@ -1008,7 +1078,7 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'alias hello="world"\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'alias hello="world"\n');
-    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
@@ -1021,8 +1091,12 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.stdout, '✚ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'empty\n');
-    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), [snapshotFileName]);
+    assert.deepEqual(gistPayload(), {
+      files: { [snapshotFileName]: { content: 'empty\n' } },
+    });
+    assert.notInclude(JSON.stringify(gistPayload()), 'null');
   });
 
   it('hydrates a missing cache from unchanged Gist content', () => {
@@ -1034,7 +1108,7 @@ printf '%s\\n' '123456 Example App'
     assertBackupSucceeded(result);
     assert.equal(result.stdout, '✔ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export EDITOR=vim\n');
-    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
 
@@ -1052,18 +1126,145 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('compares against hydrated Gist content before uploading a change', () => {
+  ([
+    {
+      name: 'adds local content when cache and remote are both missing',
+      base: null,
+      remote: null,
+      local: 'local value\n',
+      expectedStatus: 0,
+      expectedOutput: '✚ zshrc\n',
+      uploads: [snapshotFileName],
+    },
+    {
+      name: 'hydrates a missing cache when remote and local match',
+      base: null,
+      remote: 'shared value\n',
+      local: 'shared value\n',
+      expectedStatus: 0,
+      expectedOutput: '✔ zshrc\n',
+      uploads: [],
+    },
+    {
+      name: 'conflicts when cache is missing and remote differs from local',
+      base: null,
+      remote: 'remote value\n',
+      local: 'local value\n',
+      expectedStatus: 1,
+      expectedOutput: '',
+      uploads: [],
+    },
+    {
+      name: 'leaves matching base, remote, and local content unchanged',
+      base: 'shared value\n',
+      remote: 'shared value\n',
+      local: 'shared value\n',
+      expectedStatus: 0,
+      expectedOutput: '✔ zshrc\n',
+      uploads: [],
+    },
+    {
+      name: 'uploads a local change when base and remote match',
+      base: 'base value\n',
+      remote: 'base value\n',
+      local: 'local value\n',
+      expectedStatus: 0,
+      expectedOutput: '✎ zshrc\n',
+      uploads: [snapshotFileName],
+    },
+    {
+      name: 'fast-forwards a stale cache when remote and local match',
+      base: 'base value\n',
+      remote: 'remote value\n',
+      local: 'remote value\n',
+      expectedStatus: 0,
+      expectedOutput: '✔ zshrc\n',
+      uploads: [],
+    },
+    {
+      name: 'conflicts when remote changes while local still matches the cached base',
+      base: 'base value\n',
+      remote: 'remote value\n',
+      local: 'base value\n',
+      expectedStatus: 1,
+      expectedOutput: '',
+      uploads: [],
+    },
+    {
+      name: 'conflicts when remote and local both differ from the base',
+      base: 'base value\n',
+      remote: 'remote value\n',
+      local: 'local value\n',
+      expectedStatus: 1,
+      expectedOutput: '',
+      uploads: [],
+    },
+    {
+      name: 'conflicts when a cached remote base has been deleted',
+      base: 'base value\n',
+      remote: null,
+      local: 'local value\n',
+      expectedStatus: 1,
+      expectedOutput: '',
+      uploads: [],
+    },
+  ] as {
+    name: string;
+    base: string | null;
+    remote: string | null;
+    local: string;
+    expectedStatus: number;
+    expectedOutput: string;
+    uploads: string[];
+  }[]).forEach((testCase) => {
+    it(`applies the three-way table: ${testCase.name}`, () => {
+      writeSnapshot(testCase.local);
+      if (testCase.base !== null) {
+        seedBackupCache(testCase.base, false);
+      }
+      if (testCase.remote !== null) {
+        seedFakeGist(testCase.remote);
+      }
+
+      const result = runBackup();
+
+      assert.equal(result.status, testCase.expectedStatus);
+      assert.equal(result.stdout, testCase.expectedOutput);
+      assert.deepEqual(gistUploads(), testCase.uploads);
+      if (testCase.expectedStatus === 0) {
+        assert.equal(result.stderr, '');
+        assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), testCase.local);
+        assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), testCase.local);
+      } else {
+        assert.include(result.stderr, `ballin backup: conflict for ${snapshotFileName}`);
+        if (testCase.base === null) {
+          assert.isFalse(fs.existsSync(cachedSnapshotPath()));
+        } else {
+          assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), testCase.base);
+        }
+        if (testCase.remote === null) {
+          assert.isFalse(fs.existsSync(fakeGistFilePath()));
+        } else {
+          assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), testCase.remote);
+        }
+      }
+    });
+  });
+
+  it('refuses differing remote content when no cached base exists', () => {
     writeSnapshot('new value\n');
     seedFakeGist('old value\n');
 
     const result = runBackup();
 
-    assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✎ zshrc\n');
-    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
-    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
-    assert.deepEqual(gistReads(), [snapshotFileName]);
-    assert.deepEqual(gistUploads(), [snapshotFileName]);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, `ballin backup: conflict for ${snapshotFileName}`);
+    assert.include(result.stderr, 'Ballin changed neither the Gist nor the backup cache');
+    assert.isFalse(fs.existsSync(cachedSnapshotPath()));
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old value\n');
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
   });
 
   it('reports unchanged non-empty output without uploading it', () => {
@@ -1089,17 +1290,19 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
-  it('recreates a missing remote file when the local cache is warm', () => {
+  it('treats a missing remote file with a warm cache as a conflict', () => {
     writeSnapshot('export COLOR=blue\n');
-    seedBackupCache('export COLOR=red\n');
+    seedBackupCache('export COLOR=red\n', false);
 
-    const result = runBackup({ ghEditMissingFile: true });
+    const result = runBackup();
 
-    assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✎ zshrc\n');
-    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
-    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
-    assert.deepEqual(gistUploads(), [snapshotFileName]);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, `ballin backup: conflict for ${snapshotFileName}`);
+    assert.include(result.stderr, 'the remote file is missing but this machine has a cached base');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=red\n');
+    assert.isFalse(fs.existsSync(fakeGistFilePath()));
+    assert.deepEqual(gistUploads(), []);
   });
 
   it('reports a failure when a Gist upload fails', () => {
@@ -1110,7 +1313,12 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup({ ghUploadFail: true });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'simulated gh gist upload failure\nballin backup: failed to snapshot zshrc.sh\n');
+    assert.equal(
+      result.stderr,
+      'simulated gh api upload failure\n'
+        + 'ballin backup: the Gist update failed; backup caches were left unchanged\n'
+        + 'ballin backup: rerun ballin backup to re-read and reconcile current remote state\n',
+    );
     assert.deepEqual(fs.readdirSync(scratchDir), []);
     assert.equal(result.stdout, '');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=red\n');
@@ -1132,6 +1340,166 @@ printf '%s\\n' '123456 Example App'
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('sends one PATCH containing only safely changed snapshots', () => {
+    writeSnapshot('new zsh value\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'new git value\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitignore_global'), 'stable ignore\n');
+    seedBackupCache('old zsh value\n');
+    seedCacheFile('gitconfig', 'old git value\n');
+    seedCacheFile('gitignore_global', 'stable ignore\n');
+
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.deepEqual(gistUploads(), [snapshotFileName, 'gitconfig']);
+    assert.lengthOf(gistPatchCalls(), 1);
+    assert.deepEqual(Object.keys(gistPayload().files), [snapshotFileName, 'gitconfig']);
+    assert.deepEqual(gistPayload(), {
+      files: {
+        [snapshotFileName]: { content: 'new zsh value\n' },
+        gitconfig: { content: 'new git value\n' },
+      },
+    });
+  });
+
+  it('refuses a sequential stale writer without overwriting the first writer', () => {
+    writeSnapshot('Mac A value\n');
+    seedBackupCache('shared base\n');
+
+    const macAResult = runBackup();
+    seedBackupCache('shared base\n', false);
+    writeSnapshot('Mac B value\n');
+    const macBResult = runBackup();
+
+    assertBackupSucceeded(macAResult);
+    assert.equal(macBResult.status, 1);
+    assert.equal(macBResult.stdout, '');
+    assert.include(macBResult.stderr, `ballin backup: conflict for ${snapshotFileName}`);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'Mac A value\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'shared base\n');
+    assert.lengthOf(gistPatchCalls(), 1);
+  });
+
+  it('reports every conflict before refusing the complete run', () => {
+    writeSnapshot('local zsh\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'local git\n');
+    seedBackupCache('base zsh\n', false);
+    seedCacheFile('gitconfig', 'base git\n', false);
+    seedFakeGist('remote zsh\n');
+    seedFakeGistFile('gitconfig', 'remote git\n');
+
+    const result = runBackup();
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, `conflict for ${snapshotFileName}`);
+    assert.include(result.stderr, 'conflict for gitconfig');
+    assert.include(result.stderr, "'ballin backup read <file>'");
+    assert.deepEqual(gistUploads(), []);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base zsh\n');
+    assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'base git\n');
+  });
+
+  it('preserves every cache entry when Gist metadata cannot be parsed', () => {
+    writeSnapshot('new zsh\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'new git\n');
+    seedBackupCache('old zsh\n');
+    seedCacheFile('gitconfig', 'old git\n');
+
+    const result = runBackup({ ghMetadataInvalid: true });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'unable to parse Gist metadata');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh\n');
+    assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'old git\n');
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('fails closed when the remote Gist file list is truncated', () => {
+    writeSnapshot('local value\n');
+    seedBackupCache('base value\n');
+
+    const result = runBackup({ ghMetadataTruncated: true });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'remote Gist file list was truncated');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base value\n');
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves caches when a truncated remote file raw read fails', () => {
+    const largeSnapshot = `${'r'.repeat(1024 * 1024 + 1)}\n`;
+    writeSnapshot(largeSnapshot);
+    seedBackupCache(largeSnapshot);
+
+    const result = runBackup({ ghRawReadFailures: [snapshotFileName] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, `failed to read remote snapshot ${snapshotFileName}`);
+    assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assert.deepEqual(gistUploads(), []);
+    assert.deepEqual(gistReads(), [snapshotFileName]);
+  });
+
+  it('leaves caches stale after an ambiguous PATCH and reconciles on retry', () => {
+    writeSnapshot('new value\n');
+    seedBackupCache('old value\n');
+
+    const ambiguousResult = runBackup({ ghUploadAmbiguous: true });
+
+    assert.equal(ambiguousResult.status, 1);
+    assert.equal(ambiguousResult.stdout, '');
+    assert.include(ambiguousResult.stderr, 'Gist update outcome is unknown');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old value\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
+
+    const retryResult = runBackup();
+
+    assertBackupSucceeded(retryResult);
+    assert.equal(retryResult.stdout, '✔ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
+    assert.lengthOf(gistPatchCalls(), 1);
+  });
+
+  it('reports cache promotion failure after remote success and recovers without another PATCH', () => {
+    writeSnapshot('new value\n');
+    fs.mkdirSync(cachedSnapshotPath(), { recursive: true });
+
+    const failedPromotion = runBackup();
+
+    assert.equal(failedPromotion.status, 1);
+    assert.equal(failedPromotion.stdout, '');
+    assert.include(failedPromotion.stderr, `failed to promote cache for ${snapshotFileName}`);
+    assert.include(failedPromotion.stderr, 'Gist outcome is known');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
+    assert.isTrue(fs.statSync(cachedSnapshotPath()).isDirectory());
+
+    fs.rmSync(cachedSnapshotPath(), { recursive: true });
+    const recoveredResult = runBackup();
+
+    assertBackupSucceeded(recoveredResult);
+    assert.equal(recoveredResult.stdout, '✔ zshrc\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
+    assert.lengthOf(gistPatchCalls(), 1);
+  });
+
+  it('routes metadata and PATCH requests through the configured Enterprise hostname', () => {
+    const enterpriseHost = 'github.enterprise.test';
+    writeBackupConfig('test-gist-id', enterpriseHost);
+    writeSnapshot('enterprise value\n');
+
+    const result = runBackup({ ghExpectedHost: enterpriseHost });
+
+    assertBackupSucceeded(result);
+    assert.lengthOf(gistPatchCalls(), 1);
+    gistRequests().forEach((call: string) => {
+      assert.include(call, `--hostname ${enterpriseHost}`);
+    });
   });
 
   it('streams large snapshot output without the default spawn buffer limit', () => {
@@ -1248,7 +1616,7 @@ printf '%*s\\n' 1048577 '' >&2
     });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, '✚ gitconfig\n');
+    assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
       'cat: simulated failure reading .zshrc\n'
@@ -1256,11 +1624,9 @@ printf '%*s\\n' 1048577 '' >&2
     );
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old zsh value\n');
-    assert.equal(
-      fs.readFileSync(path.join(backupCacheDir, 'gitconfig'), 'utf8'),
-      'new git value\n',
-    );
-    assert.deepEqual(gistUploads(), ['gitconfig']);
+    assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'gitconfig')));
+    assert.isFalse(fs.existsSync(path.join(fakeGistDir, 'gitconfig')));
+    assert.deepEqual(gistUploads(), []);
     assert.deepEqual(fs.readdirSync(scratchDir), []);
   });
 
@@ -1274,7 +1640,7 @@ printf '%*s\\n' 1048577 '' >&2
     assert.equal(result.stderr, 'ballin backup: failed to snapshot zshrc.sh\n');
     assert.isFalse(fs.existsSync(cachedSnapshotPath()));
     assert.isFalse(fs.existsSync(fakeGistFilePath()));
-    assert.deepEqual(gistReads(), [snapshotFileName]);
+    assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
     assert.deepEqual(fs.readdirSync(scratchDir), []);
   });
@@ -1295,7 +1661,7 @@ printf '%*s\\n' 1048577 '' >&2
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
-  it('returns one predictable failure status after multiple snapshot failures', () => {
+  it('attempts later collectors after a failure while making no remote or cache mutation', () => {
     const gitconfigPath = path.join(testHomeDir, '.gitconfig');
     writeSnapshot('zsh value\n');
     fs.writeFileSync(gitconfigPath, 'git value\n');
@@ -1309,6 +1675,8 @@ printf '%*s\\n' 1048577 '' >&2
       'ballin backup: failed to snapshot zshrc.sh\n'
         + 'ballin backup: failed to snapshot gitconfig\n',
     );
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.deepEqual(gistRequests(), []);
     assert.deepEqual(gistUploads(), []);
     assert.deepEqual(fs.readdirSync(scratchDir), []);
   });

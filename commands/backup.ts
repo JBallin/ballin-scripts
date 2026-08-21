@@ -31,12 +31,36 @@ type SnapshotCommand = {
   suppressStderrOnSuccess?: boolean;
 };
 
-type SnapshotCacheState = {
-  cacheFile: string;
-  isNew: boolean;
+type SnapshotResultState = 'unchanged' | 'created' | 'removed' | 'updated';
+
+type StagedSnapshot = {
+  snapshot: SnapshotCommand;
+  localFile: string;
 };
 
-type SnapshotResultState = 'unchanged' | 'created' | 'removed' | 'updated';
+type RemoteSnapshot = {
+  file: string | null;
+  exists: boolean;
+};
+
+type EvaluatedSnapshot = StagedSnapshot & {
+  cacheFile: string;
+  cacheNeedsPromotion: boolean;
+  isEmpty: boolean;
+  resultState: SnapshotResultState;
+  shouldUpload: boolean;
+};
+
+type GistFileMetadata = {
+  content?: unknown;
+  size?: unknown;
+  truncated?: unknown;
+};
+
+type GistMetadata = {
+  files: Record<string, GistFileMetadata>;
+  truncated?: unknown;
+};
 
 type SnapshotOptions = Pick<SnapshotCommand, 'env' | 'suppressStderrOnSuccess'>;
 
@@ -265,45 +289,64 @@ const readGistFileToFile = (
   return result.status === 0 && !result.error;
 };
 
-const uploadGistFile = (host: string, id: string, filePath: string, isNew: boolean): boolean => {
-  const addArgs = ['gist', 'edit', id, '--add', filePath];
-  const editArgs = ['gist', 'edit', id, '--filename', path.basename(filePath), filePath];
-  const args = isNew ? addArgs : editArgs;
-  const stderrFile = makeTempFile('ballin-backup-upload-stderr-');
-  const stderrFd = fs.openSync(stderrFile, 'w');
+const readGistMetadata = (host: string, id: string): GistMetadata | null => {
+  const metadataFile = makeTempFile('ballin-backup-gist-metadata-');
+  const outputFd = fs.openSync(metadataFile, 'w');
   let result: ReturnType<typeof runCommand>;
   try {
-    result = runGh(host, args, { stdio: ['ignore', 'ignore', stderrFd] });
+    result = runGh(host, [
+      'api',
+      '--hostname', host,
+      '--method', 'GET',
+      `gists/${id}`,
+    ], { stdio: ['ignore', outputFd, 'inherit'] });
   } finally {
-    fs.closeSync(stderrFd);
+    fs.closeSync(outputFd);
   }
+
   if (result.error) {
-    writeFileToStderr(stderrFile);
-    removeTempFile(stderrFile);
     reportSpawnError('gh', result.error);
-    return false;
+    removeTempFile(metadataFile);
+    return null;
   }
-  if (result.status === 0) {
-    removeTempFile(stderrFile);
-    return true;
+  if (result.status !== 0) {
+    removeTempFile(metadataFile);
+    return null;
   }
-  const uploadError = fs.readFileSync(stderrFile, 'utf8');
-  if (!isNew && uploadError.includes('has no file')) {
-    const addResult = runGh(host, addArgs, { stdio: ['ignore', 'ignore', 'inherit'] });
-    if (addResult.error) {
-      writeFileToStderr(stderrFile);
-      removeTempFile(stderrFile);
-      reportSpawnError('gh', addResult.error);
-      return false;
+
+  try {
+    const metadata: unknown = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+    if (
+      typeof metadata !== 'object'
+      || metadata === null
+      || !('files' in metadata)
+      || typeof metadata.files !== 'object'
+      || metadata.files === null
+      || Array.isArray(metadata.files)
+    ) {
+      writeStderrLine('ballin backup: GitHub returned invalid Gist metadata');
+      return null;
     }
-    if (addResult.status === 0) {
-      removeTempFile(stderrFile);
-      return true;
+    const parsedMetadata = metadata as GistMetadata;
+    if (
+      parsedMetadata.truncated !== undefined
+      && typeof parsedMetadata.truncated !== 'boolean'
+    ) {
+      writeStderrLine('ballin backup: GitHub returned an invalid Gist truncation marker');
+      return null;
     }
+    if (parsedMetadata.truncated === true) {
+      writeStderrLine('ballin backup: the remote Gist file list was truncated; refusing to infer missing files');
+      return null;
+    }
+    return parsedMetadata;
+  } catch (error) {
+    const message = error instanceof Error ? `: ${error.message}` : '';
+    writeStderrLine(`ballin backup: unable to parse Gist metadata${message}`);
+    return null;
+  } finally {
+    removeTempFile(metadataFile);
   }
-  writeFileToStderr(stderrFile);
-  removeTempFile(stderrFile);
-  return false;
 };
 
 const verifyGistReadable = (host: string, id: string): CommandCheckResult => {
@@ -357,25 +400,6 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
   return result.status === 0 && !result.error;
 };
 
-const seedCacheFromGist = (host: string, id: string, fileName: string, cacheFile: string): boolean => {
-  if (readGistFileToFile(host, id, fileName, cacheFile, 'inherit')) {
-    return true;
-  }
-  fs.rmSync(cacheFile, { force: true });
-  return false;
-};
-
-const prepareSnapshotCache = (
-  host: string,
-  id: string,
-  cacheDir: string,
-  fileName: string,
-): SnapshotCacheState => {
-  const cacheFile = path.join(cacheDir, fileName);
-  const isNew = !fileExists(cacheFile) && !seedCacheFromGist(host, id, fileName, cacheFile);
-  return { cacheFile, isNew };
-};
-
 const normalizeSnapshotInput = (inputFile: string): void => {
   if (fs.statSync(inputFile).size === 0) {
     fs.writeFileSync(inputFile, emptySnapshotContent);
@@ -391,13 +415,6 @@ const snapshotFilesMatch = (leftFile: string, rightFile: string): boolean => (
 const snapshotIsEmpty = (filePath: string): boolean => (
   fs.readFileSync(filePath, 'utf8') === emptySnapshotContent
 );
-
-const createSnapshotUploadFile = (sourceFile: string, fileName: string): string => {
-  const tempFile = makeTempFile('ballin-backup-upload-');
-  const uploadFile = path.join(path.dirname(tempFile), fileName);
-  fs.copyFileSync(sourceFile, uploadFile);
-  return uploadFile;
-};
 
 const classifySnapshotResult = (
   isNew: boolean,
@@ -436,51 +453,293 @@ const writeSnapshotStatus = (
   }
 };
 
-const updateSnapshot = (
+const errorMessage = (error: unknown): string => (
+  error instanceof Error ? `: ${error.message}` : ''
+);
+
+const removeStagedSnapshots = (stagedSnapshots: StagedSnapshot[]): void => {
+  stagedSnapshots.forEach(({ localFile }) => removeTempFile(localFile));
+};
+
+const stageSnapshots = (snapshots: SnapshotCommand[]): StagedSnapshot[] | null => {
+  const stagedSnapshots: StagedSnapshot[] = [];
+  let failed = false;
+
+  snapshots.forEach((snapshot) => {
+    let inputFile: string | null = null;
+    let staged = false;
+    try {
+      const createdInputFile = makeTempFile('ballin-backup-input-');
+      inputFile = createdInputFile;
+      if (captureSnapshotInput(snapshot, createdInputFile)) {
+        normalizeSnapshotInput(createdInputFile);
+        stagedSnapshots.push({ snapshot, localFile: createdInputFile });
+        staged = true;
+      }
+    } catch (error) {
+      writeStderrLine(`ballin backup: unable to stage ${snapshot.fileName}${errorMessage(error)}`);
+    } finally {
+      if (!staged && inputFile) {
+        removeTempFile(inputFile);
+      }
+    }
+
+    if (!staged) {
+      writeStderrLine(`ballin backup: failed to snapshot ${snapshot.fileName}`);
+      failed = true;
+    }
+  });
+
+  if (failed) {
+    removeStagedSnapshots(stagedSnapshots);
+    return null;
+  }
+  return stagedSnapshots;
+};
+
+const removeRemoteSnapshots = (remoteSnapshots: Map<string, RemoteSnapshot>): void => {
+  remoteSnapshots.forEach(({ file }) => {
+    if (file) {
+      removeTempFile(file);
+    }
+  });
+};
+
+const readRemoteSnapshots = (
   host: string,
   id: string,
-  cacheDir: string,
-  snapshot: SnapshotCommand,
-): boolean => {
-  const { cacheFile, isNew } = prepareSnapshotCache(host, id, cacheDir, snapshot.fileName);
-  let resultState: SnapshotResultState = 'updated';
-  let isEmpty = false;
-
-  const inputFile = makeTempFile('ballin-backup-input-');
-  try {
-    if (!captureSnapshotInput(snapshot, inputFile)) {
-      return false;
-    }
-
-    normalizeSnapshotInput(inputFile);
-
-    let isChanged = true;
-    if (!isNew && fileExists(cacheFile)) {
-      isChanged = !snapshotFilesMatch(inputFile, cacheFile);
-    }
-
-    isEmpty = snapshotIsEmpty(inputFile);
-    const wasEmpty = !isNew && fileExists(cacheFile) && snapshotIsEmpty(cacheFile);
-    resultState = classifySnapshotResult(isNew, isChanged, isEmpty, wasEmpty);
-
-    if (isChanged) {
-      const uploadFile = createSnapshotUploadFile(inputFile, snapshot.fileName);
-      try {
-        if (!uploadGistFile(host, id, uploadFile, isNew)) {
-          return false;
-        }
-      } finally {
-        removeTempFile(uploadFile);
-      }
-      fs.copyFileSync(inputFile, cacheFile);
-    }
-  } finally {
-    removeTempFile(inputFile);
+  stagedSnapshots: StagedSnapshot[],
+): Map<string, RemoteSnapshot> | null => {
+  const remoteSnapshots = new Map<string, RemoteSnapshot>();
+  const metadata = readGistMetadata(host, id);
+  if (!metadata) {
+    writeStderrLine('ballin backup: failed to read current Gist state');
+    return null;
   }
 
-  writeSnapshotStatus(snapshot, resultState, isEmpty);
+  try {
+    for (const { snapshot } of stagedSnapshots) {
+      const { fileName } = snapshot;
+      if (!Object.prototype.hasOwnProperty.call(metadata.files, fileName)) {
+        remoteSnapshots.set(fileName, { exists: false, file: null });
+        continue;
+      }
 
-  return true;
+      const fileMetadata = metadata.files[fileName];
+      if (typeof fileMetadata !== 'object' || fileMetadata === null) {
+        writeStderrLine(`ballin backup: invalid remote metadata for ${fileName}`);
+        removeRemoteSnapshots(remoteSnapshots);
+        return null;
+      }
+
+      const remoteFile = makeTempFile('ballin-backup-remote-');
+      let readSucceeded = false;
+      try {
+        if (fileMetadata.truncated === true) {
+          readSucceeded = readGistFileToFile(host, id, fileName, remoteFile, 'inherit');
+        } else if (typeof fileMetadata.content === 'string') {
+          fs.writeFileSync(remoteFile, fileMetadata.content);
+          readSucceeded = true;
+        }
+
+        const expectedSize = fileMetadata.size;
+        const hasValidExpectedSize = (
+          typeof expectedSize === 'number'
+          && Number.isSafeInteger(expectedSize)
+          && expectedSize >= 0
+        );
+        if (!hasValidExpectedSize) {
+          writeStderrLine(`ballin backup: missing or invalid size metadata for remote snapshot ${fileName}`);
+          readSucceeded = false;
+        }
+        if (
+          readSucceeded
+          && fs.statSync(remoteFile).size !== expectedSize
+        ) {
+          writeStderrLine(`ballin backup: remote snapshot ${fileName} was incomplete or changed while reading`);
+          readSucceeded = false;
+        }
+        if (!readSucceeded) {
+          writeStderrLine(`ballin backup: failed to read remote snapshot ${fileName}`);
+          removeTempFile(remoteFile);
+          removeRemoteSnapshots(remoteSnapshots);
+          return null;
+        }
+      } catch (error) {
+        writeStderrLine(`ballin backup: failed to read remote snapshot ${fileName}${errorMessage(error)}`);
+        removeTempFile(remoteFile);
+        removeRemoteSnapshots(remoteSnapshots);
+        return null;
+      }
+
+      remoteSnapshots.set(fileName, { exists: true, file: remoteFile });
+    }
+  } catch (error) {
+    writeStderrLine(`ballin backup: failed to read current Gist state${errorMessage(error)}`);
+    removeRemoteSnapshots(remoteSnapshots);
+    return null;
+  }
+
+  return remoteSnapshots;
+};
+
+const evaluateSnapshots = (
+  cacheDir: string,
+  stagedSnapshots: StagedSnapshot[],
+  remoteSnapshots: Map<string, RemoteSnapshot>,
+): { evaluated: EvaluatedSnapshot[]; conflicts: { fileName: string; reason: string }[] } => {
+  const evaluated: EvaluatedSnapshot[] = [];
+  const conflicts: { fileName: string; reason: string }[] = [];
+
+  stagedSnapshots.forEach((stagedSnapshot) => {
+    const { snapshot, localFile } = stagedSnapshot;
+    const cacheFile = path.join(cacheDir, snapshot.fileName);
+    const baseExists = fileExists(cacheFile);
+    const remote = remoteSnapshots.get(snapshot.fileName);
+    if (!remote) {
+      throw new Error(`missing staged remote state for ${snapshot.fileName}`);
+    }
+
+    const localMatchesRemote = remote.exists
+      && remote.file !== null
+      && snapshotFilesMatch(localFile, remote.file);
+    let shouldUpload = false;
+
+    if (!baseExists && !remote.exists) {
+      shouldUpload = true;
+    } else if (!baseExists && remote.exists) {
+      if (!localMatchesRemote) {
+        conflicts.push({
+          fileName: snapshot.fileName,
+          reason: 'remote content differs and this machine has no cached base',
+        });
+        return;
+      }
+    } else if (baseExists && !remote.exists) {
+      conflicts.push({
+        fileName: snapshot.fileName,
+        reason: 'the remote file is missing but this machine has a cached base',
+      });
+      return;
+    } else if (remote.file !== null) {
+      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file);
+      if (baseMatchesRemote && !localMatchesRemote) {
+        shouldUpload = true;
+      } else if (!baseMatchesRemote && !localMatchesRemote) {
+        conflicts.push({
+          fileName: snapshot.fileName,
+          reason: 'remote content diverged from the cached base and staged local content',
+        });
+        return;
+      }
+    }
+
+    const isEmpty = snapshotIsEmpty(localFile);
+    const wasEmpty = remote.exists && remote.file !== null && snapshotIsEmpty(remote.file);
+    evaluated.push({
+      ...stagedSnapshot,
+      cacheFile,
+      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile),
+      isEmpty,
+      resultState: classifySnapshotResult(!remote.exists, shouldUpload, isEmpty, wasEmpty),
+      shouldUpload,
+    });
+  });
+
+  return { evaluated, conflicts };
+};
+
+const reportConflicts = (conflicts: { fileName: string; reason: string }[]): void => {
+  conflicts.forEach(({ fileName, reason }) => {
+    writeStderrLine(`ballin backup: conflict for ${fileName}: ${reason}`);
+  });
+  writeStderrLine('ballin backup: conflicts detected; Ballin changed neither the Gist nor the backup cache');
+  writeStderrLine("ballin backup: inspect each remote snapshot with 'ballin backup read <file>' or the Gist UI");
+  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun ballin backup');
+};
+
+const updateGist = (host: string, id: string, snapshots: EvaluatedSnapshot[]): boolean => {
+  const changedSnapshots = snapshots.filter(({ shouldUpload }) => shouldUpload);
+  if (changedSnapshots.length === 0) {
+    return true;
+  }
+
+  const payloadFile = makeTempFile('ballin-backup-payload-');
+  try {
+    const files = Object.fromEntries(changedSnapshots.map(({ snapshot, localFile }) => [
+      snapshot.fileName,
+      { content: fs.readFileSync(localFile, 'utf8') },
+    ]));
+    fs.writeFileSync(payloadFile, JSON.stringify({ files }));
+
+    const result = runGh(host, [
+      'api',
+      '--hostname', host,
+      '--method', 'PATCH',
+      `gists/${id}`,
+      '--input', payloadFile,
+      '--silent',
+    ], { stdio: ['ignore', 'ignore', 'inherit'] });
+
+    if (result.error) {
+      reportSpawnError('gh', result.error);
+    }
+    if (result.status === 0 && !result.error && !result.signal) {
+      return true;
+    }
+    if (result.signal || result.error || result.status === null) {
+      writeStderrLine('ballin backup: the Gist update outcome is unknown; backup caches were left unchanged');
+    } else {
+      writeStderrLine('ballin backup: the Gist update failed; backup caches were left unchanged');
+    }
+    writeStderrLine('ballin backup: rerun ballin backup to re-read and reconcile current remote state');
+    return false;
+  } catch (error) {
+    writeStderrLine(`ballin backup: failed to prepare the Gist update${errorMessage(error)}`);
+    return false;
+  } finally {
+    removeTempFile(payloadFile);
+  }
+};
+
+const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolean => {
+  const cacheUpdates = snapshots.filter(({ cacheNeedsPromotion }) => cacheNeedsPromotion);
+  if (cacheUpdates.length === 0) {
+    return true;
+  }
+
+  let stagingDir: string;
+  try {
+    ensureDir(cacheDir);
+    stagingDir = fs.mkdtempSync(path.join(cacheDir, '.ballin-backup-cache-'));
+  } catch (error) {
+    writeStderrLine(`ballin backup: failed to prepare backup cache updates${errorMessage(error)}`);
+    return false;
+  }
+
+  try {
+    for (const { snapshot, localFile } of cacheUpdates) {
+      try {
+        fs.copyFileSync(localFile, path.join(stagingDir, snapshot.fileName));
+      } catch (error) {
+        writeStderrLine(`ballin backup: failed to stage cache update for ${snapshot.fileName}${errorMessage(error)}`);
+        return false;
+      }
+    }
+
+    let failed = false;
+    cacheUpdates.forEach(({ snapshot, cacheFile }) => {
+      try {
+        fs.renameSync(path.join(stagingDir, snapshot.fileName), cacheFile);
+      } catch (error) {
+        writeStderrLine(`ballin backup: failed to promote cache for ${snapshot.fileName}${errorMessage(error)}`);
+        failed = true;
+      }
+    });
+    return !failed;
+  } finally {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  }
 };
 
 const catSnapshot = (homeDir: string, fileName: string, sourcePath: string): SnapshotCommand => ({
@@ -653,6 +912,59 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
   return snapshots;
 };
 
+const runStagedBackup = (host: string, id: string, homeDir: string): boolean => {
+  const stagedSnapshots = stageSnapshots(collectSnapshots(homeDir));
+  if (!stagedSnapshots) {
+    return false;
+  }
+
+  try {
+    const remoteSnapshots = readRemoteSnapshots(host, id, stagedSnapshots);
+    if (!remoteSnapshots) {
+      return false;
+    }
+
+    try {
+      let evaluation: ReturnType<typeof evaluateSnapshots>;
+      try {
+        evaluation = evaluateSnapshots(
+          path.join(homeDir, '.ballin-scripts', '.backup-cache'),
+          stagedSnapshots,
+          remoteSnapshots,
+        );
+      } catch (error) {
+        writeStderrLine(`ballin backup: failed to reconcile staged snapshots${errorMessage(error)}`);
+        return false;
+      }
+
+      if (evaluation.conflicts.length > 0) {
+        reportConflicts(evaluation.conflicts);
+        return false;
+      }
+
+      if (!updateGist(host, id, evaluation.evaluated)) {
+        return false;
+      }
+
+      const cacheDir = path.join(homeDir, '.ballin-scripts', '.backup-cache');
+      if (!promoteCaches(cacheDir, evaluation.evaluated)) {
+        writeStderrLine('ballin backup: the Gist outcome is known, but one or more cache updates failed');
+        writeStderrLine('ballin backup: rerun ballin backup to re-read and reconcile current remote state');
+        return false;
+      }
+
+      evaluation.evaluated.forEach(({ snapshot, resultState, isEmpty }) => {
+        writeSnapshotStatus(snapshot, resultState, isEmpty);
+      });
+      return true;
+    } finally {
+      removeRemoteSnapshots(remoteSnapshots);
+    }
+  } finally {
+    removeStagedSnapshots(stagedSnapshots);
+  }
+};
+
 function runBackupCommand(args = process.argv.slice(2)): void {
   const homeDir = process.env.HOME ?? '';
   const command = args[0];
@@ -713,14 +1025,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  const gistReadable = verifyGistReadable(config.host, config.id);
-  if (!gistReadable.ok) {
-    writeStdoutLine("Error retrieving your gist, please run 'ballin self-update'.");
-    process.exitCode = gistReadable.exitStatus;
-    return;
-  }
-
   if (command === 'read') {
+    const gistReadable = verifyGistReadable(config.host, config.id);
+    if (!gistReadable.ok) {
+      writeStdoutLine("Error retrieving your gist, please run 'ballin self-update'.");
+      process.exitCode = gistReadable.exitStatus;
+      return;
+    }
     if (readGistFileToStdout(config.host, config.id, args[1])) {
       return;
     } else {
@@ -730,18 +1041,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  const cacheDir = path.join(homeDir, '.ballin-scripts', '.backup-cache');
-  ensureDir(cacheDir);
-
-  let failed = false;
-  collectSnapshots(homeDir).forEach((snapshot) => {
-    if (!updateSnapshot(config.host, config.id, cacheDir, snapshot)) {
-      writeStderrLine(`ballin backup: failed to snapshot ${snapshot.fileName}`);
-      failed = true;
-    }
-  });
-
-  if (failed) {
+  if (!runStagedBackup(config.host, config.id, homeDir)) {
     process.exitCode = 1;
   }
 }

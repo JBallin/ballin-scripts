@@ -66,14 +66,41 @@ workflow.
 
 Unchanged empty snapshots do not print a line.
 
-### Current consistency boundary
+Markers are delayed until the complete logical run has succeeded, including
+any required Gist update and local cache promotion. A failed run does not
+print partial success markers.
 
-Use one active writer per backup Gist. Ballin does not synchronize or merge
-snapshots from multiple machines, so one machine can overwrite another's
-changes.
+### Backup consistency and conflicts
 
-A backup currently uploads each changed file with a separate Gist edit. A
-failure between edits can leave the backup spread across revisions or only
-partly uploaded. The staged single-request backup work—including conflict
-detection and cache updates only after remote success—is tracked in
-[#282](https://github.com/JBallin/ballin-scripts/issues/282).
+`ballin backup` is a staged single-request backup. It captures and normalizes
+every available snapshot before reading current remote content. If any
+collector fails, Ballin still attempts the later collectors and reports their
+failures, but changes neither the Gist nor the backup cache.
+
+For every collected snapshot, Ballin compares the machine's cached base,
+current remote content, and staged local content. A local change is uploaded
+only when the cached base still matches the remote file. When local and remote
+already match, a missing or stale cache can be hydrated without an upload.
+An existing remote file that differs when no cached base exists is a conflict,
+as is a remotely deleted file with a cached base. Deleting `.backup-cache`
+therefore cannot bypass stale-writer protection.
+
+Conflicts identify every affected snapshot and stop the entire run without
+changing the Gist or cache. Inspect remote content with
+`ballin backup read <file>` or the Gist UI, decide which content should win,
+reconcile the local environment or remote Gist so the contents match, and
+rerun `ballin backup` to establish the cache.
+
+One logical run sends at most one Gist update containing only safely changed
+files. Empty snapshots remain the text `empty\n`; Ballin does not send Gist
+deletion entries. Cache files are replaced only after the remote result is
+known. A failed or interrupted request leaves caches unchanged so the next run
+re-reads and reconciles remote state. A cache-promotion failure after remote
+success is reported without success markers and is likewise recoverable by
+rerunning the command.
+
+Use one active writer per backup Gist. A multi-file request is not documented
+as transactional, and Ballin does not synchronize, merge, or eliminate the
+race in which another writer changes the Gist between Ballin's read and write.
+See the [Gist backup API evidence](gist-backup-api.md) for the verified
+transport boundary.
