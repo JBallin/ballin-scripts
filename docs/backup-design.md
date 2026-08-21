@@ -1,46 +1,33 @@
 # Backup design
 
-This guide records the consistency invariants and GitHub transport assumptions
-behind `ballin backup`. User behavior and conflict recovery are documented in
+This guide records the safety model behind `ballin backup`. User behavior and
+conflict recovery are documented in
 [Supported capabilities](capabilities.md#backup-consistency-and-conflicts).
 
-## Run invariants
+## Consistency model
 
-- Collect and normalize every available snapshot before reading the Gist or
-  changing remote or cache state. Continue after collector failures, then abort
-  without mutations if any collector failed.
-- Read current remote state after staging. A missing file is a valid state; a
-  failed, interrupted, truncated, or incomplete read fails the run.
-- Treat each cache file as the last remote content observed by this machine.
-  Compare cached base, current remote, and staged local content, including file
-  presence. Any conflict aborts the complete run without mutations.
-- Send safely changed files in at most one PATCH. Omit unchanged files and
-  never send null or deletion entries; empty snapshots remain `empty\n`.
-- Promote caches with staged per-file replacement only after the remote outcome
-  is known. Failed or uncertain requests leave caches unchanged for a fresh
-  remote read on retry. Report promotion failures without success markers.
+- Stage every snapshot before reading or changing remote state. Collector or
+  remote-read failures abort without changing the Gist or cache.
+- Treat the cache as the last remote state observed by this machine. Compare
+  cached, remote, and staged content—including file presence—and abort every
+  conflict without mutations.
+- Send safely changed files in one unsplit request, then promote caches and
+  print results only after the remote outcome is known.
 
 The presence-aware decision cases are covered as an executable table in
 [`test/backup.test.ts`](../test/backup.test.ts).
 
-## GitHub transport evidence
+## GitHub constraints
 
-| Assumption | Evidence | Design consequence |
-| --- | --- | --- |
-| One update can carry multiple files. Omitted files remain unchanged, while null or contentless entries delete files. | GitHub REST: [Update a gist](https://docs.github.com/en/rest/gists/gists#update-a-gist) | Send one `files` object containing only changed `{ "content": ... }` entries. |
-| Large Gist files may return truncated inline content with a `raw_url`; the documented `size` is in bytes. | GitHub REST: [About gists](https://docs.github.com/en/rest/gists/gists#about-gists) | Fetch raw content when required and validate byte length, preserving snapshots larger than 1 MiB. Treat incomplete reads as failures. |
-| `gh api` accepts a host, explicit method, and complete input body. | GitHub CLI: [`gh api`](https://cli.github.com/manual/gh_api) | Route reads and writes through the configured GitHub or Enterprise hostname and submit one payload. |
-| The CLI reports generic success or failure exit status, not a server-side transaction outcome. | GitHub CLI: [Exit codes](https://cli.github.com/manual/gh_help_exit-codes) | Conservatively treat nonzero or interrupted update calls as uncertain outcomes and do not promote caches. |
+GitHub's [Gist update API](https://docs.github.com/en/rest/gists/gists#update-a-gist)
+supports multiple changed files while leaving omitted files unchanged. Ballin
+sends changed content only and never sends deletion entries. For
+[truncated files](https://docs.github.com/en/rest/gists/gists#about-gists), it
+requests raw content and validates the byte count before comparing files.
 
-The Gist update documentation defines neither a transactional multi-file update
-nor a conditional PATCH precondition. GitHub's general
-[conditional request guidance](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#use-conditional-requests-if-appropriate)
-does not add one to this endpoint. The update endpoint, `gh api` reference, and
-GitHub's
-[REST troubleshooting guidance](https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api)
-also document no applicable universal request-payload maximum.
-
-Ballin therefore sends one unsplit request, leaves caches unchanged if the host
-rejects it, and supports one active writer per backup Gist. It does not
+The endpoint documents no transactional or conditional PATCH guarantee and no
+applicable universal payload maximum. Ballin therefore fails closed on rejected
+or uncertain requests and supports one active writer per Gist. It does not
 synchronize, merge, automatically resolve changes, or eliminate the read/write
-race.
+race. Requests use the configured GitHub or Enterprise host through
+[`gh api`](https://cli.github.com/manual/gh_api).
