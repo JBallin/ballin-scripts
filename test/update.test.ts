@@ -206,7 +206,7 @@ exit 0
     assert.include(result.stdout, 'simulated cleanup failure');
     assert.include(result.stdout, 'Checking Homebrew installation');
     assert.include(result.stdout, 'Updating ballin-scripts');
-    assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.include(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'brew|1,1|upgrade',
       'brew|1,1|cleanup',
@@ -290,7 +290,7 @@ exit 0
     assert.include(result.stdout, 'Updating ballin-scripts');
     assert.include(result.stdout, 'updated ballin-scripts');
     assert.include(result.stdout, 'Checking Ballin readiness');
-    assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.include(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
       'gh|,|auth status --active --hostname example.test',
@@ -324,7 +324,7 @@ exit 2
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Checking Ballin readiness');
-    assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.include(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog().slice(1), [
       'node|,|-e process.stdout.write(JSON.stringify(process.env))',
       'ballin|,|self-update',
@@ -354,7 +354,7 @@ exit 0
     assert.include(result.stdout, 'Checking Ballin readiness');
     assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
     assert.include(result.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
-    assert.notInclude(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.notInclude(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
       'gh|,|auth status --active --hostname example.test',
@@ -375,7 +375,7 @@ exit 0
     assert.equal(result.status, 23);
     assert.include(result.stdout, 'simulated update failure');
     assert.notInclude(result.stdout, 'Checking Ballin readiness');
-    assert.notInclude(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.notInclude(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
     ]);
@@ -438,7 +438,7 @@ exit 0
     });
 
     assert.equal(result.status, 17);
-    assert.include(result.stdout, 'Your Ballin-managed environment is healthy.');
+    assert.include(result.stdout, '😎 You\'re ballin.');
     assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
