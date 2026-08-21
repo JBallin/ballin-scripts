@@ -34,6 +34,7 @@ type RunBackupOptions = {
   ghInitialReadSignal?: boolean;
   ghMetadataInvalid?: boolean;
   ghFileTruncationInvalid?: boolean;
+  ghFileSizeMode?: 'valid' | 'missing' | 'invalid' | 'mismatch';
   ghMetadataTruncated?: boolean;
   ghRawReadFailures?: string[];
   ghRawReadSignals?: string[];
@@ -127,7 +128,7 @@ if [ "$1" = 'api' ]; then
       printf '%s\\n' '{invalid'
       exit 0
     fi
-    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = { filename: name, size, truncated: process.env.FAKE_GH_FILE_TRUNCATION_INVALID === "true" ? "invalid" : size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
+    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; const sizeMode = process.env.FAKE_GH_FILE_SIZE_MODE; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = { filename: name, ...(sizeMode === "missing" ? {} : { size: sizeMode === "invalid" ? "invalid" : sizeMode === "mismatch" ? size + 1 : size }), truncated: process.env.FAKE_GH_FILE_TRUNCATION_INVALID === "true" ? "invalid" : size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
     exit $?
   fi
   if [ "$5" = 'PATCH' ] && [ "$7" = '--input' ] && [ "$9" = '--silent' ] && [ "$#" -eq 9 ]; then
@@ -337,6 +338,7 @@ done
     ghInitialReadSignal = false,
     ghMetadataInvalid = false,
     ghFileTruncationInvalid = false,
+    ghFileSizeMode = 'valid',
     ghMetadataTruncated = false,
     ghRawReadFailures = [],
     ghRawReadSignals = [],
@@ -368,6 +370,7 @@ done
       FAKE_GH_INITIAL_READ_SIGNAL: ghInitialReadSignal ? 'true' : 'false',
       FAKE_GH_METADATA_INVALID: ghMetadataInvalid ? 'true' : 'false',
       FAKE_GH_FILE_TRUNCATION_INVALID: ghFileTruncationInvalid ? 'true' : 'false',
+      FAKE_GH_FILE_SIZE_MODE: ghFileSizeMode,
       FAKE_GH_METADATA_TRUNCATED: ghMetadataTruncated ? 'true' : 'false',
       FAKE_GH_RAW_READ_FAILURES: ghRawReadFailures.join(':'),
       FAKE_GH_RAW_READ_SIGNALS: ghRawReadSignals.join(':'),
@@ -1445,6 +1448,38 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.stdout, '');
     assert.include(result.stderr, `invalid truncation metadata for remote snapshot ${snapshotFileName}`);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base value\n');
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  (['missing', 'invalid'] as const).forEach((sizeMode) => {
+    it(`fails closed when a remote file has ${sizeMode} size metadata`, () => {
+      writeSnapshot('local value\n');
+      seedBackupCache('base value\n');
+      seedFakeGist('base value\n');
+
+      const result = runBackup({ ghFileSizeMode: sizeMode });
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, `missing or invalid size metadata for remote snapshot ${snapshotFileName}`);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base value\n');
+      assert.deepEqual(gistUploads(), []);
+    });
+  });
+
+  it('fails closed when a raw remote read does not match its declared byte size', () => {
+    const largeSnapshot = `${'r'.repeat(1024 * 1024 + 1)}\n`;
+    writeSnapshot(largeSnapshot);
+    seedBackupCache(largeSnapshot);
+    seedFakeGist(largeSnapshot);
+
+    const result = runBackup({ ghFileSizeMode: 'mismatch' });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, `remote snapshot ${snapshotFileName} was incomplete or changed while reading`);
+    assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assert.deepEqual(gistReads(), [snapshotFileName]);
     assert.deepEqual(gistUploads(), []);
   });
 
