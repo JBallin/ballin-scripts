@@ -11,8 +11,8 @@ conflict recovery are documented in
 - Treat the cache as the last remote state observed by this machine. Compare
   cached, remote, and staged content—including file presence—and abort every
   conflict without mutations.
-- Send safely changed files in one unsplit request, then promote caches and
-  print results only after the remote outcome is known.
+- Send safely changed files in at most one unsplit request, then promote caches
+  and print results only after the remote outcome is known.
 - Report cache-promotion failures after remote success without success markers;
   the next run re-reads remote state and reconciles stale cache entries.
 

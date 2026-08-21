@@ -81,9 +81,6 @@ Conflicts identify every affected snapshot. Inspect remote content with
 reconcile the local environment or remote Gist so the contents match, and rerun
 `ballin backup`.
 
-Ballin prints success markers only after the Gist update and local cache update
-succeed.
-
 Use one active writer per backup Gist. Ballin does not synchronize or merge
 changes from multiple writers.
 
