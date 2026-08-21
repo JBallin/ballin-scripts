@@ -13,6 +13,8 @@ conflict recovery are documented in
   conflict without mutations.
 - Send safely changed files in one unsplit request, then promote caches and
   print results only after the remote outcome is known.
+- Report cache-promotion failures after remote success without success markers;
+  the next run re-reads remote state and reconciles stale cache entries.
 
 The presence-aware decision cases are covered as an executable table in
 [`test/backup.test.ts`](../test/backup.test.ts).
