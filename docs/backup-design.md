@@ -26,8 +26,7 @@ The presence-aware decision cases are covered as an executable table in
 
 ## GitHub transport evidence
 
-Verified August 21, 2026 with GitHub CLI 2.98.0, official documentation, and
-the isolated backup fixture. No live Gist was created or modified.
+Verified August 21, 2026 against official documentation and GitHub CLI 2.98.0.
 
 | Assumption | Evidence | Design consequence |
 | --- | --- | --- |
@@ -48,15 +47,3 @@ The update endpoint, `gh api` reference, and GitHub's
 do not document an applicable universal request-payload maximum. Ballin does
 not invent one or split a logical backup. A host rejection fails the single
 request and leaves caches unchanged.
-
-## Validation boundary
-
-Backup tests use the isolated spawn-based harness with complete child
-environments and stubbed GitHub responses. They do not modify real Gists,
-authentication, Homebrew, packages, configuration, or macOS state. Run:
-
-```shell
-npx --no-install mocha test/backup.test.ts
-npm test
-git diff --check
-```
