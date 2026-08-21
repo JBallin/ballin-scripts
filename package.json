@@ -1,7 +1,7 @@
 {
   "name": "ballin-scripts",
   "version": "2.0.0",
-  "description": "Useful scripts to save time",
+  "description": "Back up your dotfiles and update your macOS development environment",
   "scripts": {
     "lint": "eslint .",
     "analytics:report": "node analytics-worker/report.ts",
