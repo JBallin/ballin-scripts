@@ -227,7 +227,7 @@ exit 17
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Your Ballin-managed environment is healthy.\n');
+    assert.equal(result.stdout, '😎 You\'re ballin.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       'auth status --active --hostname example.test',
@@ -252,6 +252,7 @@ exit 17
       'OK    Configured Gist readability: The configured backup Gist exists and is readable. Write permission was not checked.',
     );
     assert.include(result.stdout, 'Result: Ballin-managed environment health looks good.');
+    assert.notInclude(result.stdout, '😎 You\'re ballin.');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       'auth status --active --hostname example.test',
