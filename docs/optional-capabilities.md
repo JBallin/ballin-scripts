@@ -102,8 +102,7 @@ changing the Gist or cache.
 
 For conflict recovery, inspect the named remote snapshots with
 `ballin backup read <file>` or the Gist UI, reconcile local and remote content
-so they match, and rerun `ballin backup`. Failed or interrupted requests also
-leave caches unchanged so a retry rechecks the Gist.
+so they match, and rerun `ballin backup`.
 
 Use one active writer per backup Gist; Ballin does not synchronize or merge
 changes from multiple machines. See

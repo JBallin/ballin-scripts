@@ -99,9 +99,9 @@ re-reads and reconciles remote state. A cache-promotion failure after remote
 success is reported without success markers and is likewise recoverable by
 rerunning the command.
 
-Use one active writer per backup Gist. A multi-file request is not documented
-as transactional, and Ballin does not synchronize, merge, or eliminate the
-race in which another writer changes the Gist between Ballin's read and write.
+Use one active writer per backup Gist. Ballin does not synchronize, merge, or
+eliminate the race in which another writer changes the Gist between Ballin's
+read and write.
 
 Maintainers can find the consistency invariants and API evidence in
 [Backup design](backup-design.md).
