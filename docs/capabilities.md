@@ -77,27 +77,18 @@ every available snapshot before reading current remote content. If any
 collector fails, Ballin still attempts the later collectors and reports their
 failures, but changes neither the Gist nor the backup cache.
 
-For every collected snapshot, Ballin compares the machine's cached base,
-current remote content, and staged local content. A local change is uploaded
-only when the cached base still matches the remote file. When local and remote
-already match, a missing or stale cache can be hydrated without an upload.
-An existing remote file that differs when no cached base exists is a conflict,
-as is a remotely deleted file with a cached base. Deleting `.backup-cache`
-therefore cannot bypass stale-writer protection.
+Ballin checks cached, remote, and local content before uploading safely changed
+files in at most one request. If it detects conflicting changes or cannot read
+remote state safely, it stops without changing the Gist or cache.
 
-Conflicts identify every affected snapshot and stop the entire run without
-changing the Gist or cache. Inspect remote content with
+Conflicts identify every affected snapshot. Inspect remote content with
 `ballin backup read <file>` or the Gist UI, decide which content should win,
-reconcile the local environment or remote Gist so the contents match, and
-rerun `ballin backup` to establish the cache.
+reconcile the local environment or remote Gist so the contents match, and rerun
+`ballin backup` to establish the cache.
 
-One logical run sends at most one Gist update containing only safely changed
-files. Empty snapshots remain the text `empty\n`; Ballin does not send Gist
-deletion entries. Cache files are replaced only after the remote result is
-known. A failed or interrupted request leaves caches unchanged so the next run
-re-reads and reconciles remote state. A cache-promotion failure after remote
-success is reported without success markers and is likewise recoverable by
-rerunning the command.
+Cache files and result markers are updated only after the remote outcome is
+known. A failed or interrupted request leaves caches unchanged so rerunning the
+command rechecks current remote state.
 
 Use one active writer per backup Gist. Ballin does not synchronize, merge, or
 eliminate the race in which another writer changes the Gist between Ballin's
