@@ -102,6 +102,3 @@ rerunning the command.
 Use one active writer per backup Gist. Ballin does not synchronize, merge, or
 eliminate the race in which another writer changes the Gist between Ballin's
 read and write.
-
-Maintainers can find the consistency invariants and API evidence in
-[Backup design](backup-design.md).
