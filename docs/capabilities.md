@@ -102,3 +102,12 @@ rerunning the command.
 Use one active writer per backup Gist. A multi-file request is not documented
 as transactional, and Ballin does not synchronize, merge, or eliminate the
 race in which another writer changes the Gist between Ballin's read and write.
+
+Implementation references: GitHub documents
+[multi-file Gist updates](https://docs.github.com/en/rest/gists/gists#update-a-gist),
+[truncated file retrieval](https://docs.github.com/en/rest/gists/gists#about-gists),
+and [`gh api` host and input routing](https://cli.github.com/manual/gh_api).
+Because the Gist endpoint documents no transactional guarantee,
+[conditional `PATCH` support](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#use-conditional-requests-if-appropriate),
+or universal payload limit, Ballin sends one request and fails closed on
+rejected or uncertain outcomes rather than splitting the backup.
