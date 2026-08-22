@@ -12,6 +12,7 @@ Start here when setting up or auditing what Ballin manages.
 
 ## Maintainer guides
 
+- [Backup design](backup-design.md): backup safety model and GitHub constraints.
 - [Design system](design-system.md): Ballin identity, product messaging,
   visual guidance, and brand asset conventions.
 - [Analytics backend](analytics-backend.md): backend deployment and data-policy

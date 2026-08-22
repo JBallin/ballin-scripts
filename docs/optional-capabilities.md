@@ -88,19 +88,16 @@ as sensitive. To make one discoverable, make it public in GitHub after reviewing
 it: backup snapshots can expose paths, usernames, tool choices, package lists,
 and other local config, and public Gists cannot be made secret again.
 
-When Ballin saves changed snapshots to the Gist, GitHub preserves the Gist's
-native revision history and diffs, so you can inspect changes between backup
-revisions through GitHub. Ballin does not currently provide its own history
-navigation, rollback, restore, or revision-selection commands.
+GitHub preserves Gist revision history and diffs. Ballin does not provide
+history navigation, rollback, restore, or revision selection.
 
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
-Use one active writer per backup Gist. Ballin does not synchronize or merge
-snapshots from multiple machines. It also uploads each changed file with a
-separate Gist edit, so an interrupted run can leave a backup only partly
-uploaded. The staged single-request backup work is tracked in
-[#282](https://github.com/JBallin/ballin-scripts/issues/282).
+Before updating, Ballin checks for conflicting changes and stops safely if it
+finds any. Use one active writer per backup Gist. See
+[Supported capabilities](capabilities.md#backup-consistency-and-conflicts) for
+recovery guidance, guarantees, and limitations.
 
 ## Readiness checks
 

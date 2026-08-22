@@ -66,14 +66,23 @@ workflow.
 
 Unchanged empty snapshots do not print a line.
 
-### Current consistency boundary
+Markers are delayed until the complete logical run has succeeded, including
+any required Gist update and local cache promotion. A failed run does not
+print partial success markers.
+
+### Backup consistency and conflicts
+
+`ballin backup` collects every available snapshot before changing the Gist. If
+collection fails, remote content cannot be read safely, or changes conflict,
+Ballin reports the problem and leaves the Gist and backup cache unchanged.
+
+Conflicts identify every affected snapshot. Inspect remote content with
+`ballin backup read <file>` or the Gist UI, decide which content should win,
+reconcile the local environment or remote Gist so the contents match, and rerun
+`ballin backup`.
 
 Use one active writer per backup Gist. Ballin does not synchronize or merge
-snapshots from multiple machines, so one machine can overwrite another's
-changes.
+changes from multiple writers.
 
-A backup currently uploads each changed file with a separate Gist edit. A
-failure between edits can leave the backup spread across revisions or only
-partly uploaded. The staged single-request backup work—including conflict
-detection and cache updates only after remote success—is tracked in
-[#282](https://github.com/JBallin/ballin-scripts/issues/282).
+See [Backup design](backup-design.md) for the underlying safety model and
+GitHub constraints.
