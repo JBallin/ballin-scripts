@@ -92,7 +92,9 @@ enabled or onboarding setting.
 `backup.id` must be null or a non-empty string. Arrays, objects, numbers, and
 other non-string values are invalid configuration rather than maintenance-only
 state; doctor, setup, and backup fail before GitHub work until the value is
-corrected.
+corrected. Run `ballin config reset` to restore valid defaults, then run
+`ballin backup setup` again if backup is still wanted. A missing or malformed
+`backup.host` can be repaired directly with `ballin backup setup`.
 
 When an adopted backup includes `ballin_config`, Ballin restores compatible
 preferences. The host selected during setup and the marker-validated Gist ID

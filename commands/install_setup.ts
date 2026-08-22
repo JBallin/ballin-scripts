@@ -331,7 +331,7 @@ const configureGist = (
   }
   if (destination.idStatus === 'invalid') {
     writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.id; expected null or a non-empty string.');
-    writeStdoutLine(`Fix backup.id in ${ballinConfig}, then run ballin backup setup again.`);
+    writeStdoutLine('Run ballin config reset to restore valid defaults, then run ballin backup setup if needed.');
     return false;
   }
 

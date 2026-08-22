@@ -90,8 +90,10 @@ Backup is configured only when `backup.id` contains a non-empty Gist ID.
 Missing, null, blank, and legacy string `"null"` IDs all mean maintenance-only
 Ballin. Non-string IDs are invalid configuration: doctor, setup, backup, and an
 enabled update backup stage fail before GitHub work until `backup.id` is fixed
-to null or a non-empty string. `backup.host` records which GitHub or GitHub
-Enterprise host to use.
+to null or a non-empty string. Run `ballin config reset` to restore valid
+defaults, then opt into backup again if needed. `backup.host` records which
+GitHub or GitHub Enterprise host to use; `ballin backup setup` repairs a missing
+or malformed host.
 
 Setup creates a secret Gist. Secret means unlisted, not strongly private:
 anyone with the URL or ID can view it. Shell, Git, and editor files can contain

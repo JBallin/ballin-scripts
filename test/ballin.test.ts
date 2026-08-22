@@ -366,7 +366,7 @@ esac
 
       assert.equal(result.status, 1, result.stderr);
       assert.include(result.stdout, 'ERROR Gist ID: backup.id must be null or a non-empty string.');
-      assert.include(result.stdout, 'Next: Fix backup.id in ballin.config.json');
+      assert.include(result.stdout, 'Next: Run ballin config reset to restore valid defaults');
     });
 
     writeConfig({
@@ -379,6 +379,7 @@ esac
 
     assert.equal(malformedHost.status, 1);
     assert.include(malformedHost.stdout, 'ERROR Gist host: Gist host is not configured.');
+    assert.include(malformedHost.stdout, 'Next: Run ballin backup setup to repair the backup host.');
     assert.deepEqual(commandLog(), []);
   });
 

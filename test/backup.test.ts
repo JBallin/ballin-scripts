@@ -542,7 +542,8 @@ done
       const result = runBackup();
 
       assert.equal(result.status, 1);
-      assert.equal(result.stderr, 'ballin backup: invalid config value backup.id; expected null or a non-empty string\n');
+      assert.include(result.stderr, 'ballin backup: invalid config value backup.id; expected null or a non-empty string');
+      assert.include(result.stderr, 'run ballin config reset to restore valid defaults');
     });
     assert.deepEqual(ghCalls(), []);
   });
@@ -554,7 +555,8 @@ done
       const result = runBackup();
 
       assert.equal(result.status, 1);
-      assert.equal(result.stderr, 'ballin backup: missing config value backup.host\n');
+      assert.include(result.stderr, 'missing or invalid config value backup.host');
+      assert.include(result.stderr, 'run ballin backup setup to repair it');
     });
     assert.deepEqual(ghCalls(), []);
   });
@@ -665,6 +667,7 @@ exit 2
 
       assert.equal(result.status, 1);
       assert.include(result.stdout, 'Invalid config value backup.id; expected null or a non-empty string.');
+      assert.include(result.stdout, 'Run ballin config reset to restore valid defaults');
       assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
       assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
       assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve invalid destination cache\n');
@@ -1221,7 +1224,8 @@ exit 2
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.include(result.stderr, 'missing or invalid config value backup.host');
+    assert.include(result.stderr, 'run ballin backup setup to repair it');
     assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);

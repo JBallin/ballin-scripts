@@ -377,6 +377,7 @@ exit 0
 
       assert.equal(result.status, 1);
       assert.include(result.stderr, 'invalid config value backup.id; expected null or a non-empty string');
+      assert.include(result.stderr, 'run ballin config reset to restore valid defaults');
     });
 
     writeConfig({
@@ -388,7 +389,7 @@ exit 0
     const malformedHost = spawnUpdate();
 
     assert.equal(malformedHost.status, 1);
-    assert.include(malformedHost.stderr, 'missing config value backup.host');
+    assert.include(malformedHost.stderr, 'run ballin backup setup to repair it');
     assert.deepEqual(commandLog(), []);
   });
 

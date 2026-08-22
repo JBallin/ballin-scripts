@@ -193,6 +193,7 @@ const backupConfig = (): BackupConfigResult => {
 
   if (idStatus === 'invalid') {
     writeStderrLine('ballin backup: invalid config value backup.id; expected null or a non-empty string');
+    writeStderrLine('ballin backup: run ballin config reset to restore valid defaults, then run ballin backup setup if needed');
     return { config: null, exitStatus: 1 };
   }
 
@@ -205,7 +206,7 @@ const backupConfig = (): BackupConfigResult => {
     return { config: null, exitStatus: 1 };
   }
   if (!host) {
-    writeStderrLine('ballin backup: missing config value backup.host');
+    writeStderrLine('ballin backup: missing or invalid config value backup.host; run ballin backup setup to repair it');
   }
   return {
     config: null,
