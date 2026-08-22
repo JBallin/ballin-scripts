@@ -27,6 +27,7 @@ describe('ballin', () => {
     assert.include(result.stdout, 'ballin <command> [options]');
     assert.include(result.stdout, 'update');
     assert.include(result.stdout, 'backup');
+    assert.include(result.stdout, 'setup');
     assert.include(result.stdout, 'doctor');
     assert.include(result.stdout, 'config');
     assert.include(result.stdout, 'self-update');
@@ -300,10 +301,24 @@ exit 17
       analytics: {},
     });
     const missingId = runBallin(['doctor']);
-    assert.equal(missingId.status, 1);
-    assert.include(missingId.stdout, 'ERROR Gist ID: Backup Gist ID is not configured yet.');
-    assert.notInclude(missingId.stdout, 'Configured Gist readability:');
+    assert.equal(missingId.status, 0, missingId.stderr);
+    assert.equal(missingId.stdout, '😎 You\'re ballin.\n');
+    assert.deepEqual(commandLog(), []);
 
+    const optionalVerbose = runBallin(['doctor', '--verbose']);
+    assert.equal(optionalVerbose.status, 0, optionalVerbose.stderr);
+    assert.include(optionalVerbose.stdout, 'INFO  Optional Gist backup:');
+    assert.include(optionalVerbose.stdout, 'ballin backup setup');
+    assert.deepEqual(commandLog(), []);
+
+    writeConfig({
+      update: {},
+      backup: {
+        id: 'test-gist-id',
+        host: 'example.test',
+      },
+      analytics: {},
+    });
     fs.rmSync(path.join(binDir, 'gh'));
     const missingGh = runBallin(['doctor']);
     assert.equal(missingGh.status, 1);
@@ -339,6 +354,34 @@ esac
     );
   });
 
+  it('uses raw backup destination types in doctor', () => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeConfig({
+        update: {},
+        backup: { id, host: 'example.test' },
+        analytics: {},
+      });
+
+      const result = runBallin(['doctor', '--verbose']);
+
+      assert.equal(result.status, 1, result.stderr);
+      assert.include(result.stdout, 'ERROR Gist ID: backup.id must be null or a non-empty string.');
+      assert.include(result.stdout, 'Next: Fix backup.id in ballin.config.json');
+    });
+
+    writeConfig({
+      update: {},
+      backup: { id: 'test-gist-id', host: { value: 'unexpected-host' } },
+      analytics: {},
+    });
+
+    const malformedHost = runBallin(['doctor']);
+
+    assert.equal(malformedHost.status, 1);
+    assert.include(malformedHost.stdout, 'ERROR Gist host: Gist host is not configured.');
+    assert.deepEqual(commandLog(), []);
+  });
+
   it('fails doctor when a required health check fails', () => {
     fs.rmSync(path.join(binDir, 'ballin'));
     writeConfig({
@@ -357,8 +400,8 @@ esac
     assert.equal(missingShim.status, 1);
     assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
-    assert.include(missingShim.stdout, 'ERROR Gist ID: Backup Gist ID is not configured yet.');
-    assert.include(missingShim.stdout, '\nNext: Run the installer to create or adopt a backup Gist.');
+    assert.notInclude(missingShim.stdout, 'Gist ID:');
+    assert.notInclude(missingShim.stdout, 'GitHub CLI:');
     assert.notInclude(missingShim.stdout, '      Next:');
     assert.notInclude(missingShim.stdout, 'OK    Node.js runtime:');
     assert.notInclude(missingShim.stdout, 'OK    Config readability:');

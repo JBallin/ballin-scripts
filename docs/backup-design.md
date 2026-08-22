@@ -11,6 +11,10 @@ conflict recovery are documented in
 - Treat the cache as the last remote state observed by this machine. Compare
   cached, remote, and staged content—including file presence—and abort every
   conflict without mutations.
+- Treat cache ownership as unproven whenever no destination is configured.
+  Enabling backup from that state invalidates `.backup-cache` before destination
+  persistence; the cache format is deliberately not extended with destination
+  metadata in this design.
 - Send safely changed files in at most one unsplit request, then promote caches
   and print results only after the remote outcome is known.
 - Report cache-promotion failures after remote success without success markers;
@@ -18,6 +22,12 @@ conflict recovery are documented in
 
 The presence-aware decision cases are covered as an executable table in
 [`test/backup.test.ts`](../test/backup.test.ts).
+
+During adoption, the host selected in the current setup and the Gist ID whose
+marker was validated are authoritative. A restored `ballin_config` contributes
+other settings, but its destination fields are overridden. The restored settings
+and authoritative destination are committed together; a failed commit preserves
+the prior unconfigured config. An already-invalidated cache remains removed.
 
 ## GitHub constraints
 

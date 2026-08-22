@@ -5,11 +5,12 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
-const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 
 type RunInstallOptions = {
   env?: NodeJS.ProcessEnv;
+  input?: string;
 };
 
 describe('install', () => {
@@ -115,8 +116,9 @@ esac
     installNodeStub();
   };
 
-  const runInstall = ({ env = {} }: RunInstallOptions = {}) => spawnSync(installPath, [], {
+  const runInstall = ({ env = {}, input = 'y\n' }: RunInstallOptions = {}) => spawnSync(installPath, [], {
     encoding: 'utf8',
+    input,
     env: {
       HOME: homeDir,
       PATH: toolDir,
@@ -137,7 +139,7 @@ esac
     ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter(Boolean)
     : []);
 
-  const setupCommand = () => `node:install_setup ${repoDir}/commands/install_setup.ts setup ${repoDir} ${docsUrl} ${analyticsDocsUrl}`;
+  const setupCommand = (mode = 'refresh') => `node:install_setup ${repoDir}/commands/install_setup.ts setup ${repoDir} ${docsUrl} ${analyticsDocsUrl} ${mode}`;
 
   beforeEach(() => {
     homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-install-'));
@@ -158,10 +160,35 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "🏀 let's ball...");
+    assert.include(result.stdout, 'Installation plan');
+    assert.include(result.stdout, 'Review installer source:');
+    assert.include(result.stdout, 'Inspect effects, uninstall, and manual removal:');
     assert.deepEqual(commandLog(), [
       'git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts',
-      setupCommand(),
+      setupCommand('fresh'),
     ]);
+  });
+
+  it('makes no installation changes when fresh-install confirmation is declined', () => {
+    installBaseCommands();
+
+    const result = runInstall({ input: 'n\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
+    assert.deepEqual(commandLog(), []);
+    assert.isFalse(fs.existsSync(repoDir));
+  });
+
+  it('makes no installation changes when fresh-install confirmation receives EOF', () => {
+    installBaseCommands();
+
+    const result = runInstall({ input: '' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
+    assert.deepEqual(commandLog(), []);
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   it('updates an existing current checkout through the typed repo updater before setup', () => {
@@ -171,6 +198,7 @@ esac
     const result = runInstall();
 
     assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), [
       `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
       setupCommand(),
@@ -211,22 +239,22 @@ esac
   it('stops with guidance when Node.js is unavailable', () => {
     linkCommand('bash');
     installGitStub();
-    writeCurrentCheckout();
 
     const result = runInstall();
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js is required');
     assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
-    assert.include(result.stdout, 'docs/README.md');
+    assert.include(result.stdout, 'docs/installation.md');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
+    assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), []);
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   it('stops with guidance before clone or update when Git is unavailable', () => {
     linkCommand('bash');
-    writeCurrentCheckout();
 
     const result = runInstall();
 
@@ -234,13 +262,14 @@ esac
     assert.include(result.stdout, 'Git is required before install can continue');
     assert.include(result.stdout, 'Install Git, then run this installer again');
     assert.include(result.stdout, 'run this installer again');
+    assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), []);
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   it('stops with guidance before clone or update when Git cannot run', () => {
     linkCommand('bash');
     installGitStub();
-    writeCurrentCheckout();
 
     const result = runInstall({ env: { FAKE_GIT_VERSION_STATUS: '69' } });
 
@@ -248,22 +277,25 @@ esac
     assert.include(result.stdout, 'Git is required before install can continue');
     assert.include(result.stdout, 'Install Git, then run this installer again');
     assert.include(result.stdout, 'run this installer again');
+    assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), []);
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   it('stops with guidance when Node.js is below the supported version', () => {
     installBaseCommands();
-    writeCurrentCheckout();
 
     const result = runInstall({ env: { FAKE_NODE_SUPPORTED: 'false' } });
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js 24.12 or newer is required');
     assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
-    assert.include(result.stdout, 'docs/README.md');
+    assert.include(result.stdout, 'docs/installation.md');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
+    assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), []);
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   it('returns the typed setup status when setup fails', () => {
