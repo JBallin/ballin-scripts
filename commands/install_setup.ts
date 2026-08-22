@@ -24,6 +24,7 @@ const backupMarker = '### Backup of your dev environment\n'
 const configSnapshotFileName = 'ballin_config';
 const backupSafetyNotice = [
   'Ballin can store selected development configuration in a secret GitHub Gist.',
+  'Setup only creates or adopts the destination; snapshots are collected and uploaded later by ballin backup.',
   'Secret Gists are unlisted, not private: anyone with the URL or Gist ID can view them.',
   'Shell, Git, and editor configuration may contain tokens, credentials, private URLs, or other sensitive values you added.',
   'Ballin is not a secrets manager. Review sensitive configuration and do not share the Gist URL or ID.',

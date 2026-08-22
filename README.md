@@ -49,13 +49,6 @@ Your system is ready to brew.
 ==> Updating App Store apps
 
 ==> Installing macOS updates
-
-==> Backing up development environment
-✔ zprofile
-✔ zshrc
-...
-✔ vs_settings
-✔ mas
 ```
 
 ## New Mac setup

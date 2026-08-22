@@ -814,6 +814,10 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Secret Gists are unlisted, not private');
+    assert.include(
+      result.stdout,
+      'snapshots are collected and uploaded later by ballin backup',
+    );
     assert.include(result.stdout, 'anyone with the URL or Gist ID can view them');
     assert.include(result.stdout, 'Ballin is not a secrets manager');
     assert.isBelow(

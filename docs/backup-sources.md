@@ -7,6 +7,12 @@ private URLs, usernames, paths, commands, and other sensitive data. This audit
 records the current inclusion decision; Ballin does not scan or redact these
 snapshots.
 
+Listed filenames may live under an application's configuration directory. To
+inspect editor files before opting in, check
+`~/Library/Application Support/Code/User/`,
+`~/Library/Application Support/Code - Insiders/User/`, and
+`~/Library/Application Support/Brackets/`.
+
 | Local source or command | Gist snapshot | Why included | Plausible sensitive content | Decision |
 | --- | --- | --- | --- | --- |
 | `.bash_profile`, `.bashrc`, `.profile`, `.zprofile`, `.zshrc` | `bash_profile.sh`, `bashrc.sh`, `profile.sh`, `zprofile.sh`, `zshrc.sh` | Reproduce shell startup behavior. | Arbitrary exports, tokens, URLs, usernames, paths, and shell commands. | Retain; warn prominently, with no heuristic redaction. |
