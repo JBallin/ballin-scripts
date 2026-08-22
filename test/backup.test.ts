@@ -664,17 +664,23 @@ exit 2
     assert.deepEqual(ghCalls(), []);
   });
 
-  it('rejects a non-string host for a configured ID during standalone setup', () => {
+  it('diagnoses and repairs a non-string host during standalone setup', () => {
     writeBackupConfig('test-gist-id', { value: 'unexpected-host' });
 
-    const result = runBackup({ args: ['setup'] });
-
-    assert.equal(result.status, 1);
-    assert.include(result.stderr, 'ballin backup setup: setup did not complete');
-    assert.deepEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host, {
-      value: 'unexpected-host',
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.enterprise.test',
+      input: 'github.enterprise.test\n',
     });
-    assert.deepEqual(ghCalls(), []);
+
+    assertBackupSucceeded(result);
+    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
+    assert.equal(
+      JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host,
+      'github.enterprise.test',
+    );
+    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
   });
 
   it('prompts for a legacy configured backup host before accepting a migrated default', () => {

@@ -167,6 +167,26 @@ const setConfigValue = (configPath: string, key: string, value: string): boolean
   return true;
 };
 
+const replaceInvalidBackupHost = (configPath: string, value: string): boolean => {
+  const config = readJsonObject(configPath);
+  if (
+    !config
+    || !isConfigObject(config.backup)
+    || !Object.prototype.hasOwnProperty.call(config.backup, 'host')
+  ) {
+    return false;
+  }
+
+  try {
+    config.backup.host = value;
+    fs.writeFileSync(configPath, stringify(config), 'utf8');
+    process.stdout.write(`"backup.host" set to: ${JSON.stringify(value)}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const runGh = (
   host: string,
   args: string[],
@@ -302,6 +322,11 @@ const configureGist = (
   const backupCacheDir = options.backupCacheDir ?? path.join(repoDir, '.backup-cache');
   let backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
   const backupId = normalizeBackupId(configValue(ballinConfig, 'backup.id'));
+  const backupHostInvalid = backupHostExisted && !backupHost;
+
+  if (backupHostInvalid) {
+    writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
+  }
 
   if (!backupId) {
     writeStdoutLine(`\n${backupSafetyNotice}`);
@@ -314,21 +339,35 @@ const configureGist = (
   }
 
   if (process.env.BALLIN_BACKUP_HOST) {
-    if (!setConfigValue(ballinConfig, 'backup.host', process.env.BALLIN_BACKUP_HOST)) {
+    const hostSaved = backupHostInvalid
+      ? replaceInvalidBackupHost(ballinConfig, process.env.BALLIN_BACKUP_HOST)
+      : setConfigValue(ballinConfig, 'backup.host', process.env.BALLIN_BACKUP_HOST);
+    if (!hostSaved) {
       return false;
     }
     backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
     if (!backupHost) {
       return false;
     }
-  } else if (!backupId || !backupHostExisted) {
-    const inputHost = readPrompt(`\n🤔 What GitHub host should be used for Gist backups? [${backupHost}] `);
-    if (inputHost) {
-      if (!setConfigValue(ballinConfig, 'backup.host', inputHost)) {
+  } else if (!backupId || !backupHostExisted || backupHostInvalid) {
+    const suggestedHost = backupHost ?? 'github.com';
+    const inputHost = readPrompt(`\n🤔 What GitHub host should be used for Gist backups? [${suggestedHost}] `);
+    const replacementHost = inputHost || (backupHostInvalid ? suggestedHost : null);
+    if (replacementHost) {
+      const normalizedReplacementHost = normalizeBackupHost(replacementHost);
+      if (!normalizedReplacementHost) {
+        writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
+        return false;
+      }
+      const hostSaved = backupHostInvalid
+        ? replaceInvalidBackupHost(ballinConfig, normalizedReplacementHost)
+        : setConfigValue(ballinConfig, 'backup.host', normalizedReplacementHost);
+      if (!hostSaved) {
         return false;
       }
       backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
       if (!backupHost) {
+        writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
         return false;
       }
     }
