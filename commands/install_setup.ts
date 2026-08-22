@@ -202,17 +202,36 @@ const commitAdoptedConfig = (
   try {
     previousConfig = fs.readFileSync(configPath, 'utf8');
 
-    const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', configSnapshotFileName], {
+    const filesResult = runGh(host, ['gist', 'view', '--files', '--', gistId], {
       cwd: repoDir,
     });
-    if (gistResult.stderr) {
-      process.stderr.write(gistResult.stderr);
+    if (filesResult.stderr) {
+      process.stderr.write(filesResult.stderr);
     }
 
-    if (gistResult.status !== 0 || gistResult.error) {
+    if (filesResult.status !== 0 || filesResult.error) {
+      writeStdoutLine(`\n⚠️  ERROR: Unable to inspect ${configSnapshotFileName} in the adopted Gist.`);
+      return false;
+    }
+
+    const hasConfigSnapshot = filesResult.stdout
+      .split(/\r?\n/u)
+      .some((fileName: string) => fileName.trim() === configSnapshotFileName);
+
+    if (!hasConfigSnapshot) {
       writeStdoutLine(`\nℹ️  No ${configSnapshotFileName} snapshot was found in that gist; keeping the local config defaults.`);
       fs.writeFileSync(restoreConfig, previousConfig, 'utf8');
     } else {
+      const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', configSnapshotFileName], {
+        cwd: repoDir,
+      });
+      if (gistResult.stderr) {
+        process.stderr.write(gistResult.stderr);
+      }
+      if (gistResult.status !== 0 || gistResult.error) {
+        writeStdoutLine(`\n⚠️  ERROR: Unable to read ${configSnapshotFileName} from the adopted Gist.`);
+        return false;
+      }
       fs.writeFileSync(restoreConfig, gistResult.stdout, 'utf8');
       restoredSnapshot = true;
     }
@@ -231,6 +250,9 @@ const commitAdoptedConfig = (
     fs.writeFileSync(restoreConfig, stringify(candidate), 'utf8');
 
     try {
+      if (process.env.BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT === '1') {
+        throw new Error('Simulated final config commit failure');
+      }
       fs.renameSync(restoreConfig, configPath);
     } catch {
       if (previousConfig !== undefined) {
@@ -348,7 +370,12 @@ const configureGist = (
     writeStdoutLine('\nWelcome Back!');
     let validGistId = false;
     while (!validGistId) {
-      const gistId = readPrompt('Enter your gist ID: ');
+      const gistId = readPrompt('Enter your gist ID: ').trim();
+      if (!gistId) {
+        writeStdoutLine('\nℹ️  Backup Gist adoption cancelled; no destination was configured.');
+        writeStdoutLine('Retry with: ballin backup setup');
+        return false;
+      }
       const markerResult = runGh(selectedHost, ['gist', 'view', gistId, '--raw', '--filename', '.MyConfig.md'], {
         cwd: repoDir,
       });

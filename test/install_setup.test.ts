@@ -148,7 +148,17 @@ case "$1:$2" in
       printf '%s\\n' 'not a ballin backup'
       exit 0
     fi
+    if [ "$3:$4:$5" = '--files:--:returning-gist-id' ]; then
+      if [ "$FAKE_GIST_FILE_LIST_SIGNAL" = '1' ]; then kill -TERM "$$"; fi
+      if [ "\${FAKE_GIST_FILE_LIST_STATUS:-0}" != '0' ]; then exit "$FAKE_GIST_FILE_LIST_STATUS"; fi
+      printf '%s\\n' '.MyConfig.md'
+      if [ "$FAKE_GIST_CONFIG_ABSENT" != '1' ]; then
+        printf '%s\\n' 'ballin_config'
+      fi
+      exit 0
+    fi
     if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:ballin_config' ]; then
+      if [ "$FAKE_GIST_CONFIG_SIGNAL" = '1' ]; then kill -TERM "$$"; fi
       printf '%s\\n' "$FAKE_RESTORED_CONFIG"
       exit "$FAKE_GIST_CONFIG_STATUS"
     fi
@@ -210,6 +220,7 @@ esac
         PATH: binDir,
         FAKE_COMMAND_LOG: commandLogPath,
         FAKE_GH_AUTH_STATUS: '0',
+        FAKE_GIST_FILE_LIST_STATUS: '0',
         FAKE_GIST_CONFIG_STATUS: '0',
         FAKE_RESTORED_CONFIG: '{"update":{"cleanup":"false","selfUpdate":"true","backup":"true","softwareupdate":"false","npm":"true","nvm":"true"},"backup":{"id":null,"host":"github.example.test"}}',
         TEST_DIR: testDir,
@@ -704,7 +715,7 @@ esac
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(localConfig));
 
     const result = runGistSetup({
-      env: { FAKE_GIST_CONFIG_STATUS: '1' },
+      env: { FAKE_GIST_CONFIG_ABSENT: '1' },
       input: '\ny\nreturning-gist-id\n',
     });
 
@@ -716,6 +727,34 @@ esac
     assert.deepEqual(readRepoConfig().localOnly, { preserve: 'yes' });
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
+  });
+
+  ([
+    { name: 'file listing fails', env: { FAKE_GIST_FILE_LIST_STATUS: '17' } },
+    { name: 'config snapshot read fails', env: { FAKE_GIST_CONFIG_STATUS: '18' } },
+    { name: 'config snapshot read is interrupted', env: { FAKE_GIST_CONFIG_SIGNAL: '1' } },
+  ]).forEach(({ name, env }) => {
+    it(`fails adoption without changing config when the adopted Gist ${name}`, () => {
+      installConfigSources();
+      installFakeGhCommand();
+      const configPath = path.join(repoDir, 'ballin.config.json');
+      const originalConfig = '{"backup":{"id":null,"host":"github.example.test"},"local":"keep"}';
+      fs.writeFileSync(configPath, originalConfig);
+      const cachePath = path.join(repoDir, '.backup-cache');
+      fs.mkdirSync(cachePath);
+      fs.writeFileSync(path.join(cachePath, 'old-snapshot'), 'old remote base\n');
+
+      const result = runGistSetup({
+        env,
+        input: '\ny\nreturning-gist-id\n',
+      });
+
+      assert.equal(result.status, 1);
+      assert.equal(fs.readFileSync(configPath, 'utf8'), originalConfig);
+      assert.isFalse(fs.existsSync(cachePath));
+      assert.notInclude(commandLog(), 'snapshot.example.test');
+      assert.notInclude(commandLog(), 'snapshot-gist-id');
+    });
   });
 
   it('restores the exact unconfigured config when the final adopted-config commit fails', () => {

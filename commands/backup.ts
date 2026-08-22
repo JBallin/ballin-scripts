@@ -1038,16 +1038,19 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
 
-    const repoDir = path.join(__dirname, '..');
+    const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
     if (!configure(repoDir, backupSetupDocsUrl, configPath)) {
       writeStderrLine('ballin backup setup: unable to create or update config');
       process.exitCode = 1;
       return;
     }
     const configured = configureGist(repoDir, backupSetupDocsUrl, true, {
-      backupCacheDir: path.join(process.env.HOME ?? '', '.ballin-scripts', '.backup-cache'),
+      backupCacheDir: path.join(repoDir, '.backup-cache'),
       configPath,
     });
+    if (!configured) {
+      writeStderrLine("ballin backup setup: setup did not complete; resolve the error and retry with 'ballin backup setup'");
+    }
     process.exitCode = configured ? 0 : 1;
     return;
   }

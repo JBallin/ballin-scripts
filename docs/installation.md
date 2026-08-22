@@ -28,7 +28,11 @@ ballin backup setup
 
 If requested backup setup fails, the checkout, configuration, command link, and
 eligible analytics state remain installed. The installer exits nonzero and
-prints the same command as the retry path.
+prints the same command as the retry path. If Gist creation succeeds but Ballin
+cannot persist `backup.id`, local setup remains unconfigured, but the newly
+created remote secret Gist may remain. Inspect your Gists and remove that remote
+destination manually if it is not needed; Ballin does not attempt an automatic
+remote rollback.
 
 ## Local effects
 
@@ -100,7 +104,10 @@ contribute update preferences, analytics opt-out, and other settings, but its
 own `backup.host` and `backup.id` cannot select or redirect the destination.
 Restored settings and the authoritative destination become live in one config
 commit. A restoration or final-commit failure leaves the prior config active
-and unconfigured.
+and unconfigured. Setup retains local settings only when a successful Gist file
+listing establishes that `ballin_config` is absent. A failed, interrupted, or
+unreadable listing or snapshot read stops adoption instead of silently skipping
+restoration.
 
 `.backup-cache` is the last remote base observed by this machine, but its format
 does not identify a destination. Ballin therefore invalidates any cache before

@@ -20,7 +20,8 @@ updates.
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
 fresh installation. It installs the maintenance commands first; Gist backup is
-an optional later step and does not require Homebrew or GitHub CLI.
+an optional later step. Maintenance-only installation does not require Homebrew
+or GitHub CLI; Gist backup setup requires an authenticated GitHub CLI.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
@@ -92,6 +93,10 @@ arbitrary user-added credentials, private URLs, paths, and commands. Ballin is
 not a secrets manager and does not scan or redact allowed content. Review the
 [source and sensitivity audit](docs/backup-sources.md) before enabling backup
 or sharing the Gist.
+
+Secret Gists remain Ballin's current backup storage. [#254](https://github.com/JBallin/ballin-scripts/issues/254)
+tracks the longer-term evaluation of more secure storage options; this project
+does not yet implement that redesign.
 
 ## Documentation
 

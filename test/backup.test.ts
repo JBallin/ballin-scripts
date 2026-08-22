@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
+const repoRoot = path.join(__dirname, '..');
 const snapshotFileName = 'zshrc.sh';
 // Expose only the basic commands backup needs; package managers remain unavailable.
 const requiredCommands = [
@@ -43,6 +44,9 @@ type RunBackupOptions = {
   ghUploadAmbiguous?: boolean;
   ghUploadFail?: boolean;
   commandPath?: string;
+  commandCwd?: string;
+  failFinalConfigCommit?: boolean;
+  homeDirOverride?: string | null;
 };
 
 describe('ballin backup', () => {
@@ -154,6 +158,14 @@ fi
 if [ "$1:$2" != 'gist:view' ]; then
   printf '%s\\n' 'Unexpected gh call' >&2
   exit 2
+fi
+if [ "$3:$4:$5" = '--files:--:test-gist-id' ]; then
+  for fake_gist_file in "$FAKE_GIST_STORAGE_DIR"/*; do
+    if [ -f "$fake_gist_file" ]; then
+      printf '%s\n' "\${fake_gist_file##*/}"
+    fi
+  done
+  exit 0
 fi
 if [ "$3" != 'test-gist-id' ]; then
   printf '%s\\n' 'Unexpected Gist ID' >&2
@@ -317,6 +329,9 @@ done
       fakeGistDir,
       scratchDir,
     ].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
+    fs.cpSync(path.join(repoRoot, 'config'), path.join(testHomeDir, '.ballin-scripts', 'config'), {
+      recursive: true,
+    });
     requiredCommands.forEach(linkRequiredCommand);
     realCatPath = installControllableCatCommand();
     writeBackupConfig();
@@ -351,18 +366,24 @@ done
     ghUploadAmbiguous = false,
     ghUploadFail = false,
     commandPath = ballinPath,
+    commandCwd = testHomeDir,
+    failFinalConfigCommit = false,
+    homeDirOverride = testHomeDir,
   }: RunBackupOptions = {}) => spawnSync(commandPath, ['backup', ...args], {
+    cwd: commandCwd,
     encoding: 'utf8',
     input,
     maxBuffer: 10 * 1024 * 1024,
     env: {
-      HOME: testHomeDir,
+      ...(homeDirOverride === null ? {} : { HOME: homeDirOverride }),
       PATH: testBinDir,
       TMPDIR: scratchDir,
       ...(completionDir === undefined ? {} : {
         BALLIN_BACKUP_BASH_COMPLETION_DIR: completionDir,
       }),
       BALLIN_TEST_CONFIG_PATH: configPath,
+      BALLIN_TEST_REPO_DIR: path.join(testHomeDir, '.ballin-scripts'),
+      BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: failFinalConfigCommit ? '1' : '0',
       BALLIN_NO_ANALYTICS: '1',
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
@@ -412,6 +433,11 @@ done
   const seedFakeGistFile = (fileName: string, content: string) => {
     fs.writeFileSync(path.join(fakeGistDir, fileName), content);
   };
+  const seedBackupMarker = () => seedFakeGistFile(
+    '.MyConfig.md',
+    '### Backup of your dev environment\n'
+      + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n\n',
+  );
   const seedCacheFile = (fileName: string, content: string, seedRemote = true) => {
     fs.mkdirSync(backupCacheDir, { recursive: true });
     fs.writeFileSync(cachedFilePath(fileName), content);
@@ -598,17 +624,113 @@ exit 2
     assert.deepEqual(ghCalls(), []);
   });
 
+  it('invalidates the executing checkout cache without touching a mismatched HOME cache', () => {
+    const alternateHome = path.join(testHomeDir, 'alternate-home');
+    const alternateCache = path.join(alternateHome, '.ballin-scripts', '.backup-cache');
+    writeBackupConfig(null);
+    seedBackupCache('checkout stale base\n', false);
+    fs.mkdirSync(alternateCache, { recursive: true });
+    fs.writeFileSync(path.join(alternateCache, 'unrelated'), 'preserve alternate HOME cache\n');
+    seedBackupMarker();
+
+    const result = runBackup({
+      args: ['setup'],
+      homeDirOverride: alternateHome,
+      input: 'y\n\ny\ntest-gist-id\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(
+      fs.readFileSync(path.join(alternateCache, 'unrelated'), 'utf8'),
+      'preserve alternate HOME cache\n',
+    );
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, 'test-gist-id');
+  });
+
+  it('invalidates the executing checkout cache with HOME unset without touching a relative cache', () => {
+    const commandCwd = path.join(testHomeDir, 'unrelated-cwd');
+    const relativeCache = path.join(commandCwd, '.ballin-scripts', '.backup-cache');
+    writeBackupConfig(null);
+    seedBackupCache('checkout stale base\n', false);
+    fs.mkdirSync(relativeCache, { recursive: true });
+    fs.writeFileSync(path.join(relativeCache, 'unrelated'), 'preserve relative cache\n');
+    seedBackupMarker();
+
+    const result = runBackup({
+      args: ['setup'],
+      commandCwd,
+      homeDirOverride: null,
+      input: 'y\n\ny\ntest-gist-id\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(
+      fs.readFileSync(path.join(relativeCache, 'unrelated'), 'utf8'),
+      'preserve relative cache\n',
+    );
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, 'test-gist-id');
+  });
+
+  it('cancels adopted Gist setup on empty or EOF input without looping', () => {
+    writeBackupConfig(null);
+
+    const result = runBackup({
+      args: ['setup'],
+      input: 'y\n\ny\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Backup Gist adoption cancelled; no destination was configured');
+    assert.include(result.stderr, "retry with 'ballin backup setup'");
+    assert.isNull(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id);
+    assert.notInclude(ghCalls().join('\n'), 'gist view');
+  });
+
+  it('reports public setup failure and preserves exact config when the final adoption commit fails', () => {
+    const originalConfig = `${JSON.stringify({
+      update: {
+        cleanup: 'false',
+        selfUpdate: 'true',
+        backup: 'false',
+        softwareupdate: 'false',
+        npm: 'false',
+        nvm: 'false',
+      },
+      backup: { id: null, host: 'example.test' },
+      analytics: { enabled: 'false' },
+      local: { keep: 'exactly' },
+    }, null, 2)}\n`;
+    fs.writeFileSync(configPath, originalConfig);
+    seedBackupCache('checkout stale base\n', false);
+    seedBackupMarker();
+    seedFakeGistFile('ballin_config', JSON.stringify({
+      backup: { id: 'snapshot-gist-id', host: 'snapshot.example.test' },
+      analytics: { enabled: 'false' },
+    }));
+
+    const result = runBackup({
+      args: ['setup'],
+      failFinalConfigCommit: true,
+      input: 'y\n\ny\ntest-gist-id\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, "retry with 'ballin backup setup'");
+    assert.equal(fs.readFileSync(configPath, 'utf8'), originalConfig);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.notInclude(ghCalls().join('\n'), 'snapshot.example.test');
+    assert.notInclude(ghCalls().join('\n'), 'snapshot-gist-id');
+  });
+
   it('invalidates stale cache before adoption so it cannot authorize a later upload', () => {
     const staleRemoteBase = 'old destination value\n';
     const localValue = 'local value for adopted destination\n';
     writeBackupConfig(null);
     seedBackupCache(staleRemoteBase, false);
     seedFakeGist(staleRemoteBase);
-    seedFakeGistFile(
-      '.MyConfig.md',
-      '### Backup of your dev environment\n'
-        + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n\n',
-    );
+    seedBackupMarker();
     seedFakeGistFile('ballin_config', JSON.stringify({
       update: {
         cleanup: 'false',
