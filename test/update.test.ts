@@ -355,6 +355,43 @@ exit 0
     assert.deepEqual(commandLog(), []);
   });
 
+  it('uses raw destination types when an enabled backup stage validates config', () => {
+    fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
+    const update = {
+      cleanup: 'false',
+      nvm: 'false',
+      npm: 'false',
+      softwareupdate: 'false',
+      selfUpdate: 'false',
+      backup: 'true',
+    };
+
+    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeConfig({
+        update,
+        backup: { id, host: 'example.test' },
+        analytics: { enabled: 'false' },
+      });
+
+      const result = spawnUpdate();
+
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, "run 'ballin backup setup' to enable it");
+    });
+
+    writeConfig({
+      update,
+      backup: { id: 'test-gist-id', host: { value: 'unexpected-host' } },
+      analytics: { enabled: 'false' },
+    });
+
+    const malformedHost = spawnUpdate();
+
+    assert.equal(malformedHost.status, 1);
+    assert.include(malformedHost.stderr, 'missing config value backup.host');
+    assert.deepEqual(commandLog(), []);
+  });
+
   it('checks Ballin readiness with the Node.js runtime from the updated nvm PATH', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     const nvmBinDir = path.join(tempDir, 'nvm-bin');

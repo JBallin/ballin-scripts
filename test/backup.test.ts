@@ -81,7 +81,7 @@ describe('ballin backup', () => {
     fs.writeFileSync(path.join(testBinDir, name), contents, { mode: 0o755 });
   };
 
-  const writeBackupConfig = (id: string | null = 'test-gist-id', host: string | null = 'example.test') => {
+  const writeBackupConfig = (id: unknown = 'test-gist-id', host: unknown = 'example.test') => {
     fs.writeFileSync(configPath, `${JSON.stringify({
       update: {},
       backup: {
@@ -528,6 +528,33 @@ done
     assert.deepEqual(gistReads(), []);
   });
 
+  it('rejects non-string backup IDs as unconfigured without using GitHub', () => {
+    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeBackupConfig(id);
+
+      const result = runBackup();
+
+      assert.equal(result.status, 1);
+      assert.equal(
+        result.stderr,
+        "ballin backup: backup is not configured; run 'ballin backup setup' to enable it\n",
+      );
+    });
+    assert.deepEqual(ghCalls(), []);
+  });
+
+  it('rejects non-string backup hosts for configured IDs without using GitHub', () => {
+    [42, false, ['unexpected-host'], { value: 'unexpected-host' }].forEach((host) => {
+      writeBackupConfig('test-gist-id', host);
+
+      const result = runBackup();
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stderr, 'ballin backup: missing config value backup.host\n');
+    });
+    assert.deepEqual(ghCalls(), []);
+  });
+
   it('remains executable through the installed symlink model', () => {
     const linkPath = path.join(testBinDir, 'ballin-link');
     fs.symlinkSync(ballinPath, linkPath);
@@ -622,6 +649,69 @@ exit 2
     assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
     assert.include(result.stderr, 'ballin backup setup: unable to create or update config');
     assert.deepEqual(ghCalls(), []);
+  });
+
+  it('uses unconfigured semantics for non-string backup IDs during standalone setup', () => {
+    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeBackupConfig(id);
+
+      const result = runBackup({ args: ['setup'], input: 'n\n' });
+
+      assertBackupSucceeded(result);
+      assert.include(result.stdout, 'Set up optional Gist backups now?');
+      assert.deepEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, id);
+    });
+    assert.deepEqual(ghCalls(), []);
+  });
+
+  it('rejects a non-string host for a configured ID during standalone setup', () => {
+    writeBackupConfig('test-gist-id', { value: 'unexpected-host' });
+
+    const result = runBackup({ args: ['setup'] });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'ballin backup setup: setup did not complete');
+    assert.deepEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host, {
+      value: 'unexpected-host',
+    });
+    assert.deepEqual(ghCalls(), []);
+  });
+
+  it('prompts for a legacy configured backup host before accepting a migrated default', () => {
+    writeBackupConfig('test-gist-id', null);
+    seedBackupCache('preserve configured cache\n', false);
+
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.enterprise.test',
+      input: 'github.enterprise.test\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(config.backup.id, 'test-gist-id');
+    assert.equal(config.backup.host, 'github.enterprise.test');
+    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('preserves an existing Enterprise host without re-prompting standalone setup', () => {
+    writeBackupConfig('test-gist-id', 'github.enterprise.test');
+    seedBackupCache('preserve configured cache\n', false);
+
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.enterprise.test',
+    });
+
+    assertBackupSucceeded(result);
+    assert.notInclude(result.stdout, 'What GitHub host should be used for Gist backups?');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(config.backup.id, 'test-gist-id');
+    assert.equal(config.backup.host, 'github.enterprise.test');
+    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
   });
 
   it('uses the executing checkout cache after setup with mismatched HOME', () => {

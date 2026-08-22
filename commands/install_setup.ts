@@ -582,6 +582,7 @@ if (require.main === module) {
 module.exports = {
   configure,
   commitAdoptedConfig,
+  configHasBackupHost,
   configureGist,
   invalidateBackupCache,
   runInstallSetupCli,

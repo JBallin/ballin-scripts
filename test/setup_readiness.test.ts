@@ -233,6 +233,39 @@ describe('setup readiness', () => {
     });
   });
 
+  it('rejects non-string destination values consistently', () => {
+    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      commandLog = [];
+      writeConfig({
+        update: {},
+        backup: { id, host: 'example.test' },
+        analytics: {},
+      });
+
+      const report = collect();
+
+      assert.equal(report.status, 'pass');
+      assert.equal(checkById(report, 'backup.optional').status, 'info');
+      assert.deepEqual(commandLog, []);
+    });
+
+    [42, false, ['unexpected-host'], { value: 'unexpected-host' }].forEach((host) => {
+      commandLog = [];
+      writeConfig({
+        update: {},
+        backup: { id: 'test-gist-id', host },
+        analytics: {},
+      });
+
+      const report = collect();
+
+      assert.equal(report.status, 'fail');
+      assert.equal(checkById(report, 'backup.host').status, 'fail');
+      assert.equal(checkById(report, 'backup.gist').status, 'pass');
+      assert.deepEqual(commandLog, []);
+    });
+  });
+
   it('reports missing Gist host and failed gh auth', () => {
     writeConfig({
       update: {},

@@ -354,6 +354,33 @@ esac
     );
   });
 
+  it('uses raw backup destination types in doctor', () => {
+    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeConfig({
+        update: {},
+        backup: { id, host: 'example.test' },
+        analytics: {},
+      });
+
+      const result = runBallin(['doctor', '--verbose']);
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, 'INFO  Optional Gist backup:');
+    });
+
+    writeConfig({
+      update: {},
+      backup: { id: 'test-gist-id', host: { value: 'unexpected-host' } },
+      analytics: {},
+    });
+
+    const malformedHost = runBallin(['doctor']);
+
+    assert.equal(malformedHost.status, 1);
+    assert.include(malformedHost.stdout, 'ERROR Gist host: Gist host is not configured.');
+    assert.deepEqual(commandLog(), []);
+  });
+
   it('fails doctor when a required health check fails', () => {
     fs.rmSync(path.join(binDir, 'ballin'));
     writeConfig({

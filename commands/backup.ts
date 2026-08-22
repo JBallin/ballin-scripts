@@ -8,15 +8,14 @@ const {
 const {
   configPath,
   fetchConfig,
-  getConfig,
 } = require('../config/index.ts');
 const {
+  backupDestinationFromConfig,
   isConfigObject,
-  normalizeBackupHost,
-  normalizeBackupId,
 } = require('./backup_config.ts');
 const {
   configure,
+  configHasBackupHost,
   configureGist,
 } = require('./install_setup.ts');
 const {
@@ -74,11 +73,6 @@ type GistMetadata = {
 };
 
 type SnapshotOptions = Pick<SnapshotCommand, 'env' | 'suppressStderrOnSuccess'>;
-
-type ConfigValueResult = {
-  value: string;
-  spawnStatus?: number;
-};
 
 type BackupConfigResult = {
   config: { id: string; host: string } | null;
@@ -175,26 +169,10 @@ const reportSpawnError = (command: string, error: Error): number => {
   return 1;
 };
 
-const configValue = (key: string): ConfigValueResult => {
-  try {
-    const value = getConfig(key);
-    if (typeof value === 'string' && value.startsWith('INVALID:')) {
-      return { value: '' };
-    }
-    return {
-      value: value === null ? '' : String(value).trim(),
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      writeStderrLine(`Unable to read config: ${error.message}`);
-    }
-    return { value: '' };
-  }
-};
-
 const backupConfig = (): BackupConfigResult => {
+  let configObj: Record<string, unknown>;
   try {
-    const { configObj } = fetchConfig();
+    ({ configObj } = fetchConfig());
     if (
       !isConfigObject(configObj)
       || (
@@ -211,10 +189,7 @@ const backupConfig = (): BackupConfigResult => {
     return { config: null, exitStatus: 1 };
   }
 
-  const idResult = configValue('backup.id');
-  const hostResult = configValue('backup.host');
-  const id = normalizeBackupId(idResult.value);
-  const host = normalizeBackupHost(hostResult.value);
+  const { id, host } = backupDestinationFromConfig(configObj);
 
   if (id && host) {
     return { config: { id, host }, exitStatus: 0 };
@@ -222,17 +197,14 @@ const backupConfig = (): BackupConfigResult => {
 
   if (!id) {
     writeStderrLine("ballin backup: backup is not configured; run 'ballin backup setup' to enable it");
-    return {
-      config: null,
-      exitStatus: idResult.spawnStatus ?? 1,
-    };
+    return { config: null, exitStatus: 1 };
   }
   if (!host) {
     writeStderrLine('ballin backup: missing config value backup.host');
   }
   return {
     config: null,
-    exitStatus: idResult.spawnStatus ?? hostResult.spawnStatus ?? 1,
+    exitStatus: 1,
   };
 };
 
@@ -1040,12 +1012,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
 
+    const backupHostExisted = configHasBackupHost(repoDir, configPath);
     if (!configure(repoDir, backupSetupDocsUrl, configPath)) {
       writeStderrLine('ballin backup setup: unable to create or update config');
       process.exitCode = 1;
       return;
     }
-    const configured = configureGist(repoDir, backupSetupDocsUrl, true, {
+    const configured = configureGist(repoDir, backupSetupDocsUrl, backupHostExisted, {
       backupCacheDir,
       configPath,
     });
