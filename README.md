@@ -18,15 +18,18 @@ updates.
 
 ## Installation
 
-The installer adds command shims, configures the backup Gist, and guides you
-through missing setup. For the smoothest first run, have Node.js LTS, Homebrew,
-and an authenticated GitHub CLI available.
+The installer checks Git and Node.js, shows its plan, and asks before making a
+fresh installation. It installs the maintenance commands first; Gist backup is
+an optional later step and does not require Homebrew or GitHub CLI.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
 ```shell
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
+
+Review the exact local effects, network interactions, partial-failure behavior,
+and removal steps in [Installation and removal](docs/installation.md).
 
 ## Example output
 
@@ -56,8 +59,9 @@ Your system is ready to brew.
 
 ## New Mac setup
 
-On a new Mac, install Ballin and create or adopt the backup Gist. Use
-existing snapshots as a rebuild reference.
+On a new Mac, install Ballin for maintenance, then optionally create or adopt a
+backup Gist with `ballin backup setup`. Use existing snapshots as a rebuild
+reference.
 
 Ballin makes rebuilds more repeatable and auditable, but it is not a
 full disk backup or one-command restore system.
@@ -68,6 +72,7 @@ full disk backup or one-command restore system.
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
 | `ballin doctor` | Checks the managed environment. |
+| `ballin backup setup` | Creates or adopts an optional backup Gist. |
 | `ballin backup` | Updates snapshots in the configured backup Gist. |
 | `ballin backup open` | Opens the configured backup Gist. |
 | `ballin backup read <file>` | Prints a backed-up file from the Gist. |
@@ -79,13 +84,16 @@ full disk backup or one-command restore system.
 ## Privacy and security
 
 Backups are stored in a configured secret GitHub Gist. Secret Gists are
-unlisted, but anyone with the URL can view them. Treat the Gist URL and
+unlisted, but anyone with the URL or ID can view them. Treat the destination and
 snapshots as sensitive.
 
-Ballin is not a secrets manager; review snapshots before sharing the
-Gist URL or making the Gist public.
+Ballin uses an explicit source allowlist, but allowed files can contain
+arbitrary user-added credentials, private URLs, paths, and commands. Ballin is
+not a secrets manager and does not scan or redact allowed content. Review the
+[source and sensitivity audit](docs/backup-sources.md) before enabling backup
+or sharing the Gist.
 
 ## Documentation
 
-See the [documentation](docs/README.md) for Node.js setup, update settings,
-optional integrations, and managed capabilities.
+See the [documentation](docs/README.md) for installation, backup sensitivity,
+Node.js setup, update settings, optional integrations, and managed capabilities.

@@ -8,7 +8,9 @@ const {
   analyticsNoticeFor,
 } = require('../commands/analytics.ts');
 const {
+  commitAdoptedConfig,
   configure,
+  invalidateBackupCache,
   setup,
   setupAnalytics,
   symlinkBinaries,
@@ -157,6 +159,10 @@ case "$1:$2" in
       printf '%s\\n' 'Unexpected GH_HOST' >&2
       exit 2
     fi
+    if [ -e "$TEST_REPO_DIR/.backup-cache" ] || [ -L "$TEST_REPO_DIR/.backup-cache" ]; then
+      printf '%s\n' 'backup cache still existed during Gist creation' >&2
+      exit 9
+    fi
     if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
     printf '%s\\n' 'https://gist.github.com/new-gist-id'
     ;;
@@ -166,10 +172,12 @@ esac
   };
 
   const runGistSetup = ({
+    confirmBackup = true,
     env = {},
     guHostExisted = 'true',
     input,
   }: {
+    confirmBackup?: boolean;
     env?: NodeJS.ProcessEnv;
     guHostExisted?: 'true' | 'false';
     input?: string;
@@ -183,6 +191,10 @@ esac
       };
       fs.writeFileSync(configPath, JSON.stringify(config));
     }
+    const configuredId = readRepoConfig().backup?.id;
+    const setupInput = configuredId
+      ? input
+      : `${confirmBackup ? 'y' : 'n'}\n${input ?? ''}`;
 
     return spawnSync(process.execPath, [
       installSetupPath,
@@ -192,7 +204,7 @@ esac
       guHostExisted,
     ], {
       encoding: 'utf8',
-      input,
+      input: setupInput,
       env: {
         ...process.env,
         PATH: binDir,
@@ -460,7 +472,6 @@ esac
       path.join(repoDir, 'config', '.defaultConfig.json'),
       path.join(repoDir, 'ballin.config.json'),
     );
-
     const result = runGistSetup();
 
     assert.equal(result.status, 1, result.stderr);
@@ -495,12 +506,35 @@ esac
     const config = readRepoConfig();
     config.backup.id = 'existing-gist-id';
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
+    const cachePath = path.join(repoDir, '.backup-cache');
+    fs.mkdirSync(cachePath);
+    fs.writeFileSync(path.join(cachePath, 'known-base'), 'preserve me\n');
 
     const result = runGistSetup();
 
     assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
+    assert.notInclude(result.stdout, 'Secret Gists are unlisted');
     assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
     assert.notInclude(commandLog(), 'gh:gist');
+    assert.equal(fs.readFileSync(path.join(cachePath, 'known-base'), 'utf8'), 'preserve me\n');
+  });
+
+  it('invalidates an unconfigured backup cache whether it is a file or symlink', () => {
+    const cachePath = path.join(repoDir, '.backup-cache');
+    fs.writeFileSync(cachePath, 'stale file cache\n');
+
+    assert.isTrue(withoutStdout(() => invalidateBackupCache(cachePath)));
+    assert.isFalse(fs.existsSync(cachePath));
+
+    const symlinkTarget = path.join(testDir, 'unrelated-target');
+    fs.writeFileSync(symlinkTarget, 'do not remove\n');
+    fs.symlinkSync(symlinkTarget, cachePath);
+
+    assert.isTrue(withoutStdout(() => invalidateBackupCache(cachePath)));
+    assert.isFalse(fs.lstatSync(symlinkTarget).isSymbolicLink());
+    assert.isFalse(fs.existsSync(cachePath));
+    assert.equal(fs.readFileSync(symlinkTarget, 'utf8'), 'do not remove\n');
   });
 
   it('persists BALLIN_BACKUP_HOST and passes it to gh auth and gist commands', () => {
@@ -510,7 +544,6 @@ esac
       path.join(repoDir, 'config', '.defaultConfig.json'),
       path.join(repoDir, 'ballin.config.json'),
     );
-
     const result = runGistSetup({
       env: {
         BALLIN_BACKUP_HOST: 'github.enterprise.test',
@@ -572,7 +605,27 @@ esac
       path.join(repoDir, 'ballin.config.json'),
     );
 
-    const result = runGistSetup({ input: '\ny\nreturning-gist-id\n' });
+    const result = runGistSetup({
+      env: {
+        FAKE_RESTORED_CONFIG: JSON.stringify({
+          update: {
+            cleanup: 'false',
+            selfUpdate: 'true',
+            backup: 'true',
+            softwareupdate: 'false',
+            npm: 'true',
+            nvm: 'true',
+          },
+          backup: {
+            id: 'snapshot-gist-id',
+            host: 'snapshot.example.test',
+          },
+          analytics: { enabled: 'false' },
+          custom: { keep: 'yes' },
+        }),
+      },
+      input: '\ny\nreturning-gist-id\n',
+    });
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Do you already have a Ballin backup Gist? [y/N]');
@@ -591,6 +644,10 @@ esac
       id: 'returning-gist-id',
       host: 'github.example.test',
     });
+    assert.deepEqual(restoredConfig.analytics, { enabled: 'false' });
+    assert.deepEqual(restoredConfig.custom, { keep: 'yes' });
+    assert.notInclude(commandLog(), 'snapshot.example.test');
+    assert.notInclude(commandLog(), 'snapshot-gist-id');
   });
 
   it('accepts an adopted backup marker without a trailing newline like Bash did', () => {
@@ -641,6 +698,10 @@ esac
       path.join(repoDir, 'config', '.defaultConfig.json'),
       path.join(repoDir, 'ballin.config.json'),
     );
+    const localConfig = readRepoConfig();
+    localConfig.update.cleanup = 'false';
+    localConfig.localOnly = { preserve: 'yes' };
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(localConfig));
 
     const result = runGistSetup({
       env: { FAKE_GIST_CONFIG_STATUS: '1' },
@@ -650,8 +711,55 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'No ballin_config snapshot was found in that gist');
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
+    assert.equal(readRepoConfig().backup.host, 'github.example.test');
+    assert.equal(readRepoConfig().update.cleanup, 'false');
+    assert.deepEqual(readRepoConfig().localOnly, { preserve: 'yes' });
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
+  });
+
+  it('restores the exact unconfigured config when the final adopted-config commit fails', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    const originalConfig = '{"backup":{"id":null,"host":"github.example.test"},"local":{"keep":"exactly"}}\n';
+    fs.writeFileSync(configPath, originalConfig);
+    const cachePath = path.join(repoDir, '.backup-cache');
+    fs.mkdirSync(cachePath);
+    fs.writeFileSync(path.join(cachePath, 'old-snapshot'), 'old remote base\n');
+    assert.isTrue(withoutStdout(() => invalidateBackupCache(cachePath)));
+
+    const originalRenameSync = fs.renameSync;
+    fs.renameSync = (source: string, destination: string) => {
+      if (destination === configPath) {
+        throw new Error('simulated final config commit failure');
+      }
+      return originalRenameSync(source, destination);
+    };
+
+    try {
+      const result = withEnv({
+        PATH: binDir,
+        FAKE_COMMAND_LOG: commandLogPath,
+        FAKE_GH_HOST: 'github.example.test',
+        FAKE_GIST_CONFIG_STATUS: '0',
+        FAKE_RESTORED_CONFIG: '{"backup":{"id":"snapshot-gist-id","host":"snapshot.example.test"},"analytics":{"enabled":"false"}}',
+      }, () => captureStdout(() => commitAdoptedConfig(
+        repoDir,
+        docsUrl,
+        'github.example.test',
+        'returning-gist-id',
+        configPath,
+      )));
+
+      assert.isFalse(result.result);
+      assert.equal(fs.readFileSync(configPath, 'utf8'), originalConfig);
+      assert.isFalse(fs.existsSync(cachePath));
+      assert.notInclude(commandLog(), 'snapshot.example.test');
+      assert.notInclude(commandLog(), 'snapshot-gist-id');
+    } finally {
+      fs.renameSync = originalRenameSync;
+    }
   });
 
   it('creates a new secret Gist and deletes local Gist setup files', () => {
@@ -666,8 +774,15 @@ esac
     const result = runGistSetup({ input: '\nn\n' });
 
     assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Secret Gists are unlisted, not private');
+    assert.include(result.stdout, 'anyone with the URL or Gist ID can view them');
+    assert.include(result.stdout, 'Ballin is not a secrets manager');
+    assert.isBelow(
+      result.stdout.indexOf('Set up optional Gist backups now?'),
+      result.stdout.indexOf('What GitHub host should be used for Gist backups?'),
+    );
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
-    assert.include(result.stdout, 'Deleted existing .backup-cache folder');
+    assert.include(result.stdout, 'Invalidated existing .backup-cache');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
     assert.equal(readRepoConfig().backup.id, 'new-gist-id');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
@@ -711,6 +826,119 @@ esac
     assert.include(result.output, `export PATH="${binDir}:$PATH"`);
   });
 
+  it('completes a fresh maintenance-only setup without GitHub CLI', () => {
+    installConfigSources();
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: path.join(testDir, 'home'),
+      PATH: binDir,
+    };
+    delete childEnv.CI;
+    delete childEnv.BALLIN_NO_ANALYTICS;
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'setup',
+      repoDir,
+      docsUrl,
+      'https://example.test/analytics',
+      'fresh',
+    ], {
+      encoding: 'utf8',
+      input: 'n\n',
+      env: childEnv,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
+    assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
+    assert.isTrue(fs.existsSync(installIdPath()));
+    assert.notInclude(commandLog(), 'gh:');
+  });
+
+  it('leaves core installation usable when requested backup setup fails', () => {
+    installConfigSources();
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'setup',
+      repoDir,
+      docsUrl,
+      '',
+      'fresh',
+    ], {
+      encoding: 'utf8',
+      input: 'y\n\n',
+      env: {
+        ...process.env,
+        BALLIN_NO_ANALYTICS: '1',
+        HOME: path.join(testDir, 'home'),
+        PATH: binDir,
+      },
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'GitHub CLI is required for Gist backup setup');
+    assert.include(result.stdout, 'Ballin maintenance is installed. Retry with: ballin backup setup');
+    assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
+    assert.isNull(readRepoConfig().backup.id);
+  });
+
+  it('honors a restored analytics opt-out before analytics initialization', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: path.join(testDir, 'home'),
+      PATH: binDir,
+      BALLIN_BACKUP_HOST: 'github.example.test',
+      FAKE_GH_HOST: 'github.example.test',
+      FAKE_COMMAND_LOG: commandLogPath,
+      FAKE_GH_AUTH_STATUS: '0',
+      FAKE_GIST_CONFIG_STATUS: '0',
+      FAKE_RESTORED_CONFIG: JSON.stringify({
+        update: {
+          cleanup: 'false',
+          selfUpdate: 'true',
+          backup: 'false',
+          softwareupdate: 'false',
+          npm: 'false',
+          nvm: 'false',
+        },
+        backup: {
+          id: 'snapshot-gist-id',
+          host: 'snapshot.example.test',
+        },
+        analytics: { enabled: 'false' },
+      }),
+      TEST_DIR: testDir,
+      TEST_REPO_DIR: repoDir,
+    };
+    delete childEnv.CI;
+    delete childEnv.BALLIN_NO_ANALYTICS;
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'setup',
+      repoDir,
+      docsUrl,
+      'https://example.test/analytics',
+      'fresh',
+    ], {
+      encoding: 'utf8',
+      input: 'y\ny\nreturning-gist-id\n',
+      env: childEnv,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readRepoConfig().backup.host, 'github.example.test');
+    assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
   it('creates a new secret Gist through the setup CLI when no backup is configured', () => {
     installConfigSources();
     installFakeGhCommand();
@@ -720,9 +948,11 @@ esac
       'setup',
       repoDir,
       docsUrl,
+      '',
+      'fresh',
     ], {
       encoding: 'utf8',
-      input: '\nn\n',
+      input: 'y\nn\n',
       env: {
         ...process.env,
         HOME: path.join(testDir, 'home'),

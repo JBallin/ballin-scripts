@@ -23,12 +23,25 @@ invalid known setting values fail before any integration runs.
 | Mac App Store apps | Runs `mas upgrade`. | `mas` on `PATH`. |
 | macOS updates | Runs `softwareupdate -ia`; a missing command records a failure while later stages continue. | `update.softwareupdate=true` and `softwareupdate` on `PATH`. |
 | ballin-scripts | Runs Ballin self-update, then checks readiness. A failed check records a failure while a configured backup still runs. | `update.selfUpdate=true`. |
-| Backups | Runs `ballin backup` as the final update step. | `update.backup=true`. |
+| Backups | Runs `ballin backup` as the final update step. | `update.backup=true` and a destination configured with `ballin backup setup`. |
+
+## `ballin doctor`
+
+Maintenance-only Ballin is a supported healthy state. When `backup.id` is
+missing, null, blank, or the legacy string `"null"`, doctor reports one optional
+Gist backup `INFO` check in verbose mode and executes no `gh` command. The
+default healthy output remains `😎 You're ballin.`
+
+When a non-empty ID configures the backup capability, doctor retains the full
+host, GitHub CLI, authentication, and Gist-readability checks. Failures in those
+checks fail overall health. Missing, malformed, or unreadable core config is not
+reinterpreted as maintenance-only.
 
 ## `ballin backup`
 
 `ballin backup` backs up changed snapshots to the configured secret GitHub Gist.
-It can snapshot:
+Run `ballin backup setup` to create or adopt the optional destination. It can
+snapshot:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -45,6 +58,12 @@ It can snapshot:
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
 | Ballin config | `ballin_config` | Local `ballin.config.json` file. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
+
+The allowlist identifies which sources Ballin selects; it does not guarantee
+that their contents are non-sensitive. See
+[Backup sources and sensitivity](backup-sources.md) for the source-by-source
+inclusion and risk review. New snapshot categories require that review before
+implementation.
 
 For Homebrew, Ballin generates the saved `Brewfile` from the current Mac through
 Homebrew Bundle by running `brew bundle dump --file=-`. It stores the Brewfile
@@ -75,6 +94,14 @@ print partial success markers.
 `ballin backup` collects every available snapshot before changing the Gist. If
 collection fails, remote content cannot be read safely, or changes conflict,
 Ballin reports the problem and leaves the Gist and backup cache unchanged.
+
+`.backup-cache` is derived local comparison state representing the last remote
+base observed by this machine. It is not a destination or enablement flag.
+Ballin preserves it while a destination remains configured and invalidates it
+before an unconfigured installation creates or adopts a destination. Because
+the cache format does not identify a host or Gist ID, setup fails closed rather
+than trusting a potentially stale base. After invalidation, differing local and
+remote content conflicts instead of authorizing an upload.
 
 Conflicts identify every affected snapshot. Inspect remote content with
 `ballin backup read <file>` or the Gist UI, decide which content should win,

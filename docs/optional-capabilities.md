@@ -76,17 +76,33 @@ setting is required.
 ## Gist backups
 
 `ballin backup` uses [GitHub CLI](https://cli.github.com/) to read and update
-the configured backup Gist. During install, Ballin prompts for the
-GitHub host, including GitHub Enterprise hosts, checks `gh` authentication for
-that host, and either adopts an existing backup Gist or creates a new one. When
-an adopted backup includes a saved `ballin_config` snapshot, the installer restores
-it before continuing.
+the configured backup Gist. Backup is optional: declining it during install
+produces a healthy maintenance-only Ballin installation and makes no `gh`
+calls. Enable it during installation or later without reinstalling:
+
+```shell
+ballin backup setup
+```
+
+Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
+`gh` authentication for that host, and either adopts an existing backup Gist or
+creates a new one. `backup.id` is the opt-in signal; there is no separate
+enabled or onboarding setting.
+
+When an adopted backup includes `ballin_config`, Ballin restores compatible
+preferences. The host selected during setup and the marker-validated Gist ID
+remain authoritative: destination values inside the snapshot are overridden
+and cannot redirect setup. Restoration and destination persistence are one
+config transition, so a failed commit leaves the prior unconfigured config
+active.
 
 Setup creates backup Gists as [secret Gists](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists). Secret Gists are unlisted and not
-searchable, but anyone with the URL can view them, so treat the backup Gist URL
-as sensitive. To make one discoverable, make it public in GitHub after reviewing
+searchable, but anyone with the URL or ID can view them, so treat both as
+sensitive. To make one discoverable, make it public in GitHub after reviewing
 it: backup snapshots can expose paths, usernames, tool choices, package lists,
-and other local config, and public Gists cannot be made secret again.
+and arbitrary content in allowed local config. Ballin does not scan or redact
+allowed files, and public Gists cannot be made secret again. Review
+[Backup sources and sensitivity](backup-sources.md) before opting in.
 
 GitHub preserves Gist revision history and diffs. Ballin does not provide
 history navigation, rollback, restore, or revision selection.
@@ -99,15 +115,26 @@ finds any. Use one active writer per backup Gist. See
 [Supported capabilities](capabilities.md#backup-consistency-and-conflicts) for
 recovery guidance, guarantees, and limitations.
 
+`.backup-cache` is derived local comparison state, not destination or enablement
+state. It is trusted only while the same destination remains configured. When
+backup is enabled from an unconfigured state, setup removes any existing cache
+before creating or adopting the destination. After adoption, differing local
+and remote content with no trusted base is a conflict; Ballin does not choose a
+winner. See [Installation and removal](installation.md#optional-backup-and-adoption)
+for the full transition behavior.
+
 ## Readiness checks
 
 Use `ballin doctor` to check whether the Ballin-managed environment is healthy,
 including Node.js, installed commands, settings, and known Gist backup
-prerequisites. For backups, doctor checks the configured host and Gist ID,
-`gh` availability, whether `gh auth status` succeeds for that host, and whether
-the Gist is readable. These checks do not verify write permission, freshness,
-completeness, cache consistency, or the absence of partial backup runs. Use
-`--verbose` to see every check and the explicit write-permission limitation.
+prerequisites. With no configured backup ID, doctor remains healthy, makes no
+`gh` calls, and shows one optional-backup `INFO` row in verbose output. With a
+configured ID, doctor checks the host, `gh` availability, whether
+`gh auth status` succeeds for that host, and whether the Gist is readable.
+Those configured-capability failures affect overall health. These checks do not
+verify write permission, freshness, completeness, cache consistency, or the
+absence of partial backup runs. Use `--verbose` to see every check and the
+explicit write-permission limitation.
 
 ```shell
 ballin doctor
@@ -142,7 +169,7 @@ command returns the last nonzero stage status.
 | --- | --- | --- |
 | `update.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
 | `update.selfUpdate` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
-| `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Enable it when you want each update to also modify your backup Gist. |
+| `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Configure a destination with `ballin backup setup` before enabling it; an explicitly requested unconfigured backup stage fails with setup guidance. |
 | `update.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `update.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
 | `update.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |

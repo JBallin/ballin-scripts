@@ -6,8 +6,19 @@ const {
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const {
+  configPath,
+  fetchConfig,
   getConfig,
 } = require('../config/index.ts');
+const {
+  isConfigObject,
+  normalizeBackupHost,
+  normalizeBackupId,
+} = require('./backup_config.ts');
+const {
+  configure,
+  configureGist,
+} = require('./install_setup.ts');
 const {
   commandExists,
   ensureDir,
@@ -99,12 +110,14 @@ type CommandOptions = {
 
 const emptySnapshotContent = 'empty\n';
 const configSnapshotFileName = 'ballin_config';
+const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 
 const fileSuggestions = `
   ${configSnapshotFileName}
   bash_completions
   bash_profile.sh
   bashrc.sh
+  Brewfile
   brackets_disabled_extensions
   brackets_extensions
   brackets_keymap.json
@@ -113,8 +126,7 @@ const fileSuggestions = `
   brew_leaves
   brew_list
   brew_services
-  git_config
-  gitconfig.cson
+  gitconfig
   gitignore_global
   mas
   nanorc
@@ -181,17 +193,39 @@ const configValue = (key: string): ConfigValueResult => {
 };
 
 const backupConfig = (): BackupConfigResult => {
+  try {
+    const { configObj } = fetchConfig();
+    if (
+      !isConfigObject(configObj)
+      || (
+        Object.prototype.hasOwnProperty.call(configObj, 'backup')
+        && !isConfigObject(configObj.backup)
+      )
+    ) {
+      writeStderrLine('ballin backup: configuration must contain JSON objects');
+      return { config: null, exitStatus: 1 };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeStderrLine(`Unable to read config: ${message}`);
+    return { config: null, exitStatus: 1 };
+  }
+
   const idResult = configValue('backup.id');
   const hostResult = configValue('backup.host');
-  const id = idResult.value;
-  const host = hostResult.value;
+  const id = normalizeBackupId(idResult.value);
+  const host = normalizeBackupHost(hostResult.value);
 
   if (id && host) {
     return { config: { id, host }, exitStatus: 0 };
   }
 
   if (!id) {
-    writeStderrLine('ballin backup: missing config value backup.id');
+    writeStderrLine("ballin backup: backup is not configured; run 'ballin backup setup' to enable it");
+    return {
+      config: null,
+      exitStatus: idResult.spawnStatus ?? 1,
+    };
   }
   if (!host) {
     writeStderrLine('ballin backup: missing config value backup.host');
@@ -985,7 +1019,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if (command && !['open', 'read'].includes(command)) {
+  if (command && !['open', 'read', 'setup'].includes(command)) {
     writeStderrLine(`ballin backup: unknown command '${command}'`);
     process.exitCode = 1;
     return;
@@ -994,6 +1028,27 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   if (command === 'open' && args.length !== 1) {
     writeStderrLine('ballin backup open: expected no arguments');
     process.exitCode = 1;
+    return;
+  }
+
+  if (command === 'setup') {
+    if (args.length !== 1) {
+      writeStderrLine('ballin backup setup: expected no arguments');
+      process.exitCode = 1;
+      return;
+    }
+
+    const repoDir = path.join(__dirname, '..');
+    if (!configure(repoDir, backupSetupDocsUrl, configPath)) {
+      writeStderrLine('ballin backup setup: unable to create or update config');
+      process.exitCode = 1;
+      return;
+    }
+    const configured = configureGist(repoDir, backupSetupDocsUrl, true, {
+      backupCacheDir: path.join(process.env.HOME ?? '', '.ballin-scripts', '.backup-cache'),
+      configPath,
+    });
+    process.exitCode = configured ? 0 : 1;
     return;
   }
 

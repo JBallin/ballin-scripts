@@ -22,7 +22,7 @@ const nextSteps: Record<string, string> = {
   'commands.path': 'Run the installer again or add the Ballin command directory to PATH.',
   'config.read': 'Run ballin config reset to recreate the config.',
   'backup.host': 'Set the backup host with ballin config set backup.host <host>.',
-  'backup.gist': 'Run the installer to create or adopt a backup Gist.',
+  'backup.gist': 'Run ballin backup setup to create or adopt a backup Gist.',
   'backup.gh': 'Install GitHub CLI and authenticate it for your backup host.',
   'backup.auth': 'Run gh auth login for the configured backup host.',
   'backup.read': 'Confirm the configured Gist ID is readable on the backup host.',

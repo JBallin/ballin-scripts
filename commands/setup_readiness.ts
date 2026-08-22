@@ -5,6 +5,9 @@ const {
   runCommand: defaultRunCommand,
   spawnResultStatus,
 } = require('./commandHelpers.ts');
+const {
+  backupDestinationFromConfig,
+} = require('./backup_config.ts');
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
 
@@ -44,13 +47,13 @@ type CollectSetupReadinessOptions = {
   runCommand?: RunCommand;
 };
 
-const requiredCommandShims = [
-  'ballin',
-];
-
 const isConfigObject = (value: unknown): value is ConfigObject => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const requiredCommandShims = [
+  'ballin',
+];
 
 const hasOwn = (obj: ConfigObject, key: string): boolean => (
   Object.prototype.hasOwnProperty.call(obj, key)
@@ -205,6 +208,21 @@ const readConfig = (configPath: string): {
   }
 
   const requiredSections = ['update', 'backup', 'analytics'];
+  const invalidSections = requiredSections.filter((section) => (
+    hasOwn(parsed, section) && !isConfigObject(parsed[section])
+  ));
+  if (invalidSections.length) {
+    return {
+      config: null,
+      check: {
+        id: 'config.read',
+        label: 'Config readability',
+        status: 'fail',
+        summary: `Config sections must be JSON objects: ${invalidSections.join(', ')}.`,
+        data: { configPath, invalidSections },
+      },
+    };
+  }
   const missingSections = requiredSections.filter((section) => !hasOwn(parsed, section));
   return {
     config: parsed,
@@ -242,10 +260,20 @@ const guConfigChecks = (
     ];
   }
 
-  const backupConfig = isConfigObject(config.backup) ? config.backup : null;
-  const host = backupConfig && typeof backupConfig.host === 'string' ? backupConfig.host.trim() : '';
-  const id = backupConfig && typeof backupConfig.id === 'string' ? backupConfig.id.trim() : '';
-  const hasConfiguredId = Boolean(id) && id !== 'null';
+  const destination = backupDestinationFromConfig(config);
+  const host = destination.host ?? '';
+  const id = destination.id;
+
+  if (!id) {
+    return [{
+      id: 'backup.optional',
+      label: 'Optional Gist backup',
+      status: 'info',
+      summary: 'Gist backup is not configured. Maintenance-only Ballin is supported; run ballin backup setup to enable it.',
+      data: { configured: false },
+    }];
+  }
+
   const checks: SetupReadinessCheck[] = [
     {
       id: 'backup.host',
@@ -259,11 +287,9 @@ const guConfigChecks = (
     {
       id: 'backup.gist',
       label: 'Gist ID',
-      status: hasConfiguredId ? 'pass' : 'fail',
-      summary: hasConfiguredId
-        ? 'Backup Gist ID is configured.'
-        : 'Backup Gist ID is not configured yet.',
-      data: { configured: hasConfiguredId },
+      status: 'pass',
+      summary: 'Backup Gist ID is configured.',
+      data: { configured: true },
     },
   ];
 
@@ -331,14 +357,12 @@ const guConfigChecks = (
     data: { host, exitStatus },
   });
 
-  if (!authenticated || !hasConfiguredId) {
+  if (!authenticated) {
     checks.push({
       id: 'backup.read',
       label: 'Configured Gist readability',
       status: 'info',
-      summary: !authenticated
-        ? 'Skipping configured Gist readability check until GitHub CLI authentication succeeds.'
-        : 'Skipping configured Gist readability check until a backup Gist ID is configured.',
+      summary: 'Skipping configured Gist readability check until GitHub CLI authentication succeeds.',
       data: { host },
     });
     return checks;
