@@ -264,6 +264,16 @@ const guConfigChecks = (
   const host = destination.host ?? '';
   const id = destination.id;
 
+  if (destination.idStatus === 'invalid') {
+    return [{
+      id: 'backup.gist',
+      label: 'Gist ID',
+      status: 'fail',
+      summary: 'backup.id must be null or a non-empty string.',
+      data: { configured: false, invalid: true },
+    }];
+  }
+
   if (!id) {
     return [{
       id: 'backup.optional',

@@ -89,6 +89,11 @@ Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
 creates a new one. `backup.id` is the opt-in signal; there is no separate
 enabled or onboarding setting.
 
+`backup.id` must be null or a non-empty string. Arrays, objects, numbers, and
+other non-string values are invalid configuration rather than maintenance-only
+state; doctor, setup, and backup fail before GitHub work until the value is
+corrected.
+
 When an adopted backup includes `ballin_config`, Ballin restores compatible
 preferences. The host selected during setup and the marker-validated Gist ID
 remain authoritative: destination values inside the snapshot are overridden

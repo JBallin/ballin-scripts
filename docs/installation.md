@@ -88,7 +88,10 @@ snapshots. See [Backup sources and sensitivity](backup-sources.md).
 
 Backup is configured only when `backup.id` contains a non-empty Gist ID.
 Missing, null, blank, and legacy string `"null"` IDs all mean maintenance-only
-Ballin. `backup.host` records which GitHub or GitHub Enterprise host to use.
+Ballin. Non-string IDs are invalid configuration: doctor, setup, backup, and an
+enabled update backup stage fail before GitHub work until `backup.id` is fixed
+to null or a non-empty string. `backup.host` records which GitHub or GitHub
+Enterprise host to use.
 
 Setup creates a secret Gist. Secret means unlisted, not strongly private:
 anyone with the URL or ID can view it. Shell, Git, and editor files can contain
@@ -108,6 +111,12 @@ and unconfigured. Setup retains local settings only when a successful Gist file
 listing establishes that `ballin_config` is absent. A failed, interrupted, or
 unreadable listing or snapshot read stops adoption instead of silently skipping
 restoration.
+
+If a configured ID has a malformed host, `ballin backup setup` asks for a
+replacement but does not persist it immediately. Setup authenticates to the
+replacement host and confirms that the retained Gist contains Ballin's marker.
+Only then does it save the host and preserve the configured destination's cache.
+A missing or wrong Gist leaves the malformed host and cache unchanged.
 
 `.backup-cache` is the last remote base observed by this machine, but its format
 does not identify a destination. Ballin therefore invalidates any cache before

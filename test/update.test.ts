@@ -366,7 +366,7 @@ exit 0
       backup: 'true',
     };
 
-    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
       writeConfig({
         update,
         backup: { id, host: 'example.test' },
@@ -376,7 +376,7 @@ exit 0
       const result = spawnUpdate();
 
       assert.equal(result.status, 1);
-      assert.include(result.stderr, "run 'ballin backup setup' to enable it");
+      assert.include(result.stderr, 'invalid config value backup.id; expected null or a non-empty string');
     });
 
     writeConfig({

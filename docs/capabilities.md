@@ -34,8 +34,9 @@ default healthy output remains `😎 You're ballin.`
 
 When a non-empty ID configures the backup capability, doctor retains the full
 host, GitHub CLI, authentication, and Gist-readability checks. Failures in those
-checks fail overall health. Missing, malformed, or unreadable core config is not
-reinterpreted as maintenance-only.
+checks fail overall health. A non-string `backup.id` is invalid and fails
+readiness before GitHub CLI work. Missing, malformed, or unreadable core config
+is not reinterpreted as maintenance-only.
 
 ## `ballin backup`
 

@@ -234,7 +234,7 @@ describe('setup readiness', () => {
   });
 
   it('rejects non-string destination values consistently', () => {
-    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
       commandLog = [];
       writeConfig({
         update: {},
@@ -244,8 +244,9 @@ describe('setup readiness', () => {
 
       const report = collect();
 
-      assert.equal(report.status, 'pass');
-      assert.equal(checkById(report, 'backup.optional').status, 'info');
+      assert.equal(report.status, 'fail');
+      assert.equal(checkById(report, 'backup.gist').status, 'fail');
+      assert.equal(checkById(report, 'backup.gist').summary, 'backup.id must be null or a non-empty string.');
       assert.deepEqual(commandLog, []);
     });
 

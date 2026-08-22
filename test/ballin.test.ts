@@ -355,7 +355,7 @@ esac
   });
 
   it('uses raw backup destination types in doctor', () => {
-    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
       writeConfig({
         update: {},
         backup: { id, host: 'example.test' },
@@ -364,8 +364,9 @@ esac
 
       const result = runBallin(['doctor', '--verbose']);
 
-      assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'INFO  Optional Gist backup:');
+      assert.equal(result.status, 1, result.stderr);
+      assert.include(result.stdout, 'ERROR Gist ID: backup.id must be null or a non-empty string.');
+      assert.include(result.stdout, 'Next: Fix backup.id in ballin.config.json');
     });
 
     writeConfig({

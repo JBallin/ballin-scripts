@@ -189,7 +189,12 @@ const backupConfig = (): BackupConfigResult => {
     return { config: null, exitStatus: 1 };
   }
 
-  const { id, host } = backupDestinationFromConfig(configObj);
+  const { id, host, idStatus } = backupDestinationFromConfig(configObj);
+
+  if (idStatus === 'invalid') {
+    writeStderrLine('ballin backup: invalid config value backup.id; expected null or a non-empty string');
+    return { config: null, exitStatus: 1 };
+  }
 
   if (id && host) {
     return { config: { id, host }, exitStatus: 0 };

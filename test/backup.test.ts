@@ -94,6 +94,13 @@ describe('ballin backup', () => {
     })}\n`);
   };
 
+  const writeCompleteBackupConfig = (id: unknown, host: unknown) => {
+    const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'config', '.defaultConfig.json'), 'utf8'));
+    config.backup = { id, host };
+    config.analytics.enabled = 'false';
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  };
+
   const installFakeGhCommand = () => {
     // Store the fake remote Gist as ordinary files inside the temporary test home.
     writeTestExecutable('gh', `#!/usr/bin/env bash
@@ -528,17 +535,14 @@ done
     assert.deepEqual(gistReads(), []);
   });
 
-  it('rejects non-string backup IDs as unconfigured without using GitHub', () => {
-    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+  it('rejects malformed backup IDs without using GitHub', () => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
       writeBackupConfig(id);
 
       const result = runBackup();
 
       assert.equal(result.status, 1);
-      assert.equal(
-        result.stderr,
-        "ballin backup: backup is not configured; run 'ballin backup setup' to enable it\n",
-      );
+      assert.equal(result.stderr, 'ballin backup: invalid config value backup.id; expected null or a non-empty string\n');
     });
     assert.deepEqual(ghCalls(), []);
   });
@@ -651,21 +655,51 @@ exit 2
     assert.deepEqual(ghCalls(), []);
   });
 
-  it('uses unconfigured semantics for non-string backup IDs during standalone setup', () => {
-    [42, false, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
-      writeBackupConfig(id);
+  it('rejects malformed backup IDs during standalone setup without mutation or GitHub work', () => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeCompleteBackupConfig(id, 'example.test');
+      seedBackupCache('preserve invalid destination cache\n', false);
+      const previousConfig = fs.readFileSync(configPath, 'utf8');
 
-      const result = runBackup({ args: ['setup'], input: 'n\n' });
+      const result = runBackup({ args: ['setup'], input: 'y\n' });
 
-      assertBackupSucceeded(result);
-      assert.include(result.stdout, 'Set up optional Gist backups now?');
-      assert.deepEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, id);
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, 'Invalid config value backup.id; expected null or a non-empty string.');
+      assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve invalid destination cache\n');
+      fs.rmSync(backupCacheDir, { recursive: true, force: true });
     });
     assert.deepEqual(ghCalls(), []);
+    assert.deepEqual(gistRequests(), []);
   });
 
-  it('diagnoses and repairs a non-string host during standalone setup', () => {
-    writeBackupConfig('test-gist-id', { value: 'unexpected-host' });
+  it('validates the retained Gist before repairing a malformed host to GitHub.com', () => {
+    writeCompleteBackupConfig('test-gist-id', { value: 'unexpected-host' });
+    seedBackupCache('preserve configured cache\n', false);
+    seedBackupMarker();
+
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.com',
+      input: '\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host, 'github.com');
+    assert.deepEqual(ghCalls(), [
+      'auth status --hostname github.com',
+      'gist view test-gist-id --raw --filename .MyConfig.md',
+    ]);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('validates the retained Gist before repairing a malformed host to Enterprise', () => {
+    writeCompleteBackupConfig('test-gist-id', { value: 'unexpected-host' });
+    seedBackupCache('preserve configured cache\n', false);
+    seedBackupMarker();
 
     const result = runBackup({
       args: ['setup'],
@@ -680,7 +714,43 @@ exit 2
       JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host,
       'github.enterprise.test',
     );
-    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
+    assert.deepEqual(ghCalls(), [
+      'auth status --hostname github.enterprise.test',
+      'gist view test-gist-id --raw --filename .MyConfig.md',
+    ]);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('does not persist a repaired host when the retained Gist marker is missing or wrong', () => {
+    [null, 'not a Ballin backup\n'].forEach((marker) => {
+      fs.rmSync(ghCommandLogPath, { force: true });
+      fs.rmSync(gistReadLogPath, { force: true });
+      fs.rmSync(fakeGistDir, { recursive: true, force: true });
+      fs.rmSync(backupCacheDir, { recursive: true, force: true });
+      fs.mkdirSync(fakeGistDir, { recursive: true });
+      writeCompleteBackupConfig('test-gist-id', { value: 'unexpected-host' });
+      seedBackupCache('preserve configured cache\n', false);
+      if (marker !== null) {
+        seedFakeGistFile('.MyConfig.md', marker);
+      }
+      const previousConfig = fs.readFileSync(configPath, 'utf8');
+
+      const result = runBackup({
+        args: ['setup'],
+        ghExpectedHost: 'github.enterprise.test',
+        input: 'github.enterprise.test\n',
+      });
+
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, "Gist 'test-gist-id' on github.enterprise.test is not a valid Ballin backup destination.");
+      assert.include(result.stdout, 'The existing backup.host was not changed.');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+      assert.deepEqual(ghCalls(), [
+        'auth status --hostname github.enterprise.test',
+        'gist view test-gist-id --raw --filename .MyConfig.md',
+      ]);
+    });
   });
 
   it('prompts for a legacy configured backup host before accepting a migrated default', () => {

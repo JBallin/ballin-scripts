@@ -8,8 +8,8 @@ const {
   stringify,
 } = require('../config/store.ts');
 const {
+  backupDestinationFromConfig,
   normalizeBackupHost,
-  normalizeBackupId,
 } = require('./backup_config.ts');
 const {
   commandExists,
@@ -105,6 +105,11 @@ const readJsonObject = (filePath: string): ConfigObject | null => {
   } catch {
     return null;
   }
+};
+
+const backupDestinationForConfig = (filePath: string) => {
+  const config = readJsonObject(filePath);
+  return config ? backupDestinationFromConfig(config) : null;
 };
 
 const configHasBackupHost = (repoDir: string, configPath = configPathFor(repoDir)): boolean => {
@@ -320,9 +325,21 @@ const configureGist = (
 ): boolean => {
   const ballinConfig = options.configPath ?? configPathFor(repoDir);
   const backupCacheDir = options.backupCacheDir ?? path.join(repoDir, '.backup-cache');
-  let backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
-  const backupId = normalizeBackupId(configValue(ballinConfig, 'backup.id'));
+  const destination = backupDestinationForConfig(ballinConfig);
+  if (!destination) {
+    return false;
+  }
+  if (destination.idStatus === 'invalid') {
+    writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.id; expected null or a non-empty string.');
+    writeStdoutLine(`Fix backup.id in ${ballinConfig}, then run ballin backup setup again.`);
+    return false;
+  }
+
+  let backupHost = destination.host;
+  const backupId = destination.id;
   const backupHostInvalid = backupHostExisted && !backupHost;
+  const deferHostPersistence = Boolean(backupId && backupHostInvalid);
+  let pendingBackupHost: string | null = null;
 
   if (backupHostInvalid) {
     writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
@@ -339,15 +356,24 @@ const configureGist = (
   }
 
   if (process.env.BALLIN_BACKUP_HOST) {
-    const hostSaved = backupHostInvalid
-      ? replaceInvalidBackupHost(ballinConfig, process.env.BALLIN_BACKUP_HOST)
-      : setConfigValue(ballinConfig, 'backup.host', process.env.BALLIN_BACKUP_HOST);
-    if (!hostSaved) {
+    const replacementHost = normalizeBackupHost(process.env.BALLIN_BACKUP_HOST);
+    if (!replacementHost) {
       return false;
     }
-    backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
-    if (!backupHost) {
-      return false;
+    if (deferHostPersistence) {
+      pendingBackupHost = replacementHost;
+      backupHost = replacementHost;
+    } else {
+      const hostSaved = backupHostInvalid
+        ? replaceInvalidBackupHost(ballinConfig, replacementHost)
+        : setConfigValue(ballinConfig, 'backup.host', replacementHost);
+      if (!hostSaved) {
+        return false;
+      }
+      backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
+      if (!backupHost) {
+        return false;
+      }
     }
   } else if (!backupId || !backupHostExisted || backupHostInvalid) {
     const suggestedHost = backupHost ?? 'github.com';
@@ -359,16 +385,21 @@ const configureGist = (
         writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
         return false;
       }
-      const hostSaved = backupHostInvalid
-        ? replaceInvalidBackupHost(ballinConfig, normalizedReplacementHost)
-        : setConfigValue(ballinConfig, 'backup.host', normalizedReplacementHost);
-      if (!hostSaved) {
-        return false;
-      }
-      backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
-      if (!backupHost) {
-        writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
-        return false;
+      if (deferHostPersistence) {
+        pendingBackupHost = normalizedReplacementHost;
+        backupHost = normalizedReplacementHost;
+      } else {
+        const hostSaved = backupHostInvalid
+          ? replaceInvalidBackupHost(ballinConfig, normalizedReplacementHost)
+          : setConfigValue(ballinConfig, 'backup.host', normalizedReplacementHost);
+        if (!hostSaved) {
+          return false;
+        }
+        backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
+        if (!backupHost) {
+          writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
+          return false;
+        }
       }
     }
   }
@@ -402,6 +433,28 @@ const configureGist = (
   }
 
   if (backupId) {
+    if (pendingBackupHost) {
+      const markerResult = runGh(
+        selectedHost,
+        ['gist', 'view', backupId, '--raw', '--filename', '.MyConfig.md'],
+        { cwd: repoDir },
+      );
+      if (markerResult.stderr) {
+        process.stderr.write(markerResult.stderr);
+      }
+      if (
+        markerResult.status !== 0
+        || markerResult.error
+        || stripTrailingNewlines(markerResult.stdout) !== stripTrailingNewlines(backupMarker)
+      ) {
+        writeStdoutLine(`\n⚠️  ERROR: Gist '${backupId}' on ${selectedHost} is not a valid Ballin backup destination.`);
+        writeStdoutLine('The existing backup.host was not changed. Verify the host and Gist ID, then retry with ballin backup setup.');
+        return false;
+      }
+      if (!replaceInvalidBackupHost(ballinConfig, pendingBackupHost)) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -438,7 +491,7 @@ const configureGist = (
     }
   }
 
-  if (!normalizeBackupId(configValue(ballinConfig, 'backup.id'))) {
+  if (backupDestinationForConfig(ballinConfig)?.idStatus !== 'configured') {
     if (!invalidateBackupCache(backupCacheDir)) {
       return false;
     }
@@ -547,9 +600,11 @@ const setup = (
     return false;
   }
 
-  const backupConfigured = normalizeBackupId(configValue(configPathFor(repoDir), 'backup.id')) !== null;
+  const backupIdStatus = backupDestinationForConfig(configPathFor(repoDir))?.idStatus;
+  const backupConfigured = backupIdStatus === 'configured';
+  const backupInvalid = backupIdStatus === 'invalid';
   let backupSetupSucceeded = true;
-  if (mode === 'fresh' || backupConfigured) {
+  if (mode === 'fresh' || backupConfigured || backupInvalid) {
     backupSetupSucceeded = configureGist(repoDir, docsUrl, backupHostExisted);
     if (!backupSetupSucceeded) {
       writeStdoutLine('\n⚠️  ERROR: Unable to configure Gist backup');
