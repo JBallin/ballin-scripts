@@ -952,7 +952,12 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
   return snapshots;
 };
 
-const runStagedBackup = (host: string, id: string, homeDir: string): boolean => {
+const runStagedBackup = (
+  host: string,
+  id: string,
+  homeDir: string,
+  backupCacheDir: string,
+): boolean => {
   const stagedSnapshots = stageSnapshots(collectSnapshots(homeDir));
   if (!stagedSnapshots) {
     return false;
@@ -967,11 +972,7 @@ const runStagedBackup = (host: string, id: string, homeDir: string): boolean => 
     try {
       let evaluation: ReturnType<typeof evaluateSnapshots>;
       try {
-        evaluation = evaluateSnapshots(
-          path.join(homeDir, '.ballin-scripts', '.backup-cache'),
-          stagedSnapshots,
-          remoteSnapshots,
-        );
+        evaluation = evaluateSnapshots(backupCacheDir, stagedSnapshots, remoteSnapshots);
       } catch (error) {
         writeStderrLine(`ballin backup: failed to reconcile staged snapshots${errorMessage(error)}`);
         return false;
@@ -986,8 +987,7 @@ const runStagedBackup = (host: string, id: string, homeDir: string): boolean => 
         return false;
       }
 
-      const cacheDir = path.join(homeDir, '.ballin-scripts', '.backup-cache');
-      if (!promoteCaches(cacheDir, evaluation.evaluated)) {
+      if (!promoteCaches(backupCacheDir, evaluation.evaluated)) {
         writeStderrLine('ballin backup: the Gist outcome is known, but one or more cache updates failed');
         writeStderrLine('ballin backup: rerun ballin backup to re-read and reconcile current remote state');
         return false;
@@ -1007,6 +1007,8 @@ const runStagedBackup = (host: string, id: string, homeDir: string): boolean => 
 
 function runBackupCommand(args = process.argv.slice(2)): void {
   const homeDir = process.env.HOME ?? '';
+  const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
+  const backupCacheDir = path.join(repoDir, '.backup-cache');
   const command = args[0];
 
   if (command === 'help') {
@@ -1038,14 +1040,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
 
-    const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
     if (!configure(repoDir, backupSetupDocsUrl, configPath)) {
       writeStderrLine('ballin backup setup: unable to create or update config');
       process.exitCode = 1;
       return;
     }
     const configured = configureGist(repoDir, backupSetupDocsUrl, true, {
-      backupCacheDir: path.join(repoDir, '.backup-cache'),
+      backupCacheDir,
       configPath,
     });
     if (!configured) {
@@ -1070,6 +1071,12 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   const { config, exitStatus } = backupConfig();
   if (!config) {
     process.exitCode = exitStatus;
+    return;
+  }
+
+  if (!command && !homeDir) {
+    writeStderrLine('ballin backup: HOME is not set; unable to collect backup sources safely');
+    process.exitCode = 1;
     return;
   }
 
@@ -1105,7 +1112,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if (!runStagedBackup(config.host, config.id, homeDir)) {
+  if (!runStagedBackup(config.host, config.id, homeDir, backupCacheDir)) {
     process.exitCode = 1;
   }
 }

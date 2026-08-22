@@ -624,13 +624,16 @@ exit 2
     assert.deepEqual(ghCalls(), []);
   });
 
-  it('invalidates the executing checkout cache without touching a mismatched HOME cache', () => {
+  it('uses the executing checkout cache after setup with mismatched HOME', () => {
+    const staleRemoteBase = 'old destination value\n';
+    const localValue = 'local value for adopted destination\n';
     const alternateHome = path.join(testHomeDir, 'alternate-home');
     const alternateCache = path.join(alternateHome, '.ballin-scripts', '.backup-cache');
     writeBackupConfig(null);
     seedBackupCache('checkout stale base\n', false);
     fs.mkdirSync(alternateCache, { recursive: true });
-    fs.writeFileSync(path.join(alternateCache, 'unrelated'), 'preserve alternate HOME cache\n');
+    fs.writeFileSync(path.join(alternateCache, snapshotFileName), staleRemoteBase);
+    seedFakeGist(staleRemoteBase);
     seedBackupMarker();
 
     const result = runBackup({
@@ -641,20 +644,32 @@ exit 2
 
     assertBackupSucceeded(result);
     assert.isFalse(fs.existsSync(backupCacheDir));
-    assert.equal(
-      fs.readFileSync(path.join(alternateCache, 'unrelated'), 'utf8'),
-      'preserve alternate HOME cache\n',
-    );
+    assert.equal(fs.readFileSync(path.join(alternateCache, snapshotFileName), 'utf8'), staleRemoteBase);
     assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, 'test-gist-id');
+
+    fs.writeFileSync(path.join(alternateHome, '.zshrc'), localValue);
+    const backupResult = runBackup({ homeDirOverride: alternateHome });
+
+    assert.equal(backupResult.status, 1);
+    assert.include(backupResult.stderr, `ballin backup: conflict for ${snapshotFileName}`);
+    assert.deepEqual(gistPatchCalls(), []);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), staleRemoteBase);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(
+      fs.readFileSync(path.join(alternateCache, snapshotFileName), 'utf8'),
+      staleRemoteBase,
+    );
   });
 
-  it('invalidates the executing checkout cache with HOME unset without touching a relative cache', () => {
+  it('never consults a relative cache when HOME is unset', () => {
+    const staleRemoteBase = 'old destination value\n';
     const commandCwd = path.join(testHomeDir, 'unrelated-cwd');
     const relativeCache = path.join(commandCwd, '.ballin-scripts', '.backup-cache');
     writeBackupConfig(null);
     seedBackupCache('checkout stale base\n', false);
     fs.mkdirSync(relativeCache, { recursive: true });
-    fs.writeFileSync(path.join(relativeCache, 'unrelated'), 'preserve relative cache\n');
+    fs.writeFileSync(path.join(relativeCache, snapshotFileName), staleRemoteBase);
+    seedFakeGist(staleRemoteBase);
     seedBackupMarker();
 
     const result = runBackup({
@@ -666,11 +681,25 @@ exit 2
 
     assertBackupSucceeded(result);
     assert.isFalse(fs.existsSync(backupCacheDir));
-    assert.equal(
-      fs.readFileSync(path.join(relativeCache, 'unrelated'), 'utf8'),
-      'preserve relative cache\n',
-    );
     assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, 'test-gist-id');
+    const setupGhCalls = ghCalls();
+
+    fs.writeFileSync(path.join(commandCwd, '.zshrc'), 'local value for adopted destination\n');
+    const backupResult = runBackup({ commandCwd, homeDirOverride: null });
+
+    assert.equal(backupResult.status, 1);
+    assert.equal(
+      backupResult.stderr,
+      'ballin backup: HOME is not set; unable to collect backup sources safely\n',
+    );
+    assert.deepEqual(ghCalls(), setupGhCalls);
+    assert.deepEqual(gistPatchCalls(), []);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), staleRemoteBase);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(
+      fs.readFileSync(path.join(relativeCache, snapshotFileName), 'utf8'),
+      staleRemoteBase,
+    );
   });
 
   it('cancels adopted Gist setup on empty or EOF input without looping', () => {
