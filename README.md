@@ -34,7 +34,9 @@ and removal steps in [Installation and removal](docs/installation.md).
 
 ## Example output
 
-`ballin update` output depends on installed tools and enabled integrations.
+`ballin update` output depends on installed tools and enabled integrations. This
+example shows a backup-enabled configuration; backup is optional and disabled
+by default.
 
 ```shell
 $ ballin update
@@ -49,6 +51,13 @@ Your system is ready to brew.
 ==> Updating App Store apps
 
 ==> Installing macOS updates
+
+==> Backing up development environment
+✔ zprofile
+✔ zshrc
+...
+✔ vs_settings
+✔ mas
 ```
 
 ## New Mac setup
