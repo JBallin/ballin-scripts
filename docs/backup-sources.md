@@ -31,4 +31,5 @@ inspect editor files before opting in, check
 | `.nvmrc` | `nvmrc` | Preserve the preferred Node.js version. | Usually a version, but the file is arbitrary user-authored content. | Retain. |
 | `mas list` | `mas` | Record installed Mac App Store applications. | Application choices and versions. | Retain; document preference metadata. |
 
-Future snapshot categories, including [#148 Codex support](https://github.com/JBallin/ballin-scripts/issues/148), require an explicit include/exclude decision and sensitivity review before implementation. This requirement does not imply secret scanning, redaction, restore behavior, or broader synchronization work.
+Any new snapshot category requires an explicit inclusion and sensitivity review
+before it is added to Ballin's backup source allowlist.
