@@ -106,34 +106,22 @@ When adopting an existing backup, setup validates the Ballin marker using the
 host selected in the current setup flow. That selected host and the
 marker-validated Gist ID are authoritative. A restored `ballin_config` can
 contribute update preferences, analytics opt-out, and other settings, but its
-own `backup.host` and `backup.id` cannot select or redirect the destination.
-Restored settings and the authoritative destination become live in one config
-commit. A restoration or final-commit failure leaves the prior config active
-and unconfigured. Setup retains local settings only when a successful Gist file
-listing establishes that `ballin_config` is absent. A failed, interrupted, or
-unreadable listing or snapshot read stops adoption instead of silently skipping
-restoration.
+own destination fields cannot redirect setup. If reading, restoring, or saving
+the adopted configuration fails, setup stops and leaves the prior unconfigured
+configuration active.
 
 If a configured ID has a malformed host, `ballin backup setup` asks for a
-replacement but does not persist it immediately. Setup authenticates to the
-replacement host and confirms that the retained Gist contains Ballin's marker.
-Only then does it save the host and preserve the configured destination's cache.
-A missing or wrong Gist leaves the malformed host and cache unchanged.
+replacement and verifies the retained Gist's Ballin marker on that host before
+saving it. Failed validation leaves the malformed host and cache unchanged.
 
 `.backup-cache` is the last remote base observed by this machine, but its format
 does not identify a destination. Ballin therefore invalidates any cache before
-an unconfigured installation creates or adopts a destination. If invalidation
-fails, setup stops before creation, restoration, or destination persistence.
-After adoption, a missing cache uses the normal fail-closed comparison rules:
-if local and remote snapshot content differ, the next backup reports a conflict
-instead of choosing a winner. Ballin does not restore the invalidated cache when
-later setup steps fail.
-
-Once a destination is configured, installer refresh, self-update, doctor, and
-setup validation preserve its cache. Resetting config returns Ballin to the
-maintenance-only state and does not delete the old remote Gist. A later setup
-attempt invalidates the now-unproven local cache before configuring a
-destination.
+an unconfigured installation creates or adopts a destination; failure stops
+setup. A configured destination retains its cache. Without a trusted cache,
+differing local and remote content reports a conflict rather than choosing a
+winner. If a later setup step fails, the invalidated cache remains removed.
+Resetting config leaves the remote Gist untouched, and a later setup invalidates
+the now-unproven cache again.
 
 ## Health and recovery
 

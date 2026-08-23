@@ -89,19 +89,10 @@ Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
 creates a new one. `backup.id` is the opt-in signal; there is no separate
 enabled or onboarding setting.
 
-`backup.id` must be null or a non-empty string. Arrays, objects, numbers, and
-other non-string values are invalid configuration rather than maintenance-only
-state; doctor, setup, and backup fail before GitHub work until the value is
-corrected. Run `ballin config reset` to restore valid defaults, then run
-`ballin backup setup` again if backup is still wanted. A missing or malformed
-`backup.host` can be repaired directly with `ballin backup setup`.
-
-When an adopted backup includes `ballin_config`, Ballin restores compatible
-preferences. The host selected during setup and the marker-validated Gist ID
-remain authoritative: destination values inside the snapshot are overridden
-and cannot redirect setup. Restoration and destination persistence are one
-config transition, so a failed commit leaves the prior unconfigured config
-active.
+Invalid `backup.id` values can be repaired with `ballin config reset`; a missing
+or malformed `backup.host` can be repaired with `ballin backup setup`. See
+[Installation and removal](installation.md#optional-backup-and-adoption) for
+adoption, failure, and cache-transition behavior.
 
 Setup creates backup Gists as [secret Gists](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists). Secret Gists are unlisted and not
 searchable, but anyone with the URL or ID can view them, so treat both as
@@ -114,6 +105,10 @@ allowed files, and public Gists cannot be made secret again. Review
 GitHub preserves Gist revision history and diffs. Ballin does not provide
 history navigation, rollback, restore, or revision selection.
 
+Secret Gists remain Ballin's current backup storage.
+[#254](https://github.com/JBallin/ballin-scripts/issues/254) tracks the
+longer-term evaluation of more secure storage options.
+
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
 
@@ -122,26 +117,12 @@ finds any. Use one active writer per backup Gist. See
 [Supported capabilities](capabilities.md#backup-consistency-and-conflicts) for
 recovery guidance, guarantees, and limitations.
 
-`.backup-cache` is derived local comparison state, not destination or enablement
-state. It is trusted only while the same destination remains configured. When
-backup is enabled from an unconfigured state, setup removes any existing cache
-before creating or adopting the destination. After adoption, differing local
-and remote content with no trusted base is a conflict; Ballin does not choose a
-winner. See [Installation and removal](installation.md#optional-backup-and-adoption)
-for the full transition behavior.
-
 ## Readiness checks
 
-Use `ballin doctor` to check whether the Ballin-managed environment is healthy,
-including Node.js, installed commands, settings, and known Gist backup
-prerequisites. With no configured backup ID, doctor remains healthy, makes no
-`gh` calls, and shows one optional-backup `INFO` row in verbose output. With a
-configured ID, doctor checks the host, `gh` availability, whether
-`gh auth status` succeeds for that host, and whether the Gist is readable.
-Those configured-capability failures affect overall health. These checks do not
-verify write permission, freshness, completeness, cache consistency, or the
-absence of partial backup runs. Use `--verbose` to see every check and the
-explicit write-permission limitation.
+Use `ballin doctor` to check the managed environment. Maintenance-only Ballin
+is healthy and does not invoke `gh`; configured backup failures affect overall
+health. See [Supported capabilities](capabilities.md#ballin-doctor) for the
+checks and their limitations.
 
 ```shell
 ballin doctor
