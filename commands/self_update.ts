@@ -13,6 +13,7 @@ const {
 } = require('./repo_update.ts');
 
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 
 function runSelfUpdateCommand(): void {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
@@ -29,6 +30,8 @@ function runSelfUpdateCommand(): void {
     'setup',
     repoDir,
     docsUrl,
+    analyticsDocsUrl,
+    'refresh',
   ], {
     cwd: repoDir,
     env: commandEnv(repoDir),

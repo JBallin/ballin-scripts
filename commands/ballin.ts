@@ -33,6 +33,7 @@ const format = {
   value: '\x1b[4mvalue\x1b[0m',
   get: '\x1b[1mget\x1b[0m',
   set: '\x1b[1mset\x1b[0m',
+  setup: '\x1b[1msetup\x1b[0m',
   empty: "\x1b[1m''\x1b[0m",
   reset: '\x1b[1mreset\x1b[0m',
   open: '\x1b[1mopen\x1b[0m',
@@ -59,6 +60,7 @@ Commands:
 
     update                update the Ballin-managed macOS development environment
     backup                backup Ballin-managed environment state to the configured backup Gist
+                          ${format.setup} configure an optional backup Gist
                           ${format.open} open the configured backup Gist
                           ${format.read} ${format.fileName} read a backed-up file
     doctor                check whether the Ballin-managed environment is healthy

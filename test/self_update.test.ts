@@ -6,6 +6,7 @@ const path = require('path');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 type SpawnSelfUpdateOverrides = Omit<
   import('child_process').SpawnSyncOptionsWithStringEncoding,
   'encoding' | 'env'
@@ -142,7 +143,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       : []
   );
 
-  const setupLog = () => `${fs.realpathSync(repoDir)}|install_setup:setup ${repoDir} ${docsUrl}`;
+  const setupLog = () => `${fs.realpathSync(repoDir)}|install_setup:setup ${repoDir} ${docsUrl} ${analyticsDocsUrl} refresh`;
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-update-'));

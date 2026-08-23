@@ -148,6 +148,23 @@ describe('setup readiness', () => {
     assert.deepEqual(sectionCheck.data?.missingSections, ['update', 'analytics']);
   });
 
+  it('fails structurally invalid config instead of treating it as maintenance-only', () => {
+    writeConfig({
+      update: {},
+      backup: null,
+      analytics: {},
+    });
+
+    const report = collect();
+
+    assert.equal(report.status, 'fail');
+    assert.equal(checkById(report, 'config.read').status, 'fail');
+    assert.include(checkById(report, 'config.read').summary, 'backup');
+    assert.equal(checkById(report, 'backup.config').status, 'info');
+    assert.isUndefined(report.checks.find((check) => check.id === 'backup.optional'));
+    assert.deepEqual(commandLog, []);
+  });
+
   it('reports successful Gist readiness signals without mutating anything', () => {
     const beforeConfig = fs.readFileSync(configPath, 'utf8');
 
@@ -174,7 +191,7 @@ describe('setup readiness', () => {
     assert.notInclude(commandLog.join('\n'), 'ballin config set');
   });
 
-  it('reports unconfigured Gist ID and missing gh as failures', () => {
+  it('treats an unconfigured backup as an optional healthy capability without gh', () => {
     fs.rmSync(path.join(binDir, 'gh'));
     writeConfig({
       update: {},
@@ -187,32 +204,67 @@ describe('setup readiness', () => {
 
     const report = collect();
 
-    assert.equal(report.status, 'fail');
-    assert.equal(checkById(report, 'backup.gist').status, 'fail');
-    assert.equal(checkById(report, 'backup.gh').status, 'fail');
-    assert.equal(checkById(report, 'backup.auth').status, 'info');
-    assert.equal(checkById(report, 'backup.read').status, 'info');
+    assert.equal(report.status, 'pass');
+    assert.equal(checkById(report, 'backup.optional').status, 'info');
+    assert.include(checkById(report, 'backup.optional').summary, 'ballin backup setup');
+    assert.deepEqual(report.checks.filter((check) => check.id.startsWith('backup.')).map((check) => check.id), [
+      'backup.optional',
+    ]);
     assert.deepEqual(commandLog, []);
   });
 
-  it('authenticates but skips Gist readability when the Gist ID is missing', () => {
-    writeConfig({
-      update: {},
-      backup: {
-        id: null,
-        host: 'example.test',
-      },
-      analytics: {},
+  it('normalizes blank and legacy string null backup IDs as unconfigured', () => {
+    ['', '   ', 'null'].forEach((id) => {
+      commandLog = [];
+      writeConfig({
+        update: {},
+        backup: {
+          id,
+          host: 'example.test',
+        },
+        analytics: {},
+      });
+
+      const report = collect();
+
+      assert.equal(report.status, 'pass');
+      assert.equal(checkById(report, 'backup.optional').status, 'info');
+      assert.deepEqual(commandLog, []);
+    });
+  });
+
+  it('rejects non-string destination values consistently', () => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      commandLog = [];
+      writeConfig({
+        update: {},
+        backup: { id, host: 'example.test' },
+        analytics: {},
+      });
+
+      const report = collect();
+
+      assert.equal(report.status, 'fail');
+      assert.equal(checkById(report, 'backup.gist').status, 'fail');
+      assert.equal(checkById(report, 'backup.gist').summary, 'backup.id must be null or a non-empty string.');
+      assert.deepEqual(commandLog, []);
     });
 
-    const report = collect();
+    [42, false, ['unexpected-host'], { value: 'unexpected-host' }].forEach((host) => {
+      commandLog = [];
+      writeConfig({
+        update: {},
+        backup: { id: 'test-gist-id', host },
+        analytics: {},
+      });
 
-    assert.equal(report.status, 'fail');
-    assert.equal(checkById(report, 'backup.gist').status, 'fail');
-    assert.equal(checkById(report, 'backup.auth').status, 'pass');
-    assert.equal(checkById(report, 'backup.read').status, 'info');
-    assert.include(checkById(report, 'backup.read').summary, 'until a backup Gist ID is configured');
-    assert.deepEqual(commandLog, ['gh auth status --active --hostname example.test']);
+      const report = collect();
+
+      assert.equal(report.status, 'fail');
+      assert.equal(checkById(report, 'backup.host').status, 'fail');
+      assert.equal(checkById(report, 'backup.gist').status, 'pass');
+      assert.deepEqual(commandLog, []);
+    });
   });
 
   it('reports missing Gist host and failed gh auth', () => {

@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
+const repoRoot = path.join(__dirname, '..');
 const snapshotFileName = 'zshrc.sh';
 // Expose only the basic commands backup needs; package managers remain unavailable.
 const requiredCommands = [
@@ -23,6 +24,7 @@ type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
 
 type RunBackupOptions = {
   args?: string[];
+  input?: string;
   failedPaths?: string[];
   emitUnderlyingStderr?: boolean;
   brewServicesFail?: boolean;
@@ -42,6 +44,9 @@ type RunBackupOptions = {
   ghUploadAmbiguous?: boolean;
   ghUploadFail?: boolean;
   commandPath?: string;
+  commandCwd?: string;
+  failFinalConfigCommit?: boolean;
+  homeDirOverride?: string | null;
 };
 
 describe('ballin backup', () => {
@@ -55,6 +60,7 @@ describe('ballin backup', () => {
   let gistPayloadPath: string;
   let scratchDir: string;
   let gistUploadLogPath: string;
+  let ghCommandLogPath: string;
   let brewLogPath: string;
   let pythonToolLogPath: string;
   let openLogPath: string;
@@ -75,7 +81,7 @@ describe('ballin backup', () => {
     fs.writeFileSync(path.join(testBinDir, name), contents, { mode: 0o755 });
   };
 
-  const writeBackupConfig = (id: string | null = 'test-gist-id', host: string | null = 'example.test') => {
+  const writeBackupConfig = (id: unknown = 'test-gist-id', host: unknown = 'example.test') => {
     fs.writeFileSync(configPath, `${JSON.stringify({
       update: {},
       backup: {
@@ -88,9 +94,17 @@ describe('ballin backup', () => {
     })}\n`);
   };
 
+  const writeCompleteBackupConfig = (id: unknown, host: unknown) => {
+    const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'config', '.defaultConfig.json'), 'utf8'));
+    config.backup = { id, host };
+    config.analytics.enabled = 'false';
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  };
+
   const installFakeGhCommand = () => {
     // Store the fake remote Gist as ordinary files inside the temporary test home.
     writeTestExecutable('gh', `#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_GH_COMMAND_LOG"
 if [ "$GH_HOST" != "$FAKE_GH_EXPECTED_HOST" ] && [ "$1:$2" != 'auth:status' ]; then
   printf '%s\\n' 'Unexpected GH_HOST' >&2
   exit 2
@@ -151,6 +165,14 @@ fi
 if [ "$1:$2" != 'gist:view' ]; then
   printf '%s\\n' 'Unexpected gh call' >&2
   exit 2
+fi
+if [ "$3:$4:$5" = '--files:--:test-gist-id' ]; then
+  for fake_gist_file in "$FAKE_GIST_STORAGE_DIR"/*; do
+    if [ -f "$fake_gist_file" ]; then
+      printf '%s\n' "\${fake_gist_file##*/}"
+    fi
+  done
+  exit 0
 fi
 if [ "$3" != 'test-gist-id' ]; then
   printf '%s\\n' 'Unexpected Gist ID' >&2
@@ -301,6 +323,7 @@ done
     gistPayloadPath = path.join(testHomeDir, 'fake-gist-payload.json');
     scratchDir = path.join(testHomeDir, 'tmp');
     gistUploadLogPath = path.join(testHomeDir, 'fake-gist-uploads.log');
+    ghCommandLogPath = path.join(testHomeDir, 'fake-gh-commands.log');
     brewLogPath = path.join(testHomeDir, 'fake-brew.log');
     pythonToolLogPath = path.join(testHomeDir, 'fake-python-tools.log');
     openLogPath = path.join(testHomeDir, 'fake-open.log');
@@ -313,6 +336,9 @@ done
       fakeGistDir,
       scratchDir,
     ].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
+    fs.cpSync(path.join(repoRoot, 'config'), path.join(testHomeDir, '.ballin-scripts', 'config'), {
+      recursive: true,
+    });
     requiredCommands.forEach(linkRequiredCommand);
     realCatPath = installControllableCatCommand();
     writeBackupConfig();
@@ -327,6 +353,7 @@ done
   // Pass a complete child environment so real tools and credentials are not inherited.
   const runBackup = ({
     args = [],
+    input,
     failedPaths = [],
     emitUnderlyingStderr = false,
     brewServicesFail = false,
@@ -346,23 +373,31 @@ done
     ghUploadAmbiguous = false,
     ghUploadFail = false,
     commandPath = ballinPath,
+    commandCwd = testHomeDir,
+    failFinalConfigCommit = false,
+    homeDirOverride = testHomeDir,
   }: RunBackupOptions = {}) => spawnSync(commandPath, ['backup', ...args], {
+    cwd: commandCwd,
     encoding: 'utf8',
+    input,
     maxBuffer: 10 * 1024 * 1024,
     env: {
-      HOME: testHomeDir,
+      ...(homeDirOverride === null ? {} : { HOME: homeDirOverride }),
       PATH: testBinDir,
       TMPDIR: scratchDir,
       ...(completionDir === undefined ? {} : {
         BALLIN_BACKUP_BASH_COMPLETION_DIR: completionDir,
       }),
       BALLIN_TEST_CONFIG_PATH: configPath,
+      BALLIN_TEST_REPO_DIR: path.join(testHomeDir, '.ballin-scripts'),
+      BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: failFinalConfigCommit ? '1' : '0',
       BALLIN_NO_ANALYTICS: '1',
       FAKE_GIST_STORAGE_DIR: fakeGistDir,
       FAKE_GIST_READ_LOG: gistReadLogPath,
       FAKE_GIST_UPLOAD_LOG: gistUploadLogPath,
       FAKE_GH_REQUEST_LOG: gistRequestLogPath,
       FAKE_GH_PAYLOAD_PATH: gistPayloadPath,
+      FAKE_GH_COMMAND_LOG: ghCommandLogPath,
       FAKE_GH_WEB_LOG: openLogPath,
       FAKE_GH_EXPECTED_HOST: ghExpectedHost,
       FAKE_GH_AUTH_FAIL: ghAuthFail ? 'true' : 'false',
@@ -405,6 +440,11 @@ done
   const seedFakeGistFile = (fileName: string, content: string) => {
     fs.writeFileSync(path.join(fakeGistDir, fileName), content);
   };
+  const seedBackupMarker = () => seedFakeGistFile(
+    '.MyConfig.md',
+    '### Backup of your dev environment\n'
+      + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n\n',
+  );
   const seedCacheFile = (fileName: string, content: string, seedRemote = true) => {
     fs.mkdirSync(backupCacheDir, { recursive: true });
     fs.writeFileSync(cachedFilePath(fileName), content);
@@ -422,6 +462,7 @@ done
   );
   const gistReads = () => readLogLines(gistReadLogPath);
   const gistUploads = () => readLogLines(gistUploadLogPath);
+  const ghCalls = () => readLogLines(ghCommandLogPath);
   const gistRequests = () => readLogLines(gistRequestLogPath);
   const gistPatchCalls = () => gistRequests().filter((call: string) => call.includes('--method PATCH'));
   const gistPayload = () => JSON.parse(fs.readFileSync(gistPayloadPath, 'utf8'));
@@ -476,8 +517,8 @@ done
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.include(result.stderr, 'ballin backup: missing config value backup.id\n');
-    assert.include(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.include(result.stderr, 'Unable to read config:');
+    assert.notInclude(result.stderr, 'ballin backup setup');
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
   });
@@ -489,9 +530,35 @@ done
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'ballin backup: missing config value backup.id\n');
+    assert.equal(result.stderr, "ballin backup: backup is not configured; run 'ballin backup setup' to enable it\n");
     assert.deepEqual(openCalls(), []);
     assert.deepEqual(gistReads(), []);
+  });
+
+  it('rejects malformed backup IDs without using GitHub', () => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeBackupConfig(id);
+
+      const result = runBackup();
+
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, 'ballin backup: invalid config value backup.id; expected null or a non-empty string');
+      assert.include(result.stderr, 'run ballin config reset to restore valid defaults');
+    });
+    assert.deepEqual(ghCalls(), []);
+  });
+
+  it('rejects non-string backup hosts for configured IDs without using GitHub', () => {
+    [42, false, ['unexpected-host'], { value: 'unexpected-host' }].forEach((host) => {
+      writeBackupConfig('test-gist-id', host);
+
+      const result = runBackup();
+
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, 'missing or invalid config value backup.host');
+      assert.include(result.stderr, 'run ballin backup setup to repair it');
+    });
+    assert.deepEqual(ghCalls(), []);
   });
 
   it('remains executable through the installed symlink model', () => {
@@ -545,6 +612,7 @@ exit 2
     assertBackupSucceeded(result);
     assert.include(result.stdout, 'Ballin');
     assert.include(result.stdout, 'ballin backup');
+    assert.include(result.stdout, 'setup');
   });
 
   it('prints help without requiring a readable Gist', () => {
@@ -564,6 +632,398 @@ exit 2
     assert.equal(result.stderr, 'ballin backup help: expected no arguments\n');
     assert.deepEqual(ballinCalls(), []);
     assert.deepEqual(gistReads(), []);
+  });
+
+  it('rejects extra setup arguments before using GitHub', () => {
+    writeBackupConfig(null);
+
+    const result = runBackup({ args: ['setup', 'extra'] });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'ballin backup setup: expected no arguments\n');
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistRequests(), []);
+  });
+
+  it('rejects malformed config before prompting or using GitHub during setup', () => {
+    writeInvalidConfig();
+
+    const result = runBackup({ args: ['setup'] });
+
+    assert.equal(result.status, 1);
+    assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
+    assert.include(result.stderr, 'ballin backup setup: unable to create or update config');
+    assert.deepEqual(ghCalls(), []);
+  });
+
+  it('rejects malformed backup IDs during standalone setup without mutation or GitHub work', () => {
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeCompleteBackupConfig(id, 'example.test');
+      seedBackupCache('preserve invalid destination cache\n', false);
+      const previousConfig = fs.readFileSync(configPath, 'utf8');
+
+      const result = runBackup({ args: ['setup'], input: 'y\n' });
+
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, 'Invalid config value backup.id; expected null or a non-empty string.');
+      assert.include(result.stdout, 'Run ballin config reset to restore valid defaults');
+      assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve invalid destination cache\n');
+      fs.rmSync(backupCacheDir, { recursive: true, force: true });
+    });
+    assert.deepEqual(ghCalls(), []);
+    assert.deepEqual(gistRequests(), []);
+  });
+
+  it('validates the retained Gist before repairing a malformed host to GitHub.com', () => {
+    writeCompleteBackupConfig('test-gist-id', { value: 'unexpected-host' });
+    seedBackupCache('preserve configured cache\n', false);
+    seedBackupMarker();
+
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.com',
+      input: '\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host, 'github.com');
+    assert.deepEqual(ghCalls(), [
+      'auth status --hostname github.com',
+      'gist view test-gist-id --raw --filename .MyConfig.md',
+    ]);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('validates the retained Gist before repairing a malformed host to Enterprise', () => {
+    writeCompleteBackupConfig('test-gist-id', { value: 'unexpected-host' });
+    seedBackupCache('preserve configured cache\n', false);
+    seedBackupMarker();
+
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.enterprise.test',
+      input: 'github.enterprise.test\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
+    assert.equal(
+      JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host,
+      'github.enterprise.test',
+    );
+    assert.deepEqual(ghCalls(), [
+      'auth status --hostname github.enterprise.test',
+      'gist view test-gist-id --raw --filename .MyConfig.md',
+    ]);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('does not persist a repaired host when the retained Gist marker is missing or wrong', () => {
+    [null, 'not a Ballin backup\n'].forEach((marker) => {
+      fs.rmSync(ghCommandLogPath, { force: true });
+      fs.rmSync(gistReadLogPath, { force: true });
+      fs.rmSync(fakeGistDir, { recursive: true, force: true });
+      fs.rmSync(backupCacheDir, { recursive: true, force: true });
+      fs.mkdirSync(fakeGistDir, { recursive: true });
+      writeCompleteBackupConfig('test-gist-id', { value: 'unexpected-host' });
+      seedBackupCache('preserve configured cache\n', false);
+      if (marker !== null) {
+        seedFakeGistFile('.MyConfig.md', marker);
+      }
+      const previousConfig = fs.readFileSync(configPath, 'utf8');
+
+      const result = runBackup({
+        args: ['setup'],
+        ghExpectedHost: 'github.enterprise.test',
+        input: 'github.enterprise.test\n',
+      });
+
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, "Gist 'test-gist-id' on github.enterprise.test is not a valid Ballin backup destination.");
+      assert.include(result.stdout, 'The existing backup.host was not changed.');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+      assert.deepEqual(ghCalls(), [
+        'auth status --hostname github.enterprise.test',
+        'gist view test-gist-id --raw --filename .MyConfig.md',
+      ]);
+    });
+  });
+
+  it('prompts for a legacy configured backup host before accepting a migrated default', () => {
+    writeBackupConfig('test-gist-id', null);
+    seedBackupCache('preserve configured cache\n', false);
+
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.enterprise.test',
+      input: 'github.enterprise.test\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(config.backup.id, 'test-gist-id');
+    assert.equal(config.backup.host, 'github.enterprise.test');
+    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('preserves an existing Enterprise host without re-prompting standalone setup', () => {
+    writeBackupConfig('test-gist-id', 'github.enterprise.test');
+    seedBackupCache('preserve configured cache\n', false);
+
+    const result = runBackup({
+      args: ['setup'],
+      ghExpectedHost: 'github.enterprise.test',
+    });
+
+    assertBackupSucceeded(result);
+    assert.notInclude(result.stdout, 'What GitHub host should be used for Gist backups?');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(config.backup.id, 'test-gist-id');
+    assert.equal(config.backup.host, 'github.enterprise.test');
+    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('uses the executing checkout cache after setup with mismatched HOME', () => {
+    const staleRemoteBase = 'old destination value\n';
+    const localValue = 'local value for adopted destination\n';
+    const alternateHome = path.join(testHomeDir, 'alternate-home');
+    const alternateCache = path.join(alternateHome, '.ballin-scripts', '.backup-cache');
+    writeBackupConfig(null);
+    seedBackupCache('checkout stale base\n', false);
+    fs.mkdirSync(alternateCache, { recursive: true });
+    fs.writeFileSync(path.join(alternateCache, snapshotFileName), staleRemoteBase);
+    seedFakeGist(staleRemoteBase);
+    seedBackupMarker();
+
+    const result = runBackup({
+      args: ['setup'],
+      homeDirOverride: alternateHome,
+      input: 'y\n\ny\ntest-gist-id\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(fs.readFileSync(path.join(alternateCache, snapshotFileName), 'utf8'), staleRemoteBase);
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, 'test-gist-id');
+
+    fs.writeFileSync(path.join(alternateHome, '.zshrc'), localValue);
+    const backupResult = runBackup({ homeDirOverride: alternateHome });
+
+    assert.equal(backupResult.status, 1);
+    assert.include(backupResult.stderr, `ballin backup: conflict for ${snapshotFileName}`);
+    assert.deepEqual(gistPatchCalls(), []);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), staleRemoteBase);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(
+      fs.readFileSync(path.join(alternateCache, snapshotFileName), 'utf8'),
+      staleRemoteBase,
+    );
+  });
+
+  it('never consults a relative cache when HOME is unset', () => {
+    const staleRemoteBase = 'old destination value\n';
+    const commandCwd = path.join(testHomeDir, 'unrelated-cwd');
+    const relativeCache = path.join(commandCwd, '.ballin-scripts', '.backup-cache');
+    writeBackupConfig(null);
+    seedBackupCache('checkout stale base\n', false);
+    fs.mkdirSync(relativeCache, { recursive: true });
+    fs.writeFileSync(path.join(relativeCache, snapshotFileName), staleRemoteBase);
+    seedFakeGist(staleRemoteBase);
+    seedBackupMarker();
+
+    const result = runBackup({
+      args: ['setup'],
+      commandCwd,
+      homeDirOverride: null,
+      input: 'y\n\ny\ntest-gist-id\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id, 'test-gist-id');
+    const setupGhCalls = ghCalls();
+
+    fs.writeFileSync(path.join(commandCwd, '.zshrc'), 'local value for adopted destination\n');
+    const backupResult = runBackup({ commandCwd, homeDirOverride: null });
+
+    assert.equal(backupResult.status, 1);
+    assert.equal(
+      backupResult.stderr,
+      'ballin backup: HOME is not set; unable to collect backup sources safely\n',
+    );
+    assert.deepEqual(ghCalls(), setupGhCalls);
+    assert.deepEqual(gistPatchCalls(), []);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), staleRemoteBase);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(
+      fs.readFileSync(path.join(relativeCache, snapshotFileName), 'utf8'),
+      staleRemoteBase,
+    );
+  });
+
+  it('cancels adopted Gist setup on empty or EOF input without looping', () => {
+    writeBackupConfig(null);
+
+    const result = runBackup({
+      args: ['setup'],
+      input: 'y\n\ny\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Backup Gist adoption cancelled; no destination was configured');
+    assert.include(result.stderr, "retry with 'ballin backup setup'");
+    assert.isNull(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id);
+    assert.notInclude(ghCalls().join('\n'), 'gist view');
+  });
+
+  it('reports public setup failure and preserves exact config when the final adoption commit fails', () => {
+    const originalConfig = `${JSON.stringify({
+      update: {
+        cleanup: 'false',
+        selfUpdate: 'true',
+        backup: 'false',
+        softwareupdate: 'false',
+        npm: 'false',
+        nvm: 'false',
+      },
+      backup: { id: null, host: 'example.test' },
+      analytics: { enabled: 'false' },
+      local: { keep: 'exactly' },
+    }, null, 2)}\n`;
+    fs.writeFileSync(configPath, originalConfig);
+    seedBackupCache('checkout stale base\n', false);
+    seedBackupMarker();
+    seedFakeGistFile('ballin_config', JSON.stringify({
+      backup: { id: 'snapshot-gist-id', host: 'snapshot.example.test' },
+      analytics: { enabled: 'false' },
+    }));
+
+    const result = runBackup({
+      args: ['setup'],
+      failFinalConfigCommit: true,
+      input: 'y\n\ny\ntest-gist-id\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, "retry with 'ballin backup setup'");
+    assert.equal(fs.readFileSync(configPath, 'utf8'), originalConfig);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.notInclude(ghCalls().join('\n'), 'snapshot.example.test');
+    assert.notInclude(ghCalls().join('\n'), 'snapshot-gist-id');
+  });
+
+  it('invalidates stale cache before adoption so it cannot authorize a later upload', () => {
+    const staleRemoteBase = 'old destination value\n';
+    const localValue = 'local value for adopted destination\n';
+    writeBackupConfig(null);
+    seedBackupCache(staleRemoteBase, false);
+    seedFakeGist(staleRemoteBase);
+    seedBackupMarker();
+    seedFakeGistFile('ballin_config', JSON.stringify({
+      update: {
+        cleanup: 'false',
+        selfUpdate: 'true',
+        backup: 'false',
+        softwareupdate: 'false',
+        npm: 'false',
+        nvm: 'false',
+      },
+      backup: {
+        id: 'snapshot-destination-id',
+        host: 'snapshot.example.test',
+      },
+      analytics: { enabled: 'false' },
+    }));
+
+    const setupResult = runBackup({
+      args: ['setup'],
+      input: 'y\n\ny\ntest-gist-id\n',
+    });
+
+    assertBackupSucceeded(setupResult);
+    const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(configured.backup.host, 'example.test');
+    assert.equal(configured.backup.id, 'test-gist-id');
+    assert.isFalse(fs.existsSync(backupCacheDir));
+
+    writeSnapshot(localValue);
+    const backupResult = runBackup();
+
+    assert.equal(backupResult.status, 1);
+    assert.include(backupResult.stderr, `ballin backup: conflict for ${snapshotFileName}`);
+    assert.deepEqual(gistPatchCalls(), []);
+    assert.deepEqual(gistUploads(), []);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), staleRemoteBase);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+  });
+
+  it('leaves backup unconfigured and prevents Gist creation when cache invalidation fails', () => {
+    writeBackupConfig(null);
+    fs.mkdirSync(backupCacheDir, { recursive: true });
+    fs.writeFileSync(cachedSnapshotPath(), 'unproven cache\n');
+    const cacheParent = path.dirname(backupCacheDir);
+    fs.chmodSync(cacheParent, 0o555);
+
+    let result: StringSpawnResult;
+    try {
+      result = runBackup({
+        args: ['setup'],
+        input: 'y\n\nn\n',
+      });
+    } finally {
+      fs.chmodSync(cacheParent, 0o755);
+    }
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, `Unable to invalidate ${backupCacheDir}`);
+    assert.isNull(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id);
+    assert.isTrue(fs.existsSync(backupCacheDir));
+    assert.notInclude(ghCalls().join('\n'), 'gist create');
+    assert.notInclude(ghCalls().join('\n'), 'gist view');
+  });
+
+  it('prevents adopted config restoration when cache invalidation fails', () => {
+    writeBackupConfig(null);
+    fs.mkdirSync(backupCacheDir, { recursive: true });
+    fs.writeFileSync(cachedSnapshotPath(), 'unproven cache\n');
+    seedFakeGistFile(
+      '.MyConfig.md',
+      '### Backup of your dev environment\n'
+        + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n\n',
+    );
+    seedFakeGistFile('ballin_config', JSON.stringify({
+      backup: { id: 'snapshot-id', host: 'snapshot.example.test' },
+    }));
+    const cacheParent = path.dirname(backupCacheDir);
+    fs.chmodSync(cacheParent, 0o555);
+
+    let result: StringSpawnResult;
+    try {
+      result = runBackup({
+        args: ['setup'],
+        input: 'y\n\ny\ntest-gist-id\n',
+      });
+    } finally {
+      fs.chmodSync(cacheParent, 0o755);
+    }
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, `Unable to invalidate ${backupCacheDir}`);
+    assert.isNull(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id);
+    assert.isTrue(fs.existsSync(backupCacheDir));
+    assert.include(ghCalls().join('\n'), 'gist view test-gist-id --raw --filename .MyConfig.md');
+    assert.notInclude(ghCalls().join('\n'), '--filename ballin_config');
+    assert.notInclude(ghCalls().join('\n'), 'gist create');
   });
 
   it('fails unknown commands instead of ignoring them', () => {
@@ -624,6 +1084,10 @@ exit 2
     assert.equal(result.status, 1);
     assert.include(result.stdout, '\nOptions: ');
     assert.include(result.stdout, 'ballin_config');
+    assert.include(result.stdout, 'Brewfile');
+    assert.include(result.stdout, 'gitconfig');
+    assert.notInclude(result.stdout, 'git_config');
+    assert.notInclude(result.stdout, 'gitconfig.cson');
     assert.include(result.stdout, 'pipx');
     assert.include(result.stdout, 'uv_tools');
     assert.include(result.stdout, 'pyenv_versions');
@@ -732,8 +1196,8 @@ exit 2
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.include(result.stderr, 'ballin backup: missing config value backup.id\n');
-    assert.include(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.include(result.stderr, 'Unable to read config:');
+    assert.notInclude(result.stderr, 'ballin backup setup');
     assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
@@ -747,8 +1211,7 @@ exit 2
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.include(result.stderr, 'Unable to read');
-    assert.include(result.stderr, 'ballin backup: missing config value backup.id\n');
-    assert.include(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.notInclude(result.stderr, 'ballin backup setup');
     assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
@@ -761,7 +1224,8 @@ exit 2
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'ballin backup: missing config value backup.host\n');
+    assert.include(result.stderr, 'missing or invalid config value backup.host');
+    assert.include(result.stderr, 'run ballin backup setup to repair it');
     assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);

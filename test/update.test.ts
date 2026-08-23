@@ -298,6 +298,101 @@ exit 0
     ]);
   });
 
+  it('keeps maintenance-only Ballin healthy after self-update without using gh', () => {
+    installCommandStub('ballin', { output: 'updated maintenance-only Ballin' });
+    requiredCommandShims.forEach((command: string) => {
+      if (!fs.existsSync(path.join(binDir, command))) {
+        installCommandStub(command);
+      }
+    });
+    writeConfig({
+      update: {
+        cleanup: 'false',
+        nvm: 'false',
+        npm: 'false',
+        softwareupdate: 'false',
+        selfUpdate: 'true',
+        backup: 'false',
+      },
+      backup: {
+        id: null,
+        host: 'example.test',
+      },
+      analytics: { enabled: 'false' },
+    });
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'updated maintenance-only Ballin');
+    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.deepEqual(commandLog(), ['ballin|,|self-update']);
+  });
+
+  it('fails an explicitly enabled backup stage with setup guidance when unconfigured', () => {
+    fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
+    writeConfig({
+      update: {
+        cleanup: 'false',
+        nvm: 'false',
+        npm: 'false',
+        softwareupdate: 'false',
+        selfUpdate: 'false',
+        backup: 'true',
+      },
+      backup: {
+        id: null,
+        host: 'example.test',
+      },
+      analytics: { enabled: 'false' },
+    });
+
+    const result = spawnUpdate();
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Backing up development environment');
+    assert.include(result.stderr, "run 'ballin backup setup' to enable it");
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('uses raw destination types when an enabled backup stage validates config', () => {
+    fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
+    const update = {
+      cleanup: 'false',
+      nvm: 'false',
+      npm: 'false',
+      softwareupdate: 'false',
+      selfUpdate: 'false',
+      backup: 'true',
+    };
+
+    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+      writeConfig({
+        update,
+        backup: { id, host: 'example.test' },
+        analytics: { enabled: 'false' },
+      });
+
+      const result = spawnUpdate();
+
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, 'invalid config value backup.id; expected null or a non-empty string');
+      assert.include(result.stderr, 'run ballin config reset to restore valid defaults');
+    });
+
+    writeConfig({
+      update,
+      backup: { id: 'test-gist-id', host: { value: 'unexpected-host' } },
+      analytics: { enabled: 'false' },
+    });
+
+    const malformedHost = spawnUpdate();
+
+    assert.equal(malformedHost.status, 1);
+    assert.include(malformedHost.stderr, 'run ballin backup setup to repair it');
+    assert.deepEqual(commandLog(), []);
+  });
+
   it('checks Ballin readiness with the Node.js runtime from the updated nvm PATH', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     const nvmBinDir = path.join(tempDir, 'nvm-bin');
