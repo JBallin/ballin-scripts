@@ -165,18 +165,20 @@ describe('analytics D1 reset', () => {
     assert.deepEqual(calls, []);
   });
 
-  it('falls back to npx wrangler when wrangler is unavailable', () => {
+  it('falls back to npx --yes wrangler when wrangler is unavailable', () => {
     const calls: SpawnCall[] = [];
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-reset-'));
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
-
-    const rows = runWrangler('SELECT 1', {
+    const options = {
       database: defaultDatabase,
       dryRun: true,
       help: false,
       rootDir,
-    }, (command: string, args: string[]) => {
+    };
+    const wranglerArgs = wranglerArgsFor('SELECT 1', options);
+
+    const rows = runWrangler('SELECT 1', options, (command: string, args: string[]) => {
       calls.push({ args, command });
       if (command === 'wrangler') {
         return {
@@ -187,7 +189,10 @@ describe('analytics D1 reset', () => {
       return d1Success([{ rows: 1, table_name: 'install_days' }]);
     });
 
-    assert.deepEqual(calls.map((call) => call.command), ['wrangler', 'npx']);
+    assert.deepEqual(calls, [
+      { args: wranglerArgs, command: 'wrangler' },
+      { args: ['--yes', 'wrangler', ...wranglerArgs], command: 'npx' },
+    ]);
     assert.deepEqual(rows, [{ rows: 1, table_name: 'install_days' }]);
   });
 });

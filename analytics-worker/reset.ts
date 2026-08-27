@@ -175,7 +175,7 @@ const runWrangler = (
   });
 
   if (result.error && 'code' in result.error && result.error.code === 'ENOENT') {
-    result = spawnRunner('npx', ['wrangler', ...wranglerArgs], {
+    result = spawnRunner('npx', ['--yes', 'wrangler', ...wranglerArgs], {
       cwd: rootDir,
       encoding: 'utf8',
     });

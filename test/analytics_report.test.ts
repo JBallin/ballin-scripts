@@ -224,6 +224,50 @@ describe('analytics D1 report', () => {
     assert.include(calls[0].args, '--remote');
   });
 
+  it('falls back to npx --yes wrangler when wrangler is unavailable', () => {
+    const calls: SpawnCall[] = [];
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
+    fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
+    const options = {
+      database: defaultDatabase,
+      from: '2026-06-01',
+      rootDir,
+      to: '2026-06-30',
+    };
+    const wranglerArgs = wranglerArgsFor('SELECT 1', options);
+
+    const rows = runWrangler('SELECT 1', options, (command: string, args: string[]) => {
+      calls.push({ args, command });
+      if (command === 'wrangler') {
+        return {
+          error: Object.assign(new Error('missing wrangler'), { code: 'ENOENT' }),
+          output: [],
+          pid: 1,
+          signal: null,
+          status: null,
+          stderr: '',
+          stdout: '',
+        };
+      }
+      return {
+        error: undefined,
+        output: [],
+        pid: 1,
+        signal: null,
+        status: 0,
+        stderr: '',
+        stdout: JSON.stringify([{ results: [{ total: 1 }], success: true }]),
+      };
+    });
+
+    assert.deepEqual(calls, [
+      { args: wranglerArgs, command: 'wrangler' },
+      { args: ['--yes', 'wrangler', ...wranglerArgs], command: 'npx' },
+    ]);
+    assert.deepEqual(rows, [{ total: 1 }]);
+  });
+
   it('explains the required local Wrangler config before running commands', () => {
     const calls: SpawnCall[] = [];
 
