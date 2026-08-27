@@ -206,12 +206,19 @@ cp analytics-worker/wrangler.toml.example analytics-worker/wrangler.toml
 ```
 
 Then fill in the D1 `database_id` and make sure Wrangler is authenticated for
-the Cloudflare account. The database ID is not a secret by itself; remote reads
-are still controlled by Wrangler auth.
+the Cloudflare account. For local maintainer authentication, run:
+
+```shell
+npx wrangler login
+```
+
+The database ID is not a secret by itself; remote reads are still controlled by
+Wrangler auth.
 
 The report does not read or print Cloudflare secrets. Do not paste secret
-values into the report command. If Wrangler is not installed globally, the
-script falls back to `npx wrangler`.
+values into the report command. If `wrangler` is not directly available, the
+script falls back to `npx --yes wrangler`; `--yes` allows npx to install
+Wrangler without prompting.
 
 Reporting stays within the existing aggregate schema:
 
@@ -259,5 +266,7 @@ npm run analytics:report
 ```
 
 The reset command uses local Wrangler authentication and the ignored
-`analytics-worker/wrangler.toml` file, like the report command. If Wrangler is
-not installed globally, the script falls back to `npx wrangler`.
+`analytics-worker/wrangler.toml` file, like the report command. Run
+`npx wrangler login` first if local Wrangler authentication is not configured.
+If `wrangler` is not directly available, the script falls back to
+`npx --yes wrangler`, which allows npx to install Wrangler without prompting.
