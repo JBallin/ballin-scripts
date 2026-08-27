@@ -216,7 +216,7 @@ The database ID is not a secret by itself; remote reads are still controlled by
 Wrangler auth.
 
 The report does not read or print Cloudflare secrets. Do not paste secret
-values into the report command. If Wrangler is not installed globally, the
+values into the report command. If `wrangler` is not directly available, the
 script falls back to `npx --yes wrangler`; `--yes` allows npx to install
 Wrangler without prompting.
 
@@ -268,5 +268,5 @@ npm run analytics:report
 The reset command uses local Wrangler authentication and the ignored
 `analytics-worker/wrangler.toml` file, like the report command. Run
 `npx wrangler login` first if local Wrangler authentication is not configured.
-If Wrangler is not installed globally, the script falls back to
+If `wrangler` is not directly available, the script falls back to
 `npx --yes wrangler`, which allows npx to install Wrangler without prompting.
