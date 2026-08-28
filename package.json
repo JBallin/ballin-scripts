@@ -1,7 +1,8 @@
 {
   "name": "ballin-scripts",
   "version": "2.0.0",
-  "description": "Back up your dotfiles and update your macOS development environment",
+  "private": true,
+  "license": "MIT",
   "scripts": {
     "lint": "eslint .",
     "analytics:report": "node analytics-worker/report.ts",
@@ -15,26 +16,12 @@
   },
   "mocha": {
     "extension": [
-      "js",
       "ts"
     ],
     "require": [
       "test/setup.ts"
     ]
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/JBallin/ballin-scripts.git"
-  },
-  "author": {
-    "name": "JBallin",
-    "url": "https://medium.com/@PrintSupWorld"
-  },
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/JBallin/ballin-scripts/issues"
-  },
-  "homepage": "https://github.com/JBallin/ballin-scripts#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/chai": "^4.3.20",

@@ -23,8 +23,18 @@ const runCommand = (
   args: string[] = [],
   options: SpawnOptions = {},
 ): SpawnResult => spawnSync(command, args, {
-  encoding: 'utf8',
   ...options,
+  encoding: 'utf8',
+  shell: false,
+});
+
+const runNodeScript = (
+  scriptPath: string,
+  options: SpawnOptions = {},
+): SpawnResult => spawnSync(process.execPath, [scriptPath], {
+  ...options,
+  encoding: 'utf8',
+  shell: false,
 });
 
 const isExecutable = (candidate: string): boolean => {
@@ -139,6 +149,7 @@ module.exports = {
   reportSpawnError,
   removeTempFile,
   runCommand,
+  runNodeScript,
   runVisibleCommand,
   spawnResultStatus,
   writeStderrLine,
