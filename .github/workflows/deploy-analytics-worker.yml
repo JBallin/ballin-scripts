@@ -147,9 +147,11 @@ jobs:
           NODE
 
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Rate-limit bindings require Wrangler >=4.36.0.
+          wranglerVersion: "^4.36.0"
           command: deploy
           workingDirectory: analytics-worker
