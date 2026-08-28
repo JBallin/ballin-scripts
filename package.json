@@ -46,10 +46,10 @@
     ],
     "reports-dir": "coverage",
     "check-coverage": true,
-    "statements": 98.9,
-    "branches": 95.9,
+    "statements": 99,
+    "branches": 96.1,
     "functions": 100,
-    "lines": 98.9
+    "lines": 99
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

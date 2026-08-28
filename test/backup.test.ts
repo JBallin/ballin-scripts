@@ -45,6 +45,7 @@ type RunBackupOptions = {
   ghUploadFail?: boolean;
   ghRemoveAfterAuth?: boolean;
   ghRemoveAfterInitialRead?: boolean;
+  ghRemoveAfterMetadata?: boolean;
   commandPath?: string;
   commandCwd?: string;
   failFinalConfigCommit?: boolean;
@@ -149,7 +150,9 @@ if [ "$1" = 'api' ]; then
     if [ "$FAKE_GH_METADATA_MODE" = 'files-null' ]; then printf '%s\\n' '{"files":null}'; exit 0; fi
     if [ "$FAKE_GH_METADATA_MODE" = 'truncated-string' ]; then printf '%s\\n' '{"files":{},"truncated":"yes"}'; exit 0; fi
     node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; const sizeMode = process.env.FAKE_GH_FILE_SIZE_MODE; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = process.env.FAKE_GH_METADATA_MODE === "file-null" ? null : { filename: name, ...(sizeMode === "missing" ? {} : { size: sizeMode === "invalid" ? "invalid" : sizeMode === "mismatch" ? size + 1 : size }), truncated: process.env.FAKE_GH_FILE_TRUNCATION_INVALID === "true" ? "invalid" : size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
-    exit $?
+    metadata_status=$?
+    if [ "$FAKE_GH_REMOVE_AFTER_METADATA" = 'true' ]; then rm "$0"; fi
+    exit "$metadata_status"
   fi
   if [ "$5" = 'PATCH' ] && [ "$7" = '--input' ] && [ "$9" = '--silent' ] && [ "$#" -eq 9 ]; then
     if [ "$FAKE_GH_UPLOAD_FAIL" = 'true' ]; then
@@ -382,6 +385,7 @@ done
     ghUploadFail = false,
     ghRemoveAfterAuth = false,
     ghRemoveAfterInitialRead = false,
+    ghRemoveAfterMetadata = false,
     commandPath = ballinPath,
     commandCwd = testHomeDir,
     failFinalConfigCommit = false,
@@ -424,6 +428,7 @@ done
       FAKE_GH_UPLOAD_FAIL: ghUploadFail ? 'true' : 'false',
       FAKE_GH_REMOVE_AFTER_AUTH: ghRemoveAfterAuth ? 'true' : 'false',
       FAKE_GH_REMOVE_AFTER_INITIAL_READ: ghRemoveAfterInitialRead ? 'true' : 'false',
+      FAKE_GH_REMOVE_AFTER_METADATA: ghRemoveAfterMetadata ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_PYTHON_TOOL_LOG: pythonToolLogPath,
       FAKE_OPEN_LOG: openLogPath,
@@ -1253,6 +1258,32 @@ exit 2
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'cached base\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'cached base\n');
     assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves remote and cache state when gh disappears before a truncated remote read', () => {
+    const remoteContent = `${'remote content\n'.repeat(80000)}`;
+    writeSnapshot('local content\n');
+    seedFakeGist(remoteContent);
+
+    const result = runBackup({ ghRemoveAfterMetadata: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'gh: command not found');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), remoteContent);
+    assert.isFalse(fs.existsSync(cachedSnapshotPath()));
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves remote and cache state when gh disappears before the Gist update', () => {
+    writeSnapshot('new local content\n');
+
+    const result = runBackup({ ghRemoveAfterMetadata: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'gh: command not found');
+    assert.include(result.stderr, 'Gist update failed or its outcome is unknown');
+    assert.isFalse(fs.existsSync(cachedSnapshotPath()));
     assert.deepEqual(gistUploads(), []);
   });
 
