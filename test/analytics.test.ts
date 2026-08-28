@@ -1,4 +1,3 @@
-const { assert } = require('chai');
 const { EventEmitter } = require('events');
 const https = require('https');
 const { fetchConfig, configPath, stringify } = require('../config/index.ts');
