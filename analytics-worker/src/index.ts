@@ -289,7 +289,7 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
     return jsonResponse(400, { error: 'content-type must be application/json' });
   }
-  if (!env.INSTALL_ID_HASH_SECRET) {
+  if (!env.INSTALL_ID_HASH_SECRET || !env.ANALYTICS_RATE_LIMITER) {
     return jsonResponse(500, { error: 'analytics backend is not configured' });
   }
   if (contentLengthExceedsLimit(request)) {

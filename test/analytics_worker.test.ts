@@ -1,4 +1,10 @@
 const { assert } = require('chai');
+const {
+  buildAnalyticsPayload,
+} = require('../commands/analytics.ts');
+const {
+  analyticsCommandForBallinArgs,
+} = require('../commands/ballin.ts');
 
 type StatementRun = {
   query: string;
@@ -7,6 +13,7 @@ type StatementRun = {
 
 type MakeEnvOptions = {
   hashSecret?: string;
+  rateLimiter?: boolean;
   rateLimitFailure?: (key: string) => boolean;
 };
 
@@ -37,6 +44,14 @@ class TestStatement {
 const makeEnv = (options: MakeEnvOptions = {}) => {
   const rateLimitKeys: string[] = [];
   const runs: StatementRun[] = [];
+  const rateLimiter = options.rateLimiter === false ? {} : {
+    ANALYTICS_RATE_LIMITER: {
+      async limit({ key }: { key: string }) {
+        rateLimitKeys.push(key);
+        return { success: !options.rateLimitFailure?.(key) };
+      },
+    },
+  };
   return {
     env: {
       ANALYTICS_DB: {
@@ -53,12 +68,7 @@ const makeEnv = (options: MakeEnvOptions = {}) => {
           return [];
         },
       },
-      ANALYTICS_RATE_LIMITER: {
-        async limit({ key }: { key: string }) {
-          rateLimitKeys.push(key);
-          return { success: !options.rateLimitFailure?.(key) };
-        },
-      },
+      ...rateLimiter,
       INSTALL_ID_HASH_SECRET: options.hashSecret ?? 'test-secret',
     },
     rateLimitKeys,
@@ -102,6 +112,27 @@ const eventRequest = (
 };
 
 describe('analytics Worker', () => {
+  it('accepts the current client payload for a canonical command', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const command = analyticsCommandForBallinArgs(['doctor', '--verbose']);
+    const now = new Date();
+    const payload = buildAnalyticsPayload({
+      command,
+      status: 'success',
+      durationBucket: '<1s',
+      now,
+    }, '826f9faa-9995-4f66-a01b-73b4f7aebdf1', '2.0.0');
+
+    const response = await worker.fetch(eventRequest(payload), env);
+
+    assert.equal(command, 'ballin doctor');
+    assert.equal(response.status, 204);
+    assert.includeDeepMembers(runs.map(({ values }) => values), [
+      [payload.dateBucket, 'ballin doctor', 'success', '<1s'],
+    ]);
+  });
+
   it('accepts valid unauthenticated events and stores only aggregate fields', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, rateLimitKeys, runs } = makeEnv();
@@ -247,6 +278,19 @@ describe('analytics Worker', () => {
   it('fails closed when the install ID hash secret is missing', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, rateLimitKeys, runs } = makeEnv({ hashSecret: '' });
+
+    const response = await worker.fetch(eventRequest(payloadForCommand('ballin update')), env);
+    const body = await response.json() as { error?: string };
+
+    assert.equal(response.status, 500);
+    assert.equal(body.error, 'analytics backend is not configured');
+    assert.deepEqual(rateLimitKeys, []);
+    assert.deepEqual(runs, []);
+  });
+
+  it('fails closed when the rate-limit binding is missing', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, rateLimitKeys, runs } = makeEnv({ rateLimiter: false });
 
     const response = await worker.fetch(eventRequest(payloadForCommand('ballin update')), env);
     const body = await response.json() as { error?: string };
