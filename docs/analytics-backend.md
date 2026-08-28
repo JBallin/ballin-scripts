@@ -142,7 +142,9 @@ For production setup or recreation:
   `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`
 - apply `analytics-worker/migrations/0001_initial.sql` with `--remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
-  change landed on `main`
+  change landed on `main`; after deploying, the workflow verifies every Worker
+  version receiving traffic has the required D1, rate-limit, and hash-secret
+  binding names and types
 - confirm the deployed Worker returns `204` for a valid event, `400` for
   unsupported fields or invalid enums, and `429` when rate limits are exceeded
 - query D1 to confirm only hashed install/day rows and aggregate counts are
@@ -151,3 +153,6 @@ For production setup or recreation:
 Deploy failures are visible in GitHub Actions. Remote D1 migrations remain
 manual and should use `--remote`; migration changes stop publishing until the
 remote migration is applied and the deploy workflow succeeds from `main`.
+The deployment check verifies Cloudflare binding metadata without exposing
+secret values. It cannot verify the hash secret's value, D1 schema or migration
+state, resource reachability, or runtime rate-limit behavior.

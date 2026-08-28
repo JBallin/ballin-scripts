@@ -134,8 +134,18 @@ globally, use `npx wrangler` in place of `wrangler`.
 The deploy workflow runs `npm test`, creates an ignored runner-local
 `wrangler.toml` from `wrangler.toml.example`, fills in the D1 database ID from
 `CLOUDFLARE_D1_DATABASE_ID`, and runs `wrangler deploy` from this directory. It
-does not set or rotate the existing Cloudflare Worker hash secret
-`INSTALL_ID_HASH_SECRET`.
+then inspects every Worker version receiving production traffic and fails unless
+each version exposes `ANALYTICS_DB` as a D1 binding,
+`ANALYTICS_RATE_LIMITER` as a rate-limit binding, and
+`INSTALL_ID_HASH_SECRET` as a secret-text binding. The check uses structured
+Wrangler deployment and version metadata; it does not parse deploy output or
+make unrelated Wrangler warnings fatal.
+
+The workflow does not set or rotate `INSTALL_ID_HASH_SECRET`. Cloudflare exposes
+the secret binding name and type without exposing its value, so deployment
+verification can confirm that the secret is attached but cannot confirm that
+its value is correct. Binding metadata likewise does not prove D1 schema or
+migration state, database reachability, or runtime rate-limit behavior.
 
 Keep the Cloudflare values as environment secrets rather than repository
 secrets. The workflow runs automatically on Worker-impacting pushes to `main`
