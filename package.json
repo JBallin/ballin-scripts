@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:analytics-worker": "tsc --noEmit --strict --target ES2023 --module ESNext --lib ES2023,WebWorker --ignoreConfig analytics-worker/src/index.ts",
     "test:unit": "mocha",
-    "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:unit"
+    "test:coverage": "c8 npm run test:unit",
+    "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage"
   },
   "engines": {
     "node": ">=24.12"
@@ -23,11 +24,39 @@
       "test/setup.ts"
     ]
   },
+  "c8": {
+    "all": true,
+    "extension": [
+      ".ts"
+    ],
+    "include": [
+      "commands/**/*.ts",
+      "config/**/*.ts",
+      "analytics-worker/report.ts",
+      "analytics-worker/reset.ts",
+      "analytics-worker/src/**/*.ts"
+    ],
+    "exclude": [
+      "test/**",
+      "coverage/**"
+    ],
+    "reporter": [
+      "text",
+      "html"
+    ],
+    "reports-dir": "coverage",
+    "check-coverage": true,
+    "statements": 92.84,
+    "branches": 85.69,
+    "functions": 95.47,
+    "lines": 92.84
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.13.2",
+    "c8": "^12.0.0",
     "chai": "^6.2.2",
     "eslint": "^10.5.0",
     "globals": "^17.7.0",
