@@ -5,15 +5,16 @@
 - `bin/ballin` is the stable, extensionless public entry point and must remain a
   tiny Node shim. Put typed CLI implementations under `commands/` or the feature
   folder that owns them, and configuration code under `config/`.
-- TypeScript source runs directly in Node. Do not introduce generated JavaScript,
-  build output, runtime transpilers, or bundlers. Preserve executable modes and
-  the existing shebang and installed-symlink coverage when changing public entry
-  points.
+- Node-side TypeScript runs directly in Node. Do not introduce generated
+  JavaScript, build output, runtime transpilers, or bundlers for those surfaces.
+  Preserve executable modes and the existing shebang and installed-symlink
+  coverage when changing public entry points.
 - `install.sh` is Bash bootstrap/install glue, not part of the installed command
   shim. It delegates current setup behavior to `commands/install_setup.ts`.
-- `analytics-worker/` owns the separate Cloudflare Worker, D1 schema and
-  migrations, reporting/reset utilities, and deployment verification. Preserve
-  the isolation and data policy documented in `analytics-worker/README.md`.
+- `analytics-worker/src/index.ts` is a Cloudflare Workers entry point deployed
+  through the existing Wrangler toolchain, not a direct-Node CLI surface. The
+  folder also owns D1 migrations, reporting/reset utilities, and deployment
+  verification; preserve the isolation and data policy in its README.
 
 ## Local commands
 
