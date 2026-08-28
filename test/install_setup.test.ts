@@ -309,6 +309,21 @@ esac
     );
   });
 
+  it('updates config when the repository path contains spaces and shell metacharacters', () => {
+    repoDir = path.join(testDir, 'repo with spaces $(touch shell-sentinel)');
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
+
+    const result = withoutStdout(() => configure(repoDir, docsUrl));
+
+    assert.isTrue(result);
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'config', 'shell-sentinel')));
+    assert.include(
+      fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'),
+      '"update"',
+    );
+  });
+
   it('shows the analytics notice and creates a local install ID for enabled config', () => {
     installConfigSources();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
