@@ -836,6 +836,28 @@ exit 2
     assert.equal(configured.update.backup, 'false');
   });
 
+  it('reports failure when an accepted automatic-backup choice cannot be persisted', () => {
+    writeCompleteBackupConfig(null, 'example.test');
+    seedBackupMarker();
+    const restoredConfig = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, 'config', '.defaultConfig.json'), 'utf8'),
+    );
+    restoredConfig.update.backup = { invalid: true };
+    seedFakeGistFile('ballin_config', JSON.stringify(restoredConfig));
+
+    const result = runBackup({
+      args: ['setup'],
+      input: 'y\n\ny\ntest-gist-id\ny\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.include(result.stderr, "setup did not complete; resolve the error and retry with 'ballin backup setup'");
+    const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(configured.backup.id, 'test-gist-id');
+    assert.deepEqual(configured.update.backup, { invalid: true });
+  });
+
   it('uses the executing checkout cache after setup with mismatched HOME', () => {
     const staleRemoteBase = 'old destination value\n';
     const localValue = 'local value for adopted destination\n';
