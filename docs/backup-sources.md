@@ -9,9 +9,8 @@ snapshots.
 
 Listed filenames may live under an application's configuration directory. To
 inspect editor files before opting in, check
-`~/Library/Application Support/Code/User/`,
-`~/Library/Application Support/Code - Insiders/User/`, and
-`~/Library/Application Support/Brackets/`.
+`~/Library/Application Support/Code/User/` and
+`~/Library/Application Support/Code - Insiders/User/`.
 
 | Local source or command | Gist snapshot | Why included | Plausible sensitive content | Decision |
 | --- | --- | --- | --- | --- |
@@ -20,8 +19,6 @@ inspect editor files before opting in, check
 | `.vimrc`, `.nanorc` | `vimrc`, `nanorc` | Preserve editor behavior. | Arbitrary user commands, paths, plugins, and URLs. | Retain; document. |
 | VS Code and VS Code Insiders `settings.json`, `keybindings.json` | `vs_settings`, `vs_keybindings`, `vsI_settings`, `vsI_keybindings` | Preserve editor settings and keybindings. | Extension credentials, remote hosts, paths, command arguments, and arbitrary settings. | Retain; explicitly identify as sensitive. |
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Retain; document metadata exposure. |
-| Brackets `brackets.json`, `keymap.json` | `brackets_settings.json`, `brackets_keymap.json` | Preserve editor settings and keybindings. | Arbitrary extension configuration, paths, and possible credentials. | Retain; explicitly identify as sensitive. |
-| Brackets user and disabled extension directory listings | `brackets_extensions`, `brackets_disabled_extensions` | Record installed and disabled tooling. | Tooling and preferences. | Retain; document metadata exposure. |
 | `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Preserve compatible Ballin preferences for adoption. | Gist ID and host, update choices, analytics choice, and unknown future settings. | Retain for adoption compatibility; setup overrides destination fields during adoption. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Retain. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Retain. |

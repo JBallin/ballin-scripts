@@ -1427,45 +1427,6 @@ printf '%s\\n' 'publisher.insiders-extension'
     ]);
   });
 
-  it('snapshots Brackets settings, keymap, and extension directories', () => {
-    const bracketsDir = path.join(testHomeDir, 'Library', 'Application Support', 'Brackets');
-    fs.mkdirSync(path.join(bracketsDir, 'extensions', 'user'), { recursive: true });
-    fs.mkdirSync(path.join(bracketsDir, 'extensions', 'disabled'), { recursive: true });
-    fs.writeFileSync(path.join(bracketsDir, 'brackets.json'), '{"linting.enabled":true}\n');
-    fs.writeFileSync(path.join(bracketsDir, 'keymap.json'), '{"Ctrl-E":"edit"}\n');
-    fs.writeFileSync(path.join(bracketsDir, 'extensions', 'user', 'beautify'), '');
-    fs.writeFileSync(path.join(bracketsDir, 'extensions', 'disabled', 'legacy-lint'), '');
-
-    const result = runBackup();
-
-    assertBackupSucceeded(result);
-    assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ brackets_settings',
-      '✚ brackets_keymap',
-      '✚ brackets_extensions',
-      '✚ brackets_disabled_extensions',
-    ]);
-    assert.equal(
-      fs.readFileSync(path.join(backupCacheDir, 'brackets_settings.json'), 'utf8'),
-      '{"linting.enabled":true}\n',
-    );
-    assert.equal(
-      fs.readFileSync(path.join(backupCacheDir, 'brackets_keymap.json'), 'utf8'),
-      '{"Ctrl-E":"edit"}\n',
-    );
-    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'brackets_extensions'), 'utf8'), 'beautify\n');
-    assert.equal(
-      fs.readFileSync(path.join(backupCacheDir, 'brackets_disabled_extensions'), 'utf8'),
-      'legacy-lint\n',
-    );
-    assert.deepEqual(gistUploads(), [
-      'brackets_settings.json',
-      'brackets_keymap.json',
-      'brackets_extensions',
-      'brackets_disabled_extensions',
-    ]);
-  });
-
   it('snapshots npm globals and Mac App Store apps when commands are available', () => {
     writeTestExecutable('npm', `#!/usr/bin/env bash
 if [ "$*" != 'list -g --depth=0' ]; then exit 2; fi

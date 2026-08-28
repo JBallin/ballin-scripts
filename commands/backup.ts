@@ -108,10 +108,6 @@ const fileSuggestions = `
   bash_profile.sh
   bashrc.sh
   Brewfile
-  brackets_disabled_extensions
-  brackets_extensions
-  brackets_keymap.json
-  brackets_settings.json
   brew_cask
   brew_leaves
   brew_list
@@ -894,18 +890,6 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
       addShellCommand(`${prefix}_extensions`, `${binaryName} --list-extensions`, vscodeDir);
     }
   });
-
-  const bracketsDir = path.join(homeDir, 'Library', 'Application Support', 'Brackets');
-  if (dirExists(bracketsDir)) {
-    if (fileExists(path.join(bracketsDir, 'brackets.json'))) {
-      snapshots.push(catSnapshot(bracketsDir, 'brackets_settings.json', 'brackets.json'));
-    }
-    if (fileExists(path.join(bracketsDir, 'keymap.json'))) {
-      snapshots.push(catSnapshot(bracketsDir, 'brackets_keymap.json', 'keymap.json'));
-    }
-    addShellCommand('brackets_extensions', 'ls -A extensions/user/', bracketsDir);
-    addShellCommand('brackets_disabled_extensions', 'ls -A extensions/disabled/', bracketsDir);
-  }
 
   addFile('.vimrc', 'vimrc');
   addFile('.nanorc', 'nanorc');
