@@ -173,6 +173,20 @@ const setConfigValue = (configPath: string, key: string, value: string): boolean
   return true;
 };
 
+const offerAutomaticUpdateBackup = (configPath: string): boolean => {
+  const currentPreference = configValue(configPath, 'update.backup');
+  if (currentPreference === true || currentPreference === 'true') {
+    return true;
+  }
+
+  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [y/N] ');
+  if (enable !== 'y' && enable !== 'Y') {
+    return true;
+  }
+
+  return setConfigValue(configPath, 'update.backup', 'true');
+};
+
 const replaceInvalidBackupHost = (configPath: string, value: string): boolean => {
   const config = readJsonObject(configPath);
   if (
@@ -522,6 +536,14 @@ const configureGist = (
     } finally {
       fs.rmSync(markerPath, { force: true });
     }
+  }
+
+  if (
+    !backupId
+    && backupDestinationForConfig(ballinConfig)?.idStatus === 'configured'
+    && !offerAutomaticUpdateBackup(ballinConfig)
+  ) {
+    return false;
   }
 
   return true;

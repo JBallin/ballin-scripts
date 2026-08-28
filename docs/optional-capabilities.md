@@ -87,7 +87,14 @@ ballin backup setup
 Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
 `gh` authentication for that host, and either adopts an existing backup Gist or
 creates a new one. `backup.id` is the opt-in signal; there is no separate
-enabled or onboarding setting.
+enabled or onboarding setting. When setup newly configures a destination, it
+also offers a default-no choice to run `ballin backup` automatically after
+`ballin update`. Change that preference later with:
+
+```shell
+ballin config set update.backup true
+ballin config set update.backup false
+```
 
 Invalid `backup.id` values can be repaired with `ballin config reset`; a missing
 or malformed `backup.host` can be repaired with `ballin backup setup`. See
@@ -157,7 +164,7 @@ command returns the last nonzero stage status.
 | --- | --- | --- |
 | `update.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
 | `update.selfUpdate` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
-| `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Configure a destination with `ballin backup setup` before enabling it; an explicitly requested unconfigured backup stage fails with setup guidance. |
+| `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Newly completed backup setup offers this choice with a default of no. Configure a destination with `ballin backup setup` before enabling it; an explicitly requested unconfigured backup stage fails with setup guidance. |
 | `update.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `update.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
 | `update.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |
