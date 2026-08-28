@@ -14,6 +14,7 @@ const jsRules = {
 const tsFiles = [
   'analytics-worker/report.ts',
   'analytics-worker/reset.ts',
+  'analytics-worker/verify-deployment.ts',
   'commands/**/*.ts',
   'config/**/*.ts',
   'test/**/*.ts',

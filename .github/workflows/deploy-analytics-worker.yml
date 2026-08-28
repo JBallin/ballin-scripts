@@ -155,3 +155,4 @@ jobs:
           wranglerVersion: "^4.36.0"
           command: deploy
           workingDirectory: analytics-worker
+          postCommands: node verify-deployment.ts
