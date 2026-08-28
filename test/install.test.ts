@@ -1,4 +1,3 @@
-const { assert } = require('chai');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');

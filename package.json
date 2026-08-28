@@ -19,15 +19,16 @@
       "ts"
     ],
     "require": [
+      "chai/register-assert.js",
       "test/setup.ts"
     ]
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/chai": "^4.3.20",
+    "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.13.2",
-    "chai": "^4.3.6",
+    "chai": "^6.2.2",
     "eslint": "^10.5.0",
     "globals": "^17.7.0",
     "mocha": "^11.7.6",
