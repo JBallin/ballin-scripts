@@ -15,6 +15,7 @@ const {
   commandExists,
   readCommandOutput,
   runCommand,
+  runNodeScript,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
@@ -122,7 +123,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
   const childEnv = commandEnv(path.join(repoDir, 'config'));
   childEnv.BALLIN_TEST_CONFIG_PATH = configPath;
 
-  const updateResult = runCommand(process.execPath, [updateConfigPath], {
+  const updateResult = runNodeScript(updateConfigPath, {
     cwd: path.join(repoDir, 'config'),
     env: childEnv,
   });
