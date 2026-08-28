@@ -1,4 +1,5 @@
 /node_modules
+/coverage/
 ballin.config.json
 /.backup-cache
 /.analytics
