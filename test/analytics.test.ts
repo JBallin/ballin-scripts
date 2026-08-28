@@ -316,16 +316,21 @@ describe('analytics client', () => {
       enabled: 'true',
     });
     writeInstallId();
+    let senderCalled = false;
 
     await recordAnalyticsEvent({
       command: 'ballin update',
       now: fixedNow,
     }, {
+      env: {},
       installIdPath: testInstallIdPath,
       sender: async () => {
+        senderCalled = true;
         throw new Error('network unavailable');
       },
     });
+
+    assert.isTrue(senderCalled);
   });
 
   it('sends only the allowlisted payload fields', async () => {
