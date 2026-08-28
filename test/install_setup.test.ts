@@ -2,13 +2,15 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const {
+  const {
   analyticsNotice,
   analyticsNoticeFor,
 } = require('../commands/analytics.ts');
 const {
   commitAdoptedConfig,
+  configHasBackupHost,
   configure,
+  configureGist,
   invalidateBackupCache,
   setup,
   setupAnalytics,
@@ -149,6 +151,7 @@ case "$1:$2" in
     fi
     if [ "$3:$4:$5" = '--files:--:returning-gist-id' ]; then
       if [ "$FAKE_GIST_FILE_LIST_SIGNAL" = '1' ]; then kill -TERM "$$"; fi
+      if [ -n "$FAKE_GIST_FILE_LIST_STDERR" ]; then printf '%s\\n' "$FAKE_GIST_FILE_LIST_STDERR" >&2; fi
       if [ "\${FAKE_GIST_FILE_LIST_STATUS:-0}" != '0' ]; then exit "$FAKE_GIST_FILE_LIST_STATUS"; fi
       printf '%s\\n' '.MyConfig.md'
       if [ "$FAKE_GIST_CONFIG_ABSENT" != '1' ]; then
@@ -158,6 +161,7 @@ case "$1:$2" in
     fi
     if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:ballin_config' ]; then
       if [ "$FAKE_GIST_CONFIG_SIGNAL" = '1' ]; then kill -TERM "$$"; fi
+      if [ -n "$FAKE_GIST_CONFIG_STDERR" ]; then printf '%s\\n' "$FAKE_GIST_CONFIG_STDERR" >&2; fi
       printf '%s\\n' "$FAKE_RESTORED_CONFIG"
       exit "$FAKE_GIST_CONFIG_STATUS"
     fi
@@ -173,6 +177,9 @@ case "$1:$2" in
       exit 9
     fi
     if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
+    if [ -n "$FAKE_GIST_CREATE_STDERR" ]; then printf '%s\\n' "$FAKE_GIST_CREATE_STDERR" >&2; fi
+    if [ "\${FAKE_GIST_CREATE_STATUS:-0}" != '0' ]; then exit "$FAKE_GIST_CREATE_STATUS"; fi
+    if [ "$FAKE_GIST_REMOVE_CONFIG" = '1' ]; then /bin/rm -f "$TEST_REPO_DIR/ballin.config.json"; fi
     printf '%s\\n' 'https://gist.github.com/new-gist-id'
     ;;
   *) exit 2 ;;
@@ -185,14 +192,16 @@ esac
     env = {},
     guHostExisted = 'true',
     input,
+    preserveBackupConfig = false,
   }: {
     confirmBackup?: boolean;
     env?: NodeJS.ProcessEnv;
     guHostExisted?: 'true' | 'false';
     input?: string;
+    preserveBackupConfig?: boolean;
   } = {}) => {
     const configPath = path.join(repoDir, 'ballin.config.json');
-    if (fs.existsSync(configPath)) {
+    if (fs.existsSync(configPath) && !preserveBackupConfig) {
       const config = readRepoConfig();
       config.backup = {
         ...config.backup,
@@ -266,6 +275,32 @@ esac
       JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8')),
       JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8')),
     );
+  });
+
+  it('fails config creation cleanly when required config sources are missing', () => {
+    const { output, result } = captureStdout(() => configure(repoDir, docsUrl));
+
+    assert.isFalse(result);
+    assert.equal(output, '');
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
+  it('treats malformed config structures as having no usable backup host', () => {
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), 'null\n');
+    assert.isFalse(configHasBackupHost(repoDir));
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{\n');
+    assert.isFalse(configHasBackupHost(repoDir));
+  });
+
+  it('rejects a missing Gist config without prompting or contacting GitHub', () => {
+    const missingConfig = path.join(repoDir, 'missing-config.json');
+
+    const result = withoutStdout(() => configureGist(repoDir, docsUrl, false, {
+      configPath: missingConfig,
+    }));
+
+    assert.isFalse(result);
+    assert.equal(commandLog(), '');
   });
 
   it('does not create a local install ID while creating config', () => {
@@ -371,6 +406,40 @@ esac
     assert.isFalse(fs.existsSync(installIdPath()));
   });
 
+  it('never blocks setup when analytics state cannot be created', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      analytics: { enabled: 'true' },
+    }));
+    fs.writeFileSync(path.join(repoDir, '.analytics'), 'blocks analytics directory creation\n');
+
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+
+    assert.isTrue(result);
+    assert.include(output, analyticsNotice);
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
+  it('ignores structurally invalid analytics config during setup', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({ analytics: false }));
+
+    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+
+    assert.isTrue(result);
+    assert.equal(output, '');
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
+  it('never blocks setup when the analytics config file disappears', () => {
+    const missingConfig = path.join(repoDir, 'missing-config.json');
+
+    const result = withoutStdout(() => setupAnalytics(repoDir, docsUrl, missingConfig));
+
+    assert.isTrue(result);
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
   it('does not create a local install ID when analytics are disabled by environment', () => {
     [
       { BALLIN_NO_ANALYTICS: '1' },
@@ -472,6 +541,43 @@ esac
     assert.equal(unsupportedResult.status, 1);
   });
 
+  it('reports missing and unknown setup CLI usage with failing statuses', () => {
+    const missing = spawnSync(process.execPath, [installSetupPath], { encoding: 'utf8' });
+    const unknown = spawnSync(process.execPath, [
+      installSetupPath,
+      'future-command',
+      repoDir,
+      docsUrl,
+    ], { encoding: 'utf8' });
+
+    assert.equal(missing.status, 1);
+    assert.include(missing.stdout, 'Usage: install_setup.ts');
+    assert.equal(unknown.status, 1);
+    assert.equal(unknown.stdout, 'Unknown install setup command: future-command\n');
+  });
+
+  it('propagates configure and symlink failures through the setup CLI', () => {
+    const configureResult = spawnSync(process.execPath, [
+      installSetupPath,
+      'configure',
+      repoDir,
+      docsUrl,
+    ], { encoding: 'utf8' });
+    const blockedBinDir = path.join(testDir, 'blocked-bin');
+    fs.writeFileSync(blockedBinDir, 'not a directory\n');
+    const symlinkResult = spawnSync(process.execPath, [
+      installSetupPath,
+      'symlink-binaries',
+      repoDir,
+      blockedBinDir,
+    ], { encoding: 'utf8' });
+
+    assert.equal(configureResult.status, 1);
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    assert.equal(symlinkResult.status, 1);
+    assert.include(symlinkResult.stdout, `Unable to create ${blockedBinDir}`);
+  });
+
   it('replaces existing command symlinks', () => {
     fs.mkdirSync(binDir, { recursive: true });
     fs.symlinkSync(path.join(testDir, 'old-ballin'), path.join(binDir, 'ballin'));
@@ -480,6 +586,14 @@ esac
 
     assert.isTrue(result);
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+  });
+
+  it('fails safely when the binary source directory disappears', () => {
+    fs.rmSync(sourceBinDir, { recursive: true });
+    const { output, result } = captureStdout(() => symlinkBinaries(repoDir, binDir));
+
+    assert.isFalse(result);
+    assert.include(output, `Unable to symlink binaries into ${binDir}`);
   });
 
   it('fails when a command target cannot be replaced', () => {
@@ -583,6 +697,21 @@ esac
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
   });
 
+  it('rejects a blank backup host before authentication or remote mutation', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({ env: { BALLIN_BACKUP_HOST: '   ' } });
+
+    assert.equal(result.status, 1);
+    assert.equal(commandLog(), '');
+    assert.isNull(readRepoConfig().backup.id);
+  });
+
   it('prompts for a host when config migration adds backup.host', () => {
     installConfigSources();
     installFakeGhCommand();
@@ -604,6 +733,72 @@ esac
     assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
     assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
     assert.notInclude(commandLog(), 'gh:gist');
+  });
+
+  it('defers an environment-provided host repair until the retained Gist is validated', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+    const config = readRepoConfig();
+    config.backup = { host: 42, id: 'returning-gist-id' };
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
+
+    const result = runGistSetup({
+      env: {
+        BALLIN_BACKUP_HOST: 'github.enterprise.test',
+        FAKE_GH_HOST: 'github.enterprise.test',
+      },
+      preserveBackupConfig: true,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
+    assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename .MyConfig.md');
+  });
+
+  it('rejects a whitespace-only prompted replacement for an invalid host', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+    const config = readRepoConfig();
+    config.backup = { host: 42, id: 'returning-gist-id' };
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
+
+    const result = runGistSetup({
+      input: '   \n',
+      preserveBackupConfig: true,
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Invalid config value backup.host');
+    assert.equal(commandLog(), '');
+  });
+
+  it('fails safely when a legacy configured Gist has no host and none is selected', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+    const config = readRepoConfig();
+    config.backup = { id: 'existing-gist-id' };
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
+
+    const result = runGistSetup({
+      guHostExisted: 'false',
+      input: '\n',
+      preserveBackupConfig: true,
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(commandLog(), '');
   });
 
   it('rejects invalid backup Gist IDs until a valid marker is found', () => {
@@ -744,8 +939,8 @@ esac
   });
 
   ([
-    { name: 'file listing fails', env: { FAKE_GIST_FILE_LIST_STATUS: '17' } },
-    { name: 'config snapshot read fails', env: { FAKE_GIST_CONFIG_STATUS: '18' } },
+    { name: 'file listing fails', env: { FAKE_GIST_FILE_LIST_STATUS: '17', FAKE_GIST_FILE_LIST_STDERR: 'listing failed' } },
+    { name: 'config snapshot read fails', env: { FAKE_GIST_CONFIG_STATUS: '18', FAKE_GIST_CONFIG_STDERR: 'snapshot failed' } },
     { name: 'config snapshot read is interrupted', env: { FAKE_GIST_CONFIG_SIGNAL: '1' } },
   ]).forEach(({ name, env }) => {
     it(`fails adoption without changing config when the adopted Gist ${name}`, () => {
@@ -764,6 +959,8 @@ esac
       });
 
       assert.equal(result.status, 1);
+      if (env.FAKE_GIST_FILE_LIST_STDERR) assert.include(result.stderr, env.FAKE_GIST_FILE_LIST_STDERR);
+      if (env.FAKE_GIST_CONFIG_STDERR) assert.include(result.stderr, env.FAKE_GIST_CONFIG_STDERR);
       assert.equal(fs.readFileSync(configPath, 'utf8'), originalConfig);
       assert.isFalse(fs.existsSync(cachePath));
       assert.notInclude(commandLog(), 'snapshot.example.test');
@@ -846,6 +1043,68 @@ esac
     assert.isFalse(fs.existsSync(path.join(repoDir, '.backup-cache')));
   });
 
+  it('keeps backup unconfigured and removes the marker when Gist creation fails', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({
+      env: {
+        FAKE_GIST_CREATE_STATUS: '19',
+        FAKE_GIST_CREATE_STDERR: 'remote create failed',
+      },
+      input: '\nn\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, 'remote create failed\n');
+    assert.isNull(readRepoConfig().backup.id);
+    assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
+  });
+
+  it('fails closed when a newly created Gist ID cannot be persisted locally', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({
+      env: { FAKE_GIST_REMOVE_CONFIG: '1' },
+      input: '\nn\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
+  });
+
+  it('fails adopted-config commit safely when the local config disappears', () => {
+    installFakeGhCommand();
+    const missingConfig = path.join(repoDir, 'missing-config.json');
+
+    const result = withEnv({
+      PATH: binDir,
+      FAKE_COMMAND_LOG: commandLogPath,
+      FAKE_GH_HOST: 'github.example.test',
+    }, () => captureStdout(() => commitAdoptedConfig(
+      repoDir,
+      docsUrl,
+      'github.example.test',
+      'returning-gist-id',
+      missingConfig,
+    )));
+
+    assert.isFalse(result.result);
+    assert.equal(result.output, '');
+    assert.isFalse(fs.existsSync(missingConfig));
+  });
+
   it('runs full setup with existing Gist settings through typed orchestration', () => {
     installConfigSources();
     installFakeGhCommand();
@@ -881,6 +1140,109 @@ esac
     assert.isFalse(result.result);
     assert.include(result.output, `${binDir} doesn't seem to be in your path.`);
     assert.include(result.output, `export PATH="${binDir}:$PATH"`);
+  });
+
+  it('stops safely when neither Homebrew nor HOME can provide a command directory', () => {
+    installConfigSources();
+    const previousHome = process.env.HOME;
+    const previousPath = process.env.PATH;
+    delete process.env.HOME;
+    process.env.PATH = binDir;
+    try {
+      const { output, result } = captureStdout(() => setup(repoDir, docsUrl));
+      assert.isFalse(result);
+      assert.equal(output, '');
+      assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  });
+
+  it('reports configuration failure from full setup before creating symlinks', () => {
+    const result = withEnv({
+      HOME: path.join(testDir, 'home'),
+      PATH: binDir,
+    }, () => captureStdout(() => setup(repoDir, docsUrl)));
+
+    assert.isFalse(result.result);
+    assert.include(result.output, 'Unable to create or update ballin.config.json');
+    assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+  });
+
+  it('uses the active Homebrew prefix for the command directory', () => {
+    installConfigSources();
+    const brewPrefix = path.join(testDir, 'homebrew');
+    const brewBinDir = path.join(brewPrefix, 'bin');
+    fs.mkdirSync(brewBinDir, { recursive: true });
+    writeExecutable('brew', `#!/bin/sh
+if [ "$1" = '--prefix' ]; then printf '%s\n' "${brewPrefix}"; exit 0; fi
+exit 2
+`);
+
+    const result = withEnv({
+      HOME: path.join(testDir, 'home'),
+      PATH: `${binDir}${path.delimiter}${brewBinDir}`,
+    }, () => captureStdout(() => setup(repoDir, docsUrl)));
+
+    assert.isTrue(result.result);
+    assert.include(result.output, `symlinked binaries into ${brewBinDir}`);
+    assert.isTrue(fs.lstatSync(path.join(brewBinDir, 'ballin')).isSymbolicLink());
+  });
+
+  it('falls back to the user command directory when brew prefix lookup fails', () => {
+    installConfigSources();
+    writeExecutable('brew', '#!/bin/sh\nexit 9\n');
+
+    const result = withEnv({
+      HOME: path.join(testDir, 'home'),
+      PATH: binDir,
+    }, () => captureStdout(() => setup(repoDir, docsUrl)));
+
+    assert.isTrue(result.result);
+    assert.include(result.output, `symlinked binaries into ${binDir}`);
+  });
+
+  it('stops full setup after a symlink failure while preserving the valid config', () => {
+    installConfigSources();
+    fs.rmSync(sourceBinDir, { recursive: true });
+
+    const result = withEnv({
+      HOME: path.join(testDir, 'home'),
+      PATH: binDir,
+    }, () => captureStdout(() => setup(repoDir, docsUrl)));
+
+    assert.isFalse(result.result);
+    assert.include(result.output, `Unable to symlink binaries into ${binDir}`);
+    assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
+  it('runs refresh setup through the CLI without prompting for optional backup', () => {
+    installConfigSources();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+    const result = spawnSync(process.execPath, [
+      installSetupPath,
+      'setup',
+      repoDir,
+      docsUrl,
+      '',
+    ], {
+      encoding: 'utf8',
+      env: {
+        HOME: path.join(testDir, 'home'),
+        PATH: binDir,
+        BALLIN_NO_ANALYTICS: '1',
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
+    assert.include(result.stdout, '😎 ballin!');
   });
 
   it('completes a fresh maintenance-only setup without GitHub CLI', () => {

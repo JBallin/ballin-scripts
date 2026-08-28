@@ -3,7 +3,10 @@ const https = require('https');
 const { fetchConfig, configPath, stringify } = require('../config/index.ts');
 const {
   analyticsDisabledByEnv,
+  buildAnalyticsPayload,
   durationBucketFromMs,
+  ensureAnalyticsInstallId,
+  loadAppVersion,
   recordAnalyticsEvent,
   rethrowCommandError,
   runWithCommandAnalytics,
@@ -135,6 +138,17 @@ describe('analytics client', () => {
     assert.deepEqual(notices, []);
   });
 
+  it('treats malformed analytics config as disabled', async () => {
+    const { configObj } = fetchConfig();
+    configObj.analytics = false;
+    writeConfig(configObj);
+    writeInstallId();
+
+    const { payloads } = await recordWithSender({ command: 'ballin', now: fixedNow });
+
+    assert.deepEqual(payloads, []);
+  });
+
   it('does not send when environment opt-outs are set', async () => {
     const optOuts = [
       { BALLIN_NO_ANALYTICS: '1' },
@@ -231,6 +245,70 @@ describe('analytics client', () => {
     assert.deepEqual(payloads, []);
     assert.deepEqual(notices, []);
     assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
+  });
+
+  it('returns no install ID when local analytics state cannot be written', () => {
+    const blockedParent = path.join(tempDir, 'blocked-parent');
+    fs.writeFileSync(blockedParent, 'not a directory\n');
+    const notices: string[] = [];
+
+    const installId = ensureAnalyticsInstallId({
+      analyticsConfig: { enabled: 'true' },
+      env: {},
+      generateInstallId: () => fixedInstallId,
+      installIdPath: path.join(blockedParent, 'install-id'),
+      noticeWriter: (message: string) => notices.push(message),
+    });
+
+    assert.isNull(installId);
+    assert.lengthOf(notices, 1);
+    assert.isFalse(fs.existsSync(path.join(blockedParent, 'install-id')));
+  });
+
+  it('normalizes unsupported platforms and malformed OS versions in payloads', () => {
+    const originalPlatform = os.platform;
+    const originalRelease = os.release;
+    os.platform = () => 'freebsd';
+    os.release = () => 'release-candidate';
+    try {
+      const payload = buildAnalyticsPayload({
+        command: 'ballin',
+        durationBucket: '<1s',
+        now: fixedNow,
+        status: 'success',
+      }, fixedInstallId, '2.0.0');
+
+      assert.equal(payload.os, 'unknown');
+      assert.equal(payload.osVersion, 'unknown');
+    } finally {
+      os.platform = originalPlatform;
+      os.release = originalRelease;
+    }
+  });
+
+  it('falls back safely when application version metadata is malformed or missing', () => {
+    const malformedPackagePath = path.join(tempDir, 'malformed-package.json');
+    fs.writeFileSync(malformedPackagePath, '{not json', 'utf8');
+
+    assert.equal(loadAppVersion(malformedPackagePath), '0.0.0');
+    assert.equal(loadAppVersion(path.join(tempDir, 'missing-package.json')), '0.0.0');
+  });
+
+  it('uses the OS major alone when no numeric minor version is available', () => {
+    const originalRelease = os.release;
+    os.release = () => '15.release';
+    try {
+      const payload = buildAnalyticsPayload({
+        command: 'ballin',
+        durationBucket: '<1s',
+        now: fixedNow,
+        status: 'success',
+      }, fixedInstallId, '2.0.0');
+
+      assert.equal(payload.osVersion, '15');
+    } finally {
+      os.release = originalRelease;
+    }
   });
 
   it('never throws when analytics config or sender behavior fails', async () => {
@@ -606,6 +684,94 @@ describe('analytics client', () => {
       'content-type': 'application/json',
     });
     assert.notProperty(options.headers, 'x-ballin-analytics-token');
+  });
+
+  it('returns immediately when no analytics endpoint is configured', async () => {
+    const originalRequest = https.request;
+    let requestCalled = false;
+    https.request = (() => {
+      requestCalled = true;
+      throw new Error('request should not run');
+    }) as typeof https.request;
+    try {
+      await sendAnalyticsPayload({
+        schemaVersion: 1,
+        installId: fixedInstallId,
+        dateBucket: '2026-06-27',
+        command: 'ballin',
+        status: 'success',
+        durationBucket: '<1s',
+        appVersion: '1.0.0',
+        nodeMajor: '24',
+        os: 'darwin',
+        osVersion: '15',
+      }, {});
+    } finally {
+      https.request = originalRequest;
+    }
+    assert.isFalse(requestCalled);
+  });
+
+  it('swallows synchronous HTTPS request setup failures', async () => {
+    const originalRequest = https.request;
+    https.request = (() => {
+      throw new Error('synchronous TLS setup failure');
+    }) as typeof https.request;
+    try {
+      await sendAnalyticsPayload({
+        schemaVersion: 1,
+        installId: fixedInstallId,
+        dateBucket: '2026-06-27',
+        command: 'ballin',
+        status: 'success',
+        durationBucket: '<1s',
+        appVersion: '1.0.0',
+        nodeMajor: '24',
+        os: 'darwin',
+        osVersion: '15',
+      }, { endpoint: 'https://analytics.example.test/v1/events' });
+    } finally {
+      https.request = originalRequest;
+    }
+  });
+
+  it('destroys and settles the request when the socket timeout fires', async () => {
+    const originalRequest = https.request;
+    let socketTimeout: (() => void) | undefined;
+    let destroyed = false;
+    https.request = (): ClientRequest => {
+      const request = new EventEmitter() as ClientRequest;
+      request.setTimeout = (_milliseconds: number, handler?: () => void) => {
+        socketTimeout = handler;
+        return request;
+      };
+      request.end = (() => request) as ClientRequest['end'];
+      request.destroy = () => {
+        destroyed = true;
+        return request;
+      };
+      return request;
+    };
+    try {
+      const done = sendAnalyticsPayload({
+        schemaVersion: 1,
+        installId: fixedInstallId,
+        dateBucket: '2026-06-27',
+        command: 'ballin',
+        status: 'success',
+        durationBucket: '<1s',
+        appVersion: '1.0.0',
+        nodeMajor: '24',
+        os: 'darwin',
+        osVersion: '15',
+      }, { endpoint: 'https://analytics.example.test/v1/events', timeoutMs: 100 });
+      assert.isFunction(socketTimeout);
+      socketTimeout?.();
+      await done;
+    } finally {
+      https.request = originalRequest;
+    }
+    assert.isTrue(destroyed);
   });
 
   it('bounds https sends with a wall-clock timeout and swallows request failures', async () => {

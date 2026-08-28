@@ -11,6 +11,7 @@ type StatementRun = {
 };
 
 type MakeEnvOptions = {
+  batchError?: Error;
   hashSecret?: string;
   rateLimiter?: boolean;
   rateLimitFailure?: (key: string) => boolean;
@@ -58,6 +59,9 @@ const makeEnv = (options: MakeEnvOptions = {}) => {
           return new TestStatement(query);
         },
         async batch(statements: TestStatement[]) {
+          if (options.batchError) {
+            throw options.batchError;
+          }
           statements.forEach((statement) => {
             runs.push({
               query: statement.query,
@@ -178,6 +182,46 @@ describe('analytics Worker', () => {
     assert.deepEqual(runs, []);
   });
 
+  it('rejects malformed payload shapes, required identifiers, and enums without D1 writes', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const cases: Array<[Record<string, unknown> | string, string]> = [
+      ['null', 'event payload must be a JSON object'],
+      [{ ...payloadForCommand('ballin'), schemaVersion: 2 }, 'schemaVersion must be 1'],
+      [{ ...payloadForCommand('ballin'), installId: '' }, 'installId must be a lowercase UUID'],
+      [{ ...payloadForCommand('ballin'), dateBucket: '2026/06/01' }, 'dateBucket must be YYYY-MM-DD'],
+      [{ ...payloadForCommand('ballin'), command: 'ballin destroy' }, 'command is not supported'],
+      [{ ...payloadForCommand('ballin'), status: 'partial' }, 'status is not supported'],
+      [{ ...payloadForCommand('ballin'), durationBucket: 'fast' }, 'durationBucket is not supported'],
+      [{ ...payloadForCommand('ballin'), nodeMajor: 'v24' }, 'nodeMajor must be a major version number'],
+      [{ ...payloadForCommand('ballin'), os: 'freebsd' }, 'os is not supported'],
+      [{ ...payloadForCommand('ballin'), osVersion: '15.1.2' }, 'osVersion must be coarse'],
+    ];
+
+    for (const [payload, expectedError] of cases) {
+      const { env, runs } = makeEnv();
+      const response = await worker.fetch(eventRequest(payload), env);
+      const body = await response.json() as { error?: string };
+
+      assert.equal(response.status, 400, expectedError);
+      assert.equal(body.error, expectedError);
+      assert.deepEqual(runs, []);
+    }
+  });
+
+  it('defaults a missing duration bucket to unknown before aggregation', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const payload = payloadForCommand('ballin backup');
+    delete (payload as Partial<typeof payload>).durationBucket;
+
+    const response = await worker.fetch(eventRequest(payload), env);
+
+    assert.equal(response.status, 204);
+    assert.includeDeepMembers(runs.map(({ values }) => values), [
+      [payload.dateBucket, 'ballin backup', 'success', 'unknown'],
+    ]);
+  });
+
   it('rejects high-cardinality version and runtime values', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, runs } = makeEnv();
@@ -226,6 +270,53 @@ describe('analytics Worker', () => {
     assert.equal(body.error, 'request body is too large');
     assert.deepEqual(rateLimitKeys, []);
     assert.deepEqual(runs, []);
+  });
+
+  it('rejects unsupported methods, content types, invalid JSON, and unknown routes', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const methodResponse = await worker.fetch(new Request('https://analytics.example.test/v1/events'), env);
+    const contentTypeResponse = await worker.fetch(new Request('https://analytics.example.test/v1/events', {
+      method: 'POST',
+      body: '{}',
+    }), env);
+    const invalidJsonResponse = await worker.fetch(eventRequest('{'), env);
+    const routeResponse = await worker.fetch(new Request('https://analytics.example.test/health'), env);
+
+    assert.equal(methodResponse.status, 405);
+    assert.equal(contentTypeResponse.status, 400);
+    assert.deepEqual(await contentTypeResponse.json(), { error: 'content-type must be application/json' });
+    assert.equal(invalidJsonResponse.status, 400);
+    assert.deepEqual(await invalidJsonResponse.json(), { error: 'invalid JSON' });
+    assert.equal(routeResponse.status, 404);
+    assert.deepEqual(runs, []);
+  });
+
+  it('rejects oversized streamed bodies after rate limiting but before parsing', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, rateLimitKeys, runs } = makeEnv();
+    const response = await worker.fetch(eventRequest(' '.repeat(2049), {
+      headers: { 'x-forwarded-for': '198.51.100.5, 198.51.100.6' },
+    }), env);
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'request body is too large' });
+    assert.deepEqual(rateLimitKeys, ['v1-events:global', 'v1-events:source:198.51.100.5']);
+    assert.deepEqual(runs, []);
+  });
+
+  it('bounds missing and malformed forwarding identities in source rate-limit keys', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const missing = makeEnv();
+    const malformed = makeEnv();
+
+    assert.equal((await worker.fetch(eventRequest(payloadForCommand('ballin')), missing.env)).status, 204);
+    assert.equal((await worker.fetch(eventRequest(payloadForCommand('ballin'), {
+      headers: { 'x-forwarded-for': ' CLIENT @ EXAMPLE! ' },
+    }), malformed.env)).status, 204);
+
+    assert.equal(missing.rateLimitKeys[1], 'v1-events:source:unknown');
+    assert.equal(malformed.rateLimitKeys[1], 'v1-events:source:client___example_');
   });
 
   it('applies source rate limits before parsing or D1 writes', async () => {
@@ -298,5 +389,50 @@ describe('analytics Worker', () => {
     assert.equal(body.error, 'analytics backend is not configured');
     assert.deepEqual(rateLimitKeys, []);
     assert.deepEqual(runs, []);
+  });
+
+  it('deletes every aggregate older than the scheduled retention cutoff', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    let cleanup: Promise<unknown> | undefined;
+
+    await worker.scheduled({
+      cron: '0 4 * * *',
+      scheduledTime: Date.parse('2026-06-30T04:00:00.000Z'),
+    }, env, {
+      waitUntil(promise: Promise<unknown>) {
+        cleanup = promise;
+      },
+    });
+    await cleanup;
+
+    assert.lengthOf(runs, 3);
+    assert.deepEqual(runs.map(({ values }) => values), [
+      ['2025-05-31'],
+      ['2025-05-31'],
+      ['2025-05-31'],
+    ]);
+    assert.deepEqual(runs.map(({ query }) => query), [
+      'DELETE FROM install_days WHERE date_bucket < ?1',
+      'DELETE FROM command_events_daily WHERE date_bucket < ?1',
+      'DELETE FROM version_events_daily WHERE date_bucket < ?1',
+    ]);
+  });
+
+  it('propagates scheduled D1 cleanup failures through waitUntil', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env } = makeEnv({ batchError: new Error('D1 retention failed') });
+    let cleanup: Promise<unknown> | undefined;
+
+    await worker.scheduled({ cron: '0 4 * * *', scheduledTime: Date.now() }, env, {
+      waitUntil(promise: Promise<unknown>) {
+        cleanup = promise;
+      },
+    });
+
+    await cleanup?.then(
+      () => assert.fail('expected retention cleanup to reject'),
+      (error: Error) => assert.equal(error.message, 'D1 retention failed'),
+    );
   });
 });

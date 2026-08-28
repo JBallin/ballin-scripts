@@ -1,10 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  rethrowCommandError,
-  runWithCommandAnalytics,
-} = require('./analytics.ts');
-const {
   configPath,
 } = require('../config/index.ts');
 const {
@@ -87,8 +83,10 @@ const readConfigObject = (filePath: string, description: string): ConfigObject =
   return parsed;
 };
 
-const resolveUpdateSettings = (): UpdateSettings => {
-  const defaultConfigPath = path.join(__dirname, '..', 'config', '.defaultConfig.json');
+const resolveUpdateSettings = (
+  defaultConfigPath = path.join(__dirname, '..', 'config', '.defaultConfig.json'),
+  userConfigPath = configPath,
+): UpdateSettings => {
   const defaults = readConfigObject(defaultConfigPath, 'bundled default config');
   if (!isConfigObject(defaults.update)) {
     throw new Error('Bundled default config must contain an update object.');
@@ -106,7 +104,7 @@ const resolveUpdateSettings = (): UpdateSettings => {
     defaultSettings[key] = value;
   });
 
-  const userConfig = readConfigObject(configPath, 'Ballin config');
+  const userConfig = readConfigObject(userConfigPath, 'Ballin config');
   const hasUpdateSection = hasOwn(userConfig, 'update');
   if (hasUpdateSection && !isConfigObject(userConfig.update)) {
     throw new Error('Ballin config update section must contain a JSON object.');
@@ -334,11 +332,7 @@ function runUpdateCommand(): void {
   }
 }
 
-const runUpdateCli = (): void => {
-  void runWithCommandAnalytics('ballin update', runUpdateCommand).catch(rethrowCommandError);
-};
-
 module.exports = {
+  resolveUpdateSettings,
   runUpdateCommand,
-  runUpdateCli,
 };

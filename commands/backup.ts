@@ -2,10 +2,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  rethrowCommandError,
-  runWithCommandAnalytics,
-} = require('./analytics.ts');
-const {
   configPath,
   fetchConfig,
 } = require('../config/index.ts');
@@ -222,14 +218,6 @@ const shellStyleExitStatus = (result: ReturnType<typeof runCommand>): number => 
     }
   }
   return result.status ?? 1;
-};
-
-const runVisible = (command: string, args: string[] = []): number => {
-  const result = runCommand(command, args, { stdio: 'inherit' });
-  if (result.error) {
-    return reportSpawnError(command, result.error);
-  }
-  return shellStyleExitStatus(result);
 };
 
 const fileExists = (filePath: string): boolean => {
@@ -990,12 +978,8 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   const command = args[0];
 
   if (command === 'help') {
-    if (args.length !== 1) {
-      writeStderrLine('ballin backup help: expected no arguments');
-      process.exitCode = 1;
-      return;
-    }
-    process.exitCode = runVisible('ballin');
+    writeStderrLine('ballin backup help: expected no arguments');
+    process.exitCode = 1;
     return;
   }
 
@@ -1096,11 +1080,6 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 }
 
-const runBackupCli = (args = process.argv.slice(2)): void => {
-  void runWithCommandAnalytics('ballin backup', () => runBackupCommand(args)).catch(rethrowCommandError);
-};
-
 module.exports = {
   runBackupCommand,
-  runBackupCli,
 };

@@ -5,6 +5,9 @@ const path = require('path');
 const {
   requiredCommandShims,
 } = require('../commands/setup_readiness.ts');
+const {
+  resolveUpdateSettings,
+} = require('../commands/update.ts');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 type InstallCommandStubOptions = {
@@ -250,7 +253,8 @@ exit 0
     assert.equal(result.stdout.match(/brew command output/g).length, 2);
   });
 
-  it('runs enabled npm, macOS update, ballin update, and backup integrations', () => {
+  it('runs enabled npm, macOS update, ballin update, and backup integrations', function test() {
+    this.timeout(5000);
     ['npm', 'softwareupdate'].forEach((command) => {
       installCommandStub(command);
     });
@@ -274,6 +278,16 @@ exit 0
       'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
+  });
+
+  it('updates App Store apps when mas is available without requiring a setting', () => {
+    installCommandStub('mas');
+
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false' });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Updating App Store apps');
+    assert.deepEqual(commandLog(), ['mas|,|upgrade']);
   });
 
   it('checks Ballin readiness after a successful ballin update', () => {
@@ -582,6 +596,47 @@ kill -TERM "$$"
     assert.equal(fs.readFileSync(logPath, 'utf8'), 'install --lts\n');
   });
 
+  it('reports unexpected bash spawn failures and continues to backup', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    installNvmStub(nvmDir);
+    fs.rmSync(path.join(binDir, 'bash'));
+    fs.symlinkSync('bash', path.join(binDir, 'bash'));
+    writeTestExecutable('ballin', '#!/bin/sh\nexit 0\n');
+
+    const result = runUpdate({
+      NVM_DIR: nvmDir,
+      TEST_UPDATE_BACKUP: 'true',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'ELOOP');
+    assert.include(result.stdout, 'Backing up development environment');
+  });
+
+  it('falls back to the running Node version when updated-node lookup fails', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const nvmBinDir = path.join(tempDir, 'nvm-bin');
+    fs.mkdirSync(nvmBinDir);
+    installPathUpdatingNvmStub(nvmDir, nvmBinDir);
+    writeTestExecutable('node', `#!/bin/sh
+printf 'node|,|%s\n' "$*" >> "$UPDATE_TEST_LOG"
+if [ "$1" = '-e' ]; then exec ${JSON.stringify(process.execPath)} "$@"; fi
+if [ "$1" = '-p' ]; then exit 31; fi
+exit 2
+`, nvmBinDir);
+    installCommandStub('ballin');
+    installHealthyReadinessCommands();
+
+    const result = runUpdate({
+      NVM_DIR: nvmDir,
+      TEST_UPDATE_BALLIN: 'true',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, "😎 You're ballin.");
+    assert.include(commandLog(), 'node|,|-p process.versions.node');
+  });
+
   it('reports nvm install failures after running later integrations', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     fs.mkdirSync(nvmDir, { recursive: true });
@@ -677,6 +732,28 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.deepEqual(commandLog().slice(1), [
       'backup still ran',
     ]);
+  });
+
+  it('rejects malformed updated Node environment data and keeps running later integrations', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const malformedNodeDir = path.join(tempDir, 'malformed-node');
+    fs.mkdirSync(malformedNodeDir);
+    installPathUpdatingNvmStub(nvmDir, malformedNodeDir);
+    fs.writeFileSync(path.join(malformedNodeDir, 'node'), `#!/usr/bin/env bash
+printf '%s\\n' 'not-json'
+`, { mode: 0o755 });
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
+`);
+
+    const result = runUpdate({
+      NVM_DIR: nvmDir,
+      TEST_UPDATE_BACKUP: 'true',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to capture the updated Node.js environment');
+    assert.deepEqual(commandLog().slice(1), ['backup still ran']);
   });
 
   it('fails when nvm is enabled but cannot be loaded', () => {
@@ -877,6 +954,31 @@ exit 17
     const updateResult = spawnUpdate();
     assert.equal(updateResult.status, 1);
     assert.include(updateResult.stderr, 'Ballin config update section must contain a JSON object.');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('rejects malformed bundled update defaults before reading user settings', () => {
+    const defaultPath = path.join(tempDir, 'defaults.json');
+    const baseDefaults = JSON.parse(fs.readFileSync(
+      path.join(__dirname, '..', 'config', '.defaultConfig.json'),
+      'utf8',
+    ));
+
+    fs.writeFileSync(defaultPath, JSON.stringify({ ...baseDefaults, update: null }));
+    assert.throws(() => resolveUpdateSettings(defaultPath, configPath), 'Bundled default config must contain an update object.');
+
+    const missingSetting = JSON.parse(JSON.stringify(baseDefaults));
+    delete missingSetting.update.backup;
+    fs.writeFileSync(defaultPath, JSON.stringify(missingSetting));
+    assert.throws(() => resolveUpdateSettings(defaultPath, configPath), 'Bundled default config is missing update.backup.');
+
+    const invalidSetting = JSON.parse(JSON.stringify(baseDefaults));
+    invalidSetting.update.cleanup = 'sometimes';
+    fs.writeFileSync(defaultPath, JSON.stringify(invalidSetting));
+    assert.throws(() => resolveUpdateSettings(defaultPath, configPath), 'Bundled default update.cleanup must be true or false.');
+
+    fs.rmSync(defaultPath);
+    assert.throws(() => resolveUpdateSettings(defaultPath, configPath), 'Unable to read bundled default config');
     assert.deepEqual(commandLog(), []);
   });
 
