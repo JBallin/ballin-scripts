@@ -185,7 +185,12 @@ const offerAutomaticUpdateBackup = (configPath: string): boolean => {
     return true;
   }
 
-  return setConfigValue(configPath, 'update.backup', 'true');
+  if (!setConfigValue(configPath, 'update.backup', 'true')) {
+    writeStdoutLine('\nℹ️  Backup setup completed, but automatic update backups were not enabled. Enable later with: ballin config set update.backup true');
+    return false;
+  }
+
+  return true;
 };
 
 const replaceInvalidBackupHost = (configPath: string, value: string): boolean => {
