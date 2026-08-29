@@ -186,7 +186,7 @@ const offerAutomaticUpdateBackup = (configPath: string): boolean => {
   }
 
   if (!setConfigValue(configPath, 'update.backup', 'true')) {
-    writeStdoutLine('\nℹ️  Backup setup completed, but automatic update backups were not enabled. Enable later with: ballin config set update.backup true');
+    writeStdoutLine('\nℹ️  Backup setup completed, but automatic update backups were not enabled. Edit ballin.config.json and set update.backup to true.');
     return false;
   }
 

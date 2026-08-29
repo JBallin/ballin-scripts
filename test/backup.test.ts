@@ -903,7 +903,8 @@ exit 2
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
-    assert.include(result.stdout, 'Backup setup completed, but automatic update backups were not enabled. Enable later with: ballin config set update.backup true');
+    assert.include(result.stdout, 'Backup setup completed, but automatic update backups were not enabled. Edit ballin.config.json and set update.backup to true.');
+    assert.notInclude(result.stdout, 'Enable later with: ballin config set update.backup true');
     assert.include(result.stderr, "setup did not complete; resolve the error and retry with 'ballin backup setup'");
     const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(configured.backup.id, 'test-gist-id');
