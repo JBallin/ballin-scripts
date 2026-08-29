@@ -105,6 +105,19 @@ exit 2
     assert.equal(fs.readFileSync(remoteGistFixture, 'utf8'), 'remote destination remains\n');
   });
 
+  it('preserves a regular file that has the same name as an installed command', () => {
+    const userBin = path.join(homeDir, '.local', 'bin');
+    createCommand('ballin');
+    const regularFile = path.join(userBin, 'ballin');
+    fs.writeFileSync(regularFile, 'user-owned command\n');
+
+    const result = runUninstall();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(regularFile, 'utf8'), 'user-owned command\n');
+    assert.isFalse(fs.existsSync(repoDir));
+  });
+
   it('remains executable through the installed symlink model', () => {
     const installBinDir = path.join(testDir, 'installed-bin');
     const symlinkPath = path.join(installBinDir, 'ballin');

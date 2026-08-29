@@ -1,9 +1,5 @@
 const path = require('path');
 const {
-  rethrowCommandError,
-  runWithCommandAnalytics,
-} = require('./analytics.ts');
-const {
   runVisibleCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
@@ -38,11 +34,6 @@ function runSelfUpdateCommand(): void {
   });
 }
 
-const runSelfUpdateCli = (): void => {
-  void runWithCommandAnalytics('ballin self-update', runSelfUpdateCommand).catch(rethrowCommandError);
-};
-
 module.exports = {
   runSelfUpdateCommand,
-  runSelfUpdateCli,
 };
