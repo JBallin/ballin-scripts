@@ -834,11 +834,81 @@ exit 2
 
     assertBackupSucceeded(result);
     assert.notInclude(result.stdout, 'What GitHub host should be used for Gist backups?');
+    assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(config.backup.id, 'test-gist-id');
     assert.equal(config.backup.host, 'github.enterprise.test');
     assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+  });
+
+  it('offers automatic update backups after standalone setup adopts a destination', () => {
+    writeCompleteBackupConfig(null, 'example.test');
+    seedBackupMarker();
+    const restoredConfig = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, 'config', '.defaultConfig.json'), 'utf8'),
+    );
+    restoredConfig.update.backup = 'false';
+    seedFakeGistFile('ballin_config', JSON.stringify(restoredConfig));
+
+    const result = runBackup({
+      args: ['setup'],
+      input: 'y\n\ny\ntest-gist-id\ny\n',
+    });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stderr, '');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.notInclude(result.stdout, 'Automatic update backups unchanged.');
+    const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(configured.backup.id, 'test-gist-id');
+    assert.equal(configured.update.backup, 'true');
+  });
+
+  it('preserves a declined automatic-backup preference after standalone adoption', () => {
+    writeCompleteBackupConfig(null, 'example.test');
+    seedBackupMarker();
+    const restoredConfig = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, 'config', '.defaultConfig.json'), 'utf8'),
+    );
+    restoredConfig.update.backup = 'false';
+    seedFakeGistFile('ballin_config', JSON.stringify(restoredConfig));
+
+    const result = runBackup({
+      args: ['setup'],
+      input: 'y\n\ny\ntest-gist-id\nn\n',
+    });
+
+    assertBackupSucceeded(result);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.include(result.stdout, 'Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
+    const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(configured.backup.id, 'test-gist-id');
+    assert.equal(configured.update.backup, 'false');
+  });
+
+  it('reports failure when an accepted automatic-backup choice cannot be persisted', () => {
+    writeCompleteBackupConfig(null, 'example.test');
+    seedBackupMarker();
+    const restoredConfig = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, 'config', '.defaultConfig.json'), 'utf8'),
+    );
+    restoredConfig.update.backup = { invalid: true };
+    seedFakeGistFile('ballin_config', JSON.stringify(restoredConfig));
+
+    const result = runBackup({
+      args: ['setup'],
+      input: 'y\n\ny\ntest-gist-id\ny\n',
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.include(result.stdout, 'Backup setup completed, but automatic update backups were not enabled. Edit ballin.config.json and set update.backup to true.');
+    assert.notInclude(result.stdout, 'Enable later with: ballin config set update.backup true');
+    assert.include(result.stderr, "setup did not complete; resolve the error and retry with 'ballin backup setup'");
+    const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(configured.backup.id, 'test-gist-id');
+    assert.deepEqual(configured.update.backup, { invalid: true });
   });
 
   it('uses the executing checkout cache after setup with mismatched HOME', () => {
@@ -920,7 +990,7 @@ exit 2
   });
 
   it('cancels adopted Gist setup on empty or EOF input without looping', () => {
-    writeBackupConfig(null);
+    writeCompleteBackupConfig(null, 'example.test');
 
     const result = runBackup({
       args: ['setup'],
@@ -929,8 +999,10 @@ exit 2
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Backup Gist adoption cancelled; no destination was configured');
+    assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.include(result.stderr, "retry with 'ballin backup setup'");
     assert.isNull(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id);
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).update.backup, 'false');
     assert.notInclude(ghCalls().join('\n'), 'gist view');
   });
 

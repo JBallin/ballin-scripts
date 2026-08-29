@@ -21,7 +21,8 @@ updates.
 The installer checks Git and Node.js, shows its plan, and asks before making a
 fresh installation. It installs the maintenance commands first; Gist backup is
 an optional later step. Maintenance-only installation does not require Homebrew
-or GitHub CLI; Gist backup setup requires an authenticated GitHub CLI.
+or GitHub CLI; Gist backup setup requires an authenticated GitHub CLI and, when
+newly completed, offers a default-no choice to run backups after updates.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
@@ -64,7 +65,8 @@ Your system is ready to brew.
 
 On a new Mac, install Ballin for maintenance, then optionally create or adopt a
 backup Gist with `ballin backup setup`. Use existing snapshots as a rebuild
-reference.
+reference. See [Optional capabilities](docs/optional-capabilities.md#gist-backups)
+for the automatic-backup choice and how to change it later.
 
 Ballin makes rebuilds more repeatable and auditable, but it is not a
 full disk backup or one-command restore system.

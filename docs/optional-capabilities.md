@@ -87,7 +87,14 @@ ballin backup setup
 Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
 `gh` authentication for that host, and either adopts an existing backup Gist or
 creates a new one. `backup.id` is the opt-in signal; there is no separate
-enabled or onboarding setting.
+enabled or onboarding setting. When setup newly configures a destination, it
+also offers a default-no choice to run `ballin backup` automatically after
+`ballin update`. Change that preference later with:
+
+```shell
+ballin config set update.backup true
+ballin config set update.backup false
+```
 
 Invalid `backup.id` values can be repaired with `ballin config reset`; a missing
 or malformed `backup.host` can be repaired with `ballin backup setup`. See

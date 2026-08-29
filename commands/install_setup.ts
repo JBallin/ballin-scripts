@@ -173,6 +173,26 @@ const setConfigValue = (configPath: string, key: string, value: string): boolean
   return true;
 };
 
+const offerAutomaticUpdateBackup = (configPath: string): boolean => {
+  const currentPreference = configValue(configPath, 'update.backup');
+  if (currentPreference === true || currentPreference === 'true') {
+    return true;
+  }
+
+  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [y/N] ');
+  if (enable !== 'y' && enable !== 'Y') {
+    writeStdoutLine('\nℹ️  Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
+    return true;
+  }
+
+  if (!setConfigValue(configPath, 'update.backup', 'true')) {
+    writeStdoutLine('\nℹ️  Backup setup completed, but automatic update backups were not enabled. Edit ballin.config.json and set update.backup to true.');
+    return false;
+  }
+
+  return true;
+};
+
 const replaceInvalidBackupHost = (configPath: string, value: string): boolean => {
   const config = readJsonObject(configPath);
   if (
@@ -522,6 +542,14 @@ const configureGist = (
     } finally {
       fs.rmSync(markerPath, { force: true });
     }
+  }
+
+  if (
+    !backupId
+    && backupDestinationForConfig(ballinConfig)?.idStatus === 'configured'
+    && !offerAutomaticUpdateBackup(ballinConfig)
+  ) {
+    return false;
   }
 
   return true;
