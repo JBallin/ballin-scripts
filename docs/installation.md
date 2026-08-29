@@ -114,9 +114,9 @@ After an unconfigured installation successfully creates or adopts a backup
 destination, setup offers a default-no choice to run `ballin backup`
 automatically after `ballin update`. An adopted `update.backup=true` preference
 is preserved without another prompt; a restored `false` preference can be
-explicitly enabled. Declining leaves the current preference unchanged. Change
-it later with `ballin config set update.backup true` or
-`ballin config set update.backup false`.
+explicitly enabled. Declining leaves the current preference unchanged. See
+[Optional capabilities](optional-capabilities.md#gist-backups) to change it
+later.
 
 If a configured ID has a malformed host, `ballin backup setup` asks for a
 replacement and verifies the retained Gist's Ballin marker on that host before

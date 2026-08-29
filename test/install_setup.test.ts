@@ -1040,6 +1040,7 @@ esac
     );
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.include(result.stdout, 'Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
     assert.include(result.stdout, 'Invalidated existing .backup-cache');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
     assert.equal(readRepoConfig().backup.id, 'new-gist-id');
@@ -1399,6 +1400,7 @@ exit 2
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.notInclude(result.stdout, 'Automatic update backups unchanged.');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
     assert.equal(readRepoConfig().backup.id, 'new-gist-id');
     assert.equal(readRepoConfig().update.backup, 'true');

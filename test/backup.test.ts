@@ -859,6 +859,7 @@ exit 2
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.equal(result.stderr, '');
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.notInclude(result.stdout, 'Automatic update backups unchanged.');
     const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(configured.backup.id, 'test-gist-id');
     assert.equal(configured.update.backup, 'true');
@@ -880,6 +881,7 @@ exit 2
 
     assertBackupSucceeded(result);
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.include(result.stdout, 'Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
     const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(configured.backup.id, 'test-gist-id');
     assert.equal(configured.update.backup, 'false');

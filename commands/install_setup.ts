@@ -181,6 +181,7 @@ const offerAutomaticUpdateBackup = (configPath: string): boolean => {
 
   const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [y/N] ');
   if (enable !== 'y' && enable !== 'Y') {
+    writeStdoutLine('\nℹ️  Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
     return true;
   }
 
