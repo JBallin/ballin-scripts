@@ -2,10 +2,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  rethrowCommandError,
-  runWithCommandAnalytics,
-} = require('./analytics.ts');
-const {
   configPath,
   fetchConfig,
 } = require('../config/index.ts');
@@ -112,10 +108,6 @@ const fileSuggestions = `
   bash_profile.sh
   bashrc.sh
   Brewfile
-  brackets_disabled_extensions
-  brackets_extensions
-  brackets_keymap.json
-  brackets_settings.json
   brew_cask
   brew_leaves
   brew_list
@@ -222,14 +214,6 @@ const shellStyleExitStatus = (result: ReturnType<typeof runCommand>): number => 
     }
   }
   return result.status ?? 1;
-};
-
-const runVisible = (command: string, args: string[] = []): number => {
-  const result = runCommand(command, args, { stdio: 'inherit' });
-  if (result.error) {
-    return reportSpawnError(command, result.error);
-  }
-  return shellStyleExitStatus(result);
 };
 
 const fileExists = (filePath: string): boolean => {
@@ -907,18 +891,6 @@ const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
     }
   });
 
-  const bracketsDir = path.join(homeDir, 'Library', 'Application Support', 'Brackets');
-  if (dirExists(bracketsDir)) {
-    if (fileExists(path.join(bracketsDir, 'brackets.json'))) {
-      snapshots.push(catSnapshot(bracketsDir, 'brackets_settings.json', 'brackets.json'));
-    }
-    if (fileExists(path.join(bracketsDir, 'keymap.json'))) {
-      snapshots.push(catSnapshot(bracketsDir, 'brackets_keymap.json', 'keymap.json'));
-    }
-    addShellCommand('brackets_extensions', 'ls -A extensions/user/', bracketsDir);
-    addShellCommand('brackets_disabled_extensions', 'ls -A extensions/disabled/', bracketsDir);
-  }
-
   addFile('.vimrc', 'vimrc');
   addFile('.nanorc', 'nanorc');
   addFile(path.join('.ballin-scripts', 'ballin.config.json'), configSnapshotFileName);
@@ -990,12 +962,8 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   const command = args[0];
 
   if (command === 'help') {
-    if (args.length !== 1) {
-      writeStderrLine('ballin backup help: expected no arguments');
-      process.exitCode = 1;
-      return;
-    }
-    process.exitCode = runVisible('ballin');
+    writeStderrLine('ballin backup help: expected no arguments');
+    process.exitCode = 1;
     return;
   }
 
@@ -1096,11 +1064,6 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 }
 
-const runBackupCli = (args = process.argv.slice(2)): void => {
-  void runWithCommandAnalytics('ballin backup', () => runBackupCommand(args)).catch(rethrowCommandError);
-};
-
 module.exports = {
   runBackupCommand,
-  runBackupCli,
 };

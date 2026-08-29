@@ -92,9 +92,9 @@ const analyticsNotice = analyticsNoticeFor();
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 const defaultRepoDir = path.join(__dirname, '..');
 
-const loadAppVersion = (): string => {
+const loadAppVersion = (appPackageJsonPath = packageJsonPath): string => {
   try {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { version?: unknown };
+    const packageJson = JSON.parse(fs.readFileSync(appPackageJsonPath, 'utf8')) as { version?: unknown };
     return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0';
   } catch {
     return '0.0.0';
@@ -173,7 +173,7 @@ const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): stri
 
 const dateBucket = (now: Date): string => now.toISOString().slice(0, 10);
 
-const nodeMajor = (): string => process.versions.node.split('.')[0] ?? '0';
+const nodeMajor = (): string => process.versions.node.split('.')[0];
 
 const osFamily = (): string => {
   const platform = os.platform();
@@ -257,11 +257,6 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise(
     const body = JSON.stringify(payload);
     const optionsWithHeaders = requestOptions(options.endpoint);
     const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
-    let destroyRequest = () => {};
-    wallClockTimeout = setTimeout(() => {
-      destroyRequest();
-      settle();
-    }, timeoutMs);
     const request = https.request({
       ...optionsWithHeaders,
       headers: {
@@ -273,10 +268,10 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise(
       response.on('close', settle);
       response.resume();
     });
-    destroyRequest = () => {
+    wallClockTimeout = setTimeout(() => {
       request.destroy();
-    };
-
+      settle();
+    }, timeoutMs);
     request.on('error', settle);
     request.on('close', settle);
     request.setTimeout(timeoutMs, () => {
@@ -379,6 +374,7 @@ module.exports = {
   durationBucketFromMs,
   ensureAnalyticsInstallId,
   installIdPathForRepo,
+  loadAppVersion,
   readLocalInstallId,
   recordAnalyticsEvent,
   rethrowCommandError,

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const {
   dateRangeFromArgs,
   defaultDatabase,
@@ -9,6 +10,7 @@ const {
   optionsFromArgs,
   parseD1Json,
   renderReport,
+  runCli,
   runWrangler,
   wranglerArgsFor,
 } = require('../analytics-worker/report.ts');
@@ -46,6 +48,12 @@ describe('analytics D1 report', () => {
       help: false,
       to: '2026-06-01',
     }), '--from must be on or before --to');
+    assert.throws(() => dateRangeFromArgs({
+      database: defaultDatabase,
+      from: '2026-06-01',
+      help: false,
+      to: 'June 30',
+    }), '--to must be a valid YYYY-MM-DD date');
   });
 
   it('loads only read-only aggregate queries with validated date buckets', () => {
@@ -118,6 +126,22 @@ describe('analytics D1 report', () => {
     assert.include(output, 'No runtime/version events found for this range.');
   });
 
+  it('normalizes malformed aggregate values without misreporting failures', () => {
+    const output = renderReport({
+      activeInstalls: [{ date_bucket: null, active_installs: 'not-a-number' }],
+      commandStatus: [{ command: '', total: 0, failures: Infinity }],
+      runtimeTrends: [{ events: '2' }],
+    }, {
+      database: defaultDatabase,
+      from: '2026-06-01',
+      to: '2026-06-01',
+    });
+
+    assert.include(output, '2026-06-01  0');
+    assert.match(output, /unknown\s+0\s+0\s+0\s+0\s+0\.0%/);
+    assert.include(output, 'unknown  unknown      unknown     unknown  unknown     2');
+  });
+
   it('generates the report with an injected D1 runner', () => {
     const sqlStatements: string[] = [];
     const report = generateReport({
@@ -164,6 +188,20 @@ describe('analytics D1 report', () => {
     ]));
 
     assert.deepEqual(rows, [{ command: 'ballin update', total: 3 }]);
+  });
+
+  it('normalizes supported Wrangler JSON envelopes and ignores malformed rows', () => {
+    assert.deepEqual(parseD1Json(JSON.stringify([
+      { total: 1 },
+      null,
+      'bad row',
+    ])), [{ total: 1 }]);
+    assert.deepEqual(parseD1Json(JSON.stringify({
+      result: [{ results: [{ total: 2 }], success: true }],
+    })), [{ total: 2 }]);
+    assert.deepEqual(parseD1Json('null'), []);
+    assert.deepEqual(parseD1Json('{}'), []);
+    assert.throws(() => parseD1Json('{'), 'Wrangler returned invalid JSON');
   });
 
   it('rejects unsuccessful Wrangler D1 JSON responses', () => {
@@ -221,6 +259,35 @@ describe('analytics D1 report', () => {
 
     assert.deepEqual(calls.map((call) => call.command), ['wrangler']);
     assert.include(calls[0].args, '--remote');
+  });
+
+  it('surfaces spawn errors and stdout/default Wrangler failure messages', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
+    fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
+    const options = { database: defaultDatabase, from: '2026-06-01', rootDir, to: '2026-06-30' };
+    const result = (overrides: Record<string, unknown>) => ({
+      error: undefined,
+      output: [],
+      pid: 1,
+      signal: null,
+      status: 0,
+      stderr: '',
+      stdout: '[]',
+      ...overrides,
+    });
+
+    assert.throws(() => runWrangler('SELECT 1', options, () => result({
+      error: new Error('spawn denied'),
+    })), 'spawn denied');
+    assert.throws(() => runWrangler('SELECT 1', options, () => result({
+      status: 1,
+      stdout: 'structured failure',
+    })), 'structured failure');
+    assert.throws(() => runWrangler('SELECT 1', options, () => result({
+      status: null,
+      stdout: '',
+    })), 'Wrangler D1 query failed');
   });
 
   it('falls back to npx --yes wrangler when wrangler is unavailable', () => {
@@ -311,9 +378,54 @@ describe('analytics D1 report', () => {
     });
   });
 
+  it('handles report CLI help, success, and validation failures through injected boundaries', () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const writeOut = (text: string) => stdout.push(text);
+    const writeError = (text: string) => stderr.push(text);
+    const runner = (sql: string): D1Row[] => (
+      sql.includes('install_days') ? [{ date_bucket: '2026-06-01', active_installs: 1 }] : []
+    );
+
+    assert.equal(runCli(['--help'], runner, writeOut, writeError), 0);
+    assert.include(stdout.pop(), 'Usage: npm run analytics:report');
+    assert.equal(runCli(['--from', '2026-06-01', '--to', '2026-06-01'], runner, writeOut, writeError), 0);
+    assert.include(stdout.pop(), '2026-06-01  1');
+    assert.equal(runCli(['--unknown'], runner, writeOut, writeError), 1);
+    assert.equal(stderr.pop(), 'analytics report: Unknown analytics report option: --unknown\n');
+  });
+
+  it('runs the report help entry point without requiring Wrangler configuration', () => {
+    const result = spawnSync(process.execPath, ['analytics-worker/report.ts', '--help'], {
+      cwd: path.join(__dirname, '..'),
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Usage: npm run analytics:report');
+    assert.equal(result.stderr, '');
+  });
+
+  it('returns a failing status and actionable stderr from the report entry point', () => {
+    const result = spawnSync(process.execPath, ['analytics-worker/report.ts', '--unknown'], {
+      cwd: path.join(__dirname, '..'),
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'analytics report: Unknown analytics report option: --unknown\n');
+  });
+
   it('rejects missing CLI option values', () => {
     assert.throws(() => optionsFromArgs(['--from']), '--from requires a value');
     assert.throws(() => optionsFromArgs(['--to', '--database', 'custom-db']), '--to requires a value');
     assert.throws(() => optionsFromArgs(['--database']), '--database requires a value');
+    assert.deepEqual(optionsFromArgs(['-h']), {
+      database: defaultDatabase,
+      from: '',
+      help: true,
+      to: '',
+    });
   });
 });

@@ -119,9 +119,6 @@ const dateRangeFromArgs = (args: ParsedArgs, now = new Date()): DateRange => {
 
 const optionsFromArgs = (args: string[], now = new Date()): ReportOptions & { help: boolean } => {
   const parsed = parseArgs(args);
-  if (!parsed.database) {
-    throw new Error('--database must not be empty');
-  }
   if (parsed.help) {
     return {
       database: parsed.database,
@@ -268,9 +265,10 @@ const runWrangler = (
   return parseD1Json(result.stdout);
 };
 
-const numberValue = (value: unknown): number => (
-  typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0
-);
+const numberValue = (value: unknown): number => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
 
 const stringValue = (value: unknown): string => (
   typeof value === 'string' && value.length > 0 ? value : 'unknown'
@@ -380,18 +378,23 @@ const generateReport = (options: ReportOptions, runner: D1Runner = runWrangler):
   }, options);
 };
 
-const runCli = (args = process.argv.slice(2)): number => {
+const runCli = (
+  args = process.argv.slice(2),
+  runner: D1Runner = runWrangler,
+  stdout: (text: string) => void = (text) => process.stdout.write(text),
+  stderr: (text: string) => void = (text) => process.stderr.write(text),
+): number => {
   try {
     const options = optionsFromArgs(args);
     if (options.help) {
-      process.stdout.write(`${usage}\n`);
+      stdout(`${usage}\n`);
       return 0;
     }
-    process.stdout.write(generateReport(options));
+    stdout(generateReport(options, runner));
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`analytics report: ${message}\n`);
+    stderr(`analytics report: ${message}\n`);
     return 1;
   }
 };

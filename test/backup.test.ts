@@ -34,6 +34,7 @@ type RunBackupOptions = {
   ghInitialReadFail?: boolean;
   ghInitialReadSignal?: boolean;
   ghMetadataInvalid?: boolean;
+  ghMetadataMode?: 'files-array' | 'files-null' | 'file-null' | 'truncated-string';
   ghFileTruncationInvalid?: boolean;
   ghFileSizeMode?: 'valid' | 'missing' | 'invalid' | 'mismatch';
   ghMetadataTruncated?: boolean;
@@ -42,6 +43,9 @@ type RunBackupOptions = {
   ghExpectedHost?: string;
   ghUploadAmbiguous?: boolean;
   ghUploadFail?: boolean;
+  ghRemoveAfterAuth?: boolean;
+  ghRemoveAfterInitialRead?: boolean;
+  ghRemoveAfterMetadata?: boolean;
   commandPath?: string;
   commandCwd?: string;
   failFinalConfigCommit?: boolean;
@@ -117,6 +121,7 @@ if [ "$1:$2" = 'auth:status' ]; then
     printf '%s\\n' 'simulated gh auth failure' >&2
     exit 4
   fi
+  if [ "$FAKE_GH_REMOVE_AFTER_AUTH" = 'true' ]; then rm "$0"; fi
   exit 0
 fi
 if [ "$1" = 'api' ]; then
@@ -141,8 +146,13 @@ if [ "$1" = 'api' ]; then
       printf '%s\\n' '{invalid'
       exit 0
     fi
-    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; const sizeMode = process.env.FAKE_GH_FILE_SIZE_MODE; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = { filename: name, ...(sizeMode === "missing" ? {} : { size: sizeMode === "invalid" ? "invalid" : sizeMode === "mismatch" ? size + 1 : size }), truncated: process.env.FAKE_GH_FILE_TRUNCATION_INVALID === "true" ? "invalid" : size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
-    exit $?
+    if [ "$FAKE_GH_METADATA_MODE" = 'files-array' ]; then printf '%s\\n' '{"files":[]}'; exit 0; fi
+    if [ "$FAKE_GH_METADATA_MODE" = 'files-null' ]; then printf '%s\\n' '{"files":null}'; exit 0; fi
+    if [ "$FAKE_GH_METADATA_MODE" = 'truncated-string' ]; then printf '%s\\n' '{"files":{},"truncated":"yes"}'; exit 0; fi
+    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; const sizeMode = process.env.FAKE_GH_FILE_SIZE_MODE; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const size = fs.statSync(file).size; files[name] = process.env.FAKE_GH_METADATA_MODE === "file-null" ? null : { filename: name, ...(sizeMode === "missing" ? {} : { size: sizeMode === "invalid" ? "invalid" : sizeMode === "mismatch" ? size + 1 : size }), truncated: process.env.FAKE_GH_FILE_TRUNCATION_INVALID === "true" ? "invalid" : size > 1048576, ...(size > 1048576 ? {} : { content: fs.readFileSync(file, "utf8") }) }; } process.stdout.write(JSON.stringify({ files, truncated: process.env.FAKE_GH_METADATA_TRUNCATED === "true" }) + "\\n");' "$FAKE_GIST_STORAGE_DIR"
+    metadata_status=$?
+    if [ "$FAKE_GH_REMOVE_AFTER_METADATA" = 'true' ]; then rm "$0"; fi
+    exit "$metadata_status"
   fi
   if [ "$5" = 'PATCH' ] && [ "$7" = '--input' ] && [ "$9" = '--silent' ] && [ "$#" -eq 9 ]; then
     if [ "$FAKE_GH_UPLOAD_FAIL" = 'true' ]; then
@@ -190,6 +200,7 @@ if [ "$1:$2" = 'gist:view' ]; then
     if [ "$FAKE_GH_INITIAL_READ_SIGNAL" = 'true' ]; then
       kill -TERM "$$"
     fi
+    if [ "$FAKE_GH_REMOVE_AFTER_INITIAL_READ" = 'true' ]; then rm "$0"; fi
     exit 0
   fi
   if [ "$4" != '--raw' ]; then
@@ -363,6 +374,7 @@ done
     ghInitialReadFail = false,
     ghInitialReadSignal = false,
     ghMetadataInvalid = false,
+    ghMetadataMode,
     ghFileTruncationInvalid = false,
     ghFileSizeMode = 'valid',
     ghMetadataTruncated = false,
@@ -371,6 +383,9 @@ done
     ghExpectedHost = 'example.test',
     ghUploadAmbiguous = false,
     ghUploadFail = false,
+    ghRemoveAfterAuth = false,
+    ghRemoveAfterInitialRead = false,
+    ghRemoveAfterMetadata = false,
     commandPath = ballinPath,
     commandCwd = testHomeDir,
     failFinalConfigCommit = false,
@@ -403,6 +418,7 @@ done
       FAKE_GH_INITIAL_READ_FAIL: ghInitialReadFail ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_SIGNAL: ghInitialReadSignal ? 'true' : 'false',
       FAKE_GH_METADATA_INVALID: ghMetadataInvalid ? 'true' : 'false',
+      FAKE_GH_METADATA_MODE: ghMetadataMode ?? '',
       FAKE_GH_FILE_TRUNCATION_INVALID: ghFileTruncationInvalid ? 'true' : 'false',
       FAKE_GH_FILE_SIZE_MODE: ghFileSizeMode,
       FAKE_GH_METADATA_TRUNCATED: ghMetadataTruncated ? 'true' : 'false',
@@ -410,6 +426,9 @@ done
       FAKE_GH_RAW_READ_SIGNALS: ghRawReadSignals.join(':'),
       FAKE_GH_UPLOAD_AMBIGUOUS: ghUploadAmbiguous ? 'true' : 'false',
       FAKE_GH_UPLOAD_FAIL: ghUploadFail ? 'true' : 'false',
+      FAKE_GH_REMOVE_AFTER_AUTH: ghRemoveAfterAuth ? 'true' : 'false',
+      FAKE_GH_REMOVE_AFTER_INITIAL_READ: ghRemoveAfterInitialRead ? 'true' : 'false',
+      FAKE_GH_REMOVE_AFTER_METADATA: ghRemoveAfterMetadata ? 'true' : 'false',
       FAKE_BREW_LOG: brewLogPath,
       FAKE_PYTHON_TOOL_LOG: pythonToolLogPath,
       FAKE_OPEN_LOG: openLogPath,
@@ -522,6 +541,17 @@ done
     assert.deepEqual(gistReads(), []);
   });
 
+  it('rejects non-object configuration before any GitHub operation', () => {
+    ['[]\n', 'null\n', '{"backup":[]}\n'].forEach((config) => {
+      fs.writeFileSync(configPath, config);
+      const result = runBackup();
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stderr, 'ballin backup: configuration must contain JSON objects\n');
+    });
+    assert.deepEqual(ghCalls(), []);
+  });
+
   it('treats a default null Gist ID as missing when opening', () => {
     writeBackupConfig(null);
 
@@ -603,6 +633,25 @@ exit 2
     assert.equal(result.status, 126);
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, 'gh: Permission denied\n');
+  });
+
+  it('reports unexpected gh spawn failures without masking the underlying error', () => {
+    fs.rmSync(path.join(testBinDir, 'gh'));
+    fs.symlinkSync('gh', path.join(testBinDir, 'gh'));
+
+    const result = runBackup({ args: ['open'] });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'ELOOP');
+    assert.deepEqual(openCalls(), []);
+  });
+
+  it('reports when gh disappears after authentication but before opening the Gist', () => {
+    const result = runBackup({ args: ['open'], ghRemoveAfterAuth: true });
+
+    assert.equal(result.status, 127);
+    assert.include(result.stderr, 'gh: command not found');
+    assert.isFalse(fs.existsSync(openLogPath));
   });
 
   it('prints help through the ballin command', () => {
@@ -1162,6 +1211,34 @@ exit 2
     assert.deepEqual(gistReads(), ['missing_file']);
   });
 
+  it('fails a read before output when Gist readability cannot be verified', () => {
+    const result = runBackup({ args: ['read', 'vimrc'], ghInitialReadFail: true });
+
+    assert.equal(result.status, 17);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin self-update'.\n");
+    assert.include(result.stderr, 'simulated initial gh gist read failure');
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails a read safely when gh disappears after authentication', () => {
+    const result = runBackup({ args: ['read', 'vimrc'], ghRemoveAfterAuth: true });
+
+    assert.equal(result.status, 127);
+    assert.equal(result.stdout, "Error retrieving your gist, please run 'ballin self-update'.\n");
+    assert.equal(result.stderr, 'gh: command not found\n');
+    assert.deepEqual(gistReads(), []);
+  });
+
+  it('fails a read safely when gh disappears after verifying the Gist', () => {
+    const result = runBackup({
+      args: ['read', 'vimrc'],
+      ghRemoveAfterInitialRead: true,
+    });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'gh: command not found');
+  });
+
   it('prints options when read is missing a filename', () => {
     const result = runBackup({ args: ['read'] });
 
@@ -1200,6 +1277,44 @@ exit 2
     assert.deepEqual(gistUploads(), []);
   });
 
+  it('reports temp-file staging failures without reading or mutating the Gist', () => {
+    writeSnapshot('local value\n');
+    fs.rmSync(scratchDir, { recursive: true });
+    fs.writeFileSync(scratchDir, 'not a temp directory\n');
+
+    const result = runBackup();
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, `unable to stage ${snapshotFileName}`);
+    assert.include(result.stderr, `failed to snapshot ${snapshotFileName}`);
+    assert.deepEqual(gistRequests(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('reports collector spawn failures and leaves remote and cache state untouched', () => {
+    writeSnapshot('local value\n');
+    fs.rmSync(path.join(testBinDir, 'cat'));
+    fs.symlinkSync('cat', path.join(testBinDir, 'cat'));
+
+    const result = runBackup();
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'ELOOP');
+    assert.include(result.stderr, `failed to snapshot ${snapshotFileName}`);
+    assert.deepEqual(gistRequests(), []);
+    assert.deepEqual(gistUploads(), []);
+    assert.isFalse(fs.existsSync(cachedSnapshotPath()));
+  });
+
+  it('fails closed when gh disappears before Gist metadata is read', () => {
+    const result = runBackup({ ghRemoveAfterAuth: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'gh: command not found');
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.equal(fs.readdirSync(fakeGistDir).length, 0);
+  });
+
   it('treats an interrupted Gist metadata read as a failed closed run', () => {
     writeSnapshot('new local value\n');
     seedBackupCache('cached base\n');
@@ -1211,6 +1326,32 @@ exit 2
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'cached base\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'cached base\n');
     assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves remote and cache state when gh disappears before a truncated remote read', () => {
+    const remoteContent = `${'remote content\n'.repeat(80000)}`;
+    writeSnapshot('local content\n');
+    seedFakeGist(remoteContent);
+
+    const result = runBackup({ ghRemoveAfterMetadata: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'gh: command not found');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), remoteContent);
+    assert.isFalse(fs.existsSync(cachedSnapshotPath()));
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('preserves remote and cache state when gh disappears before the Gist update', () => {
+    writeSnapshot('new local content\n');
+
+    const result = runBackup({ ghRemoveAfterMetadata: true });
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'gh: command not found');
+    assert.include(result.stderr, 'Gist update failed or its outcome is unknown');
+    assert.isFalse(fs.existsSync(cachedSnapshotPath()));
     assert.deepEqual(gistUploads(), []);
   });
 
@@ -1351,45 +1492,6 @@ printf '%s\\n' 'publisher.insiders-extension'
       'vsI_settings',
       'vsI_keybindings',
       'vsI_extensions',
-    ]);
-  });
-
-  it('snapshots Brackets settings, keymap, and extension directories', () => {
-    const bracketsDir = path.join(testHomeDir, 'Library', 'Application Support', 'Brackets');
-    fs.mkdirSync(path.join(bracketsDir, 'extensions', 'user'), { recursive: true });
-    fs.mkdirSync(path.join(bracketsDir, 'extensions', 'disabled'), { recursive: true });
-    fs.writeFileSync(path.join(bracketsDir, 'brackets.json'), '{"linting.enabled":true}\n');
-    fs.writeFileSync(path.join(bracketsDir, 'keymap.json'), '{"Ctrl-E":"edit"}\n');
-    fs.writeFileSync(path.join(bracketsDir, 'extensions', 'user', 'beautify'), '');
-    fs.writeFileSync(path.join(bracketsDir, 'extensions', 'disabled', 'legacy-lint'), '');
-
-    const result = runBackup();
-
-    assertBackupSucceeded(result);
-    assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ brackets_settings',
-      '✚ brackets_keymap',
-      '✚ brackets_extensions',
-      '✚ brackets_disabled_extensions',
-    ]);
-    assert.equal(
-      fs.readFileSync(path.join(backupCacheDir, 'brackets_settings.json'), 'utf8'),
-      '{"linting.enabled":true}\n',
-    );
-    assert.equal(
-      fs.readFileSync(path.join(backupCacheDir, 'brackets_keymap.json'), 'utf8'),
-      '{"Ctrl-E":"edit"}\n',
-    );
-    assert.equal(fs.readFileSync(path.join(backupCacheDir, 'brackets_extensions'), 'utf8'), 'beautify\n');
-    assert.equal(
-      fs.readFileSync(path.join(backupCacheDir, 'brackets_disabled_extensions'), 'utf8'),
-      'legacy-lint\n',
-    );
-    assert.deepEqual(gistUploads(), [
-      'brackets_settings.json',
-      'brackets_keymap.json',
-      'brackets_extensions',
-      'brackets_disabled_extensions',
     ]);
   });
 
@@ -1617,6 +1719,20 @@ printf '%s\\n' '123456 Example App'
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'alias hello="world"\n');
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), [snapshotFileName]);
+  });
+
+  it('reports cache preparation failure only after a known successful remote update', () => {
+    writeSnapshot('new remote value\n');
+    fs.writeFileSync(backupCacheDir, 'blocks cache directory creation\n');
+
+    const result = runBackup();
+
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'failed to prepare backup cache updates');
+    assert.include(result.stderr, 'the Gist outcome is known, but one or more cache updates failed');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new remote value\n');
+    assert.equal(fs.readFileSync(backupCacheDir, 'utf8'), 'blocks cache directory creation\n');
+    assert.lengthOf(gistPatchCalls(), 1);
   });
 
   it('uses the final new-file marker for a first empty snapshot', () => {
@@ -1954,6 +2070,26 @@ printf '%s\\n' '123456 Example App'
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh\n');
     assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'old git\n');
     assert.deepEqual(gistUploads(), []);
+  });
+
+  ([
+    { mode: 'files-array', message: 'GitHub returned invalid Gist metadata' },
+    { mode: 'files-null', message: 'GitHub returned invalid Gist metadata' },
+    { mode: 'truncated-string', message: 'GitHub returned an invalid Gist truncation marker' },
+    { mode: 'file-null', message: `invalid remote metadata for ${snapshotFileName}` },
+  ] as const).forEach(({ mode, message }) => {
+    it(`fails closed for malformed ${mode} Gist metadata`, () => {
+      writeSnapshot('new value\n');
+      seedBackupCache('old value\n');
+
+      const result = runBackup({ ghMetadataMode: mode });
+
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, message);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old value\n');
+      assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old value\n');
+      assert.deepEqual(gistPatchCalls(), []);
+    });
   });
 
   it('fails closed when the remote Gist file list is truncated', () => {

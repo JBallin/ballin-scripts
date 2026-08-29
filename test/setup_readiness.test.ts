@@ -121,6 +121,29 @@ describe('setup readiness', () => {
     assert.equal(unsupported.status, 'fail');
   });
 
+  it('warns when package engine metadata or runtime versions cannot be compared', () => {
+    const invalidRuntime = collect({ nodeVersion: 'nightly', nodeEngine: '>=24' });
+    const invalidEngine = collect({ nodeVersion: '24.12.0', nodeEngine: '24.x' });
+
+    assert.equal(checkById(invalidRuntime, 'runtime.node').status, 'warn');
+    assert.include(checkById(invalidRuntime, 'runtime.node').summary, 'Unable to compare');
+    assert.equal(checkById(invalidEngine, 'runtime.node').status, 'warn');
+
+    const packagePath = path.join(repoDir, 'package.json');
+    [
+      'null\n',
+      '{}\n',
+      '{"engines":{}}\n',
+      '{"engines":{"node":24}}\n',
+      '{not json\n',
+    ].forEach((contents) => {
+      fs.writeFileSync(packagePath, contents);
+      const report = collect({ nodeVersion: '24.12.0' });
+      assert.equal(checkById(report, 'runtime.node').status, 'warn');
+      assert.include(checkById(report, 'runtime.node').summary, 'Unable to determine');
+    });
+  });
+
   it('reports missing and non-executable command shims on PATH', () => {
     fs.rmSync(path.join(binDir, 'ballin'));
 
@@ -138,6 +161,9 @@ describe('setup readiness', () => {
 
     fs.writeFileSync(configPath, '{not json\n');
     assert.include(checkById(collect(), 'config.read').summary, 'not valid JSON');
+
+    writeConfig([]);
+    assert.include(checkById(collect(), 'config.read').summary, 'must contain a JSON object');
 
     writeConfig({ backup: { id: null, host: 'example.test' } });
     const sectionCheck = checkById(collect(), 'config.read');
@@ -312,6 +338,33 @@ describe('setup readiness', () => {
       'gh gist view --files -- test-gist-id',
     ]);
     assert.deepEqual(commandHosts, ['example.test', 'example.test']);
+  });
+
+  it('reports gh spawn errors for authentication and Gist reads', () => {
+    const spawnError = Object.assign(new Error('spawn failed'), { code: 'EIO' });
+    const authError = collect({
+      runCommand: () => ({
+        error: spawnError,
+        signal: null,
+        status: null,
+        stderr: '',
+        stdout: '',
+      }),
+    });
+    assert.equal(checkById(authError, 'backup.auth').status, 'fail');
+    assert.equal(checkById(authError, 'backup.read').status, 'info');
+
+    const readError = collect({
+      runCommand: (_command, args = []) => ({
+        ...(args[0] === 'gist' ? { error: spawnError } : {}),
+        signal: null,
+        status: args[0] === 'gist' ? null : 0,
+        stderr: '',
+        stdout: '',
+      }),
+    });
+    assert.equal(checkById(readError, 'backup.auth').status, 'pass');
+    assert.equal(checkById(readError, 'backup.read').status, 'fail');
   });
 
   it('terminates gh flags before reading a configured Gist ID', () => {
