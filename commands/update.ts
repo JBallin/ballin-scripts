@@ -315,7 +315,12 @@ function runUpdateCommand(): void {
 
   if (settings.selfUpdate) {
     progress('Updating ballin-scripts');
-    const updateStatus = runIntegrationCommand(ballinCommandPath(), ['self-update'], { env: childEnv });
+    const updateStatus = runIntegrationCommand(ballinCommandPath(), ['self-update'], {
+      env: {
+        ...childEnv,
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
+      },
+    });
     if (updateStatus === 0) {
       progress('Checking Ballin readiness');
       recordFailure(reportBallinReadiness(childEnv));
@@ -324,7 +329,12 @@ function runUpdateCommand(): void {
 
   if (settings.backup) {
     progress('Backing up development environment');
-    runIntegrationCommand(ballinCommandPath(), ['backup'], { env: childEnv });
+    runIntegrationCommand(ballinCommandPath(), ['backup'], {
+      env: {
+        ...childEnv,
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
+      },
+    });
   }
 
   if (exitStatus !== 0) {

@@ -116,6 +116,10 @@ const analyticsDisabledByEnv = (env: NodeJS.ProcessEnv): boolean => (
   env.BALLIN_NO_ANALYTICS === '1' || Boolean(env.CI)
 );
 
+const commandAnalyticsDisabledByEnv = (env: NodeJS.ProcessEnv): boolean => (
+  analyticsDisabledByEnv(env) || env.BALLIN_NO_COMMAND_ANALYTICS === '1'
+);
+
 const installIdPathForRepo = (repoDir = defaultRepoDir): string => (
   path.join(repoDir, '.analytics', 'install-id')
 );
@@ -288,7 +292,7 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise(
 const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: AnalyticsRuntime = {}): Promise<void> => {
   try {
     const env = runtime.env ?? process.env;
-    if (analyticsDisabledByEnv(env)) {
+    if (commandAnalyticsDisabledByEnv(env)) {
       return;
     }
     if (!allowedCommands.has(input.command)) {

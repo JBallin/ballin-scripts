@@ -24,7 +24,12 @@ const configAction = (request?: string, keys?: string, value?: string, other?: s
   if (request === 'set') return setConfig(keys, value, other);
   if (process.env.NODE_ENV !== 'test') {
     // exec() is async, so actionErr is returned before the help output is printed.
-    exec('ballin', (error: Error | null, stdout: string) => console.log(stdout)); // eslint-disable-line no-console
+    exec('ballin', {
+      env: {
+        ...process.env,
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
+      },
+    }, (error: Error | null, stdout: string) => console.log(stdout)); // eslint-disable-line no-console
   }
   return configMessages.actionErr;
 };

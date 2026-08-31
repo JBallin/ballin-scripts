@@ -280,6 +280,194 @@ exit 0
     ]);
   });
 
+  it('records only the top-level update event while preserving the nested child environment', function test() {
+    this.timeout(5000);
+    const analyticsPath = path.join(__dirname, '..', 'commands', 'analytics.ts');
+    const selfUpdatePath = path.join(__dirname, '..', 'commands', 'self_update.ts');
+    const updatePath = path.join(__dirname, '..', 'commands', 'update.ts');
+    const analyticsLogPath = path.join(tempDir, 'analytics.log');
+    const analyticsInstallIdPath = path.join(tempDir, '.ballin-scripts', '.analytics', 'install-id');
+    const harnessPath = path.join(tempDir, 'run-update.ts');
+    const installedCommandsDir = path.join(tempDir, '.ballin-scripts', 'commands');
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const nvmBinDir = path.join(tempDir, 'nvm-bin');
+    const nestedBallinPath = path.join(binDir, 'ballin');
+    const installId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
+
+    fs.mkdirSync(installedCommandsDir, { recursive: true });
+    fs.mkdirSync(nvmDir);
+    fs.mkdirSync(nvmBinDir);
+    fs.mkdirSync(path.dirname(analyticsInstallIdPath), { recursive: true });
+    fs.writeFileSync(analyticsInstallIdPath, 'not-a-uuid\n');
+    fs.writeFileSync(path.join(nvmDir, 'nvm.sh'), `nvm() {
+  export PATH="${nvmBinDir}:$PATH"
+  export BALLIN_NVM_TEST_MARKER='captured-after-nvm'
+}
+`);
+    fs.symlinkSync(process.execPath, path.join(nvmBinDir, 'node'));
+    fs.writeFileSync(path.join(nvmBinDir, 'npm'), `#!${process.execPath}
+const fs = require('fs');
+fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
+  type: 'integration',
+  command: 'npm',
+  hardOptOut: process.env.BALLIN_NO_ANALYTICS ?? null,
+  commandOptOut: process.env.BALLIN_NO_COMMAND_ANALYTICS ?? null,
+  nvmMarker: process.env.BALLIN_NVM_TEST_MARKER ?? null,
+}) + '\\n');
+`, { mode: 0o755 });
+    fs.writeFileSync(path.join(nvmBinDir, 'git'), `#!${process.execPath}
+process.exit(0);
+`, { mode: 0o755 });
+    fs.writeFileSync(path.join(installedCommandsDir, 'install_setup.ts'), `const {
+  ensureAnalyticsInstallId,
+} = require(${JSON.stringify(analyticsPath)});
+
+const installId = ensureAnalyticsInstallId({
+  analyticsConfig: { enabled: 'true' },
+  env: process.env,
+  generateInstallId: () => ${JSON.stringify(installId)},
+  installIdPath: process.env.ANALYTICS_TEST_INSTALL_ID_PATH,
+});
+if (!installId) {
+  process.exitCode = 1;
+}
+`);
+    fs.writeFileSync(nestedBallinPath, `#!${process.execPath}
+const fs = require('fs');
+const { runWithCommandAnalytics } = require(${JSON.stringify(analyticsPath)});
+const { runSelfUpdateCommand } = require(${JSON.stringify(selfUpdatePath)});
+
+const commandName = process.argv[2];
+const command = 'ballin ' + commandName;
+fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
+  type: 'nested',
+  command,
+  hardOptOut: process.env.BALLIN_NO_ANALYTICS ?? null,
+  commandOptOut: process.env.BALLIN_NO_COMMAND_ANALYTICS ?? null,
+  nvmMarker: process.env.BALLIN_NVM_TEST_MARKER ?? null,
+  path: process.env.PATH,
+}) + '\\n');
+
+(async () => {
+  await runWithCommandAnalytics(
+    command,
+    commandName === 'self-update' ? runSelfUpdateCommand : () => {},
+    {
+    analyticsConfig: { enabled: 'true' },
+    appVersion: '2.0.0',
+    env: process.env,
+    installIdPath: process.env.ANALYTICS_TEST_INSTALL_ID_PATH,
+    sender: async (payload) => {
+      fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
+        type: 'event',
+        command: payload.command,
+        installId: payload.installId,
+      }) + '\\n');
+    },
+  });
+})().catch((error) => {
+  process.stderr.write(String(error) + '\\n');
+  process.exitCode = 1;
+});
+`, { mode: 0o755 });
+    installCommandStub('gh');
+    writeConfig({
+      update: {
+        cleanup: 'false',
+        nvm: 'true',
+        npm: 'true',
+        softwareupdate: 'false',
+        selfUpdate: 'true',
+        backup: 'true',
+      },
+      backup: {
+        id: 'test-gist-id',
+        host: 'example.test',
+      },
+      analytics: {
+        enabled: 'true',
+      },
+    });
+    fs.writeFileSync(harnessPath, `const fs = require('fs');
+const { runWithCommandAnalytics } = require(${JSON.stringify(analyticsPath)});
+const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
+
+(async () => {
+  await runWithCommandAnalytics('ballin update', runUpdateCommand, {
+    analyticsConfig: { enabled: 'true' },
+    appVersion: '2.0.0',
+    env: process.env,
+    installIdPath: process.env.ANALYTICS_TEST_INSTALL_ID_PATH,
+    sender: async (payload) => {
+      fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
+        type: 'event',
+        command: payload.command,
+        installId: payload.installId,
+      }) + '\\n');
+    },
+  });
+})().catch((error) => {
+  process.stderr.write(String(error) + '\\n');
+  process.exitCode = 1;
+});
+`);
+
+    const result = spawnSync(process.execPath, [harnessPath], {
+      encoding: 'utf8',
+      env: {
+        HOME: tempDir,
+        PATH: binDir,
+        NVM_DIR: nvmDir,
+        ANALYTICS_TEST_LOG: analyticsLogPath,
+        ANALYTICS_TEST_INSTALL_ID_PATH: analyticsInstallIdPath,
+        BALLIN_NO_ANALYTICS: '0',
+        BALLIN_TEST_BALLIN_PATH: nestedBallinPath,
+        BALLIN_TEST_CONFIG_PATH: configPath,
+        UPDATE_TEST_LOG: logPath,
+      },
+    });
+    const analyticsLog = fs.readFileSync(analyticsLogPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line: string) => JSON.parse(line));
+    const events = analyticsLog.filter(({ type }: { type: string }) => type === 'event');
+    const nested = analyticsLog.filter(({ type }: { type: string }) => type === 'nested');
+    const integrations = analyticsLog.filter(({ type }: { type: string }) => type === 'integration');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(analyticsInstallIdPath, 'utf8'), `${installId}\n`);
+    assert.deepEqual(events, [{ type: 'event', command: 'ballin update', installId }]);
+    assert.deepEqual(nested.map(({ command, hardOptOut, commandOptOut, nvmMarker, path: childPath }: {
+      command: string;
+      hardOptOut: string;
+      commandOptOut: string;
+      nvmMarker: string;
+      path: string;
+    }) => ({ command, hardOptOut, commandOptOut, nvmMarker, path: childPath })), [
+      {
+        command: 'ballin self-update',
+        hardOptOut: '0',
+        commandOptOut: '1',
+        nvmMarker: 'captured-after-nvm',
+        path: `${nvmBinDir}:${binDir}`,
+      },
+      {
+        command: 'ballin backup',
+        hardOptOut: '0',
+        commandOptOut: '1',
+        nvmMarker: 'captured-after-nvm',
+        path: `${nvmBinDir}:${binDir}`,
+      },
+    ]);
+    assert.deepEqual(integrations, [{
+      type: 'integration',
+      command: 'npm',
+      hardOptOut: '0',
+      commandOptOut: null,
+      nvmMarker: 'captured-after-nvm',
+    }]);
+  });
+
   it('updates App Store apps when mas is available without requiring a setting', () => {
     installCommandStub('mas');
 
