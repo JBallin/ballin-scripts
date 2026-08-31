@@ -318,7 +318,7 @@ function runUpdateCommand(): void {
     const updateStatus = runIntegrationCommand(ballinCommandPath(), ['self-update'], {
       env: {
         ...childEnv,
-        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
       },
     });
     if (updateStatus === 0) {
@@ -332,7 +332,7 @@ function runUpdateCommand(): void {
     runIntegrationCommand(ballinCommandPath(), ['backup'], {
       env: {
         ...childEnv,
-        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
       },
     });
   }

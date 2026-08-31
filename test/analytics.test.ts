@@ -121,6 +121,7 @@ describe('analytics client', () => {
     assert.isTrue(analyticsDisabledByEnv({ BALLIN_NO_ANALYTICS: '1' }));
     assert.isTrue(analyticsDisabledByEnv({ CI: 'true' }));
     assert.isFalse(analyticsDisabledByEnv({ BALLIN_NO_ANALYTICS: '0' }));
+    assert.isFalse(analyticsDisabledByEnv({ BALLIN_NO_COMMAND_ANALYTICS: '1' }));
   });
 
   it('does not send when analytics are disabled in config', async () => {
@@ -168,6 +169,42 @@ describe('analytics client', () => {
 
       assert.deepEqual(payloads, []);
     }
+  });
+
+  it('keeps hard environment opt-outs from creating analytics install IDs', () => {
+    for (const env of [{ BALLIN_NO_ANALYTICS: '1' }, { CI: 'true' }]) {
+      const installId = ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env,
+        generateInstallId: () => fixedInstallId,
+        installIdPath: testInstallIdPath,
+      });
+
+      assert.isNull(installId);
+      assert.isFalse(fs.existsSync(testInstallIdPath));
+    }
+  });
+
+  it('suppresses command events without blocking analytics install ID repair', async () => {
+    const commandOnlyEnv = { BALLIN_NO_COMMAND_ANALYTICS: '1' };
+    writeRawInstallId('not-a-uuid\n');
+
+    const installId = ensureAnalyticsInstallId({
+      analyticsConfig: { enabled: 'true' },
+      env: commandOnlyEnv,
+      generateInstallId: () => fixedInstallId,
+      installIdPath: testInstallIdPath,
+    });
+    const { payloads } = await recordWithSender({
+      command: 'ballin update',
+      now: fixedNow,
+    }, {
+      env: commandOnlyEnv,
+    });
+
+    assert.equal(installId, fixedInstallId);
+    assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), `${fixedInstallId}\n`);
+    assert.deepEqual(payloads, []);
   });
 
   it('reads the local install ID and includes it in the payload', async () => {

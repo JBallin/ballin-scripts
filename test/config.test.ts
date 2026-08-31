@@ -377,7 +377,7 @@ describe('config', () => {
       analytics: { enabled: 'false' },
     }));
     fs.writeFileSync(path.join(binDir, 'ballin'), `#!/bin/sh
-printf '%s\\n' "$BALLIN_NO_ANALYTICS" > "$BALLIN_CONFIG_HELP_LOG"
+printf '%s|%s\\n' "$BALLIN_NO_ANALYTICS" "$BALLIN_NO_COMMAND_ANALYTICS" > "$BALLIN_CONFIG_HELP_LOG"
 printf '%s\\n' 'Ballin help from child'
 `, { mode: 0o755 });
 
@@ -397,7 +397,7 @@ printf '%s\\n' 'Ballin help from child'
       assert.equal(result.status, 0);
       assert.equal(result.stdout, `${configMessages.actionErr}\nBallin help from child\n\n`);
       assert.equal(result.stderr, '');
-      assert.equal(fs.readFileSync(childLogPath, 'utf8'), '1\n');
+      assert.equal(fs.readFileSync(childLogPath, 'utf8'), '0|1\n');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

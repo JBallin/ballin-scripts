@@ -27,7 +27,7 @@ const configAction = (request?: string, keys?: string, value?: string, other?: s
     exec('ballin', {
       env: {
         ...process.env,
-        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
       },
     }, (error: Error | null, stdout: string) => console.log(stdout)); // eslint-disable-line no-console
   }
