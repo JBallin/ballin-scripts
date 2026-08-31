@@ -366,6 +366,43 @@ describe('config', () => {
     assert.equal(result.stderr, '');
   });
 
+  it('CLI invalid action suppresses analytics only for its production-mode help child', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-help-'));
+    const binDir = path.join(tempDir, 'bin');
+    const childLogPath = path.join(tempDir, 'child.log');
+    const isolatedConfigPath = path.join(tempDir, 'ballin.config.json');
+    fs.mkdirSync(binDir);
+    fs.writeFileSync(isolatedConfigPath, JSON.stringify({
+      ...defaultConfig,
+      analytics: { enabled: 'false' },
+    }));
+    fs.writeFileSync(path.join(binDir, 'ballin'), `#!/bin/sh
+printf '%s\\n' "$BALLIN_NO_ANALYTICS" > "$BALLIN_CONFIG_HELP_LOG"
+printf '%s\\n' 'Ballin help from child'
+`, { mode: 0o755 });
+
+    try {
+      const result = spawnSync(process.execPath, [cliPath, 'config', 'wrong'], {
+        encoding: 'utf8',
+        env: {
+          HOME: tempDir,
+          PATH: binDir,
+          NODE_ENV: 'production',
+          BALLIN_CONFIG_HELP_LOG: childLogPath,
+          BALLIN_NO_ANALYTICS: '0',
+          BALLIN_TEST_CONFIG_PATH: isolatedConfigPath,
+        },
+      });
+
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, `${configMessages.actionErr}\nBallin help from child\n\n`);
+      assert.equal(result.stderr, '');
+      assert.equal(fs.readFileSync(childLogPath, 'utf8'), '1\n');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   describe('configAction', () => {
     it('() should return a String', () => {
       assert.isString(configAction('get'));

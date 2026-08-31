@@ -459,6 +459,30 @@ describe('analytics client', () => {
     });
   });
 
+  it('records direct backup and self-update commands normally', async () => {
+    setAnalyticsConfig({
+      enabled: 'true',
+    });
+    writeInstallId();
+    const payloads: AnalyticsPayload[] = [];
+
+    for (const command of ['ballin backup', 'ballin self-update']) {
+      await runWithCommandAnalytics(command, () => {}, {
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        installIdPath: testInstallIdPath,
+        sender: async (payload: AnalyticsPayload) => {
+          payloads.push(payload);
+        },
+      });
+    }
+
+    assert.deepEqual(payloads.map(({ command, status }) => ({ command, status })), [
+      { command: 'ballin backup', status: 'success' },
+      { command: 'ballin self-update', status: 'success' },
+    ]);
+  });
+
   it('records command-level failures from exitCode without changing it', async () => {
     setAnalyticsConfig({
       enabled: 'true',
