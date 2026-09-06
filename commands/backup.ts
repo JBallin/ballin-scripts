@@ -1,5 +1,4 @@
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const {
   configPath,
@@ -19,14 +18,13 @@ const {
   ensureDir,
   makeTempFile,
   readCommandOutput,
+  reportSpawnError,
   removeTempFile,
   runCommand,
+  spawnResultStatus,
   writeStderrLine,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
-
-const commandPermissionDeniedStatus = 126;
-const commandNotFoundStatus = 127;
 
 type SnapshotCommand = {
   fileName: string;
@@ -147,20 +145,6 @@ const runGh = (
   })
 );
 
-const reportSpawnError = (command: string, error: Error): number => {
-  const errorCode = (error as { code?: string }).code;
-  if (errorCode === 'EACCES') {
-    writeStderrLine(`${command}: Permission denied`);
-    return commandPermissionDeniedStatus;
-  }
-  if (errorCode === 'ENOENT') {
-    writeStderrLine(`${command}: command not found`);
-    return commandNotFoundStatus;
-  }
-  writeStderrLine(error.message);
-  return 1;
-};
-
 const backupConfig = (): BackupConfigResult => {
   let configObj: Record<string, unknown>;
   try {
@@ -206,16 +190,6 @@ const backupConfig = (): BackupConfigResult => {
   };
 };
 
-const shellStyleExitStatus = (result: ReturnType<typeof runCommand>): number => {
-  if (result.signal) {
-    const signalNumber = os.constants.signals[result.signal];
-    if (typeof signalNumber === 'number') {
-      return 128 + signalNumber;
-    }
-  }
-  return result.status ?? 1;
-};
-
 const fileExists = (filePath: string): boolean => {
   try {
     return fs.statSync(filePath).isFile();
@@ -258,7 +232,7 @@ const ghAuthStatus = (host: string): CommandCheckResult => {
   if (result.status !== 0) {
     writeStderrLine(`ballin backup: GitHub CLI authentication is required for ${host}`);
     writeStderrLine(`ballin backup: run 'gh auth login --hostname ${host}'`);
-    return { ok: false, exitStatus: shellStyleExitStatus(result) };
+    return { ok: false, exitStatus: spawnResultStatus(result) };
   }
   return { ok: true, exitStatus: 0 };
 };
@@ -354,7 +328,7 @@ const verifyGistReadable = (host: string, id: string): CommandCheckResult => {
     };
   }
   if (result.status !== 0) {
-    return { ok: false, exitStatus: shellStyleExitStatus(result) };
+    return { ok: false, exitStatus: spawnResultStatus(result) };
   }
   return { ok: true, exitStatus: 0 };
 };
@@ -1038,7 +1012,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     if (result.error) {
       process.exitCode = reportSpawnError('gh', result.error);
     } else {
-      process.exitCode = shellStyleExitStatus(result);
+      process.exitCode = spawnResultStatus(result);
     }
     return;
   }
