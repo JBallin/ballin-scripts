@@ -17,21 +17,13 @@ ballin config reset
 ballin config --help
 ```
 
-`ballin config` prints the full config, `get` prints one value, `set` updates
-an existing setting, and `reset` restores the default config.
+`ballin config` prints the full config, `get` prints one value, and `set` updates
+an existing setting. Use `ballin config --help` for usage, even if the config
+file is missing or unreadable.
 
-Successful operations print to stdout and exit with status `0`. Errors print to
-stderr: status `2` means invalid usage (an unknown action, missing arguments, or
-extra arguments); status `1` means a config read, parse, validation, or save
-failure. A missing key or an attempt to replace an object instead of a leaf is
-a validation failure. Values passed to `set` remain strings, including empty
-strings; it does not enforce the setting-specific rules used by other commands.
-
-`ballin config help` and `ballin config --help` print config usage without reading
-the config file. Usage errors also show this guidance. Missing or malformed
-config is not automatically rewritten: use `ballin config reset` to restore
-defaults, replacing any saved choices. For access or save errors, check the
-config file's permissions and its parent directory before retrying.
+Use `ballin config reset` to recover a missing or malformed config file. This
+restores defaults and replaces saved settings. For read or save errors, check
+the config file's permissions and its parent directory before retrying.
 
 ## Node.js
 
