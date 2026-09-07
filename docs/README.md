@@ -8,8 +8,9 @@ Start here when setting up or auditing what Ballin manages.
   services, optional backup setup, failure recovery, and removal.
 - [Backup sources and sensitivity](backup-sources.md): source-by-source audit of
   current snapshots and their plausible sensitive content.
-- [Optional capabilities](optional-capabilities.md): Node.js setup, optional
-  tool setup, analytics opt-out, and configurable `ballin update` settings.
+- [Optional capabilities](optional-capabilities.md): local settings, Node.js
+  setup, optional tools, analytics opt-out, and configurable `ballin update`
+  settings.
 - [Analytics](analytics.md): analytics consent, payload, opt-out, and retention.
 - [Supported capabilities](capabilities.md): the current `ballin update`
   integrations and `ballin backup` snapshots.
