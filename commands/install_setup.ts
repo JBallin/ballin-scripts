@@ -438,12 +438,8 @@ const configureGist = (
     return false;
   }
 
-  const authResult = runCommand('gh', ['auth', 'status', '--hostname', selectedHost], {
+  const authResult = runGh(selectedHost, ['api', '--hostname', selectedHost, 'user'], {
     cwd: repoDir,
-    env: {
-      ...process.env,
-      GH_HOST: selectedHost,
-    },
   });
 
   if (authResult.status !== 0 || authResult.error) {

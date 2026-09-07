@@ -74,9 +74,9 @@ The command shown above downloads `install.sh` from GitHub. The installer then:
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
 - makes no GitHub CLI or Gist calls when optional backup setup is declined;
-- when backup setup is requested, checks `gh` authentication for the selected
-  host and either reads an existing Gist marker and optional `ballin_config`, or
-  creates a secret Gist containing only the Ballin marker;
+- when backup setup is requested, checks the active `gh` account for the
+  selected host and either reads an existing Gist marker and optional
+  `ballin_config`, or creates a secret Gist containing only the Ballin marker;
 - sends no analytics request during installation. Later instrumented commands
   can contact the endpoint described in [Analytics](analytics.md).
 

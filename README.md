@@ -21,8 +21,9 @@ updates.
 The installer checks Git and Node.js, shows its plan, and asks before making a
 fresh installation. It installs the maintenance commands first; Gist backup is
 an optional later step. Maintenance-only installation does not require Homebrew
-or GitHub CLI; Gist backup setup requires an authenticated GitHub CLI and, when
-newly completed, offers a default-no choice to run backups after updates.
+or GitHub CLI. Gist backup setup validates the active GitHub CLI account for the
+selected host and, when newly completed, offers a default-no choice to run
+backups after updates.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 

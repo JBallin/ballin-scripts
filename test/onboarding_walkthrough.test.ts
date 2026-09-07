@@ -68,9 +68,10 @@ esac
     writeExecutable('gh', `#!/usr/bin/env bash
 printf 'gh:%s\\n' "$*" >> "$BALLIN_WALKTHROUGH_LOG"
 if [ "$1:$2" = 'auth:status' ]; then
-  if [ "$*" != 'auth status --hostname github.com' ]; then exit 2; fi
+  if [ "$*" != 'auth status --active --hostname github.com' ]; then exit 2; fi
   exit 0
 fi
+if [ "$1:$2:$3:$4" = 'api:--hostname:github.com:user' ] && [ "$#" -eq 4 ]; then exit 0; fi
 if [ "$1:$2" = 'gist:create' ]; then
   if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
   cp "$PWD/.MyConfig.md" "$BALLIN_WALKTHROUGH_GIST/.MyConfig.md"

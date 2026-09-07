@@ -91,8 +91,8 @@ ballin backup setup
 ```
 
 Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
-`gh` authentication for that host, and either adopts an existing backup Gist or
-creates a new one. `backup.id` is the opt-in signal; there is no separate
+the active `gh` account for that host, and either adopts an existing backup
+Gist or creates a new one. `backup.id` is the opt-in signal; there is no separate
 enabled or onboarding setting. When setup newly configures a destination, it
 also offers a default-no choice to run `ballin backup` automatically after
 `ballin update`. Change that preference later with:
@@ -118,9 +118,12 @@ allowed files, and public Gists cannot be made secret again. Review
 GitHub preserves Gist revision history and diffs. Ballin does not provide
 history navigation, rollback, restore, or revision selection.
 
-Secret Gists remain Ballin's current backup storage.
-[#254](https://github.com/JBallin/ballin-scripts/issues/254) tracks the
-longer-term evaluation of more secure storage options.
+Ballin currently stores backups in secret Gists.
+[#254](https://github.com/JBallin/ballin-scripts/issues/254) completed the
+storage-security evaluation; follow-up implementation work is tracked in
+[#332](https://github.com/JBallin/ballin-scripts/issues/332),
+[#333](https://github.com/JBallin/ballin-scripts/issues/333), and
+[#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
