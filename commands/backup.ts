@@ -15,7 +15,6 @@ const {
 } = require('./install_setup.ts');
 const {
   commandExists,
-  ensureDir,
   makeTempFile,
   readCommandOutput,
   reportSpawnError,
@@ -427,6 +426,35 @@ const errorMessage = (error: unknown): string => (
   error instanceof Error ? `: ${error.message}` : ''
 );
 
+const restrictCacheEntryPermissions = (entryPath: string): void => {
+  const stat = fs.lstatSync(entryPath);
+  if (stat.isDirectory()) {
+    fs.chmodSync(entryPath, 0o700);
+    for (const name of fs.readdirSync(entryPath)) {
+      restrictCacheEntryPermissions(path.join(entryPath, name));
+    }
+  } else if (stat.isFile()) {
+    fs.chmodSync(entryPath, 0o600);
+  } else {
+    throw new Error(`unsupported backup cache entry: ${entryPath}`);
+  }
+};
+
+const secureExistingBackupCache = (cacheDir: string): boolean => {
+  try {
+    const stat = fs.lstatSync(cacheDir, { throwIfNoEntry: false });
+    // Leave creation and non-directory file obstructions to cache promotion.
+    if (!stat || stat.isFile()) {
+      return true;
+    }
+    restrictCacheEntryPermissions(cacheDir);
+    return true;
+  } catch (error) {
+    writeStderrLine(`ballin backup: unable to secure backup cache permissions${errorMessage(error)}`);
+    return false;
+  }
+};
+
 const removeStagedSnapshots = (stagedSnapshots: StagedSnapshot[]): void => {
   stagedSnapshots.forEach(({ localFile }) => removeTempFile(localFile));
 };
@@ -631,7 +659,7 @@ const reportConflicts = (conflicts: { fileName: string; reason: string }[]): voi
   conflicts.forEach(({ fileName, reason }) => {
     writeStderrLine(`ballin backup: conflict for ${fileName}: ${reason}`);
   });
-  writeStderrLine('ballin backup: conflicts detected; Ballin changed neither the Gist nor the backup cache');
+  writeStderrLine('ballin backup: conflicts detected; Ballin changed neither the Gist nor the backup cache contents');
   writeStderrLine("ballin backup: inspect each remote snapshot with 'ballin backup read <file>' or the Gist UI");
   writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun ballin backup');
 };
@@ -666,7 +694,7 @@ const updateGist = (host: string, id: string, snapshots: EvaluatedSnapshot[]): b
       return true;
     }
     writeStderrLine(
-      'ballin backup: the Gist update failed or its outcome is unknown; backup caches were left unchanged',
+      'ballin backup: the Gist update failed or its outcome is unknown; backup cache contents were left unchanged',
     );
     writeStderrLine('ballin backup: rerun ballin backup to re-read and reconcile current remote state');
     return false;
@@ -686,7 +714,8 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
 
   let stagingDir: string;
   try {
-    ensureDir(cacheDir);
+    fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(cacheDir, 0o700);
     stagingDir = fs.mkdtempSync(path.join(cacheDir, '.ballin-backup-cache-'));
   } catch (error) {
     writeStderrLine(`ballin backup: failed to prepare backup cache updates${errorMessage(error)}`);
@@ -696,7 +725,9 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
   try {
     for (const { snapshot, localFile } of cacheUpdates) {
       try {
-        fs.copyFileSync(localFile, path.join(stagingDir, snapshot.fileName));
+        const stagedFile = path.join(stagingDir, snapshot.fileName);
+        fs.copyFileSync(localFile, stagedFile);
+        fs.chmodSync(stagedFile, 0o600);
       } catch (error) {
         writeStderrLine(`ballin backup: failed to stage cache update for ${snapshot.fileName}${errorMessage(error)}`);
         return false;
@@ -997,6 +1028,11 @@ function runBackupCommand(args = process.argv.slice(2)): void {
 
   if (!command && !homeDir) {
     writeStderrLine('ballin backup: HOME is not set; unable to collect backup sources safely');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!command && !secureExistingBackupCache(backupCacheDir)) {
     process.exitCode = 1;
     return;
   }
