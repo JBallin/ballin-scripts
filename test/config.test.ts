@@ -517,28 +517,35 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       });
     });
 
-    it('reports missing and unreadable files without paths or stacks', () => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-read-'));
-      try {
-        for (const args of [['get'], ['set', 'backup.id', 'value']]) {
-          const missing = runConfigCli(args, { BALLIN_TEST_CONFIG_PATH: path.join(tempDir, 'missing.json') });
-          assert.equal(missing.status, 1);
-          assert.equal(missing.stdout, '');
-          assert.equal(missing.stderr, 'ballin config: Unable to read config. Run ballin config reset to restore defaults.\n');
-
-          const unreadable = runConfigCli(args, { BALLIN_TEST_CONFIG_PATH: tempDir });
-          assert.equal(unreadable.status, 1);
-          assert.equal(unreadable.stdout, '');
-          assert.equal(unreadable.stderr, 'ballin config: Unable to read config. Check that the config file is accessible and readable.\n');
+    [
+      ...[['get'], ['set', 'backup.id', 'value']].flatMap((args) => [
+        {
+          args, missing: true,
+          message: 'ballin config: Unable to read config. Run ballin config reset to restore defaults.\n',
+        },
+        {
+          args, missing: false,
+          message: 'ballin config: Unable to read config. Check that the config file is accessible and readable.\n',
+        },
+      ]),
+      {
+        args: ['reset'], missing: false,
+        message: 'ballin config: Unable to save config. Check that the config file and its parent directory are writable.\n',
+      },
+    ].forEach(({ args, missing, message }) => {
+      it(`reports ${JSON.stringify(args)} with ${missing ? 'missing' : 'unreadable'} config without paths or stacks`, () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-read-'));
+        try {
+          const fixturePath = missing ? path.join(tempDir, 'missing.json') : tempDir;
+          const result = runConfigCli(args, { BALLIN_TEST_CONFIG_PATH: fixturePath });
+          assert.equal(result.status, 1);
+          assert.equal(result.stdout, '');
+          assert.equal(result.stderr, message);
+          assert.deepEqual(fs.readdirSync(tempDir), []);
+        } finally {
+          fs.rmSync(tempDir, { recursive: true, force: true });
         }
-        const reset = runConfigCli(['reset'], { BALLIN_TEST_CONFIG_PATH: tempDir });
-        assert.equal(reset.status, 1);
-        assert.equal(reset.stdout, '');
-        assert.equal(reset.stderr, 'ballin config: Unable to save config. Check that the config file and its parent directory are writable.\n');
-        assert.deepEqual(fs.readdirSync(tempDir), []);
-      } finally {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      });
     });
 
     it('reports write failures and oversized config reads from the public CLI without printing success', () => {
@@ -594,29 +601,39 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       });
     });
 
-    it('preserves successful output, string values, and the empty-action alias', () => {
-      for (const args of [['get'], ['']]) {
+    [['get'], ['']].forEach((args) => {
+      it(`preserves full-config output for ${JSON.stringify(args)}`, () => {
         const result = runConfigCli(args);
         assert.equal(result.status, 0);
         assert.equal(result.stdout, `${fetchConfigJSON()}\n`);
         assert.equal(result.stderr, '');
-      }
+      });
+    });
+
+    it('preserves successful object output', () => {
       const object = runConfigCli(['get', 'analytics']);
       assert.equal(object.status, 0);
       assert.equal(object.stdout, "{ enabled: 'true' }\n");
       assert.equal(object.stderr, '');
+    });
 
-      for (const value of ['', 'false', 'INVALID: a legitimate stored value']) {
+    ['', 'false', 'INVALID: a legitimate stored value'].forEach((value) => {
+      it(`preserves successful set output and persistence for ${JSON.stringify(value)}`, () => {
         const set = runConfigCli(['set', 'backup.id', value]);
         assert.equal(set.status, 0);
         assert.equal(set.stdout, `${configMessages.set('backup.id', value)}\n`);
         assert.equal(set.stderr, '');
+        assert.strictEqual(getConfig('backup.id'), value);
+      });
+
+      it(`reads ${JSON.stringify(value)} through the empty-action alias`, () => {
+        setConfig('backup.id', value);
         const get = runConfigCli(['', 'backup.id']);
         assert.equal(get.status, 0);
         assert.equal(get.stdout, `${value}\n`);
         assert.equal(get.stderr, '');
         assert.strictEqual(getConfig('backup.id'), value);
-      }
+      });
     });
   });
 
