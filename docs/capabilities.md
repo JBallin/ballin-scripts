@@ -93,7 +93,13 @@ print partial success markers.
 
 `ballin backup` collects every available snapshot before changing the Gist. If
 collection fails, remote content cannot be read safely, or changes conflict,
-Ballin reports the problem and leaves the Gist and backup cache unchanged.
+Ballin reports the problem and leaves Gist and backup cache contents unchanged.
+
+Cache directories use owner-only permissions (`0700`), and cached files use
+`0600`. Before authentication or collection, a configured backup repairs
+existing cache permissions, even if the run later fails. If permissions cannot
+be secured or the cache contains symbolic links or unsupported entry types,
+the run stops with an error. Source-file permissions are unchanged.
 
 `.backup-cache` is derived local comparison state representing the last remote
 base observed by this machine. It is not a destination or enablement flag.

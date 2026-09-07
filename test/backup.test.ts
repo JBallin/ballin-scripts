@@ -50,6 +50,7 @@ type RunBackupOptions = {
   commandCwd?: string;
   failFinalConfigCommit?: boolean;
   homeDirOverride?: string | null;
+  umask?: '000' | '022' | '077';
 };
 
 describe('ballin backup', () => {
@@ -390,7 +391,12 @@ done
     commandCwd = testHomeDir,
     failFinalConfigCommit = false,
     homeDirOverride = testHomeDir,
-  }: RunBackupOptions = {}) => spawnSync(commandPath, ['backup', ...args], {
+    umask,
+  }: RunBackupOptions = {}) => spawnSync(
+    umask === undefined ? commandPath : path.join(testBinDir, 'bash'),
+    umask === undefined ? ['backup', ...args] : [
+      '-c', 'umask "$1"; shift; exec "$@"', 'backup-test', umask, commandPath, 'backup', ...args,
+    ], {
     cwd: commandCwd,
     encoding: 'utf8',
     input,
@@ -469,6 +475,43 @@ done
     if (seedRemote) {
       seedFakeGistFile(fileName, content);
     }
+  };
+  const makeCachePermissive = (entryPath = backupCacheDir) => {
+    const stat = fs.lstatSync(entryPath);
+    fs.chmodSync(entryPath, stat.isDirectory() ? 0o777 : 0o666);
+    if (stat.isDirectory()) {
+      fs.readdirSync(entryPath).forEach((name: string) => {
+        makeCachePermissive(path.join(entryPath, name));
+      });
+    }
+  };
+  const assertOwnerOnlyCache = (entryPath = backupCacheDir) => {
+    const stat = fs.lstatSync(entryPath);
+    assert.equal(stat.mode & 0o777, stat.isDirectory() ? 0o700 : 0o600, entryPath);
+    if (stat.isDirectory()) {
+      fs.readdirSync(entryPath).forEach((name: string) => {
+        assertOwnerOnlyCache(path.join(entryPath, name));
+      });
+    }
+  };
+  const installChmodFailureLauncher = (failurePath: string, staged = false) => {
+    const launcherName = 'backup-chmod-failure.cjs';
+    writeTestExecutable(launcherName, `#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const originalChmod = fs.chmodSync;
+fs.chmodSync = (entryPath, mode) => {
+  const matches = ${staged}
+    ? path.dirname(path.dirname(entryPath)) === ${JSON.stringify(backupCacheDir)}
+      && path.basename(path.dirname(entryPath)).startsWith('.ballin-backup-cache-')
+      && path.basename(entryPath) === ${JSON.stringify(failurePath)}
+    : entryPath === ${JSON.stringify(failurePath)};
+  if (matches) throw new Error('simulated cache chmod failure');
+  return originalChmod(entryPath, mode);
+};
+require(${JSON.stringify(ballinPath)});
+`);
+    return path.join(testBinDir, launcherName);
   };
   const assertBackupSucceeded = (result: StringSpawnResult) => {
     assert.equal(result.status, 0);
@@ -1322,13 +1365,15 @@ exit 2
   it('treats an interrupted Gist metadata read as a failed closed run', () => {
     writeSnapshot('new local value\n');
     seedBackupCache('cached base\n');
-    const result = runBackup({ ghInitialReadSignal: true });
+    makeCachePermissive();
+    const result = runBackup({ ghInitialReadSignal: true, umask: '000' });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, 'ballin backup: failed to read current Gist state\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'cached base\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'cached base\n');
+    assertOwnerOnlyCache();
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -1360,7 +1405,10 @@ exit 2
   });
 
   it('reports gh authentication failures before snapshotting', () => {
-    const result = runBackup({ ghAuthFail: true });
+    writeSnapshot('new snapshot\n');
+    seedBackupCache('cached base\n');
+    makeCachePermissive();
+    const result = runBackup({ ghAuthFail: true, failedPaths: ['.zshrc'], umask: '000' });
 
     assert.equal(result.status, 4);
     assert.equal(result.stdout, '');
@@ -1370,7 +1418,9 @@ exit 2
         + 'ballin backup: GitHub CLI authentication is required for example.test\n'
         + "ballin backup: run 'gh auth login --hostname example.test'\n",
     );
-    assert.isFalse(fs.existsSync(backupCacheDir));
+    assertOwnerOnlyCache();
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'cached base\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'cached base\n');
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -1725,6 +1775,184 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
+  (['000', '022', '077'] as const).forEach((umask) => {
+    it(`creates an owner-only cache from a restricted source with umask ${umask}`, () => {
+      writeSnapshot('private snapshot\n');
+      fs.chmodSync(snapshotPath(), 0o600);
+
+      const result = runBackup({ umask });
+
+      assertBackupSucceeded(result);
+      assertOwnerOnlyCache();
+      assert.equal(fs.statSync(snapshotPath()).mode & 0o777, 0o600);
+      assert.equal(fs.readFileSync(snapshotPath(), 'utf8'), 'private snapshot\n');
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'private snapshot\n');
+      assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'private snapshot\n');
+      assert.deepEqual(fs.readdirSync(backupCacheDir), [snapshotFileName]);
+      assert.lengthOf(gistPatchCalls(), 1);
+    });
+  });
+
+  it('repairs every existing cache entry on an unchanged run without a PATCH', () => {
+    writeSnapshot('shared snapshot\n');
+    seedBackupCache('shared snapshot\n');
+    seedCacheFile('inactive-snapshot', 'old inactive snapshot\n', false);
+    const leftoverDir = cachedFilePath('.ballin-backup-cache-leftover');
+    const nestedDir = path.join(leftoverDir, 'nested');
+    const leftoverFile = path.join(nestedDir, 'snapshot');
+    fs.mkdirSync(nestedDir, { recursive: true });
+    fs.writeFileSync(leftoverFile, 'leftover contents\n');
+    makeCachePermissive();
+
+    const result = runBackup({ umask: '000' });
+
+    assertBackupSucceeded(result);
+    assert.equal(result.stdout, '✔ zshrc\n');
+    assertOwnerOnlyCache();
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'shared snapshot\n');
+    assert.equal(fs.readFileSync(cachedFilePath('inactive-snapshot'), 'utf8'), 'old inactive snapshot\n');
+    assert.equal(fs.readFileSync(leftoverFile, 'utf8'), 'leftover contents\n');
+    assert.deepEqual(gistPatchCalls(), []);
+  });
+
+  it('keeps a restricted cache entry owner-only when replacing its contents', () => {
+    writeSnapshot('new snapshot\n');
+    seedBackupCache('old snapshot\n');
+    fs.chmodSync(backupCacheDir, 0o700);
+    fs.chmodSync(cachedSnapshotPath(), 0o600);
+    fs.chmodSync(snapshotPath(), 0o644);
+
+    const result = runBackup({ umask: '000' });
+
+    assertBackupSucceeded(result);
+    assertOwnerOnlyCache();
+    assert.equal(fs.statSync(snapshotPath()).mode & 0o777, 0o644);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new snapshot\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new snapshot\n');
+    assert.lengthOf(gistPatchCalls(), 1);
+  });
+
+  (['directory', 'existing file'] as const).forEach((failure) => {
+    it(`stops before authentication and collection when securing the ${failure} fails`, () => {
+      writeSnapshot('new snapshot\n');
+      seedBackupCache('old snapshot\n');
+      makeCachePermissive();
+      const failurePath = failure === 'directory' ? backupCacheDir : cachedSnapshotPath();
+      const commandPath = installChmodFailureLauncher(failurePath);
+
+      const result = runBackup({ commandPath, failedPaths: ['.zshrc'], umask: '000' });
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'unable to secure backup cache permissions');
+      assert.include(result.stderr, 'simulated cache chmod failure');
+      assert.notInclude(result.stderr, 'failed to snapshot');
+      assert.equal(fs.statSync(backupCacheDir).mode & 0o777, failure === 'directory' ? 0o777 : 0o700);
+      assert.equal(fs.statSync(cachedSnapshotPath()).mode & 0o777, 0o666);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old snapshot\n');
+      assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old snapshot\n');
+      assert.deepEqual(ghCalls(), []);
+      assert.deepEqual(fs.readdirSync(scratchDir), []);
+
+      const recoveredResult = runBackup({ umask: '000' });
+
+      assertBackupSucceeded(recoveredResult);
+      assertOwnerOnlyCache();
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new snapshot\n');
+      assert.lengthOf(gistPatchCalls(), 1);
+    });
+  });
+
+  it('cleans all staged copies after chmod failure and reconciles on retry without another PATCH', () => {
+    writeSnapshot('new zsh snapshot\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'new git snapshot\n');
+    seedBackupCache('old zsh snapshot\n');
+    seedCacheFile('gitconfig', 'old git snapshot\n');
+    makeCachePermissive();
+    const commandPath = installChmodFailureLauncher('gitconfig', true);
+
+    const result = runBackup({ commandPath, umask: '000' });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'failed to stage cache update for gitconfig');
+    assert.include(result.stderr, 'simulated cache chmod failure');
+    assert.include(result.stderr, 'Gist outcome is known');
+    assertOwnerOnlyCache();
+    assert.deepEqual(fs.readdirSync(backupCacheDir).sort(), ['gitconfig', snapshotFileName]);
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh snapshot\n');
+    assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'old git snapshot\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new zsh snapshot\n');
+    assert.equal(fs.readFileSync(path.join(fakeGistDir, 'gitconfig'), 'utf8'), 'new git snapshot\n');
+
+    const recoveredResult = runBackup({ umask: '000' });
+
+    assertBackupSucceeded(recoveredResult);
+    assertOwnerOnlyCache();
+    assert.equal(recoveredResult.stdout, '✔ zshrc\n✔ gitconfig\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh snapshot\n');
+    assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'new git snapshot\n');
+    assert.lengthOf(gistPatchCalls(), 1);
+  });
+
+  it('creates a private cache even when its promotion-time directory chmod fails', () => {
+    writeSnapshot('new snapshot\n');
+    const commandPath = installChmodFailureLauncher(backupCacheDir);
+
+    const result = runBackup({ commandPath, umask: '000' });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'failed to prepare backup cache updates');
+    assert.include(result.stderr, 'simulated cache chmod failure');
+    assert.include(result.stderr, 'Gist outcome is known');
+    assertOwnerOnlyCache();
+    assert.deepEqual(fs.readdirSync(backupCacheDir), []);
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new snapshot\n');
+
+    const recoveredResult = runBackup({ umask: '000' });
+
+    assertBackupSucceeded(recoveredResult);
+    assert.equal(recoveredResult.stdout, '✔ zshrc\n');
+    assertOwnerOnlyCache();
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new snapshot\n');
+    assert.lengthOf(gistPatchCalls(), 1);
+  });
+
+  (['cache root', 'cache entry'] as const).forEach((location) => {
+    it(`rejects a symbolic link at the ${location} without changing its target`, () => {
+      const targetDir = path.join(testHomeDir, 'outside-cache');
+      const targetFile = path.join(targetDir, 'private-file');
+      fs.mkdirSync(targetDir);
+      fs.writeFileSync(targetFile, 'external contents\n');
+      fs.chmodSync(targetDir, 0o755);
+      fs.chmodSync(targetFile, 0o644);
+      if (location === 'cache root') {
+        fs.symlinkSync(targetDir, backupCacheDir);
+      } else {
+        fs.mkdirSync(backupCacheDir);
+        fs.chmodSync(backupCacheDir, 0o777);
+        fs.symlinkSync(targetFile, cachedSnapshotPath());
+      }
+      writeSnapshot('new snapshot\n');
+
+      const result = runBackup({ failedPaths: ['.zshrc'], umask: '000' });
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'unable to secure backup cache permissions');
+      assert.notInclude(result.stderr, 'failed to snapshot');
+      assert.equal(fs.statSync(targetDir).mode & 0o777, 0o755);
+      assert.equal(fs.statSync(targetFile).mode & 0o777, 0o644);
+      assert.equal(fs.readFileSync(targetFile, 'utf8'), 'external contents\n');
+      assert.isTrue(fs.lstatSync(location === 'cache root' ? backupCacheDir : cachedSnapshotPath()).isSymbolicLink());
+      assert.deepEqual(ghCalls(), []);
+      assert.deepEqual(fs.readdirSync(scratchDir), []);
+    });
+  });
+
   it('reports cache preparation failure only after a known successful remote update', () => {
     writeSnapshot('new remote value\n');
     fs.writeFileSync(backupCacheDir, 'blocks cache directory creation\n');
@@ -1760,11 +1988,12 @@ printf '%s\\n' '123456 Example App'
     writeSnapshot('export EDITOR=vim\n');
     seedFakeGist('export EDITOR=vim\n');
 
-    const result = runBackup();
+    const result = runBackup({ umask: '000' });
 
     assertBackupSucceeded(result);
     assert.equal(result.stdout, '✔ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export EDITOR=vim\n');
+    assertOwnerOnlyCache();
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });
@@ -1878,16 +2107,20 @@ printf '%s\\n' '123456 Example App'
       writeSnapshot(testCase.local);
       if (testCase.base !== null) {
         seedBackupCache(testCase.base, false);
+        makeCachePermissive();
       }
       if (testCase.remote !== null) {
         seedFakeGist(testCase.remote);
       }
 
-      const result = runBackup();
+      const result = runBackup({ umask: '000' });
 
       assert.equal(result.status, testCase.expectedStatus);
       assert.equal(result.stdout, testCase.expectedOutput);
       assert.deepEqual(gistUploads(), testCase.uploads);
+      if (testCase.base !== null || testCase.expectedStatus === 0) {
+        assertOwnerOnlyCache();
+      }
       if (testCase.expectedStatus === 0) {
         assert.equal(result.stderr, '');
         assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), testCase.local);
@@ -1917,7 +2150,7 @@ printf '%s\\n' '123456 Example App'
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.include(result.stderr, `ballin backup: conflict for ${snapshotFileName}`);
-    assert.include(result.stderr, 'Ballin changed neither the Gist nor the backup cache');
+    assert.include(result.stderr, 'Ballin changed neither the Gist nor the backup cache contents');
     assert.isFalse(fs.existsSync(cachedSnapshotPath()));
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old value\n');
     assert.deepEqual(gistReads(), []);
@@ -1966,21 +2199,23 @@ printf '%s\\n' '123456 Example App'
     writeSnapshot('export COLOR=blue\n');
     seedBackupCache('export COLOR=red\n');
     seedFakeGist('export COLOR=red\n');
+    makeCachePermissive();
 
-    const result = runBackup({ ghUploadFail: true });
+    const result = runBackup({ ghUploadFail: true, umask: '000' });
 
     assert.equal(result.status, 1);
     assert.equal(
       result.stderr,
       'simulated gh api upload failure\n'
         + 'ballin backup: the Gist update failed or its outcome is unknown; '
-        + 'backup caches were left unchanged\n'
+        + 'backup cache contents were left unchanged\n'
         + 'ballin backup: rerun ballin backup to re-read and reconcile current remote state\n',
     );
     assert.deepEqual(fs.readdirSync(scratchDir), []);
     assert.equal(result.stdout, '');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=red\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export COLOR=red\n');
+    assertOwnerOnlyCache();
     assert.deepEqual(gistUploads(), []);
   });
 
@@ -2065,14 +2300,16 @@ printf '%s\\n' '123456 Example App'
     fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'new git\n');
     seedBackupCache('old zsh\n');
     seedCacheFile('gitconfig', 'old git\n');
+    makeCachePermissive();
 
-    const result = runBackup({ ghMetadataInvalid: true });
+    const result = runBackup({ ghMetadataInvalid: true, umask: '000' });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.include(result.stderr, 'unable to parse Gist metadata');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh\n');
     assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'old git\n');
+    assertOwnerOnlyCache();
     assert.deepEqual(gistUploads(), []);
   });
 
@@ -2158,13 +2395,15 @@ printf '%s\\n' '123456 Example App'
     const largeSnapshot = `${'r'.repeat(1024 * 1024 + 1)}\n`;
     writeSnapshot(largeSnapshot);
     seedBackupCache(largeSnapshot);
+    makeCachePermissive();
 
-    const result = runBackup({ ghRawReadFailures: [snapshotFileName] });
+    const result = runBackup({ ghRawReadFailures: [snapshotFileName], umask: '000' });
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.include(result.stderr, `failed to read remote snapshot ${snapshotFileName}`);
     assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
+    assertOwnerOnlyCache();
     assert.deepEqual(gistUploads(), []);
     assert.deepEqual(gistReads(), [snapshotFileName]);
   });
@@ -2187,20 +2426,23 @@ printf '%s\\n' '123456 Example App'
   it('leaves caches stale after an ambiguous PATCH and reconciles on retry', () => {
     writeSnapshot('new value\n');
     seedBackupCache('old value\n');
+    makeCachePermissive();
 
-    const ambiguousResult = runBackup({ ghUploadAmbiguous: true });
+    const ambiguousResult = runBackup({ ghUploadAmbiguous: true, umask: '000' });
 
     assert.equal(ambiguousResult.status, 1);
     assert.equal(ambiguousResult.stdout, '');
     assert.include(ambiguousResult.stderr, 'Gist update failed or its outcome is unknown');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
+    assertOwnerOnlyCache();
 
-    const retryResult = runBackup();
+    const retryResult = runBackup({ umask: '000' });
 
     assertBackupSucceeded(retryResult);
     assert.equal(retryResult.stdout, '✔ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
+    assertOwnerOnlyCache();
     assert.lengthOf(gistPatchCalls(), 1);
   });
 
@@ -2208,8 +2450,9 @@ printf '%s\\n' '123456 Example App'
     writeSnapshot('new zsh value\n');
     fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'new git value\n');
     fs.mkdirSync(cachedFilePath('gitconfig'), { recursive: true });
+    makeCachePermissive();
 
-    const failedPromotion = runBackup();
+    const failedPromotion = runBackup({ umask: '000' });
 
     assert.equal(failedPromotion.status, 1);
     assert.equal(failedPromotion.stdout, '');
@@ -2219,14 +2462,18 @@ printf '%s\\n' '123456 Example App'
     assert.equal(fs.readFileSync(path.join(fakeGistDir, 'gitconfig'), 'utf8'), 'new git value\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh value\n');
     assert.isTrue(fs.statSync(cachedFilePath('gitconfig')).isDirectory());
+    assertOwnerOnlyCache();
+    assert.deepEqual(fs.readdirSync(backupCacheDir).sort(), ['gitconfig', snapshotFileName]);
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
 
     fs.rmSync(cachedFilePath('gitconfig'), { recursive: true });
-    const recoveredResult = runBackup();
+    const recoveredResult = runBackup({ umask: '000' });
 
     assertBackupSucceeded(recoveredResult);
     assert.equal(recoveredResult.stdout, '✔ zshrc\n✔ gitconfig\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh value\n');
     assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'new git value\n');
+    assertOwnerOnlyCache();
     assert.lengthOf(gistPatchCalls(), 1);
   });
 
@@ -2351,10 +2598,12 @@ printf '%*s\\n' 1048577 '' >&2
     fs.writeFileSync(gitconfigPath, 'new git value\n');
     seedBackupCache('old zsh value\n');
     seedFakeGist('old zsh value\n');
+    makeCachePermissive();
 
     const result = runBackup({
       failedPaths: ['.zshrc'],
       emitUnderlyingStderr: true,
+      umask: '000',
     });
 
     assert.equal(result.status, 1);
@@ -2366,6 +2615,7 @@ printf '%*s\\n' 1048577 '' >&2
     );
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old zsh value\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old zsh value\n');
+    assertOwnerOnlyCache();
     assert.isFalse(fs.existsSync(path.join(backupCacheDir, 'gitconfig')));
     assert.isFalse(fs.existsSync(path.join(fakeGistDir, 'gitconfig')));
     assert.deepEqual(gistUploads(), []);

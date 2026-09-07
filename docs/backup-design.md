@@ -7,10 +7,10 @@ conflict recovery are documented in
 ## Consistency model
 
 - Stage every snapshot before reading or changing remote state. Collector or
-  remote-read failures abort without changing the Gist or cache.
+  remote-read failures abort without changing Gist or cache contents.
 - Treat the cache as the last remote state observed by this machine. Compare
   cached, remote, and staged content—including file presence—and abort every
-  conflict without mutations.
+  conflict without changing those contents.
 - Treat cache ownership as unproven whenever no destination is configured.
   Enabling backup from that state invalidates `.backup-cache` before destination
   persistence; the cache format is deliberately not extended with destination
@@ -28,6 +28,25 @@ marker was validated are authoritative. A restored `ballin_config` contributes
 other settings, but its destination fields are overridden. The restored settings
 and authoritative destination are committed together; a failed commit preserves
 the prior unconfigured config. An already-invalidated cache remains removed.
+
+## Local cache permissions
+
+Before authentication or collection, a configured backup restricts existing
+cache directories to `0700` and regular files to `0600`, including inactive
+snapshots and leftover staging directories. Permission changes remain in place
+if the run later fails; unchanged cache contents do not imply unchanged modes.
+Symbolic links and unsupported entry types are rejected without following them.
+An error securing the cache stops the run before any remote request.
+
+A missing cache is created only during promotion, with mode `0700` explicitly
+enforced. Copies are restricted to `0600` inside the private staging directory
+before any rename replaces a final entry. Copy or chmod failure prevents
+promotion and removes that staging directory. Source permissions and the
+process umask are unchanged.
+
+These are POSIX mode protections for Ballin-owned files on macOS and Linux.
+They do not manage ACLs, isolate hardlink aliases, or protect against concurrent
+path replacement through writable ancestors.
 
 ## GitHub constraints
 
