@@ -31,6 +31,7 @@ type RunBackupOptions = {
   brewPrefixFail?: boolean;
   completionDir?: string;
   ghAuthFail?: boolean;
+  ghInactiveAccountExpired?: boolean;
   ghInitialReadFail?: boolean;
   ghInitialReadSignal?: boolean;
   ghMetadataInvalid?: boolean;
@@ -113,7 +114,11 @@ if [ "$GH_HOST" != "$FAKE_GH_EXPECTED_HOST" ] && [ "$1:$2" != 'auth:status' ]; t
   exit 2
 fi
 if [ "$1:$2" = 'auth:status' ]; then
-  if [ "$*" != "auth status --hostname $FAKE_GH_EXPECTED_HOST" ]; then
+  if [ "$*" = "auth status --hostname $FAKE_GH_EXPECTED_HOST" ] && [ "$FAKE_GH_INACTIVE_ACCOUNT_EXPIRED" = 'true' ]; then
+    printf '%s\n' 'simulated expired inactive account' >&2
+    exit 4
+  fi
+  if [ "$*" != "auth status --active --hostname $FAKE_GH_EXPECTED_HOST" ]; then
     printf '%s\\n' 'Unexpected gh auth arguments' >&2
     exit 2
   fi
@@ -371,6 +376,7 @@ done
     brewPrefixFail = false,
     completionDir,
     ghAuthFail = false,
+    ghInactiveAccountExpired = false,
     ghInitialReadFail = false,
     ghInitialReadSignal = false,
     ghMetadataInvalid = false,
@@ -415,6 +421,7 @@ done
       FAKE_GH_WEB_LOG: openLogPath,
       FAKE_GH_EXPECTED_HOST: ghExpectedHost,
       FAKE_GH_AUTH_FAIL: ghAuthFail ? 'true' : 'false',
+      FAKE_GH_INACTIVE_ACCOUNT_EXPIRED: ghInactiveAccountExpired ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_FAIL: ghInitialReadFail ? 'true' : 'false',
       FAKE_GH_INITIAL_READ_SIGNAL: ghInitialReadSignal ? 'true' : 'false',
       FAKE_GH_METADATA_INVALID: ghMetadataInvalid ? 'true' : 'false',
@@ -501,12 +508,16 @@ done
     fs.writeFileSync(filePath, content);
   };
 
-  it('opens the configured Gist through gh', () => {
-    const result = runBackup({ args: ['open'] });
+  it('uses the active account for the configured host before opening the Gist', () => {
+    const result = runBackup({ args: ['open'], ghInactiveAccountExpired: true });
 
     assertBackupSucceeded(result);
     assert.equal(result.stdout, '');
     assert.deepEqual(openCalls(), ['gist view test-gist-id --web']);
+    assert.deepEqual(ghCalls(), [
+      'auth status --active --hostname example.test',
+      'gist view test-gist-id --web',
+    ]);
   });
 
   it('opens the configured Gist without requiring a readable Gist', () => {
@@ -741,7 +752,7 @@ exit 2
     assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
     assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host, 'github.com');
     assert.deepEqual(ghCalls(), [
-      'auth status --hostname github.com',
+      'auth status --active --hostname github.com',
       'gist view test-gist-id --raw --filename .MyConfig.md',
     ]);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
@@ -766,7 +777,7 @@ exit 2
       'github.enterprise.test',
     );
     assert.deepEqual(ghCalls(), [
-      'auth status --hostname github.enterprise.test',
+      'auth status --active --hostname github.enterprise.test',
       'gist view test-gist-id --raw --filename .MyConfig.md',
     ]);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
@@ -798,7 +809,7 @@ exit 2
       assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
       assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
       assert.deepEqual(ghCalls(), [
-        'auth status --hostname github.enterprise.test',
+        'auth status --active --hostname github.enterprise.test',
         'gist view test-gist-id --raw --filename .MyConfig.md',
       ]);
     });
@@ -819,7 +830,7 @@ exit 2
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(config.backup.id, 'test-gist-id');
     assert.equal(config.backup.host, 'github.enterprise.test');
-    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
+    assert.deepEqual(ghCalls(), ['auth status --active --hostname github.enterprise.test']);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
   });
 
@@ -838,7 +849,7 @@ exit 2
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(config.backup.id, 'test-gist-id');
     assert.equal(config.backup.host, 'github.enterprise.test');
-    assert.deepEqual(ghCalls(), ['auth status --hostname github.enterprise.test']);
+    assert.deepEqual(ghCalls(), ['auth status --active --hostname github.enterprise.test']);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
   });
 
@@ -1166,14 +1177,22 @@ exit 2
     assert.deepEqual(gistUploads(), []);
   });
 
-  it('reads a named Gist file', () => {
+  it('uses the active account for the configured host before reading a named Gist file', () => {
     seedFakeGistFile('vimrc', 'set number\n');
 
-    const result = runBackup({ args: ['read', 'vimrc'] });
+    const result = runBackup({
+      args: ['read', 'vimrc'],
+      ghInactiveAccountExpired: true,
+    });
 
     assertBackupSucceeded(result);
     assert.equal(result.stdout, 'set number\n');
     assert.deepEqual(gistReads(), ['vimrc']);
+    assert.deepEqual(ghCalls(), [
+      'auth status --active --hostname example.test',
+      'gist view test-gist-id --files',
+      'gist view test-gist-id --raw --filename vimrc',
+    ]);
   });
 
   it('fails read when extra arguments are provided', () => {
@@ -1371,6 +1390,8 @@ exit 2
         + "ballin backup: run 'gh auth login --hostname example.test'\n",
     );
     assert.isFalse(fs.existsSync(backupCacheDir));
+    assert.deepEqual(ghCalls(), ['auth status --active --hostname example.test']);
+    assert.deepEqual(gistRequests(), []);
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
   });

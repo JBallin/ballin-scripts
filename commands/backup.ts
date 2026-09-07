@@ -220,7 +220,7 @@ const writeFileToStderr = (filePath: string): void => {
 };
 
 const ghAuthStatus = (host: string): CommandCheckResult => {
-  const result = runCommand('gh', ['auth', 'status', '--hostname', host], {
+  const result = runCommand('gh', ['auth', 'status', '--active', '--hostname', host], {
     stdio: ['ignore', 'ignore', 'inherit'],
   });
   if (result.error) {

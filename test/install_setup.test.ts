@@ -103,7 +103,8 @@ printf 'gh:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
 expected_host="\${FAKE_GH_HOST:-github.example.test}"
 case "$1:$2" in
   auth:status)
-    if [ "$*" != "auth status --hostname $expected_host" ]; then exit 2; fi
+    if [ "$*" = "auth status --hostname $expected_host" ] && [ "$FAKE_GH_INACTIVE_ACCOUNT_EXPIRED" = '1' ]; then exit 4; fi
+    if [ "$*" != "auth status --active --hostname $expected_host" ]; then exit 2; fi
     exit "$FAKE_GH_AUTH_STATUS"
     ;;
   gist:view)
@@ -598,7 +599,7 @@ esac
     assert.notInclude(commandLog(), 'gh:');
   });
 
-  it('reports gh authentication failures before adoption or creation', () => {
+  it('reports invalid active-account authentication before adoption or creation', () => {
     installConfigSources();
     installFakeGhCommand();
     fs.copyFileSync(
@@ -610,7 +611,7 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'gh is not authenticated for github.example.test');
-    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
+    assert.include(commandLog(), 'gh:auth status --active --hostname github.example.test');
     assert.notInclude(commandLog(), 'gh:gist');
   });
 
@@ -634,7 +635,7 @@ esac
     assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.notInclude(result.stdout, 'Secret Gists are unlisted');
-    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
+    assert.include(commandLog(), 'gh:auth status --active --hostname github.example.test');
     assert.notInclude(commandLog(), 'gh:gist');
     assert.equal(fs.readFileSync(path.join(cachePath, 'known-base'), 'utf8'), 'preserve me\n');
     assert.equal(readRepoConfig().update.backup, 'false');
@@ -657,7 +658,7 @@ esac
     assert.equal(fs.readFileSync(symlinkTarget, 'utf8'), 'do not remove\n');
   });
 
-  it('persists BALLIN_BACKUP_HOST and passes it to gh auth and gist commands', () => {
+  it('uses the valid active account despite an expired inactive account on the selected host', () => {
     installConfigSources();
     installFakeGhCommand();
     fs.copyFileSync(
@@ -668,13 +669,14 @@ esac
       env: {
         BALLIN_BACKUP_HOST: 'github.enterprise.test',
         FAKE_GH_HOST: 'github.enterprise.test',
+        FAKE_GH_INACTIVE_ACCOUNT_EXPIRED: '1',
       },
       input: 'n\n',
     });
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
-    assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
+    assert.include(commandLog(), 'gh:auth status --active --hostname github.enterprise.test');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
   });
 
@@ -715,7 +717,7 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
-    assert.include(commandLog(), 'gh:auth status --hostname github.enterprise.test');
+    assert.include(commandLog(), 'gh:auth status --active --hostname github.enterprise.test');
     assert.notInclude(commandLog(), 'gh:gist');
   });
 
@@ -1093,7 +1095,7 @@ esac
     assert.isFalse(fs.existsSync(missingConfig));
   });
 
-  it('runs full setup with existing Gist settings through typed orchestration', () => {
+  it('uses the active account during configured install and self-update setup', () => {
     installConfigSources();
     installFakeGhCommand();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
@@ -1106,6 +1108,7 @@ esac
       PATH: binDir,
       FAKE_COMMAND_LOG: commandLogPath,
       FAKE_GH_AUTH_STATUS: '0',
+      FAKE_GH_INACTIVE_ACCOUNT_EXPIRED: '1',
       TEST_DIR: testDir,
       TEST_REPO_DIR: repoDir,
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
@@ -1113,7 +1116,7 @@ esac
     assert.isTrue(result.result);
     assert.include(result.output, `symlinked binaries into ${binDir}`);
     assert.include(result.output, '😎 ballin!');
-    assert.include(commandLog(), 'gh:auth status --hostname github.example.test');
+    assert.include(commandLog(), 'gh:auth status --active --hostname github.example.test');
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
   });
 

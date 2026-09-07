@@ -438,7 +438,7 @@ const configureGist = (
     return false;
   }
 
-  const authResult = runCommand('gh', ['auth', 'status', '--hostname', selectedHost], {
+  const authResult = runCommand('gh', ['auth', 'status', '--active', '--hostname', selectedHost], {
     cwd: repoDir,
     env: {
       ...process.env,
