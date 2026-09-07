@@ -126,10 +126,6 @@ const runVisibleCommand = (
   return spawnResultStatus(result);
 };
 
-const ensureDir = (directory: string): void => {
-  fs.mkdirSync(directory, { recursive: true });
-};
-
 const makeTempFile = (prefix: string): string => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   return path.join(directory, 'output');
@@ -141,7 +137,6 @@ const removeTempFile = (filePath: string): void => {
 
 module.exports = {
   commandExists,
-  ensureDir,
   isDirectory,
   makeTempFile,
   progress,
