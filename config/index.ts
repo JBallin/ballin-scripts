@@ -1,6 +1,6 @@
-const { exec } = require('child_process');
 const path = require('path');
 const {
+  ConfigError,
   configMessages,
   createConfigStore,
   stringify,
@@ -17,21 +17,19 @@ const {
   setConfig,
 } = store;
 
-const configAction = (request?: string, keys?: string, value?: string, other?: string[]) => {
-  if (request === 'reset') return resetConfig();
-  // Send full config when no explicit request is provided.
-  if (request === 'get' || !request) return getConfig(keys, value);
-  if (request === 'set') return setConfig(keys, value, other);
-  if (process.env.NODE_ENV !== 'test') {
-    // exec() is async, so actionErr is returned before the help output is printed.
-    exec('ballin', {
-      env: {
-        ...process.env,
-        BALLIN_NO_COMMAND_ANALYTICS: '1',
-      },
-    }, (error: Error | null, stdout: string) => console.log(stdout)); // eslint-disable-line no-console
+const configAction = (args: string[] = []) => {
+  const [request, keys, value, ...other] = args;
+  if (request === 'reset') {
+    if (args.length !== 1) throw new ConfigError(configMessages.resetArgsErr, 2);
+    return resetConfig();
   }
-  return configMessages.actionErr;
+  // Send full config when no explicit request is provided.
+  if (request === 'get' || !request) {
+    if (args.length > 2) throw new ConfigError(configMessages.getArgsErr, 2);
+    return getConfig(keys);
+  }
+  if (request === 'set') return setConfig(keys, value, other);
+  throw new ConfigError(configMessages.actionErr, 2);
 };
 
 module.exports = {

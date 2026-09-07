@@ -14,10 +14,16 @@ ballin config
 ballin config get update.cleanup
 ballin config set update.cleanup false
 ballin config reset
+ballin config --help
 ```
 
-`ballin config` prints the full config, `get` prints one value, `set` updates
-an existing setting, and `reset` restores the default config.
+`ballin config` prints the full config, `get` prints one value, and `set` updates
+an existing setting. Use `ballin config --help` for usage, even if the config
+file is missing or unreadable.
+
+Use `ballin config reset` to recover a missing or malformed config file. This
+restores defaults and replaces saved settings. For read or save errors, check
+the config file's permissions and its parent directory before retrying.
 
 ## Node.js
 

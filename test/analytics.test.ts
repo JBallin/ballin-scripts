@@ -1,6 +1,7 @@
 const { EventEmitter } = require('events');
 const https = require('https');
-const { fetchConfig, configPath, stringify } = require('../config/index.ts');
+const { fetchConfig, configMessages, configPath, stringify } = require('../config/index.ts');
+const { runConfigCli } = require('../config/cli.ts');
 const {
   analyticsDisabledByEnv,
   buildAnalyticsPayload,
@@ -100,6 +101,45 @@ const recordWithSender = (
   }).then(() => {
     return { payloads, notices, order };
   });
+};
+
+const runConfigWithAnalytics = async (
+  args: string[],
+  runtime: Record<string, unknown> = {},
+) => {
+  const payloads: AnalyticsPayload[] = [];
+  let stdout = '';
+  let stderr = '';
+  const previousExitCode = process.exitCode;
+  const originalStdoutWrite = process.stdout.write;
+  const originalStderrWrite = process.stderr.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    stdout += chunk.toString();
+    return true;
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += chunk.toString();
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    await runWithCommandAnalytics('ballin config', () => runConfigCli(args), {
+      analyticsConfig: { enabled: 'true' },
+      appVersion: packageJson.version,
+      env: {},
+      installId: fixedInstallId,
+      nowMs: () => 1000,
+      sender: async (payload: AnalyticsPayload) => {
+        payloads.push(payload);
+      },
+      ...runtime,
+    });
+    return { payloads, stdout, stderr, exitCode: process.exitCode };
+  } finally {
+    process.exitCode = previousExitCode;
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+  }
 };
 
 describe('analytics client', () => {
@@ -576,6 +616,62 @@ describe('analytics client', () => {
       status: 'failure',
       durationBucket: '10-60s',
     });
+  });
+
+  [
+    { args: ['get', 'backup.id'], exitCode: 0, status: 'success' },
+    { args: ['get', 'missing-key'], exitCode: 1, status: 'failure' },
+    { args: ['wrong'], exitCode: 2, status: 'failure' },
+    { args: ['set', 'backup.id'], exitCode: 2, status: 'failure' },
+  ].forEach(({ args, exitCode, status }) => {
+    it(`records the actual config command status for ${JSON.stringify(args)}`, async () => {
+      const result = await runConfigWithAnalytics(args);
+
+      assert.equal(result.exitCode, exitCode);
+      assert.lengthOf(result.payloads, 1);
+      assert.deepInclude(result.payloads[0], {
+        command: 'ballin config',
+        status,
+        durationBucket: '<1s',
+      });
+      if (exitCode === 0) {
+        assert.equal(result.stdout, 'null\n');
+        assert.equal(result.stderr, '');
+      } else {
+        assert.equal(result.stdout, '');
+        assert.isNotEmpty(result.stderr);
+      }
+    });
+  });
+
+  it('preserves a config failure diagnostic and exit status when the analytics sender rejects', async () => {
+    const sentPayloads: AnalyticsPayload[] = [];
+    const result = await runConfigWithAnalytics(['get', 'missing-key'], {
+      sender: async (payload: AnalyticsPayload) => {
+        sentPayloads.push(payload);
+        throw new Error('network unavailable');
+      },
+    });
+
+    assert.lengthOf(sentPayloads, 1);
+    assert.equal(sentPayloads[0].status, 'failure');
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, `ballin config: ${configMessages.getKeysDneErr('missing-key')}\n`);
+  });
+
+  it('preserves a malformed-config failure when analytics cannot read consent', async () => {
+    fs.writeFileSync(configPath, '{not json\n', 'utf8');
+
+    const result = await runConfigWithAnalytics(['get'], { analyticsConfig: undefined });
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'Config is not valid JSON.');
+    assert.include(result.stderr, 'ballin config reset');
+    assert.notInclude(result.stderr, configPath);
+    assert.notInclude(result.stderr, 'SyntaxError');
+    assert.deepEqual(result.payloads, []);
   });
 
   it('can preserve local analytics state before a command removes it', async () => {
