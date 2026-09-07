@@ -577,22 +577,21 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       }
     });
 
-    it('rejects object writes and invalid paths with status 1 and no config changes', () => {
-      const before = fetchConfigJSON();
-      const cases = [
-        { args: ['set', 'update', 'false'], message: configMessages.setObjErr('update') },
-        ...invalidPathCases.flatMap(([key, missing]) => [
-          { args: ['get', key], message: configMessages.getKeysDneErr(missing) },
-          { args: ['set', key, 'value'], message: configMessages.setDneErr(missing) },
-        ]),
-      ];
-      for (const { args, message } of cases) {
+    [
+      { args: ['set', 'update', 'false'], message: configMessages.setObjErr('update') },
+      ...invalidPathCases.flatMap(([key, missing]) => [
+        { args: ['get', key], message: configMessages.getKeysDneErr(missing) },
+        { args: ['set', key, 'value'], message: configMessages.setDneErr(missing) },
+      ]),
+    ].forEach(({ args, message }) => {
+      it(`rejects ${JSON.stringify(args)} with status 1 and no config changes`, () => {
+        const before = fetchConfigJSON();
         const result = runConfigCli(args);
         assert.equal(result.status, 1);
         assert.equal(result.stdout, '');
         assert.equal(result.stderr, `ballin config: ${message}\n`);
         assert.equal(fetchConfigJSON(), before);
-      }
+      });
     });
 
     it('preserves successful output, string values, and the empty-action alias', () => {
