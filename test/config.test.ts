@@ -5,7 +5,9 @@ const os = require('os');
 const path = require('path');
 const defaultConfig = require('../config/.defaultConfig.json');
 const configModule = require('../config/index.ts');
+const { configHelp, runConfigCli: executeConfigCli } = require('../config/cli.ts');
 const {
+  ConfigError,
   createConfigStore,
 } = require('../config/store.ts');
 
@@ -42,11 +44,11 @@ const setTest = (keys: string, value: string, action = setConfig) => {
   assert.deepEqual(value, getConfig(keys));
 };
 
-const setConfigAction = (keys: string, value: string) => configAction('set', keys, value);
+const setConfigAction = (keys: string, value: string) => configAction(['set', keys, value]);
 
-const runConfigCli = (args: SpawnArgs = []) => spawnSync(process.execPath, [cliPath, 'config', ...args], {
+const runConfigCli = (args: SpawnArgs = [], env: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath, [cliPath, 'config', ...args], {
   encoding: 'utf8',
-  env: testChildEnvironment(),
+  env: testChildEnvironment(env),
 });
 
 describe('config', () => {
@@ -152,6 +154,78 @@ describe('config', () => {
       assert.isFalse(store.writeLeafValue('backup.host', 'github.example.test'));
       assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), '{not json\n');
     });
+
+    it('rejects missing or invalid bundled defaults before reset writes user config', () => {
+      const store = writeExplicitConfig(defaultConfig);
+      const before = fs.readFileSync(explicitConfigPath, 'utf8');
+      const defaultsPath = path.join(tempDir, 'defaults.json');
+      const resetStore = createConfigStore({ configPath: explicitConfigPath, defaultConfigPath: defaultsPath });
+      assert.throws(() => resetStore.resetConfig(), ConfigError, 'Unable to read bundled default config.');
+      for (const contents of ['{not json', 'null', '[]']) {
+        fs.writeFileSync(defaultsPath, contents);
+        const error = assert.throws(() => resetStore.resetConfig(), ConfigError,
+          'Check the Ballin installation\'s bundled default config.');
+        assert.propertyVal(error, 'exitCode', 1);
+        assert.notInclude(String(error), defaultsPath);
+        assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), before);
+      }
+      assert.equal(store.readLeafValue('backup.host'), 'github.com');
+    });
+
+    it('rejects direct get/set usage before reading config and preserves leaf-helper failures', () => {
+      const store = createConfigStore({ configPath: explicitConfigPath });
+      for (const action of [() => store.getConfig('key', ''), () => store.setConfig()]) {
+        const error = assert.throws(action, ConfigError);
+        assert.propertyVal(error, 'exitCode', 2);
+      }
+      fs.writeFileSync(explicitConfigPath, 'null');
+      assert.isUndefined(store.readLeafValue('backup.id'));
+      assert.isFalse(store.writeLeafValue('backup.id', 'value'));
+      assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), 'null');
+    });
+
+    it('preserves numeric and boolean leaves without requiring setting-specific validation', () => {
+      const store = writeExplicitConfig({ values: { boolean: false, number: 0 } });
+      assert.strictEqual(store.readLeafValue('values.boolean'), false);
+      assert.strictEqual(store.readLeafValue('values.number'), 0);
+      assert.isTrue(store.writeLeafValue('values.boolean', true));
+      assert.isTrue(store.writeLeafValue('values.number', 42));
+      assert.strictEqual(store.getConfig('values.boolean'), true);
+      assert.strictEqual(store.getConfig('values.number'), 42);
+    });
+
+    it('does not disguise programming errors as expected configuration failures', () => {
+      const store = writeExplicitConfig(defaultConfig);
+      const previousExitCode = process.exitCode;
+      const cases = [
+        { owner: fs, method: 'readFileSync', action: () => executeConfigCli(['get']) },
+        { owner: fs, method: 'readFileSync', action: () => store.resetConfig() },
+        { owner: fs, method: 'writeFileSync', action: () => store.setConfig('backup.id', 'value') },
+        { owner: JSON, method: 'parse', action: () => store.getConfig() },
+      ];
+      try {
+        for (const failure of [
+          new TypeError('unexpected programming error'),
+          Object.assign(new TypeError('invalid API argument'), { code: 'ERR_INVALID_ARG_TYPE' }),
+        ]) {
+          for (const { owner, method, action } of cases) {
+            const original = owner[method];
+            owner[method] = () => { throw failure; };
+            let caught: unknown;
+            try {
+              action();
+            } catch (error) {
+              caught = error;
+            } finally {
+              owner[method] = original;
+            }
+            assert.strictEqual(caught, failure);
+          }
+        }
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    });
   });
 
   describe('getConfig', () => {
@@ -172,7 +246,7 @@ describe('config', () => {
     });
     invalidPathCases.forEach(([keys, missingKeys]) => {
       it(`should report "${missingKeys}" for invalid path "${keys}"`, () => {
-        assert.equal(getConfig(keys), configMessages.getKeysDneErr(missingKeys));
+        assert.throws(() => getConfig(keys), ConfigError, configMessages.getKeysDneErr(missingKeys));
       });
     });
     it('should reject traversal through every JSON primitive type', () => {
@@ -187,7 +261,7 @@ describe('config', () => {
 
       ['boolean', 'number', 'string', 'null'].forEach((key) => {
         const keys = `testValues.${key}.nested`;
-        assert.equal(getConfig(keys), configMessages.getKeysDneErr(keys));
+        assert.throws(() => getConfig(keys), ConfigError, configMessages.getKeysDneErr(keys));
       });
     });
   });
@@ -206,10 +280,10 @@ describe('config', () => {
       setTest('backup.id', '123');
     });
     it('should give error if given no arguments', () => {
-      assert.equal(setConfig(), configMessages.setArgsErr);
+      assert.throws(() => setConfig(), ConfigError, configMessages.setArgsErr);
     });
     it('should give error if given 3 arguments', () => {
-      assert.equal(setConfig('a', 'b', ['c']), configMessages.setArgsErr);
+      assert.throws(() => setConfig('a', 'b', ['c']), ConfigError, configMessages.setArgsErr);
     });
     it('should return the keys/value it set', () => {
       const keys = 'update.cleanup';
@@ -219,13 +293,13 @@ describe('config', () => {
     it('should give error if trying to write to an object', () => {
       const keys = 'update';
       const val = 'true';
-      assert.include(setConfig(keys, val), 'INVALID: "update" is not a bottom-level value, it returns');
+      assert.throws(() => setConfig(keys, val), ConfigError, configMessages.setObjErr(keys));
     });
     invalidPathCases.forEach(([keys, missingKeys]) => {
       it(`should reject invalid path "${keys}" without changing config`, () => {
         const configBeforeSet = fetchConfigJSON();
 
-        assert.equal(setConfig(keys, 'test'), configMessages.setDneErr(missingKeys));
+        assert.throws(() => setConfig(keys, 'test'), ConfigError, configMessages.setDneErr(missingKeys));
         assert.equal(fetchConfigJSON(), configBeforeSet);
       });
     });
@@ -242,24 +316,24 @@ describe('config', () => {
 
       ['boolean', 'number', 'string', 'null'].forEach((key) => {
         const keys = `testValues.${key}.nested`;
-        assert.equal(setConfig(keys, 'test'), configMessages.setDneErr(keys));
+        assert.throws(() => setConfig(keys, 'test'), ConfigError, configMessages.setDneErr(keys));
         assert.equal(fetchConfigJSON(), configBeforeSet);
       });
     });
   });
 
-  it('CLI invalid get/set commands exit cleanly without changing config', () => {
+  it('CLI invalid get/set commands fail on stderr without changing config', () => {
     const configBeforeSet = fetchConfigJSON();
     const getResult = runConfigCli(['get', 'update.nvm.nested']);
     const setResult = runConfigCli(['set', 'update.nvm.nested', 'test']);
-    const expectedOutput = `${configMessages.getKeysDneErr('update.nvm.nested')}\n`;
+    const expectedOutput = `ballin config: ${configMessages.getKeysDneErr('update.nvm.nested')}\n`;
 
-    assert.equal(getResult.status, 0);
-    assert.equal(getResult.stdout, expectedOutput);
-    assert.equal(getResult.stderr, '');
-    assert.equal(setResult.status, 0);
-    assert.equal(setResult.stdout, expectedOutput);
-    assert.equal(setResult.stderr, '');
+    assert.equal(getResult.status, 1);
+    assert.equal(getResult.stdout, '');
+    assert.equal(getResult.stderr, expectedOutput);
+    assert.equal(setResult.status, 1);
+    assert.equal(setResult.stdout, '');
+    assert.equal(setResult.stderr, expectedOutput);
     assert.equal(fetchConfigJSON(), configBeforeSet);
   });
 
@@ -322,7 +396,8 @@ describe('config', () => {
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Config has been reset...\nFROM:');
-    assert.include(result.stdout, `Unable to read ${configPath}.`);
+    assert.include(result.stdout, 'Unable to read previous config.');
+    assert.notInclude(result.stdout, configPath);
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
     assert.equal(result.stderr, '');
   });
@@ -355,73 +430,219 @@ describe('config', () => {
     });
   });
 
-  it('CLI invalid action exits cleanly in test mode', () => {
-    const result = runConfigCli(['wrong']);
-
-    assert.equal(result.status, 0);
-    assert.equal(result.stdout, `${configMessages.actionErr}\n`);
-    assert.equal(result.stderr, '');
-  });
-
-  it('CLI invalid action suppresses analytics only for its production-mode help child', () => {
+  it('CLI invalid action prints deterministic help without a child in either environment', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-help-'));
-    const binDir = path.join(tempDir, 'bin');
     const childLogPath = path.join(tempDir, 'child.log');
-    const isolatedConfigPath = path.join(tempDir, 'ballin.config.json');
-    fs.mkdirSync(binDir);
-    fs.writeFileSync(isolatedConfigPath, JSON.stringify({
-      ...defaultConfig,
-      analytics: { enabled: 'false' },
-    }));
-    fs.writeFileSync(path.join(binDir, 'ballin'), `#!/bin/sh
-printf '%s|%s\\n' "$BALLIN_NO_ANALYTICS" "$BALLIN_NO_COMMAND_ANALYTICS" > "$BALLIN_CONFIG_HELP_LOG"
-printf '%s\\n' 'Ballin help from child'
+    fs.writeFileSync(path.join(tempDir, 'ballin'), `#!/bin/sh
+printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
 `, { mode: 0o755 });
 
     try {
-      const result = spawnSync(process.execPath, [cliPath, 'config', 'wrong'], {
-        encoding: 'utf8',
-        env: {
-          HOME: tempDir,
-          PATH: binDir,
-          NODE_ENV: 'production',
+      for (const nodeEnv of ['test', 'production']) {
+        const result = runConfigCli(['wrong'], {
+          PATH: tempDir,
+          NODE_ENV: nodeEnv,
           BALLIN_CONFIG_HELP_LOG: childLogPath,
-          BALLIN_NO_ANALYTICS: '0',
-          BALLIN_TEST_CONFIG_PATH: isolatedConfigPath,
-        },
-      });
-
-      assert.equal(result.status, 0);
-      assert.equal(result.stdout, `${configMessages.actionErr}\nBallin help from child\n\n`);
-      assert.equal(result.stderr, '');
-      assert.equal(fs.readFileSync(childLogPath, 'utf8'), '0|1\n');
+        });
+        assert.equal(result.status, 2);
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, `ballin config: ${configMessages.actionErr}\n${configHelp}`);
+        assert.isFalse(fs.existsSync(childLogPath));
+      }
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
+  describe('CLI error contract', () => {
+    const usageCases = [
+      { args: ['wrong'], message: configMessages.actionErr },
+      { args: ['get', 'backup.id', ''], message: configMessages.getArgsErr },
+      { args: ['', 'backup.id', '', 'extra'], message: configMessages.getArgsErr },
+      { args: ['set'], message: configMessages.setArgsErr },
+      { args: ['set', 'backup.id'], message: configMessages.setArgsErr },
+      { args: ['set', '', 'value'], message: configMessages.setArgsErr },
+      { args: ['set', 'backup.id', 'value', ''], message: configMessages.setArgsErr },
+      { args: ['reset', ''], message: configMessages.resetArgsErr },
+      { args: ['help', 'extra'], message: configMessages.actionErr },
+      { args: ['--help', 'extra'], message: configMessages.actionErr },
+    ];
+
+    usageCases.forEach(({ args, message }) => {
+      it(`rejects ${JSON.stringify(args)} before reading malformed config`, () => {
+        const malformed = '{private malformed contents';
+        fs.writeFileSync(configPath, malformed);
+        const result = runConfigCli(args);
+
+        assert.equal(result.status, 2);
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, `ballin config: ${message}\n${configHelp}`);
+        assert.equal(fs.readFileSync(configPath, 'utf8'), malformed);
+      });
+    });
+
+    ['help', '--help'].forEach((action) => {
+      it(`prints ${action} without reading missing, malformed, or unreadable config`, () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-help-read-'));
+        const malformedPath = path.join(tempDir, 'malformed.json');
+        fs.writeFileSync(malformedPath, '{not json');
+        try {
+          for (const fixturePath of [path.join(tempDir, 'missing.json'), malformedPath, tempDir]) {
+            const result = runConfigCli([action], { BALLIN_TEST_CONFIG_PATH: fixturePath });
+            assert.equal(result.status, 0);
+            assert.equal(result.stdout, configHelp);
+            assert.equal(result.stderr, '');
+          }
+        } finally {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+      });
+    });
+
+    [
+      { contents: '{private malformed contents', reason: 'Config is not valid JSON.' },
+      ...['null', '[]', '"private value"', 'false', '42'].map((contents) => ({
+        contents, reason: 'Config must contain a JSON object.',
+      })),
+    ].forEach(({ contents, reason }) => {
+      it(`rejects invalid config ${contents} for full reads, keyed reads, and writes`, () => {
+        fs.writeFileSync(configPath, contents);
+        for (const args of [[], ['get', 'backup.id'], ['set', 'backup.id', 'changed']]) {
+          const result = runConfigCli(args);
+          assert.equal(result.status, 1);
+          assert.equal(result.stdout, '');
+          assert.equal(result.stderr, `ballin config: ${reason} Run ballin config reset to restore defaults.\n`);
+          assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
+        }
+      });
+    });
+
+    it('reports missing and unreadable files without paths or stacks', () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-read-'));
+      try {
+        for (const args of [['get'], ['set', 'backup.id', 'value']]) {
+          const missing = runConfigCli(args, { BALLIN_TEST_CONFIG_PATH: path.join(tempDir, 'missing.json') });
+          assert.equal(missing.status, 1);
+          assert.equal(missing.stdout, '');
+          assert.equal(missing.stderr, 'ballin config: Unable to read config. Run ballin config reset to restore defaults.\n');
+
+          const unreadable = runConfigCli(args, { BALLIN_TEST_CONFIG_PATH: tempDir });
+          assert.equal(unreadable.status, 1);
+          assert.equal(unreadable.stdout, '');
+          assert.equal(unreadable.stderr, 'ballin config: Unable to read config. Check that the config file is accessible and readable.\n');
+        }
+        const reset = runConfigCli(['reset'], { BALLIN_TEST_CONFIG_PATH: tempDir });
+        assert.equal(reset.status, 1);
+        assert.equal(reset.stdout, '');
+        assert.equal(reset.stderr, 'ballin config: Unable to save config. Check that the config file and its parent directory are writable.\n');
+        assert.deepEqual(fs.readdirSync(tempDir), []);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('reports write failures and oversized config reads from the public CLI without printing success', () => {
+      const before = fetchConfigJSON();
+      const writeMessage = 'Unable to save config. Check that the config file and its parent directory are writable.';
+      const cases = [
+        { args: ['set', 'backup.id', 'changed'], method: 'writeFileSync', code: 'EACCES', message: writeMessage },
+        { args: ['reset'], method: 'writeFileSync', code: 'EACCES', message: writeMessage },
+        {
+          args: ['get'], method: 'readFileSync', code: 'ERR_FS_FILE_TOO_LARGE',
+          message: 'Unable to read config. Check that the config file is accessible and readable.',
+        },
+      ];
+      for (const { args, method, code, message } of cases) {
+        // Stub only this child's fixture access; no permission assumptions or production hooks.
+        const script = `
+          const fs = require('fs');
+          const method = ${JSON.stringify(method)};
+          const original = fs[method];
+          fs[method] = (file, ...args) => {
+            if (file === process.env.BALLIN_TEST_CONFIG_PATH) {
+              throw Object.assign(new Error('private path: ' + file), { code: ${JSON.stringify(code)} });
+            }
+            return original(file, ...args);
+          };
+          process.argv = [process.execPath, ${JSON.stringify(cliPath)}, 'config', ...${JSON.stringify(args)}];
+          require(${JSON.stringify(cliPath)});
+        `;
+        const result = spawnSync(process.execPath, ['-e', script], {
+          encoding: 'utf8', env: testChildEnvironment(),
+        });
+        assert.equal(result.status, 1);
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, `ballin config: ${message}\n`);
+        assert.equal(fetchConfigJSON(), before);
+      }
+    });
+
+    it('rejects object writes and invalid paths with status 1 and no config changes', () => {
+      const before = fetchConfigJSON();
+      const cases = [
+        { args: ['set', 'update', 'false'], message: configMessages.setObjErr('update') },
+        ...invalidPathCases.flatMap(([key, missing]) => [
+          { args: ['get', key], message: configMessages.getKeysDneErr(missing) },
+          { args: ['set', key, 'value'], message: configMessages.setDneErr(missing) },
+        ]),
+      ];
+      for (const { args, message } of cases) {
+        const result = runConfigCli(args);
+        assert.equal(result.status, 1);
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, `ballin config: ${message}\n`);
+        assert.equal(fetchConfigJSON(), before);
+      }
+    });
+
+    it('preserves successful output, string values, and the empty-action alias', () => {
+      for (const args of [['get'], ['']]) {
+        const result = runConfigCli(args);
+        assert.equal(result.status, 0);
+        assert.equal(result.stdout, `${fetchConfigJSON()}\n`);
+        assert.equal(result.stderr, '');
+      }
+      const object = runConfigCli(['get', 'analytics']);
+      assert.equal(object.status, 0);
+      assert.equal(object.stdout, "{ enabled: 'true' }\n");
+      assert.equal(object.stderr, '');
+
+      for (const value of ['', 'false', 'INVALID: a legitimate stored value']) {
+        const set = runConfigCli(['set', 'backup.id', value]);
+        assert.equal(set.status, 0);
+        assert.equal(set.stdout, `${configMessages.set('backup.id', value)}\n`);
+        assert.equal(set.stderr, '');
+        const get = runConfigCli(['', 'backup.id']);
+        assert.equal(get.status, 0);
+        assert.equal(get.stdout, `${value}\n`);
+        assert.equal(get.stderr, '');
+        assert.strictEqual(getConfig('backup.id'), value);
+      }
+    });
+  });
+
   describe('configAction', () => {
     it('() should return a String', () => {
-      assert.isString(configAction('get'));
+      assert.isString(configAction());
     });
     it('("get") should return a String', () => {
-      assert.isString(configAction('get'));
+      assert.isString(configAction(['get']));
     });
     it('("set") should return a setConfig error', () => {
-      assert.equal(configAction('set'), configMessages.setArgsErr);
+      assert.throws(() => configAction(['set']), ConfigError, configMessages.setArgsErr);
     });
     it('("get", "backup.id") should return null by default', () => {
-      assert.isNull(configAction('get', 'backup.id'));
+      assert.isNull(configAction(['get', 'backup.id']));
     });
     it('("wrong") should return an invalid error', () => {
-      assert.equal(configAction('wrong'), configMessages.actionErr);
+      assert.throws(() => configAction(['wrong']), ConfigError, configMessages.actionErr);
     });
     it('("set", "backup.id", "123") should set backup.id to "123"', () => {
       setTest('backup.id', '123', setConfigAction);
     });
     it('("reset") should reset config', () => {
       setTest('backup.id', '123', setConfigAction);
-      assert.include(configAction('reset'), 'Config has been reset...\nFROM:');
+      assert.include(configAction(['reset']), 'Config has been reset...\nFROM:');
       assert.isNull(getConfig('backup.id'));
     });
   });
