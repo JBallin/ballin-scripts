@@ -34,8 +34,8 @@ $ git push --set-upstream fork "$BRANCH_NAME"
 
 For more repo context, see [AGENTS.md](AGENTS.md).
 
-For test isolation and coverage diagnostics, see the
-[maintainer testing guide](docs/testing.md).
+For deeper user and maintainer documentation, see the
+[documentation index](docs/README.md).
 
 ## Suggestions Welcome
 
