@@ -16,6 +16,8 @@ Start here when setting up or auditing what Ballin manages.
 
 ## Maintainer guides
 
+- [Testing and coverage](testing.md): test isolation, coverage comparisons, and
+  runtime and platform limits.
 - [Backup design](backup-design.md): backup safety model and GitHub constraints.
 - [Design system](design-system.md): Ballin identity, product messaging,
   visual guidance, and brand asset conventions.

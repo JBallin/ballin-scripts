@@ -1,4 +1,5 @@
 const { spawnSync } = require('child_process');
+const { testChildEnvironment, withEnvironment } = require('./helpers/environment.ts');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -70,45 +71,21 @@ describe('install setup', () => {
 
   const readRepoConfig = () => JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
 
-  const withEnv = (env: NodeJS.ProcessEnv, action: () => { output: string; result: boolean }) => {
-    const previousValues = new Map<string, string | undefined>();
-    Object.keys(env).forEach((key) => {
-      previousValues.set(key, process.env[key]);
-      process.env[key] = env[key];
-    });
-    try {
-      return action();
-    } finally {
-      previousValues.forEach((value, key) => {
-        if (value === undefined) {
-          delete process.env[key];
-        } else {
-          process.env[key] = value;
-        }
-      });
-    }
+  const analyticsEnabledEnv = {
+    CI: undefined,
+    BALLIN_NO_ANALYTICS: undefined,
+    BALLIN_NO_COMMAND_ANALYTICS: undefined,
   };
 
-  const withoutAnalyticsOptOutEnv = (action: () => { output: string; result: boolean }) => {
-    const previousCi = process.env.CI;
-    const previousNoAnalytics = process.env.BALLIN_NO_ANALYTICS;
-    delete process.env.CI;
-    delete process.env.BALLIN_NO_ANALYTICS;
-    try {
-      return action();
-    } finally {
-      if (previousCi === undefined) {
-        delete process.env.CI;
-      } else {
-        process.env.CI = previousCi;
-      }
-      if (previousNoAnalytics === undefined) {
-        delete process.env.BALLIN_NO_ANALYTICS;
-      } else {
-        process.env.BALLIN_NO_ANALYTICS = previousNoAnalytics;
-      }
-    }
-  };
+  const withAnalyticsEnabled = (action: () => { output: string; result: boolean }) => (
+    withEnvironment(analyticsEnabledEnv, action)
+  );
+
+  const childEnvironment = (overrides: NodeJS.ProcessEnv = {}) => testChildEnvironment({
+    HOME: path.join(testDir, 'home'),
+    PATH: binDir,
+    ...overrides,
+  });
 
   const installConfigSources = () => {
     fs.mkdirSync(path.join(repoDir, 'config'), { recursive: true });
@@ -223,9 +200,7 @@ esac
     ], {
       encoding: 'utf8',
       input: setupInput,
-      env: {
-        ...process.env,
-        PATH: binDir,
+      env: childEnvironment({
         FAKE_COMMAND_LOG: commandLogPath,
         FAKE_GH_AUTH_STATUS: '0',
         FAKE_GIST_FILE_LIST_STATUS: '0',
@@ -234,7 +209,7 @@ esac
         TEST_DIR: testDir,
         TEST_REPO_DIR: repoDir,
         ...env,
-      },
+      }),
     });
   };
 
@@ -306,7 +281,7 @@ esac
   it('does not create a local install ID while creating config', () => {
     installConfigSources();
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => configure(repoDir, docsUrl)));
+    const { output, result } = withAnalyticsEnabled(() => captureStdout(() => configure(repoDir, docsUrl)));
 
     assert.isTrue(result);
     assert.notInclude(output, analyticsNotice);
@@ -323,6 +298,7 @@ esac
       docsUrl,
     ], {
       encoding: 'utf8',
+      env: childEnvironment(),
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -366,7 +342,7 @@ esac
       },
     }));
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+    const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.equal(output, `\n${analyticsNotice}\n`);
@@ -384,7 +360,7 @@ esac
     fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
     fs.writeFileSync(installIdPath(), `${fixedInstallId}\n`, 'utf8');
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+    const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.notInclude(output, analyticsNotice);
@@ -399,7 +375,7 @@ esac
       },
     }));
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+    const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.notInclude(output, analyticsNotice);
@@ -413,7 +389,7 @@ esac
     }));
     fs.writeFileSync(path.join(repoDir, '.analytics'), 'blocks analytics directory creation\n');
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+    const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.include(output, analyticsNotice);
@@ -424,7 +400,7 @@ esac
     installConfigSources();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({ analytics: false }));
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+    const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.equal(output, '');
@@ -453,7 +429,9 @@ esac
         },
       }));
 
-      const { output, result } = withEnv(env, () => captureStdout(() => setupAnalytics(repoDir)));
+      const { output, result } = withEnvironment({ ...analyticsEnabledEnv, ...env }, () => (
+        captureStdout(() => setupAnalytics(repoDir))
+      ));
 
       assert.isTrue(result);
       assert.notInclude(output, analyticsNotice);
@@ -471,7 +449,7 @@ esac
     fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
     fs.writeFileSync(installIdPath(), 'not-a-uuid\n', 'utf8');
 
-    const { output, result } = withoutAnalyticsOptOutEnv(() => captureStdout(() => setupAnalytics(repoDir)));
+    const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
     assert.include(output, analyticsNotice);
@@ -487,6 +465,7 @@ esac
       binDir,
     ], {
       encoding: 'utf8',
+      env: childEnvironment(),
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -502,9 +481,7 @@ esac
         enabled: 'true',
       },
     }));
-    const childEnv = { ...process.env };
-    delete childEnv.CI;
-    delete childEnv.BALLIN_NO_ANALYTICS;
+    const childEnv = childEnvironment(analyticsEnabledEnv);
 
     const result = spawnSync(process.execPath, [
       installSetupPath,
@@ -528,6 +505,7 @@ esac
       'setup',
     ], {
       encoding: 'utf8',
+      env: childEnvironment(),
     });
     const unsupportedResult = spawnSync(process.execPath, [
       installSetupPath,
@@ -535,6 +513,7 @@ esac
       'old-command',
     ], {
       encoding: 'utf8',
+      env: childEnvironment(),
     });
 
     assert.equal(supportedResult.status, 0, supportedResult.stderr);
@@ -542,13 +521,13 @@ esac
   });
 
   it('reports missing and unknown setup CLI usage with failing statuses', () => {
-    const missing = spawnSync(process.execPath, [installSetupPath], { encoding: 'utf8' });
+    const missing = spawnSync(process.execPath, [installSetupPath], { encoding: 'utf8', env: childEnvironment() });
     const unknown = spawnSync(process.execPath, [
       installSetupPath,
       'future-command',
       repoDir,
       docsUrl,
-    ], { encoding: 'utf8' });
+    ], { encoding: 'utf8', env: childEnvironment() });
 
     assert.equal(missing.status, 1);
     assert.include(missing.stdout, 'Usage: install_setup.ts');
@@ -562,7 +541,7 @@ esac
       'configure',
       repoDir,
       docsUrl,
-    ], { encoding: 'utf8' });
+    ], { encoding: 'utf8', env: childEnvironment() });
     const blockedBinDir = path.join(testDir, 'blocked-bin');
     fs.writeFileSync(blockedBinDir, 'not a directory\n');
     const symlinkResult = spawnSync(process.execPath, [
@@ -570,7 +549,7 @@ esac
       'symlink-binaries',
       repoDir,
       blockedBinDir,
-    ], { encoding: 'utf8' });
+    ], { encoding: 'utf8', env: childEnvironment() });
 
     assert.equal(configureResult.status, 1);
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -725,11 +704,14 @@ esac
     config.backup.id = 'existing-gist-id';
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
 
-    const result = runGistSetup({
+    const result = withEnvironment({
+      BALLIN_BACKUP_HOST: 'ambient.example.test',
+      FAKE_GH_AUTH_STATUS: '4',
+    }, () => runGistSetup({
       env: { FAKE_GH_HOST: 'github.enterprise.test' },
       guHostExisted: 'false',
       input: 'github.enterprise.test\n',
-    });
+    }));
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
@@ -991,7 +973,7 @@ esac
     };
 
     try {
-      const result = withEnv({
+      const result = withEnvironment({
         PATH: binDir,
         FAKE_COMMAND_LOG: commandLogPath,
         FAKE_GH_HOST: 'github.example.test',
@@ -1094,7 +1076,7 @@ esac
     installFakeGhCommand();
     const missingConfig = path.join(repoDir, 'missing-config.json');
 
-    const result = withEnv({
+    const result = withEnvironment({
       PATH: binDir,
       FAKE_COMMAND_LOG: commandLogPath,
       FAKE_GH_HOST: 'github.example.test',
@@ -1119,7 +1101,7 @@ esac
       analytics: { enabled: 'false' },
     }));
 
-    const result = withEnv({
+    const result = withEnvironment({
       HOME: path.join(testDir, 'home'),
       PATH: binDir,
       FAKE_COMMAND_LOG: commandLogPath,
@@ -1138,7 +1120,7 @@ esac
   it('stops before setup work when the command directory is missing from PATH', () => {
     installConfigSources();
 
-    const result = withEnv({
+    const result = withEnvironment({
       HOME: path.join(testDir, 'home'),
       PATH: path.join(testDir, 'other-bin'),
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
@@ -1168,7 +1150,7 @@ esac
   });
 
   it('reports configuration failure from full setup before creating symlinks', () => {
-    const result = withEnv({
+    const result = withEnvironment({
       HOME: path.join(testDir, 'home'),
       PATH: binDir,
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
@@ -1188,7 +1170,7 @@ if [ "$1" = '--prefix' ]; then printf '%s\n' "${brewPrefix}"; exit 0; fi
 exit 2
 `);
 
-    const result = withEnv({
+    const result = withEnvironment({
       HOME: path.join(testDir, 'home'),
       PATH: `${binDir}${path.delimiter}${brewBinDir}`,
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
@@ -1202,7 +1184,7 @@ exit 2
     installConfigSources();
     writeExecutable('brew', '#!/bin/sh\nexit 9\n');
 
-    const result = withEnv({
+    const result = withEnvironment({
       HOME: path.join(testDir, 'home'),
       PATH: binDir,
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
@@ -1215,7 +1197,7 @@ exit 2
     installConfigSources();
     fs.rmSync(sourceBinDir, { recursive: true });
 
-    const result = withEnv({
+    const result = withEnvironment({
       HOME: path.join(testDir, 'home'),
       PATH: binDir,
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
@@ -1253,13 +1235,7 @@ exit 2
 
   it('completes a fresh maintenance-only setup without GitHub CLI', () => {
     installConfigSources();
-    const childEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      HOME: path.join(testDir, 'home'),
-      PATH: binDir,
-    };
-    delete childEnv.CI;
-    delete childEnv.BALLIN_NO_ANALYTICS;
+    const childEnv = childEnvironment(analyticsEnabledEnv);
 
     const result = spawnSync(process.execPath, [
       installSetupPath,
@@ -1297,12 +1273,7 @@ exit 2
     ], {
       encoding: 'utf8',
       input: 'y\n\n',
-      env: {
-        ...process.env,
-        BALLIN_NO_ANALYTICS: '1',
-        HOME: path.join(testDir, 'home'),
-        PATH: binDir,
-      },
+      env: childEnvironment(),
     });
 
     assert.equal(result.status, 1);
@@ -1318,47 +1289,48 @@ exit 2
   it('honors a restored analytics opt-out before analytics initialization', () => {
     installConfigSources();
     installFakeGhCommand();
-    const childEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      HOME: path.join(testDir, 'home'),
-      PATH: binDir,
-      BALLIN_BACKUP_HOST: 'github.example.test',
-      FAKE_GH_HOST: 'github.example.test',
-      FAKE_COMMAND_LOG: commandLogPath,
-      FAKE_GH_AUTH_STATUS: '0',
-      FAKE_GIST_CONFIG_STATUS: '0',
-      FAKE_RESTORED_CONFIG: JSON.stringify({
-        update: {
-          cleanup: 'false',
-          selfUpdate: 'true',
-          backup: 'false',
-          softwareupdate: 'false',
-          npm: 'false',
-          nvm: 'false',
-        },
-        backup: {
-          id: 'snapshot-gist-id',
-          host: 'snapshot.example.test',
-        },
-        analytics: { enabled: 'false' },
-      }),
-      TEST_DIR: testDir,
-      TEST_REPO_DIR: repoDir,
-    };
-    delete childEnv.CI;
-    delete childEnv.BALLIN_NO_ANALYTICS;
+    const result = withEnvironment({
+      BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1',
+      FAKE_GIST_FILE_LIST_STATUS: '17',
+    }, () => {
+      const childEnv = childEnvironment({
+        ...analyticsEnabledEnv,
+        BALLIN_BACKUP_HOST: 'github.example.test',
+        FAKE_GH_HOST: 'github.example.test',
+        FAKE_COMMAND_LOG: commandLogPath,
+        FAKE_GH_AUTH_STATUS: '0',
+        FAKE_GIST_CONFIG_STATUS: '0',
+        FAKE_RESTORED_CONFIG: JSON.stringify({
+          update: {
+            cleanup: 'false',
+            selfUpdate: 'true',
+            backup: 'false',
+            softwareupdate: 'false',
+            npm: 'false',
+            nvm: 'false',
+          },
+          backup: {
+            id: 'snapshot-gist-id',
+            host: 'snapshot.example.test',
+          },
+          analytics: { enabled: 'false' },
+        }),
+        TEST_DIR: testDir,
+        TEST_REPO_DIR: repoDir,
+      });
 
-    const result = spawnSync(process.execPath, [
-      installSetupPath,
-      'setup',
-      repoDir,
-      docsUrl,
-      'https://example.test/analytics',
-      'fresh',
-    ], {
-      encoding: 'utf8',
-      input: 'y\ny\nreturning-gist-id\ny\n',
-      env: childEnv,
+      return spawnSync(process.execPath, [
+        installSetupPath,
+        'setup',
+        repoDir,
+        docsUrl,
+        'https://example.test/analytics',
+        'fresh',
+      ], {
+        encoding: 'utf8',
+        input: 'y\ny\nreturning-gist-id\ny\n',
+        env: childEnv,
+      });
     });
 
     assert.equal(result.status, 0, result.stderr);
@@ -1384,17 +1356,14 @@ exit 2
     ], {
       encoding: 'utf8',
       input: 'y\nn\ny\n',
-      env: {
-        ...process.env,
-        HOME: path.join(testDir, 'home'),
-        PATH: binDir,
+      env: childEnvironment({
         BALLIN_BACKUP_HOST: 'github.example.test',
         FAKE_GH_HOST: 'github.example.test',
         FAKE_COMMAND_LOG: commandLogPath,
         FAKE_GH_AUTH_STATUS: '0',
         TEST_DIR: testDir,
         TEST_REPO_DIR: repoDir,
-      },
+      }),
     });
 
     assert.equal(result.status, 0, result.stderr);

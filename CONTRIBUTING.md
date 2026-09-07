@@ -34,6 +34,9 @@ $ git push --set-upstream fork "$BRANCH_NAME"
 
 For more repo context, see [AGENTS.md](AGENTS.md).
 
+For deeper user and maintainer documentation, see the
+[documentation index](docs/README.md).
+
 ## Suggestions Welcome
 
 Please open issues (or PRs) with any suggestions for additions to `ballin backup`, `ballin update`, or anything else.

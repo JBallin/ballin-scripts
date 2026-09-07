@@ -1,4 +1,5 @@
 const { spawnSync } = require('child_process');
+const { testChildEnvironment } = require('./helpers/environment.ts');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -79,15 +80,14 @@ describe('ballin', () => {
     ...args,
   ], {
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      BALLIN_NO_ANALYTICS: '1',
+    env: testChildEnvironment({
+      HOME: tempDir,
       BALLIN_TEST_CONFIG_PATH: configPath,
       BALLIN_TEST_BALLIN_PATH: path.join(binDir, 'ballin'),
       FAKE_COMMAND_LOG: commandLogPath,
       PATH: binDir,
       ...env,
-    },
+    }),
   });
 
   beforeEach(() => {
@@ -131,7 +131,7 @@ esac
   it('remains executable through its shebang', () => {
     assertHelpOutput(spawnSync(ballinPath, [], {
       encoding: 'utf8',
-      env: process.env,
+      env: testChildEnvironment(),
     }));
   });
 
@@ -143,7 +143,7 @@ esac
       fs.symlinkSync(ballinPath, symlinkPath);
       assertHelpOutput(spawnSync(symlinkPath, [], {
         encoding: 'utf8',
-        env: process.env,
+        env: testChildEnvironment(),
       }));
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
