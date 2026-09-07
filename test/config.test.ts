@@ -1,4 +1,5 @@
 const { spawnSync } = require('child_process');
+const { testChildEnvironment } = require('./helpers/environment.ts');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -45,7 +46,7 @@ const setConfigAction = (keys: string, value: string) => configAction('set', key
 
 const runConfigCli = (args: SpawnArgs = []) => spawnSync(process.execPath, [cliPath, 'config', ...args], {
   encoding: 'utf8',
-  env: process.env,
+  env: testChildEnvironment(),
 });
 
 describe('config', () => {
@@ -65,11 +66,7 @@ describe('config', () => {
     const result = spawnSync(process.execPath, ['-p', "require('./config/index.ts').configPath"], {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',
-      env: {
-        ...process.env,
-        BALLIN_TEST_CONFIG_PATH: '',
-        NODE_ENV: 'test',
-      },
+      env: testChildEnvironment({ BALLIN_TEST_CONFIG_PATH: '' }),
     });
 
     assert.equal(result.status, 0);
@@ -277,7 +274,7 @@ describe('config', () => {
   it('CLI remains executable through its shebang', () => {
     const result = spawnSync(cliPath, ['config', 'get', 'backup.id'], {
       encoding: 'utf8',
-      env: process.env,
+      env: testChildEnvironment(),
     });
 
     assert.equal(result.status, 0);
@@ -294,7 +291,7 @@ describe('config', () => {
 
       const result = spawnSync(symlinkPath, ['config', 'get', 'backup.id'], {
         encoding: 'utf8',
-        env: process.env,
+        env: testChildEnvironment(),
       });
 
       assert.equal(result.status, 0);
@@ -434,7 +431,7 @@ printf '%s\\n' 'Ballin help from child'
     const runUpdateConfig = () => spawnSync(process.execPath, [updateConfigPath], {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',
-      env: process.env,
+      env: testChildEnvironment(),
     });
 
     it('updates the isolated fixture when required directly', () => {
@@ -443,7 +440,7 @@ printf '%s\\n' 'Ballin help from child'
       const result = spawnSync(process.execPath, ['-e', "require('./config/updateConfig.ts')"], {
         cwd: path.join(__dirname, '..'),
         encoding: 'utf8',
-        env: process.env,
+        env: testChildEnvironment(),
       });
 
       assert.equal(result.status, 0);

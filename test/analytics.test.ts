@@ -120,8 +120,30 @@ describe('analytics client', () => {
   it('treats BALLIN_NO_ANALYTICS and CI as hard opt-outs', () => {
     assert.isTrue(analyticsDisabledByEnv({ BALLIN_NO_ANALYTICS: '1' }));
     assert.isTrue(analyticsDisabledByEnv({ CI: 'true' }));
+    assert.isTrue(analyticsDisabledByEnv({ CI: 'false' }));
+    assert.isFalse(analyticsDisabledByEnv({ CI: '' }));
     assert.isFalse(analyticsDisabledByEnv({ BALLIN_NO_ANALYTICS: '0' }));
     assert.isFalse(analyticsDisabledByEnv({ BALLIN_NO_COMMAND_ANALYTICS: '1' }));
+  });
+
+  it('defaults to the harness opt-out even with enabled config and a valid install ID', async () => {
+    setAnalyticsConfig({ enabled: 'true' });
+    writeInstallId();
+
+    const { payloads } = await recordWithSender({ command: 'ballin', now: fixedNow }, {
+      env: undefined,
+    });
+
+    assert.isUndefined(process.env.CI);
+    assert.equal(process.env.BALLIN_NO_ANALYTICS, '1');
+    assert.deepEqual(payloads, []);
+
+    fs.rmSync(testInstallIdPath);
+    assert.isNull(ensureAnalyticsInstallId({
+      analyticsConfig: { enabled: 'true' },
+      installIdPath: testInstallIdPath,
+    }));
+    assert.isFalse(fs.existsSync(testInstallIdPath));
   });
 
   it('does not send when analytics are disabled in config', async () => {

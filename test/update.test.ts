@@ -357,6 +357,7 @@ fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
     appVersion: '2.0.0',
     env: process.env,
     installIdPath: process.env.ANALYTICS_TEST_INSTALL_ID_PATH,
+    nowMs: () => 0,
     sender: async (payload) => {
       fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
         type: 'event',
@@ -398,6 +399,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     appVersion: '2.0.0',
     env: process.env,
     installIdPath: process.env.ANALYTICS_TEST_INSTALL_ID_PATH,
+    nowMs: () => 0,
     sender: async (payload) => {
       fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
         type: 'event',
