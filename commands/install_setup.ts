@@ -18,11 +18,14 @@ const {
   runNodeScript,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
+const {
+  backupMarkerFileName,
+  configSnapshotFileName,
+} = require('./backup_snapshots.ts');
 
 const backupMarker = '### Backup of your dev environment\n'
   + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n'
   + '\n';
-const configSnapshotFileName = 'ballin_config';
 const backupSafetyNotice = [
   'Ballin can store selected development configuration in a secret GitHub Gist.',
   'Setup only creates or adopts the destination; snapshots are collected and uploaded later by ballin backup.',
@@ -453,7 +456,7 @@ const configureGist = (
     if (pendingBackupHost) {
       const markerResult = runGh(
         selectedHost,
-        ['gist', 'view', backupId, '--raw', '--filename', '.MyConfig.md'],
+        ['gist', 'view', backupId, '--raw', '--filename', backupMarkerFileName],
         { cwd: repoDir },
       );
       if (markerResult.stderr) {
@@ -486,9 +489,13 @@ const configureGist = (
         writeStdoutLine('Retry with: ballin backup setup');
         return false;
       }
-      const markerResult = runGh(selectedHost, ['gist', 'view', gistId, '--raw', '--filename', '.MyConfig.md'], {
-        cwd: repoDir,
-      });
+      const markerResult = runGh(
+        selectedHost,
+        ['gist', 'view', gistId, '--raw', '--filename', backupMarkerFileName],
+        {
+          cwd: repoDir,
+        },
+      );
 
       if (
         markerResult.status === 0
@@ -512,11 +519,11 @@ const configureGist = (
     if (!invalidateBackupCache(backupCacheDir)) {
       return false;
     }
-    const markerPath = path.join(repoDir, '.MyConfig.md');
+    const markerPath = path.join(repoDir, backupMarkerFileName);
     fs.writeFileSync(markerPath, backupMarker);
 
     try {
-      const createResult = runGh(selectedHost, ['gist', 'create', '.MyConfig.md', '--desc', backupMarker], {
+      const createResult = runGh(selectedHost, ['gist', 'create', backupMarkerFileName, '--desc', backupMarker], {
         cwd: repoDir,
       });
       if (createResult.stderr) {
