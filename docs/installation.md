@@ -112,9 +112,7 @@ configuration active.
 
 After backup is newly configured, Ballin asks whether `ballin update` should run
 `ballin backup` automatically; yes is the default. When adopting an existing
-backup, this choice overrides any restored automatic-backup preference. Running
-setup for an already-configured backup does not ask again or change the
-preference. See
+backup, this choice overrides any restored automatic-backup preference. See
 [Optional capabilities](optional-capabilities.md#gist-backups) to change it
 later.
 

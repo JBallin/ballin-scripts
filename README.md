@@ -20,9 +20,8 @@ updates.
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
 fresh installation. It installs the maintenance commands first; Gist backup is
-an optional later step. Maintenance-only installation does not require Homebrew
-or GitHub CLI. When Gist backup is configured, Ballin can run it automatically
-as part of `ballin update`.
+optional, and a maintenance-only installation does not require Homebrew or
+GitHub CLI. When configured, backups can run automatically with `ballin update`.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
@@ -36,7 +35,7 @@ and removal steps in [Installation and removal](docs/installation.md).
 ## Example output
 
 `ballin update` output depends on installed tools and enabled integrations. This
-example includes backups.
+example includes optional backups.
 
 ```shell
 $ ballin update
