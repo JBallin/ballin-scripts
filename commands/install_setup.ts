@@ -34,12 +34,15 @@ const backupSafetyNotice = [
   'Ballin is not a secrets manager. Review sensitive configuration and do not share the Gist URL or ID.',
 ].join('\n');
 
-const readPrompt = (prompt: string): string => {
+const readPrompt = (prompt: string, eofResponse = ''): string => {
   process.stdout.write(prompt);
 
   const input: string[] = [];
   const buffer = Buffer.alloc(1);
-  while (fs.readSync(0, buffer, 0, 1, null) > 0) {
+  while (true) {
+    if (fs.readSync(0, buffer, 0, 1, null) === 0) {
+      return input.length === 0 ? eofResponse : input.join('');
+    }
     const character = buffer.toString('utf8');
     if (character === '\n') {
       break;
@@ -177,7 +180,7 @@ const setConfigValue = (configPath: string, key: string, value: string): boolean
 };
 
 const offerAutomaticUpdateBackup = (configPath: string): boolean => {
-  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [Y/n] ');
+  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [Y/n] ', 'n');
   const preference = enable === '' || enable === 'y' || enable === 'Y' ? 'true' : 'false';
 
   if (!setConfigValue(configPath, 'update.backup', preference)) {

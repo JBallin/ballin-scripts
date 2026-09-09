@@ -200,7 +200,7 @@ exit 2
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
     installGhStub();
-    const installResult = runInstaller('y\ny\n\nn\n');
+    const installResult = runInstaller('y\ny\n\nn\n\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));

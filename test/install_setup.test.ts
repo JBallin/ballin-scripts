@@ -864,6 +864,22 @@ esac
     assert.notInclude(commandLog(), 'snapshot-gist-id');
   });
 
+  it('does not enable automatic update backups when adopted setup reaches EOF', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({ input: '\ny\nreturning-gist-id\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+    assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
+    assert.equal(readRepoConfig().update.backup, 'false');
+  });
+
   it('accepts an adopted backup marker without a trailing newline like Bash did', () => {
     installConfigSources();
     installFakeGhCommand();
@@ -1037,6 +1053,22 @@ esac
     assert.equal(readRepoConfig().update.backup, 'true');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.backup-cache')));
+  });
+
+  it('does not enable automatic update backups when new Gist setup reaches EOF', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({ input: '\nn\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+    assert.equal(readRepoConfig().backup.id, 'new-gist-id');
+    assert.equal(readRepoConfig().update.backup, 'false');
   });
 
   it('prompts and persists no when unconfigured setup already prefers automatic backups', () => {
