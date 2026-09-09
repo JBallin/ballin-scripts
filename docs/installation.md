@@ -110,20 +110,14 @@ own destination fields cannot redirect setup. If reading, restoring, or saving
 the adopted configuration fails, setup stops and leaves the prior unconfigured
 configuration active.
 
-After an unconfigured installation successfully creates or adopts a backup
-destination, setup offers a default-yes choice to run `ballin backup`
-automatically after `ballin update`. Enter or `y` saves `update.backup=true`;
-`n` saves `update.backup=false`. This explicit choice controls the current
-installation even when adoption restored a previous value. Setup that began
-with a configured destination does not prompt or change the preference. See
+After setup successfully creates or adopts a backup destination, it asks whether
+`ballin update` should run `ballin backup` automatically. Yes is the default:
+Enter or `y` saves `update.backup=true`; `n` saves `update.backup=false`. For an
+adopted backup, this choice overrides any restored `update.backup` value.
+Running setup again for an already-configured destination does not ask again or
+change the preference. See
 [Optional capabilities](optional-capabilities.md#gist-backups) to change it
 later.
-
-If the destination is committed but the automatic-backup preference cannot be
-saved, setup reports failure while retaining the configured destination and the
-previous preference. Follow the printed guidance to edit `update.backup`
-directly; re-running setup for the now-configured destination does not prompt
-again.
 
 If a configured ID has a malformed host, `ballin backup setup` asks for a
 replacement and verifies the retained Gist's Ballin marker on that host before

@@ -36,8 +36,7 @@ and removal steps in [Installation and removal](docs/installation.md).
 ## Example output
 
 `ballin update` output depends on installed tools and enabled integrations. This
-example shows a backup-enabled configuration; maintenance-only Ballin remains a
-supported option.
+example shows a backup-enabled configuration; backup remains optional.
 
 ```shell
 $ ballin update
