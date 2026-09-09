@@ -36,7 +36,7 @@ and removal steps in [Installation and removal](docs/installation.md).
 ## Example output
 
 `ballin update` output depends on installed tools and enabled integrations. This
-example shows a backup-enabled configuration; backup remains optional.
+example includes backups.
 
 ```shell
 $ ballin update
@@ -65,7 +65,7 @@ Your system is ready to brew.
 On a new Mac, install Ballin for maintenance, then optionally create or adopt a
 backup Gist with `ballin backup setup`. Use existing snapshots as a rebuild
 reference. See [Optional capabilities](docs/optional-capabilities.md#gist-backups)
-for the automatic-backup choice and how to change it later.
+for backup settings.
 
 Ballin makes rebuilds more repeatable and auditable, but it is not a
 full disk backup or one-command restore system.
