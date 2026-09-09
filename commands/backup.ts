@@ -14,9 +14,7 @@ const {
   configureGist,
 } = require('./install_setup.ts');
 const {
-  commandExists,
   makeTempFile,
-  readCommandOutput,
   reportSpawnError,
   removeTempFile,
   runCommand,
@@ -24,15 +22,21 @@ const {
   writeStderrLine,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
+const {
+  collectSnapshotObservations,
+  emptySnapshotContent,
+  normalizeSnapshotInput,
+  observeSnapshotSources,
+  snapshotDefinitions,
+} = require('./backup_snapshots.ts');
 
-type SnapshotCommand = {
-  fileName: string;
-  command: string;
-  args?: string[];
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
-  suppressStderrOnSuccess?: boolean;
-};
+import type {
+  AvailableSnapshotObservation,
+  SnapshotCaptureResult,
+  SnapshotCollectionObservation,
+  SnapshotCommand,
+  SnapshotSourceObservation,
+} from './backup_snapshots.ts';
 
 type SnapshotResultState = 'unchanged' | 'created' | 'removed' | 'updated';
 
@@ -65,8 +69,6 @@ type GistMetadata = {
   truncated?: unknown;
 };
 
-type SnapshotOptions = Pick<SnapshotCommand, 'env' | 'suppressStderrOnSuccess'>;
-
 type BackupConfigResult = {
   config: { id: string; host: string } | null;
   exitStatus: number;
@@ -77,57 +79,32 @@ type CommandCheckResult = {
   exitStatus: number;
 };
 
-type SnapshotCollector = {
-  addFile: (sourceName: string, fileName: string) => void;
-  addShellCommand: (
-    fileName: string,
-    command: string,
-    cwd?: string,
-    options?: SnapshotOptions,
-  ) => void;
-  addDirectoryListing: (fileName: string, directory: string) => void;
-  snapshots: SnapshotCommand[];
-};
-
 type CommandOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   stdio?: unknown;
 };
 
-const emptySnapshotContent = 'empty\n';
-const configSnapshotFileName = 'ballin_config';
 const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 
-const fileSuggestions = `
-  ${configSnapshotFileName}
-  bash_completions
-  bash_profile.sh
-  bashrc.sh
-  Brewfile
-  brew_cask
-  brew_leaves
-  brew_list
-  brew_services
-  gitconfig
-  gitignore_global
-  mas
-  nanorc
-  npm_global
-  nvmrc
-  pipx
-  profile.sh
-  pyenv_versions
-  uv_tools
-  vimrc
-  vs_extensions
-  vs_keybindings
-  vs_settings
-  vsI_extensions
-  vsI_keybindings
-  vsI_settings
-  zprofile.sh
-  zshrc.sh`;
+const suggestionSortKey = (fileName: string): string => (
+  fileName === 'Brewfile' ? 'brew' : fileName.toLowerCase()
+);
+
+const compareSuggestionFileNames = (left: string, right: string): number => {
+  const leftKey = suggestionSortKey(left);
+  const rightKey = suggestionSortKey(right);
+  if (leftKey === rightKey) {
+    return 0;
+  }
+  return leftKey < rightKey ? -1 : 1;
+};
+
+const suggestionFileNames = snapshotDefinitions
+  .map(({ name }: { name: string }) => name)
+  .toSorted(compareSuggestionFileNames);
+
+const fileSuggestions = `\n${suggestionFileNames.map((name: string) => `  ${name}`).join('\n')}`;
 
 const runGh = (
   host: string,
@@ -194,21 +171,6 @@ const fileExists = (filePath: string): boolean => {
     return fs.statSync(filePath).isFile();
   } catch {
     return false;
-  }
-};
-
-const dirExists = (directory: string): boolean => {
-  try {
-    return fs.statSync(directory).isDirectory();
-  } catch {
-    return false;
-  }
-};
-
-const ensureTrailingNewline = (filePath: string): void => {
-  const content = fs.readFileSync(filePath);
-  if (content.length === 0 || content.at(-1) !== 10) {
-    fs.appendFileSync(filePath, '\n');
   }
 };
 
@@ -369,14 +331,6 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
   return result.status === 0 && !result.error;
 };
 
-const normalizeSnapshotInput = (inputFile: string): void => {
-  if (fs.statSync(inputFile).size === 0) {
-    fs.writeFileSync(inputFile, emptySnapshotContent);
-  } else {
-    ensureTrailingNewline(inputFile);
-  }
-};
-
 const snapshotFilesMatch = (leftFile: string, rightFile: string): boolean => (
   fs.readFileSync(leftFile).equals(fs.readFileSync(rightFile))
 );
@@ -459,36 +413,41 @@ const removeStagedSnapshots = (stagedSnapshots: StagedSnapshot[]): void => {
   stagedSnapshots.forEach(({ localFile }) => removeTempFile(localFile));
 };
 
-const stageSnapshots = (snapshots: SnapshotCommand[]): StagedSnapshot[] | null => {
-  const stagedSnapshots: StagedSnapshot[] = [];
-  let failed = false;
-
-  snapshots.forEach((snapshot) => {
-    let inputFile: string | null = null;
-    let staged = false;
-    try {
-      const createdInputFile = makeTempFile('ballin-backup-input-');
-      inputFile = createdInputFile;
-      if (captureSnapshotInput(snapshot, createdInputFile)) {
-        normalizeSnapshotInput(createdInputFile);
-        stagedSnapshots.push({ snapshot, localFile: createdInputFile });
-        staged = true;
-      }
-    } catch (error) {
-      writeStderrLine(`ballin backup: unable to stage ${snapshot.fileName}${errorMessage(error)}`);
-    } finally {
-      if (!staged && inputFile) {
-        removeTempFile(inputFile);
-      }
+const captureAvailableSnapshot = (source: AvailableSnapshotObservation): SnapshotCaptureResult => {
+  const snapshot = source.collector;
+  let inputFile: string | null = null;
+  let captured = false;
+  try {
+    const createdInputFile = makeTempFile('ballin-backup-input-');
+    inputFile = createdInputFile;
+    if (captureSnapshotInput(snapshot, createdInputFile)) {
+      normalizeSnapshotInput(createdInputFile);
+      captured = true;
     }
-
-    if (!staged) {
-      writeStderrLine(`ballin backup: failed to snapshot ${snapshot.fileName}`);
-      failed = true;
+  } catch (error) {
+    writeStderrLine(`ballin backup: unable to stage ${snapshot.fileName}${errorMessage(error)}`);
+  } finally {
+    if (!captured && inputFile) {
+      removeTempFile(inputFile);
     }
-  });
+  }
 
-  if (failed) {
+  if (!captured || !inputFile) {
+    writeStderrLine(`ballin backup: failed to snapshot ${snapshot.fileName}`);
+    return { status: 'collector-failed' };
+  }
+  return { status: 'captured', localFile: inputFile };
+};
+
+const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapshot[] | null => {
+  const collection = collectSnapshotObservations(observations, captureAvailableSnapshot);
+  const stagedSnapshots = collection.flatMap((result: SnapshotCollectionObservation) => (
+    result.status === 'captured'
+      ? [{ snapshot: result.source.collector, localFile: result.localFile }]
+      : []
+  ));
+
+  if (collection.some(({ status }: SnapshotCollectionObservation) => status === 'collector-failed')) {
     removeStagedSnapshots(stagedSnapshots);
     return null;
   }
@@ -749,171 +708,14 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
   }
 };
 
-const catSnapshot = (homeDir: string, fileName: string, sourcePath: string): SnapshotCommand => ({
-  fileName,
-  command: 'cat',
-  args: [sourcePath],
-  cwd: homeDir,
-});
-
-const shellSnapshot = (
-  fileName: string,
-  command: string,
-  cwd: string,
-): SnapshotCommand => ({
-  fileName,
-  command: 'bash',
-  args: ['-c', command],
-  cwd,
-});
-
-const directoryListingSnapshot = (fileName: string, directory: string): SnapshotCommand => ({
-  fileName,
-  command: 'ls',
-  args: [directory],
-});
-
-const createSnapshotCollector = (homeDir: string): SnapshotCollector => {
-  const snapshots: SnapshotCommand[] = [];
-  const addFile = (sourceName: string, fileName: string): void => {
-    if (fileExists(path.join(homeDir, sourceName))) {
-      snapshots.push(catSnapshot(homeDir, fileName, sourceName));
-    }
-  };
-  const addShellCommand = (
-    fileName: string,
-    command: string,
-    cwd = homeDir,
-    options: SnapshotOptions = {},
-  ): void => {
-    snapshots.push({ ...shellSnapshot(fileName, command, cwd), ...options });
-  };
-  const addDirectoryListing = (fileName: string, directory: string): void => {
-    if (dirExists(directory)) {
-      snapshots.push(directoryListingSnapshot(fileName, directory));
-    }
-  };
-
-  return {
-    addFile,
-    addShellCommand,
-    addDirectoryListing,
-    snapshots,
-  };
-};
-
-const collectSnapshots = (homeDir: string): SnapshotCommand[] => {
-  const collector = createSnapshotCollector(homeDir);
-  const { addFile, addShellCommand, addDirectoryListing, snapshots } = collector;
-
-  addFile('.bash_profile', 'bash_profile.sh');
-  addFile('.bashrc', 'bashrc.sh');
-  addFile('.profile', 'profile.sh');
-  addFile('.zprofile', 'zprofile.sh');
-  addFile('.zshrc', 'zshrc.sh');
-
-  const brewAvailable = commandExists('brew');
-  let bashCompletionDir = process.env.BALLIN_BACKUP_BASH_COMPLETION_DIR ?? '';
-  if (!bashCompletionDir && brewAvailable) {
-    const brewPrefix = readCommandOutput('brew', ['--prefix'], {
-      env: {
-        ...process.env,
-        HOMEBREW_NO_AUTO_UPDATE: '1',
-        HOMEBREW_NO_ENV_HINTS: '1',
-      },
-    })?.trim();
-    if (brewPrefix) {
-      bashCompletionDir = path.join(brewPrefix, 'etc', 'bash_completion.d');
-    }
-  }
-  if (bashCompletionDir && dirExists(bashCompletionDir)) {
-    addDirectoryListing('bash_completions', bashCompletionDir);
-  }
-
-  if (brewAvailable) {
-    const brewEnv = {
-      ...process.env,
-      HOMEBREW_NO_AUTO_UPDATE: '1',
-      HOMEBREW_NO_ENV_HINTS: '1',
-    };
-    addShellCommand('brew_list', 'brew list --formula', homeDir, { env: brewEnv });
-    addShellCommand('brew_leaves', 'brew leaves', homeDir, { env: brewEnv });
-    addShellCommand('brew_cask', 'brew list --cask', homeDir, { env: brewEnv });
-    addShellCommand('brew_services', 'brew services list', homeDir, {
-      env: brewEnv,
-      suppressStderrOnSuccess: true,
-    });
-    addShellCommand('Brewfile', 'brew bundle dump --file=-', homeDir, { env: brewEnv });
-  }
-
-  addFile('.gitignore_global', 'gitignore_global');
-  addFile('.gitconfig', 'gitconfig');
-
-  if (commandExists('npm')) {
-    addShellCommand('npm_global', 'npm list -g --depth=0');
-  }
-
-  if (commandExists('pipx')) {
-    addShellCommand('pipx', 'pipx list --json', homeDir, {
-      env: {
-        ...process.env,
-        PIPX_DISABLE_SHARED_LIBS_AUTO_UPGRADE: '1',
-      },
-      suppressStderrOnSuccess: true,
-    });
-  }
-
-  if (commandExists('uv')) {
-    addShellCommand(
-      'uv_tools',
-      'uv tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
-      homeDir,
-      { suppressStderrOnSuccess: true },
-    );
-  }
-
-  if (commandExists('pyenv')) {
-    addShellCommand('pyenv_versions', 'pyenv versions --bare');
-  }
-
-  addFile('.nvmrc', 'nvmrc');
-
-  [
-    ['Code', 'code', 'vs'],
-    ['Code - Insiders', 'code-insiders', 'vsI'],
-  ].forEach(([appName, binaryName, prefix]) => {
-    const vscodeDir = path.join(homeDir, 'Library', 'Application Support', appName, 'User');
-    if (!dirExists(vscodeDir)) {
-      return;
-    }
-    ['settings.json', 'keybindings.json'].forEach((fileName) => {
-      if (fileExists(path.join(vscodeDir, fileName))) {
-        snapshots.push(catSnapshot(vscodeDir, `${prefix}_${fileName.replace('.json', '')}`, fileName));
-      }
-    });
-    if (commandExists(binaryName)) {
-      addShellCommand(`${prefix}_extensions`, `${binaryName} --list-extensions`, vscodeDir);
-    }
-  });
-
-  addFile('.vimrc', 'vimrc');
-  addFile('.nanorc', 'nanorc');
-  addFile(path.join('.ballin-scripts', 'ballin.config.json'), configSnapshotFileName);
-
-  if (commandExists('mas')) {
-    addShellCommand('mas', 'mas list');
-  }
-
-  return snapshots;
-};
-
 const runStagedBackup = (
   host: string,
   id: string,
   homeDir: string,
   backupCacheDir: string,
 ): boolean => {
-  const stagedSnapshots = stageSnapshots(collectSnapshots(homeDir));
+  const sourceObservations = observeSnapshotSources({ homeDir, env: process.env });
+  const stagedSnapshots = stageSnapshots(sourceObservations);
   if (!stagedSnapshots) {
     return false;
   }

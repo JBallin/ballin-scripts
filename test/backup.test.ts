@@ -19,6 +19,35 @@ const requiredCommands = [
   'tail',
   'node',
 ];
+const expectedFileSuggestions = `
+  ballin_config
+  bash_completions
+  bash_profile.sh
+  bashrc.sh
+  Brewfile
+  brew_cask
+  brew_leaves
+  brew_list
+  brew_services
+  gitconfig
+  gitignore_global
+  mas
+  nanorc
+  npm_global
+  nvmrc
+  pipx
+  profile.sh
+  pyenv_versions
+  uv_tools
+  vimrc
+  vs_extensions
+  vs_keybindings
+  vs_settings
+  vsI_extensions
+  vsI_keybindings
+  vsI_settings
+  zprofile.sh
+  zshrc.sh`;
 type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
 
 type RunBackupOptions = {
@@ -1284,16 +1313,7 @@ exit 2
     const result = runBackup({ args: ['read', 'missing_file'] });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, '\nOptions: ');
-    assert.include(result.stdout, 'ballin_config');
-    assert.include(result.stdout, 'Brewfile');
-    assert.include(result.stdout, 'gitconfig');
-    assert.notInclude(result.stdout, 'git_config');
-    assert.notInclude(result.stdout, 'gitconfig.cson');
-    assert.include(result.stdout, 'pipx');
-    assert.include(result.stdout, 'uv_tools');
-    assert.include(result.stdout, 'pyenv_versions');
-    assert.include(result.stdout, 'vsI_settings');
+    assert.equal(result.stdout, `\nOptions: ${expectedFileSuggestions}\n`);
     assert.deepEqual(gistReads(), ['missing_file']);
   });
 
@@ -1329,11 +1349,10 @@ exit 2
     const result = runBackup({ args: ['read'] });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, "Error: 'read' needs a filename.");
-    assert.include(result.stdout, '\nOptions: ');
-    assert.include(result.stdout, 'pipx');
-    assert.include(result.stdout, 'uv_tools');
-    assert.include(result.stdout, 'pyenv_versions');
+    assert.equal(
+      result.stdout,
+      `Error: 'read' needs a filename.\n\nOptions: ${expectedFileSuggestions}\n`,
+    );
     assert.deepEqual(gistReads(), []);
   });
 
@@ -1854,6 +1873,33 @@ printf '%s\\n' '123456 Example App'
     assert.equal(fs.readFileSync(cachedFilePath('inactive-snapshot'), 'utf8'), 'old inactive snapshot\n');
     assert.equal(fs.readFileSync(leftoverFile, 'utf8'), 'leftover contents\n');
     assert.deepEqual(gistPatchCalls(), []);
+  });
+
+  it('retains remote and cached snapshots whose source tool is unavailable', () => {
+    seedCacheFile('npm_global', 'retained npm inventory\n');
+
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(cachedFilePath('npm_global'), 'utf8'), 'retained npm inventory\n');
+    assert.equal(fs.readFileSync(path.join(fakeGistDir, 'npm_global'), 'utf8'), 'retained npm inventory\n');
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
+  });
+
+  it('retains remote and cached snapshots whose source discovery fails', () => {
+    seedBackupCache('retained shell config\n');
+    fs.symlinkSync('.zshrc', snapshotPath());
+
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'retained shell config\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'retained shell config\n');
+    assert.deepEqual(gistReads(), []);
+    assert.deepEqual(gistUploads(), []);
   });
 
   it('keeps a restricted cache entry owner-only when replacing its contents', () => {
