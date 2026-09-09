@@ -177,19 +177,11 @@ const setConfigValue = (configPath: string, key: string, value: string): boolean
 };
 
 const offerAutomaticUpdateBackup = (configPath: string): boolean => {
-  const currentPreference = configValue(configPath, 'update.backup');
-  if (currentPreference === true || currentPreference === 'true') {
-    return true;
-  }
+  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [Y/n] ');
+  const preference = enable === '' || enable === 'y' || enable === 'Y' ? 'true' : 'false';
 
-  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [y/N] ');
-  if (enable !== 'y' && enable !== 'Y') {
-    writeStdoutLine('\nℹ️  Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
-    return true;
-  }
-
-  if (!setConfigValue(configPath, 'update.backup', 'true')) {
-    writeStdoutLine('\nℹ️  Backup setup completed, but automatic update backups were not enabled. Edit ballin.config.json and set update.backup to true.');
+  if (!setConfigValue(configPath, 'update.backup', preference)) {
+    writeStdoutLine(`\nℹ️  Backup setup completed, but the automatic update backup preference was not saved. Edit ballin.config.json and set update.backup to ${preference}.`);
     return false;
   }
 

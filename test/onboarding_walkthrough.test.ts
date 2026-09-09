@@ -206,6 +206,7 @@ exit 2
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));
     assert.equal(config.backup.host, 'github.com');
     assert.equal(config.backup.id, createdGistId);
+    assert.equal(config.update.backup, 'true');
     assert.isTrue(fs.existsSync(path.join(remoteGistDir, '.MyConfig.md')));
 
     const zshrc = 'export BALLIN_WALKTHROUGH=1\n';
