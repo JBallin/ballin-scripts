@@ -921,6 +921,7 @@ exit 2
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(config.backup.id, 'test-gist-id');
     assert.equal(config.backup.host, 'github.enterprise.test');
+    assert.equal(config.update.backup, 'false');
     assert.deepEqual(ghCalls(), ['api --hostname github.enterprise.test user']);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
   });
@@ -955,25 +956,24 @@ exit 2
 
     const result = runBackup({
       args: ['setup'],
-      input: 'y\n\ny\ntest-gist-id\ny\n',
+      input: 'y\n\ny\ntest-gist-id\n\n',
     });
 
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.equal(result.stderr, '');
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
-    assert.notInclude(result.stdout, 'Automatic update backups unchanged.');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(configured.backup.id, 'test-gist-id');
     assert.equal(configured.update.backup, 'true');
   });
 
-  it('preserves a declined automatic-backup preference after standalone adoption', () => {
+  it('overrides a restored automatic-backup preference when standalone adoption declines', () => {
     writeCompleteBackupConfig(null, 'example.test');
     seedBackupMarker();
     const restoredConfig = JSON.parse(
       fs.readFileSync(path.join(repoRoot, 'config', '.defaultConfig.json'), 'utf8'),
     );
-    restoredConfig.update.backup = 'false';
+    restoredConfig.update.backup = 'true';
     seedFakeGistFile('ballin_config', JSON.stringify(restoredConfig));
 
     const result = runBackup({
@@ -982,8 +982,7 @@ exit 2
     });
 
     assertBackupSucceeded(result);
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
-    assert.include(result.stdout, 'Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(configured.backup.id, 'test-gist-id');
     assert.equal(configured.update.backup, 'false');
@@ -1004,9 +1003,8 @@ exit 2
     });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
-    assert.include(result.stdout, 'Backup setup completed, but automatic update backups were not enabled. Edit ballin.config.json and set update.backup to true.');
-    assert.notInclude(result.stdout, 'Enable later with: ballin config set update.backup true');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+    assert.include(result.stdout, 'Backup setup completed, but the automatic update backup preference was not saved. Edit ballin.config.json and set update.backup to true.');
     assert.include(result.stderr, "setup did not complete; resolve the error and retry with 'ballin backup setup'");
     const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(configured.backup.id, 'test-gist-id');
@@ -1093,6 +1091,9 @@ exit 2
 
   it('cancels adopted Gist setup on empty or EOF input without looping', () => {
     writeCompleteBackupConfig(null, 'example.test');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.update.backup = 'true';
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
     const result = runBackup({
       args: ['setup'],
@@ -1104,7 +1105,7 @@ exit 2
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.include(result.stderr, "retry with 'ballin backup setup'");
     assert.isNull(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.id);
-    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).update.backup, 'false');
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).update.backup, 'true');
     assert.notInclude(ghCalls().join('\n'), 'gist view');
   });
 

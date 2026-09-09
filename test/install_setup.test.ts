@@ -629,6 +629,7 @@ esac
     );
     const config = readRepoConfig();
     config.backup.id = 'existing-gist-id';
+    config.update.backup = 'true';
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
     const cachePath = path.join(repoDir, '.backup-cache');
     fs.mkdirSync(cachePath);
@@ -643,7 +644,7 @@ esac
     assert.include(commandLog(), 'gh:api --hostname github.example.test user');
     assert.notInclude(commandLog(), 'gh:gist');
     assert.equal(fs.readFileSync(path.join(cachePath, 'known-base'), 'utf8'), 'preserve me\n');
-    assert.equal(readRepoConfig().update.backup, 'false');
+    assert.equal(readRepoConfig().update.backup, 'true');
   });
 
   it('invalidates an unconfigured backup cache whether it is a file or symlink', () => {
@@ -809,7 +810,7 @@ esac
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
   });
 
-  it('restores config values from an adopted backup Gist', () => {
+  it('restores config values from an adopted backup Gist before applying the local automatic-backup choice', () => {
     installConfigSources();
     installFakeGhCommand();
     fs.copyFileSync(
@@ -836,19 +837,19 @@ esac
           custom: { keep: 'yes' },
         }),
       },
-      input: '\ny\nreturning-gist-id\n',
+      input: '\ny\nreturning-gist-id\nn\n',
     });
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Do you already have a Ballin backup Gist? [y/N]');
     assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
-    assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
     const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
     assert.deepEqual(restoredConfig.update, {
       cleanup: 'false',
       selfUpdate: 'true',
-      backup: 'true',
+      backup: 'false',
       softwareupdate: 'false',
       npm: 'true',
       nvm: 'true',
@@ -861,6 +862,22 @@ esac
     assert.deepEqual(restoredConfig.custom, { keep: 'yes' });
     assert.notInclude(commandLog(), 'snapshot.example.test');
     assert.notInclude(commandLog(), 'snapshot-gist-id');
+  });
+
+  it('does not enable automatic update backups when adopted setup reaches EOF', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({ input: '\ny\nreturning-gist-id\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+    assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
+    assert.equal(readRepoConfig().update.backup, 'false');
   });
 
   it('accepts an adopted backup marker without a trailing newline like Bash did', () => {
@@ -1029,14 +1046,48 @@ esac
       result.stdout.indexOf('What GitHub host should be used for Gist backups?'),
     );
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
-    assert.include(result.stdout, 'Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     assert.include(result.stdout, 'Invalidated existing .backup-cache');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
     assert.equal(readRepoConfig().backup.id, 'new-gist-id');
-    assert.equal(readRepoConfig().update.backup, 'false');
+    assert.equal(readRepoConfig().update.backup, 'true');
     assert.isFalse(fs.existsSync(path.join(repoDir, '.MyConfig.md')));
     assert.isFalse(fs.existsSync(path.join(repoDir, '.backup-cache')));
+  });
+
+  it('does not enable automatic update backups when new Gist setup reaches EOF', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+
+    const result = runGistSetup({ input: '\nn\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+    assert.equal(readRepoConfig().backup.id, 'new-gist-id');
+    assert.equal(readRepoConfig().update.backup, 'false');
+  });
+
+  it('prompts and persists no when unconfigured setup already prefers automatic backups', () => {
+    installConfigSources();
+    installFakeGhCommand();
+    fs.copyFileSync(
+      path.join(repoDir, 'config', '.defaultConfig.json'),
+      path.join(repoDir, 'ballin.config.json'),
+    );
+    const config = readRepoConfig();
+    config.update.backup = 'true';
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
+
+    const result = runGistSetup({ input: '\nn\nn\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+    assert.equal(readRepoConfig().backup.id, 'new-gist-id');
+    assert.equal(readRepoConfig().update.backup, 'false');
   });
 
   it('keeps backup unconfigured and removes the marker when Gist creation fails', () => {
@@ -1344,7 +1395,7 @@ exit 2
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     assert.equal(readRepoConfig().backup.host, 'github.example.test');
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
     assert.equal(readRepoConfig().update.backup, 'true');
@@ -1378,8 +1429,7 @@ exit 2
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "Created a secret gist titled '.MyConfig'");
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
-    assert.notInclude(result.stdout, 'Automatic update backups unchanged.');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     assert.include(commandLog(), 'gh:gist create .MyConfig.md --desc ');
     assert.equal(readRepoConfig().backup.id, 'new-gist-id');
     assert.equal(readRepoConfig().update.backup, 'true');

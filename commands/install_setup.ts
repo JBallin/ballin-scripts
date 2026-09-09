@@ -34,12 +34,15 @@ const backupSafetyNotice = [
   'Ballin is not a secrets manager. Review sensitive configuration and do not share the Gist URL or ID.',
 ].join('\n');
 
-const readPrompt = (prompt: string): string => {
+const readPrompt = (prompt: string, eofResponse = ''): string => {
   process.stdout.write(prompt);
 
   const input: string[] = [];
   const buffer = Buffer.alloc(1);
-  while (fs.readSync(0, buffer, 0, 1, null) > 0) {
+  while (true) {
+    if (fs.readSync(0, buffer, 0, 1, null) === 0) {
+      return input.length === 0 ? eofResponse : input.join('');
+    }
     const character = buffer.toString('utf8');
     if (character === '\n') {
       break;
@@ -177,19 +180,11 @@ const setConfigValue = (configPath: string, key: string, value: string): boolean
 };
 
 const offerAutomaticUpdateBackup = (configPath: string): boolean => {
-  const currentPreference = configValue(configPath, 'update.backup');
-  if (currentPreference === true || currentPreference === 'true') {
-    return true;
-  }
+  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [Y/n] ', 'n');
+  const preference = enable === '' || enable === 'y' || enable === 'Y' ? 'true' : 'false';
 
-  const enable = readPrompt('\n🤔 Automatically run ballin backup after ballin update? [y/N] ');
-  if (enable !== 'y' && enable !== 'Y') {
-    writeStdoutLine('\nℹ️  Automatic update backups unchanged. Enable later with: ballin config set update.backup true');
-    return true;
-  }
-
-  if (!setConfigValue(configPath, 'update.backup', 'true')) {
-    writeStdoutLine('\nℹ️  Backup setup completed, but automatic update backups were not enabled. Edit ballin.config.json and set update.backup to true.');
+  if (!setConfigValue(configPath, 'update.backup', preference)) {
+    writeStdoutLine(`\nℹ️  Backup setup completed, but the automatic update backup preference was not saved. Edit ballin.config.json and set update.backup to ${preference}.`);
     return false;
   }
 

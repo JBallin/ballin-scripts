@@ -110,11 +110,9 @@ own destination fields cannot redirect setup. If reading, restoring, or saving
 the adopted configuration fails, setup stops and leaves the prior unconfigured
 configuration active.
 
-After an unconfigured installation successfully creates or adopts a backup
-destination, setup offers a default-no choice to run `ballin backup`
-automatically after `ballin update`. An adopted `update.backup=true` preference
-is preserved without another prompt; a restored `false` preference can be
-explicitly enabled. Declining leaves the current preference unchanged. See
+After backup is newly configured, Ballin asks whether `ballin update` should run
+`ballin backup` automatically; yes is the default. When adopting an existing
+backup, this choice overrides any restored automatic-backup preference. See
 [Optional capabilities](optional-capabilities.md#gist-backups) to change it
 later.
 
