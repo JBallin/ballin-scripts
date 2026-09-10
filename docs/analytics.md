@@ -49,11 +49,6 @@ environment opt-outs still apply. The exact restoration rules are recorded in
 - coarse OS version; on macOS (`darwin`), this is the macOS product version as
   major/minor when available, such as `26.6`, or `unknown` when unavailable
 
-Historical `darwin` events collected before Ballin adopted product-version
-collection used a coarse Darwin kernel release in `osVersion`. Those rows are
-not migrated or backfilled and should not be interpreted as macOS product
-versions.
-
 ## What Is Never Sent
 
 - command arguments
