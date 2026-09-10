@@ -27,6 +27,14 @@ export BALLIN_NO_ANALYTICS=1
 CI never sends analytics. Analytics failures are ignored and never change
 command output, side effects, or exit status.
 
+Backup exports and restores only the exact `analytics.enabled="false"`
+opt-out. It never restores enabled consent or an installation identity.
+A preexisting local analytics leaf wins over a restored opt-out; a default
+created during the current fresh installation does not block that opt-out.
+Absent, invalid, native-boolean, and `"true"` remote values are ignored.
+Without an applicable restored opt-out, the usual defaults, first-run notice,
+and environment opt-outs still apply.
+
 ## What Is Sent
 
 - schema version

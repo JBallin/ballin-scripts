@@ -810,13 +810,14 @@ esac
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
   });
 
-  it('restores config values from an adopted backup Gist before applying the local automatic-backup choice', () => {
+  it('restores only eligible portable preferences while retaining local choices and unknown settings', () => {
     installConfigSources();
     installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      backup: { id: null, host: 'github.example.test' },
+      update: { cleanup: 'true' },
+      custom: { keep: 'local' },
+    }));
 
     const result = runGistSetup({
       env: {
@@ -842,12 +843,12 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Do you already have a Ballin backup Gist? [y/N]');
-    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
+    assert.include(result.stdout, 'Restored eligible portable preferences');
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
     const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
     assert.deepEqual(restoredConfig.update, {
-      cleanup: 'false',
+      cleanup: 'true',
       selfUpdate: 'true',
       backup: 'false',
       softwareupdate: 'false',
@@ -859,7 +860,7 @@ esac
       host: 'github.example.test',
     });
     assert.deepEqual(restoredConfig.analytics, { enabled: 'false' });
-    assert.deepEqual(restoredConfig.custom, { keep: 'yes' });
+    assert.deepEqual(restoredConfig.custom, { keep: 'local' });
     assert.notInclude(commandLog(), 'snapshot.example.test');
     assert.notInclude(commandLog(), 'snapshot-gist-id');
   });
@@ -894,7 +895,7 @@ esac
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
+    assert.include(result.stdout, 'Restored eligible portable preferences');
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
   });
 
@@ -1006,7 +1007,6 @@ esac
         FAKE_RESTORED_CONFIG: '{"backup":{"id":"snapshot-gist-id","host":"snapshot.example.test"},"analytics":{"enabled":"false"}}',
       }, () => captureStdout(() => commitAdoptedConfig(
         repoDir,
-        docsUrl,
         'github.example.test',
         'returning-gist-id',
         configPath,
@@ -1141,7 +1141,6 @@ esac
       FAKE_GH_HOST: 'github.example.test',
     }, () => captureStdout(() => commitAdoptedConfig(
       repoDir,
-      docsUrl,
       'github.example.test',
       'returning-gist-id',
       missingConfig,
@@ -1401,6 +1400,34 @@ exit 2
     assert.equal(readRepoConfig().update.backup, 'true');
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
+    assert.equal(readRepoConfig().update.cleanup, 'false');
+    assert.equal(readRepoConfig().update.softwareupdate, 'false');
+  });
+
+  [false, true].forEach((hasInstallId) => {
+    it(`rejects malformed analytics before fresh setup can supply enabled defaults (existing ID: ${hasInstallId})`, () => {
+      installConfigSources();
+      const configPath = path.join(repoDir, 'ballin.config.json');
+      const original = '{"analytics":false,"custom":{"keep":"LOCAL_DUMMY_SECRET"}}\n';
+      fs.writeFileSync(configPath, original);
+      if (hasInstallId) {
+        fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
+        fs.writeFileSync(installIdPath(), fixedInstallId);
+      }
+
+      const result = spawnSync(process.execPath, [
+        installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh',
+      ], { encoding: 'utf8', input: 'n\n', env: childEnvironment(analyticsEnabledEnv) });
+
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, 'analytics');
+      assert.notInclude(result.stdout + result.stderr, 'LOCAL_DUMMY_SECRET');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), original);
+      assert.equal(fs.existsSync(installIdPath()), hasInstallId);
+      if (hasInstallId) assert.equal(readInstallId(), fixedInstallId);
+      assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+      assert.equal(commandLog(), '');
+    });
   });
 
   it('creates a new secret Gist through the setup CLI when no backup is configured', () => {

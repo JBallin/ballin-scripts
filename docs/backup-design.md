@@ -25,9 +25,46 @@ The presence-aware decision cases are covered as an executable table in
 
 During adoption, the host selected in the current setup and the Gist ID whose
 marker was validated are authoritative. A restored `ballin_config` contributes
-other settings, but its destination fields are overridden. The restored settings
+only admitted portable preferences where no local leaf existed before setup
+filled defaults. Existing local choices and unknown settings are retained;
+remote destination and unknown fields are ignored. The restored settings
 and authoritative destination are committed together; a failed commit preserves
 the prior unconfigured config. An already-invalidated cache remains removed.
+
+The config collector projects the explicit export allowlist before producing
+`ballin_config`. Invalid local update/inclusion preferences fail collection,
+so staged successes are discarded before remote snapshot inspection. Remote/cache
+comparison still uses exact bytes: a legacy whole-config snapshot receives no
+special overwrite or conflict exception.
+
+## Shared inclusion policy
+
+The canonical definitions own fixed `inventory`, `detailed`, `raw`, and
+`preferences` inclusion groups, separate from tool-oriented categories.
+`SnapshotDefinition.name` remains the durable identity and stored/read name.
+The selection defaults to inventory and projected preferences, with raw and
+detailed inclusion controlled by two default-off preferences. Unknown groups
+are excluded; future categories require a separately reviewed default-off
+decision.
+
+Policy-aware observation gates discovery itself. `excluded-by-policy` carries
+the definition and reason, without a source or collector; collection records
+a skipped result. It remains distinct from absent, unavailable, failed
+discovery, and failed collection. Consumers must not inspect excluded raw
+sources just to verify them. Exclusion does not delete existing remote/cache
+data or make retained content a current capture.
+
+The shared review helper takes original local preferences, optional restored
+proposals, and a local source context. It returns confirmed selection,
+cancellation, or failure without persisting anything. Raw review follows
+selected symlinks and displays logical and resolved sources; it never reads
+contents or executes collectors. Callers own the destination/config commit.
+
+Current Gist capture explicitly keeps its existing source selection. #333
+connects shared selection/review to repository onboarding, and #334 consumes
+it for reviewed migration and removes the Gist path. No permanent legacy mode
+or richer Gist setup is introduced. See the user-facing
+[source review contract](backup-sources.md#shared-inclusion-policy).
 
 ## Local cache permissions
 

@@ -42,9 +42,9 @@ The installer can create or change:
   and merges `origin/main`. If checkout or merge recovery is needed, Ballin can
   stash tracked and untracked changes in this checkout.
 - `~/.ballin-scripts/ballin.config.json`. A new file starts from the bundled
-  defaults. A refresh adds missing known settings. Adopting a backup can restore
-  compatible settings and unknown keys from `ballin_config` as described
-  below.
+  defaults. A refresh adds missing known settings. Adopting a backup restores
+  only eligible portable preferences from `ballin_config`; existing local
+  choices and local unknown settings are preserved.
 - `~/.ballin-scripts/.analytics/install-id` when analytics are enabled and the
   environment has not opted out. Installation creates only the local random
   ID; it sends no analytics event. Later instrumented commands can send the
@@ -58,7 +58,8 @@ The installer can create or change:
 Before creating the command link, setup removes an existing non-directory
 target at `<bin>/ballin`. It refuses to replace a directory. A repository
 refresh can replace checkout files through the Git merge. Config migration can
-add bundled defaults; successful adoption can replace saved preferences.
+add bundled defaults; adoption can replace defaults created during that setup
+with eligible restored preferences.
 
 Temporary Gist marker and staged config files are removed after setup. The
 installer does not run `ballin update`, collect snapshots, perform the first
@@ -105,10 +106,20 @@ the Gist URL and ID.
 When adopting an existing backup, setup validates the Ballin marker using the
 host selected in the current setup flow. That selected host and the
 marker-validated Gist ID are authoritative. A restored `ballin_config` can
-contribute update preferences, analytics opt-out, and other settings, but its
-own destination fields cannot redirect setup. If reading, restoring, or saving
-the adopted configuration fails, setup stops and leaves the prior unconfigured
-configuration active.
+contribute the six update preferences and an analytics opt-out where no local
+leaf existed before setup. Defaults created during the current fresh install
+do not block restoration. Preexisting leaves, including values equal to a
+bundled default or invalid values, remain local choices. Unknown remote
+settings and remote destination fields are never restored. See the
+[portable-preference rules](optional-capabilities.md#portable-preferences).
+If reading, restoring, or saving the adopted configuration fails, setup stops
+and leaves the prior unconfigured configuration active.
+
+Setup rejects malformed local JSON or non-object `update`, `analytics`, or
+`backup` sections before refreshing configuration. Repair these sections and
+retry; setup will not replace a malformed analytics section with enabled
+defaults. Missing sections are allowed. Invalid individual remote preferences
+are ignored, but malformed JSON or a non-object remote snapshot stops adoption.
 
 After backup is newly configured, Ballin asks whether `ballin update` should run
 `ballin backup` automatically; yes is the default. When adopting an existing
@@ -128,6 +139,18 @@ differing local and remote content reports a conflict rather than choosing a
 winner. If a later setup step fails, the invalidated cache remains removed.
 Resetting config leaves the remote Gist untouched, and a later setup invalidates
 the now-unproven cache again.
+
+Older `ballin_config` snapshots may contain the whole configuration. The new
+portable projection can differ from those bytes, and adoption invalidates the
+old comparison cache. A later backup may therefore report a `ballin_config`
+conflict. Inspect and reconcile it using the existing
+[conflict guidance](capabilities.md#backup-consistency-and-conflicts); adoption
+does not overwrite the remote snapshot or bypass conflicts.
+
+Current Gist setup and capture keep their existing source selection. The shared
+default-off raw/detailed preferences are for the reviewed repository transition;
+they do not restrict current Gist captures or add a Gist review wizard. See
+[source inclusion](backup-sources.md#shared-inclusion-policy).
 
 ## Health and recovery
 

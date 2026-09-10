@@ -1,11 +1,13 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const {
   backupMarkerFileName,
   classifySnapshotFileName,
   collectSnapshotObservations,
   configSnapshotFileName,
+  isSnapshotSelected,
   normalizeSnapshotInput,
   observeSnapshotSources,
   snapshotDefinitions,
@@ -14,6 +16,7 @@ const {
 import type {
   AvailableSnapshotObservation,
   SnapshotDefinition,
+  SnapshotInclusionGroup,
   SnapshotSourceObservation,
 } from '../commands/backup_snapshots.ts';
 
@@ -84,7 +87,7 @@ describe('backup snapshot definitions', () => {
   let homeDir: string;
 
   const observations = (env: NodeJS.ProcessEnv = { PATH: '' }): SnapshotSourceObservation[] => (
-    observeSnapshotSources({ homeDir, env })
+    observeSnapshotSources({ homeDir, env }, { includeRaw: true, includeDetailed: true })
   );
 
   const observation = (
@@ -136,6 +139,152 @@ describe('backup snapshot definitions', () => {
       '.MyConfig.md.bak',
       'unexpected',
     ].forEach((name) => assert.equal(classifySnapshotFileName(name), 'unexpected'));
+  });
+
+  it('assigns each canonical snapshot to the exact reviewed inclusion group', () => {
+    const expectedGroups = {
+      inventory: [
+        'bash_completions', 'brew_list', 'brew_leaves', 'brew_cask', 'vs_extensions', 'vsI_extensions', 'mas',
+      ],
+      detailed: ['brew_services', 'Brewfile', 'npm_global', 'pipx', 'uv_tools', 'pyenv_versions'],
+      raw: [
+        'bash_profile.sh', 'bashrc.sh', 'profile.sh', 'zprofile.sh', 'zshrc.sh', 'gitignore_global', 'gitconfig',
+        'nvmrc', 'vs_settings', 'vs_keybindings', 'vsI_settings', 'vsI_keybindings', 'vimrc', 'nanorc',
+      ],
+      preferences: ['ballin_config'],
+    };
+    Object.entries(expectedGroups).forEach(([group, names]) => {
+      assert.deepEqual(
+        snapshotDefinitions
+          .filter((definition: SnapshotDefinition) => definition.inclusionGroup === group)
+          .map((definition: SnapshotDefinition) => definition.name),
+        names,
+      );
+    });
+  });
+
+  it('excludes raw and detailed sources before any discovery with default selection', () => {
+    const restricted = (snapshotDefinitions as SnapshotDefinition[]).filter(({ inclusionGroup }) => (
+      inclusionGroup === 'raw' || inclusionGroup === 'detailed'
+    ));
+    const originalDiscoveries = restricted.map(({ discover }) => discover);
+    try {
+      restricted.forEach((definition) => {
+        definition.discover = () => { throw new Error('Excluded sources must never be inspected'); };
+      });
+      const result = observeSnapshotSources({ homeDir, env: { PATH: '' } }) as SnapshotSourceObservation[];
+      assert.lengthOf(result, 28);
+      const excluded = result.filter(({ status }) => status === 'excluded-by-policy');
+      assert.lengthOf(excluded, 20);
+      excluded.forEach((entry) => {
+        assert.equal('reason' in entry && entry.reason, 'excluded-by-policy');
+        assert.notProperty(entry, 'source');
+        assert.notProperty(entry, 'collector');
+      });
+      const captured: string[] = [];
+      const collection = collectSnapshotObservations(excluded, (source: AvailableSnapshotObservation) => {
+        captured.push(source.definition.name);
+        return { status: 'collector-failed' };
+      });
+      assert.deepEqual(captured, []);
+      assert.isTrue(collection.every((entry: { status: string; reason?: string }) => (
+        entry.status === 'skipped' && entry.reason === 'excluded-by-policy'
+      )));
+    } finally {
+      restricted.forEach((definition, index) => { definition.discover = originalDiscoveries[index]; });
+    }
+  });
+
+  it('selects the two optional groups independently and excludes unknown groups', () => {
+    const raw = snapshotDefinitions.find((definition: SnapshotDefinition) => definition.name === 'zshrc.sh');
+    const detailed = snapshotDefinitions.find((definition: SnapshotDefinition) => definition.name === 'pipx');
+    assert.isTrue(isSnapshotSelected(raw, { includeRaw: true, includeDetailed: false }));
+    assert.isFalse(isSnapshotSelected(raw, { includeRaw: false, includeDetailed: true }));
+    assert.isFalse(isSnapshotSelected(raw, { includeRaw: 'false', includeDetailed: false }));
+    assert.isFalse(isSnapshotSelected(detailed, { includeRaw: true, includeDetailed: false }));
+    assert.isTrue(isSnapshotSelected(detailed, { includeRaw: false, includeDetailed: true }));
+    assert.isFalse(isSnapshotSelected(detailed, { includeRaw: false, includeDetailed: 'false' }));
+    assert.isFalse(isSnapshotSelected(
+      { ...raw, inclusionGroup: 'future-category' as SnapshotInclusionGroup },
+      { includeRaw: true, includeDetailed: true },
+    ));
+  });
+
+  it('normalizes persisted boolean strings before selecting sources through the CommonJS boundary', () => {
+    const restricted = (snapshotDefinitions as SnapshotDefinition[]).filter(({ inclusionGroup }) => (
+      inclusionGroup === 'raw' || inclusionGroup === 'detailed'
+    ));
+    const originalDiscoveries = restricted.map(({ discover }) => discover);
+    try {
+      restricted.forEach((definition) => {
+        definition.discover = () => { throw new Error('String false must not authorize discovery'); };
+      });
+      const result: SnapshotSourceObservation[] = observeSnapshotSources(
+        { homeDir, env: { PATH: '' } },
+        { includeRaw: 'false', includeDetailed: 'false' },
+      );
+      assert.lengthOf(result.filter(({ status }) => status === 'excluded-by-policy'), 20);
+    } finally {
+      restricted.forEach((definition, index) => { definition.discover = originalDiscoveries[index]; });
+    }
+  });
+
+  it('rejects invalid selection values before discovering even baseline sources', () => {
+    const definitions = snapshotDefinitions as SnapshotDefinition[];
+    const originalDiscoveries = definitions.map(({ discover }) => discover);
+    const discovered: string[] = [];
+    try {
+      definitions.forEach((definition) => {
+        definition.discover = () => {
+          discovered.push(definition.name);
+          throw new Error('Must reject the whole selection before discovery');
+        };
+      });
+      [
+        { includeRaw: 'INVALID_DUMMY_SECRET', includeDetailed: false },
+        { includeRaw: true, includeDetailed: null },
+        { includeRaw: false, includeDetailed: {} },
+        null,
+        [],
+      ].forEach((selection) => {
+        assert.throws(
+          () => observeSnapshotSources({ homeDir, env: { PATH: '' } }, selection),
+          /Invalid backup/,
+        );
+      });
+      assert.deepEqual(discovered, []);
+    } finally {
+      definitions.forEach((definition, index) => { definition.discover = originalDiscoveries[index]; });
+    }
+  });
+
+  it('projects the canonical Ballin config with the private Node collector', () => {
+    const sourcePath = path.join(homeDir, '.ballin-scripts', 'ballin.config.json');
+    fs.mkdirSync(path.dirname(sourcePath));
+    fs.writeFileSync(sourcePath, JSON.stringify({
+      update: { backup: 'false' },
+      backup: { id: 'private-destination', host: 'example.test' },
+      custom: { token: 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED' },
+    }));
+    const result = observation('ballin_config');
+    assert.equal(result.status, 'available');
+    if (result.status !== 'available') {
+      return;
+    }
+    assert.equal(result.collector.command, process.execPath);
+    assert.deepEqual(result.collector.args, [
+      path.resolve(__dirname, '..', 'config', 'portable.ts'), sourcePath,
+    ]);
+    const captured = spawnSync(result.collector.command, result.collector.args, {
+      cwd: result.collector.cwd,
+      env: { HOME: homeDir, PATH: '' },
+      encoding: 'utf8',
+    });
+    assert.equal(captured.status, 0, captured.stderr);
+    assert.equal(JSON.parse(captured.stdout).update.backup, 'false');
+    assert.notInclude(captured.stdout, 'private-destination');
+    assert.notInclude(captured.stdout, 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');
+    assert.include(fs.readFileSync(sourcePath, 'utf8'), 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');
   });
 
   it('returns one ordered observation even when every local source is absent or unavailable', () => {

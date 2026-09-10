@@ -143,6 +143,36 @@ checks and their limitations.
 ballin doctor
 ```
 
+## Portable preferences
+
+`ballin_config` exports only the six `update.*` preferences listed below,
+`analytics.enabled` when it is exactly `"false"`, and the two inclusion
+preferences `backup.includeRaw` and `backup.includeDetailed`. Destination
+linkage (`backup.id`, `backup.host`), analytics identity, and unknown/custom
+settings are excluded. They are not removed from local configuration.
+
+For update and inclusion preferences, valid native booleans and exact
+`"true"`/`"false"` strings export as canonical strings. Missing leaves are
+omitted. Invalid local update or inclusion values stop the config snapshot
+and the staged backup before remote snapshot reads or writes; diagnostics
+identify the key without printing its value.
+
+Adoption starts from local configuration. It restores valid update preferences
+and the exact analytics opt-out only where the leaf was absent before setup
+created or refreshed defaults. An existing leaf wins even when it equals the
+bundled default or is invalid. Remote invalid/unknown values are ignored.
+Restoring update preferences affects later updates; adoption runs no update
+integrations. Every newly configured backup still takes the local automatic
+backup answer as final authority, as described above.
+
+Both inclusion preferences default to `"false"`. A restored false can fill an
+unchosen preference; a restored true is only a proposal requiring local source
+review. Current Gist adoption does not activate that proposal. Existing local
+choices remain intact. These fields support the
+[shared inclusion policy](backup-sources.md#shared-inclusion-policy) for future
+repository setup and migration; changing them does not change current Gist
+source capture.
+
 ## Analytics
 
 Ballin can send minimal anonymous usage analytics after a first-run

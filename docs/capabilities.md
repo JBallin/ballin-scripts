@@ -56,7 +56,7 @@ snapshot:
 | VS Code | `vs_settings`, `vs_keybindings`, `vs_extensions` | VS Code user files; `code` for extension list. |
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
-| Ballin config | `ballin_config` | Local `ballin.config.json` file. |
+| Ballin preferences | `ballin_config` | Local `ballin.config.json`, projected to the explicit portable-preference allowlist. |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
 
 The allowlist identifies which sources Ballin selects; it does not guarantee

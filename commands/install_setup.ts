@@ -8,6 +8,11 @@ const {
   stringify,
 } = require('../config/store.ts');
 const {
+  PortableConfigError,
+  readSetupConfigContext,
+  restorePortablePreferences,
+} = require('../config/portable.ts');
+const {
   backupDestinationFromConfig,
   normalizeBackupHost,
 } = require('./backup_config.ts');
@@ -31,6 +36,7 @@ const backupSafetyNotice = [
   'Setup only creates or adopts the destination; snapshots are collected and uploaded later by ballin backup.',
   'Secret Gists are unlisted, not private: anyone with the URL or Gist ID can view them.',
   'Shell, Git, and editor configuration may contain tokens, credentials, private URLs, or other sensitive values you added.',
+  'Ballin preferences are filtered for portability; destination linkage and custom settings stay local.',
   'Ballin is not a secrets manager. Review sensitive configuration and do not share the Gist URL or ID.',
 ].join('\n');
 
@@ -71,6 +77,7 @@ type SetupMode = 'fresh' | 'refresh';
 type ConfigureGistOptions = {
   backupCacheDir?: string;
   configPath?: string;
+  originalConfig?: Record<string, unknown>;
 };
 
 const isConfigObject = (value: unknown): value is ConfigObject => (
@@ -78,6 +85,20 @@ const isConfigObject = (value: unknown): value is ConfigObject => (
 );
 
 const configPathFor = (repoDir: string): string => path.join(repoDir, 'ballin.config.json');
+
+// Capture choices before configure() supplies defaults for this invocation.
+const readOriginalSetupConfig = (configPath: string): Record<string, unknown> | null => {
+  try {
+    return readSetupConfigContext(configPath);
+  } catch (error) {
+    const message = error instanceof PortableConfigError
+      ? (error as Error).message
+      : 'Unable to inspect local configuration.';
+    writeStdoutLine(`\n⚠️  ERROR: ${message}`);
+    writeStdoutLine('Repair the local configuration before retrying setup.');
+    return null;
+  }
+};
 
 const setupAnalyticsInstallId = (repoDir: string, configPath: string, docsUrl?: string): void => {
   try {
@@ -235,17 +256,19 @@ const restorePreviousConfig = (configPath: string, previousConfig: string): void
 
 const commitAdoptedConfig = (
   repoDir: string,
-  docsUrl: string,
   host: string,
   gistId: string,
   configPath: string,
+  originalConfig?: Record<string, unknown>,
 ): boolean => {
   const restoreConfig = `${configPath}.${process.pid}.restore.tmp`;
   let previousConfig: string | undefined;
   let restoredSnapshot = false;
 
   try {
+    const original = originalConfig ?? readSetupConfigContext(configPath);
     previousConfig = fs.readFileSync(configPath, 'utf8');
+    let candidate = readSetupConfigContext(configPath) as ConfigObject;
 
     const filesResult = runGh(host, ['gist', 'view', '--files', '--', gistId], {
       cwd: repoDir,
@@ -264,8 +287,7 @@ const commitAdoptedConfig = (
       .some((fileName: string) => fileName.trim() === configSnapshotFileName);
 
     if (!hasConfigSnapshot) {
-      writeStdoutLine(`\nℹ️  No ${configSnapshotFileName} snapshot was found in that gist; keeping the local config defaults.`);
-      fs.writeFileSync(restoreConfig, previousConfig, 'utf8');
+      writeStdoutLine(`\nℹ️  No ${configSnapshotFileName} snapshot was found in that gist; keeping local settings and defaults.`);
     } else {
       const gistResult = runGh(host, ['gist', 'view', gistId, '--raw', '--filename', configSnapshotFileName], {
         cwd: repoDir,
@@ -277,19 +299,19 @@ const commitAdoptedConfig = (
         writeStdoutLine(`\n⚠️  ERROR: Unable to read ${configSnapshotFileName} from the adopted Gist.`);
         return false;
       }
-      fs.writeFileSync(restoreConfig, gistResult.stdout, 'utf8');
+      let remoteConfig: unknown;
+      try {
+        remoteConfig = JSON.parse(gistResult.stdout);
+      } catch {
+        writeStdoutLine(`\n⚠️  ERROR: ${configSnapshotFileName} is not valid JSON.`);
+        return false;
+      }
+      ({ config: candidate } = restorePortablePreferences(candidate, original, remoteConfig));
       restoredSnapshot = true;
     }
 
-    if (!updateConfig(repoDir, docsUrl, restoreConfig)) {
-      return false;
-    }
-
-    const candidate = readJsonObject(restoreConfig);
-    const candidateBackup = candidate?.backup;
-    if (!candidate || !isConfigObject(candidateBackup)) {
-      return false;
-    }
+    const candidateBackup = isConfigObject(candidate.backup) ? candidate.backup : {};
+    candidate.backup = candidateBackup;
     candidateBackup.host = host;
     candidateBackup.id = gistId;
     fs.writeFileSync(restoreConfig, stringify(candidate), 'utf8');
@@ -307,10 +329,13 @@ const commitAdoptedConfig = (
     }
 
     if (restoredSnapshot) {
-      writeStdoutLine('\n♻️  Restored ballin.config.json from your backup gist.');
+      writeStdoutLine('\n♻️  Restored eligible portable preferences from your backup Gist; existing local choices were kept.');
     }
     return true;
-  } catch {
+  } catch (error) {
+    if (error instanceof PortableConfigError) {
+      writeStdoutLine(`\n⚠️  ERROR: ${(error as Error).message}`);
+    }
     if (previousConfig !== undefined) {
       restorePreviousConfig(configPath, previousConfig);
     }
@@ -343,6 +368,10 @@ const configureGist = (
   options: ConfigureGistOptions = {},
 ): boolean => {
   const ballinConfig = options.configPath ?? configPathFor(repoDir);
+  const originalConfig = options.originalConfig ?? readOriginalSetupConfig(ballinConfig);
+  if (!originalConfig) {
+    return false;
+  }
   const backupCacheDir = options.backupCacheDir ?? path.join(repoDir, '.backup-cache');
   const destination = backupDestinationForConfig(ballinConfig);
   if (!destination) {
@@ -500,7 +529,7 @@ const configureGist = (
         if (!invalidateBackupCache(backupCacheDir)) {
           return false;
         }
-        if (!commitAdoptedConfig(repoDir, docsUrl, selectedHost, gistId, ballinConfig)) {
+        if (!commitAdoptedConfig(repoDir, selectedHost, gistId, ballinConfig, originalConfig)) {
           return false;
         }
         validGistId = true;
@@ -610,6 +639,10 @@ const setup = (
   analyticsDocsUrl?: string,
   mode: SetupMode = 'refresh',
 ): boolean => {
+  const originalConfig = readOriginalSetupConfig(configPathFor(repoDir));
+  if (!originalConfig) {
+    return false;
+  }
   const binDir = resolveBinDir();
   if (!binDir || !validateBinDirInPath(binDir)) {
     return false;
@@ -632,7 +665,7 @@ const setup = (
   const backupInvalid = backupIdStatus === 'invalid';
   let backupSetupSucceeded = true;
   if (mode === 'fresh' || backupConfigured || backupInvalid) {
-    backupSetupSucceeded = configureGist(repoDir, docsUrl, backupHostExisted);
+    backupSetupSucceeded = configureGist(repoDir, docsUrl, backupHostExisted, { originalConfig });
     if (!backupSetupSucceeded) {
       writeStdoutLine('\n⚠️  ERROR: Unable to configure Gist backup');
       writeStdoutLine('\nBallin maintenance is installed. Retry with: ballin backup setup');
@@ -706,6 +739,7 @@ module.exports = {
   configHasBackupHost,
   configureGist,
   invalidateBackupCache,
+  readOriginalSetupConfig,
   runInstallSetupCli,
   setup,
   setupAnalytics,
