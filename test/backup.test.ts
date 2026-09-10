@@ -972,11 +972,11 @@ exit 2
       fs.rmSync(configPath);
       seedBackupMarker();
       const update = Object.fromEntries(
-        ['cleanup', 'selfUpdate', 'backup', 'softwareupdate', 'npm', 'nvm']
+        ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm']
           .map((key) => [key, value]),
       );
       seedFakeGistFile('ballin_config', JSON.stringify({
-        update,
+        update: { ...update, backup: !value },
         analytics: { enabled: 'false' },
         backup: { id: 'untrusted-id', host: 'untrusted.test', includeRaw: true, includeDetailed: true },
         custom: { token: 'REMOTE_DUMMY_SECRET' },
@@ -989,10 +989,13 @@ exit 2
 
       assertBackupSucceeded(result);
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      assert.deepEqual(config.update, Object.fromEntries(Object.keys(update).map((key) => [key, String(value)])));
+      assert.deepEqual(config.update, {
+        ...Object.fromEntries(Object.keys(update).map((key) => [key, String(value)])),
+        backup: String(value),
+      });
       assert.equal(config.analytics.enabled, 'false');
       assert.deepEqual(config.backup, {
-        id: 'test-gist-id', host: 'example.test', includeRaw: 'false', includeDetailed: 'false',
+        id: 'test-gist-id', host: 'example.test',
       });
       assert.notProperty(config, 'custom');
       assert.notInclude(result.stdout + result.stderr, 'REMOTE_DUMMY_SECRET');
@@ -1026,7 +1029,7 @@ exit 2
     });
     assert.equal(config.analytics.enabled, 'true');
     assert.equal(config.backup.includeRaw, 'true');
-    assert.equal(config.backup.includeDetailed, 'false');
+    assert.notProperty(config.backup, 'includeDetailed');
     assert.deepEqual(config.custom, { keep: 'LOCAL_DUMMY_SECRET' });
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_SECRET');
   });
@@ -1048,7 +1051,7 @@ exit 2
     });
   });
 
-  it('overrides a restored automatic-backup preference when standalone adoption declines', () => {
+  it('keeps the declined local automatic-backup choice despite a remote opt-in', () => {
     writeCompleteBackupConfig(null, 'example.test');
     seedBackupMarker();
     const restoredConfig = JSON.parse(
@@ -1077,8 +1080,7 @@ exit 2
     );
     restoredConfig.update.backup = { invalid: true };
     restoredConfig.backup.host = 'example.test';
-    // The invalid leaf is a local persistence obstruction, not remote input
-    // that portable restoration would now reject.
+    // Obstruct the local preference write; remote values are ignored.
     fs.writeFileSync(configPath, JSON.stringify(restoredConfig));
     seedFakeGistFile('ballin_config', JSON.stringify({ update: { backup: 'false' } }));
 
@@ -2183,6 +2185,10 @@ printf '%s\\n' '123456 Example App'
     fs.writeFileSync(rawTarget, 'export DEMO_TOKEN=RAW_DUMMY_SECRET');
     fs.symlinkSync(rawTarget, snapshotPath());
     fs.writeFileSync(path.join(testHomeDir, '.nvmrc'), 'arbitrary DUMMY_TOKEN=value');
+    const pipxContent = '{"venvs":{"demo":{"metadata":{"main_package":{"package_or_url":"https://DUMMY_TOKEN@private.test/demo","pip_args":["--index-url","https://DUMMY_TOKEN@private.test"]}}}}}\n';
+    writeTestExecutable('pipx', `#!/usr/bin/env node
+process.stdout.write(${JSON.stringify(pipxContent)});
+`);
 
     const result = runBackup();
 
@@ -2190,19 +2196,40 @@ printf '%s\\n' '123456 Example App'
     const remoteConfig = fs.readFileSync(path.join(fakeGistDir, 'ballin_config'), 'utf8');
     assert.deepEqual(JSON.parse(remoteConfig), {
       update: { cleanup: 'false', npm: 'true' },
-      backup: { includeRaw: 'false', includeDetailed: 'false' },
       analytics: { enabled: 'false' },
     });
     assert.notInclude(remoteConfig, 'PRIVATE_DESTINATION');
     assert.notInclude(remoteConfig, 'CONFIG_DUMMY_SECRET');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'export DEMO_TOKEN=RAW_DUMMY_SECRET\n');
     assert.equal(fs.readFileSync(path.join(fakeGistDir, 'nvmrc'), 'utf8'), 'arbitrary DUMMY_TOKEN=value\n');
+    assert.equal(fs.readFileSync(path.join(fakeGistDir, 'pipx'), 'utf8'), pipxContent);
     assert.isTrue(fs.lstatSync(snapshotPath()).isSymbolicLink());
     assert.lengthOf(gistPatchCalls(), 1);
 
     const second = runBackup();
     assertBackupSucceeded(second);
     assert.lengthOf(gistPatchCalls(), 1, 'unchanged projected content must remain a true no-op');
+  });
+
+  it('captures a selected symlink outside HOME without changing its target content', () => {
+    const sourceDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-selected-source-'));
+    try {
+      const sourcePath = path.join(sourceDirectory, 'shell-config');
+      const content = 'export TOKEN=OUTSIDE_HOME_DUMMY_SECRET';
+      fs.writeFileSync(sourcePath, content);
+      fs.symlinkSync(sourcePath, snapshotPath());
+
+      const result = runBackup();
+
+      assertBackupSucceeded(result);
+      assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), `${content}\n`);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), `${content}\n`);
+      assert.equal(fs.readFileSync(sourcePath, 'utf8'), content);
+      assert.equal(fs.realpathSync(snapshotPath()), fs.realpathSync(sourcePath));
+      assert.isTrue(fs.lstatSync(snapshotPath()).isSymbolicLink());
+    } finally {
+      fs.rmSync(sourceDirectory, { recursive: true, force: true });
+    }
   });
 
   it('aborts all staged captures before remote reads when portable projection fails', () => {
@@ -2241,7 +2268,7 @@ printf '%s\\n' '123456 Example App'
     assert.isFalse(fs.existsSync(cachedFilePath('ballin_config')));
   });
 
-  it('retains excluded raw remote/cache contents when the shared default selection feeds the writer', () => {
+  it('retains excluded sensitive remote/cache contents when the shared default selection feeds the writer', () => {
     // Substitute source observation in the fixture, keeping the complete real
     // staging/reconciliation writer without adding a production policy flag.
     const wrapper = path.join(testHomeDir, 'policy-backup');
@@ -2252,6 +2279,8 @@ snapshots.observeSnapshotSources = (context) => observe(context);
 require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup.ts'))}).runBackupCommand(process.argv.slice(3));
 `, { mode: 0o755 });
     seedBackupCache('retained raw base\n');
+    seedCacheFile('pipx', 'retained sensitive install metadata\n');
+    writeTestExecutable('pipx', '#!/usr/bin/env bash\nexit 23\n');
     writeSnapshot('excluded raw change\n');
 
     const result = runBackup({ commandPath: wrapper, failedPaths: ['.zshrc'] });
@@ -2262,6 +2291,8 @@ require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup.ts'))}).runBack
     assert.deepEqual(gistReads(), []);
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'retained raw base\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'retained raw base\n');
+    assert.equal(fs.readFileSync(cachedFilePath('pipx'), 'utf8'), 'retained sensitive install metadata\n');
+    assert.equal(fs.readFileSync(path.join(fakeGistDir, 'pipx'), 'utf8'), 'retained sensitive install metadata\n');
   });
 
   it('streams large Gist files when hydrating a missing cache', () => {

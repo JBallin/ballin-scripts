@@ -9,9 +9,7 @@
   },
   "backup": {
     "id": null,
-    "host": "github.com",
-    "includeRaw": "false",
-    "includeDetailed": "false"
+    "host": "github.com"
   },
   "analytics": {
     "enabled": "true"

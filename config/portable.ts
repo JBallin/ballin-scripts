@@ -1,23 +1,16 @@
 const fs = require('fs');
 
 type ConfigObject = Record<string, unknown>;
-type BackupInclusion = {
-  includeRaw: boolean;
-  includeDetailed: boolean;
-};
-type InclusionProposals = Partial<BackupInclusion>;
 
 class PortableConfigError extends Error {}
 
 // These permissions are intentionally independent of each other and of defaults.
 const exportedUpdateKeys = [
-  'cleanup', 'selfUpdate', 'backup', 'softwareupdate', 'npm', 'nvm',
+  'cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm',
 ] as const;
 const restoredUpdateKeys = [
-  'cleanup', 'selfUpdate', 'backup', 'softwareupdate', 'npm', 'nvm',
+  'cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm',
 ] as const;
-const exportedInclusionKeys = ['includeRaw', 'includeDetailed'] as const;
-const restoredInclusionKeys = ['includeRaw', 'includeDetailed'] as const;
 
 const hasOwn = (value: ConfigObject, key: string): boolean => (
   Object.prototype.hasOwnProperty.call(value, key)
@@ -95,17 +88,11 @@ const readSetupConfigContext = (configPath: string): ConfigObject => (
 const projectPortablePreferences = (input: unknown): ConfigObject => {
   const config = requireObject(input, 'config');
   const update = requireOptionalSection(config, 'update');
-  const backup = requireOptionalSection(config, 'backup');
   const projected: ConfigObject = {};
 
   exportedUpdateKeys.forEach((key) => {
     if (hasOwn(update, key)) {
       setLeaf(projected, 'update', key, String(requireBoolean(update[key], `update.${key}`)));
-    }
-  });
-  exportedInclusionKeys.forEach((key) => {
-    if (hasOwn(backup, key)) {
-      setLeaf(projected, 'backup', key, String(requireBoolean(backup[key], `backup.${key}`)));
     }
   });
 
@@ -120,12 +107,11 @@ const restorePortablePreferences = (
   localConfig: ConfigObject,
   originalConfig: ConfigObject,
   remoteInput: unknown,
-): { config: ConfigObject; inclusionProposals: InclusionProposals } => {
+): ConfigObject => {
   validateSetupObject(localConfig);
   validateSetupObject(originalConfig);
   const remote = requireObject(remoteInput, 'remote config');
   const config = structuredClone(localConfig);
-  const inclusionProposals: InclusionProposals = {};
   const originalUpdate = objectSection(originalConfig, 'update') ?? {};
   const remoteUpdate = objectSection(remote, 'update') ?? {};
 
@@ -145,27 +131,7 @@ const restorePortablePreferences = (
     setLeaf(config, 'analytics', 'enabled', 'false');
   }
 
-  const originalBackup = objectSection(originalConfig, 'backup') ?? {};
-  const remoteBackup = objectSection(remote, 'backup') ?? {};
-  restoredInclusionKeys.forEach((key) => {
-    if (hasOwn(originalBackup, key) || !hasOwn(remoteBackup, key)) return;
-    const value = parseBoolean(remoteBackup[key]);
-    if (value === true) inclusionProposals[key] = true;
-    if (value === false) setLeaf(config, 'backup', key, 'false');
-  });
-
-  return { config, inclusionProposals };
-};
-
-const resolveBackupInclusion = (input: unknown): BackupInclusion => {
-  const config = requireObject(input, 'config');
-  const backup = requireOptionalSection(config, 'backup');
-  return {
-    includeRaw: hasOwn(backup, 'includeRaw')
-      ? requireBoolean(backup.includeRaw, 'backup.includeRaw') : false,
-    includeDetailed: hasOwn(backup, 'includeDetailed')
-      ? requireBoolean(backup.includeDetailed, 'backup.includeDetailed') : false,
-  };
+  return config;
 };
 
 if (require.main === module) {
@@ -184,8 +150,7 @@ module.exports = {
   PortableConfigError,
   projectPortablePreferences,
   readSetupConfigContext,
-  resolveBackupInclusion,
   restorePortablePreferences,
 };
 
-export type { BackupInclusion, ConfigObject, InclusionProposals, PortableConfigError };
+export type { ConfigObject, PortableConfigError };

@@ -306,7 +306,7 @@ const commitAdoptedConfig = (
         writeStdoutLine(`\n⚠️  ERROR: ${configSnapshotFileName} is not valid JSON.`);
         return false;
       }
-      ({ config: candidate } = restorePortablePreferences(candidate, original, remoteConfig));
+      candidate = restorePortablePreferences(candidate, original, remoteConfig);
       restoredSnapshot = true;
     }
 

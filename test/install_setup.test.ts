@@ -815,7 +815,7 @@ esac
     installFakeGhCommand();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
       backup: { id: null, host: 'github.example.test' },
-      update: { cleanup: 'true' },
+      update: { cleanup: 'true', backup: 'false' },
       custom: { keep: 'local' },
     }));
 
@@ -899,7 +899,7 @@ esac
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
   });
 
-  it('rolls back local config when a restored Gist config cannot migrate', () => {
+  it('preserves local config when the remote snapshot is malformed JSON', () => {
     installConfigSources();
     installFakeGhCommand();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{"backup":{"id":null,"host":"github.example.test"},"local":"keep"}\n');
@@ -918,8 +918,7 @@ esac
       local: 'keep',
     });
     assert.notEqual(readRepoConfig().backup.id, 'returning-gist-id');
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.restore.tmp')), []);
   });
 
   it('keeps local defaults when an adopted Gist has no config snapshot', () => {
@@ -945,8 +944,7 @@ esac
     assert.equal(readRepoConfig().backup.host, 'github.example.test');
     assert.equal(readRepoConfig().update.cleanup, 'false');
     assert.deepEqual(readRepoConfig().localOnly, { preserve: 'yes' });
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.restore.tmp')), []);
   });
 
   ([
@@ -1346,62 +1344,63 @@ exit 2
     assert.equal(readRepoConfig().update.backup, 'false');
   });
 
-  it('honors a restored analytics opt-out before analytics initialization', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    const result = withEnvironment({
-      BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1',
-      FAKE_GIST_FILE_LIST_STATUS: '17',
-    }, () => {
-      const childEnv = childEnvironment({
-        ...analyticsEnabledEnv,
-        BALLIN_BACKUP_HOST: 'github.example.test',
-        FAKE_GH_HOST: 'github.example.test',
-        FAKE_COMMAND_LOG: commandLogPath,
-        FAKE_GH_AUTH_STATUS: '0',
-        FAKE_GIST_CONFIG_STATUS: '0',
-        FAKE_RESTORED_CONFIG: JSON.stringify({
-          update: {
-            cleanup: 'false',
-            selfUpdate: 'true',
-            backup: 'false',
-            softwareupdate: 'false',
-            npm: 'false',
-            nvm: 'false',
-          },
-          backup: {
-            id: 'snapshot-gist-id',
-            host: 'snapshot.example.test',
-          },
-          analytics: { enabled: 'false' },
-        }),
-        TEST_DIR: testDir,
-        TEST_REPO_DIR: repoDir,
+  [false, true].forEach((value) => {
+    it(`restores five update preferences and an analytics opt-out during fresh setup (${value})`, () => {
+      installConfigSources();
+      installFakeGhCommand();
+      const result = withEnvironment({
+        BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1',
+        FAKE_GIST_FILE_LIST_STATUS: '17',
+      }, () => {
+        const childEnv = childEnvironment({
+          ...analyticsEnabledEnv,
+          BALLIN_BACKUP_HOST: 'github.example.test',
+          FAKE_GH_HOST: 'github.example.test',
+          FAKE_COMMAND_LOG: commandLogPath,
+          FAKE_GH_AUTH_STATUS: '0',
+          FAKE_GIST_CONFIG_STATUS: '0',
+          FAKE_RESTORED_CONFIG: JSON.stringify({
+            update: {
+              ...Object.fromEntries(
+                ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'].map((key) => [key, value]),
+              ),
+              backup: !value,
+            },
+            backup: {
+              id: 'snapshot-gist-id',
+              host: 'snapshot.example.test',
+            },
+            analytics: { enabled: 'false' },
+          }),
+          TEST_DIR: testDir,
+          TEST_REPO_DIR: repoDir,
+        });
+
+        return spawnSync(process.execPath, [
+          installSetupPath,
+          'setup',
+          repoDir,
+          docsUrl,
+          'https://example.test/analytics',
+          'fresh',
+        ], {
+          encoding: 'utf8',
+          input: `y\ny\nreturning-gist-id\n${value ? 'y' : 'n'}\n`,
+          env: childEnv,
+        });
       });
 
-      return spawnSync(process.execPath, [
-        installSetupPath,
-        'setup',
-        repoDir,
-        docsUrl,
-        'https://example.test/analytics',
-        'fresh',
-      ], {
-        encoding: 'utf8',
-        input: 'y\ny\nreturning-gist-id\ny\n',
-        env: childEnv,
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+      assert.equal(readRepoConfig().backup.host, 'github.example.test');
+      assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
+      assert.equal(readRepoConfig().update.backup, String(value));
+      assert.equal(readRepoConfig().analytics.enabled, 'false');
+      assert.isFalse(fs.existsSync(installIdPath()));
+      ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'].forEach((key) => {
+        assert.equal(readRepoConfig().update[key], String(value));
       });
     });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
-    assert.equal(readRepoConfig().backup.host, 'github.example.test');
-    assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
-    assert.equal(readRepoConfig().update.backup, 'true');
-    assert.equal(readRepoConfig().analytics.enabled, 'false');
-    assert.isFalse(fs.existsSync(installIdPath()));
-    assert.equal(readRepoConfig().update.cleanup, 'false');
-    assert.equal(readRepoConfig().update.softwareupdate, 'false');
   });
 
   [false, true].forEach((hasInstallId) => {

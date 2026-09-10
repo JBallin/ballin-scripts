@@ -87,7 +87,7 @@ describe('backup snapshot definitions', () => {
   let homeDir: string;
 
   const observations = (env: NodeJS.ProcessEnv = { PATH: '' }): SnapshotSourceObservation[] => (
-    observeSnapshotSources({ homeDir, env }, { includeRaw: true, includeDetailed: true })
+    observeSnapshotSources({ homeDir, env }, true)
   );
 
   const observation = (
@@ -144,12 +144,12 @@ describe('backup snapshot definitions', () => {
   it('assigns each canonical snapshot to the exact reviewed inclusion group', () => {
     const expectedGroups = {
       inventory: [
-        'bash_completions', 'brew_list', 'brew_leaves', 'brew_cask', 'vs_extensions', 'vsI_extensions', 'mas',
+        'bash_completions', 'brew_list', 'brew_leaves', 'brew_cask', 'brew_services', 'Brewfile',
+        'npm_global', 'uv_tools', 'pyenv_versions', 'vs_extensions', 'vsI_extensions', 'mas',
       ],
-      detailed: ['brew_services', 'Brewfile', 'npm_global', 'pipx', 'uv_tools', 'pyenv_versions'],
-      raw: [
+      sensitive: [
         'bash_profile.sh', 'bashrc.sh', 'profile.sh', 'zprofile.sh', 'zshrc.sh', 'gitignore_global', 'gitconfig',
-        'nvmrc', 'vs_settings', 'vs_keybindings', 'vsI_settings', 'vsI_keybindings', 'vimrc', 'nanorc',
+        'pipx', 'nvmrc', 'vs_settings', 'vs_keybindings', 'vsI_settings', 'vsI_keybindings', 'vimrc', 'nanorc',
       ],
       preferences: ['ballin_config'],
     };
@@ -163,9 +163,9 @@ describe('backup snapshot definitions', () => {
     });
   });
 
-  it('excludes raw and detailed sources before any discovery with default selection', () => {
+  it('excludes sensitive sources before any discovery with default selection', () => {
     const restricted = (snapshotDefinitions as SnapshotDefinition[]).filter(({ inclusionGroup }) => (
-      inclusionGroup === 'raw' || inclusionGroup === 'detailed'
+      inclusionGroup === 'sensitive'
     ));
     const originalDiscoveries = restricted.map(({ discover }) => discover);
     try {
@@ -175,7 +175,7 @@ describe('backup snapshot definitions', () => {
       const result = observeSnapshotSources({ homeDir, env: { PATH: '' } }) as SnapshotSourceObservation[];
       assert.lengthOf(result, 28);
       const excluded = result.filter(({ status }) => status === 'excluded-by-policy');
-      assert.lengthOf(excluded, 20);
+      assert.lengthOf(excluded, 15);
       excluded.forEach((entry) => {
         assert.equal('reason' in entry && entry.reason, 'excluded-by-policy');
         assert.notProperty(entry, 'source');
@@ -195,37 +195,68 @@ describe('backup snapshot definitions', () => {
     }
   });
 
-  it('selects the two optional groups independently and excludes unknown groups', () => {
-    const raw = snapshotDefinitions.find((definition: SnapshotDefinition) => definition.name === 'zshrc.sh');
-    const detailed = snapshotDefinitions.find((definition: SnapshotDefinition) => definition.name === 'pipx');
-    assert.isTrue(isSnapshotSelected(raw, { includeRaw: true, includeDetailed: false }));
-    assert.isFalse(isSnapshotSelected(raw, { includeRaw: false, includeDetailed: true }));
-    assert.isFalse(isSnapshotSelected(raw, { includeRaw: 'false', includeDetailed: false }));
-    assert.isFalse(isSnapshotSelected(detailed, { includeRaw: true, includeDetailed: false }));
-    assert.isTrue(isSnapshotSelected(detailed, { includeRaw: false, includeDetailed: true }));
-    assert.isFalse(isSnapshotSelected(detailed, { includeRaw: false, includeDetailed: 'false' }));
-    assert.isFalse(isSnapshotSelected(
-      { ...raw, inclusionGroup: 'future-category' as SnapshotInclusionGroup },
-      { includeRaw: true, includeDetailed: true },
-    ));
+  it('selects sensitive files and pipx together while excluding unknown groups', () => {
+    const rawFile = snapshotDefinitions.find((definition: SnapshotDefinition) => definition.name === 'zshrc.sh');
+    const pipx = snapshotDefinitions.find((definition: SnapshotDefinition) => definition.name === 'pipx');
+    [rawFile, pipx].forEach((definition) => {
+      assert.isTrue(isSnapshotSelected(definition, true));
+      assert.isFalse(isSnapshotSelected(definition, false));
+      assert.isFalse(isSnapshotSelected(definition, 'true'));
+      assert.isFalse(isSnapshotSelected(definition, 'false'));
+    });
+    [true, false].forEach((selection) => {
+      assert.isFalse(isSnapshotSelected(
+        { ...rawFile, inclusionGroup: 'future-category' as SnapshotInclusionGroup },
+        selection,
+      ));
+    });
+    const selected = observations();
+    assert.lengthOf(selected, 28);
+    assert.isFalse(selected.some(({ status }) => status === 'excluded-by-policy'));
   });
 
-  it('normalizes persisted boolean strings before selecting sources through the CommonJS boundary', () => {
-    const restricted = (snapshotDefinitions as SnapshotDefinition[]).filter(({ inclusionGroup }) => (
-      inclusionGroup === 'raw' || inclusionGroup === 'detailed'
-    ));
-    const originalDiscoveries = restricted.map(({ discover }) => discover);
+  it('does not stat or check executable access for excluded raw files or pipx', () => {
+    const binDir = path.join(homeDir, 'bin');
+    fs.mkdirSync(binDir);
+    ['npm', 'pipx'].forEach((tool) => {
+      fs.writeFileSync(path.join(binDir, tool), '#!/bin/sh\nexit 91\n', { mode: 0o755 });
+    });
+    const rawPaths = [
+      '.bash_profile', '.bashrc', '.profile', '.zprofile', '.zshrc',
+      '.gitignore_global', '.gitconfig', '.nvmrc', '.vimrc', '.nanorc',
+      'Library/Application Support/Code/User/settings.json',
+      'Library/Application Support/Code/User/keybindings.json',
+      'Library/Application Support/Code - Insiders/User/settings.json',
+      'Library/Application Support/Code - Insiders/User/keybindings.json',
+    ].map((relativePath) => path.join(homeDir, relativePath));
+    rawPaths.forEach((sourcePath) => {
+      fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+      fs.writeFileSync(sourcePath, 'DUMMY_SENSITIVE_CONTENT\n');
+    });
+    const statted: string[] = [];
+    const accessed: string[] = [];
+    const originalStat = fs.statSync;
+    const originalAccess = fs.accessSync;
     try {
-      restricted.forEach((definition) => {
-        definition.discover = () => { throw new Error('String false must not authorize discovery'); };
+      fs.statSync = (candidate: string) => {
+        statted.push(candidate);
+        return originalStat(candidate);
+      };
+      fs.accessSync = (candidate: string, mode: number) => {
+        accessed.push(candidate);
+        return originalAccess(candidate, mode);
+      };
+      const result: SnapshotSourceObservation[] = observeSnapshotSources({ homeDir, env: { PATH: binDir } });
+      assert.lengthOf(result.filter(({ status }) => status === 'excluded-by-policy'), 15);
+      [...rawPaths, path.join(binDir, 'pipx')].forEach((excludedPath) => {
+        assert.notInclude(statted, excludedPath);
+        assert.notInclude(accessed, excludedPath);
       });
-      const result: SnapshotSourceObservation[] = observeSnapshotSources(
-        { homeDir, env: { PATH: '' } },
-        { includeRaw: 'false', includeDetailed: 'false' },
-      );
-      assert.lengthOf(result.filter(({ status }) => status === 'excluded-by-policy'), 20);
+      assert.include(statted, path.join(binDir, 'npm'));
+      assert.include(accessed, path.join(binDir, 'npm'));
     } finally {
-      restricted.forEach((definition, index) => { definition.discover = originalDiscoveries[index]; });
+      fs.statSync = originalStat;
+      fs.accessSync = originalAccess;
     }
   });
 
@@ -241,15 +272,12 @@ describe('backup snapshot definitions', () => {
         };
       });
       [
-        { includeRaw: 'INVALID_DUMMY_SECRET', includeDetailed: false },
-        { includeRaw: true, includeDetailed: null },
-        { includeRaw: false, includeDetailed: {} },
-        null,
-        [],
+        'INVALID_DUMMY_SECRET', 'true', 'false', '', 0, 1, NaN, null, [], {},
+        { includeSensitive: true }, Object(true), () => true,
       ].forEach((selection) => {
         assert.throws(
           () => observeSnapshotSources({ homeDir, env: { PATH: '' } }, selection),
-          /Invalid backup/,
+          /Invalid sensitive-source selection: expected a boolean/,
         );
       });
       assert.deepEqual(discovered, []);
@@ -262,7 +290,7 @@ describe('backup snapshot definitions', () => {
     const sourcePath = path.join(homeDir, '.ballin-scripts', 'ballin.config.json');
     fs.mkdirSync(path.dirname(sourcePath));
     fs.writeFileSync(sourcePath, JSON.stringify({
-      update: { backup: 'false' },
+      update: { cleanup: 'false', backup: 'false' },
       backup: { id: 'private-destination', host: 'example.test' },
       custom: { token: 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED' },
     }));
@@ -281,7 +309,7 @@ describe('backup snapshot definitions', () => {
       encoding: 'utf8',
     });
     assert.equal(captured.status, 0, captured.stderr);
-    assert.equal(JSON.parse(captured.stdout).update.backup, 'false');
+    assert.deepEqual(JSON.parse(captured.stdout), { update: { cleanup: 'false' } });
     assert.notInclude(captured.stdout, 'private-destination');
     assert.notInclude(captured.stdout, 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');
     assert.include(fs.readFileSync(sourcePath, 'utf8'), 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');

@@ -96,10 +96,6 @@ not a secrets manager and does not scan or redact allowed content. Review the
 [source and sensitivity audit](docs/backup-sources.md) before enabling backup
 or sharing the Gist.
 
-Ballin's own configuration snapshot contains only portable preferences.
-Destination linkage and custom settings stay local; adoption preserves existing
-local choices. See [portable preferences](docs/optional-capabilities.md#portable-preferences).
-
 ## Documentation
 
 See the [documentation](docs/README.md) for installation, backup sensitivity,

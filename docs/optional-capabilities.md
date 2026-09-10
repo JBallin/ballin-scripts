@@ -120,13 +120,10 @@ GitHub preserves Gist revision history and diffs. Ballin does not provide
 history navigation, rollback, or revision selection. Adoption restores eligible
 Ballin preferences; it does not apply saved dotfiles or install saved packages.
 
-Ballin currently stores backups in secret Gists.
-[#254](https://github.com/JBallin/ballin-scripts/issues/254) completed the
-storage-security evaluation. The portable-preference and shared inclusion
-policy is recorded in [#332](https://github.com/JBallin/ballin-scripts/issues/332).
-Future repository onboarding and migration are tracked in
-[#333](https://github.com/JBallin/ballin-scripts/issues/333) and
-[#334](https://github.com/JBallin/ballin-scripts/issues/334).
+Private-repository backups and local sensitive-source review are planned in
+[#333](https://github.com/JBallin/ballin-scripts/issues/333), followed by reviewed
+Gist migration in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+Current Gist capture includes all available allowlisted sources.
 
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
@@ -147,37 +144,20 @@ checks and their limitations.
 ballin doctor
 ```
 
-## Portable preferences
+## Recovering Ballin preferences
 
-`ballin_config` exports only the six `update.*` preferences listed below,
-`analytics.enabled` when it is exactly `"false"`, and the two inclusion
-preferences `backup.includeRaw` and `backup.includeDetailed`. Destination
-linkage (`backup.id`, `backup.host`), analytics identity, and unknown/custom
-settings are excluded. They are not removed from local configuration.
+Reconnecting to a backup can recover supported Ballin preferences for cleanup,
+self-updates, macOS updates, and Node/npm updates, plus an analytics opt-out.
+Existing local choices take precedence. Recovery affects later maintenance;
+it does not run updates, apply dotfiles, or install packages.
 
-For update and inclusion preferences, valid native booleans and exact
-`"true"`/`"false"` strings export as canonical strings. Missing leaves are
-omitted. Invalid local update or inclusion values stop the config snapshot
-and the staged backup before remote snapshot reads or writes; diagnostics
-identify the key without printing its value.
-
-Adoption starts from local configuration. It restores valid update preferences
-and the exact analytics opt-out only where the leaf was absent before setup
-created or refreshed defaults. An existing leaf wins even when it equals the
-bundled default or is invalid. Remote invalid/unknown values are ignored;
-missing remote preferences or an absent snapshot leave local settings and
-defaults intact.
-Restoring update preferences affects later updates; adoption runs no update
-integrations. Every newly configured backup still takes the local automatic
-backup answer as final authority over local and restored values.
-
-Both inclusion preferences default to `"false"`. A restored false can fill an
-unchosen preference; a restored true is only a proposal requiring local source
-review. Current Gist adoption neither activates nor saves that proposal.
-Existing local choices remain intact. These fields support the
-[shared inclusion policy](backup-sources.md#shared-inclusion-policy) for future
-repository setup and migration; changing them does not change current Gist
-source capture.
+The `ballin_config` snapshot saves only those supported preferences.
+Destination identity, custom settings, analytics identity, automatic-backup
+choices, and sensitive-source approval stay local. A newly configured backup
+gets its own automatic-backup choice during setup. Sensitive-source review
+will be part of future repository setup, not current Gist setup. See
+[Backup design](backup-design.md#portable-preferences) for the exact allowlists
+and restoration rules.
 
 ## Analytics
 

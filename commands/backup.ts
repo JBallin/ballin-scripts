@@ -719,7 +719,7 @@ const runStagedBackup = (
   // shared reviewed policy and retire this destination path.
   const sourceObservations = observeSnapshotSources(
     { homeDir, env: process.env },
-    { includeRaw: true, includeDetailed: true },
+    true,
   );
   const stagedSnapshots = stageSnapshots(sourceObservations);
   if (!stagedSnapshots) {

@@ -42,9 +42,9 @@ The installer can create or change:
   and merges `origin/main`. If checkout or merge recovery is needed, Ballin can
   stash tracked and untracked changes in this checkout.
 - `~/.ballin-scripts/ballin.config.json`. A new file starts from the bundled
-  defaults. A refresh adds missing known settings. Adopting a backup restores
-  only eligible portable preferences from `ballin_config`; existing local
-  choices and local unknown settings are preserved.
+  defaults. A refresh adds missing known settings. Adopting a backup can recover
+  supported Ballin preferences; existing local choices and custom settings are
+  preserved.
 - `~/.ballin-scripts/.analytics/install-id` when analytics are enabled and the
   environment has not opted out. Installation creates only the local random
   ID; it sends no analytics event. Later instrumented commands can send the
@@ -58,8 +58,7 @@ The installer can create or change:
 Before creating the command link, setup removes an existing non-directory
 target at `<bin>/ballin`. It refuses to replace a directory. A repository
 refresh can replace checkout files through the Git merge. Config migration can
-add bundled defaults; adoption can replace defaults created during that setup
-with eligible restored preferences.
+add bundled defaults.
 
 Temporary Gist marker and staged config files are removed after setup. The
 installer does not run `ballin update`, collect snapshots, perform the first
@@ -106,30 +105,27 @@ the Gist URL and ID.
 When adopting an existing backup, setup validates the Ballin marker using the
 host selected in the current setup flow. That selected host and the
 marker-validated Gist ID are authoritative. A restored `ballin_config` can
-contribute the six update preferences and an analytics opt-out where no local
-leaf existed before setup. Defaults created during the current fresh install
-do not block restoration. Preexisting leaves, including values equal to a
-bundled default or invalid values, remain local choices. Unknown remote
-settings and remote destination fields are never restored. See the
-[portable-preference rules](optional-capabilities.md#portable-preferences).
+recover supported maintenance preferences and an analytics opt-out. Existing
+local choices take precedence. Destination identity, custom settings, and
+automatic-backup or sensitive-source approval are not restored. See
+[preference recovery](optional-capabilities.md#recovering-ballin-preferences).
 If reading, restoring, or saving the adopted configuration fails, setup stops
 and leaves the prior unconfigured configuration active.
 
-Setup rejects malformed local JSON, a non-object config root, or non-object
-`update`, `analytics`, or `backup` sections before refreshing configuration.
-Repair the config and retry; setup will not replace a malformed analytics
-section with enabled defaults. Missing sections are allowed. Invalid individual
-remote preferences are ignored, but malformed JSON or a non-object remote
-snapshot stops adoption.
+Unreadable local JSON or malformed configuration sections stop setup before
+settings are refreshed. Repair the config and retry; setup will not replace a
+malformed analytics section with enabled defaults. See
+[Backup design](backup-design.md#portable-preferences) for validation and
+restoration rules.
 
 After backup is newly configured, Ballin asks whether `ballin update` should run
 `ballin backup` automatically with a `[Y/n]` prompt. Enter, `y`, or `Y` saves
-`"true"`; other answers or EOF save `"false"`. This choice overrides any local
-or restored `update.backup` value. Already-configured backups keep their choice
-without this prompt. If saving the answer fails, setup reports failure and
-recovery guidance, but the destination remains configured. See
-[Optional capabilities](optional-capabilities.md#gist-backups) to change it
-later.
+`"true"`; other answers or EOF save `"false"`. This local choice controls
+`update.backup`, which is never restored from a backup. Already-configured
+backups keep their choice without this prompt. If saving the answer fails,
+setup reports failure and recovery guidance, but the destination remains
+configured. See [Optional capabilities](optional-capabilities.md#gist-backups)
+to change it later.
 
 If a configured ID has a malformed host, `ballin backup setup` asks for a
 replacement and verifies the retained Gist's Ballin marker on that host before
@@ -144,17 +140,12 @@ winner. If a later setup step fails, the invalidated cache remains removed.
 Resetting config leaves the remote Gist untouched, and a later setup invalidates
 the now-unproven cache again.
 
-Older `ballin_config` snapshots may contain the whole configuration. The new
-portable projection can differ from those bytes, and adoption invalidates the
-old comparison cache. A later backup may therefore report a `ballin_config`
-conflict. Inspect and reconcile it using the existing
+Older `ballin_config` snapshots may contain settings that are no longer backed
+up, and adoption invalidates the old comparison cache. A later backup may
+therefore report a `ballin_config` conflict. Inspect and reconcile it using the
+existing
 [conflict guidance](capabilities.md#backup-consistency-and-conflicts); adoption
 does not overwrite the remote snapshot or bypass conflicts.
-
-Current Gist setup and capture keep their existing source selection. The shared
-default-off raw/detailed preferences are for the reviewed repository transition;
-they do not restrict current Gist captures or add a Gist review wizard. See
-[source inclusion](backup-sources.md#shared-inclusion-policy).
 
 ## Health and recovery
 

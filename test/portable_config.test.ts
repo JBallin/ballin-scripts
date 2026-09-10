@@ -7,13 +7,16 @@ const {
   PortableConfigError,
   projectPortablePreferences,
   readSetupConfigContext,
-  resolveBackupInclusion,
   restorePortablePreferences,
 } = require('../config/portable.ts');
 import type { ConfigObject } from '../config/portable.ts';
 
-const updateKeys = ['cleanup', 'selfUpdate', 'backup', 'softwareupdate', 'npm', 'nvm'];
-const inclusionKeys = ['includeRaw', 'includeDetailed'];
+const updateKeys = ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'];
+const excludedLeaves = [
+  ['update', 'backup'], ['backup', 'includeRaw'], ['backup', 'includeDetailed'],
+  ['backup', 'id'], ['backup', 'host'], ['backup', 'includeFuture'],
+  ['analytics', 'installId'], ['update', 'futureIntegration'], ['custom', 'token'],
+];
 const booleanCases = [
   { input: true, canonical: 'true' },
   { input: false, canonical: 'false' },
@@ -25,7 +28,7 @@ const baseline = (): ConfigObject => ({
   update: {
     cleanup: 'true', selfUpdate: 'true', backup: 'false', softwareupdate: 'true', npm: 'false', nvm: 'false',
   },
-  backup: { id: null, host: 'local.example.test', includeRaw: 'false', includeDetailed: 'false' },
+  backup: { id: null, host: 'local.example.test' },
   analytics: { enabled: 'true' },
 });
 
@@ -104,21 +107,39 @@ describe('portable Ballin preferences', () => {
       });
     });
 
-    inclusionKeys.forEach((key) => {
-      booleanCases.forEach(({ input, canonical }) => {
-        it(`exports backup.${key}=${JSON.stringify(input)} as a canonical string`, () => {
-          assert.deepEqual(projectPortablePreferences({ backup: { [key]: input } }), { backup: { [key]: canonical } });
+    excludedLeaves.forEach(([section, key]) => {
+      [...booleanCases.map(({ input }) => input), ...invalidValues].forEach((value) => {
+        it(`omits excluded ${section}.${key}=${JSON.stringify(value)} without validating it`, () => {
+          const local = { [section]: { [key]: value } };
+          const before = structuredClone(local);
+          assert.deepEqual(projectPortablePreferences(local), {});
+          assert.deepEqual(local, before);
         });
       });
-      invalidValues.forEach((value) => {
-        it(`rejects invalid backup.${key}=${JSON.stringify(value)}`, () => {
-          assert.throws(
-            () => projectPortablePreferences({ backup: { [key]: value } }),
-            PortableConfigError,
-            `Invalid backup.${key}; expected true or false.`,
-          );
-        });
+    });
+
+    it('does not inspect the excluded backup section', () => {
+      [undefined, ...booleanCases.map(({ input }) => input), ...invalidValues].forEach((backup) => {
+        assert.deepEqual(projectPortablePreferences({ update: { npm: true }, backup }), { update: { npm: 'true' } });
       });
+      assert.deepEqual(projectPortablePreferences({
+        get backup() { throw new Error('Excluded backup section must not be read'); },
+        update: { npm: true },
+      }), { update: { npm: 'true' } });
+    });
+
+    it('projects admitted leaves deterministically while ignoring invalid excluded settings', () => {
+      const input = {
+        analytics: { enabled: 'false' },
+        backup: 'dummy-sensitive-value',
+        update: { nvm: false, npm: true, softwareupdate: false, backup: [], selfUpdate: true, cleanup: false },
+      };
+      const expected = {
+        update: { cleanup: 'false', selfUpdate: 'true', softwareupdate: 'false', npm: 'true', nvm: 'false' },
+        analytics: { enabled: 'false' },
+      };
+      assert.equal(JSON.stringify(projectPortablePreferences(input)), JSON.stringify(expected));
+      assert.equal(JSON.stringify(projectPortablePreferences(expected)), JSON.stringify(expected));
     });
 
     it('exports analytics opt-out only for exact string false', () => {
@@ -156,9 +177,7 @@ describe('portable Ballin preferences', () => {
     it('rejects malformed roots and export-bearing sections', () => {
       [null, [], false, 'dummy-sensitive-value'].forEach((value) => {
         assert.throws(() => projectPortablePreferences(value), PortableConfigError, 'Invalid config; expected a JSON object.');
-        ['update', 'backup'].forEach((section) => {
-          assert.throws(() => projectPortablePreferences({ [section]: value }), PortableConfigError, `Invalid ${section}; expected a JSON object.`);
-        });
+        assert.throws(() => projectPortablePreferences({ update: value }), PortableConfigError, 'Invalid update; expected a JSON object.');
       });
     });
   });
@@ -168,33 +187,32 @@ describe('portable Ballin preferences', () => {
       booleanCases.forEach(({ input, canonical }) => {
         it(`restores update.${key}=${JSON.stringify(input)} only over a newly filled default`, () => {
           const local = baseline();
-          const { config, inclusionProposals } = restorePortablePreferences(local, {}, { update: { [key]: input } });
+          const config = restorePortablePreferences(local, {}, { update: { [key]: input } });
           assert.equal((config.update as ConfigObject)[key], canonical);
-          assert.deepEqual(inclusionProposals, {});
           assert.deepEqual(local, baseline());
         });
       });
       [...booleanCases.map(({ input }) => input), ...invalidValues].forEach((value) => {
         it(`preserves the existing update.${key} choice ${JSON.stringify(value)}`, () => {
           const local = { update: { [key]: value }, custom: { preserve: true } };
-          const { config } = restorePortablePreferences(local, local, { update: { [key]: 'true' } });
+          const config = restorePortablePreferences(local, local, { update: { [key]: 'true' } });
           assert.deepEqual(config, local);
         });
       });
       it(`ignores absent and invalid remote update.${key} values`, () => {
         [undefined, ...invalidValues].forEach((value) => {
           const local = baseline();
-          const { config } = restorePortablePreferences(local, {}, { update: { [key]: value } });
+          const config = restorePortablePreferences(local, {}, { update: { [key]: value } });
           assert.deepEqual(config, local);
         });
-        assert.deepEqual(restorePortablePreferences(baseline(), {}, {}).config, baseline());
+        assert.deepEqual(restorePortablePreferences(baseline(), {}, {}), baseline());
       });
     });
 
     it('imports exact analytics opt-out over newly created defaults without importing consent', () => {
-      assert.deepEqual(restorePortablePreferences(baseline(), {}, { analytics: { enabled: 'false' } }).config.analytics, { enabled: 'false' });
+      assert.deepEqual(restorePortablePreferences(baseline(), {}, { analytics: { enabled: 'false' } }).analytics, { enabled: 'false' });
       [true, false, 'true', undefined, ...invalidValues].forEach((value) => {
-        assert.deepEqual(restorePortablePreferences(baseline(), {}, { analytics: { enabled: value } }).config, baseline());
+        assert.deepEqual(restorePortablePreferences(baseline(), {}, { analytics: { enabled: value } }), baseline());
       });
     });
 
@@ -202,44 +220,26 @@ describe('portable Ballin preferences', () => {
       it(`preserves preexisting analytics.enabled=${JSON.stringify(value)}`, () => {
         const local = { analytics: { enabled: value } };
         ['false', 'true'].forEach((remoteValue) => {
-          assert.deepEqual(restorePortablePreferences(local, local, { analytics: { enabled: remoteValue } }).config, local);
+          assert.deepEqual(restorePortablePreferences(local, local, { analytics: { enabled: remoteValue } }), local);
         });
       });
     });
 
-    inclusionKeys.forEach((key) => {
-      it(`treats remote true backup.${key} as an unpersisted proposal and false as restorable`, () => {
-        [true, 'true'].forEach((value) => {
-          const local = baseline();
-          const result = restorePortablePreferences(local, {}, { backup: { [key]: value } });
-          assert.deepEqual(result.config, local);
-          assert.deepEqual(result.inclusionProposals, { [key]: true });
-          assert.deepEqual(resolveBackupInclusion(result.config), { includeRaw: false, includeDetailed: false });
-          assert.deepEqual(restorePortablePreferences({}, {}, { backup: { [key]: value } }).config, {});
-        });
-        [false, 'false'].forEach((value) => {
-          assert.deepEqual(restorePortablePreferences({}, {}, { backup: { [key]: value } }), {
-            config: { backup: { [key]: 'false' } }, inclusionProposals: {},
-          });
+    excludedLeaves.forEach(([section, key]) => {
+      it(`never restores excluded ${section}.${key}, including otherwise valid values`, () => {
+        [undefined, ...booleanCases.map(({ input }) => input), ...invalidValues].forEach((value) => {
+          const remote = { [section]: { [key]: value } };
+          assert.deepEqual(restorePortablePreferences({}, {}, remote), {});
+          assert.deepEqual(restorePortablePreferences(baseline(), {}, remote), baseline());
         });
       });
 
-      it(`preserves every existing backup.${key} choice including invalid values`, () => {
+      it(`preserves existing excluded ${section}.${key}, including invalid values`, () => {
         [...booleanCases.map(({ input }) => input), ...invalidValues].forEach((value) => {
-          const local = { backup: { [key]: value } };
-          [true, false].forEach((remoteValue) => {
-            assert.deepEqual(restorePortablePreferences(local, local, { backup: { [key]: remoteValue } }), {
-              config: local, inclusionProposals: {},
-            });
-          });
-        });
-      });
-
-      it(`ignores invalid remote backup.${key}`, () => {
-        [undefined, ...invalidValues].forEach((value) => {
-          assert.deepEqual(restorePortablePreferences(baseline(), {}, { backup: { [key]: value } }), {
-            config: baseline(), inclusionProposals: {},
-          });
+          const local = { [section]: { [key]: value } };
+          const remote = { [section]: { [key]: 'dummy-remote-value' } };
+          assert.deepEqual(restorePortablePreferences(local, local, remote), local);
+          assert.deepEqual(restorePortablePreferences(local, {}, remote), local);
         });
       });
     });
@@ -258,8 +258,8 @@ describe('portable Ballin preferences', () => {
         analytics: { installId: 'remote-install-id' },
       };
       const result = restorePortablePreferences(local, original, remote);
-      assert.deepEqual(result, { config: local, inclusionProposals: {} });
-      (result.config.custom as ConfigObject).private = 'changed-copy';
+      assert.deepEqual(result, local);
+      (result.custom as ConfigObject).private = 'changed-copy';
       assert.equal(local.custom.private, 'dummy-local-secret');
       assert.deepEqual(original, local);
       assert.equal(remote.custom.private, 'dummy-remote-secret');
@@ -268,14 +268,14 @@ describe('portable Ballin preferences', () => {
     it('ignores malformed remote sections independently, while rejecting malformed roots', () => {
       [null, [], true, 'dummy-sensitive-value'].forEach((value) => {
         assert.throws(() => restorePortablePreferences({}, {}, value), PortableConfigError, 'Invalid remote config; expected a JSON object.');
-        assert.deepEqual(restorePortablePreferences({}, {}, { update: value, analytics: { enabled: 'false' } }).config, {
+        assert.deepEqual(restorePortablePreferences({}, {}, { update: value, analytics: { enabled: 'false' } }), {
           analytics: { enabled: 'false' },
         });
-        assert.deepEqual(restorePortablePreferences({}, {}, { backup: value, update: { npm: true } }).config, {
+        assert.deepEqual(restorePortablePreferences({}, {}, { backup: value, update: { npm: true } }), {
           update: { npm: 'true' },
         });
-        assert.deepEqual(restorePortablePreferences({}, {}, { analytics: value, backup: { includeDetailed: false } }).config, {
-          backup: { includeDetailed: 'false' },
+        assert.deepEqual(restorePortablePreferences({}, {}, { analytics: value, update: { npm: false } }), {
+          update: { npm: 'false' },
         });
       });
     });
@@ -290,48 +290,16 @@ describe('portable Ballin preferences', () => {
 
     it('ignores inherited remote permissions and prototype-shaped unknown fields', () => {
       const remote = Object.create({ update: { npm: true }, analytics: { enabled: 'false' }, backup: { includeRaw: true } });
-      assert.deepEqual(restorePortablePreferences({}, {}, remote), { config: {}, inclusionProposals: {} });
+      assert.deepEqual(restorePortablePreferences({}, {}, remote), {});
       assert.deepEqual(restorePortablePreferences({}, {}, {
         update: Object.create({ npm: true }),
         analytics: Object.create({ enabled: 'false' }),
         backup: Object.create({ includeRaw: true }),
-      }), { config: {}, inclusionProposals: {} });
+      }), {});
       const local = JSON.parse('{"__proto__":{"local":"keep"},"constructor":{"keep":true}}');
       const unsafeRemote = JSON.parse('{"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}}}');
-      assert.deepEqual(restorePortablePreferences(local, local, unsafeRemote).config, local);
+      assert.deepEqual(restorePortablePreferences(local, local, unsafeRemote), local);
       assert.isUndefined(({} as ConfigObject).polluted);
-    });
-  });
-
-  describe('inclusion resolution before discovery', () => {
-    it('defaults only missing groups to false and ignores unknown future groups', () => {
-      assert.deepEqual(resolveBackupInclusion({}), { includeRaw: false, includeDetailed: false });
-      assert.deepEqual(resolveBackupInclusion({ backup: { includeFuture: true } }), { includeRaw: false, includeDetailed: false });
-      assert.deepEqual(resolveBackupInclusion({ backup: Object.create({ includeRaw: true, includeDetailed: true }) }), {
-        includeRaw: false, includeDetailed: false,
-      });
-    });
-
-    inclusionKeys.forEach((key) => {
-      booleanCases.forEach(({ input, canonical }) => {
-        it(`resolves backup.${key}=${JSON.stringify(input)} without reading other preferences`, () => {
-          assert.deepEqual(resolveBackupInclusion({ backup: { [key]: input }, update: 'unrelated' }), {
-            includeRaw: false, includeDetailed: false, [key]: canonical === 'true',
-          });
-        });
-      });
-      invalidValues.forEach((value) => {
-        it(`rejects backup.${key}=${JSON.stringify(value)} before discovery`, () => {
-          assert.throws(() => resolveBackupInclusion({ backup: { [key]: value } }), PortableConfigError, `Invalid backup.${key}; expected true or false.`);
-        });
-      });
-    });
-
-    it('rejects invalid root or backup objects', () => {
-      [null, [], true, 'dummy-sensitive-value'].forEach((value) => {
-        assert.throws(() => resolveBackupInclusion(value), PortableConfigError, 'Invalid config; expected a JSON object.');
-        assert.throws(() => resolveBackupInclusion({ backup: value }), PortableConfigError, 'Invalid backup; expected a JSON object.');
-      });
     });
   });
 
@@ -362,7 +330,7 @@ describe('portable Ballin preferences', () => {
       const result = runCli();
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stderr, '');
-      assert.deepEqual(JSON.parse(result.stdout), { update: { npm: 'true' }, backup: { includeRaw: 'false' }, analytics: { enabled: 'false' } });
+      assert.deepEqual(JSON.parse(result.stdout), { update: { npm: 'true' }, analytics: { enabled: 'false' } });
       assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
     });
 
