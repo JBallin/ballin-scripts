@@ -152,8 +152,18 @@ exit 2
     try {
       const result = runUninstall();
 
-      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.status, 1, result.stderr);
+      assert.equal(
+        result.stdout,
+        "\nIt's been real...\nRemoved the local checkout, but some symlinked binaries remain.\n\n",
+      );
       assert.include(result.stderr, 'ballin');
+      assert.include(result.stderr, 'Uninstall incomplete: these Ballin-owned links remain:');
+      assert.include(result.stderr, `  ${linkPath}\n`);
+      assert.include(
+        result.stderr,
+        'Remove the remaining links manually (you may need elevated permissions).',
+      );
       assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
       assert.isFalse(fs.existsSync(repoDir));
     } finally {

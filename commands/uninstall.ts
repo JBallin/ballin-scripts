@@ -16,16 +16,16 @@ const relocateSystemPath = (systemRoot: string, absolutePath: string): string =>
   systemRoot ? path.join(systemRoot, absolutePath) : absolutePath
 );
 
-const removeOwnedLink = (linkPath: string, targetPath: string): void => {
+const removeOwnedLink = (linkPath: string, targetPath: string): string | null => {
   let stat;
   try {
     stat = fs.lstatSync(linkPath);
   } catch {
-    return;
+    return null;
   }
 
   if (!stat.isSymbolicLink()) {
-    return;
+    return null;
   }
 
   if (fs.readlinkSync(linkPath) === targetPath) {
@@ -35,8 +35,11 @@ const removeOwnedLink = (linkPath: string, targetPath: string): void => {
       if (error instanceof Error) {
         process.stderr.write(`${error.message}\n`);
       }
+      return linkPath;
     }
   }
+
+  return null;
 };
 
 const runUninstallCommand = (): void => {
@@ -48,6 +51,7 @@ const runUninstallCommand = (): void => {
     relocateSystemPath(systemRoot, '/usr/local/bin'),
     relocateSystemPath(systemRoot, '/opt/homebrew/bin'),
   ];
+  const remainingOwnedLinks: string[] = [];
 
   writeStdoutLine();
   writeStdoutLine("It's been real...");
@@ -67,13 +71,31 @@ const runUninstallCommand = (): void => {
     fs.readdirSync(repoBinDir).forEach((binName: string) => {
       const targetPath = path.join(repoBinDir, binName);
       binDirs.forEach((binDir) => {
-        removeOwnedLink(path.join(binDir, binName), targetPath);
+        const remainingLink = removeOwnedLink(path.join(binDir, binName), targetPath);
+        if (remainingLink) {
+          addUnique(remainingOwnedLinks, remainingLink);
+        }
       });
     });
   }
 
-  writeStdoutLine('Deleted symlinked binaries');
   fs.rmSync(repoDir, { recursive: true, force: true });
+
+  if (remainingOwnedLinks.length > 0) {
+    writeStdoutLine('Removed the local checkout, but some symlinked binaries remain.');
+    process.stderr.write('Uninstall incomplete: these Ballin-owned links remain:\n');
+    remainingOwnedLinks.forEach((linkPath) => {
+      process.stderr.write(`  ${linkPath}\n`);
+    });
+    process.stderr.write(
+      'Remove the remaining links manually (you may need elevated permissions).\n',
+    );
+    process.exitCode = 1;
+    writeStdoutLine();
+    return;
+  }
+
+  writeStdoutLine('Deleted symlinked binaries');
   writeStdoutLine('PEACE! You still ballin tho...');
   writeStdoutLine();
 };
