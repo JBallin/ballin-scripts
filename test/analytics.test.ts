@@ -5,6 +5,7 @@ const { runConfigCli } = require('../config/cli.ts');
 const {
   analyticsDisabledByEnv,
   buildAnalyticsPayload,
+  coarseOsVersion,
   durationBucketFromMs,
   ensureAnalyticsInstallId,
   loadAppVersion,
@@ -41,6 +42,10 @@ const path = require('path');
 const packageJson = require('../package.json');
 const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 const fixedNow = new Date('2026-06-27T20:15:00.000Z');
+const fixedOsVersionOptions = {
+  platform: () => 'darwin',
+  readCommandOutput: () => '26.6.2\n',
+};
 const allowedPayloadKeys = [
   'schemaVersion',
   'installId',
@@ -89,6 +94,7 @@ const recordWithSender = (
     endpoint: 'https://analytics.example.test/v1/events',
     env: {},
     installIdPath: testInstallIdPath,
+    osVersionOptions: fixedOsVersionOptions,
     sender: async (payload: AnalyticsPayload) => {
       order.push('send');
       payloads.push(payload);
@@ -129,6 +135,7 @@ const runConfigWithAnalytics = async (
       env: {},
       installId: fixedInstallId,
       nowMs: () => 1000,
+      osVersionOptions: fixedOsVersionOptions,
       sender: async (payload: AnalyticsPayload) => {
         payloads.push(payload);
       },
@@ -305,6 +312,7 @@ describe('analytics client', () => {
     }, {
       env: {},
       installIdPath: testInstallIdPath,
+      osVersionOptions: fixedOsVersionOptions,
       sender: async (_payload: AnalyticsPayload, options: SenderOptions) => {
         senderOptions.push(options);
       },
@@ -365,23 +373,93 @@ describe('analytics client', () => {
   });
 
   it('normalizes unsupported platforms and malformed OS versions in payloads', () => {
-    const originalPlatform = os.platform;
-    const originalRelease = os.release;
-    os.platform = () => 'freebsd';
-    os.release = () => 'release-candidate';
-    try {
-      const payload = buildAnalyticsPayload({
-        command: 'ballin',
-        durationBucket: '<1s',
-        now: fixedNow,
-        status: 'success',
-      }, fixedInstallId, '2.0.0');
+    const payload = buildAnalyticsPayload({
+      command: 'ballin',
+      durationBucket: '<1s',
+      now: fixedNow,
+      status: 'success',
+    }, fixedInstallId, '2.0.0', {
+      platform: () => 'freebsd',
+      release: () => 'release-candidate',
+    });
 
-      assert.equal(payload.os, 'unknown');
-      assert.equal(payload.osVersion, 'unknown');
+    assert.equal(payload.os, 'unknown');
+    assert.equal(payload.osVersion, 'unknown');
+  });
+
+  it('reads a coarse macOS product version without patch detail', () => {
+    let call: { command: string; args?: string[]; timeout?: number } | undefined;
+
+    const version = coarseOsVersion({
+      platform: () => 'darwin',
+      readCommandOutput: (command: string, args?: string[], options?: { timeout?: number }) => {
+        call = { command, args, timeout: options?.timeout };
+        return '26.6.2\n';
+      },
+      release: () => {
+        throw new Error('Darwin release must not be used');
+      },
+    });
+
+    assert.equal(version, '26.6');
+    assert.deepEqual(call, {
+      command: '/usr/bin/sw_vers',
+      args: ['-productVersion'],
+      timeout: 750,
+    });
+  });
+
+  it('falls back to unknown when macOS product-version collection fails', () => {
+    const failures = [
+      { name: 'missing command', read: () => null },
+      { name: 'failed command', read: () => null },
+      { name: 'timed-out command', read: () => null },
+      { name: 'empty output', read: () => '\n' },
+      { name: 'malformed output', read: () => 'release-candidate' },
+      { name: 'malformed minor version', read: () => '26.release' },
+    ];
+
+    for (const { name, read } of failures) {
+      assert.equal(coarseOsVersion({
+        platform: () => 'darwin',
+        readCommandOutput: read,
+      }), 'unknown', name);
+    }
+  });
+
+  it('preserves command behavior when macOS product-version collection throws', async () => {
+    const payloads: AnalyticsPayload[] = [];
+    const previousExitCode = process.exitCode;
+    let commandRan = false;
+
+    try {
+      await runWithCommandAnalytics('ballin', () => {
+        commandRan = true;
+        process.exitCode = 23;
+      }, {
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        installId: fixedInstallId,
+        osVersionOptions: {
+          platform: () => 'darwin',
+          readCommandOutput: () => {
+            throw new Error('unexpected version lookup failure');
+          },
+        },
+        sender: async (payload: AnalyticsPayload) => {
+          payloads.push(payload);
+        },
+      });
+
+      assert.isTrue(commandRan);
+      assert.equal(process.exitCode, 23);
+      assert.deepInclude(payloads[0], {
+        os: 'darwin',
+        osVersion: 'unknown',
+        status: 'failure',
+      });
     } finally {
-      os.platform = originalPlatform;
-      os.release = originalRelease;
+      process.exitCode = previousExitCode;
     }
   });
 
@@ -394,20 +472,18 @@ describe('analytics client', () => {
   });
 
   it('uses the OS major alone when no numeric minor version is available', () => {
-    const originalRelease = os.release;
-    os.release = () => '15.release';
-    try {
-      const payload = buildAnalyticsPayload({
-        command: 'ballin',
-        durationBucket: '<1s',
-        now: fixedNow,
-        status: 'success',
-      }, fixedInstallId, '2.0.0');
+    let macOsReaderCalled = false;
+    const version = coarseOsVersion({
+      platform: () => 'linux',
+      readCommandOutput: () => {
+        macOsReaderCalled = true;
+        return '26.6.2';
+      },
+      release: () => '15.release',
+    });
 
-      assert.equal(payload.osVersion, '15');
-    } finally {
-      os.release = originalRelease;
-    }
+    assert.equal(version, '15');
+    assert.isFalse(macOsReaderCalled);
   });
 
   it('never throws when analytics config or sender behavior fails', async () => {
@@ -423,6 +499,7 @@ describe('analytics client', () => {
     }, {
       env: {},
       installIdPath: testInstallIdPath,
+      osVersionOptions: fixedOsVersionOptions,
       sender: async () => {
         senderCalled = true;
         throw new Error('network unavailable');
@@ -529,6 +606,7 @@ describe('analytics client', () => {
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => currentNow,
+        osVersionOptions: fixedOsVersionOptions,
         sender: (payload: AnalyticsPayload) => new Promise<void>((resolve) => {
           events.push('send-start');
           payloads.push(payload);
@@ -570,6 +648,7 @@ describe('analytics client', () => {
         analyticsConfig: { enabled: 'true' },
         env: {},
         installIdPath: testInstallIdPath,
+        osVersionOptions: fixedOsVersionOptions,
         sender: async (payload: AnalyticsPayload) => {
           payloads.push(payload);
         },
@@ -601,6 +680,7 @@ describe('analytics client', () => {
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => currentNow,
+        osVersionOptions: fixedOsVersionOptions,
         sender: async (payload: AnalyticsPayload) => {
           payloads.push(payload);
         },
@@ -690,6 +770,7 @@ describe('analytics client', () => {
       endpoint: 'https://analytics.example.test/v1/events',
       env: {},
       installIdPath: testInstallIdPath,
+      osVersionOptions: fixedOsVersionOptions,
       preserveLocalState: true,
       sender: async (payload: AnalyticsPayload) => {
         payloads.push(payload);
@@ -719,6 +800,7 @@ describe('analytics client', () => {
         env: {},
         installIdPath: testInstallIdPath,
         nowMs: () => 1000,
+        osVersionOptions: fixedOsVersionOptions,
         sender: async (payload: AnalyticsPayload) => {
           payloads.push(payload);
         },
@@ -755,6 +837,7 @@ describe('analytics client', () => {
       env: {},
       installIdPath: testInstallIdPath,
       nowMs: () => currentNow,
+      osVersionOptions: fixedOsVersionOptions,
       sender: (payload: AnalyticsPayload) => new Promise<void>((resolve) => {
         payloads.push(payload);
         releaseSender = () => resolve();
