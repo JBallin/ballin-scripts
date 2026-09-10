@@ -32,9 +32,7 @@
     "include": [
       "commands/**/*.ts",
       "config/**/*.ts",
-      "analytics-worker/report.ts",
-      "analytics-worker/reset.ts",
-      "analytics-worker/src/**/*.ts"
+      "analytics-worker/**/*.ts"
     ],
     "exclude": [
       "test/**",
@@ -46,10 +44,10 @@
     ],
     "reports-dir": "coverage",
     "check-coverage": true,
-    "statements": 99,
-    "branches": 96.1,
+    "statements": 99.2,
+    "branches": 96.7,
     "functions": 100,
-    "lines": 99
+    "lines": 99.2
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
