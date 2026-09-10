@@ -59,7 +59,7 @@ Usage:
 Commands:
 
     update                update the Ballin-managed macOS development environment
-    backup                back up Ballin-managed environment state to your private backup
+    backup                back up Ballin-managed environment state to the configured backup
                           ${format.setup} [repository-name] create or reconnect to an optional backup
                           ${format.open} open the configured backup
                           ${format.read} ${format.fileName} read a backed-up file

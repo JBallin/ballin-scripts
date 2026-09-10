@@ -564,6 +564,24 @@ require(${JSON.stringify(ballinPath)});
 `);
     return path.join(testBinDir, launcherName);
   };
+  const installCleanupFailureLauncher = (prefixes: string[]) => {
+    const launcherName = 'backup-cleanup-failure.cjs';
+    writeTestExecutable(launcherName, `#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const originalRemove = fs.rmSync;
+fs.rmSync = (entryPath, options) => {
+  const name = path.basename(entryPath);
+  if (${JSON.stringify(prefixes)}.some((prefix) => name.startsWith(prefix))) {
+    fs.appendFileSync(${JSON.stringify(path.join(testHomeDir, 'cleanup-attempts.log'))}, entryPath + '\\n');
+    throw new Error('simulated temporary cleanup failure');
+  }
+  return originalRemove(entryPath, options);
+};
+require(${JSON.stringify(ballinPath)});
+`);
+    return path.join(testBinDir, launcherName);
+  };
   const assertBackupSucceeded = (result: StringSpawnResult) => {
     assert.equal(result.status, 0);
     assert.equal(result.stderr, '');
@@ -1093,6 +1111,126 @@ exit 2
     assert.isFalse(fs.existsSync(backupCacheDir));
     assert.deepEqual(gistReads(), []);
     assert.deepEqual(gistUploads(), []);
+  });
+
+  for (const prefix of ['ballin-backup-input-', 'ballin-backup-remote-']) {
+    it(`fails after publication and cache promotion when ${prefix} cleanup fails`, () => {
+      writeSnapshot('new snapshot\n');
+      seedBackupCache('old snapshot\n');
+      const commandPath = installCleanupFailureLauncher([prefix]);
+
+      const result = runBackup({ commandPath });
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'private temporary-file cleanup is incomplete');
+      assert.include(result.stderr, 'completed remote and cache effects are retained');
+      assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new snapshot\n');
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new snapshot\n');
+      assert.lengthOf(gistPatchCalls(), 1);
+      assertOwnerOnlyCache();
+      const attempts = readLogLines(path.join(testHomeDir, 'cleanup-attempts.log'));
+      assert.lengthOf(attempts, 1);
+      assert.isTrue(fs.existsSync(path.join(attempts[0], 'output')));
+      assert.deepEqual(fs.readdirSync(scratchDir), [path.basename(attempts[0])]);
+
+      const next = runBackup();
+      assert.equal(next.status, 0, next.stderr);
+      assert.equal(next.stdout, '✔ zshrc\n');
+      assert.lengthOf(gistPatchCalls(), 1);
+    });
+  }
+
+  it('reports both cleanup failures alongside a Gist conflict and attempts each removal once', () => {
+    writeSnapshot('local change\n');
+    seedBackupCache('base\n');
+    seedFakeGist('remote change\n');
+    const commandPath = installCleanupFailureLauncher(['ballin-backup-input-', 'ballin-backup-remote-']);
+    const result = runBackup({ commandPath });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'conflict for zshrc.sh');
+    assert.include(result.stderr, 'private temporary-file cleanup is incomplete');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'remote change\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base\n');
+    assert.deepEqual(gistPatchCalls(), []);
+    const attempts = readLogLines(path.join(testHomeDir, 'cleanup-attempts.log'));
+    assert.lengthOf(attempts, 2);
+    assert.equal(new Set(attempts).size, 2);
+  });
+
+  it('preserves collector failure and later captures when failed-input and staged cleanup fail', () => {
+    writeSnapshot('failed input\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), 'later capture\n');
+    const commandPath = installCleanupFailureLauncher(['ballin-backup-input-']);
+    const result = runBackup({ commandPath, failedPaths: ['.zshrc'], emitUnderlyingStderr: true });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'cat: simulated failure reading .zshrc');
+    assert.include(result.stderr, 'failed to snapshot zshrc.sh');
+    assert.include(result.stderr, 'private temporary-file cleanup is incomplete');
+    assert.deepEqual(gistRequests(), []);
+    assert.isFalse(fs.existsSync(backupCacheDir));
+    const attempts = readLogLines(path.join(testHomeDir, 'cleanup-attempts.log'));
+    assert.lengthOf(attempts, 2);
+    assert.equal(new Set(attempts).size, 2);
+    assert.equal(fs.readFileSync(path.join(attempts[1], 'output'), 'utf8'), 'later capture\n');
+  });
+
+  it('preserves remote-read failure and cleans staged files without retrying failed remote cleanup', () => {
+    writeSnapshot('local capture\n');
+    seedBackupCache('old snapshot\n');
+    const commandPath = installCleanupFailureLauncher(['ballin-backup-remote-']);
+    const result = runBackup({ commandPath, ghFileSizeMode: 'mismatch' });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'failed to read remote snapshot zshrc.sh');
+    assert.include(result.stderr, 'private temporary-file cleanup is incomplete');
+    assert.deepEqual(gistPatchCalls(), []);
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'old snapshot\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old snapshot\n');
+    const attempts = readLogLines(path.join(testHomeDir, 'cleanup-attempts.log'));
+    assert.lengthOf(attempts, 1);
+    assert.deepEqual(fs.readdirSync(scratchDir), [path.basename(attempts[0])]);
+  });
+
+  for (const prefix of ['ballin-backup-gist-metadata-', 'ballin-backup-stderr-', 'ballin-backup-payload-']) {
+    it(`reports ${prefix} cleanup failure without success markers or cache promotion`, () => {
+      writeSnapshot('new snapshot\n');
+      seedBackupCache('old snapshot\n');
+      const commandPath = installCleanupFailureLauncher([prefix]);
+      const result = runBackup({ commandPath });
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'private temporary-file cleanup is incomplete');
+      const published = prefix === 'ballin-backup-payload-';
+      assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), published ? 'new snapshot\n' : 'old snapshot\n');
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old snapshot\n');
+      assert.lengthOf(gistPatchCalls(), published ? 1 : 0);
+      const attempts = readLogLines(path.join(testHomeDir, 'cleanup-attempts.log'));
+      assert.lengthOf(attempts, 1);
+      assert.deepEqual(fs.readdirSync(scratchDir), [path.basename(attempts[0])]);
+    });
+  }
+
+  it('reports incomplete cache staging cleanup while retaining completed Gist and cache updates', () => {
+    writeSnapshot('new snapshot\n');
+    seedBackupCache('old snapshot\n');
+    const result = runBackup({ commandPath: installCleanupFailureLauncher(['.ballin-backup-cache-']) });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'unable to finish private cache staging cleanup');
+    assert.include(result.stderr, 'Gist outcome is known');
+    assert.include(result.stderr, 'cleanup is incomplete');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new snapshot\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new snapshot\n');
+    assert.deepEqual(fs.readdirSync(scratchDir), []);
+    assert.lengthOf(gistPatchCalls(), 1);
   });
 
   it('reports temp-file staging failures without reading or mutating the Gist', () => {

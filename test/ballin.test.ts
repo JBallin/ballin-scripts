@@ -26,7 +26,8 @@ describe('ballin', () => {
     assert.include(result.stdout, 'Usage:');
     assert.include(result.stdout, 'ballin <command> [options]');
     assert.include(result.stdout, 'update');
-    assert.include(result.stdout, 'backup');
+    assert.include(result.stdout, 'back up Ballin-managed environment state to the configured backup');
+    assert.notInclude(result.stdout, 'your private backup');
     assert.include(result.stdout, 'setup');
     assert.include(result.stdout, 'doctor');
     assert.include(result.stdout, 'config');
