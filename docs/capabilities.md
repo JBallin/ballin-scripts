@@ -123,9 +123,10 @@ Inspect each conflict with `ballin backup read <file>` or the GitHub UI. Decide
 which content to retain and deliberately reconcile local and remote bytes so
 they match before rerunning. Do not delete the cache to authorize overwrites.
 Ballin offers no force, merge, blind retry, or automatic replacement destination.
-Use one active writer, retiring the prior writer before a replacement Mac
-publishes. Reconnect supports recovery but grants no authority to overwrite
-saved data. Read/open do not execute content or change caches.
+Use only one Mac to back up to a destination. Stop using the previous Mac for
+backups before publishing from a replacement Mac. Reconnect supports recovery
+but grants no authority to overwrite saved data. Read/open do not execute
+content or change caches.
 
 Existing configured Gists retain the same three-way comparison, but their API
 has no conditional-head guarantee. See [Backup design](backup-design.md) for

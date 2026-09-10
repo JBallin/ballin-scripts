@@ -122,8 +122,9 @@ history, but Ballin provides no history navigation, rollback, or revision picker
 
 Use `ballin backup open` or `ballin backup read <file>` for read-only recovery,
 and `ballin backup disconnect` to clear local linkage and disable automatic
-backups. Use one active writer and retire the prior writer before publishing
-from a replacement Mac. See [conflicts](capabilities.md#backup-consistency-and-conflicts).
+backups. Use only one Mac to back up to a destination. Stop using the previous
+Mac for backups before publishing from a replacement Mac. See
+[conflicts](capabilities.md#backup-consistency-and-conflicts).
 
 Existing configured Gists retain their current capture/read/open behavior and
 host repair, including Enterprise hosts. Secret Gists remain readable by anyone

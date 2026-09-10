@@ -11,8 +11,8 @@ updates.
 
 ## What it does
 
-- `ballin backup` snapshots local development-environment state to GitHub.
-  New setup uses private GitHub.com repositories.
+- `ballin backup` stores snapshots of local development-environment state in
+  GitHub. Newly configured backups use private GitHub.com repositories.
 - `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
   Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
 
@@ -65,7 +65,8 @@ On a new Mac, install Ballin for maintenance, then optionally create or reconnec
 to a private backup repository with `ballin backup setup`. Reconnecting can
 recover supported Ballin preferences; existing local choices take precedence. See
 [preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences)
-for details. Retire the prior writer before using a replacement Mac to publish.
+for details. Stop using the previous Mac for backups before publishing from a
+replacement Mac.
 
 Use snapshots as a rebuild reference. Ballin does not automatically apply saved
 dotfiles or install saved packages; it is not a full disk backup or one-command
@@ -80,7 +81,7 @@ restore system.
 | `ballin backup setup [repository-name]` | Creates, reconnects to, or revalidates a private backup repository. |
 | `ballin backup` | Updates snapshots in the configured backup. |
 | `ballin backup open` | Opens the configured backup. |
-| `ballin backup disconnect` | Clears local linkage and disables automatic backups. |
+| `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
 | `ballin backup read <file>` | Prints a backed-up file from the destination. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin config` | Reads and updates local Ballin settings. |
@@ -91,14 +92,14 @@ restore system.
 
 Newly configured backups use private GitHub.com repositories. GitHub and
 authorized accounts or tokens can read their contents; the URL alone does not grant
-access. Existing configured Gists remain supported until migration and retirement
-in [#334](https://github.com/JBallin/ballin-scripts/issues/334); secret Gists are
-unlisted and readable by anyone with the URL or ID.
+access. Existing configured Gists remain supported temporarily during the
+transition to repository backups; secret Gists are unlisted and readable by
+anyone with the URL or ID.
 
 Repository backups include fixed inventories and filtered Ballin preferences.
-One default-off local choice adds raw configuration and pipx metadata. Even the
-baseline can contain private tools, identities, paths, or URLs. Ballin does not
-scan or redact credentials. Review the
+Raw configuration and pipx metadata are excluded by default and can be included
+with one local opt-in. Even the baseline can contain private tools, identities,
+paths, or URLs. Ballin does not scan or redact credentials. Review the
 [sources and sensitivity](docs/backup-sources.md) before opting in. GitHub
 controls commit author and committer attribution.
 

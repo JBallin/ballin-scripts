@@ -180,10 +180,11 @@ coverage, or successful publication.
 
 `ballin backup read <file>` prints exact supported snapshot bytes;
 `ballin backup open` opens the validated destination. Both work with read-only
-access and leave caches unchanged. Keep one active writer. Retire the previous
-writer before a replacement Mac publishes. A reconnect has no trusted base and
-cannot overwrite differing remote content; inspect and manually reconcile each
-conflict using the [conflict guidance](capabilities.md#backup-consistency-and-conflicts).
+access and leave caches unchanged. Use only one Mac to back up to a destination.
+Stop using the previous Mac for backups before publishing from a replacement Mac.
+A reconnect has no trusted base and cannot overwrite differing remote content;
+inspect and manually reconcile each conflict using the
+[conflict guidance](capabilities.md#backup-consistency-and-conflicts).
 
 If installation stops after cloning but before core setup, fix the reported
 PATH, filesystem, or configuration problem and rerun the installer. Refreshes
