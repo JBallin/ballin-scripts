@@ -140,6 +140,37 @@ const contentLengthExceedsLimit = (request: Request): boolean => {
   return Number.isFinite(byteLength) && byteLength > maxBodyBytes;
 };
 
+const readBoundedBody = async (request: Request): Promise<string | null> => {
+  if (!request.body) {
+    return '';
+  }
+
+  const reader = request.body.getReader({ mode: 'byob' });
+  const body = new Uint8Array(maxBodyBytes);
+  let byteLength = 0;
+
+  try {
+    while (true) {
+      const remainingByteLength = maxBodyBytes - byteLength + 1;
+      const { done, value } = await reader.read(new Uint8Array(remainingByteLength));
+      if (done) {
+        break;
+      }
+
+      if (value.byteLength > maxBodyBytes - byteLength) {
+        await reader.cancel();
+        return null;
+      }
+      body.set(value, byteLength);
+      byteLength += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return new TextDecoder().decode(body.subarray(0, byteLength));
+};
+
 const validateDateBucket = (dateBucket: string): boolean => {
   if (!dateBucketPattern.test(dateBucket)) {
     return false;
@@ -302,8 +333,8 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   if (rateLimitedResponse) {
     return rateLimitedResponse;
   }
-  const body = await request.text();
-  if (new TextEncoder().encode(body).byteLength > maxBodyBytes) {
+  const body = await readBoundedBody(request);
+  if (body === null) {
     return jsonResponse(400, { error: 'request body is too large' });
   }
 
