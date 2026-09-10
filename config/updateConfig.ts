@@ -3,6 +3,11 @@
 const fs = require('fs');
 const { configPath, fetchConfig, stringify } = require('./index.ts');
 const defaultConfig = require('./.defaultConfig.json');
+// Setup records destination and capture consent only in its confirmed transaction.
+if (process.env.BALLIN_DEFER_BACKUP_SELECTION === '1') {
+  delete defaultConfig.backup.repository;
+  delete defaultConfig.backup.includeSensitive;
+}
 
 type ConfigLeaf = string | number | boolean | null;
 type ConfigObject = { [key: string]: ConfigValue };

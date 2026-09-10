@@ -306,7 +306,7 @@ exit 17
 
     const optionalVerbose = runBallin(['doctor', '--verbose']);
     assert.equal(optionalVerbose.status, 0, optionalVerbose.stderr);
-    assert.include(optionalVerbose.stdout, 'INFO  Optional Gist backup:');
+    assert.include(optionalVerbose.stdout, 'INFO  Optional backup:');
     assert.include(optionalVerbose.stdout, 'ballin backup setup');
     assert.deepEqual(commandLog(), []);
 

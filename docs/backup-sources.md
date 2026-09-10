@@ -4,22 +4,20 @@
 files and command outputs Ballin selects, but it does not make their contents
 safe: files and command outputs can contain credentials, private URLs,
 usernames, paths, commands, and other sensitive data. This audit records source
-sensitivity and the planned repository policy; Ballin does not scan or redact
+sensitivity and repository policy; Ballin does not scan or redact
 these snapshots.
 
-Current Gist capture still includes every available catalog source;
-`ballin_config` saves only supported Ballin preferences. The inclusion policy
-below will take effect with private-repository onboarding in
-[#333](https://github.com/JBallin/ballin-scripts/issues/333) and migration in
-[#334](https://github.com/JBallin/ballin-scripts/issues/334). It is not part of
-current Gist setup and does not restrict Gist captures.
+Repository capture includes the fixed inventory/preferences baseline and uses
+one default-off local `backup.includeSensitive` choice for all sensitive sources.
+Existing configured Gists still capture every available catalog source;
+`ballin_config` saves only supported preferences. Migration remains separate.
 
 Listed filenames may live under an application's configuration directory. To
-inspect editor files before enabling Gist backup or sharing snapshots, check
+inspect editor files before enabling backup or sharing snapshots, check
 `~/Library/Application Support/Code/User/` and
 `~/Library/Application Support/Code - Insiders/User/`.
 
-| Local source or command | Snapshot | Why included | Plausible sensitive content | Planned repository policy |
+| Local source or command | Snapshot | Why included | Plausible sensitive content | Repository policy |
 | --- | --- | --- | --- | --- |
 | `.bash_profile`, `.bashrc`, `.profile`, `.zprofile`, `.zshrc` | `bash_profile.sh`, `bashrc.sh`, `profile.sh`, `zprofile.sh`, `zshrc.sh` | Reproduce shell startup behavior. | Arbitrary exports, tokens, URLs, usernames, paths, and shell commands. | Sensitive; one local opt-in. |
 | `.gitconfig`, `.gitignore_global` | `gitconfig`, `gitignore_global` | Preserve Git identity, behavior, and global ignore preferences. | Identity, signing configuration, credential helpers, token-bearing rewrites, private URLs, and project patterns. | Sensitive; one local opt-in. |
@@ -38,24 +36,22 @@ inspect editor files before enabling Gist backup or sharing snapshots, check
 | `.nvmrc` | `nvmrc` | Preserve the preferred Node.js version. | Usually a version, but the file is arbitrary user-authored content. | Sensitive; one local opt-in. |
 | `mas list` | `mas` | Record installed Mac App Store applications. | Application choices and versions. | Inventory; default included. |
 
-## Planned repository inclusion
+## Repository inclusion
 
-Backup remains optional. Private-repository backups will include the fixed
+Backup remains optional. Private-repository backups include the fixed
 inventory baseline and supported Ballin preferences by default. Inventories
 may contain private tool choices, identities, paths, and URLs; they are not
 guaranteed public-safe or secret-free. The privacy boundary is GitHub repository
 authorization, with no protection from GitHub itself or an authorized
 account/token compromise.
 
-One local opt-in will cover raw configuration and pipx installation metadata.
+One local opt-in covers raw configuration and pipx installation metadata.
 New and replacement installations start with these sensitive sources off and
-make their own choice; approval is never recovered from a backup. Ordinary
-reconnection retains established local consent, while Gist migration explicitly
-reviews it. The local setting and review will be introduced in #333; no such
-setting or review is available in current Gist setup.
+make their own choice; approval is never recovered from a backup. Configured setup retains established local consent; fresh reconnect requires
+its own review. This setting does not change existing Gist captures.
 
-Review will show logical paths and resolved targets for selected regular files,
-including symlinked dotfiles outside `HOME`. It will identify pipx separately as
+Review shows logical paths and resolved targets for selected regular files,
+including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.
 Review reads no file contents, runs no collectors, and does not recurse. Missing

@@ -25,7 +25,9 @@ const nextSteps: Record<string, string> = {
   'backup.gist': 'Run ballin config reset to restore valid defaults, then run ballin backup setup if needed.',
   'backup.gh': 'Install GitHub CLI and authenticate it for your backup host.',
   'backup.auth': 'Run gh auth login for the configured backup host.',
-  'backup.read': 'Confirm the configured Gist ID is readable on the backup host.',
+  'backup.read': 'Check access to the selected backup, then run ballin backup setup to revalidate it.',
+  'backup.config': 'Repair the selected backup configuration or run ballin backup disconnect.',
+  'backup.consent': 'Set backup.includeSensitive to true or false; read-only recovery remains available.',
 };
 
 const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): string => {

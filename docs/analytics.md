@@ -53,7 +53,7 @@ environment opt-outs still apply. The exact restoration rules are recorded in
 - command arguments
 - usernames
 - local paths
-- Gist IDs or URLs
+- backup destination IDs or URLs
 - dotfile contents
 - package lists
 - editor settings or extensions

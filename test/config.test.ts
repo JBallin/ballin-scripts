@@ -665,6 +665,16 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
 
   describe('updateConfig', () => {
     const updateConfigPath = path.join(__dirname, '..', 'config', 'updateConfig.ts');
+    it('defers new destination and consent defaults during setup without changing normal refresh', () => {
+      fs.writeFileSync(configPath, JSON.stringify({ backup: {} }));
+      const result = spawnSync(process.execPath, [updateConfigPath], {
+        encoding: 'utf8', env: testChildEnvironment({ BALLIN_DEFER_BACKUP_SELECTION: '1' }),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const deferred = fetchConfig().configObj;
+      assert.notProperty(deferred.backup, 'repository'); assert.notProperty(deferred.backup, 'includeSensitive');
+      assert.equal(deferred.update.backup, 'false');
+    });
     const runUpdateConfig = () => spawnSync(process.execPath, [updateConfigPath], {
       cwd: path.join(__dirname, '..'),
       encoding: 'utf8',

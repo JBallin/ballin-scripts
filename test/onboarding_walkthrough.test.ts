@@ -6,7 +6,8 @@ const path = require('path');
 const repoRoot = path.join(__dirname, '..');
 const installPath = path.join(repoRoot, 'install.sh');
 
-describe('first-run onboarding walkthroughs', () => {
+describe('first-run onboarding walkthroughs', function() {
+  this.timeout(15000);
   let testDir: string;
   let homeDir: string;
   let toolDir: string;
@@ -16,7 +17,10 @@ describe('first-run onboarding walkthroughs', () => {
   let remoteGistDir: string;
   let scratchDir: string;
 
-  const createdGistId = 'walkthrough-created-gist-id';
+  const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+  const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
+  const remoteState = () => JSON.parse(fs.readFileSync(path.join(remoteGistDir, 'repository.json'), 'utf8'));
+  const remoteFile = (name: string) => Buffer.from(remoteState().commits[remoteState().head].files[name], 'base64').toString();
 
   const commandPath = (name: string): string => {
     const resolved = (process.env.PATH ?? '')
@@ -65,50 +69,10 @@ esac
   };
 
   const installGhStub = (): void => {
-    writeExecutable('gh', `#!/usr/bin/env bash
-printf 'gh:%s\\n' "$*" >> "$BALLIN_WALKTHROUGH_LOG"
-if [ "$1:$2" = 'auth:status' ]; then
-  if [ "$*" != 'auth status --active --hostname github.com' ]; then exit 2; fi
-  exit 0
-fi
-if [ "$1:$2:$3:$4" = 'api:--hostname:github.com:user' ] && [ "$#" -eq 4 ]; then exit 0; fi
-if [ "$1:$2" = 'gist:create' ]; then
-  if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
-  cp "$PWD/.MyConfig.md" "$BALLIN_WALKTHROUGH_GIST/.MyConfig.md"
-  printf 'https://gist.github.com/%s\\n' "$BALLIN_WALKTHROUGH_GIST_ID"
-  exit 0
-fi
-if [ "$1:$2" = 'gist:view' ]; then
-  if [ "$3" != "$BALLIN_WALKTHROUGH_GIST_ID" ]; then exit 2; fi
-  if [ "$4" = '--web' ] && [ "$#" -eq 4 ]; then exit 0; fi
-  if [ "$4" = '--files' ] && [ "$#" -eq 4 ]; then
-    for remote_file in "$BALLIN_WALKTHROUGH_GIST"/*; do
-      if [ -f "$remote_file" ]; then printf '%s\\n' "\${remote_file##*/}"; fi
-    done
-    exit 0
-  fi
-  if [ "$4:$5" = '--raw:--filename' ] && [ "$#" -eq 6 ]; then
-    if [ -f "$BALLIN_WALKTHROUGH_GIST/$6" ]; then
-      cat "$BALLIN_WALKTHROUGH_GIST/$6"
-      exit 0
-    fi
-    exit 1
-  fi
-  exit 2
-fi
-if [ "$1" = 'api' ]; then
-  if [ "$2:$3:$4:$6" != "--hostname:github.com:--method:gists/$BALLIN_WALKTHROUGH_GIST_ID" ]; then exit 2; fi
-  if [ "$5" = 'GET' ] && [ "$#" -eq 6 ]; then
-    node -e 'const fs = require("fs"); const path = require("path"); const dir = process.argv[1]; const files = {}; for (const name of fs.readdirSync(dir)) { const file = path.join(dir, name); if (!fs.statSync(file).isFile()) continue; const content = fs.readFileSync(file, "utf8"); files[name] = { filename: name, size: Buffer.byteLength(content), truncated: false, content }; } process.stdout.write(JSON.stringify({ files, truncated: false }) + "\\n");' "$BALLIN_WALKTHROUGH_GIST"
-    exit $?
-  fi
-  if [ "$5" = 'PATCH' ] && [ "$7" = '--input' ] && [ "$9" = '--silent' ] && [ "$#" -eq 9 ]; then
-    node -e 'const fs = require("fs"); const path = require("path"); const payload = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); const dir = process.argv[2]; for (const [name, value] of Object.entries(payload.files)) fs.writeFileSync(path.join(dir, name), value.content);' "$8" "$BALLIN_WALKTHROUGH_GIST"
-    exit $?
-  fi
-fi
-exit 2
-`);
+    const state = fixtureState(); state.exists = false;
+    const statePath = path.join(remoteGistDir, 'repository.json');
+    fs.writeFileSync(statePath, JSON.stringify(state));
+    installRepositoryFixture(toolDir, statePath);
   };
 
   const childEnv = (): NodeJS.ProcessEnv => ({
@@ -118,7 +82,6 @@ exit 2
     BALLIN_NO_ANALYTICS: '1',
     BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: path.join(testDir, 'system'),
     BALLIN_WALKTHROUGH_GIST: remoteGistDir,
-    BALLIN_WALKTHROUGH_GIST_ID: createdGistId,
     BALLIN_WALKTHROUGH_LOG: commandLogPath,
     BALLIN_WALKTHROUGH_SOURCE: repoRoot,
   });
@@ -174,7 +137,7 @@ exit 2
     assert.equal(doctorResult.status, 0, doctorResult.stderr);
     assert.equal(doctorResult.stdout, '😎 You\'re ballin.\n');
     assert.equal(verboseDoctorResult.status, 0, verboseDoctorResult.stderr);
-    assert.include(verboseDoctorResult.stdout, 'INFO  Optional Gist backup');
+    assert.include(verboseDoctorResult.stdout, 'INFO  Optional backup');
     assert.include(verboseDoctorResult.stdout, 'ballin backup setup');
 
     [
@@ -200,23 +163,23 @@ exit 2
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
     installGhStub();
-    const installResult = runInstaller('y\ny\n\nn\n\n');
+    const installResult = runInstaller('y\ny\ncreate\n\ny\ny\n\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));
     assert.equal(config.backup.host, 'github.com');
-    assert.equal(config.backup.id, createdGistId);
+    assert.deepEqual(config.backup.repository, fixtureDestination);
     assert.equal(config.update.backup, 'true');
-    assert.isTrue(fs.existsSync(path.join(remoteGistDir, '.MyConfig.md')));
+    assert.deepEqual(Object.keys(remoteState().commits[remoteState().head].files), ['.ballin-backup.json']);
 
     const zshrc = 'export BALLIN_WALKTHROUGH=1\n';
     fs.writeFileSync(path.join(homeDir, '.zshrc'), zshrc);
     const backupResult = runInstalled(['backup']);
     assert.equal(backupResult.status, 0, backupResult.stderr);
     assert.include(backupResult.stdout, '✚ zshrc');
-    assert.equal(fs.readFileSync(path.join(remoteGistDir, 'zshrc.sh'), 'utf8'), zshrc);
+    assert.equal(remoteFile('zshrc.sh'), zshrc);
     assert.equal(
-      fs.readFileSync(path.join(installedRepoDir, '.backup-cache', 'zshrc.sh'), 'utf8'),
+      fs.readFileSync(path.join(repositoryCacheDirectory(path.join(installedRepoDir, '.backup-cache'), fixtureDestination), 'zshrc.sh'), 'utf8'),
       zshrc,
     );
 
@@ -230,12 +193,11 @@ exit 2
     assert.equal(uninstallResult.status, 0, uninstallResult.stderr);
     assert.isFalse(fs.existsSync(installedRepoDir));
     assert.isFalse(fs.existsSync(path.join(userBinDir, 'ballin')));
-    assert.equal(fs.readFileSync(path.join(remoteGistDir, 'zshrc.sh'), 'utf8'), zshrc);
+    assert.equal(remoteFile('zshrc.sh'), zshrc);
 
-    const log = commandLog();
-    assert.include(log, `gh:api --hostname github.com --method GET gists/${createdGistId}`);
-    assert.include(log, `gh:api --hostname github.com --method PATCH gists/${createdGistId}`);
-    assert.include(log, `gh:gist view ${createdGistId} --web`);
-    assert.notMatch(log, /gists\/(?!walkthrough-created-gist-id)/u);
+    const requests = remoteState().requests;
+    assert.equal(requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 1);
+    assert.equal(requests.filter((r: { endpoint: string }) => r.endpoint === 'open').length, 1);
+    assert.isTrue(requests.every((r: { endpoint: string }) => !r.endpoint.includes('gists')));
   });
 });

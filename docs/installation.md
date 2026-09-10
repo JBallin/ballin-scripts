@@ -1,7 +1,7 @@
 # Installation and removal
 
 Ballin can be installed for maintenance without configuring backups. Git and a
-supported Node.js version are the only prerequisites for the installer. Gist
+supported Node.js version are the only prerequisites for the installer. Private-repository
 backup, Homebrew, and the other integrations are optional.
 
 ## Install
@@ -18,9 +18,9 @@ before cloning or making installation changes. No or end-of-file exits
 successfully without cloning. Refreshing an existing installation does not
 repeat this confirmation.
 
-The core installation completes before Ballin offers optional Gist backup.
-Declining backup setup makes no GitHub CLI, authentication, or Gist calls. Run
-this later to create or adopt a destination without reinstalling:
+The core installation completes before Ballin offers optional backup.
+Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run
+this later to create or reconnect to a destination without reinstalling:
 
 ```shell
 ballin backup setup
@@ -28,11 +28,11 @@ ballin backup setup
 
 If requested backup setup fails, the checkout, configuration, command link, and
 eligible analytics state remain installed. The installer exits nonzero and
-prints the same command as the retry path. If Gist creation succeeds but Ballin
-cannot persist `backup.id`, local setup remains unconfigured, but the newly
-created remote secret Gist may remain. Inspect your Gists and remove that remote
-destination manually if it is not needed; Ballin does not attempt an automatic
-remote rollback.
+prints the same command as the retry path. If creation or initialization is
+ambiguous, inspect the reported repository and completed stage deliberately;
+do not blindly create again. A confirmed marker followed by local-save failure
+can be recovered through explicit reconnect. Ballin never rolls back remote
+history automatically.
 
 ## Local effects
 
@@ -42,7 +42,7 @@ The installer can create or change:
   and merges `origin/main`. If checkout or merge recovery is needed, Ballin can
   stash tracked and untracked changes in this checkout.
 - `~/.ballin-scripts/ballin.config.json`. A new file starts from the bundled
-  defaults. A refresh adds missing known settings. Adopting a backup can recover
+  defaults. A refresh adds missing known settings. Reconnecting to a backup can recover
   supported Ballin preferences; existing local choices and custom settings are
   preserved.
 - `~/.ballin-scripts/.analytics/install-id` when analytics are enabled and the
@@ -52,7 +52,7 @@ The installer can create or change:
 - `<bin>/ballin`, a symbolic link to `~/.ballin-scripts/bin/ballin`. `<bin>` is
   `$(brew --prefix)/bin` when `brew` is available, otherwise
   `~/.local/bin`. The selected directory must already be on `PATH`.
-- `~/.ballin-scripts/.backup-cache` only after a successful backup run. It is
+- `~/.ballin-scripts/.backup-cache` during confirmed-state cache promotion. It is
   derived comparison state, not the backup destination or an enablement flag.
 
 Before creating the command link, setup removes an existing non-directory
@@ -60,7 +60,7 @@ target at `<bin>/ballin`. It refuses to replace a directory. A repository
 refresh can replace checkout files through the Git merge. Config migration can
 add bundled defaults.
 
-Temporary Gist marker and staged config files are removed after setup. The
+Private transport and staged config files are removed after setup. The
 installer does not run `ballin update`, collect snapshots, perform the first
 backup, install optional tools, or change GitHub CLI authentication.
 
@@ -74,86 +74,115 @@ The command shown above downloads `install.sh` from GitHub. The installer then:
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
 - makes no GitHub CLI or Gist calls when optional backup setup is declined;
-- when backup setup is requested, checks the active `gh` account for the
-  selected host and either reads an existing Gist marker and optional
-  `ballin_config`, or creates a secret Gist containing only the Ballin marker;
+- when backup setup is requested, checks the effective personal GitHub.com
+  credential, inspects the selected repository, and after confirmation either
+  revalidates it or creates a private repository containing only the Ballin marker;
 - sends no analytics request during installation. Later instrumented commands
   can contact the endpoint described in [Analytics](analytics.md).
 
 The first `ballin backup` is a separate command. It collects the current
-allowlisted sources, reads relevant Gist state, and writes safely changed
+selected allowlisted sources, reads a coherent repository revision, and writes safely changed
 snapshots. See [Backup sources and sensitivity](backup-sources.md).
 
 ## Optional backup and adoption
 
-Backup is configured only when `backup.id` contains a non-empty Gist ID.
-Missing, null, blank, and legacy string `"null"` IDs all mean maintenance-only
-Ballin. Non-string IDs are invalid configuration: doctor, setup, backup, and an
-enabled update backup stage fail before GitHub work until `backup.id` is fixed
-to null or a non-empty string. Run `ballin config reset` to restore valid
-defaults, then opt into backup again if needed. `backup.host` records which
-GitHub or GitHub Enterprise host to use; `ballin backup setup` repairs a missing
-or malformed host.
+```shell
+ballin backup setup
+ballin backup setup my-backup-name
+```
 
-Setup creates a secret Gist. Secret means unlisted, not strongly private:
-anyone with the URL or ID can view it. Shell, Git, and editor files can contain
-credentials, tokens, private URLs, paths, or other sensitive content added by
-the user. Ballin is not a secrets manager and does not scan or redact allowed
-files. Review [Backup sources and sensitivity](backup-sources.md) and protect
-the Gist URL and ID.
+New setup offers distinct **create** and **reconnect** choices and defaults to
+`ballin-backups`. The optional argument is a repository name, not a URL or owner.
+Backups belong to the authenticated personal GitHub.com account. Setup shows
+that account and the complete destination before final confirmation. A missing
+or inaccessible reconnect candidate never causes replacement creation; a create
+collision requires an explicit different name or reconnect choice.
 
-When adopting an existing backup, setup validates the Ballin marker using the
-host selected in the current setup flow. That selected host and the
-marker-validated Gist ID are authoritative. A restored `ballin_config` can
-recover supported maintenance preferences and an analytics opt-out. Existing
-local choices take precedence. Destination identity, custom settings, and
-automatic-backup or sensitive-source approval are not restored. See
-[preference recovery](optional-capabilities.md#recovering-ballin-preferences).
-If reading, restoring, or saving the adopted configuration fails, setup stops
-and leaves the prior unconfigured configuration active.
+Ballin uses the effective credential through `gh api ... user`; an environment
+token can take precedence over a stored login. Ballin never logs in, switches
+accounts, or broadens scopes automatically. Authenticate with
+`gh auth login --hostname github.com` yourself if needed. Creation/publication
+require repository write access; reconnect and recovery need only the
+corresponding read access. Branch restrictions can still reject writes.
 
-Unreadable local JSON or malformed configuration sections stop setup before
-settings are refreshed. Repair the config and retry; setup will not replace a
-malformed analytics section with enabled defaults. See
-[Backup design](backup-design.md#portable-preferences) for validation and
-restoration rules.
+Setup completely inspects an existing backup before asking for one default-off
+choice covering raw configuration and pipx metadata. Declining performs no
+sensitive-source discovery. Selecting it reviews logical paths, resolved
+regular-file targets (including symlinks outside HOME), and missing or unavailable
+sources. pipx is described separately. Review reads no raw contents and runs no
+collectors; access or resolution errors stop setup. See
+[Source review](backup-sources.md#repository-inclusion).
 
-After backup is newly configured, Ballin asks whether `ballin update` should run
-`ballin backup` automatically with a `[Y/n]` prompt. Enter, `y`, or `Y` saves
-`"true"`; other answers or EOF save `"false"`. This local choice controls
-`update.backup`, which is never restored from a backup. Already-configured
-backups keep their choice without this prompt. If saving the answer fails,
-setup reports failure and recovery guidance, but the destination remains
-configured. See [Optional capabilities](optional-capabilities.md#gist-backups)
-to change it later.
+Final confirmation covers destination and source selection. Declining or EOF,
+including an unsubmitted partial `y`, cancels before destination, consent, cache,
+or remote writes. Ordinary configuration defaults may have been filled;
+destination and consent defaults are deferred until confirmation. After approval,
+Ballin revalidates the reconnect candidate or creates and confirms a marker-only
+repository, invalidates untrusted caches, then atomically saves verified linkage,
+reviewed consent, and eligible preferences. It never seeds a comparison base
+from recovered remote content.
 
-If a configured ID has a malformed host, `ballin backup setup` asks for a
-replacement and verifies the retained Gist's Ballin marker on that host before
-saving it. Failed validation leaves the malformed host and cache unchanged.
+`backup.repository` stores opaque repository and owner IDs, the mutable name,
+and the initially selected default branch. Renames are resolved by ID;
+configured `setup` revalidates that identity and preserves local sensitive-source
+and automatic-backup choices. An explicit name must identify that same backup.
+Changing destinations requires disconnect. Wrong ownership, public visibility,
+unsupported contents/state, or a missing selected branch fail closed.
 
-`.backup-cache` is the last remote base observed by this machine, but its format
-does not identify a destination. Ballin therefore invalidates any cache before
-an unconfigured installation creates or adopts a destination; failure stops
-setup. A configured destination retains its cache. Without a trusted cache,
-differing local and remote content reports a conflict rather than choosing a
-winner. If a later setup step fails, the invalidated cache remains removed.
-Resetting config leaves the remote Gist untouched, and a later setup invalidates
-the now-unproven cache again.
+Reconnect restores only [portable preferences](backup-design.md#portable-preferences).
+Original local leaves win, including default-valued or invalid ones; admitted
+remote values may replace defaults created during setup. Destination, sensitive
+consent, automatic-backup choices, and unknown settings are never restored.
+An eligible analytics opt-out is applied before installer analytics initialization.
+Saved dotfiles and packages are never applied or executed.
 
-Older `ballin_config` snapshots may contain settings that are no longer backed
-up, and adoption invalidates the old comparison cache. A later backup may
-therefore report a `ballin_config` conflict. Inspect and reconcile it using the
-existing
-[conflict guidance](capabilities.md#backup-consistency-and-conflicts); adoption
-does not overwrite the remote snapshot or bypass conflicts.
+After successful unconfigured-to-configured persistence, the existing `[Y/n]`
+automatic-backup prompt accepts Enter, `y`, or `Y` as `"true"`; other answers or
+unanswered EOF save `"false"`. A partial `y` followed by EOF retains the existing
+automatic-backup prompt behavior and saves `"true"`. If that preference save fails, the destination remains
+configured and the partial result is reported. Change it later with
+`ballin config set update.backup true` or `false`.
+
+Creation uses GitHub's initialized private repository, then one conditional
+commit replaces only its checked setup-generated README with the Ballin marker.
+Remote creation can remain completed if a later step fails. Cache invalidation
+can remain completed even when local persistence fails. Reconnect provides no
+authority to overwrite different saved content. Older full-config snapshots
+receive no special conflict exception.
+
+Existing configured Gists retain backup/read/open/readiness and required host
+repair through `ballin backup setup`. The internal installer compatibility command
+cannot create or adopt Gists. Migration and Gist retirement belong to
+[#334](https://github.com/JBallin/ballin-scripts/issues/334); backup verification
+belongs to [#336](https://github.com/JBallin/ballin-scripts/issues/336).
+
+## Disconnect
+
+```shell
+ballin backup disconnect
+```
+
+Disconnect atomically clears both repository and legacy Gist associations and
+sets `update.backup="false"`, then removes `.backup-cache`. It preserves sensitive
+consent, legacy host, and unrelated preferences. It requires no authentication
+or network operation and leaves remote history intact. A failed config save
+retains the prior selection. If cleanup fails after saving, writes stay disabled;
+repeat disconnect to retry cleanup even when already unconfigured.
 
 ## Health and recovery
 
-`ballin doctor` treats maintenance-only Ballin as healthy. Verbose output shows
-one `INFO` row for optional Gist backup and names `ballin backup setup`; it does
-not run `gh`. With a non-empty backup ID, doctor checks the configured host,
-`gh`, authentication, and Gist readability, and those failures affect overall
-health. Malformed or unreadable core configuration remains an error.
+`ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
+Configured repositories are checked for authentication, expected private identity,
+supported layout, and coherent readability. This is readiness only: it does not
+collect, repair cache permissions, probe writes, or establish backup freshness,
+coverage, or successful publication.
+
+`ballin backup read <file>` prints exact supported snapshot bytes;
+`ballin backup open` opens the validated destination. Both work with read-only
+access and leave caches unchanged. Keep one active writer. Retire the previous
+writer before a replacement Mac publishes. A reconnect has no trusted base and
+cannot overwrite differing remote content; inspect and manually reconcile each
+conflict using the [conflict guidance](capabilities.md#backup-consistency-and-conflicts).
 
 If installation stops after cloning but before core setup, fix the reported
 PATH, filesystem, or configuration problem and rerun the installer. Refreshes
@@ -170,7 +199,7 @@ ballin uninstall
 
 Uninstall removes Ballin-owned command symlinks and recursively deletes
 `~/.ballin-scripts`, including config, analytics identity, and backup cache. It
-does not delete a remote Gist, its revision history, or GitHub CLI credentials.
+does not delete a remote backup, its revision history, or GitHub CLI credentials.
 When analytics remain enabled, uninstall can send its normal final top-level
 command event using state captured before local deletion.
 
@@ -180,5 +209,5 @@ If the command cannot run, inspect the potential link locations first:
 `~/.local/bin/ballin`, `/opt/homebrew/bin/ballin`, `/usr/local/bin/ballin`, and
 `$(brew --prefix)/bin/ballin` for a custom Homebrew prefix. Remove only links
 whose target is `~/.ballin-scripts/bin/ballin`, then remove
-`~/.ballin-scripts`. Remote Gists and GitHub CLI authentication require separate
+`~/.ballin-scripts`. Remote backups and GitHub CLI authentication require separate
 manual action if you also want to remove them.

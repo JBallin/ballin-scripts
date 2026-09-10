@@ -78,7 +78,7 @@ counts.
 The report only reads the existing aggregate tables: `install_days`,
 `command_events_daily`, and `version_events_daily`. It does not introduce new
 telemetry fields or report feature-level events, command arguments, local paths,
-Gist details, package/editor data, raw errors, environment variables,
+backup destination details, package/editor data, raw errors, environment variables,
 arbitrary config values, IPs, or raw install IDs.
 
 ## Resetting Aggregates
