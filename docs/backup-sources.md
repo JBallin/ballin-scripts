@@ -41,24 +41,25 @@ inspect editor files before enabling backup or sharing snapshots, check
 Backup remains optional. Private-repository backups include the fixed
 inventory baseline and supported Ballin preferences by default. Inventories
 may contain private tool choices, identities, paths, and URLs; they are not
-guaranteed public-safe or secret-free. The privacy boundary is GitHub repository
-authorization, with no protection from GitHub itself or an authorized
-account/token compromise.
+guaranteed public-safe or secret-free. Private repository authorization prevents
+URL-only access; GitHub and authorized accounts or tokens can still read the
+contents.
 
 One local opt-in covers raw configuration and pipx installation metadata.
 New and replacement installations start with these sensitive sources off and
-make their own choice; approval is never recovered from a backup. Configured setup retains established local consent; fresh reconnect requires
-its own review. This setting does not change existing Gist captures.
+make their own choice; approval is never recovered from a backup. Configured
+setup retains established local consent; fresh reconnect requires its own
+review. This setting does not change existing Gist captures.
 
 Review shows logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.
 Review reads no file contents, runs no collectors, and does not recurse. Missing
-and unavailable sources must be shown accurately; access or resolution errors
-prevent confirmation. EOF or declining final confirmation cancels without
+and unavailable sources are shown; access or resolution errors prevent
+confirmation. EOF or declining final confirmation cancels without
 saving consent or changing destination, cache, or remote state. Excluded
-sensitive sources must not be inspected just to verify them.
+sensitive sources are not inspected just to verify them.
 
 Consent covers later captures as files, symlink targets, and installed-tool
 metadata change. It does not certify future contents or require repeated review
@@ -70,7 +71,8 @@ home trees remain outside direct selection. Allowed sources may still contain
 credentials.
 
 Omitting a category from future captures does not delete older remote files,
-history, or cached content. Current Gist read/recovery remains available.
+history, or cached content. Existing configured Gists remain readable until
+migration and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
 Any new source or group requires an explicit inclusion and sensitivity review.
 Unknown groups are excluded; existing or restored preferences do not authorize

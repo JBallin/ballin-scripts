@@ -11,8 +11,8 @@ updates.
 
 ## What it does
 
-- `ballin backup` snapshots local development-environment state to a configured
-  private GitHub repository.
+- `ballin backup` snapshots local development-environment state to GitHub.
+  New setup uses private GitHub.com repositories.
 - `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
   Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
 
@@ -61,9 +61,9 @@ Your system is ready to brew.
 
 ## New Mac setup
 
-On a new Mac, install Ballin for maintenance, then optionally create or reconnect to a
-private backup repository with `ballin backup setup`. Reconnecting to an existing backup can recover
-supported Ballin preferences; existing local choices take precedence. See
+On a new Mac, install Ballin for maintenance, then optionally create or reconnect
+to a private backup repository with `ballin backup setup`. Reconnecting can
+recover supported Ballin preferences; existing local choices take precedence. See
 [preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences)
 for details. Retire the prior writer before using a replacement Mac to publish.
 
@@ -89,16 +89,18 @@ restore system.
 
 ## Privacy and security
 
-New backups use private GitHub.com repositories. GitHub and authorized accounts
-or tokens can read their contents; possession of the URL alone does not grant
-access. Existing configured Gists remain supported until migration is available;
-secret Gists are unlisted and readable by anyone with the URL or ID.
+Newly configured backups use private GitHub.com repositories. GitHub and
+authorized accounts or tokens can read their contents; the URL alone does not grant
+access. Existing configured Gists remain supported until migration and retirement
+in [#334](https://github.com/JBallin/ballin-scripts/issues/334); secret Gists are
+unlisted and readable by anyone with the URL or ID.
 
 Repository backups include fixed inventories and filtered Ballin preferences.
 One default-off local choice adds raw configuration and pipx metadata. Even the
 baseline can contain private tools, identities, paths, or URLs. Ballin does not
-scan or redact credentials. Review the [sources and sensitivity](docs/backup-sources.md)
-before opting in. GitHub controls commit author and committer attribution.
+scan or redact credentials. Review the
+[sources and sensitivity](docs/backup-sources.md) before opting in. GitHub
+controls commit author and committer attribution.
 
 ## Documentation
 

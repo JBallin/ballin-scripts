@@ -1,8 +1,8 @@
 # Installation and removal
 
 Ballin can be installed for maintenance without configuring backups. Git and a
-supported Node.js version are the only prerequisites for the installer. Private-repository
-backup, Homebrew, and the other integrations are optional.
+supported Node.js version are the only prerequisites for the installer. Backups
+and integrations such as Homebrew are optional.
 
 ## Install
 
@@ -42,9 +42,9 @@ The installer can create or change:
   and merges `origin/main`. If checkout or merge recovery is needed, Ballin can
   stash tracked and untracked changes in this checkout.
 - `~/.ballin-scripts/ballin.config.json`. A new file starts from the bundled
-  defaults. A refresh adds missing known settings. Reconnecting to a backup can recover
-  supported Ballin preferences; existing local choices and custom settings are
-  preserved.
+  defaults. A refresh adds missing known settings. Reconnecting to a backup can
+  recover supported Ballin preferences; existing local choices and custom
+  settings are preserved.
 - `~/.ballin-scripts/.analytics/install-id` when analytics are enabled and the
   environment has not opted out. Installation creates only the local random
   ID; it sends no analytics event. Later instrumented commands can send the
@@ -74,17 +74,17 @@ The command shown above downloads `install.sh` from GitHub. The installer then:
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
 - makes no GitHub CLI or Gist calls when optional backup setup is declined;
-- when backup setup is requested, checks the effective personal GitHub.com
-  credential, inspects the selected repository, and after confirmation either
-  revalidates it or creates a private repository containing only the Ballin marker;
+- for new repository setup, checks the effective personal GitHub.com credential
+  and selected destination, then after confirmation either reconnects or creates
+  a private repository containing only the Ballin marker;
 - sends no analytics request during installation. Later instrumented commands
   can contact the endpoint described in [Analytics](analytics.md).
 
 The first `ballin backup` is a separate command. It collects the current
-selected allowlisted sources, reads a coherent repository revision, and writes safely changed
-snapshots. See [Backup sources and sensitivity](backup-sources.md).
+selected allowlisted sources, reads the destination, and saves changes that pass
+the conflict checks. See [Backup sources and sensitivity](backup-sources.md).
 
-## Optional backup and adoption
+## Optional backup setup and reconnect
 
 ```shell
 ballin backup setup
@@ -105,12 +105,13 @@ accounts, or broadens scopes automatically. Authenticate with
 require repository write access; reconnect and recovery need only the
 corresponding read access. Branch restrictions can still reject writes.
 
-Setup completely inspects an existing backup before asking for one default-off
-choice covering raw configuration and pipx metadata. Declining performs no
-sensitive-source discovery. Selecting it reviews logical paths, resolved
-regular-file targets (including symlinks outside HOME), and missing or unavailable
-sources. pipx is described separately. Review reads no raw contents and runs no
-collectors; access or resolution errors stop setup. See
+Fresh create or reconnect setup asks for one default-off choice covering raw
+configuration and pipx metadata. Reconnect fully inspects the existing backup
+before asking. Declining performs no sensitive-source discovery. Selecting it
+reviews logical paths, resolved regular-file targets (including symlinks outside
+`HOME`), and missing or unavailable sources. pipx is described separately. Review
+reads no raw contents and runs no collectors; access or resolution errors stop
+setup. See
 [Source review](backup-sources.md#repository-inclusion).
 
 Final confirmation covers destination and source selection. Declining or EOF,
@@ -136,10 +137,10 @@ consent, automatic-backup choices, and unknown settings are never restored.
 An eligible analytics opt-out is applied before installer analytics initialization.
 Saved dotfiles and packages are never applied or executed.
 
-After successful unconfigured-to-configured persistence, the existing `[Y/n]`
-automatic-backup prompt accepts Enter, `y`, or `Y` as `"true"`; other answers or
-unanswered EOF save `"false"`. A partial `y` followed by EOF retains the existing
-automatic-backup prompt behavior and saves `"true"`. If that preference save fails, the destination remains
+After saving a newly configured backup, Ballin asks whether updates should run
+backups automatically. The `[Y/n]` prompt accepts Enter, `y`, or `Y` as `"true"`;
+other answers or unanswered EOF save `"false"`. A partial `y` followed by EOF
+also saves `"true"`. If that preference save fails, the destination remains
 configured and the partial result is reported. Change it later with
 `ballin config set update.backup true` or `false`.
 

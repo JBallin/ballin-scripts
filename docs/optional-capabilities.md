@@ -81,27 +81,29 @@ setting is required.
 
 ## Private repository backups
 
-`ballin backup` uses [GitHub CLI](https://cli.github.com/) for private GitHub.com
-repositories owned by a personal account. Backup is optional; declining it
-leaves a healthy maintenance-only installation and makes no `gh` calls.
+Newly configured backups use private GitHub.com repositories owned by a personal
+account, accessed through [GitHub CLI](https://cli.github.com/). Backup is
+optional; declining it leaves a healthy maintenance-only installation and makes
+no `gh` calls.
 
 ```shell
 ballin backup setup [repository-name]
 ```
 
-Setup offers create or reconnect, reviews one local sensitive-source choice,
+Fresh setup offers create or reconnect, reviews one local sensitive-source choice,
 and confirms before remote or linkage changes. The effective `gh` credential
 can come from an environment token; Ballin shows the selected account and never
 logs in, switches accounts, or expands scopes automatically. Read-only access
 supports reconnect and recovery without granting write permission. See
-[setup and recovery](installation.md#optional-backup-and-adoption).
+[setup and recovery](installation.md#optional-backup-setup-and-reconnect).
 
 `backup.repository` identifies the selected destination. The fixed inventory and
 filtered-preference baseline is always selected; `backup.includeSensitive`
-defaults to `"false"` and adds raw configuration and pipx metadata. Accept only
-native booleans or exact `"true"`/`"false"` strings. These choices stay local.
-Changing sensitive consent later changes future capture selection, not saved
-files or history; review [source sensitivity](backup-sources.md) first.
+defaults to `"false"`; enabling it adds raw configuration and pipx metadata. The
+setting accepts native booleans or exact `"true"`/`"false"` strings. Destination
+and consent stay local. Changing sensitive consent later changes future capture
+selection, not saved files or history; review
+[source sensitivity](backup-sources.md) first.
 
 After new linkage, setup asks whether updates should run backups automatically,
 with yes as the default. Change that independent choice later with:
@@ -111,9 +113,10 @@ ballin config set update.backup true
 ballin config set update.backup false
 ```
 
-GitHub and authorized accounts/tokens can read private backups. Even baseline
-inventories can expose identities, private URLs, and paths; Ballin does not scan
-or redact credentials. GitHub controls account-based commit author/committer
+The repository URL alone does not grant access, but GitHub and authorized
+accounts or tokens can read private backups. Even baseline inventories can
+expose identities, private URLs, and paths; Ballin does not scan or redact
+credentials. GitHub controls account-based commit author/committer
 attribution; Ballin changes no global Git identity configuration. GitHub retains
 history, but Ballin provides no history navigation, rollback, or revision picker.
 
@@ -123,8 +126,9 @@ backups. Use one active writer and retire the prior writer before publishing
 from a replacement Mac. See [conflicts](capabilities.md#backup-consistency-and-conflicts).
 
 Existing configured Gists retain their current capture/read/open behavior and
-host repair, including Enterprise hosts. No new Gist setup is available. Migration
-and Gist retirement remain in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+host repair, including Enterprise hosts. Secret Gists remain readable by anyone
+with their URL or ID. No new Gist setup is available. Migration and Gist retirement
+remain in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
 ## Readiness checks
 

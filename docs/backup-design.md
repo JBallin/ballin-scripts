@@ -168,7 +168,7 @@ print rejected values or arbitrary remote content.
 `update.backup` remains local-only, including when reading older snapshots.
 Its maintenance-only default is `"false"`. Preserve #344's newly configured
 backup prompt, existing-local-choice behavior, and post-destination save-failure
-handling described in [Installation](installation.md#optional-backup-and-adoption).
+handling described in [Installation](installation.md#optional-backup-setup-and-reconnect).
 Migration of a configured installation retains its local automatic-backup
 choice; a replacement installation establishes its own choice during setup.
 
@@ -184,9 +184,9 @@ inclusion groups, separate from tool-oriented categories: 12 inventory sources,
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
 The observation entrypoint accepts one native boolean, `includeSensitive`,
 default false; non-boolean supplied input fails before discovery. It is an
-internal argument parsed from the single local `backup.includeSensitive` setting. Inventory and preferences form the
-fixed baseline. Unknown groups are excluded; future sources/groups require an
-explicit inclusion and sensitivity review.
+internal argument parsed from the single local `backup.includeSensitive` setting.
+Inventory and preferences form the fixed baseline. Unknown groups are excluded;
+future sources/groups require an explicit inclusion and sensitivity review.
 
 Policy-aware observation gates discovery itself. `excluded-by-policy` carries
 the definition and reason, without a source or collector; collection records
@@ -246,8 +246,10 @@ fixtures preserve the configured compatibility route. Installer walkthroughs,
 doctor fixtures, and the required `npm test` use temporary roots and complete
 child environments. Never manually smoke-test real user backup state.
 
-Separately authorized disposable real-GitHub service qualification remains a
-pre-release gate. Normal implementation validation does not perform it.
+Separately authorized disposable real-GitHub service validation is a post-merge,
+pre-release checkpoint, not a merge blocker. The checklist remains tracked in
+[#333](https://github.com/JBallin/ballin-scripts/issues/333#issuecomment-5613539242)
+until completed. Normal implementation validation does not perform it.
 [#334](https://github.com/JBallin/ballin-scripts/issues/334) owns migration/Gist
 retirement; [#336](https://github.com/JBallin/ballin-scripts/issues/336) owns
 verification. The concrete repository reader/writer can be reused there without

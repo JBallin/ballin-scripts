@@ -37,10 +37,14 @@ Configured legacy Gists retain host, authentication, and readability checks.
 
 ## `ballin backup`
 
-`ballin backup` backs up changed snapshots to the configured private GitHub repository.
-Run `ballin backup setup [repository-name]` to create or reconnect. Inventories
-and filtered preferences form the fixed baseline; raw configuration and pipx
-require the single local sensitive-source choice. Sources are:
+`ballin backup` saves changed snapshots to the configured destination. New setup
+uses private GitHub.com repositories; run `ballin backup setup [repository-name]`
+to create or reconnect. Existing configured Gists remain supported until migration
+and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+
+Repository backups include a fixed baseline of inventories and filtered
+preferences; raw configuration and pipx require the single local sensitive-source
+choice. Existing Gist backups still select all available sources. Sources are:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -84,15 +88,16 @@ workflow.
 Unchanged empty snapshots do not print a line.
 
 Markers are delayed until the complete logical run has succeeded, including
-any required publication confirmation and local cache promotion. A failed run does not
-print partial success markers.
+any required publication confirmation and local cache promotion. A failed run
+does not print partial success markers.
 
 ### Backup consistency and conflicts
 
 `ballin backup` stages every selected available snapshot before remote inspection.
 Collector failure aborts the run. Excluded, absent, unavailable, and failed-discovery
-sources are skipped and retain any saved content. Complete revision-bound reads
-are required before interpreting a missing remote file or comparing bytes.
+sources are skipped and retain any saved content. For repositories, complete
+revision-bound reads are required before interpreting a missing remote file or
+comparing bytes.
 
 The owner-only `.backup-cache` represents the last confirmed remote base observed
 by this machine. Repository entries are scoped to stable owner/repository IDs and
@@ -107,11 +112,12 @@ that matches neither base nor local capture is a conflict. Every conflict is
 reported before any publication or content promotion. Matching local and remote
 bytes can hydrate or advance the cache without a commit.
 
-Safe changes publish through one conditional commit based on the inspected head.
-A true no-op makes no mutation. Rejected, stale, or unconfirmed publication leaves
-caches unchanged. After confirmation, cache failures report the completed remote
-effect without normal success markers. A fresh invocation re-reads and reconciles;
-matching remote/local bytes recover without another publication.
+For repository backups, safe changes publish through one conditional commit
+based on the inspected head. A true no-op makes no remote mutation. Rejected,
+stale, or unconfirmed publication leaves caches unchanged. After confirmation,
+cache failures report the completed remote effect without normal success markers.
+A fresh invocation re-reads and reconciles; matching remote/local bytes recover
+without another publication.
 
 Inspect each conflict with `ballin backup read <file>` or the GitHub UI. Decide
 which content to retain and deliberately reconcile local and remote bytes so
