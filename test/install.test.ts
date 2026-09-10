@@ -160,6 +160,11 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "🏀 let's ball...");
     assert.include(result.stdout, 'Installation plan');
+    assert.include(result.stdout, 'create or reconnect to a private GitHub.com repository');
+    assert.include(result.stdout, 'Reconnect can recover compatible Ballin preferences');
+    assert.include(result.stdout, 'leaves the configured remote backup untouched');
+    assert.notInclude(result.stdout, 'secret-Gist');
+    assert.notInclude(result.stdout, 'remote Gist');
     assert.include(result.stdout, 'Review installer source:');
     assert.include(result.stdout, 'Inspect effects, uninstall, and manual removal:');
     assert.deepEqual(commandLog(), [

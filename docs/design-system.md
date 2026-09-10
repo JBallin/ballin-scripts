@@ -205,9 +205,9 @@ descriptions, install commands, or future-state claims.
 
 Avoid labels such as `Private backups`, `Always current`, `Restore-ready`,
 `Rebuild anywhere`, or `Install in 60 seconds` because they can overstate current
-behavior or distract from the hero. `Private backups` should be avoided because
-Ballin currently stores backup snapshots in a GitHub secret Gist. Secret Gists
-are unlisted, but they are not private access-controlled storage.
+behavior or distract from the hero. New backups use private GitHub repositories,
+but existing configured secret Gists remain readable by anyone with their URL.
+Broad privacy claims also omit GitHub and authorized-account access to snapshots.
 
 A possible future-safe label set, if a strip is ever needed, is:
 

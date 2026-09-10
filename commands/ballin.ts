@@ -59,10 +59,11 @@ Usage:
 Commands:
 
     update                update the Ballin-managed macOS development environment
-    backup                backup Ballin-managed environment state to the configured backup Gist
-                          ${format.setup} configure an optional backup Gist
-                          ${format.open} open the configured backup Gist
+    backup                back up Ballin-managed environment state to the configured backup
+                          ${format.setup} [repository-name] create or reconnect to an optional backup
+                          ${format.open} open the configured backup
                           ${format.read} ${format.fileName} read a backed-up file
+                          disconnect stop local backups and clear comparison state
     doctor                check whether the Ballin-managed environment is healthy
                           ${format.verbose} show full readiness details
     config                ${format.empty}/${format.get} view entire config

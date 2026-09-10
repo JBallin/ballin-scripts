@@ -28,7 +28,7 @@ The worker must not store:
 - command arguments
 - usernames
 - local paths
-- Gist IDs or URLs
+- backup destination IDs or URLs
 - dotfile contents
 - package lists
 - editor settings or extension lists
@@ -237,7 +237,7 @@ Reporting stays within the existing aggregate schema:
 - `version_events_daily`
 
 It does not add telemetry fields or expose feature-level events, command
-arguments, local paths, Gist details, package/editor data, raw errors,
+arguments, local paths, backup destination details, package/editor data, raw errors,
 environment variables, arbitrary config values, IP storage, or raw install IDs.
 
 ## Resetting Aggregates

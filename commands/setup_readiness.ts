@@ -7,7 +7,11 @@ const {
 } = require('./commandHelpers.ts');
 const {
   backupDestinationFromConfig,
+  configuredBackupDestination,
+  sensitiveSourceConsent,
 } = require('./backup_config.ts');
+const { inspectRepository, repositoryMessages } = require('./backup_repository.ts');
+import type { RepositoryInspection } from './backup_repository.ts';
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
 
@@ -247,15 +251,15 @@ const guConfigChecks = (
     return [
       {
         id: 'backup.config',
-        label: 'Gist backup config',
+        label: 'Backup config',
         status: 'info',
-        summary: 'Skipping Gist backup config checks until config is readable.',
+        summary: 'Skipping backup config checks until config is readable.',
       },
       {
         id: 'backup.read',
-        label: 'Configured Gist readability',
+        label: 'Configured backup readability',
         status: 'info',
-        summary: 'Skipping configured Gist readability check until config is readable.',
+        summary: 'Skipping configured backup readability check until config is readable.',
       },
     ];
   }
@@ -263,6 +267,29 @@ const guConfigChecks = (
   const destination = backupDestinationFromConfig(config);
   const host = destination.host ?? '';
   const id = destination.id;
+  const selected = configuredBackupDestination(config);
+  if (selected.kind === 'invalid' && destination.idStatus !== 'invalid') {
+    return [{ id: 'backup.config', label: 'Backup config', status: 'fail',
+      summary: 'Invalid or conflicting backup destination. Repair linkage or run ballin backup disconnect.' }];
+  }
+  if (selected.kind === 'repository') {
+    const checks: SetupReadinessCheck[] = [];
+    if (sensitiveSourceConsent(config) === null) checks.push({
+      id: 'backup.consent', label: 'Sensitive-source preference', status: 'fail',
+      summary: 'backup.includeSensitive must be true or false; read-only recovery remains available.',
+    });
+    if (!commandExists('gh', { env })) return [...checks, {
+      id: 'backup.gh', label: 'GitHub CLI', status: 'fail', summary: 'GitHub CLI is not discoverable on PATH.',
+    }];
+    const inspection: RepositoryInspection = inspectRepository(selected.repository, { env, runCommand });
+    checks.push({ id: 'backup.read', label: 'Private backup readiness',
+      status: inspection.status === 'complete' ? 'pass' : 'fail',
+      summary: inspection.status === 'complete'
+        ? 'The expected private backup is readable. Write permission and current source coverage were not checked.'
+        : repositoryMessages[inspection.problem],
+    });
+    return checks;
+  }
 
   if (destination.idStatus === 'invalid') {
     return [{
@@ -277,9 +304,9 @@ const guConfigChecks = (
   if (!id) {
     return [{
       id: 'backup.optional',
-      label: 'Optional Gist backup',
+      label: 'Optional backup',
       status: 'info',
-      summary: 'Gist backup is not configured. Maintenance-only Ballin is supported; run ballin backup setup to enable it.',
+      summary: 'Backup is not configured. Maintenance-only Ballin is supported; run ballin backup setup to enable it.',
       data: { configured: false },
     }];
   }

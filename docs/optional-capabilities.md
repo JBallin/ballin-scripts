@@ -79,59 +79,57 @@ When `mas` is available, `ballin update` updates installed App Store apps and
 `ballin backup` includes the installed-app list in your backup. No configuration
 setting is required.
 
-## Gist backups
+## Private repository backups
 
-`ballin backup` uses [GitHub CLI](https://cli.github.com/) to read and update
-the configured backup Gist. Backup is optional: declining it during install
-produces a healthy maintenance-only Ballin installation and makes no `gh`
-calls. Enable it during installation or later without reinstalling:
+Newly configured backups use private GitHub.com repositories owned by a personal
+account, accessed through [GitHub CLI](https://cli.github.com/). Backup is
+optional; declining it leaves a healthy maintenance-only installation and makes
+no `gh` calls.
 
 ```shell
-ballin backup setup
+ballin backup setup [repository-name]
 ```
 
-Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
-the active `gh` account for that host, and either adopts an existing backup
-Gist or creates a new one. `backup.id` is the opt-in signal; there is no separate
-enabled or onboarding setting. After creating or adopting a destination, setup
-asks whether updates should run backups automatically, with yes as the default.
-See [setup choices and recovery](installation.md#optional-backup-and-adoption).
-Change that choice later with:
+Fresh setup offers create or reconnect, reviews one local sensitive-source choice,
+and confirms before remote or linkage changes. The effective `gh` credential
+can come from an environment token; Ballin shows the selected account and never
+logs in, switches accounts, or expands scopes automatically. Read-only access
+supports reconnect and recovery without granting write permission. See
+[setup and recovery](installation.md#optional-backup-setup-and-reconnect).
+
+`backup.repository` identifies the selected destination. The fixed inventory and
+filtered-preference baseline is always selected; `backup.includeSensitive`
+defaults to `"false"`; enabling it adds raw configuration and pipx metadata. The
+setting accepts native booleans or exact `"true"`/`"false"` strings. Destination
+and consent stay local. Changing sensitive consent later changes future capture
+selection, not saved files or history; review
+[source sensitivity](backup-sources.md) first.
+
+After new linkage, setup asks whether updates should run backups automatically,
+with yes as the default. Change that independent choice later with:
 
 ```shell
 ballin config set update.backup true
 ballin config set update.backup false
 ```
 
-Invalid `backup.id` values can be repaired with `ballin config reset`; a missing
-or malformed `backup.host` can be repaired with `ballin backup setup`. See
-[Installation and removal](installation.md#optional-backup-and-adoption) for
-adoption, failure, and cache-transition behavior.
+The repository URL alone does not grant access, but GitHub and authorized
+accounts or tokens can read private backups. Even baseline inventories can
+expose identities, private URLs, and paths; Ballin does not scan or redact
+credentials. GitHub controls account-based commit author/committer
+attribution; Ballin changes no global Git identity configuration. GitHub retains
+history, but Ballin provides no history navigation, rollback, or revision picker.
 
-Setup creates backup Gists as [secret Gists](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists). Secret Gists are unlisted and not
-searchable, but anyone with the URL or ID can view them, so treat both as
-sensitive. To make one discoverable, make it public in GitHub after reviewing
-it: backup snapshots can expose paths, usernames, tool choices, package lists,
-and arbitrary content in allowed local config. Ballin does not scan or redact
-allowed files, and public Gists cannot be made secret again. Review
-[Backup sources and sensitivity](backup-sources.md) before opting in.
+Use `ballin backup open` or `ballin backup read <file>` for read-only recovery,
+and `ballin backup disconnect` to clear local linkage and disable automatic
+backups. Use only one Mac to back up to a destination. Stop using the previous
+Mac for backups before publishing from a replacement Mac. See
+[conflicts](capabilities.md#backup-consistency-and-conflicts).
 
-GitHub preserves Gist revision history and diffs. Ballin does not provide
-history navigation, rollback, or revision selection. Adoption restores eligible
-Ballin preferences; it does not apply saved dotfiles or install saved packages.
-
-Private-repository backups and local sensitive-source review are planned in
-[#333](https://github.com/JBallin/ballin-scripts/issues/333), followed by reviewed
-Gist migration in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
-Current Gist capture includes all available allowlisted sources.
-
-Use `ballin backup open` to open the configured backup Gist, or
-`ballin backup read <file>` to print one saved snapshot.
-
-Before updating, Ballin checks for conflicting changes and stops safely if it
-finds any. Use one active writer per backup Gist. See
-[Supported capabilities](capabilities.md#backup-consistency-and-conflicts) for
-recovery guidance, guarantees, and limitations.
+Existing configured Gists retain their current capture/read/open behavior and
+host repair, including Enterprise hosts. Secret Gists remain readable by anyone
+with their URL or ID. No new Gist setup is available. Migration and Gist retirement
+remain in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
 ## Readiness checks
 
@@ -154,8 +152,7 @@ it does not run updates, apply dotfiles, or install packages.
 The `ballin_config` snapshot saves only those supported preferences.
 Destination identity, custom settings, analytics identity, automatic-backup
 choices, and sensitive-source approval stay local. A newly configured backup
-gets its own automatic-backup choice during setup. Sensitive-source review
-will be part of future repository setup, not current Gist setup. See
+gets its own automatic-backup and sensitive-source choices during setup. See
 [Backup design](backup-design.md#portable-preferences) for the exact allowlists
 and restoration rules.
 

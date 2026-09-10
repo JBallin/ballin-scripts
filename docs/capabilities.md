@@ -27,22 +27,24 @@ invalid known setting values fail before any integration runs.
 
 ## `ballin doctor`
 
-Maintenance-only Ballin is a supported healthy state. When `backup.id` is
-missing, null, blank, or the legacy string `"null"`, doctor reports one optional
-Gist backup `INFO` check in verbose mode and executes no `gh` command. The
-default healthy output remains `😎 You're ballin.`
-
-When a non-empty ID configures the backup capability, doctor retains the full
-host, GitHub CLI, authentication, and Gist-readability checks. Failures in those
-checks fail overall health. A non-string `backup.id` is invalid and fails
-readiness before GitHub CLI work. Missing, malformed, or unreadable core config
-is not reinterpreted as maintenance-only.
+Maintenance-only Ballin is healthy: verbose doctor output shows one optional
+backup `INFO` check and executes no `gh`. Configured repositories require the
+effective personal GitHub.com account, expected private destination identity,
+supported layout, and coherent readability. Invalid configuration or failed
+checks affect overall health. Doctor does not collect snapshots, probe writes,
+repair cache permissions, or claim freshness, coverage, or verified publication.
+Configured legacy Gists retain host, authentication, and readability checks.
 
 ## `ballin backup`
 
-`ballin backup` backs up changed snapshots to the configured secret GitHub Gist.
-Run `ballin backup setup` to create or adopt the optional destination. It can
-snapshot:
+`ballin backup` saves changed snapshots to the configured destination. New setup
+uses private GitHub.com repositories; run `ballin backup setup [repository-name]`
+to create or reconnect. Existing configured Gists remain supported until migration
+and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+
+Repository backups include a fixed baseline of inventories and filtered
+preferences; raw configuration and pipx require the single local sensitive-source
+choice. Existing Gist backups still select all available sources. Sources are:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -86,35 +88,46 @@ workflow.
 Unchanged empty snapshots do not print a line.
 
 Markers are delayed until the complete logical run has succeeded, including
-any required Gist update and local cache promotion. A failed run does not
-print partial success markers.
+any required publication confirmation and local cache promotion. A failed run
+does not print partial success markers.
 
 ### Backup consistency and conflicts
 
-`ballin backup` collects every available snapshot before changing the Gist. If
-collection fails, remote content cannot be read safely, or changes conflict,
-Ballin reports the problem and leaves Gist and backup cache contents unchanged.
+`ballin backup` stages every selected available snapshot before remote inspection.
+Collector failure aborts the run. Excluded, absent, unavailable, and failed-discovery
+sources are skipped and retain any saved content. For repositories, complete
+revision-bound reads are required before interpreting a missing remote file or
+comparing bytes.
 
-Ballin keeps its local backup cache owner-only and repairs existing cache
-permissions before a configured backup runs. If the cache cannot be secured,
-the backup stops before contacting GitHub. Permission repairs may remain even
-if the backup later fails; source-file permissions are unchanged.
+The owner-only `.backup-cache` represents the last confirmed remote base observed
+by this machine. Repository entries are scoped to stable owner/repository IDs and
+the selected branch; names and legacy cache files cannot authorize publication.
+New linkage invalidates untrusted caches. Existing cache directories and files
+are secured before backup; symlinks are rejected. Permission repairs may remain
+when a run fails, while source permissions stay unchanged.
 
-`.backup-cache` is derived local comparison state representing the last remote
-base observed by this machine. It is not a destination or enablement flag.
-Ballin preserves it while a destination remains configured and invalidates it
-before an unconfigured installation creates or adopts a destination. Because
-the cache format does not identify a host or Gist ID, setup fails closed rather
-than trusting a potentially stale base. After invalidation, differing local and
-remote content conflicts instead of authorizing an upload.
+Ballin compares local, cached, and remote bytes and presence. A differing remote
+file without a base, a remotely deleted file with a base, or a remote change
+that matches neither base nor local capture is a conflict. Every conflict is
+reported before any publication or content promotion. Matching local and remote
+bytes can hydrate or advance the cache without a commit.
 
-Conflicts identify every affected snapshot. Inspect remote content with
-`ballin backup read <file>` or the Gist UI, decide which content should win,
-reconcile the local environment or remote Gist so the contents match, and rerun
-`ballin backup`.
+For repository backups, safe changes publish through one conditional commit
+based on the inspected head. A true no-op makes no remote mutation. Rejected,
+stale, or unconfirmed publication leaves caches unchanged. After confirmation,
+cache failures report the completed remote effect without normal success markers.
+A fresh invocation re-reads and reconciles; matching remote/local bytes recover
+without another publication.
 
-Use one active writer per backup Gist. Ballin does not synchronize or merge
-changes from multiple writers.
+Inspect each conflict with `ballin backup read <file>` or the GitHub UI. Decide
+which content to retain and deliberately reconcile local and remote bytes so
+they match before rerunning. Do not delete the cache to authorize overwrites.
+Ballin offers no force, merge, blind retry, or automatic replacement destination.
+Use only one Mac to back up to a destination. Stop using the previous Mac for
+backups before publishing from a replacement Mac. Reconnect supports recovery
+but grants no authority to overwrite saved data. Read/open do not execute
+content or change caches.
 
-See [Backup design](backup-design.md) for the underlying safety model and
-GitHub constraints.
+Existing configured Gists retain the same three-way comparison, but their API
+has no conditional-head guarantee. See [Backup design](backup-design.md) for
+storage details and constraints; migration and verification remain separate.

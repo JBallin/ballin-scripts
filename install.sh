@@ -47,11 +47,12 @@ if [ "$repo_existed" = false ]; then
   printf -- '- Clone Ballin into %s and create its config there.\n' "$repo_dir"
   printf -- '- Link the ballin command from Homebrew\047s bin directory when available, otherwise from %s.\n' "$HOME/.local/bin"
   printf -- '- Create a local analytics install ID when analytics are enabled; later commands may send the documented minimal event.\n'
-  printf -- '- Offer optional secret-Gist backup setup separately; adoption can restore compatible config preferences.\n'
+  printf -- '- Offer optional backup setup: create or reconnect to a private GitHub.com repository.\n'
+  printf -- '- Reconnect can recover compatible Ballin preferences.\n'
   printf -- '- Treat .backup-cache as derived state; later backup setup may invalidate an unproven cache before configuring a destination.\n'
   printf -- '- Do not run ballin update or collect backup snapshots during installation.\n'
   printf -- '- Existing command targets may be replaced; later refreshes can merge checkout files and add config defaults.\n'
-  printf -- '- Uninstall removes owned links and this checkout, but not a remote Gist.\n'
+  printf -- '- Uninstall removes local Ballin state but leaves the configured remote backup untouched.\n'
   printf 'Review installer source: %s\n' "$installer_source_url"
   printf 'Inspect effects, uninstall, and manual removal: %s\n' "$docs_url"
 

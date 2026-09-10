@@ -112,6 +112,30 @@ describe('setup readiness', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it('checks coherent repository readability without collecting, probing writes, or repairing cache permissions', () => {
+    const { fixtureDestination, fixtureState, requestFixture } = require('./helpers/repository.ts');
+    const state = fixtureState(); state.faults.publish = 'denied';
+    writeConfig({ backup: { repository: fixtureDestination, includeSensitive: 'false' } });
+    const cache = path.join(repoDir, '.backup-cache'); fs.symlinkSync(binDir, cache);
+    const report = collect({ runCommand: (_command, args, options) => ({ ...requestFixture(state, args, options), stderr: '' }) });
+    assert.equal(checkById(report, 'backup.read').status, 'pass');
+    assert.include(checkById(report, 'backup.read').summary, 'Write permission and current source coverage were not checked');
+    assert.isTrue(fs.lstatSync(cache).isSymbolicLink());
+    assert.isFalse(state.requests.some((r: { payload?: { query?: string } }) => r.payload?.query?.includes('BallinPublish')));
+  });
+
+  it('fails repository readiness for invalid consent, unavailable gh, invalid linkage, and incomplete reads', () => {
+    const { fixtureDestination, fixtureState, requestFixture } = require('./helpers/repository.ts');
+    const state = fixtureState(); state.faults.tree = { truncated: true };
+    writeConfig({ backup: { repository: fixtureDestination, includeSensitive: 'invalid' } });
+    const report = collect({ runCommand: (_command, args, options) => ({ ...requestFixture(state, args, options), stderr: '' }) });
+    assert.equal(checkById(report, 'backup.consent').status, 'fail');
+    assert.equal(checkById(report, 'backup.read').status, 'fail');
+    fs.rmSync(path.join(binDir, 'gh')); assert.equal(checkById(collect(), 'backup.gh').status, 'fail');
+    writeConfig({ backup: { repository: fixtureDestination, id: 'legacy' } });
+    assert.equal(checkById(collect(), 'backup.config').status, 'fail'); assert.deepEqual(commandLog, []);
+  });
+
   it('reports supported and unsupported Node.js runtimes', () => {
     const supported = collect({ nodeVersion: '24.12.0', nodeEngine: '>=24.12' });
     const unsupported = collect({ nodeVersion: '24.11.9', nodeEngine: '>=24.12' });
