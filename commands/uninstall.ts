@@ -88,7 +88,8 @@ const runUninstallCommand = (): void => {
       process.stderr.write(`  ${linkPath}\n`);
     });
     process.stderr.write(
-      'Remove the remaining links manually (you may need elevated permissions).\n',
+      'Remove the listed links with rm. If removal fails because of permissions, '
+        + 'rerun rm with elevated permissions (for example, sudo rm).\n',
     );
     process.exitCode = 1;
     writeStdoutLine();

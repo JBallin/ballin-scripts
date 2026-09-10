@@ -162,7 +162,8 @@ exit 2
       assert.include(result.stderr, `  ${linkPath}\n`);
       assert.include(
         result.stderr,
-        'Remove the remaining links manually (you may need elevated permissions).',
+        'Remove the listed links with rm. If removal fails because of permissions, '
+          + 'rerun rm with elevated permissions (for example, sudo rm).',
       );
       assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
       assert.isFalse(fs.existsSync(repoDir));
