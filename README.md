@@ -88,6 +88,9 @@ restore system.
 | `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
 | `ballin uninstall` | Removes installed command shims and the local checkout. |
 
+With an existing configured Gist, `ballin backup setup` reports that it remains
+configured; it does not migrate or replace it with a repository.
+
 ## Privacy and security
 
 Newly configured backups use private GitHub.com repositories. GitHub and
