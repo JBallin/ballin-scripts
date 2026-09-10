@@ -145,13 +145,14 @@ const readBoundedBody = async (request: Request): Promise<string | null> => {
     return '';
   }
 
-  const reader = request.body.getReader();
+  const reader = request.body.getReader({ mode: 'byob' });
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const remainingByteLength = maxBodyBytes - byteLength + 1;
+      const { done, value } = await reader.read(new Uint8Array(remainingByteLength));
       if (done) {
         break;
       }

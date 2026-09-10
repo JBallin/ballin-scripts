@@ -27,8 +27,9 @@ type ControlledBody = {
   body: ReadableStream<Uint8Array>;
   state: {
     cancellations: number;
+    deliveredBytes: number;
     pulls: number;
-    remainingChunks: number;
+    remainingBytes: number;
   };
 };
 
@@ -127,24 +128,53 @@ const controlledBody = (chunks: Uint8Array[]): ControlledBody => {
   const remaining = [...chunks];
   const state = {
     cancellations: 0,
+    deliveredBytes: 0,
     pulls: 0,
-    remainingChunks: remaining.length,
+    remainingBytes: remaining.reduce((total, chunk) => total + chunk.byteLength, 0),
   };
-  const body = new ReadableStream<Uint8Array>({
+  const source: UnderlyingByteSource = {
+    type: 'bytes',
     pull(controller) {
       state.pulls += 1;
-      const chunk = remaining.shift();
-      state.remainingChunks = remaining.length;
-      if (chunk) {
-        controller.enqueue(chunk);
-      } else {
+      const chunk = remaining[0];
+      if (!chunk) {
+        const byobRequest = controller.byobRequest;
         controller.close();
+        byobRequest?.respond(0);
+        return;
       }
+
+      const byobRequest = controller.byobRequest;
+      const byobView = byobRequest?.view;
+      if (byobRequest && byobView) {
+        const requested = new Uint8Array(
+          byobView.buffer,
+          byobView.byteOffset,
+          byobView.byteLength,
+        );
+        const deliveredByteLength = Math.min(requested.byteLength, chunk.byteLength);
+        requested.set(chunk.subarray(0, deliveredByteLength));
+        if (deliveredByteLength === chunk.byteLength) {
+          remaining.shift();
+        } else {
+          remaining[0] = chunk.subarray(deliveredByteLength);
+        }
+        state.deliveredBytes += deliveredByteLength;
+        state.remainingBytes -= deliveredByteLength;
+        byobRequest.respond(deliveredByteLength);
+        return;
+      }
+
+      remaining.shift();
+      state.deliveredBytes += chunk.byteLength;
+      state.remainingBytes -= chunk.byteLength;
+      controller.enqueue(new Uint8Array(chunk));
     },
     cancel() {
       state.cancellations += 1;
     },
-  }, { highWaterMark: 0 });
+  };
+  const body = new ReadableStream(source, { highWaterMark: 0 });
 
   return { body, state };
 };
@@ -401,8 +431,6 @@ describe('analytics Worker', () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, rateLimitKeys, runs } = makeEnv();
     const controlled = controlledBody([
-      new Uint8Array(2048),
-      new Uint8Array(1),
       new Uint8Array(65_536),
     ]);
     const response = await worker.fetch(streamedEventRequest(controlled.body, {
@@ -413,9 +441,10 @@ describe('analytics Worker', () => {
     assert.deepEqual(await response.json(), { error: 'request body is too large' });
     assert.deepEqual(rateLimitKeys, ['v1-events:global', 'v1-events:source:198.51.100.5']);
     assert.deepEqual(runs, []);
-    assert.equal(controlled.state.pulls, 2);
+    assert.equal(controlled.state.deliveredBytes, 2049);
+    assert.equal(controlled.state.pulls, 1);
     assert.equal(controlled.state.cancellations, 1);
-    assert.equal(controlled.state.remainingChunks, 1);
+    assert.equal(controlled.state.remainingBytes, 63_487);
   });
 
   it('bounds missing and malformed forwarding identities in source rate-limit keys', async () => {
