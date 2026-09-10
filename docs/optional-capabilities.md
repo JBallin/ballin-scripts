@@ -93,8 +93,10 @@ ballin backup setup
 Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
 the active `gh` account for that host, and either adopts an existing backup
 Gist or creates a new one. `backup.id` is the opt-in signal; there is no separate
-enabled or onboarding setting. Change whether `ballin update` runs backups
-automatically with:
+enabled or onboarding setting. After creating or adopting a destination, setup
+asks whether updates should run backups automatically, with yes as the default.
+See [setup choices and recovery](installation.md#optional-backup-and-adoption).
+Change that choice later with:
 
 ```shell
 ballin config set update.backup true
@@ -115,13 +117,15 @@ allowed files, and public Gists cannot be made secret again. Review
 [Backup sources and sensitivity](backup-sources.md) before opting in.
 
 GitHub preserves Gist revision history and diffs. Ballin does not provide
-history navigation, rollback, restore, or revision selection.
+history navigation, rollback, or revision selection. Adoption restores eligible
+Ballin preferences; it does not apply saved dotfiles or install saved packages.
 
 Ballin currently stores backups in secret Gists.
 [#254](https://github.com/JBallin/ballin-scripts/issues/254) completed the
-storage-security evaluation; follow-up implementation work is tracked in
-[#332](https://github.com/JBallin/ballin-scripts/issues/332),
-[#333](https://github.com/JBallin/ballin-scripts/issues/333), and
+storage-security evaluation. The portable-preference and shared inclusion
+policy is recorded in [#332](https://github.com/JBallin/ballin-scripts/issues/332).
+Future repository onboarding and migration are tracked in
+[#333](https://github.com/JBallin/ballin-scripts/issues/333) and
 [#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
 Use `ballin backup open` to open the configured backup Gist, or
@@ -160,15 +164,17 @@ identify the key without printing its value.
 Adoption starts from local configuration. It restores valid update preferences
 and the exact analytics opt-out only where the leaf was absent before setup
 created or refreshed defaults. An existing leaf wins even when it equals the
-bundled default or is invalid. Remote invalid/unknown values are ignored.
+bundled default or is invalid. Remote invalid/unknown values are ignored;
+missing remote preferences or an absent snapshot leave local settings and
+defaults intact.
 Restoring update preferences affects later updates; adoption runs no update
 integrations. Every newly configured backup still takes the local automatic
-backup answer as final authority, as described above.
+backup answer as final authority over local and restored values.
 
 Both inclusion preferences default to `"false"`. A restored false can fill an
 unchosen preference; a restored true is only a proposal requiring local source
-review. Current Gist adoption does not activate that proposal. Existing local
-choices remain intact. These fields support the
+review. Current Gist adoption neither activates nor saves that proposal.
+Existing local choices remain intact. These fields support the
 [shared inclusion policy](backup-sources.md#shared-inclusion-policy) for future
 repository setup and migration; changing them does not change current Gist
 source capture.

@@ -115,15 +115,19 @@ settings and remote destination fields are never restored. See the
 If reading, restoring, or saving the adopted configuration fails, setup stops
 and leaves the prior unconfigured configuration active.
 
-Setup rejects malformed local JSON or non-object `update`, `analytics`, or
-`backup` sections before refreshing configuration. Repair these sections and
-retry; setup will not replace a malformed analytics section with enabled
-defaults. Missing sections are allowed. Invalid individual remote preferences
-are ignored, but malformed JSON or a non-object remote snapshot stops adoption.
+Setup rejects malformed local JSON, a non-object config root, or non-object
+`update`, `analytics`, or `backup` sections before refreshing configuration.
+Repair the config and retry; setup will not replace a malformed analytics
+section with enabled defaults. Missing sections are allowed. Invalid individual
+remote preferences are ignored, but malformed JSON or a non-object remote
+snapshot stops adoption.
 
 After backup is newly configured, Ballin asks whether `ballin update` should run
-`ballin backup` automatically; yes is the default. When adopting an existing
-backup, this choice overrides any restored automatic-backup preference. See
+`ballin backup` automatically with a `[Y/n]` prompt. Enter, `y`, or `Y` saves
+`"true"`; other answers or EOF save `"false"`. This choice overrides any local
+or restored `update.backup` value. Already-configured backups keep their choice
+without this prompt. If saving the answer fails, setup reports failure and
+recovery guidance, but the destination remains configured. See
 [Optional capabilities](optional-capabilities.md#gist-backups) to change it
 later.
 

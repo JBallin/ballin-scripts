@@ -7,14 +7,15 @@ private URLs, usernames, paths, commands, and other sensitive data. This audit
 records source sensitivity and the shared reviewed policy; Ballin does not
 scan or redact these snapshots.
 
-Current Gist capture still includes every available catalog source. The
-exception to raw copying is `ballin_config`, which now exports only portable
-preferences. The shared category selection below is implemented for repository
-setup and reviewed migration in #333–#334; it does not restrict current Gist
-captures.
+Current Gist capture still includes every available catalog source;
+`ballin_config` now exports only portable preferences. The category selection
+and review described below are prepared for future repository onboarding in
+[#333](https://github.com/JBallin/ballin-scripts/issues/333) and migration in
+[#334](https://github.com/JBallin/ballin-scripts/issues/334). They are not part of
+current Gist setup and do not restrict Gist captures.
 
 Listed filenames may live under an application's configuration directory. To
-inspect editor files before opting in, check
+inspect editor files before enabling Gist backup or sharing snapshots, check
 `~/Library/Application Support/Code/User/` and
 `~/Library/Application Support/Code - Insiders/User/`.
 
@@ -62,8 +63,8 @@ normalization, rather than preserving filesystem bytes and metadata exactly.
 Ordinary private configuration can be selected when the user accepts the
 destination's access boundary. Credential stores, authentication/session files,
 SSH private keys, and arbitrary home trees are not added to the source list.
-Credentials inside allowed files cannot be ruled out without a scanner, which
-Ballin does not provide.
+Allowed files may still contain credentials; Ballin does not scan or redact
+them.
 
 Omitting a category from future captures does not delete older remote files,
 history, or cached content. Current Gist read/recovery remains available.

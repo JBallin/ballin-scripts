@@ -39,6 +39,12 @@ special overwrite or conflict exception.
 
 ## Shared inclusion policy
 
+This policy and its review helper are internal preparation for future
+repository onboarding in [#333](https://github.com/JBallin/ballin-scripts/issues/333)
+and reviewed migration in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+Current Gist setup does not invoke the review, and Gist capture keeps its
+existing source selection. Gist runtime retirement belongs to #334.
+
 The canonical definitions own fixed `inventory`, `detailed`, `raw`, and
 `preferences` inclusion groups, separate from tool-oriented categories.
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
@@ -60,10 +66,7 @@ cancellation, or failure without persisting anything. Raw review follows
 selected symlinks and displays logical and resolved sources; it never reads
 contents or executes collectors. Callers own the destination/config commit.
 
-Current Gist capture explicitly keeps its existing source selection. #333
-connects shared selection/review to repository onboarding, and #334 consumes
-it for reviewed migration and removes the Gist path. No permanent legacy mode
-or richer Gist setup is introduced. See the user-facing
+No permanent legacy mode or richer Gist setup is introduced. See the user-facing
 [source review contract](backup-sources.md#shared-inclusion-policy).
 
 ## Local cache permissions
