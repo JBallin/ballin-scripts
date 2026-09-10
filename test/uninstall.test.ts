@@ -8,6 +8,7 @@ const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 type RunUninstallOptions = {
   brewPrefix?: string;
   commandPath?: string;
+  preloadPath?: string;
 };
 
 describe('ballin uninstall', () => {
@@ -34,7 +35,11 @@ describe('ballin uninstall', () => {
     return filePath;
   };
 
-  const runUninstall = ({ brewPrefix, commandPath: command = ballinPath }: RunUninstallOptions = {}) => {
+  const runUninstall = ({
+    brewPrefix,
+    commandPath: command = ballinPath,
+    preloadPath,
+  }: RunUninstallOptions = {}) => {
     if (brewPrefix) {
       writeExecutable('brew', `#!/usr/bin/env bash
 if [ "$1" = '--prefix' ]; then
@@ -45,15 +50,44 @@ exit 2
 `);
     }
 
-    return spawnSync(command, ['uninstall'], {
-      encoding: 'utf8',
-      env: {
-        HOME: homeDir,
-        PATH: toolDir,
-        BALLIN_NO_ANALYTICS: '1',
-        BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: systemRoot,
+    return spawnSync(
+      preloadPath ? process.execPath : command,
+      preloadPath ? ['--require', preloadPath, command, 'uninstall'] : ['uninstall'],
+      {
+        encoding: 'utf8',
+        env: {
+          HOME: homeDir,
+          PATH: toolDir,
+          BALLIN_NO_ANALYTICS: '1',
+          BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: systemRoot,
+        },
       },
-    });
+    );
+  };
+
+  const writeFsFailurePreload = (
+    operation: 'lstatSync' | 'unlinkSync',
+    candidatePath: string,
+    errorCode: string,
+  ) => {
+    const preloadPath = path.join(testDir, `${operation}-failure.cjs`);
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+const operation = ${JSON.stringify(operation)};
+const candidatePath = ${JSON.stringify(candidatePath)};
+const originalOperation = fs[operation];
+fs[operation] = (currentPath, ...args) => {
+  if (currentPath === candidatePath) {
+    if (operation === 'unlinkSync') {
+      originalOperation(currentPath, ...args);
+    }
+    const error = new Error(operation + ' failed for ' + currentPath);
+    error.code = ${JSON.stringify(errorCode)};
+    throw error;
+  }
+  return originalOperation(currentPath, ...args);
+};
+`);
+    return preloadPath;
   };
 
   beforeEach(() => {
@@ -152,13 +186,66 @@ exit 2
     try {
       const result = runUninstall();
 
-      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.status, 1, result.stderr);
+      assert.equal(
+        result.stdout,
+        "\nIt's been real...\nRemoved the local checkout, but symlink cleanup is incomplete.\n\n",
+      );
       assert.include(result.stderr, 'ballin');
+      assert.include(result.stderr, 'Uninstall incomplete: these Ballin-owned links remain:');
+      assert.include(result.stderr, `  ${linkPath}\n`);
+      assert.include(
+        result.stderr,
+        'Remove the listed links with rm. If removal fails because of permissions, '
+          + 'rerun rm with elevated permissions (for example, sudo rm).',
+      );
       assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
       assert.isFalse(fs.existsSync(repoDir));
     } finally {
       fs.chmodSync(binDir, 0o755);
     }
+  });
+
+  it('reports an unverified candidate path when link inspection fails', () => {
+    const binDir = path.join(systemRoot, 'usr', 'local', 'bin');
+    const ballin = createCommand('ballin');
+    const linkPath = path.join(binDir, 'ballin');
+    fs.symlinkSync(ballin, linkPath);
+    const preloadPath = writeFsFailurePreload('lstatSync', linkPath, 'EACCES');
+
+    const result = runUninstall({ preloadPath });
+
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(
+      result.stdout,
+      "\nIt's been real...\nRemoved the local checkout, but symlink cleanup is incomplete.\n\n",
+    );
+    assert.include(result.stderr, `lstatSync failed for ${linkPath}`);
+    assert.include(result.stderr, 'These candidate Ballin link paths could not be inspected:');
+    assert.include(result.stderr, `  ${linkPath}\n`);
+    assert.include(
+      result.stderr,
+      'Resolve the reported filesystem errors, then inspect these paths before removing anything.',
+    );
+    assert.notInclude(result.stderr, 'Remove the listed links with rm.');
+    assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
+    assert.isFalse(fs.existsSync(repoDir));
+  });
+
+  it('succeeds when an owned link disappears before unlink completes', () => {
+    const binDir = path.join(systemRoot, 'usr', 'local', 'bin');
+    const ballin = createCommand('ballin');
+    const linkPath = path.join(binDir, 'ballin');
+    fs.symlinkSync(ballin, linkPath);
+    const preloadPath = writeFsFailurePreload('unlinkSync', linkPath, 'ENOENT');
+
+    const result = runUninstall({ preloadPath });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
+    assert.isFalse(fs.existsSync(linkPath));
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   ([
