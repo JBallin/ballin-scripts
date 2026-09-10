@@ -23,6 +23,20 @@ type EventRequestOptions = {
   sourceIp?: string;
 };
 
+type ControlledBody = {
+  body: ReadableStream<Uint8Array>;
+  state: {
+    cancellations: number;
+    deliveredBytes: number;
+    pulls: number;
+    remainingBytes: number;
+  };
+};
+
+type ControlledBodyOptions = {
+  maxBytesPerPull?: number;
+};
+
 class TestStatement {
   query: string;
   values: unknown[] = [];
@@ -112,6 +126,96 @@ const eventRequest = (
     headers,
     body: typeof payload === 'string' ? payload : JSON.stringify(payload),
   });
+};
+
+const controlledBody = (
+  chunks: Uint8Array[],
+  options: ControlledBodyOptions = {},
+): ControlledBody => {
+  const remaining = [...chunks];
+  const state = {
+    cancellations: 0,
+    deliveredBytes: 0,
+    pulls: 0,
+    remainingBytes: remaining.reduce((total, chunk) => total + chunk.byteLength, 0),
+  };
+  const source: UnderlyingByteSource = {
+    type: 'bytes',
+    pull(controller) {
+      state.pulls += 1;
+      const chunk = remaining[0];
+      if (!chunk) {
+        const byobRequest = controller.byobRequest;
+        controller.close();
+        byobRequest?.respond(0);
+        return;
+      }
+
+      const byobRequest = controller.byobRequest;
+      const byobView = byobRequest?.view;
+      if (byobRequest && byobView) {
+        const requested = new Uint8Array(
+          byobView.buffer,
+          byobView.byteOffset,
+          byobView.byteLength,
+        );
+        const deliveredByteLength = Math.min(
+          requested.byteLength,
+          chunk.byteLength,
+          options.maxBytesPerPull ?? chunk.byteLength,
+        );
+        requested.set(chunk.subarray(0, deliveredByteLength));
+        if (deliveredByteLength === chunk.byteLength) {
+          remaining.shift();
+        } else {
+          remaining[0] = chunk.subarray(deliveredByteLength);
+        }
+        state.deliveredBytes += deliveredByteLength;
+        state.remainingBytes -= deliveredByteLength;
+        byobRequest.respond(deliveredByteLength);
+        return;
+      }
+
+      const deliveredByteLength = Math.min(
+        chunk.byteLength,
+        options.maxBytesPerPull ?? chunk.byteLength,
+      );
+      if (deliveredByteLength === chunk.byteLength) {
+        remaining.shift();
+      } else {
+        remaining[0] = chunk.subarray(deliveredByteLength);
+      }
+      state.deliveredBytes += deliveredByteLength;
+      state.remainingBytes -= deliveredByteLength;
+      controller.enqueue(new Uint8Array(chunk.subarray(0, deliveredByteLength)));
+    },
+    cancel() {
+      state.cancellations += 1;
+    },
+  };
+  const body = new ReadableStream(source, { highWaterMark: 0 });
+
+  return { body, state };
+};
+
+const streamedEventRequest = (
+  body: ReadableStream<Uint8Array>,
+  options: EventRequestOptions = {},
+) => {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    ...options.headers,
+  };
+  if (options.sourceIp) {
+    headers['cf-connecting-ip'] = options.sourceIp;
+  }
+
+  return new Request('https://analytics.example.test/v1/events', {
+    method: 'POST',
+    headers,
+    body,
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' });
 };
 
 describe('analytics Worker', () => {
@@ -258,8 +362,9 @@ describe('analytics Worker', () => {
   it('rejects oversized bodies before rate limiting when Content-Length is known', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, rateLimitKeys, runs } = makeEnv();
+    const controlled = controlledBody([new TextEncoder().encode('{}')]);
 
-    const response = await worker.fetch(eventRequest('{}', {
+    const response = await worker.fetch(streamedEventRequest(controlled.body, {
       headers: {
         'content-length': '2049',
       },
@@ -269,6 +374,54 @@ describe('analytics Worker', () => {
     assert.equal(response.status, 400);
     assert.equal(body.error, 'request body is too large');
     assert.deepEqual(rateLimitKeys, []);
+    assert.deepEqual(runs, []);
+    assert.equal(controlled.state.pulls, 0);
+  });
+
+  it('accepts highly fragmented valid JSON at the 2048-byte body limit', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const encoder = new TextEncoder();
+    const payload = JSON.stringify(payloadForCommand('ballin update'));
+    const body = encoder.encode(payload.padEnd(2048, ' '));
+    const controlled = controlledBody([body], { maxBytesPerPull: 1 });
+
+    const response = await worker.fetch(streamedEventRequest(controlled.body), env);
+
+    assert.equal(body.byteLength, 2048);
+    assert.equal(response.status, 204);
+    assert.lengthOf(runs, 3);
+    assert.equal(controlled.state.deliveredBytes, 2048);
+    assert.equal(controlled.state.pulls, 2049);
+    assert.equal(controlled.state.cancellations, 0);
+  });
+
+  it('counts multibyte UTF-8 input by encoded bytes', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const body = JSON.stringify('é'.repeat(1024));
+
+    const response = await worker.fetch(eventRequest(body), env);
+
+    assert.isBelow(body.length, 2048);
+    assert.isAbove(new TextEncoder().encode(body).byteLength, 2048);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'request body is too large' });
+    assert.deepEqual(runs, []);
+  });
+
+  it('preserves the invalid JSON response for requests without a body', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const request = new Request('https://analytics.example.test/v1/events', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const response = await worker.fetch(request, env);
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'invalid JSON' });
     assert.deepEqual(runs, []);
   });
 
@@ -295,7 +448,10 @@ describe('analytics Worker', () => {
   it('rejects oversized streamed bodies after rate limiting but before parsing', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, rateLimitKeys, runs } = makeEnv();
-    const response = await worker.fetch(eventRequest(' '.repeat(2049), {
+    const controlled = controlledBody([
+      new Uint8Array(65_536),
+    ]);
+    const response = await worker.fetch(streamedEventRequest(controlled.body, {
       headers: { 'x-forwarded-for': '198.51.100.5, 198.51.100.6' },
     }), env);
 
@@ -303,6 +459,10 @@ describe('analytics Worker', () => {
     assert.deepEqual(await response.json(), { error: 'request body is too large' });
     assert.deepEqual(rateLimitKeys, ['v1-events:global', 'v1-events:source:198.51.100.5']);
     assert.deepEqual(runs, []);
+    assert.equal(controlled.state.deliveredBytes, 2049);
+    assert.equal(controlled.state.pulls, 1);
+    assert.equal(controlled.state.cancellations, 1);
+    assert.equal(controlled.state.remainingBytes, 63_487);
   });
 
   it('bounds missing and malformed forwarding identities in source rate-limit keys', async () => {
@@ -324,8 +484,11 @@ describe('analytics Worker', () => {
     const { env, rateLimitKeys, runs } = makeEnv({
       rateLimitFailure: (key) => key === 'v1-events:source:203.0.113.7',
     });
+    const controlled = controlledBody([
+      new TextEncoder().encode(JSON.stringify(payloadForCommand('ballin update'))),
+    ]);
 
-    const response = await worker.fetch(eventRequest(payloadForCommand('ballin update'), {
+    const response = await worker.fetch(streamedEventRequest(controlled.body, {
       sourceIp: '203.0.113.7',
     }), env);
 
@@ -335,6 +498,7 @@ describe('analytics Worker', () => {
       'v1-events:source:203.0.113.7',
     ]);
     assert.deepEqual(runs, []);
+    assert.equal(controlled.state.pulls, 0);
   });
 
   it('applies global rate limits before source keys, parsing, or D1 writes', async () => {
@@ -342,14 +506,18 @@ describe('analytics Worker', () => {
     const { env, rateLimitKeys, runs } = makeEnv({
       rateLimitFailure: (key) => key === 'v1-events:global',
     });
+    const controlled = controlledBody([
+      new TextEncoder().encode(JSON.stringify(payloadForCommand('ballin update'))),
+    ]);
 
-    const response = await worker.fetch(eventRequest(payloadForCommand('ballin update'), {
+    const response = await worker.fetch(streamedEventRequest(controlled.body, {
       sourceIp: '203.0.113.7',
     }), env);
 
     assert.equal(response.status, 429);
     assert.deepEqual(rateLimitKeys, ['v1-events:global']);
     assert.deepEqual(runs, []);
+    assert.equal(controlled.state.pulls, 0);
   });
 
   it('applies install-hash rate limits before D1 writes', async () => {
