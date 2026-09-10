@@ -943,6 +943,34 @@ exit 2
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
   });
 
+  [false, true].forEach((ghAuthFail) => {
+    it(`explains configured Gist setup through the installed shim when authentication ${ghAuthFail ? 'fails' : 'succeeds'}`, () => {
+      writeCompleteBackupConfig('test-gist-id', 'github.com');
+      const previousConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      seedBackupCache('preserve configured cache\n', false);
+      const linkPath = path.join(testBinDir, 'ballin');
+      fs.symlinkSync(ballinPath, linkPath);
+
+      const result = runBackup({
+        args: ['setup'], commandPath: linkPath, input: '', ghExpectedHost: 'github.com', ghAuthFail,
+      });
+
+      assert.equal(result.status, ghAuthFail ? 1 : 0);
+      assert.include(result.stdout, 'Existing Gist backup remains configured. Setup does not migrate or replace it with a repository.');
+      if (ghAuthFail) {
+        assert.include(result.stdout, 'gh is not authenticated for github.com');
+        assert.include(result.stderr, 'setup did not complete');
+      } else {
+        assertBackupSucceeded(result);
+      }
+      assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
+      assert.deepEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')), previousConfig);
+      assert.deepEqual(ghCalls(), ['api --hostname github.com user']);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
+      assert.isFalse(fs.existsSync(gistUploadLogPath));
+    });
+  });
+
   it('preserves an existing Enterprise host without re-prompting standalone setup', () => {
     writeBackupConfig('test-gist-id', 'github.enterprise.test');
     seedBackupCache('preserve configured cache\n', false);

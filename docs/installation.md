@@ -151,9 +151,9 @@ can remain completed even when local persistence fails. Reconnect provides no
 authority to overwrite different saved content. Older full-config snapshots
 receive no special conflict exception.
 
-Existing configured Gists retain backup/read/open/readiness and required host
-repair through `ballin backup setup`. The internal installer compatibility command
-cannot create or adopt Gists. Migration and Gist retirement belong to
+Existing configured Gists retain compatibility temporarily. `ballin backup setup`
+reports that the existing Gist remains configured; it does not migrate or replace
+it with a repository. Gist retirement after repository cutover is tracked in
 [#334](https://github.com/JBallin/ballin-scripts/issues/334); backup verification
 belongs to [#336](https://github.com/JBallin/ballin-scripts/issues/336).
 
