@@ -4,6 +4,7 @@ const https = require('https');
 const os = require('os');
 const path = require('path');
 const { fetchConfig } = require('../config/index.ts');
+const { readCommandOutput } = require('./commandHelpers.ts');
 
 import type { IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
@@ -39,12 +40,25 @@ type SenderOptions = {
 
 type AnalyticsSender = (payload: AnalyticsPayload, options: SenderOptions) => Promise<void>;
 
+type OsVersionCommandReader = (
+  command: string,
+  args?: string[],
+  options?: { timeout?: number },
+) => string | null;
+
+type OsVersionOptions = {
+  platform?: () => string;
+  readCommandOutput?: OsVersionCommandReader;
+  release?: () => string;
+};
+
 type AnalyticsRuntime = SenderOptions & {
   analyticsConfig?: AnalyticsConfig;
   appVersion?: string;
   env?: NodeJS.ProcessEnv;
   installId?: string | null;
   installIdPath?: string;
+  osVersionOptions?: OsVersionOptions;
   sender?: AnalyticsSender;
 };
 
@@ -179,17 +193,35 @@ const dateBucket = (now: Date): string => now.toISOString().slice(0, 10);
 
 const nodeMajor = (): string => process.versions.node.split('.')[0];
 
-const osFamily = (): string => {
-  const platform = os.platform();
-  return allowedOs.has(platform) ? platform : 'unknown';
-};
+const osFamily = (platform = os.platform()): string => (
+  allowedOs.has(platform) ? platform : 'unknown'
+);
 
-const coarseOsVersion = (): string => {
-  const [major, minor] = os.release().split('.');
-  if (!major || !/^[0-9]+$/.test(major)) {
+const coarseOsVersion = (options: OsVersionOptions = {}): string => {
+  try {
+    const platform = (options.platform ?? os.platform)();
+    const version = platform === 'darwin'
+      ? (options.readCommandOutput ?? readCommandOutput)(
+        '/usr/bin/sw_vers',
+        ['-productVersion'],
+        { timeout: defaultTimeoutMs },
+      )
+      : (options.release ?? os.release)();
+    if (typeof version !== 'string') {
+      return 'unknown';
+    }
+
+    const [major, minor] = version.trim().split('.');
+    if (!major || !/^[0-9]+$/.test(major)) {
+      return 'unknown';
+    }
+    if (minor && !/^[0-9]+$/.test(minor)) {
+      return platform === 'darwin' ? 'unknown' : major;
+    }
+    return minor ? `${major}.${minor}` : major;
+  } catch {
     return 'unknown';
   }
-  return minor && /^[0-9]+$/.test(minor) ? `${major}.${minor}` : major;
 };
 
 const durationBucketFromMs = (durationMs: number): string => {
@@ -212,18 +244,22 @@ const buildAnalyticsPayload = (
   input: Required<Pick<AnalyticsRecordInput, 'command' | 'status' | 'durationBucket' | 'now'>>,
   installId: string,
   appVersion = loadAppVersion(),
-): AnalyticsPayload => ({
-  schemaVersion,
-  installId,
-  dateBucket: dateBucket(input.now),
-  command: input.command,
-  status: input.status,
-  durationBucket: input.durationBucket,
-  appVersion,
-  nodeMajor: nodeMajor(),
-  os: osFamily(),
-  osVersion: coarseOsVersion(),
-});
+  osVersionOptions: OsVersionOptions = {},
+): AnalyticsPayload => {
+  const platform = (osVersionOptions.platform ?? os.platform)();
+  return {
+    schemaVersion,
+    installId,
+    dateBucket: dateBucket(input.now),
+    command: input.command,
+    status: input.status,
+    durationBucket: input.durationBucket,
+    appVersion,
+    nodeMajor: nodeMajor(),
+    os: osFamily(platform),
+    osVersion: coarseOsVersion({ ...osVersionOptions, platform: () => platform }),
+  };
+};
 
 const requestOptions = (endpoint: string): RequestOptions => {
   const url = new URL(endpoint);
@@ -320,7 +356,7 @@ const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: Analyt
       status,
       durationBucket,
       now: input.now ?? new Date(),
-    }, installId, runtime.appVersion);
+    }, installId, runtime.appVersion, runtime.osVersionOptions);
     await (runtime.sender ?? sendAnalyticsPayload)(payload, {
       endpoint: runtime.endpoint ?? productionAnalyticsEndpoint,
       timeoutMs: runtime.timeoutMs ?? defaultTimeoutMs,
@@ -375,6 +411,7 @@ module.exports = {
   analyticsNotice,
   analyticsNoticeFor,
   buildAnalyticsPayload,
+  coarseOsVersion,
   durationBucketFromMs,
   ensureAnalyticsInstallId,
   installIdPathForRepo,

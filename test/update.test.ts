@@ -400,11 +400,16 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     env: process.env,
     installIdPath: process.env.ANALYTICS_TEST_INSTALL_ID_PATH,
     nowMs: () => 0,
+    osVersionOptions: {
+      platform: () => 'darwin',
+      readCommandOutput: () => '26.6.2\\n',
+    },
     sender: async (payload) => {
       fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
         type: 'event',
         command: payload.command,
         installId: payload.installId,
+        osVersion: payload.osVersion,
       }) + '\\n');
     },
   });
@@ -438,7 +443,12 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(fs.readFileSync(analyticsInstallIdPath, 'utf8'), `${installId}\n`);
-    assert.deepEqual(events, [{ type: 'event', command: 'ballin update', installId }]);
+    assert.deepEqual(events, [{
+      type: 'event',
+      command: 'ballin update',
+      installId,
+      osVersion: '26.6',
+    }]);
     assert.deepEqual(nested.map(({ command, hardOptOut, commandOptOut, nvmMarker, path: childPath }: {
       command: string;
       hardOptOut: string;

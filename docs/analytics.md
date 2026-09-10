@@ -46,7 +46,8 @@ environment opt-outs still apply. The exact restoration rules are recorded in
 - `ballin-scripts` version
 - Node.js major version
 - OS family: `darwin`, `linux`, `win32`, or `unknown`
-- coarse OS version
+- coarse OS version; on macOS (`darwin`), this is the macOS product version as
+  major/minor when available, such as `26.6`, or `unknown` when unavailable
 
 ## What Is Never Sent
 

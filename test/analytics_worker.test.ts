@@ -103,7 +103,7 @@ const payloadForCommand = (command: string) => ({
   appVersion: '1.0.0',
   nodeMajor: '24',
   os: 'darwin',
-  osVersion: '15',
+  osVersion: '26.6',
 });
 
 const eventRequest = (
@@ -229,11 +229,15 @@ describe('analytics Worker', () => {
       status: 'success',
       durationBucket: '<1s',
       now,
-    }, '826f9faa-9995-4f66-a01b-73b4f7aebdf1', '2.0.0');
+    }, '826f9faa-9995-4f66-a01b-73b4f7aebdf1', '2.0.0', {
+      platform: () => 'darwin',
+      readCommandOutput: () => '26.6.2\n',
+    });
 
     const response = await worker.fetch(eventRequest(payload), env);
 
     assert.equal(command, 'ballin doctor');
+    assert.equal(payload.osVersion, '26.6');
     assert.equal(response.status, 204);
     assert.includeDeepMembers(runs.map(({ values }) => values), [
       [payload.dateBucket, 'ballin doctor', 'success', '<1s'],
@@ -254,7 +258,7 @@ describe('analytics Worker', () => {
     ]);
     assert.match(rateLimitKeys[2], /^v1-events:install:[0-9a-f]{64}$/);
     assert.includeDeepMembers(runs.map(({ values }) => values), [
-      [payload.dateBucket, 'ballin update', '1.0.0', '24', 'darwin', '15'],
+      [payload.dateBucket, 'ballin update', '1.0.0', '24', 'darwin', '26.6'],
     ]);
     assert.notInclude(runs.flatMap(({ values }) => values), '203.0.113.7');
   });
