@@ -42,9 +42,9 @@ The installer can create or change:
   and merges `origin/main`. If checkout or merge recovery is needed, Ballin can
   stash tracked and untracked changes in this checkout.
 - `~/.ballin-scripts/ballin.config.json`. A new file starts from the bundled
-  defaults. A refresh adds missing known settings. Adopting a backup can restore
-  compatible settings and unknown keys from `ballin_config` as described
-  below.
+  defaults. A refresh adds missing known settings. Adopting a backup can recover
+  supported Ballin preferences; existing local choices and custom settings are
+  preserved.
 - `~/.ballin-scripts/.analytics/install-id` when analytics are enabled and the
   environment has not opted out. Installation creates only the local random
   ID; it sends no analytics event. Later instrumented commands can send the
@@ -58,7 +58,7 @@ The installer can create or change:
 Before creating the command link, setup removes an existing non-directory
 target at `<bin>/ballin`. It refuses to replace a directory. A repository
 refresh can replace checkout files through the Git merge. Config migration can
-add bundled defaults; successful adoption can replace saved preferences.
+add bundled defaults.
 
 Temporary Gist marker and staged config files are removed after setup. The
 installer does not run `ballin update`, collect snapshots, perform the first
@@ -105,16 +105,27 @@ the Gist URL and ID.
 When adopting an existing backup, setup validates the Ballin marker using the
 host selected in the current setup flow. That selected host and the
 marker-validated Gist ID are authoritative. A restored `ballin_config` can
-contribute update preferences, analytics opt-out, and other settings, but its
-own destination fields cannot redirect setup. If reading, restoring, or saving
-the adopted configuration fails, setup stops and leaves the prior unconfigured
-configuration active.
+recover supported maintenance preferences and an analytics opt-out. Existing
+local choices take precedence. Destination identity, custom settings, and
+automatic-backup or sensitive-source approval are not restored. See
+[preference recovery](optional-capabilities.md#recovering-ballin-preferences).
+If reading, restoring, or saving the adopted configuration fails, setup stops
+and leaves the prior unconfigured configuration active.
+
+Unreadable local JSON or malformed configuration sections stop setup before
+settings are refreshed. Repair the config and retry; setup will not replace a
+malformed analytics section with enabled defaults. See
+[Backup design](backup-design.md#portable-preferences) for validation and
+restoration rules.
 
 After backup is newly configured, Ballin asks whether `ballin update` should run
-`ballin backup` automatically; yes is the default. When adopting an existing
-backup, this choice overrides any restored automatic-backup preference. See
-[Optional capabilities](optional-capabilities.md#gist-backups) to change it
-later.
+`ballin backup` automatically with a `[Y/n]` prompt. Enter, `y`, or `Y` saves
+`"true"`; other answers or EOF save `"false"`. This local choice controls
+`update.backup`, which is never restored from a backup. Already-configured
+backups keep their choice without this prompt. If saving the answer fails,
+setup reports failure and recovery guidance, but the destination remains
+configured. See [Optional capabilities](optional-capabilities.md#gist-backups)
+to change it later.
 
 If a configured ID has a malformed host, `ballin backup setup` asks for a
 replacement and verifies the retained Gist's Ballin marker on that host before
@@ -128,6 +139,13 @@ differing local and remote content reports a conflict rather than choosing a
 winner. If a later setup step fails, the invalidated cache remains removed.
 Resetting config leaves the remote Gist untouched, and a later setup invalidates
 the now-unproven cache again.
+
+Older `ballin_config` snapshots may contain settings that are no longer backed
+up, and adoption invalidates the old comparison cache. A later backup may
+therefore report a `ballin_config` conflict. Inspect and reconcile it using the
+existing
+[conflict guidance](capabilities.md#backup-consistency-and-conflicts); adoption
+does not overwrite the remote snapshot or bypass conflicts.
 
 ## Health and recovery
 

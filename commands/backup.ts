@@ -12,6 +12,7 @@ const {
   configure,
   configHasBackupHost,
   configureGist,
+  readOriginalSetupConfig,
 } = require('./install_setup.ts');
 const {
   makeTempFile,
@@ -714,7 +715,12 @@ const runStagedBackup = (
   homeDir: string,
   backupCacheDir: string,
 ): boolean => {
-  const sourceObservations = observeSnapshotSources({ homeDir, env: process.env });
+  // Gist capture retains its existing sources until #333–#334 activate the
+  // shared reviewed policy and retire this destination path.
+  const sourceObservations = observeSnapshotSources(
+    { homeDir, env: process.env },
+    true,
+  );
   const stagedSnapshots = stageSnapshots(sourceObservations);
   if (!stagedSnapshots) {
     return false;
@@ -793,6 +799,12 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
 
+    const originalConfig = readOriginalSetupConfig(configPath);
+    if (!originalConfig) {
+      writeStderrLine('ballin backup setup: unable to inspect config');
+      process.exitCode = 1;
+      return;
+    }
     const backupHostExisted = configHasBackupHost(repoDir, configPath);
     if (!configure(repoDir, backupSetupDocsUrl, configPath)) {
       writeStderrLine('ballin backup setup: unable to create or update config');
@@ -802,6 +814,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     const configured = configureGist(repoDir, backupSetupDocsUrl, backupHostExisted, {
       backupCacheDir,
       configPath,
+      originalConfig,
     });
     if (!configured) {
       writeStderrLine("ballin backup setup: setup did not complete; resolve the error and retry with 'ballin backup setup'");

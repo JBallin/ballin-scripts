@@ -4,6 +4,8 @@ const {
   runCommand,
 } = require('./commandHelpers.ts');
 
+type SnapshotInclusionGroup = 'inventory' | 'sensitive' | 'preferences';
+
 type SnapshotCategory =
   | 'shell'
   | 'bash-completions'
@@ -80,11 +82,17 @@ type SnapshotDiscoveryContext = {
 type SnapshotDefinition = {
   name: string;
   category: SnapshotCategory;
+  inclusionGroup: SnapshotInclusionGroup;
   prerequisites: readonly SnapshotPrerequisite[];
   discover: (context: SnapshotDiscoveryContext) => SnapshotSourceDiscovery;
 };
 
-type SnapshotSourceObservation = SnapshotSourceDiscovery & {
+type ExcludedSnapshotSource = {
+  status: 'excluded-by-policy';
+  reason: 'excluded-by-policy';
+};
+
+type SnapshotSourceObservation = (SnapshotSourceDiscovery | ExcludedSnapshotSource) & {
   definition: SnapshotDefinition;
 };
 
@@ -242,11 +250,13 @@ const sourceFromPathDiscovery = (
 
 const fileSnapshot = (
   category: SnapshotCategory,
+  inclusionGroup: SnapshotInclusionGroup,
   name: string,
   relativeSourcePath: string,
 ): SnapshotDefinition => ({
   name,
   category,
+  inclusionGroup,
   prerequisites: [{ kind: 'file', name: relativeSourcePath }],
   discover: ({ homeDir, env }) => {
     const sourcePath = path.join(homeDir, relativeSourcePath);
@@ -266,6 +276,7 @@ const fileSnapshot = (
 
 const shellCommandSnapshot = (
   category: SnapshotCategory,
+  inclusionGroup: SnapshotInclusionGroup,
   name: string,
   tool: string,
   command: string,
@@ -276,6 +287,7 @@ const shellCommandSnapshot = (
 ): SnapshotDefinition => ({
   name,
   category,
+  inclusionGroup,
   prerequisites: [{ kind: 'tool', name: tool }],
   discover: ({ homeDir, env }) => {
     const toolResult = inspectTool(tool, env);
@@ -318,6 +330,7 @@ const editorFileSnapshot = (
 ): SnapshotDefinition => ({
   name,
   category,
+  inclusionGroup: 'sensitive',
   prerequisites: [
     { kind: 'application', name: application },
     { kind: 'file', name: fileName },
@@ -364,6 +377,7 @@ const editorExtensionsSnapshot = (
 ): SnapshotDefinition => ({
   name,
   category,
+  inclusionGroup: 'inventory',
   prerequisites: [
     { kind: 'application', name: application },
     { kind: 'tool', name: tool },
@@ -423,6 +437,7 @@ const brewEnvironment = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
 const bashCompletionsSnapshot = (): SnapshotDefinition => ({
   name: 'bash_completions',
   category: 'bash-completions',
+  inclusionGroup: 'inventory',
   prerequisites: [{ kind: 'directory', name: 'active Homebrew bash completion directory' }],
   discover: ({ env }) => {
     const override = env.BALLIN_BACKUP_BASH_COMPLETION_DIR ?? '';
@@ -481,67 +496,116 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
   },
 });
 
+const portableConfigSnapshot = (): SnapshotDefinition => {
+  const definition = fileSnapshot(
+    'ballin',
+    'preferences',
+    configSnapshotFileName,
+    path.join('.ballin-scripts', 'ballin.config.json'),
+  );
+  return {
+    ...definition,
+    discover: (context) => {
+      const result = definition.discover(context);
+      if (result.status !== 'available') {
+        return result;
+      }
+      return {
+        ...result,
+        collector: {
+          ...result.collector,
+          command: process.execPath,
+          args: [path.join(__dirname, '..', 'config', 'portable.ts'), result.source.path as string],
+        },
+      };
+    },
+  };
+};
+
 // This is the snapshot source allowlist. Keep additions synchronized with the
 // inclusion and sensitivity review in docs/backup-sources.md.
 const snapshotDefinitions: readonly SnapshotDefinition[] = [
-  fileSnapshot('shell', 'bash_profile.sh', '.bash_profile'),
-  fileSnapshot('shell', 'bashrc.sh', '.bashrc'),
-  fileSnapshot('shell', 'profile.sh', '.profile'),
-  fileSnapshot('shell', 'zprofile.sh', '.zprofile'),
-  fileSnapshot('shell', 'zshrc.sh', '.zshrc'),
+  fileSnapshot('shell', 'sensitive', 'bash_profile.sh', '.bash_profile'),
+  fileSnapshot('shell', 'sensitive', 'bashrc.sh', '.bashrc'),
+  fileSnapshot('shell', 'sensitive', 'profile.sh', '.profile'),
+  fileSnapshot('shell', 'sensitive', 'zprofile.sh', '.zprofile'),
+  fileSnapshot('shell', 'sensitive', 'zshrc.sh', '.zshrc'),
   bashCompletionsSnapshot(),
-  shellCommandSnapshot('homebrew', 'brew_list', 'brew', 'brew list --formula', {
+  shellCommandSnapshot('homebrew', 'inventory', 'brew_list', 'brew', 'brew list --formula', {
     environment: brewEnvironment,
   }),
-  shellCommandSnapshot('homebrew', 'brew_leaves', 'brew', 'brew leaves', {
+  shellCommandSnapshot('homebrew', 'inventory', 'brew_leaves', 'brew', 'brew leaves', {
     environment: brewEnvironment,
   }),
-  shellCommandSnapshot('homebrew', 'brew_cask', 'brew', 'brew list --cask', {
+  shellCommandSnapshot('homebrew', 'inventory', 'brew_cask', 'brew', 'brew list --cask', {
     environment: brewEnvironment,
   }),
-  shellCommandSnapshot('homebrew', 'brew_services', 'brew', 'brew services list', {
+  shellCommandSnapshot('homebrew', 'inventory', 'brew_services', 'brew', 'brew services list', {
     environment: brewEnvironment,
     suppressStderrOnSuccess: true,
   }),
-  shellCommandSnapshot('homebrew', 'Brewfile', 'brew', 'brew bundle dump --file=-', {
+  shellCommandSnapshot('homebrew', 'inventory', 'Brewfile', 'brew', 'brew bundle dump --file=-', {
     environment: brewEnvironment,
   }),
-  fileSnapshot('git', 'gitignore_global', '.gitignore_global'),
-  fileSnapshot('git', 'gitconfig', '.gitconfig'),
-  shellCommandSnapshot('npm', 'npm_global', 'npm', 'npm list -g --depth=0'),
-  shellCommandSnapshot('python', 'pipx', 'pipx', 'pipx list --json', {
+  fileSnapshot('git', 'sensitive', 'gitignore_global', '.gitignore_global'),
+  fileSnapshot('git', 'sensitive', 'gitconfig', '.gitconfig'),
+  shellCommandSnapshot('npm', 'inventory', 'npm_global', 'npm', 'npm list -g --depth=0'),
+  shellCommandSnapshot('python', 'sensitive', 'pipx', 'pipx', 'pipx list --json', {
     environment: (env) => ({ ...env, PIPX_DISABLE_SHARED_LIBS_AUTO_UPGRADE: '1' }),
     suppressStderrOnSuccess: true,
   }),
   shellCommandSnapshot(
     'python',
+    'inventory',
     'uv_tools',
     'uv',
     'uv tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
     { suppressStderrOnSuccess: true },
   ),
-  shellCommandSnapshot('python', 'pyenv_versions', 'pyenv', 'pyenv versions --bare'),
-  fileSnapshot('node', 'nvmrc', '.nvmrc'),
+  shellCommandSnapshot('python', 'inventory', 'pyenv_versions', 'pyenv', 'pyenv versions --bare'),
+  fileSnapshot('node', 'sensitive', 'nvmrc', '.nvmrc'),
   editorFileSnapshot('vscode', 'vs_settings', 'Code', 'settings.json'),
   editorFileSnapshot('vscode', 'vs_keybindings', 'Code', 'keybindings.json'),
   editorExtensionsSnapshot('vscode', 'vs_extensions', 'Code', 'code'),
   editorFileSnapshot('vscode-insiders', 'vsI_settings', 'Code - Insiders', 'settings.json'),
   editorFileSnapshot('vscode-insiders', 'vsI_keybindings', 'Code - Insiders', 'keybindings.json'),
   editorExtensionsSnapshot('vscode-insiders', 'vsI_extensions', 'Code - Insiders', 'code-insiders'),
-  fileSnapshot('editor', 'vimrc', '.vimrc'),
-  fileSnapshot('editor', 'nanorc', '.nanorc'),
-  fileSnapshot('ballin', configSnapshotFileName, path.join('.ballin-scripts', 'ballin.config.json')),
-  shellCommandSnapshot('mas', 'mas', 'mas', 'mas list'),
+  fileSnapshot('editor', 'sensitive', 'vimrc', '.vimrc'),
+  fileSnapshot('editor', 'sensitive', 'nanorc', '.nanorc'),
+  portableConfigSnapshot(),
+  shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
 ];
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
 
-const observeSnapshotSources = (context: SnapshotDiscoveryContext): SnapshotSourceObservation[] => (
-  snapshotDefinitions.map((definition) => ({
+const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: boolean): boolean => {
+  switch (definition.inclusionGroup) {
+    case 'inventory':
+    case 'preferences':
+      return true;
+    case 'sensitive':
+      return includeSensitive === true;
+    default:
+      return false;
+  }
+};
+
+const observeSnapshotSources = (
+  context: SnapshotDiscoveryContext,
+  includeSensitive = false,
+): SnapshotSourceObservation[] => {
+  // CommonJS callers can bypass the TypeScript type. Reject invalid consent
+  // before even baseline discovery starts.
+  if (typeof includeSensitive !== 'boolean') {
+    throw new TypeError('Invalid sensitive-source selection: expected a boolean.');
+  }
+  return snapshotDefinitions.map((definition) => ({
     definition,
-    ...definition.discover(context),
-  }))
-);
+    ...(isSnapshotSelected(definition, includeSensitive)
+      ? definition.discover(context)
+      : { status: 'excluded-by-policy' as const, reason: 'excluded-by-policy' as const }),
+  }));
+};
 
 const collectSnapshotObservations = (
   observations: SnapshotSourceObservation[],
@@ -587,6 +651,7 @@ module.exports = {
   collectSnapshotObservations,
   configSnapshotFileName,
   emptySnapshotContent,
+  isSnapshotSelected,
   normalizeSnapshotInput,
   observeSnapshotSources,
   snapshotDefinitions,
@@ -600,6 +665,7 @@ export type {
   SnapshotCommand,
   SnapshotDefinition,
   SnapshotDiscoveryContext,
+  SnapshotInclusionGroup,
   SnapshotNameClassification,
   SnapshotPrerequisite,
   SnapshotSourceObservation,

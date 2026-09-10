@@ -93,8 +93,10 @@ ballin backup setup
 Setup prompts for the GitHub host, including GitHub Enterprise hosts, checks
 the active `gh` account for that host, and either adopts an existing backup
 Gist or creates a new one. `backup.id` is the opt-in signal; there is no separate
-enabled or onboarding setting. Change whether `ballin update` runs backups
-automatically with:
+enabled or onboarding setting. After creating or adopting a destination, setup
+asks whether updates should run backups automatically, with yes as the default.
+See [setup choices and recovery](installation.md#optional-backup-and-adoption).
+Change that choice later with:
 
 ```shell
 ballin config set update.backup true
@@ -115,14 +117,13 @@ allowed files, and public Gists cannot be made secret again. Review
 [Backup sources and sensitivity](backup-sources.md) before opting in.
 
 GitHub preserves Gist revision history and diffs. Ballin does not provide
-history navigation, rollback, restore, or revision selection.
+history navigation, rollback, or revision selection. Adoption restores eligible
+Ballin preferences; it does not apply saved dotfiles or install saved packages.
 
-Ballin currently stores backups in secret Gists.
-[#254](https://github.com/JBallin/ballin-scripts/issues/254) completed the
-storage-security evaluation; follow-up implementation work is tracked in
-[#332](https://github.com/JBallin/ballin-scripts/issues/332),
-[#333](https://github.com/JBallin/ballin-scripts/issues/333), and
-[#334](https://github.com/JBallin/ballin-scripts/issues/334).
+Private-repository backups and local sensitive-source review are planned in
+[#333](https://github.com/JBallin/ballin-scripts/issues/333), followed by reviewed
+Gist migration in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+Current Gist capture includes all available allowlisted sources.
 
 Use `ballin backup open` to open the configured backup Gist, or
 `ballin backup read <file>` to print one saved snapshot.
@@ -142,6 +143,21 @@ checks and their limitations.
 ```shell
 ballin doctor
 ```
+
+## Recovering Ballin preferences
+
+Reconnecting to a backup can recover supported Ballin preferences for cleanup,
+self-updates, macOS updates, and Node/npm updates, plus an analytics opt-out.
+Existing local choices take precedence. Recovery affects later maintenance;
+it does not run updates, apply dotfiles, or install packages.
+
+The `ballin_config` snapshot saves only those supported preferences.
+Destination identity, custom settings, analytics identity, automatic-backup
+choices, and sensitive-source approval stay local. A newly configured backup
+gets its own automatic-backup choice during setup. Sensitive-source review
+will be part of future repository setup, not current Gist setup. See
+[Backup design](backup-design.md#portable-preferences) for the exact allowlists
+and restoration rules.
 
 ## Analytics
 

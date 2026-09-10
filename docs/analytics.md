@@ -27,6 +27,12 @@ export BALLIN_NO_ANALYTICS=1
 CI never sends analytics. Analytics failures are ignored and never change
 command output, side effects, or exit status.
 
+Reconnecting to a backup can recover an analytics opt-out. Existing local
+choices take precedence; backup data never enables analytics or restores an
+installation identity. Otherwise, the usual defaults, first-run notice, and
+environment opt-outs still apply. The exact restoration rules are recorded in
+[Backup design](backup-design.md#portable-preferences).
+
 ## What Is Sent
 
 - schema version

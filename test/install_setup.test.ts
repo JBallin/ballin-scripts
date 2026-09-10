@@ -810,13 +810,14 @@ esac
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
   });
 
-  it('restores config values from an adopted backup Gist before applying the local automatic-backup choice', () => {
+  it('restores only eligible portable preferences while retaining local choices and unknown settings', () => {
     installConfigSources();
     installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+      backup: { id: null, host: 'github.example.test' },
+      update: { cleanup: 'true', backup: 'false' },
+      custom: { keep: 'local' },
+    }));
 
     const result = runGistSetup({
       env: {
@@ -842,12 +843,12 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Do you already have a Ballin backup Gist? [y/N]');
-    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
+    assert.include(result.stdout, 'Restored eligible portable preferences');
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
     assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename ballin_config');
     const restoredConfig = JSON.parse(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'));
     assert.deepEqual(restoredConfig.update, {
-      cleanup: 'false',
+      cleanup: 'true',
       selfUpdate: 'true',
       backup: 'false',
       softwareupdate: 'false',
@@ -859,7 +860,7 @@ esac
       host: 'github.example.test',
     });
     assert.deepEqual(restoredConfig.analytics, { enabled: 'false' });
-    assert.deepEqual(restoredConfig.custom, { keep: 'yes' });
+    assert.deepEqual(restoredConfig.custom, { keep: 'local' });
     assert.notInclude(commandLog(), 'snapshot.example.test');
     assert.notInclude(commandLog(), 'snapshot-gist-id');
   });
@@ -894,11 +895,11 @@ esac
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Restored ballin.config.json from your backup gist');
+    assert.include(result.stdout, 'Restored eligible portable preferences');
     assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
   });
 
-  it('rolls back local config when a restored Gist config cannot migrate', () => {
+  it('preserves local config when the remote snapshot is malformed JSON', () => {
     installConfigSources();
     installFakeGhCommand();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{"backup":{"id":null,"host":"github.example.test"},"local":"keep"}\n');
@@ -917,8 +918,7 @@ esac
       local: 'keep',
     });
     assert.notEqual(readRepoConfig().backup.id, 'returning-gist-id');
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.restore.tmp')), []);
   });
 
   it('keeps local defaults when an adopted Gist has no config snapshot', () => {
@@ -944,8 +944,7 @@ esac
     assert.equal(readRepoConfig().backup.host, 'github.example.test');
     assert.equal(readRepoConfig().update.cleanup, 'false');
     assert.deepEqual(readRepoConfig().localOnly, { preserve: 'yes' });
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.tmp')));
-    assert.isFalse(fs.existsSync(path.join(repoDir, '.ballin.config.restore.previous.tmp')));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.restore.tmp')), []);
   });
 
   ([
@@ -1006,7 +1005,6 @@ esac
         FAKE_RESTORED_CONFIG: '{"backup":{"id":"snapshot-gist-id","host":"snapshot.example.test"},"analytics":{"enabled":"false"}}',
       }, () => captureStdout(() => commitAdoptedConfig(
         repoDir,
-        docsUrl,
         'github.example.test',
         'returning-gist-id',
         configPath,
@@ -1141,7 +1139,6 @@ esac
       FAKE_GH_HOST: 'github.example.test',
     }, () => captureStdout(() => commitAdoptedConfig(
       repoDir,
-      docsUrl,
       'github.example.test',
       'returning-gist-id',
       missingConfig,
@@ -1347,60 +1344,89 @@ exit 2
     assert.equal(readRepoConfig().update.backup, 'false');
   });
 
-  it('honors a restored analytics opt-out before analytics initialization', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    const result = withEnvironment({
-      BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1',
-      FAKE_GIST_FILE_LIST_STATUS: '17',
-    }, () => {
-      const childEnv = childEnvironment({
-        ...analyticsEnabledEnv,
-        BALLIN_BACKUP_HOST: 'github.example.test',
-        FAKE_GH_HOST: 'github.example.test',
-        FAKE_COMMAND_LOG: commandLogPath,
-        FAKE_GH_AUTH_STATUS: '0',
-        FAKE_GIST_CONFIG_STATUS: '0',
-        FAKE_RESTORED_CONFIG: JSON.stringify({
-          update: {
-            cleanup: 'false',
-            selfUpdate: 'true',
-            backup: 'false',
-            softwareupdate: 'false',
-            npm: 'false',
-            nvm: 'false',
-          },
-          backup: {
-            id: 'snapshot-gist-id',
-            host: 'snapshot.example.test',
-          },
-          analytics: { enabled: 'false' },
-        }),
-        TEST_DIR: testDir,
-        TEST_REPO_DIR: repoDir,
+  [false, true].forEach((value) => {
+    it(`restores five update preferences and an analytics opt-out during fresh setup (${value})`, () => {
+      installConfigSources();
+      installFakeGhCommand();
+      const result = withEnvironment({
+        BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1',
+        FAKE_GIST_FILE_LIST_STATUS: '17',
+      }, () => {
+        const childEnv = childEnvironment({
+          ...analyticsEnabledEnv,
+          BALLIN_BACKUP_HOST: 'github.example.test',
+          FAKE_GH_HOST: 'github.example.test',
+          FAKE_COMMAND_LOG: commandLogPath,
+          FAKE_GH_AUTH_STATUS: '0',
+          FAKE_GIST_CONFIG_STATUS: '0',
+          FAKE_RESTORED_CONFIG: JSON.stringify({
+            update: {
+              ...Object.fromEntries(
+                ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'].map((key) => [key, value]),
+              ),
+              backup: !value,
+            },
+            backup: {
+              id: 'snapshot-gist-id',
+              host: 'snapshot.example.test',
+            },
+            analytics: { enabled: 'false' },
+          }),
+          TEST_DIR: testDir,
+          TEST_REPO_DIR: repoDir,
+        });
+
+        return spawnSync(process.execPath, [
+          installSetupPath,
+          'setup',
+          repoDir,
+          docsUrl,
+          'https://example.test/analytics',
+          'fresh',
+        ], {
+          encoding: 'utf8',
+          input: `y\ny\nreturning-gist-id\n${value ? 'y' : 'n'}\n`,
+          env: childEnv,
+        });
       });
 
-      return spawnSync(process.execPath, [
-        installSetupPath,
-        'setup',
-        repoDir,
-        docsUrl,
-        'https://example.test/analytics',
-        'fresh',
-      ], {
-        encoding: 'utf8',
-        input: 'y\ny\nreturning-gist-id\ny\n',
-        env: childEnv,
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
+      assert.equal(readRepoConfig().backup.host, 'github.example.test');
+      assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
+      assert.equal(readRepoConfig().update.backup, String(value));
+      assert.equal(readRepoConfig().analytics.enabled, 'false');
+      assert.isFalse(fs.existsSync(installIdPath()));
+      ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'].forEach((key) => {
+        assert.equal(readRepoConfig().update[key], String(value));
       });
     });
+  });
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [Y/n]');
-    assert.equal(readRepoConfig().backup.host, 'github.example.test');
-    assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
-    assert.equal(readRepoConfig().update.backup, 'true');
-    assert.equal(readRepoConfig().analytics.enabled, 'false');
-    assert.isFalse(fs.existsSync(installIdPath()));
+  [false, true].forEach((hasInstallId) => {
+    it(`rejects malformed analytics before fresh setup can supply enabled defaults (existing ID: ${hasInstallId})`, () => {
+      installConfigSources();
+      const configPath = path.join(repoDir, 'ballin.config.json');
+      const original = '{"analytics":false,"custom":{"keep":"LOCAL_DUMMY_SECRET"}}\n';
+      fs.writeFileSync(configPath, original);
+      if (hasInstallId) {
+        fs.mkdirSync(path.dirname(installIdPath()), { recursive: true });
+        fs.writeFileSync(installIdPath(), fixedInstallId);
+      }
+
+      const result = spawnSync(process.execPath, [
+        installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh',
+      ], { encoding: 'utf8', input: 'n\n', env: childEnvironment(analyticsEnabledEnv) });
+
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, 'analytics');
+      assert.notInclude(result.stdout + result.stderr, 'LOCAL_DUMMY_SECRET');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), original);
+      assert.equal(fs.existsSync(installIdPath()), hasInstallId);
+      if (hasInstallId) assert.equal(readInstallId(), fixedInstallId);
+      assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+      assert.equal(commandLog(), '');
+    });
   });
 
   it('creates a new secret Gist through the setup CLI when no backup is configured', () => {

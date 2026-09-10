@@ -62,12 +62,14 @@ Your system is ready to brew.
 ## New Mac setup
 
 On a new Mac, install Ballin for maintenance, then optionally create or adopt a
-backup Gist with `ballin backup setup`. Use existing snapshots as a rebuild
-reference. See [Optional capabilities](docs/optional-capabilities.md#gist-backups)
-for backup settings.
+backup Gist with `ballin backup setup`. Adopting an existing backup can recover
+supported Ballin preferences; existing local choices take precedence. See
+[preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences)
+for details.
 
-Ballin makes rebuilds more repeatable and auditable, but it is not a
-full disk backup or one-command restore system.
+Use snapshots as a rebuild reference. Ballin does not automatically apply saved
+dotfiles or install saved packages; it is not a full disk backup or one-command
+restore system.
 
 ## Commands
 
