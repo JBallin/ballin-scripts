@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { makeTempFile, removeTempFile, runCommand } = require('./commandHelpers.ts');
+const { makeTempFile, removeTempFile, runCommand, writeStderrLine } = require('./commandHelpers.ts');
 const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
 const { classifySnapshotFileName, repositoryMarkerFileName } = require('./backup_snapshots.ts');
 import type { RepositoryDestination } from './backup_config.ts';
@@ -9,7 +9,7 @@ import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
 type RepositoryProblem = 'authentication' | 'unavailable' | 'identity' | 'unsupported'
-  | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io';
+  | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
   authentication: 'GitHub.com authentication is required; check the effective gh account and environment token.',
   unavailable: 'The backup repository is missing or inaccessible. Check access; this does not prove it was deleted.',
@@ -20,11 +20,13 @@ const repositoryMessages: Record<RepositoryProblem, string> = {
   moved: 'The selected backup changed during inspection. Rerun to read and reconcile the current state.',
   rejected: 'GitHub rejected backup publication. Check access and branch restrictions, then rerun to reconcile.',
   uncertain: 'Backup publication is unconfirmed. Cache contents were not advanced; rerun to read and reconcile.',
+  cleanup: 'Private temporary-file cleanup is incomplete; any completed remote effects are retained.',
   'local-io': 'Unable to prepare private backup transport files. Check local storage and permissions.',
 };
 class RepositoryError extends Error {
   readonly problem: RepositoryProblem;
   completedStage?: 'repository-created';
+  cleanupFailed?: boolean;
   constructor(problem: RepositoryProblem) {
     super(repositoryMessages[problem]);
     this.problem = problem;
@@ -49,7 +51,10 @@ type RepositoryInspection =
   | { status: 'complete'; read: RepositoryRead }
   | { status: 'incomplete'; problem: RepositoryProblem; inspected?: RepositoryRead };
 type RepositoryInfo = { destination: RepositoryDestination; login: string; revision: Revision };
-type ApiResult = { ok: boolean; body: Record<string, unknown> };
+type ApiResult = { ok: boolean; body: Record<string, unknown>; cleanupFailed?: boolean };
+const requireCleanTransport = (result: ApiResult): void => {
+  if (result.cleanupFailed) throw new RepositoryError('cleanup');
+};
 
 const object = (value: unknown): Record<string, unknown> => {
   if (!isConfigObject(value)) throw new RepositoryError('invalid-data');
@@ -67,6 +72,8 @@ const oid = (value: unknown): string => {
 };
 const api = (endpoint: string, payload: unknown, options: RepositoryOptions): ApiResult => {
   let output: string | undefined;
+  let response: ApiResult = { ok: false, body: {} };
+  let failure: RepositoryError | undefined;
   try {
     output = makeTempFile('ballin-repository-');
     const fd = fs.openSync(output, 'wx', 0o600);
@@ -87,17 +94,26 @@ const api = (endpoint: string, payload: unknown, options: RepositoryOptions): Ap
     try { body = object(JSON.parse(contents)); } catch {
       if (result.status === 0 && !result.error && !result.signal) throw new RepositoryError('invalid-data');
     }
-    return { ok: result.status === 0 && !result.error && !result.signal, body };
+    response = { ok: result.status === 0 && !result.error && !result.signal, body };
   } catch (error) {
-    if (error instanceof RepositoryError) throw error;
-    throw new RepositoryError('local-io');
+    failure = error instanceof RepositoryError ? error : new RepositoryError('local-io');
   } finally {
-    if (output) removeTempFile(output);
+    if (output) {
+      try { removeTempFile(output); } catch {
+        writeStderrLine(`ballin backup: ${repositoryMessages.cleanup}`);
+        response.cleanupFailed = true;
+        if (failure) failure.cleanupFailed = true;
+      }
+    }
   }
+  // Keep response/error evidence for callers to classify before refusing success.
+  if (failure) throw failure;
+  return response;
 };
 const query = (document: string, variables: Record<string, unknown>, options: RepositoryOptions): Record<string, unknown> => {
   const result = api('graphql', { query: document, variables }, options);
   if (!result.ok || result.body.errors) throw new RepositoryError('unavailable');
+  requireCleanTransport(result);
   return object(result.body.data);
 };
 const readRepositoryAccount = (options: RepositoryOptions = {}): Account => {
@@ -106,7 +122,9 @@ const readRepositoryAccount = (options: RepositoryOptions = {}): Account => {
   if (result.body.type !== 'User') throw new RepositoryError('identity');
   const login = identifier(result.body.login);
   if (!/^[A-Za-z0-9-]+$/u.test(login)) throw new RepositoryError('invalid-data');
-  return { id: identifier(result.body.node_id), login };
+  const id = identifier(result.body.node_id);
+  requireCleanTransport(result);
+  return { id, login };
 };
 const repositoryFields = `id name isPrivate isFork isArchived isDisabled
   owner { __typename id login }
@@ -148,11 +166,15 @@ const candidateRepository = (name: string, account: Account, options: Repository
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   const result = api(`repos/${account.login}/${name}`, undefined, options);
   if (!result.ok) {
-    if (String(result.body.status) === '404') return null; // Absence is ambiguous; only explicit creation may follow.
+    if (String(result.body.status) === '404') {
+      requireCleanTransport(result);
+      return null; // Absence is ambiguous; only explicit creation may follow.
+    }
     throw new RepositoryError('unavailable');
   }
   const owner = object(result.body.owner);
   if (owner.node_id !== account.id || owner.type !== 'User') throw new RepositoryError('identity');
+  requireCleanTransport(result);
   return {
     id: identifier(result.body.node_id), ownerId: account.id,
     name, branch: identifier(result.body.default_branch),
@@ -166,6 +188,7 @@ const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')
 const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[] => {
   const result = api(`repos/${info.login}/${info.destination.name}/git/trees/${info.revision.tree}?recursive=1`, undefined, options);
   if (!result.ok) throw new RepositoryError('incomplete');
+  requireCleanTransport(result);
   const data = result.body;
   if (data.truncated !== false) throw new RepositoryError('incomplete');
   if (data.sha !== info.revision.tree || !Array.isArray(data.tree)) throw new RepositoryError('invalid-data');
@@ -186,6 +209,7 @@ const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[
 const readBlob = (info: RepositoryInfo, entry: Entry, options: RepositoryOptions): Buffer => {
   const result = api(`repos/${info.login}/${info.destination.name}/git/blobs/${entry.sha}`, undefined, options);
   if (!result.ok) throw new RepositoryError('incomplete');
+  requireCleanTransport(result);
   const data = result.body;
   if (data.sha !== entry.sha || data.size !== entry.size || data.encoding !== 'base64'
     || typeof data.content !== 'string' || data.truncated === true) throw new RepositoryError('invalid-data');
@@ -252,6 +276,7 @@ const publish = (
   additions.forEach((bytes, name) => expected.set(name, blobOid(bytes)));
   if (removeSeed) expected.delete('README.md');
   let result: ApiResult = { ok: false, body: {} };
+  let transportFailure: RepositoryError | undefined;
   try { result = api('graphql', {
     query: `mutation BallinPublish($input: CreateCommitOnBranchInput!) {
       createCommitOnBranch(input: $input) { commit { oid } }
@@ -264,8 +289,9 @@ const publish = (
         ...(removeSeed ? { deletions: [{ path: 'README.md' }] } : {}),
       },
     } },
-  }, options); } catch {
-    // A response can be lost or malformed after the mutation takes effect.
+  }, options); } catch (error) {
+    // Confirm possible remote effects, but cleanup failure must remain fatal.
+    if (error instanceof RepositoryError && error.cleanupFailed) transportFailure = error;
   }
   const errors = result.body.errors;
   const data = isConfigObject(result.body.data) ? result.body.data as Record<string, unknown> : {};
@@ -285,6 +311,10 @@ const publish = (
     || after.revision.entries.some((entry) => expected.get(entry.path) !== entry.sha)
     || [...additions].some(([name, bytes]) => !after.snapshots.get(name)?.equals(bytes))
   ) throw new RepositoryError('uncertain');
+  if (result.cleanupFailed || transportFailure) {
+    writeStderrLine('ballin backup: repository publication confirmed, but transport cleanup is incomplete; cache contents were not advanced');
+    throw transportFailure ?? new RepositoryError('cleanup');
+  }
   return after;
 };
 const publishRepositorySnapshots = (
@@ -307,6 +337,7 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
     id: identifier(result.body.node_id), ownerId: account.id, name, branch: identifier(result.body.default_branch),
   };
   try {
+    requireCleanTransport(result);
     const seed = requireRepositoryRead(inspect(destination, account, options, true));
     return publish(seed, new Map([[repositoryMarkerFileName, markerBytes(destination)]]), true, options);
   } catch (error) {

@@ -48,6 +48,36 @@ describe('repository backup lifecycle', function() {
     const fs = require('fs'); const original = fs.${method};
     fs.${method} = function(...args) { if (${condition}) throw new Error('fixture failure'); return original.apply(this, args); };
   `;
+  const transportCleanupFailure = (target: string): string => `
+    const fs = require('fs'); const path = require('path'); const remove = fs.rmSync;
+    let failed = false;
+    fs.rmSync = function(entry, options) {
+      if (!failed && path.basename(entry).startsWith('ballin-repository-')) {
+        const requests = JSON.parse(fs.readFileSync(${JSON.stringify(statePath)}, 'utf8')).requests;
+        const request = requests.at(-1);
+        const target = ${JSON.stringify(target)};
+        const matches = target === 'all' || request?.endpoint === target
+          || request?.endpoint.includes(target) || request?.payload?.query?.includes(target);
+        if (matches) {
+          failed = true;
+          fs.appendFileSync(${JSON.stringify(path.join(root, 'cleanup.log'))}, entry + '\\n');
+          throw new Error('DUMMY_PRIVATE_CLEANUP_ERROR');
+        }
+      }
+      return remove(entry, options);
+    };
+  `;
+  const assertTransportCleanupFailed = (result: { status: number; stdout: string; stderr: string }): void => {
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'Private temporary-file cleanup is incomplete');
+    assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_CLEANUP_ERROR');
+    assert.notInclude(result.stdout + result.stderr, 'dummy-secret-error');
+    assert.notMatch(result.stdout, /[✔✚✎✖]/u);
+    const attempts = fs.readFileSync(path.join(root, 'cleanup.log'), 'utf8').trim().split('\n');
+    assert.lengthOf(attempts, 1);
+    assert.isTrue(fs.existsSync(attempts[0]));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), [path.basename(attempts[0])]);
+  };
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-repository-test-'));
     home = path.join(root, 'home'); bin = path.join(root, 'bin'); checkout = path.join(home, '.ballin-scripts');
@@ -159,6 +189,83 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 1); assert.include(result.stderr, 'publication confirmed'); assert.equal(cached(), 'local\n');
     assert.notMatch(result.stdout, /[✔✚✎]/u); ok(run()); assert.equal(publications().length, 1);
   });
+  for (const target of ['user', 'BallinRepository', '/git/trees/', '/git/blobs/']) {
+    it(`fails repository reads when ${target} transport cleanup is incomplete`, () => {
+      saveState(fixtureState({ 'zshrc.sh': 'private snapshot\n' }));
+      const before = state().head;
+      const result = run(['read', 'zshrc.sh'], '', {}, transportCleanupFailure(target));
+      assertTransportCleanupFailed(result);
+      assert.equal(result.stdout, '');
+      assert.equal(state().head, before); assert.lengthOf(mutations(), 0);
+      assert.isUndefined(cached());
+    });
+  }
+
+  for (const row of [
+    { target: 'user', faults: { auth: true }, message: 'authentication is required' },
+    { target: 'BallinRepository', faults: { query: 'errors' }, message: 'missing or inaccessible' },
+    { target: '/git/trees/', faults: { tree: 'unreadable' }, message: 'could not be read completely' },
+    { target: '/git/blobs/', faults: { blob: 'unreadable' }, message: 'could not be read completely' },
+  ]) {
+    it(`preserves the ${row.target} API failure alongside transport cleanup failure`, () => {
+      source(); const value = state(); value.faults = row.faults; saveState(value);
+      const result = run([], '', {}, transportCleanupFailure(row.target));
+      assertTransportCleanupFailed(result); assert.include(result.stderr, row.message);
+      assert.lengthOf(mutations(), 0); assert.isUndefined(cached());
+    });
+  }
+
+  for (const publish of ['success', 'ambiguous', 'malformed']) {
+    it(`fails after ${publish} publication transport cleanup even when readback confirms remote success`, () => {
+      source(); const value = state(); value.faults.publish = publish; saveState(value);
+      const result = run([], '', {}, transportCleanupFailure('BallinPublish'));
+      assertTransportCleanupFailed(result);
+      assert.include(result.stderr, 'repository publication confirmed');
+      assert.include(result.stderr, 'cache contents were not advanced');
+      if (publish === 'malformed') assert.include(result.stderr, 'invalid backup metadata or content');
+      assert.equal(remote('zshrc.sh'), 'local\n'); assert.isUndefined(cached());
+      assert.lengthOf(publications(), 1);
+      ok(run()); assert.equal(cached(), 'local\n'); assert.lengthOf(publications(), 1);
+    });
+  }
+
+  it('preserves rejected publication when its transport cleanup also fails', () => {
+    source(); const value = state(); value.faults.publish = 'denied'; saveState(value);
+    const result = run([], '', {}, transportCleanupFailure('BallinPublish'));
+    assertTransportCleanupFailed(result); assert.include(result.stderr, 'GitHub rejected backup publication');
+    assert.equal(state().head, value.head); assert.lengthOf(publications(), 1); assert.isUndefined(cached());
+  });
+
+  it('stops candidate selection after transport cleanup failure even for a missing candidate', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\n', {}, transportCleanupFailure('repos/fixture-user/ballin-backups'));
+    assertTransportCleanupFailed(result); assert.lengthOf(mutations(), 0);
+    assert.isNull(config().backup.repository); assert.isFalse(state().exists);
+  });
+
+  it('retains known repository creation without initialization or linkage after transport cleanup failure', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\n', {}, transportCleanupFailure('user/repos'));
+    assertTransportCleanupFailed(result);
+    assert.include(result.stdout, 'Repository creation completed');
+    assert.include(result.stdout, 'initialization is unconfirmed');
+    assert.isTrue(state().exists); assert.lengthOf(mutations(), 1); assert.lengthOf(publications(), 0);
+    assert.isNull(config().backup.repository); assert.isUndefined(cached());
+  });
+
+  it('preserves a local transport failure when removing its directory also fails', () => {
+    const preload = transportCleanupFailure('all') + `
+      const open = fs.openSync;
+      fs.openSync = function(file, ...args) {
+        if (path.basename(path.dirname(file)).startsWith('ballin-repository-')) throw new Error('DUMMY_PRIVATE_OPEN_ERROR');
+        return open(file, ...args);
+      };
+    `;
+    const result = run([], '', {}, preload);
+    assertTransportCleanupFailed(result); assert.include(result.stderr, 'Unable to prepare private backup transport files');
+    assert.notInclude(result.stderr, 'DUMMY_PRIVATE_OPEN_ERROR'); assert.lengthOf(mutations(), 0);
+  });
+
   it('reports failed temporary-file cleanup without masking confirmed effects', () => {
     source('base\n'); ok(run()); source();
     const result = run([], '', {}, cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-remote-')"));
