@@ -53,7 +53,7 @@ allowlists, independent of bundled defaults:
 | `backup.id`, `backup.host` | No | No; independently selected destination wins |
 | Sensitive-source consent | No | No; local review owned by #333 |
 | Analytics installation identity | No | No |
-| Unknown/custom/future settings, including earlier PR inclusion fields | No | No; existing local values remain intact |
+| Unknown/custom/future settings | No | No; existing local values remain intact |
 
 For the five admitted update leaves, accept native JSON booleans and exact
 `"true"`/`"false"` strings; export and restore canonical strings. Omit absent
@@ -124,9 +124,9 @@ content a current capture.
 
 #333 owns the local consent field, its parsing/persistence, and the actual
 repository review. It will introduce one accurately named preference, default
-off, which is never exported or restored; #332 reserves no key. Earlier PR
-fields such as `backup.includeRaw` and `backup.includeDetailed` are neither
-generated nor consumed, and local leftovers are preserved as unknown settings.
+off, which is never exported or restored. #332 introduces no persisted
+sensitive-source setting and reserves no key. Unknown local settings remain
+preserved.
 There are no restored proposals, pending-consent fields, or removal migration.
 See the [planned source review](backup-sources.md#planned-repository-inclusion).
 
