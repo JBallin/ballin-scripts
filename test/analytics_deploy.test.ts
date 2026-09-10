@@ -1,5 +1,8 @@
+const { spawnSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { testChildEnvironment } = require('./helpers/environment.ts');
 const {
   requiredBindings,
   runCli,
@@ -33,6 +36,68 @@ const versionJson = (id: string, bindings: BindingMetadata[]): string => JSON.st
   id,
   resources: { bindings },
 });
+
+type VerifierCliOptions = {
+  installNpx?: boolean;
+  status?: number;
+  stderr?: string;
+};
+
+const runVerifierCli = (options: VerifierCliOptions = {}) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-deploy-'));
+  const binDir = path.join(tempDir, 'bin');
+  const commandLogPath = path.join(tempDir, 'commands.log');
+  fs.mkdirSync(binDir);
+
+  try {
+    if (options.installNpx !== false) {
+      const npxPath = path.join(binDir, 'npx');
+      fs.writeFileSync(npxPath, `#!${process.execPath}
+const fs = require('fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.FAKE_COMMAND_LOG, JSON.stringify(args) + '\\n');
+if (process.env.FAKE_NPX_STATUS) {
+  process.stderr.write(process.env.FAKE_NPX_STDERR || '');
+  process.exitCode = Number(process.env.FAKE_NPX_STATUS);
+} else if (args[2] === 'deployments' && args[3] === 'status') {
+  process.stdout.write(JSON.stringify({ versions: [{ percentage: 100, version_id: 'version-a' }] }));
+} else if (args[2] === 'versions' && args[3] === 'view') {
+  process.stdout.write(JSON.stringify({
+    id: args[4],
+    resources: {
+      bindings: [
+        { name: 'ANALYTICS_DB', type: 'd1' },
+        { name: 'ANALYTICS_RATE_LIMITER', type: 'ratelimit' },
+        { name: 'INSTALL_ID_HASH_SECRET', type: 'secret_text', text: 'sensitive-value' },
+      ],
+    },
+  }));
+} else {
+  process.stderr.write('unexpected fake npx invocation');
+  process.exitCode = 97;
+}
+`);
+      fs.chmodSync(npxPath, 0o755);
+    }
+
+    const result = spawnSync(process.execPath, [verifierPath], {
+      encoding: 'utf8',
+      env: testChildEnvironment({
+        HOME: tempDir,
+        PATH: binDir,
+        FAKE_COMMAND_LOG: commandLogPath,
+        FAKE_NPX_STATUS: options.status?.toString(),
+        FAKE_NPX_STDERR: options.stderr,
+      }),
+    });
+    const calls = fs.existsSync(commandLogPath)
+      ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').map((line: string) => JSON.parse(line))
+      : [];
+    return { calls, result };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+};
 
 const runnerFor = (
   versions: TrafficVersion[],
@@ -145,6 +210,14 @@ describe('analytics Worker deployment', () => {
   it('fails closed on malformed deployment or version metadata', () => {
     assert.throws(() => trafficVersionIds('not json'), 'Wrangler deployment status returned invalid JSON');
     assert.throws(
+      () => trafficVersionIds('null'),
+      'Wrangler deployment status returned an unexpected JSON shape',
+    );
+    assert.throws(
+      () => trafficVersionIds('{}'),
+      'Wrangler deployment status is missing versions metadata',
+    );
+    assert.throws(
       () => trafficVersionIds(deploymentJson([])),
       'Wrangler deployment status has no traffic-serving versions',
     );
@@ -160,6 +233,60 @@ describe('analytics Worker deployment', () => {
       () => versionBindings(versionJson('version-b', requiredBindings), 'version-a'),
       'Wrangler returned metadata for an unexpected version instead of version-a',
     );
+    assert.throws(
+      () => versionBindings(JSON.stringify({
+        id: 'version-a',
+        resources: { bindings: [null] },
+      }), 'version-a'),
+      'Wrangler version version-a contains invalid binding metadata',
+    );
+  });
+
+  it('runs the real verifier CLI through isolated Wrangler commands', () => {
+    const { calls, result } = runVerifierCli();
+
+    assert.isUndefined(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.include(result.stdout, 'Verified required bindings for 1 traffic-serving production version(s)');
+    assert.include(result.stdout, 'INSTALL_ID_HASH_SECRET (secret_text)');
+    assert.notInclude(result.stdout, 'sensitive-value');
+    assert.deepEqual(calls, [
+      ['--no-install', 'wrangler', 'deployments', 'status', '--json'],
+      ['--no-install', 'wrangler', 'versions', 'view', 'version-a', '--json'],
+    ]);
+  });
+
+  it('fails the real verifier CLI without exposing Wrangler stderr', () => {
+    const { calls, result } = runVerifierCli({
+      status: 23,
+      stderr: 'sensitive Wrangler failure details',
+    });
+
+    assert.isUndefined(result.error);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'analytics deployment verification: Wrangler deployments status failed\n',
+    );
+    assert.notInclude(result.stderr, 'sensitive Wrangler failure details');
+    assert.deepEqual(calls, [
+      ['--no-install', 'wrangler', 'deployments', 'status', '--json'],
+    ]);
+  });
+
+  it('fails the real verifier CLI when npx cannot be started', () => {
+    const { calls, result } = runVerifierCli({ installNpx: false });
+
+    assert.isUndefined(result.error);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(
+      result.stderr,
+      'analytics deployment verification: Wrangler deployments status failed\n',
+    );
+    assert.deepEqual(calls, []);
   });
 
   it('returns a nonzero CLI status without printing secret values when verification fails', () => {
