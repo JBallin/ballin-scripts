@@ -146,7 +146,7 @@ const readBoundedBody = async (request: Request): Promise<string | null> => {
   }
 
   const reader = request.body.getReader({ mode: 'byob' });
-  const chunks: Uint8Array[] = [];
+  const body = new Uint8Array(maxBodyBytes);
   let byteLength = 0;
 
   try {
@@ -157,24 +157,18 @@ const readBoundedBody = async (request: Request): Promise<string | null> => {
         break;
       }
 
-      byteLength += value.byteLength;
-      if (byteLength > maxBodyBytes) {
+      if (value.byteLength > maxBodyBytes - byteLength) {
         await reader.cancel();
         return null;
       }
-      chunks.push(value);
+      body.set(value, byteLength);
+      byteLength += value.byteLength;
     }
   } finally {
     reader.releaseLock();
   }
 
-  const body = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(body);
+  return new TextDecoder().decode(body.subarray(0, byteLength));
 };
 
 const validateDateBucket = (dateBucket: string): boolean => {

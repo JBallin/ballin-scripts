@@ -33,6 +33,10 @@ type ControlledBody = {
   };
 };
 
+type ControlledBodyOptions = {
+  maxBytesPerPull?: number;
+};
+
 class TestStatement {
   query: string;
   values: unknown[] = [];
@@ -124,7 +128,10 @@ const eventRequest = (
   });
 };
 
-const controlledBody = (chunks: Uint8Array[]): ControlledBody => {
+const controlledBody = (
+  chunks: Uint8Array[],
+  options: ControlledBodyOptions = {},
+): ControlledBody => {
   const remaining = [...chunks];
   const state = {
     cancellations: 0,
@@ -152,7 +159,11 @@ const controlledBody = (chunks: Uint8Array[]): ControlledBody => {
           byobView.byteOffset,
           byobView.byteLength,
         );
-        const deliveredByteLength = Math.min(requested.byteLength, chunk.byteLength);
+        const deliveredByteLength = Math.min(
+          requested.byteLength,
+          chunk.byteLength,
+          options.maxBytesPerPull ?? chunk.byteLength,
+        );
         requested.set(chunk.subarray(0, deliveredByteLength));
         if (deliveredByteLength === chunk.byteLength) {
           remaining.shift();
@@ -165,10 +176,18 @@ const controlledBody = (chunks: Uint8Array[]): ControlledBody => {
         return;
       }
 
-      remaining.shift();
-      state.deliveredBytes += chunk.byteLength;
-      state.remainingBytes -= chunk.byteLength;
-      controller.enqueue(new Uint8Array(chunk));
+      const deliveredByteLength = Math.min(
+        chunk.byteLength,
+        options.maxBytesPerPull ?? chunk.byteLength,
+      );
+      if (deliveredByteLength === chunk.byteLength) {
+        remaining.shift();
+      } else {
+        remaining[0] = chunk.subarray(deliveredByteLength);
+      }
+      state.deliveredBytes += deliveredByteLength;
+      state.remainingBytes -= deliveredByteLength;
+      controller.enqueue(new Uint8Array(chunk.subarray(0, deliveredByteLength)));
     },
     cancel() {
       state.cancellations += 1;
@@ -359,22 +378,21 @@ describe('analytics Worker', () => {
     assert.equal(controlled.state.pulls, 0);
   });
 
-  it('accepts valid JSON at the 2048-byte body limit', async () => {
+  it('accepts highly fragmented valid JSON at the 2048-byte body limit', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, runs } = makeEnv();
     const encoder = new TextEncoder();
     const payload = JSON.stringify(payloadForCommand('ballin update'));
     const body = encoder.encode(payload.padEnd(2048, ' '));
-    const controlled = controlledBody([
-      body.slice(0, 1024),
-      body.slice(1024),
-    ]);
+    const controlled = controlledBody([body], { maxBytesPerPull: 1 });
 
     const response = await worker.fetch(streamedEventRequest(controlled.body), env);
 
     assert.equal(body.byteLength, 2048);
     assert.equal(response.status, 204);
     assert.lengthOf(runs, 3);
+    assert.equal(controlled.state.deliveredBytes, 2048);
+    assert.equal(controlled.state.pulls, 2049);
     assert.equal(controlled.state.cancellations, 0);
   });
 
