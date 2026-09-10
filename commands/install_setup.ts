@@ -356,7 +356,6 @@ const configureBackup = (
       writeStdoutLine('This installation still uses a Gist. Migration is separate; disconnect before setting up an independent repository.');
       return false;
     }
-    writeStdoutLine('Existing Gist backup remains configured. Setup does not migrate or replace it with a repository.');
     return configureGist(repoDir, docsUrl, backupHostExisted, options);
   }
   return configureRepositoryBackup({

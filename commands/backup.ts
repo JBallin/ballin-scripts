@@ -896,6 +896,9 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       process.exitCode = 1;
       return;
     }
+    if (args[1] === undefined && configuredBackupDestination(originalConfig).kind === 'legacy-gist') {
+      writeStdoutLine('Existing Gist backup remains configured. Setup does not migrate or replace it with a repository.');
+    }
     const configured = configureBackup(repoDir, backupSetupDocsUrl, backupHostExisted, {
       backupCacheDir,
       configPath,
