@@ -16,30 +16,49 @@ const relocateSystemPath = (systemRoot: string, absolutePath: string): string =>
   systemRoot ? path.join(systemRoot, absolutePath) : absolutePath
 );
 
-const removeOwnedLink = (linkPath: string, targetPath: string): string | null => {
+type OwnedLinkCleanupStatus = 'complete' | 'remaining' | 'unverified';
+
+const isNotFoundError = (error: unknown): boolean => (
+  error instanceof Error
+  && 'code' in error
+  && error.code === 'ENOENT'
+);
+
+const reportFilesystemError = (error: unknown): void => {
+  if (error instanceof Error) {
+    process.stderr.write(`${error.message}\n`);
+  }
+};
+
+const removeOwnedLink = (linkPath: string, targetPath: string): OwnedLinkCleanupStatus => {
   let stat;
   try {
     stat = fs.lstatSync(linkPath);
-  } catch {
-    return null;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return 'complete';
+    }
+    reportFilesystemError(error);
+    return 'unverified';
   }
 
   if (!stat.isSymbolicLink()) {
-    return null;
+    return 'complete';
   }
 
   if (fs.readlinkSync(linkPath) === targetPath) {
     try {
       fs.unlinkSync(linkPath);
     } catch (error) {
-      if (error instanceof Error) {
-        process.stderr.write(`${error.message}\n`);
+      if (isNotFoundError(error)) {
+        return 'complete';
       }
-      return linkPath;
+      reportFilesystemError(error);
+      return 'remaining';
     }
   }
 
-  return null;
+  return 'complete';
 };
 
 const runUninstallCommand = (): void => {
@@ -52,6 +71,7 @@ const runUninstallCommand = (): void => {
     relocateSystemPath(systemRoot, '/opt/homebrew/bin'),
   ];
   const remainingOwnedLinks: string[] = [];
+  const unverifiedLinkPaths: string[] = [];
 
   writeStdoutLine();
   writeStdoutLine("It's been real...");
@@ -71,9 +91,12 @@ const runUninstallCommand = (): void => {
     fs.readdirSync(repoBinDir).forEach((binName: string) => {
       const targetPath = path.join(repoBinDir, binName);
       binDirs.forEach((binDir) => {
-        const remainingLink = removeOwnedLink(path.join(binDir, binName), targetPath);
-        if (remainingLink) {
-          addUnique(remainingOwnedLinks, remainingLink);
+        const linkPath = path.join(binDir, binName);
+        const cleanupStatus = removeOwnedLink(linkPath, targetPath);
+        if (cleanupStatus === 'remaining') {
+          addUnique(remainingOwnedLinks, linkPath);
+        } else if (cleanupStatus === 'unverified') {
+          addUnique(unverifiedLinkPaths, linkPath);
         }
       });
     });
@@ -81,16 +104,27 @@ const runUninstallCommand = (): void => {
 
   fs.rmSync(repoDir, { recursive: true, force: true });
 
-  if (remainingOwnedLinks.length > 0) {
-    writeStdoutLine('Removed the local checkout, but some symlinked binaries remain.');
-    process.stderr.write('Uninstall incomplete: these Ballin-owned links remain:\n');
-    remainingOwnedLinks.forEach((linkPath) => {
-      process.stderr.write(`  ${linkPath}\n`);
-    });
-    process.stderr.write(
-      'Remove the listed links with rm. If removal fails because of permissions, '
-        + 'rerun rm with elevated permissions (for example, sudo rm).\n',
-    );
+  if (remainingOwnedLinks.length > 0 || unverifiedLinkPaths.length > 0) {
+    writeStdoutLine('Removed the local checkout, but symlink cleanup is incomplete.');
+    if (remainingOwnedLinks.length > 0) {
+      process.stderr.write('Uninstall incomplete: these Ballin-owned links remain:\n');
+      remainingOwnedLinks.forEach((linkPath) => {
+        process.stderr.write(`  ${linkPath}\n`);
+      });
+      process.stderr.write(
+        'Remove the listed links with rm. If removal fails because of permissions, '
+          + 'rerun rm with elevated permissions (for example, sudo rm).\n',
+      );
+    }
+    if (unverifiedLinkPaths.length > 0) {
+      process.stderr.write('These candidate Ballin link paths could not be inspected:\n');
+      unverifiedLinkPaths.forEach((linkPath) => {
+        process.stderr.write(`  ${linkPath}\n`);
+      });
+      process.stderr.write(
+        'Resolve the reported filesystem errors, then inspect these paths before removing anything.\n',
+      );
+    }
     process.exitCode = 1;
     writeStdoutLine();
     return;
