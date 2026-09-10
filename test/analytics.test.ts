@@ -409,6 +409,29 @@ describe('analytics client', () => {
     });
   });
 
+  it('uses deterministic default OS collectors without real machine state', () => {
+    const originalPlatform = os.platform;
+    const originalRelease = os.release;
+    os.platform = () => 'linux';
+    os.release = () => '6.8.12';
+
+    try {
+      const payload = buildAnalyticsPayload({
+        command: 'ballin',
+        durationBucket: '<1s',
+        now: fixedNow,
+        status: 'success',
+      }, fixedInstallId, '2.0.0');
+
+      assert.equal(payload.os, 'linux');
+      assert.equal(payload.osVersion, '6.8');
+      assert.equal(coarseOsVersion({ release: () => '6.8.12' }), '6.8');
+    } finally {
+      os.platform = originalPlatform;
+      os.release = originalRelease;
+    }
+  });
+
   it('falls back to unknown when macOS product-version collection fails', () => {
     const failures = [
       { name: 'missing command', read: () => null },
@@ -471,18 +494,21 @@ describe('analytics client', () => {
     assert.equal(loadAppVersion(path.join(tempDir, 'missing-package.json')), '0.0.0');
   });
 
-  it('uses the OS major alone when no numeric minor version is available', () => {
+  it('keeps the coarse kernel-release fallback outside Darwin', () => {
     let macOsReaderCalled = false;
-    const version = coarseOsVersion({
+    let release = '15.release';
+    const options = {
       platform: () => 'linux',
       readCommandOutput: () => {
         macOsReaderCalled = true;
         return '26.6.2';
       },
-      release: () => '15.release',
-    });
+      release: () => release,
+    };
 
-    assert.equal(version, '15');
+    assert.equal(coarseOsVersion(options), '15');
+    release = '15';
+    assert.equal(coarseOsVersion(options), '15');
     assert.isFalse(macOsReaderCalled);
   });
 
