@@ -116,6 +116,14 @@ ballin config set update.backup false
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
 to access the repository can read its contents.
 
+New backup repositories include a static README that explains the flat snapshot
+layout and links to the recovery and sensitivity guidance. Most snapshots are
+inspectable reference state and are not automatically replayed. `ballin_config`
+is the narrow exception: eligible supported portable preferences may be restored
+during setup or reconnect when no existing local choice takes precedence. The
+README is explanatory only; `.ballin-backup.json` remains the authoritative
+machine-readable repository identity and format marker.
+
 Even when sensitive sources are excluded, the default-included inventory can
 reveal identities, private or custom URLs, and paths; Ballin does not scan or
 redact credentials.

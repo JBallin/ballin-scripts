@@ -136,6 +136,7 @@ const emptySnapshotContent = 'empty\n';
 const configSnapshotFileName = 'ballin_config';
 const backupMarkerFileName = '.MyConfig.md';
 const repositoryMarkerFileName = '.ballin-backup.json';
+const repositoryReadmeFileName = 'README.md';
 
 const retiredSnapshotFileNames = new Set([
   'brackets_disabled_extensions',
@@ -147,6 +148,7 @@ const retiredSnapshotFileNames = new Set([
 const reservedSnapshotFileNames = new Set([
   backupMarkerFileName,
   repositoryMarkerFileName,
+  repositoryReadmeFileName,
 ]);
 
 const errorCode = (error: unknown): string | undefined => (
@@ -650,6 +652,7 @@ const classifySnapshotFileName = (fileName: string): SnapshotNameClassification 
 module.exports = {
   backupMarkerFileName,
   repositoryMarkerFileName,
+  repositoryReadmeFileName,
   classifySnapshotFileName,
   collectSnapshotObservations,
   configSnapshotFileName,

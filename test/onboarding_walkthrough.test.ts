@@ -170,7 +170,7 @@ esac
     assert.equal(config.backup.host, 'github.com');
     assert.deepEqual(config.backup.repository, fixtureDestination);
     assert.equal(config.update.backup, 'true');
-    assert.deepEqual(Object.keys(remoteState().commits[remoteState().head].files), ['.ballin-backup.json']);
+    assert.deepEqual(Object.keys(remoteState().commits[remoteState().head].files).sort(), ['.ballin-backup.json', 'README.md']);
 
     const zshrc = 'export BALLIN_WALKTHROUGH=1\n';
     fs.writeFileSync(path.join(homeDir, '.zshrc'), zshrc);

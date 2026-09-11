@@ -22,16 +22,20 @@ cannot switch destinations. An explicit setup name must resolve to the same
 identity when configured. Simultaneously populated or malformed repository/Gist
 associations fail without fallback.
 
-The flat layout contains exact canonical snapshot names plus
-`.ballin-backup.json`, with these exact UTF-8 bytes and one final newline:
+The flat layout contains exact canonical snapshot names, the explanatory root
+`README.md`, and `.ballin-backup.json`, with these exact UTF-8 bytes and one
+final newline:
 
 ```json
 {"format":"ballin-backup","version":1,"repositoryId":"…","ownerId":"…"}
 ```
 
-Marker IDs must match the validated destination. Current, reserved, retired,
-and unexpected names use the canonical catalog classifier. Retired and ordinary
-unexpected regular files are retained without downloading their contents.
+Marker IDs must match the validated destination. The README is reserved,
+non-authoritative presentation: its contents or absence do not establish
+repository identity, change snapshot identity, or participate in preference
+recovery. Current, reserved, retired, and unexpected names use the canonical
+catalog classifier. Retired and ordinary unexpected regular files are retained
+without downloading their contents.
 Directories, workflows, executable modes, symlinks, submodules, duplicate paths,
 and other unsupported entries fail closed. There are no timestamps, device IDs,
 checkpoint receipts, or configurable layouts.
@@ -39,9 +43,11 @@ checkpoint receipts, or configurable layouts.
 Creation uses `/user/repos` with `private:true` and `auto_init:true`. Only the
 successfully returned identity can enter bootstrap. Its seed must be a single
 root commit containing only a regular README.md. One expected-head commit adds
-the marker and removes that generated README; a marker-only readback is required
-before linkage. This narrow deletion path is unavailable to ordinary backup.
-An ambiguous bootstrap stops for deliberate inspection without recreation.
+the marker and replaces the generated README contents with Ballin's static
+repository guide. The resulting tree and marker are confirmed before linkage.
+Ordinary backup never creates, updates, parses, or treats the README contents as
+backup state. An ambiguous bootstrap stops for deliberate inspection without
+recreation.
 
 ## Consistency model
 

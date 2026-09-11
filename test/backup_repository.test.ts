@@ -2,6 +2,7 @@ const fs = require('fs');
 const {
   RepositoryError, readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
   createRepositoryBackup, publishRepositorySnapshots, repositoryCacheDirectory, repositoryUrl,
+  repositoryReadmeContents,
 } = require('../commands/backup_repository.ts');
 const { fixtureDestination, fixtureState, commitFixture, requestFixture } = require('./helpers/repository.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
@@ -42,10 +43,22 @@ describe('private repository transport', () => {
     state.exists = false;
     const result = createRepositoryBackup(state.name, readRepositoryAccount(options), options);
     assert.deepEqual([...result.snapshots.keys()], ['.ballin-backup.json']);
+    assert.deepEqual(
+      result.revision.entries.map(({ path }: { path: string }) => path).sort(),
+      ['.ballin-backup.json', 'README.md'],
+    );
     assert.equal(publications().length, 1);
     const input = publications()[0].payload?.variables?.input as Record<string, unknown>;
     assert.deepEqual(input.message, { headline: 'Initialize Ballin backup' });
-    assert.deepEqual((input.fileChanges as Record<string, unknown>).deletions, [{ path: 'README.md' }]);
+    assert.notProperty(input.fileChanges, 'deletions');
+    const additions = (input.fileChanges as { additions: { path: string; contents: string }[] }).additions;
+    assert.deepEqual(additions.map(({ path }) => path), ['.ballin-backup.json', 'README.md']);
+    assert.equal(Buffer.from(additions[1].contents, 'base64').toString(), repositoryReadmeContents);
+    assert.include(repositoryReadmeContents, 'Most root files');
+    assert.include(repositoryReadmeContents, 'eligible values may be restored');
+    assert.include(repositoryReadmeContents, 'existing local choice does not take precedence');
+    assert.include(repositoryReadmeContents, 'automatic-backup choice');
+    assert.include(repositoryReadmeContents, '.ballin-backup.json');
     const created = state.requests.find((r) => r.endpoint === 'user/repos');
     assert.deepEqual(created?.payload, { name: state.name, private: true, auto_init: true });
   });
@@ -66,23 +79,42 @@ describe('private repository transport', () => {
     });
   });
   it('publishes exact multi-file bytes in one commit and retains arbitrary and retired flat entries without downloading them', () => {
-    state = fixtureState({ 'zshrc.sh': 'original\n', 'brackets_settings.json': 'retired secret', 'unusual-name': 'unexpected secret' });
+    state = fixtureState({
+      'zshrc.sh': 'original\n', 'README.md': 'User presentation\n',
+      'brackets_settings.json': 'retired secret', 'unusual-name': 'unexpected secret',
+    });
     const before = read();
     assert.equal(before.snapshots.size, 2);
+    assert.isUndefined(before.snapshots.get('README.md'));
     const after = publishRepositorySnapshots(before, changes(), options);
     assert.equal(after.revision.parents[0], before.revision.head);
     assert.equal(after.snapshots.get('gitconfig')?.toString(), 'new\n');
-    assert.equal(after.revision.entries.length, 5);
+    assert.equal(after.revision.entries.length, 6);
     assert.equal(publications().length, 1);
     const input = publications()[0].payload?.variables?.input as Record<string, unknown>;
     assert.notProperty(input.fileChanges, 'deletions');
+    assert.deepEqual(
+      (input.fileChanges as { additions: { path: string }[] }).additions.map(({ path }) => path).sort(),
+      ['gitconfig', 'zshrc.sh'],
+    );
     assert.equal(input.expectedHeadOid, before.revision.head);
     assert.deepEqual(input.branch, { id: 'REF_R_fixture_main' });
+    assert.equal(Buffer.from(state.commits[state.head].files['README.md'], 'base64').toString(), 'User presentation\n');
   });
   it('does not publish a true no-op', () => {
     const before = read();
     const after = publishRepositorySnapshots(before, new Map(), options);
     assert.strictEqual(after, before);
+    assert.equal(publications().length, 0);
+  });
+  it('does not require or recreate the non-authoritative README during ordinary reads and no-op backup', () => {
+    const files = { ...state.commits[state.head].files };
+    delete files['README.md'];
+    commitFixture(state, files);
+    const before = read();
+    assert.equal(before.snapshots.get('zshrc.sh')?.toString(), 'original\n');
+    assert.strictEqual(publishRepositorySnapshots(before, new Map(), options), before);
+    assert.notInclude(before.revision.entries.map(({ path }) => path), 'README.md');
     assert.equal(publications().length, 0);
   });
   it('preserves exact large and binary bytes rather than normalizing remote content', () => {
