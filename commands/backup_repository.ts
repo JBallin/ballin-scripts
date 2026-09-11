@@ -3,7 +3,11 @@ const path = require('path');
 const crypto = require('crypto');
 const { makeTempFile, removeTempFile, runCommand, writeStderrLine } = require('./commandHelpers.ts');
 const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
-const { classifySnapshotFileName, repositoryMarkerFileName } = require('./backup_snapshots.ts');
+const {
+  classifySnapshotFileName,
+  repositoryMarkerFileName,
+  repositoryReadmeFileName,
+} = require('./backup_snapshots.ts');
 import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
@@ -183,6 +187,17 @@ const candidateRepository = (name: string, account: Account, options: Repository
 const markerBytes = (destination: RepositoryDestination): Buffer => Buffer.from(`${JSON.stringify({
   format: 'ballin-backup', version: 1, repositoryId: destination.id, ownerId: destination.ownerId,
 })}\n`);
+const repositoryReadmeContents = `# Ballin backup
+
+This repository was created by [Ballin](https://github.com/JBallin/ballin-scripts) for development-environment backups.
+
+\`ballin_config\` contains selected portable Ballin preferences, not a complete copy of the local Ballin configuration.
+
+For current behavior and guidance, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
+
+\`.ballin-backup.json\` is Ballin's machine-readable repository identity and format marker.
+`;
+const repositoryReadmeBytes = (): Buffer => Buffer.from(repositoryReadmeContents);
 const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')
   .update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[] => {
@@ -234,12 +249,12 @@ const inspect = (
     inspected = { destination: info.destination, revision: info.revision, snapshots: new Map() };
     info.revision.entries = readInventory(info, options);
     for (const entry of info.revision.entries) {
-      if (entry.classification === 'current' || entry.path === repositoryMarkerFileName || (seed && entry.path === 'README.md')) {
+      if (entry.classification === 'current' || entry.path === repositoryMarkerFileName || (seed && entry.path === repositoryReadmeFileName)) {
         inspected.snapshots.set(entry.path, readBlob(info, entry, options));
       }
     }
     if (seed) {
-      if (info.revision.parents.length !== 0 || info.revision.entries.length !== 1 || !inspected.snapshots.has('README.md')) {
+      if (info.revision.parents.length !== 0 || info.revision.entries.length !== 1 || !inspected.snapshots.has(repositoryReadmeFileName)) {
         throw new RepositoryError('unsupported');
       }
     } else {
@@ -269,12 +284,11 @@ const unexpectedRepositoryEntries = (read: RepositoryRead): number => (
   read.revision.entries.filter((entry) => entry.classification === 'unexpected').length
 );
 const publish = (
-  before: RepositoryRead, additions: Map<string, Buffer>, removeSeed: boolean, options: RepositoryOptions,
+  before: RepositoryRead, additions: Map<string, Buffer>, initialize: boolean, options: RepositoryOptions,
 ): RepositoryRead => {
   assertCurrent(before, options);
   const expected = new Map(before.revision.entries.map((entry) => [entry.path, entry.sha]));
   additions.forEach((bytes, name) => expected.set(name, blobOid(bytes)));
-  if (removeSeed) expected.delete('README.md');
   let result: ApiResult = { ok: false, body: {} };
   let transportFailure: RepositoryError | undefined;
   try { result = api('graphql', {
@@ -283,10 +297,9 @@ const publish = (
     }`,
     variables: { input: {
       branch: { id: before.revision.branchId }, expectedHeadOid: before.revision.head,
-      message: { headline: removeSeed ? 'Initialize Ballin backup' : 'Update Ballin backup' },
+      message: { headline: initialize ? 'Initialize Ballin backup' : 'Update Ballin backup' },
       fileChanges: {
         additions: [...additions].map(([name, bytes]) => ({ path: name, contents: bytes.toString('base64') })),
-        ...(removeSeed ? { deletions: [{ path: 'README.md' }] } : {}),
       },
     } },
   }, options); } catch (error) {
@@ -309,7 +322,10 @@ const publish = (
     || after.revision.parents.length !== 1 || after.revision.parents[0] !== before.revision.head
     || after.revision.entries.length !== expected.size
     || after.revision.entries.some((entry) => expected.get(entry.path) !== entry.sha)
-    || [...additions].some(([name, bytes]) => !after.snapshots.get(name)?.equals(bytes))
+    // The complete inventory confirms the README blob ID without reading explanatory contents as backup state.
+    || [...additions].some(([name, bytes]) => (
+      name !== repositoryReadmeFileName && !after.snapshots.get(name)?.equals(bytes)
+    ))
   ) throw new RepositoryError('uncertain');
   if (result.cleanupFailed || transportFailure) {
     writeStderrLine('ballin backup: repository publication confirmed, but transport cleanup is incomplete; cache contents were not advanced');
@@ -339,7 +355,10 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
   try {
     requireCleanTransport(result);
     const seed = requireRepositoryRead(inspect(destination, account, options, true));
-    return publish(seed, new Map([[repositoryMarkerFileName, markerBytes(destination)]]), true, options);
+    return publish(seed, new Map([
+      [repositoryMarkerFileName, markerBytes(destination)],
+      [repositoryReadmeFileName, repositoryReadmeBytes()],
+    ]), true, options);
   } catch (error) {
     const failure = error instanceof RepositoryError ? error : new RepositoryError('uncertain');
     failure.completedStage = 'repository-created';
@@ -357,5 +376,6 @@ module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, publishRepositorySnapshots, repositoryCacheDirectory, repositoryUrl,
+  repositoryReadmeContents,
 };
 export type { RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account };
