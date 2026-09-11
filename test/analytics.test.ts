@@ -27,7 +27,6 @@ type AnalyticsPayload = {
   durationBucket: string;
   appVersion: string;
   nodeMajor: string;
-  os: string;
   osVersion: string;
 };
 
@@ -55,7 +54,6 @@ const allowedPayloadKeys = [
   'durationBucket',
   'appVersion',
   'nodeMajor',
-  'os',
   'osVersion',
 ];
 
@@ -372,7 +370,8 @@ describe('analytics client', () => {
     assert.isFalse(fs.existsSync(path.join(blockedParent, 'install-id')));
   });
 
-  it('normalizes unsupported platforms and malformed OS versions in payloads', () => {
+  it('uses unknown outside macOS without reading a product version', () => {
+    let versionRead = false;
     const payload = buildAnalyticsPayload({
       command: 'ballin',
       durationBucket: '<1s',
@@ -380,11 +379,14 @@ describe('analytics client', () => {
       status: 'success',
     }, fixedInstallId, '2.0.0', {
       platform: () => 'freebsd',
-      release: () => 'release-candidate',
+      readCommandOutput: () => {
+        versionRead = true;
+        return '26.6.2';
+      },
     });
 
-    assert.equal(payload.os, 'unknown');
     assert.equal(payload.osVersion, 'unknown');
+    assert.isFalse(versionRead);
   });
 
   it('reads a coarse macOS product version without patch detail', () => {
@@ -396,9 +398,6 @@ describe('analytics client', () => {
         call = { command, args, timeout: options?.timeout };
         return '26.6.2\n';
       },
-      release: () => {
-        throw new Error('Darwin release must not be used');
-      },
     });
 
     assert.equal(version, '26.6');
@@ -409,11 +408,16 @@ describe('analytics client', () => {
     });
   });
 
-  it('uses deterministic default OS collectors without real machine state', () => {
+  it('accepts a major-only macOS product version', () => {
+    assert.equal(coarseOsVersion({
+      platform: () => 'darwin',
+      readCommandOutput: () => '26\n',
+    }), '26');
+  });
+
+  it('uses the default platform collector without reading real version state', () => {
     const originalPlatform = os.platform;
-    const originalRelease = os.release;
     os.platform = () => 'linux';
-    os.release = () => '6.8.12';
 
     try {
       const payload = buildAnalyticsPayload({
@@ -423,12 +427,9 @@ describe('analytics client', () => {
         status: 'success',
       }, fixedInstallId, '2.0.0');
 
-      assert.equal(payload.os, 'linux');
-      assert.equal(payload.osVersion, '6.8');
-      assert.equal(coarseOsVersion({ release: () => '6.8.12' }), '6.8');
+      assert.equal(payload.osVersion, 'unknown');
     } finally {
       os.platform = originalPlatform;
-      os.release = originalRelease;
     }
   });
 
@@ -477,7 +478,6 @@ describe('analytics client', () => {
       assert.isTrue(commandRan);
       assert.equal(process.exitCode, 23);
       assert.deepInclude(payloads[0], {
-        os: 'darwin',
         osVersion: 'unknown',
         status: 'failure',
       });
@@ -488,28 +488,13 @@ describe('analytics client', () => {
 
   it('falls back safely when application version metadata is malformed or missing', () => {
     const malformedPackagePath = path.join(tempDir, 'malformed-package.json');
+    const invalidVersionPackagePath = path.join(tempDir, 'invalid-version-package.json');
     fs.writeFileSync(malformedPackagePath, '{not json', 'utf8');
+    fs.writeFileSync(invalidVersionPackagePath, JSON.stringify({ version: 2 }), 'utf8');
 
     assert.equal(loadAppVersion(malformedPackagePath), '0.0.0');
+    assert.equal(loadAppVersion(invalidVersionPackagePath), '0.0.0');
     assert.equal(loadAppVersion(path.join(tempDir, 'missing-package.json')), '0.0.0');
-  });
-
-  it('keeps the coarse kernel-release fallback outside Darwin', () => {
-    let macOsReaderCalled = false;
-    let release = '15.release';
-    const options = {
-      platform: () => 'linux',
-      readCommandOutput: () => {
-        macOsReaderCalled = true;
-        return '26.6.2';
-      },
-      release: () => release,
-    };
-
-    assert.equal(coarseOsVersion(options), '15');
-    release = '15';
-    assert.equal(coarseOsVersion(options), '15');
-    assert.isFalse(macOsReaderCalled);
   });
 
   it('never throws when analytics config or sender behavior fails', async () => {
@@ -563,7 +548,6 @@ describe('analytics client', () => {
     });
     assert.match(payload.appVersion, /^[0-9]+(?:\.[0-9]+){0,2}$/);
     assert.match(payload.nodeMajor, /^[0-9]+$/);
-    assert.include(['darwin', 'linux', 'win32', 'unknown'], payload.os);
     assert.match(payload.osVersion, /^[0-9]+(?:\.[0-9]+)?$|^unknown$/);
   });
 
@@ -953,7 +937,6 @@ describe('analytics client', () => {
         durationBucket: '<1s',
         appVersion: '1.0.0',
         nodeMajor: '24',
-        os: 'darwin',
         osVersion: '15',
       }, {
         endpoint: 'https://analytics.example.test/v1/events',
@@ -996,7 +979,6 @@ describe('analytics client', () => {
         durationBucket: '<1s',
         appVersion: '1.0.0',
         nodeMajor: '24',
-        os: 'darwin',
         osVersion: '15',
       }, {});
     } finally {
@@ -1020,7 +1002,6 @@ describe('analytics client', () => {
         durationBucket: '<1s',
         appVersion: '1.0.0',
         nodeMajor: '24',
-        os: 'darwin',
         osVersion: '15',
       }, { endpoint: 'https://analytics.example.test/v1/events' });
     } finally {
@@ -1055,7 +1036,6 @@ describe('analytics client', () => {
         durationBucket: '<1s',
         appVersion: '1.0.0',
         nodeMajor: '24',
-        os: 'darwin',
         osVersion: '15',
       }, { endpoint: 'https://analytics.example.test/v1/events', timeoutMs: 100 });
       assert.isFunction(socketTimeout);
@@ -1098,7 +1078,6 @@ describe('analytics client', () => {
         durationBucket: '<1s',
         appVersion: '1.0.0',
         nodeMajor: '24',
-        os: 'darwin',
         osVersion: '15',
       }, {
         endpoint: 'https://analytics.example.test/v1/events',
