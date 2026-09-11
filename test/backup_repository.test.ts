@@ -54,6 +54,7 @@ describe('private repository transport', () => {
     const additions = (input.fileChanges as { additions: { path: string; contents: string }[] }).additions;
     assert.deepEqual(additions.map(({ path }) => path), ['.ballin-backup.json', 'README.md']);
     assert.equal(Buffer.from(additions[1].contents, 'base64').toString(), repositoryReadmeContents);
+    assert.include(repositoryReadmeContents, 'This repository was created by [Ballin]');
     assert.include(repositoryReadmeContents, 'selected portable Ballin preferences');
     assert.include(repositoryReadmeContents, 'not a complete copy of the local Ballin configuration');
     assert.include(repositoryReadmeContents, 'current behavior and guidance');

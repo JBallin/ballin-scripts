@@ -189,7 +189,7 @@ const markerBytes = (destination: RepositoryDestination): Buffer => Buffer.from(
 })}\n`);
 const repositoryReadmeContents = `# Ballin backup
 
-This private repository contains development-environment snapshots maintained by [Ballin](https://github.com/JBallin/ballin-scripts).
+This repository was created by [Ballin](https://github.com/JBallin/ballin-scripts) for development-environment backups.
 
 \`ballin_config\` contains selected portable Ballin preferences, not a complete copy of the local Ballin configuration.
 

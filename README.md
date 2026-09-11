@@ -12,7 +12,7 @@ updates.
 ## What it does
 
 - `ballin backup` stores snapshots of local development-environment state in
-  GitHub. Ballin backup repositories are private and include a short explanatory
+  GitHub. Ballin creates private backup repositories with a short explanatory
   README that points to current documentation.
 - `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
   Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
