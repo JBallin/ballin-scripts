@@ -814,6 +814,18 @@ exit 2
     assert.deepEqual(gistRequests(), []);
   });
 
+  it('separates missing-config creation from backup setup output', () => {
+    removeConfig();
+
+    const result = runBackup({ args: ['setup'], input: 'n\n' });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^🧠 Created 'ballin\.config\.json' file in root using default settings\n\n/u);
+    assert.include(result.stdout, 'Set up optional private backups now? [y/N]');
+    assert.isTrue(fs.existsSync(configPath));
+    assert.deepEqual(ghCalls(), []);
+  });
+
   it('rejects malformed config before prompting or using GitHub during setup', () => {
     writeInvalidConfig();
 
