@@ -191,25 +191,19 @@ const repositoryReadmeContents = `# Ballin backup
 
 This private repository contains development-environment snapshots maintained by [Ballin](https://github.com/JBallin/ballin-scripts).
 
-## What this repository contains
+## About these files
 
-Most root files are stable snapshots of tool inventories and, when selected and available, shell, Git, or editor configuration. They are inspectable reference and recovery state; Ballin does not automatically replay them into your system.
+The repository contains snapshots of development tools, configuration, and supported Ballin preferences for backup and recovery.
 
-### \`ballin_config\`
+\`ballin_config\` contains selected portable Ballin preferences, not a complete copy of the local Ballin configuration. Some installation-specific and local-only state is intentionally excluded.
 
-\`ballin_config\` has narrower recovery behavior. It is a filtered projection of supported portable Ballin preferences, not a copy of the complete local Ballin configuration. During setup or reconnect, eligible values may be restored when an existing local choice does not take precedence.
-
-Destination binding, the automatic-backup choice, sensitive-source consent, the analytics installation identity, and unsupported or custom settings remain local and are not restored.
-
-## Recovery and privacy
-
-Ballin does not automatically apply the other snapshots or install saved packages. Review captured content before using it: even default inventory snapshots can contain private tools, identities, paths, or URLs, and repository history may retain older values.
+For current backup, recovery, and privacy behavior, see:
 
 - [Backup sources and sensitivity](https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md)
 - [Recovering Ballin preferences](https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#recovering-ballin-preferences)
 - [Backup setup and reconnect](https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect)
 
-\`.ballin-backup.json\` is Ballin's authoritative machine-readable repository identity and format marker. This README is explanatory only.
+\`.ballin-backup.json\` is Ballin's machine-readable repository identity and format marker.
 `;
 const repositoryReadmeBytes = (): Buffer => Buffer.from(repositoryReadmeContents);
 const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')

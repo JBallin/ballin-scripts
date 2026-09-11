@@ -54,10 +54,11 @@ describe('private repository transport', () => {
     const additions = (input.fileChanges as { additions: { path: string; contents: string }[] }).additions;
     assert.deepEqual(additions.map(({ path }) => path), ['.ballin-backup.json', 'README.md']);
     assert.equal(Buffer.from(additions[1].contents, 'base64').toString(), repositoryReadmeContents);
-    assert.include(repositoryReadmeContents, 'Most root files');
-    assert.include(repositoryReadmeContents, 'eligible values may be restored');
-    assert.include(repositoryReadmeContents, 'existing local choice does not take precedence');
-    assert.include(repositoryReadmeContents, 'automatic-backup choice');
+    assert.include(repositoryReadmeContents, 'supported Ballin preferences for backup and recovery');
+    assert.include(repositoryReadmeContents, 'selected portable Ballin preferences');
+    assert.include(repositoryReadmeContents, 'not a complete copy of the local Ballin configuration');
+    assert.include(repositoryReadmeContents, 'installation-specific and local-only state is intentionally excluded');
+    assert.include(repositoryReadmeContents, 'current backup, recovery, and privacy behavior');
     assert.include(repositoryReadmeContents, '.ballin-backup.json');
     const created = state.requests.find((r) => r.endpoint === 'user/repos');
     assert.deepEqual(created?.payload, { name: state.name, private: true, auto_init: true });
