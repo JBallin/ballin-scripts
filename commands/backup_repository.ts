@@ -191,17 +191,9 @@ const repositoryReadmeContents = `# Ballin backup
 
 This private repository contains development-environment snapshots maintained by [Ballin](https://github.com/JBallin/ballin-scripts).
 
-## About these files
+\`ballin_config\` contains selected portable Ballin preferences, not a complete copy of the local Ballin configuration.
 
-The repository contains snapshots of development tools, configuration, and supported Ballin preferences for backup and recovery.
-
-\`ballin_config\` contains selected portable Ballin preferences, not a complete copy of the local Ballin configuration. Some installation-specific and local-only state is intentionally excluded.
-
-For current backup, recovery, and privacy behavior, see:
-
-- [Backup sources and sensitivity](https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md)
-- [Recovering Ballin preferences](https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#recovering-ballin-preferences)
-- [Backup setup and reconnect](https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect)
+For current backup, recovery, and privacy behavior, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
 
 \`.ballin-backup.json\` is Ballin's machine-readable repository identity and format marker.
 `;

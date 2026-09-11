@@ -23,8 +23,8 @@ identity when configured. Simultaneously populated or malformed repository/Gist
 associations fail without fallback.
 
 The flat layout contains exact canonical snapshot names, the explanatory root
-`README.md`, and `.ballin-backup.json`, with these exact UTF-8 bytes and one
-final newline:
+`README.md`, and `.ballin-backup.json`. The marker has these exact UTF-8 bytes
+and one final newline:
 
 ```json
 {"format":"ballin-backup","version":1,"repositoryId":"…","ownerId":"…"}
