@@ -125,7 +125,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return false;
     }
     if (configured.kind === 'unconfigured') {
-      writeStdoutLine('Ballin backup is optional. Private GitHub repository access protects the backup URL; GitHub and authorized accounts/tokens can read the contents.');
+      writeStdoutLine('Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
       const start = readSetupLine('Set up optional private backups now? [y/N] ');
       if (start.eof || !/^[yY]$/u.test(start.text)) {
         writeStdoutLine('Backup setup skipped. Run ballin backup setup when you are ready.');

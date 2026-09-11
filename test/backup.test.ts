@@ -821,6 +821,7 @@ exit 2
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /^🧠 Created 'ballin\.config\.json' file in root using default settings\n\n/u);
+    assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
     assert.include(result.stdout, 'Set up optional private backups now? [y/N]');
     assert.isTrue(fs.existsSync(configPath));
     assert.deepEqual(ghCalls(), []);

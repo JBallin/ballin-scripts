@@ -41,8 +41,8 @@ inspect editor files before enabling backup or sharing snapshots, check
 Backup remains optional. Private-repository backups include the fixed
 inventory baseline and supported Ballin preferences by default. Inventories
 may contain private tool choices, identities, paths, and URLs; they are not
-guaranteed public-safe or secret-free. Private repository authorization prevents
-URL-only access; GitHub and authorized accounts or tokens can still read the
+guaranteed public-safe or secret-free. Backups are stored in private GitHub.com
+repositories. GitHub and anyone authorized to access a repository can read its
 contents.
 
 One local opt-in covers raw configuration and pipx installation metadata.
