@@ -56,7 +56,7 @@ describe('private repository transport', () => {
     assert.equal(Buffer.from(additions[1].contents, 'base64').toString(), repositoryReadmeContents);
     assert.include(repositoryReadmeContents, 'selected portable Ballin preferences');
     assert.include(repositoryReadmeContents, 'not a complete copy of the local Ballin configuration');
-    assert.include(repositoryReadmeContents, 'current backup, recovery, and privacy behavior');
+    assert.include(repositoryReadmeContents, 'current behavior and guidance');
     assert.include(repositoryReadmeContents, 'github.com/JBallin/ballin-scripts/tree/main/docs');
     assert.include(repositoryReadmeContents, '.ballin-backup.json');
     const created = state.requests.find((r) => r.endpoint === 'user/repos');

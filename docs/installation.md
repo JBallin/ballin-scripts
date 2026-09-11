@@ -149,9 +149,9 @@ configured and the partial result is reported. Change it later with
 
 Creation uses GitHub's initialized private repository, then one conditional
 commit adds the Ballin marker and replaces the checked setup-generated README
-with a static guide. That README explains the repository and links to recovery
-documentation, but it is not an identity marker, snapshot inventory, or source
-of preferences. Remote creation can remain completed if a later step fails.
+with a static guide. That README explains the repository and points to current
+Ballin documentation, but it is not an identity marker, snapshot inventory, or
+source of preferences. Remote creation can remain completed if a later step fails.
 Cache invalidation can remain completed even when local persistence fails.
 Reconnect provides no authority to overwrite different saved content. Older
 full-config snapshots receive no special conflict exception.

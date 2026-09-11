@@ -193,7 +193,7 @@ This private repository contains development-environment snapshots maintained by
 
 \`ballin_config\` contains selected portable Ballin preferences, not a complete copy of the local Ballin configuration.
 
-For current backup, recovery, and privacy behavior, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
+For current behavior and guidance, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
 
 \`.ballin-backup.json\` is Ballin's machine-readable repository identity and format marker.
 `;
