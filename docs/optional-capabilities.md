@@ -113,10 +113,10 @@ ballin config set update.backup true
 ballin config set update.backup false
 ```
 
-Backups are stored in private GitHub.com repositories. GitHub and anyone
-authorized to access a repository can read its contents. Even baseline
-inventories can expose identities, private URLs, and paths; Ballin does not scan
-or redact credentials. GitHub controls account-based commit author/committer
+Backups are stored in a private GitHub repository. GitHub and anyone authorized
+to access the repository can read its contents. Even baseline inventories can
+expose identities, private URLs, and paths; Ballin does not scan or redact
+credentials. GitHub controls account-based commit author/committer
 attribution; Ballin changes no global Git identity configuration. GitHub retains
 history, but Ballin provides no history navigation, rollback, or revision picker.
 
