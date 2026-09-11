@@ -91,6 +91,9 @@ ballin backup setup
 ballin backup setup my-backup-name
 ```
 
+Backups are stored in a private GitHub repository. GitHub and anyone authorized
+to access the repository can read its contents.
+
 New setup offers distinct **create** and **reconnect** choices and defaults to
 `ballin-backups`. The optional argument is a repository name, not a URL or owner.
 Backups belong to the authenticated personal GitHub.com account. Setup shows
