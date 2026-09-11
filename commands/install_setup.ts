@@ -158,7 +158,7 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
     } catch {
       return false;
     }
-    writeStdoutLine("🧠 Created 'ballin.config.json' file in root using default settings\n");
+    writeStdoutLine("🧠 Created 'ballin.config.json' file in root using default settings");
     return true;
   }
 
@@ -433,6 +433,7 @@ const setup = (
   const configExisted = fs.existsSync(configPathFor(repoDir));
   const backupHostExisted = configExisted && configHasBackupHost(repoDir);
 
+  if (!configExisted) writeStdoutLine();
   if (!configure(repoDir, docsUrl, configPathFor(repoDir), true)) {
     writeStdoutLine('\n⚠️  ERROR: Unable to create or update ballin.config.json');
     return false;

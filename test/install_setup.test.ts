@@ -947,6 +947,7 @@ exit 2
     });
 
     assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings\n\n💪 symlinked binaries");
     assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
