@@ -36,7 +36,6 @@ type AnalyticsEvent = {
   durationBucket?: string;
   appVersion: string;
   nodeMajor: string;
-  os: string;
   osVersion: string;
 };
 
@@ -62,12 +61,10 @@ const allowedPayloadKeys = new Set([
   'durationBucket',
   'appVersion',
   'nodeMajor',
-  'os',
   'osVersion',
 ]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
-const allowedOs = new Set(['darwin', 'linux', 'win32', 'unknown']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const dateBucketPattern = /^\d{4}-\d{2}-\d{2}$/;
 const versionPattern = /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/;
@@ -204,7 +201,6 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
   const durationBucket = stringField(payload, 'durationBucket') ?? 'unknown';
   const appVersion = stringField(payload, 'appVersion');
   const nodeMajor = stringField(payload, 'nodeMajor');
-  const os = stringField(payload, 'os');
   const osVersion = stringField(payload, 'osVersion');
 
   if (!installId || !installIdPattern.test(installId)) {
@@ -231,9 +227,6 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
   if (!nodeMajor || !majorVersionPattern.test(nodeMajor)) {
     return 'nodeMajor must be a major version number';
   }
-  if (!os || !allowedOs.has(os)) {
-    return 'os is not supported';
-  }
   if (!osVersion || !coarseOsVersionPattern.test(osVersion)) {
     return 'osVersion must be coarse';
   }
@@ -247,7 +240,6 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
     durationBucket,
     appVersion,
     nodeMajor,
-    os,
     osVersion,
   };
 };
@@ -285,19 +277,17 @@ const storeAnalyticsEvent = async (env: Env, event: AnalyticsEvent, installIdHas
         command,
         app_version,
         node_major,
-        os,
         os_version,
         count
       )
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)
-      ON CONFLICT(date_bucket, command, app_version, node_major, os, os_version)
+      VALUES (?1, ?2, ?3, ?4, ?5, 1)
+      ON CONFLICT(date_bucket, command, app_version, node_major, os_version)
       DO UPDATE SET count = count + 1
     `).bind(
       event.dateBucket,
       event.command,
       event.appVersion,
       event.nodeMajor,
-      event.os,
       event.osVersion,
     ),
   ]);

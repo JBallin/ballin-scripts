@@ -4,10 +4,9 @@ SELECT
   command,
   app_version,
   node_major,
-  os,
-  os_version,
+  os_version AS macos_version,
   sum(count) AS events
 FROM version_events_daily
 WHERE date_bucket BETWEEN ?1 AND ?2
-GROUP BY date_bucket, command, app_version, node_major, os, os_version
+GROUP BY date_bucket, command, app_version, node_major, os_version
 ORDER BY date_bucket, command, events DESC;

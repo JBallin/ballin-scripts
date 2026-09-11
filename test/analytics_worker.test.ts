@@ -102,7 +102,6 @@ const payloadForCommand = (command: string) => ({
   durationBucket: '<1s',
   appVersion: '1.0.0',
   nodeMajor: '24',
-  os: 'darwin',
   osVersion: '26.6',
 });
 
@@ -258,7 +257,7 @@ describe('analytics Worker', () => {
     ]);
     assert.match(rateLimitKeys[2], /^v1-events:install:[0-9a-f]{64}$/);
     assert.includeDeepMembers(runs.map(({ values }) => values), [
-      [payload.dateBucket, 'ballin update', '1.0.0', '24', 'darwin', '26.6'],
+      [payload.dateBucket, 'ballin update', '1.0.0', '24', '26.6'],
     ]);
     assert.notInclude(runs.flatMap(({ values }) => values), '203.0.113.7');
   });
@@ -301,7 +300,7 @@ describe('analytics Worker', () => {
       [{ ...payloadForCommand('ballin'), status: 'partial' }, 'status is not supported'],
       [{ ...payloadForCommand('ballin'), durationBucket: 'fast' }, 'durationBucket is not supported'],
       [{ ...payloadForCommand('ballin'), nodeMajor: 'v24' }, 'nodeMajor must be a major version number'],
-      [{ ...payloadForCommand('ballin'), os: 'freebsd' }, 'os is not supported'],
+      [{ ...payloadForCommand('ballin'), os: 'darwin' }, 'event payload contains unsupported fields'],
       [{ ...payloadForCommand('ballin'), osVersion: '15.1.2' }, 'osVersion must be coarse'],
     ];
 

@@ -92,8 +92,7 @@ describe('analytics D1 report', () => {
           date_bucket: '2026-06-01',
           app_version: '1.0.0',
           node_major: '24',
-          os: 'darwin',
-          os_version: '15',
+          macos_version: '26.6',
           events: 5,
         },
       ],
@@ -107,7 +106,7 @@ describe('analytics D1 report', () => {
     assert.include(output, 'Caveat: analytics are public client telemetry; aggregate counts are directional and not security-trustworthy.');
     assert.include(output, '2026-06-02  0');
     assert.include(output, 'ballin update  5      3        1        1        20.0%');
-    assert.include(output, '2026-06-01  1.0.0        24          darwin  15          5');
+    assert.include(output, '2026-06-01  1.0.0        24          26.6           5');
   });
 
   it('prints clear empty states for sparse aggregate data', () => {
@@ -139,7 +138,7 @@ describe('analytics D1 report', () => {
 
     assert.include(output, '2026-06-01  0');
     assert.match(output, /unknown\s+0\s+0\s+0\s+0\s+0\.0%/);
-    assert.include(output, 'unknown  unknown      unknown     unknown  unknown     2');
+    assert.include(output, 'unknown  unknown      unknown     unknown        2');
   });
 
   it('generates the report with an injected D1 runner', () => {
@@ -167,8 +166,7 @@ describe('analytics D1 report', () => {
         date_bucket: '2026-06-01',
         events: 2,
         node_major: '24',
-        os: 'darwin',
-        os_version: '15',
+        macos_version: '26.6',
       }];
     });
 
