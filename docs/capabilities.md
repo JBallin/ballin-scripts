@@ -76,16 +76,18 @@ workflow.
 
 ### Output markers
 
-`ballin backup` prints one line per meaningful snapshot result:
+On a successful run, `ballin backup` prints one line per successfully collected
+snapshot:
 
 | Marker | Meaning |
 | --- | --- |
 | `✚` | Newly saved or newly meaningful snapshot. |
 | `✎` | Existing snapshot content changed. |
 | `✖︎` | Existing snapshot became empty. |
-| `✔` | Unchanged non-empty snapshot. |
+| `✔` | Unchanged snapshot; empty snapshots add `(empty)`. |
 
-Unchanged empty snapshots do not print a line.
+`(empty)` means the source was collected successfully and produced no content.
+Absent, unavailable, excluded, or failed sources do not receive this status.
 
 Markers are delayed until the complete logical run has succeeded, including
 any required publication confirmation and local cache promotion. A failed run
