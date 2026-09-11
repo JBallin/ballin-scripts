@@ -2639,14 +2639,16 @@ printf '%*s\\n' 1048577 '' >&2
     assert.deepEqual(gistUploads(), [snapshotFileName]);
   });
 
-  it('hides unchanged empty output and does not upload it', () => {
+  it('reports unchanged empty output explicitly without uploading it', () => {
     writeSnapshot('');
     seedBackupCache('empty\n');
 
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '');
+    assert.equal(result.stdout, '✔ zshrc (empty)\n');
+    assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
+    assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'empty\n');
     assert.deepEqual(gistUploads(), []);
   });
 

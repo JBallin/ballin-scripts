@@ -394,9 +394,7 @@ const writeSnapshotStatus = (
 ): void => {
   const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
   if (resultState === 'unchanged') {
-    if (!isEmpty) {
-      writeStdoutLine(`✔ ${fileWithoutExtension}`);
-    }
+    writeStdoutLine(`✔ ${fileWithoutExtension}${isEmpty ? ' (empty)' : ''}`);
   } else if (resultState === 'created') {
     writeStdoutLine(`✚ ${fileWithoutExtension}`);
   } else if (resultState === 'removed') {
