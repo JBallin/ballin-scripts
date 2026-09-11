@@ -346,14 +346,13 @@ const formatRuntimeTrends = (rows: D1Row[]): string => {
     stringValue(row.date_bucket),
     stringValue(row.app_version),
     stringValue(row.node_major),
-    stringValue(row.os),
-    stringValue(row.os_version),
+    stringValue(row.macos_version),
     String(numberValue(row.events)),
   ]);
 
   return [
     'Runtime/version trends',
-    table(['date', 'app_version', 'node_major', 'os', 'os_version', 'events'], tableRows),
+    table(['date', 'app_version', 'node_major', 'macos_version', 'events'], tableRows),
   ].join('\n');
 };
 

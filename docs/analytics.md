@@ -45,9 +45,8 @@ environment opt-outs still apply. The exact restoration rules are recorded in
   `10m+`
 - `ballin-scripts` version
 - Node.js major version
-- OS family: `darwin`, `linux`, `win32`, or `unknown`
-- coarse OS version; on macOS (`darwin`), this is the macOS product version as
-  major/minor when available, such as `26.6`, or `unknown` when unavailable
+- coarse macOS product version as major/minor when available, such as `26.6`,
+  or `unknown` when unavailable
 
 ## What Is Never Sent
 
@@ -66,7 +65,8 @@ environment opt-outs still apply. The exact restoration rules are recorded in
 
 The installer creates a random local install ID under `.analytics/`. The
 backend hashes install IDs before storage, stores daily install rows plus
-aggregate command/version/Node/OS counts, and deletes rows older than 395 days.
+aggregate command/application-version/Node/macOS-version counts, and deletes
+rows older than 395 days.
 
 Events are sent only when analytics are enabled and the CLI is configured with
 the production analytics endpoint. The endpoint accepts public client telemetry,

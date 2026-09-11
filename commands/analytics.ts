@@ -22,7 +22,6 @@ type AnalyticsPayload = {
   durationBucket: string;
   appVersion: string;
   nodeMajor: string;
-  os: string;
   osVersion: string;
 };
 
@@ -49,7 +48,6 @@ type OsVersionCommandReader = (
 type OsVersionOptions = {
   platform?: () => string;
   readCommandOutput?: OsVersionCommandReader;
-  release?: () => string;
 };
 
 type AnalyticsRuntime = SenderOptions & {
@@ -92,7 +90,6 @@ const allowedCommands = new Set([
 ]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
-const allowedOs = new Set(['darwin', 'linux', 'win32']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
@@ -193,20 +190,18 @@ const dateBucket = (now: Date): string => now.toISOString().slice(0, 10);
 
 const nodeMajor = (): string => process.versions.node.split('.')[0];
 
-const osFamily = (platform = os.platform()): string => (
-  allowedOs.has(platform) ? platform : 'unknown'
-);
-
 const coarseOsVersion = (options: OsVersionOptions = {}): string => {
   try {
     const platform = (options.platform ?? os.platform)();
-    const version = platform === 'darwin'
-      ? (options.readCommandOutput ?? readCommandOutput)(
-        '/usr/bin/sw_vers',
-        ['-productVersion'],
-        { timeout: defaultTimeoutMs },
-      )
-      : (options.release ?? os.release)();
+    if (platform !== 'darwin') {
+      return 'unknown';
+    }
+
+    const version = (options.readCommandOutput ?? readCommandOutput)(
+      '/usr/bin/sw_vers',
+      ['-productVersion'],
+      { timeout: defaultTimeoutMs },
+    );
     if (typeof version !== 'string') {
       return 'unknown';
     }
@@ -216,7 +211,7 @@ const coarseOsVersion = (options: OsVersionOptions = {}): string => {
       return 'unknown';
     }
     if (minor && !/^[0-9]+$/.test(minor)) {
-      return platform === 'darwin' ? 'unknown' : major;
+      return 'unknown';
     }
     return minor ? `${major}.${minor}` : major;
   } catch {
@@ -246,7 +241,6 @@ const buildAnalyticsPayload = (
   appVersion = loadAppVersion(),
   osVersionOptions: OsVersionOptions = {},
 ): AnalyticsPayload => {
-  const platform = (osVersionOptions.platform ?? os.platform)();
   return {
     schemaVersion,
     installId,
@@ -256,8 +250,7 @@ const buildAnalyticsPayload = (
     durationBucket: input.durationBucket,
     appVersion,
     nodeMajor: nodeMajor(),
-    os: osFamily(platform),
-    osVersion: coarseOsVersion({ ...osVersionOptions, platform: () => platform }),
+    osVersion: coarseOsVersion(osVersionOptions),
   };
 };
 

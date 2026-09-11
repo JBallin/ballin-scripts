@@ -63,8 +63,8 @@ The report runs Wrangler D1 `SELECT` queries against the remote database using
 local Wrangler authentication and the ignored local
 `analytics-worker/wrangler.toml` described in the Worker README. It shows daily
 active installs, top-level command usage, command success/failure counts, and
-runtime/version trends. It does not require, accept, or print Cloudflare secret
-values.
+application/Node/macOS-version trends. It does not require, accept, or print
+Cloudflare secret values.
 
 Run `npx wrangler login` first if local Wrangler authentication is not
 configured. The report tries a directly available `wrangler` command first. If
@@ -140,7 +140,8 @@ For production setup or recreation:
 - create the `analytics-worker-production` GitHub deployment environment with a
   `main` branch rule and environment secrets `CLOUDFLARE_API_TOKEN`,
   `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`
-- apply `analytics-worker/migrations/0001_initial.sql` with `--remote`
+- apply all pending D1 migrations with `wrangler d1 migrations apply
+  ballin-scripts-analytics --remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
   change landed on `main`; after deploying, the workflow verifies every Worker
   version receiving traffic has the required D1, rate-limit, and hash-secret
@@ -156,3 +157,22 @@ remote migration is applied and the deploy workflow succeeds from `main`.
 The deployment check verifies Cloudflare binding metadata without exposing
 secret values. It cannot verify the hash secret's value, D1 schema or migration
 state, resource reachability, or runtime rate-limit behavior.
+
+## OS-Family Removal Cutover
+
+The migration that removes the redundant OS-family dimension intentionally
+recreates `version_events_daily` without preserving its historical rows. After
+the change lands on `main`, perform the cutover in this order:
+
+1. Apply pending D1 migrations with `wrangler d1 migrations apply
+   ballin-scripts-analytics --remote`.
+2. Rerun the `Deploy Analytics Worker` workflow so the Worker and revised table
+   schema become compatible.
+3. Run `node analytics-worker/reset.ts --confirm
+   RESET_ANALYTICS_AGGREGATES` to establish a clean baseline across every
+   aggregate table.
+4. Confirm a current schema-v1 event is accepted and use `npm run
+   analytics:report` to verify the fresh aggregate shape.
+
+Ingestion can fail between the migration and Worker deployment. Analytics are
+best-effort, and this cutover does not affect Ballin command behavior.

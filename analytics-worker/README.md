@@ -18,7 +18,8 @@ The worker may store:
 - command name from a fixed allowlist
 - status from a fixed allowlist
 - duration bucket from a fixed allowlist
-- coarse version/runtime fields from a fixed allowlist
+- released Ballin version, Node.js major version, and coarse macOS product
+  version
 - aggregate counts
 
 The worker must not store:
@@ -52,8 +53,7 @@ Example payload:
   "durationBucket": "10-60s",
   "appVersion": "2.0.0",
   "nodeMajor": "24",
-  "os": "darwin",
-  "osVersion": "15"
+  "osVersion": "26.6"
 }
 ```
 
@@ -73,6 +73,8 @@ The event is rejected unless:
   `ballin`, `ballin update`, `ballin backup`, `ballin config`,
   `ballin doctor`, `ballin self-update`, and `ballin uninstall`
 - `appVersion` is a released numeric version such as `1.0.0`
+- `nodeMajor` is a numeric major version
+- `osVersion` is a coarse macOS product version such as `26.6`, or `unknown`
 - the JSON body is 2048 bytes or smaller
 - the JSON body contains no fields outside the documented schema
 
@@ -160,6 +162,22 @@ after applying the remote migration, rerun the workflow manually from `main`.
 wrangler d1 migrations apply ballin-scripts-analytics --remote
 ```
 
+### OS-Family Removal Cutover
+
+The migration that removes OS family recreates `version_events_daily` without
+copying its historical rows. After that change lands on `main`:
+
+1. Apply pending remote D1 migrations with the command above.
+2. Rerun the `Deploy Analytics Worker` workflow.
+3. Establish a clean baseline with `node analytics-worker/reset.ts --confirm
+   RESET_ANALYTICS_AGGREGATES`.
+4. Confirm a current schema-v1 event is accepted and run `npm run
+   analytics:report` to verify the fresh aggregate shape.
+
+The old Worker cannot write to the recreated table, so ingestion may fail
+between steps 1 and 2. Analytics are best-effort and cannot affect Ballin
+command behavior.
+
 Manual deploys remain available for emergency or local maintenance:
 
 ```shell
@@ -203,7 +221,7 @@ The report uses local Wrangler authentication and
 - active installs by day
 - top-level command usage
 - command success, failure, and unknown counts
-- runtime/version trends from existing aggregate rows
+- application, Node.js, and macOS-version trends from existing aggregate rows
 
 Reports are directional maintenance signals. Because ingestion is public client
 telemetry, aggregate counts are not security-trustworthy.
