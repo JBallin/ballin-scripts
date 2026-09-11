@@ -114,12 +114,15 @@ ballin config set update.backup false
 ```
 
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
-to access the repository can read its contents. Even when sensitive sources are
-excluded, the default-included inventory can reveal identities, private or
-custom URLs, and paths; Ballin does not scan or redact credentials. GitHub
-controls account-based commit author/committer attribution; Ballin changes no
-global Git identity configuration. GitHub retains history, but Ballin provides
-no history navigation, rollback, or revision picker.
+to access the repository can read its contents.
+
+Even when sensitive sources are excluded, the default-included inventory can
+reveal identities, private or custom URLs, and paths; Ballin does not scan or
+redact credentials.
+
+GitHub controls account-based commit author/committer attribution; Ballin
+changes no global Git identity configuration. GitHub retains history, but Ballin
+provides no history navigation, rollback, or revision picker.
 
 Use `ballin backup open` or `ballin backup read <file>` for read-only recovery,
 and `ballin backup disconnect` to clear local linkage and disable automatic
