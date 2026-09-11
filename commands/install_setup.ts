@@ -158,7 +158,7 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
     } catch {
       return false;
     }
-    writeStdoutLine("\n🧠 Created 'ballin.config.json' file in root using default settings");
+    writeStdoutLine("🧠 Created 'ballin.config.json' file in root using default settings\n");
     return true;
   }
 
