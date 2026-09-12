@@ -1,6 +1,6 @@
 # Documentation
 
-Start here when setting up or auditing what Ballin manages.
+For the project overview, see the [main README](../README.md).
 
 ## User guides
 
