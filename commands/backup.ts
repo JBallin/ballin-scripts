@@ -64,7 +64,6 @@ type RemoteSnapshot = {
 type EvaluatedSnapshot = StagedSnapshot & {
   cacheFile: string;
   cacheNeedsPromotion: boolean;
-  isEmpty: boolean;
   resultState: SnapshotResultState;
   shouldUpload: boolean;
 };
@@ -634,7 +633,6 @@ const evaluateSnapshots = (
       ...stagedSnapshot,
       cacheFile,
       cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile),
-      isEmpty,
       resultState: classifySnapshotResult(!remote.exists, shouldUpload, isEmpty, wasEmpty),
       shouldUpload,
     });

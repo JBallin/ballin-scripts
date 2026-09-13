@@ -85,9 +85,10 @@ On a successful run, `ballin backup` prints one line per collected snapshot.
 | `✖︎` | Existing snapshot became empty. |
 | `✔` | Unchanged snapshot. |
 
-Markers are delayed until the complete logical run has succeeded, including
-any required publication confirmation and local cache promotion. A failed run
-does not print partial success markers.
+Empty snapshots use the same markers.
+
+Markers are printed only after the backup completes successfully; failed runs
+do not print partial success markers.
 
 ### Backup consistency and conflicts
 
