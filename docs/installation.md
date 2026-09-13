@@ -26,13 +26,13 @@ this later to create or reconnect to a destination without reinstalling:
 ballin backup setup
 ```
 
-If requested backup setup fails, the checkout, configuration, command link, and
-eligible analytics state remain installed. The installer exits nonzero and
-prints the same command as the retry path. If creation or initialization is
-ambiguous, inspect the reported repository and completed stage deliberately;
-do not blindly create again. A confirmed marker followed by local-save failure
-can be recovered through explicit reconnect. Ballin never rolls back remote
-history automatically.
+If optional backup setup fails, the maintenance installation remains usable. The
+installer exits nonzero and tells you to retry with `ballin backup setup`. If
+repository creation or initialization cannot be confirmed, inspect the reported
+repository before retrying; do not create another one blindly. If the repository
+was initialized successfully but saving the local configuration fails, reconnect
+to that repository instead of creating another one. Ballin never rolls back
+remote history automatically.
 
 ## Local effects
 
@@ -117,33 +117,32 @@ reads no raw contents and runs no collectors; access or resolution errors stop
 setup. See
 [Source review](backup-sources.md#repository-inclusion).
 
-Final confirmation covers destination and source selection. Declining or EOF,
-including an unsubmitted partial `y`, cancels before destination, consent, cache,
-or remote writes. Ordinary configuration defaults may have been filled;
-destination and consent defaults are deferred until confirmation. After approval,
-Ballin revalidates the selected destination, completes creation or reconnect, and
-saves the configured destination, sensitive-source choice, and any eligible
-recovered preferences.
+Final confirmation covers destination and source selection. Declining or reaching
+end-of-file cancels before any backup destination, sensitive-source consent,
+cache, or remote changes. Other missing configuration defaults may already have
+been added. After approval, Ballin revalidates the selected destination, completes
+creation or reconnect, and saves the configured destination, sensitive-source
+choice, and any supported preferences recovered from the backup.
 
-`backup.repository` stores opaque repository and owner IDs, the mutable name,
-and the initially selected default branch. Renames are resolved by ID;
-configured `setup` revalidates that identity and preserves local sensitive-source
-and automatic-backup choices. An explicit name must identify that same backup.
-Changing destinations requires disconnect. Wrong ownership, public visibility,
-unsupported contents/state, or a missing selected branch fail closed.
+Ballin keeps a configured backup tied to the same GitHub repository even if that
+repository is renamed. Running `ballin backup setup` again revalidates that
+destination and preserves local sensitive-source and automatic-backup choices;
+an explicit repository name must identify that same backup. To switch
+destinations, disconnect first. Setup rejects repositories with the wrong owner,
+public visibility, unsupported contents or state, or a missing selected branch.
 
 Reconnect restores only [portable preferences](backup-design.md#portable-preferences).
-Original local leaves win, including default-valued or invalid ones; admitted
-remote values may replace defaults created during setup. Destination, sensitive
-consent, automatic-backup choices, and unknown settings are never restored.
-An eligible analytics opt-out is applied before installer analytics initialization.
-Saved dotfiles and packages are never applied or executed.
+Existing local settings take precedence; supported preferences from the backup
+may replace defaults added during the current setup. Destination,
+sensitive-source consent, automatic-backup choices, and unknown settings are
+never restored. If the backup contains the supported analytics opt-out, Ballin
+applies it before initializing analytics. Saved dotfiles and packages are never
+applied or executed.
 
-After saving a newly configured backup, Ballin asks whether updates should run
-backups automatically. The `[Y/n]` prompt accepts Enter, `y`, or `Y` as `"true"`;
-other answers or unanswered EOF save `"false"`. A partial `y` followed by EOF
-also saves `"true"`. If that preference save fails, the destination remains
-configured and the partial result is reported. Change it later with
+After saving a newly configured backup, Ballin asks whether `ballin update`
+should run backups automatically. The prompt defaults to yes. Ballin saves the
+choice in `update.backup`; if that save fails, the backup destination remains
+configured and Ballin reports the partial result. Change it later with
 `ballin config set update.backup true` or `false`.
 
 Existing configured Gists retain compatibility temporarily. `ballin backup setup`

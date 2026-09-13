@@ -19,9 +19,9 @@ updates.
 ## Installation
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
-fresh installation. It installs the maintenance commands first; backup is
-optional, and a maintenance-only installation does not require Homebrew or
-GitHub CLI. When configured, backups can run automatically with `ballin update`.
+fresh installation. It installs the maintenance commands first, then offers
+optional backup setup; a maintenance-only installation does not require Homebrew
+or GitHub CLI. When configured, backups can run automatically with `ballin update`.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
@@ -61,9 +61,11 @@ Your system is ready to brew.
 
 ## New Mac setup
 
-On a new Mac, install Ballin for maintenance, then optionally create or reconnect
-to a private backup repository with `ballin backup setup`. Reconnecting can
-recover supported Ballin preferences; existing local choices take precedence. See
+On a new Mac, the installer offers optional backup setup after installing Ballin.
+You can create a new private backup repository or reconnect to an existing one;
+if you skip setup during installation, run `ballin backup setup` later.
+Reconnecting can recover supported Ballin preferences; existing local choices
+take precedence. See
 [preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences)
 for details. Stop using the previous Mac for backups before publishing from a
 replacement Mac.

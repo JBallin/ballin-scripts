@@ -35,20 +35,22 @@ Marker IDs must match the validated destination. Ballin reserves `README.md` for
 explanatory content; the file is not backup state and does not participate in
 repository identity, snapshot identity, or preference recovery. Ballin
 classifies root filenames as current snapshots, reserved Ballin files, retired
-snapshot names, or unexpected files. Regular retired and unexpected files are
-preserved without reading their contents.
+snapshot names, or unexpected files. Retired snapshot files and unexpected
+regular files are preserved without reading their contents.
 
 Directories, workflows, executable modes, symlinks, submodules, duplicate paths,
 and other unsupported entries fail closed. There are no timestamps, device IDs,
 checkpoint receipts, or configurable layouts.
 
-Creation uses `/user/repos` with `private:true` and `auto_init:true`. Only the
-returned identity may enter bootstrap. Ballin accepts only GitHub's expected
-single-file seed commit containing a regular `README.md`. One expected-head
-commit then adds the marker and replaces that README with Ballin's guide, and the
-resulting tree and marker must be confirmed before linkage. Later backups leave
-`README.md` untouched and do not read it as backup state. Ambiguous bootstrap
-stops for deliberate inspection rather than recreating the repository.
+Creation uses `/user/repos` with `private:true` and `auto_init:true`. Bootstrap
+proceeds only with the repository identity returned by GitHub. Ballin accepts
+only GitHub's expected single-file seed commit containing a regular `README.md`.
+A single conditional commit against the expected head then adds the marker and
+replaces that README with Ballin's guide. Ballin confirms the resulting tree and
+marker before saving the repository as the configured destination. Later backups
+leave `README.md` untouched and do not read it as backup state. If repository
+initialization cannot be confirmed safely, Ballin stops for manual inspection
+instead of creating another repository.
 
 ## Consistency model
 
@@ -69,9 +71,11 @@ cache bytes, including legacy `empty\n`, remain observable unchanged.
 | Differs from remote | Present | Equals remote | Advance cache |
 | Differs from remote | Present | Differs | Conflict |
 
-Every conflict aborts the complete publication. Snapshot filenames are durable
-identities. No source inclusion change deletes remote content/history. Older
-full-config or broader `ballin_config` snapshots receive no conflict exception.
+Every conflict aborts the complete publication. Ballin treats each snapshot
+filename as its stable identity across backups. Changing source inclusion does
+not delete previously saved remote content or history. Older full-config
+snapshots and earlier `ballin_config` snapshots that stored more settings follow
+the same conflict rules.
 
 Repository caches live beneath `.backup-cache/<hash>`, using SHA-256 of the
 fixed GitHub.com/owner ID/repository ID/selected branch tuple. Mutable names and
