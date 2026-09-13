@@ -76,8 +76,7 @@ The command shown above downloads `install.sh` from GitHub. The installer then:
 - makes no GitHub CLI or Gist calls when optional backup setup is declined;
 - during repository backup setup, checks the effective personal GitHub.com
   credential and selected destination, then after confirmation either reconnects
-  to an existing backup or creates a private repository containing the Ballin
-  marker and an explanatory README;
+  to an existing backup or creates a private backup repository;
 - sends no analytics request during installation. Later instrumented commands
   can contact the endpoint described in [Analytics](analytics.md).
 
@@ -122,10 +121,9 @@ Final confirmation covers destination and source selection. Declining or EOF,
 including an unsubmitted partial `y`, cancels before destination, consent, cache,
 or remote writes. Ordinary configuration defaults may have been filled;
 destination and consent defaults are deferred until confirmation. After approval,
-Ballin revalidates the reconnect candidate or creates and confirms a repository
-with its marker and explanatory README. It then invalidates untrusted caches and
-atomically saves verified linkage, reviewed consent, and eligible preferences. It
-never seeds a comparison base from recovered remote content.
+Ballin revalidates the selected destination, completes creation or reconnect, and
+saves the configured destination, sensitive-source choice, and any eligible
+recovered preferences.
 
 `backup.repository` stores opaque repository and owner IDs, the mutable name,
 and the initially selected default branch. Renames are resolved by ID;
@@ -147,16 +145,6 @@ other answers or unanswered EOF save `"false"`. A partial `y` followed by EOF
 also saves `"true"`. If that preference save fails, the destination remains
 configured and the partial result is reported. Change it later with
 `ballin config set update.backup true` or `false`.
-
-Creation starts from GitHub's initialized private repository. One conditional
-commit then adds the Ballin marker and replaces the verified seed README with
-Ballin's static guide. That guide explains the repository and points to current
-Ballin documentation, but Ballin does not use it to identify the repository,
-determine which snapshots exist, or recover preferences. If a later step fails,
-the remote repository may already exist. Cache invalidation may likewise have
-completed even if local persistence fails. Reconnect does not authorize
-overwriting different saved content. Older full-config snapshots receive no
-special conflict exception.
 
 Existing configured Gists retain compatibility temporarily. `ballin backup setup`
 reports that the existing Gist remains configured; it does not migrate or replace

@@ -116,11 +116,6 @@ ballin config set update.backup false
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
 to access the repository can read its contents.
 
-When Ballin creates a backup repository, it adds a README that explains the
-repository and links to current Ballin documentation. The README is informational
-only; Ballin uses `.ballin-backup.json`, not the README, to identify and validate
-the repository.
-
 Even when sensitive sources are excluded, the default-included inventory can
 reveal identities, private or custom URLs, and paths; Ballin does not scan or
 redact credentials.
