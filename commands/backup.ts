@@ -64,7 +64,6 @@ type RemoteSnapshot = {
 type EvaluatedSnapshot = StagedSnapshot & {
   cacheFile: string;
   cacheNeedsPromotion: boolean;
-  isEmpty: boolean;
   resultState: SnapshotResultState;
   shouldUpload: boolean;
 };
@@ -390,13 +389,10 @@ const classifySnapshotResult = (
 const writeSnapshotStatus = (
   snapshot: SnapshotCommand,
   resultState: SnapshotResultState,
-  isEmpty: boolean,
 ): void => {
   const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
   if (resultState === 'unchanged') {
-    if (!isEmpty) {
-      writeStdoutLine(`✔ ${fileWithoutExtension}`);
-    }
+    writeStdoutLine(`✔ ${fileWithoutExtension}`);
   } else if (resultState === 'created') {
     writeStdoutLine(`✚ ${fileWithoutExtension}`);
   } else if (resultState === 'removed') {
@@ -637,7 +633,6 @@ const evaluateSnapshots = (
       ...stagedSnapshot,
       cacheFile,
       cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile),
-      isEmpty,
       resultState: classifySnapshotResult(!remote.exists, shouldUpload, isEmpty, wasEmpty),
       shouldUpload,
     });
@@ -794,7 +789,7 @@ const runStagedBackup = (
     }
   }
   if (!completed) return false;
-  completed.forEach(({ snapshot, resultState, isEmpty }) => writeSnapshotStatus(snapshot, resultState, isEmpty));
+  completed.forEach(({ snapshot, resultState }) => writeSnapshotStatus(snapshot, resultState));
   return true;
 };
 
@@ -849,7 +844,7 @@ const runRepositoryBackup = (
     }
   }
   if (!completed) return false;
-  completed.forEach(({ snapshot, resultState, isEmpty }) => writeSnapshotStatus(snapshot, resultState, isEmpty));
+  completed.forEach(({ snapshot, resultState }) => writeSnapshotStatus(snapshot, resultState));
   return true;
 };
 
