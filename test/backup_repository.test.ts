@@ -39,7 +39,7 @@ describe('private repository transport', () => {
     assert.equal(inspectRepository(fixtureDestination, options).problem, 'unavailable');
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
   });
-  it('creates a private repository and initializes only its generated seed through the conditional API', () => {
+  it('creates a private repository and initializes the marker and Ballin README in one conditional commit', () => {
     state.exists = false;
     const result = createRepositoryBackup(state.name, readRepositoryAccount(options), options);
     assert.deepEqual([...result.snapshots.keys()], ['.ballin-backup.json']);
@@ -54,12 +54,12 @@ describe('private repository transport', () => {
     const additions = (input.fileChanges as { additions: { path: string; contents: string }[] }).additions;
     assert.deepEqual(additions.map(({ path }) => path), ['.ballin-backup.json', 'README.md']);
     assert.equal(Buffer.from(additions[1].contents, 'base64').toString(), repositoryReadmeContents);
-    assert.include(repositoryReadmeContents, 'This repository was created by [Ballin]');
-    assert.include(repositoryReadmeContents, 'selected portable Ballin preferences');
-    assert.include(repositoryReadmeContents, 'not a complete copy of the local Ballin configuration');
-    assert.include(repositoryReadmeContents, 'current behavior and guidance');
+    assert.include(repositoryReadmeContents, 'to store snapshots of your development environment');
+    assert.include(repositoryReadmeContents, 'portable between installations');
+    assert.include(repositoryReadmeContents, 'not a complete copy of your local Ballin configuration');
+    assert.include(repositoryReadmeContents, 'current backup behavior and guidance');
     assert.include(repositoryReadmeContents, 'github.com/JBallin/ballin-scripts/tree/main/docs');
-    assert.include(repositoryReadmeContents, '.ballin-backup.json');
+    assert.include(repositoryReadmeContents, 'uses `.ballin-backup.json` to identify this repository');
     const created = state.requests.find((r) => r.endpoint === 'user/repos');
     assert.deepEqual(created?.payload, { name: state.name, private: true, auto_init: true });
   });
@@ -108,7 +108,7 @@ describe('private repository transport', () => {
     assert.strictEqual(after, before);
     assert.equal(publications().length, 0);
   });
-  it('does not require or recreate the non-authoritative README during ordinary reads and no-op backup', () => {
+  it('does not require or recreate the non-authoritative README during ordinary reads or no-op backups', () => {
     const files = { ...state.commits[state.head].files };
     delete files['README.md'];
     commitFixture(state, files);

@@ -189,13 +189,13 @@ const markerBytes = (destination: RepositoryDestination): Buffer => Buffer.from(
 })}\n`);
 const repositoryReadmeContents = `# Ballin backup
 
-This repository was created by [Ballin](https://github.com/JBallin/ballin-scripts) for development-environment backups.
+This repository was created by [Ballin](https://github.com/JBallin/ballin-scripts) to store snapshots of your development environment.
 
-\`ballin_config\` contains selected portable Ballin preferences, not a complete copy of the local Ballin configuration.
+\`ballin_config\` stores selected Ballin preferences that are portable between installations, not a complete copy of your local Ballin configuration.
 
-For current behavior and guidance, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
+For current backup behavior and guidance, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
 
-\`.ballin-backup.json\` is Ballin's machine-readable repository identity and format marker.
+Ballin uses \`.ballin-backup.json\` to identify this repository as a Ballin backup.
 `;
 const repositoryReadmeBytes = (): Buffer => Buffer.from(repositoryReadmeContents);
 const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')
@@ -322,7 +322,7 @@ const publish = (
     || after.revision.parents.length !== 1 || after.revision.parents[0] !== before.revision.head
     || after.revision.entries.length !== expected.size
     || after.revision.entries.some((entry) => expected.get(entry.path) !== entry.sha)
-    // The complete inventory confirms the README blob ID without reading explanatory contents as backup state.
+    // The tree inventory confirms the README blob ID; its explanatory contents are intentionally not read as backup state.
     || [...additions].some(([name, bytes]) => (
       name !== repositoryReadmeFileName && !after.snapshots.get(name)?.equals(bytes)
     ))

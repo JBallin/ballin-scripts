@@ -74,9 +74,10 @@ The command shown above downloads `install.sh` from GitHub. The installer then:
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
 - makes no GitHub CLI or Gist calls when optional backup setup is declined;
-- for new repository setup, checks the effective personal GitHub.com credential
-  and selected destination, then after confirmation either reconnects or creates
-  a private repository containing the Ballin marker and an explanatory README;
+- during repository backup setup, checks the effective personal GitHub.com
+  credential and selected destination, then after confirmation either reconnects
+  to an existing backup or creates a private repository containing the Ballin
+  marker and an explanatory README;
 - sends no analytics request during installation. Later instrumented commands
   can contact the endpoint described in [Analytics](analytics.md).
 
@@ -122,9 +123,9 @@ including an unsubmitted partial `y`, cancels before destination, consent, cache
 or remote writes. Ordinary configuration defaults may have been filled;
 destination and consent defaults are deferred until confirmation. After approval,
 Ballin revalidates the reconnect candidate or creates and confirms a repository
-with its marker and explanatory README, invalidates untrusted caches, then
-atomically saves verified linkage, reviewed consent, and eligible preferences.
-It never seeds a comparison base from recovered remote content.
+with its marker and explanatory README. It then invalidates untrusted caches and
+atomically saves verified linkage, reviewed consent, and eligible preferences. It
+never seeds a comparison base from recovered remote content.
 
 `backup.repository` stores opaque repository and owner IDs, the mutable name,
 and the initially selected default branch. Renames are resolved by ID;
@@ -147,14 +148,15 @@ also saves `"true"`. If that preference save fails, the destination remains
 configured and the partial result is reported. Change it later with
 `ballin config set update.backup true` or `false`.
 
-Creation uses GitHub's initialized private repository, then one conditional
-commit adds the Ballin marker and replaces the checked setup-generated README
-with a static guide. That README explains the repository and points to current
-Ballin documentation, but it is not an identity marker, snapshot inventory, or
-source of preferences. Remote creation can remain completed if a later step fails.
-Cache invalidation can remain completed even when local persistence fails.
-Reconnect provides no authority to overwrite different saved content. Older
-full-config snapshots receive no special conflict exception.
+Creation starts from GitHub's initialized private repository. One conditional
+commit then adds the Ballin marker and replaces the verified seed README with
+Ballin's static guide. That guide explains the repository and points to current
+Ballin documentation, but Ballin does not use it to identify the repository,
+determine which snapshots exist, or recover preferences. If a later step fails,
+the remote repository may already exist. Cache invalidation may likewise have
+completed even if local persistence fails. Reconnect does not authorize
+overwriting different saved content. Older full-config snapshots receive no
+special conflict exception.
 
 Existing configured Gists retain compatibility temporarily. `ballin backup setup`
 reports that the existing Gist remains configured; it does not migrate or replace
