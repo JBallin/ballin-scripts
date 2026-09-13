@@ -2646,7 +2646,7 @@ printf '%*s\\n' 1048577 '' >&2
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, '✔ zshrc (empty)\n');
+    assert.equal(result.stdout, '✔ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'empty\n');
     assert.deepEqual(gistUploads(), []);

@@ -390,11 +390,10 @@ const classifySnapshotResult = (
 const writeSnapshotStatus = (
   snapshot: SnapshotCommand,
   resultState: SnapshotResultState,
-  isEmpty: boolean,
 ): void => {
   const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
   if (resultState === 'unchanged') {
-    writeStdoutLine(`✔ ${fileWithoutExtension}${isEmpty ? ' (empty)' : ''}`);
+    writeStdoutLine(`✔ ${fileWithoutExtension}`);
   } else if (resultState === 'created') {
     writeStdoutLine(`✚ ${fileWithoutExtension}`);
   } else if (resultState === 'removed') {
@@ -792,7 +791,7 @@ const runStagedBackup = (
     }
   }
   if (!completed) return false;
-  completed.forEach(({ snapshot, resultState, isEmpty }) => writeSnapshotStatus(snapshot, resultState, isEmpty));
+  completed.forEach(({ snapshot, resultState }) => writeSnapshotStatus(snapshot, resultState));
   return true;
 };
 
@@ -847,7 +846,7 @@ const runRepositoryBackup = (
     }
   }
   if (!completed) return false;
-  completed.forEach(({ snapshot, resultState, isEmpty }) => writeSnapshotStatus(snapshot, resultState, isEmpty));
+  completed.forEach(({ snapshot, resultState }) => writeSnapshotStatus(snapshot, resultState));
   return true;
 };
 
