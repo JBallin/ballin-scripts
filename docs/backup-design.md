@@ -42,15 +42,15 @@ Directories, workflows, executable modes, symlinks, submodules, duplicate paths,
 and other unsupported entries fail closed. There are no timestamps, device IDs,
 checkpoint receipts, or configurable layouts.
 
-Creation uses `/user/repos` with `private:true` and `auto_init:true`. Bootstrap
-proceeds only with the repository identity returned by GitHub. Ballin accepts
-only GitHub's expected single-file seed commit containing a regular `README.md`.
-A single conditional commit against the expected head then adds the marker and
-replaces that README with Ballin's guide. Ballin confirms the resulting tree and
-marker before saving the repository as the configured destination. Later backups
-leave `README.md` untouched and do not read it as backup state. If repository
-initialization cannot be confirmed safely, Ballin stops for manual inspection
-instead of creating another repository.
+Repository bootstrap is deliberately strict. Ballin creates a private,
+auto-initialized repository through `/user/repos` (`private:true`,
+`auto_init:true`) and accepts only GitHub's expected seed: a single root commit
+containing one regular `README.md`. Against that exact head, one conditional
+commit adds `.ballin-backup.json` and replaces the seed README with Ballin's
+guide. Ballin verifies the resulting tree and marker before saving the repository
+as the configured destination. Later backups leave `README.md` untouched and
+ignore it as backup state. If initialization cannot be confirmed safely, Ballin
+stops for inspection rather than risk creating a duplicate repository.
 
 ## Consistency model
 
@@ -71,9 +71,10 @@ cache bytes, including legacy `empty\n`, remain observable unchanged.
 | Differs from remote | Present | Equals remote | Advance cache |
 | Differs from remote | Present | Differs | Conflict |
 
-Every conflict aborts the complete publication. Ballin treats each snapshot
-filename as its stable identity across backups. Changing source inclusion does
-not delete previously saved remote content or history.
+If any snapshot conflicts, Ballin publishes nothing from that run. Snapshot
+filenames are stable identities across backups. Changing which sources are
+included affects future captures but does not delete existing remote snapshots
+or history.
 
 Repository caches live beneath `.backup-cache/<hash>`, using SHA-256 of the
 fixed GitHub.com/owner ID/repository ID/selected branch tuple. Mutable names and
