@@ -22,26 +22,35 @@ cannot switch destinations. An explicit setup name must resolve to the same
 identity when configured. Simultaneously populated or malformed repository/Gist
 associations fail without fallback.
 
-The flat layout contains exact canonical snapshot names plus
-`.ballin-backup.json`, with these exact UTF-8 bytes and one final newline:
+Repository contents use a flat layout. Current snapshots use the exact filenames
+defined by Ballin. `.ballin-backup.json` is the repository marker, and newly
+created repositories initially include an explanatory root `README.md`. The
+marker has these exact UTF-8 bytes and one final newline:
 
 ```json
 {"format":"ballin-backup","version":1,"repositoryId":"…","ownerId":"…"}
 ```
 
-Marker IDs must match the validated destination. Current, reserved, retired,
-and unexpected names use the canonical catalog classifier. Retired and ordinary
-unexpected regular files are retained without downloading their contents.
+Marker IDs must match the validated destination. Ballin reserves `README.md` for
+explanatory content; the file is not backup state and does not participate in
+repository identity, snapshot identity, or preference recovery. Ballin
+classifies root filenames as current snapshots, reserved Ballin files, retired
+snapshot names, or unexpected files. Retired snapshot files and unexpected
+regular files are preserved without reading their contents.
+
 Directories, workflows, executable modes, symlinks, submodules, duplicate paths,
 and other unsupported entries fail closed. There are no timestamps, device IDs,
 checkpoint receipts, or configurable layouts.
 
-Creation uses `/user/repos` with `private:true` and `auto_init:true`. Only the
-successfully returned identity can enter bootstrap. Its seed must be a single
-root commit containing only a regular README.md. One expected-head commit adds
-the marker and removes that generated README; a marker-only readback is required
-before linkage. This narrow deletion path is unavailable to ordinary backup.
-An ambiguous bootstrap stops for deliberate inspection without recreation.
+Repository bootstrap is deliberately strict. Ballin creates a private,
+auto-initialized repository through `/user/repos` (`private:true`,
+`auto_init:true`) and accepts only GitHub's expected seed: a single root commit
+containing one regular `README.md`. Against that exact head, one conditional
+commit adds `.ballin-backup.json` and replaces the seed README with Ballin's
+guide. Ballin verifies the resulting tree and marker before saving the repository
+as the configured destination. Later backups leave `README.md` untouched and
+ignore it as backup state. If initialization cannot be confirmed safely, Ballin
+stops for inspection rather than risk creating a duplicate repository.
 
 ## Consistency model
 
@@ -62,9 +71,10 @@ cache bytes, including legacy `empty\n`, remain observable unchanged.
 | Differs from remote | Present | Equals remote | Advance cache |
 | Differs from remote | Present | Differs | Conflict |
 
-Every conflict aborts the complete publication. Canonical filenames are durable
-identities. No source inclusion change deletes remote content/history. Older
-full-config or broader `ballin_config` snapshots receive no conflict exception.
+If any snapshot conflicts, Ballin publishes nothing from that run. Snapshot
+filenames are stable identities across backups. Changing which sources are
+included affects future captures but does not delete existing remote snapshots
+or history.
 
 Repository caches live beneath `.backup-cache/<hash>`, using SHA-256 of the
 fixed GitHub.com/owner ID/repository ID/selected branch tuple. Mutable names and

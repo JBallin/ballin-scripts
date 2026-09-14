@@ -10,6 +10,7 @@ const {
   isSnapshotSelected,
   normalizeSnapshotInput,
   observeSnapshotSources,
+  repositoryReadmeFileName,
   snapshotDefinitions,
 } = require('../commands/backup_snapshots.ts');
 
@@ -118,6 +119,7 @@ describe('backup snapshot definitions', () => {
 
     assert.equal(configSnapshotFileName, 'ballin_config');
     assert.equal(backupMarkerFileName, '.MyConfig.md');
+    assert.equal(repositoryReadmeFileName, 'README.md');
   });
 
   it('classifies only exact current, retired, and reserved names', () => {
@@ -129,6 +131,7 @@ describe('backup snapshot definitions', () => {
       'brackets_settings.json',
     ].forEach((name) => assert.equal(classifySnapshotFileName(name), 'retired'));
     assert.equal(classifySnapshotFileName('.MyConfig.md'), 'reserved');
+    assert.equal(classifySnapshotFileName('README.md'), 'reserved');
 
     [
       'Gitconfig',

@@ -296,6 +296,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(run(['read', 'zshrc.sh']).stdout, bytes); ok(run(['open']));
     assert.isTrue(fs.lstatSync(cacheRoot).isSymbolicLink()); assert.equal(mutations().length, 0);
     assert.equal(run(['read', '.ballin-backup.json']).status, 1);
+    assert.equal(run(['read', 'README.md']).status, 1);
     assert.equal(run(['read', 'nonexistent']).status, 1);
     const failed = state(); failed.faults.tree = { truncated: true }; saveState(failed);
     assert.equal(run(['read', 'zshrc.sh']).status, 1);
@@ -309,11 +310,12 @@ describe('repository backup lifecycle', function() {
     assert.notInclude(result.stdout, 'Gist'); assert.equal(mutations().length, 0);
   });
 
-  it('creates and confirms only the marker before persisting reviewed local choices', () => {
+  it('creates and confirms the marker and explanatory README before persisting reviewed local choices', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n\n'); ok(result);
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
-    assert.equal(config().update.backup, 'true'); assert.deepEqual(Object.keys(state().commits[state().head].files), ['.ballin-backup.json']);
+    assert.equal(config().update.backup, 'true');
+    assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 2);
     assert.isBelow(result.stdout.indexOf('Selected GitHub.com account: fixture-user'), result.stdout.indexOf('Confirm this destination'));
     assert.notInclude(result.stdout, 'zshrc.sh:');

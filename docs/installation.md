@@ -26,13 +26,10 @@ this later to create or reconnect to a destination without reinstalling:
 ballin backup setup
 ```
 
-If requested backup setup fails, the checkout, configuration, command link, and
-eligible analytics state remain installed. The installer exits nonzero and
-prints the same command as the retry path. If creation or initialization is
-ambiguous, inspect the reported repository and completed stage deliberately;
-do not blindly create again. A confirmed marker followed by local-save failure
-can be recovered through explicit reconnect. Ballin never rolls back remote
-history automatically.
+If backup setup fails, Ballin remains installed and usable for maintenance. Retry
+with `ballin backup setup`. If GitHub may already have created the repository,
+inspect the reported repository before retrying. If initialization succeeded,
+reconnect to it instead of creating another one.
 
 ## Local effects
 
@@ -74,9 +71,9 @@ The command shown above downloads `install.sh` from GitHub. The installer then:
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
 - makes no GitHub CLI or Gist calls when optional backup setup is declined;
-- for new repository setup, checks the effective personal GitHub.com credential
-  and selected destination, then after confirmation either reconnects or creates
-  a private repository containing only the Ballin marker;
+- during repository backup setup, checks the personal GitHub.com account
+  currently used by `gh` and the selected destination, then after confirmation
+  either reconnects to an existing backup or creates a private backup repository;
 - sends no analytics request during installation. Later instrumented commands
   can contact the endpoint described in [Analytics](analytics.md).
 
@@ -101,12 +98,12 @@ that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision requires an explicit different name or reconnect choice.
 
-Ballin uses the effective credential through `gh api ... user`; an environment
-token can take precedence over a stored login. Ballin never logs in, switches
-accounts, or broadens scopes automatically. Authenticate with
-`gh auth login --hostname github.com` yourself if needed. Creation/publication
-require repository write access; reconnect and recovery need only the
-corresponding read access. Branch restrictions can still reject writes.
+Ballin uses your existing `gh` authentication. It does not log in, switch
+accounts, or expand permissions on your behalf. If authentication is missing,
+run `gh auth login --hostname github.com`. Creating or updating the repository
+requires write access; reconnect and recovery need only read access. If Ballin
+shows an unexpected account, check whether an environment token is overriding
+your saved `gh` login.
 
 Fresh create or reconnect setup asks for one default-off choice covering raw
 configuration and pipx metadata. Reconnect fully inspects the existing backup
@@ -117,42 +114,31 @@ reads no raw contents and runs no collectors; access or resolution errors stop
 setup. See
 [Source review](backup-sources.md#repository-inclusion).
 
-Final confirmation covers destination and source selection. Declining or EOF,
-including an unsubmitted partial `y`, cancels before destination, consent, cache,
-or remote writes. Ordinary configuration defaults may have been filled;
-destination and consent defaults are deferred until confirmation. After approval,
-Ballin revalidates the reconnect candidate or creates and confirms a marker-only
-repository, invalidates untrusted caches, then atomically saves verified linkage,
-reviewed consent, and eligible preferences. It never seeds a comparison base
-from recovered remote content.
+Final confirmation covers the destination and source selection. If you decline,
+Ballin makes no backup-specific changes. If you approve, it revalidates the
+destination, creates or reconnects to the repository, and saves the destination,
+sensitive-source choice, and any supported preferences recovered from the
+backup.
 
-`backup.repository` stores opaque repository and owner IDs, the mutable name,
-and the initially selected default branch. Renames are resolved by ID;
-configured `setup` revalidates that identity and preserves local sensitive-source
-and automatic-backup choices. An explicit name must identify that same backup.
-Changing destinations requires disconnect. Wrong ownership, public visibility,
-unsupported contents/state, or a missing selected branch fail closed.
+Renaming the repository on GitHub does not break the connection: Ballin continues
+to recognize the same backup. To switch to a different repository, disconnect
+first and run `ballin backup setup` again. Ballin backup repositories must be
+private, belong to the personal GitHub.com account used for setup, and meet
+Ballin's other support requirements.
 
 Reconnect restores only [portable preferences](backup-design.md#portable-preferences).
-Original local leaves win, including default-valued or invalid ones; admitted
-remote values may replace defaults created during setup. Destination, sensitive
-consent, automatic-backup choices, and unknown settings are never restored.
-An eligible analytics opt-out is applied before installer analytics initialization.
-Saved dotfiles and packages are never applied or executed.
+Existing local choices take precedence over values from the backup, although
+supported backup values can replace defaults added during the current setup. The
+destination, sensitive-source consent, automatic-backup choice, and unsupported
+or unknown settings remain local. If the backup contains the supported analytics
+opt-out, Ballin applies it before initializing analytics. Reconnect does not
+apply saved dotfiles or install saved packages.
 
-After saving a newly configured backup, Ballin asks whether updates should run
-backups automatically. The `[Y/n]` prompt accepts Enter, `y`, or `Y` as `"true"`;
-other answers or unanswered EOF save `"false"`. A partial `y` followed by EOF
-also saves `"true"`. If that preference save fails, the destination remains
-configured and the partial result is reported. Change it later with
-`ballin config set update.backup true` or `false`.
-
-Creation uses GitHub's initialized private repository, then one conditional
-commit replaces only its checked setup-generated README with the Ballin marker.
-Remote creation can remain completed if a later step fails. Cache invalidation
-can remain completed even when local persistence fails. Reconnect provides no
-authority to overwrite different saved content. Older full-config snapshots
-receive no special conflict exception.
+After creating or reconnecting a backup, Ballin asks whether `ballin update`
+should run backups automatically (default: yes). The choice is stored in
+`update.backup`; change it later with `ballin config set update.backup true` or
+`false`. If Ballin cannot save the choice, the backup destination remains
+configured, and Ballin reports the partial result.
 
 Existing configured Gists retain compatibility temporarily. `ballin backup setup`
 reports that the existing Gist remains configured; it does not migrate or replace

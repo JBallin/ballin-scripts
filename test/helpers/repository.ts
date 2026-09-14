@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { repositoryReadmeContents } = require('../../commands/backup_repository.ts');
 import type { SpawnSyncOptions } from 'child_process';
 
 type FixtureCommit = { files: Record<string, string>; parents: string[]; tree: string };
@@ -29,7 +30,11 @@ const commitFixture = (state: FixtureState, files: Record<string, string>, paren
 };
 const fixtureState = (snapshots: Record<string, string> = {}): FixtureState => {
   const state: FixtureState = { exists: true, ...fixtureDestination, login: 'fixture-user', head: '', commits: {}, requests: [], faults: {} };
-  const files = { '.ballin-backup.json': fixtureMarker(), ...snapshots };
+  const files = {
+    '.ballin-backup.json': fixtureMarker(),
+    'README.md': repositoryReadmeContents,
+    ...snapshots,
+  };
   commitFixture(state, Object.fromEntries(Object.entries(files).map(([name, value]) => [name, Buffer.from(value).toString('base64')])), []);
   return state;
 };
