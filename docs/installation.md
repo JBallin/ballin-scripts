@@ -28,8 +28,8 @@ ballin backup setup
 
 If backup setup fails, Ballin remains installed and usable for maintenance. Retry
 with `ballin backup setup`. If GitHub may already have created the repository,
-inspect the reported repository and reconnect only if it was initialized; do not
-create another one.
+inspect the reported repository before retrying. If initialization succeeded,
+reconnect to it instead of creating another one.
 
 ## Local effects
 
@@ -98,12 +98,12 @@ that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision requires an explicit different name or reconnect choice.
 
-Ballin checks the personal GitHub.com account currently used by `gh`; an
-environment token can take precedence over a stored login. Ballin never logs in,
-switches accounts, or broadens scopes automatically. Authenticate with
-`gh auth login --hostname github.com` yourself if needed. Creating or updating
-the repository requires write access; reconnect and recovery need only read
-access. Branch restrictions can still reject writes.
+Ballin uses your existing `gh` authentication. It does not log in, switch
+accounts, or expand permissions on your behalf. If authentication is missing,
+run `gh auth login --hostname github.com`. Creating or updating the repository
+requires write access; reconnect and recovery need only read access. If Ballin
+shows an unexpected account, check whether an environment token is overriding
+your saved `gh` login.
 
 Fresh create or reconnect setup asks for one default-off choice covering raw
 configuration and pipx metadata. Reconnect fully inspects the existing backup
@@ -122,9 +122,9 @@ backup.
 
 Renaming the repository on GitHub does not break the connection: Ballin continues
 to recognize the same backup. To switch to a different repository, disconnect
-first and run `ballin backup setup` again. Setup rejects destinations that are
-public, owned by a different account, otherwise unsupported, or missing the
-selected branch.
+first and run `ballin backup setup` again. Ballin backup repositories must be
+private, belong to the personal GitHub.com account used for setup, and meet
+Ballin's other support requirements.
 
 Reconnect restores only [portable preferences](backup-design.md#portable-preferences).
 Existing local choices take precedence over values from the backup, although
@@ -135,7 +135,7 @@ opt-out, Ballin applies it before initializing analytics. Reconnect does not
 apply saved dotfiles or install saved packages.
 
 After creating or reconnecting a backup, Ballin asks whether `ballin update`
-should run backups automatically. The default is yes. The choice is stored in
+should run backups automatically (default: yes). The choice is stored in
 `update.backup`; change it later with `ballin config set update.backup true` or
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.
