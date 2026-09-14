@@ -73,9 +73,7 @@ cache bytes, including legacy `empty\n`, remain observable unchanged.
 
 Every conflict aborts the complete publication. Ballin treats each snapshot
 filename as its stable identity across backups. Changing source inclusion does
-not delete previously saved remote content or history. Older full-config
-snapshots and earlier `ballin_config` snapshots that stored more settings follow
-the same conflict rules.
+not delete previously saved remote content or history.
 
 Repository caches live beneath `.backup-cache/<hash>`, using SHA-256 of the
 fixed GitHub.com/owner ID/repository ID/selected branch tuple. Mutable names and
