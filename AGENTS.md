@@ -47,7 +47,9 @@
   `config/.defaultConfig.json`, relevant validation and consumers, tests, and the
   owning user documentation. Change `config/updateConfig.ts` only when migration
   behavior itself must change.
-- Use `docs/README.md` to find the owning user or maintainer guide. Follow the
-  naming rules in `docs/design-system.md`: Ballin for product prose, `ballin`
-  for the executable and command examples, and `ballin-scripts` for repository,
-  package, checkout, or path precision.
+- Use `docs/README.md` to find the owning user or maintainer guide. For
+  documentation, CLI/help text, and other user-facing copy, apply the relevant
+  copy, voice, messaging, terminology, and naming guidance in
+  `docs/design-system.md` according to the surface's job and audience. Use Ballin
+  for product prose, `ballin` for the executable and command examples, and
+  `ballin-scripts` for repository, package, checkout, or path precision.
