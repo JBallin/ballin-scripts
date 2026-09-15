@@ -19,10 +19,11 @@ updates.
 ## Installation
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
-fresh installation. A fresh install recommends [minimal anonymous analytics](docs/analytics.md)
-with a default-Yes choice, then offers optional backup setup; a maintenance-only
-installation does not require Homebrew or GitHub CLI. When configured, backups
-can run automatically with `ballin update`.
+fresh installation. Analytics start disabled, and a fresh install asks whether
+to enable [minimal anonymous usage analytics](docs/analytics.md), with Yes as the
+default. It then offers optional backup setup; a maintenance-only installation
+does not require Homebrew or GitHub CLI. When configured, backups can run
+automatically with `ballin update`.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 

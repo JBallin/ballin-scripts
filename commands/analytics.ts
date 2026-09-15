@@ -99,7 +99,7 @@ const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
-  `Ballin recommends minimal anonymous analytics about top-level command usage and outcomes. Details: ${docsUrl}`
+  `Ballin can send minimal anonymous usage analytics. Details: ${docsUrl}`
 );
 const analyticsPromptFor = (defaultEnabled = true): string => (
   `Enable minimal anonymous usage analytics? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `
@@ -212,7 +212,7 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
   if (writeAnalyticsPreference(options.configPath, enabled)) {
     return true;
   }
-  writeStdoutLine('\nUnable to save the analytics preference; the previous local choice remains authoritative.');
+  writeStdoutLine('\nUnable to save the analytics preference; the existing local setting is unchanged.');
   return false;
 };
 

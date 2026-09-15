@@ -49,7 +49,7 @@ if [ "$repo_existed" = false ]; then
   printf '\nInstallation plan\n'
   printf -- '- Clone Ballin into %s and create its config there.\n' "$repo_dir"
   printf -- '- Link the ballin command from Homebrew\047s bin directory when available, otherwise from %s.\n' "$HOME/.local/bin"
-  printf -- '- Ask whether to enable minimal anonymous usage analytics; create a local install ID only when enabled.\n'
+  printf -- '- Ask whether to enable minimal anonymous usage analytics; create a local install ID only if analytics are enabled.\n'
   printf -- '- Offer optional backup setup: create or reconnect to a private GitHub.com repository.\n'
   printf -- '- Reconnect can recover compatible Ballin preferences.\n'
   printf -- '- Treat .backup-cache as derived state; later backup setup may invalidate an unproven cache before configuring a destination.\n'

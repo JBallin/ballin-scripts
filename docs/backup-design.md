@@ -135,7 +135,7 @@ allowlists, independent of bundled defaults:
 | `update.softwareupdate` | Boolean, as described below | Boolean, subject to local precedence |
 | `update.npm` | Boolean, as described below | Boolean, subject to local precedence |
 | `update.nvm` | Boolean, as described below | Boolean, subject to local precedence |
-| `analytics.enabled` | No | No; local onboarding choice |
+| `analytics.enabled` | No | No; local setting |
 | `update.backup` | No | No; local setup choice under #344 |
 | `backup.repository`, `backup.id`, `backup.host` | No | No; independently selected destination wins |
 | Sensitive-source consent | No | No; local `backup.includeSensitive` choice |
@@ -151,10 +151,10 @@ discarded before remote snapshot inspection. Excluded leaves are not validated
 by projection: invalid `update.backup` or an excluded `backup` section does not
 block an otherwise valid export.
 
-Analytics preferences are wholly local. Projection omits `analytics.enabled`
+The analytics setting is wholly local. Projection omits `analytics.enabled`
 without validating its value, and restoration ignores analytics sections in
-older snapshots without migration. Remote data never changes the local choice
-or restores an installation identity.
+older snapshots without migration. Remote data never changes the local setting
+or restores the analytics installation identity.
 
 Setup captures local configuration before creating or refreshing defaults.
 An admitted leaf already present is authoritative, even if default-valued or

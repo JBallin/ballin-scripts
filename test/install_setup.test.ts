@@ -954,7 +954,7 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'Ballin recommends minimal anonymous analytics about top-level command usage and outcomes. Details: https://example.test/analytics',
+      'Ballin can send minimal anonymous usage analytics. Details: https://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Enable minimal anonymous usage analytics? [Y/n] ');
     assert.equal(analyticsPromptFor(false), 'Enable minimal anonymous usage analytics? [y/N] ');
@@ -1080,7 +1080,10 @@ fs.writeFileSync = function(file, contents, ...args) {
     });
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.include(
+      result.stdout,
+      'Unable to save the analytics preference; the existing local setting is unchanged.',
+    );
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
