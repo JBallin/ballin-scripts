@@ -173,6 +173,28 @@ const writeLocalInstallId = (installId: string, installIdPath = installIdPathFor
   }
 };
 
+const writeAnalyticsPreference = (configPath: string, enabled: boolean): boolean => {
+  const temporary = `${configPath}.${process.pid}.analytics.tmp`;
+  let created = false;
+  try {
+    const config = fs.readFileSync(configPath);
+    const fd = fs.openSync(temporary, 'wx', 0o600);
+    created = true;
+    try { fs.writeFileSync(fd, config); } finally { fs.closeSync(fd); }
+    if (!createConfigStore({ configPath: temporary }).writeLeafValue('analytics.enabled', String(enabled))) {
+      return false;
+    }
+    fs.renameSync(temporary, configPath);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (created) {
+      try { fs.rmSync(temporary, { force: true }); } catch { /* Best-effort private staging cleanup. */ }
+    }
+  }
+};
+
 const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
   writeStdoutLine(`\n${analyticsDisclosureFor(options.docsUrl)}`);
   const defaultEnabled = options.defaultEnabled ?? true;
@@ -187,7 +209,7 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
   const enabled = response.text === ''
     ? defaultEnabled
     : response.text === 'y' || response.text === 'Y';
-  if (createConfigStore({ configPath: options.configPath }).writeLeafValue('analytics.enabled', String(enabled))) {
+  if (writeAnalyticsPreference(options.configPath, enabled)) {
     return true;
   }
   writeStdoutLine('\nUnable to save the analytics preference; the previous local choice remains authoritative.');

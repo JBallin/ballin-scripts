@@ -19,6 +19,9 @@ if [ ! -d "$repo_dir" ]; then
   repo_existed=false
   setup_mode='fresh'
 fi
+if [ ! -f "$repo_dir/ballin.config.json" ]; then
+  setup_mode='fresh'
+fi
 
 if ! command -v git >/dev/null 2>&1 || ! git --version >/dev/null 2>&1; then
   printf '\n⚠️  ERROR: Git is required before install can continue.\n'

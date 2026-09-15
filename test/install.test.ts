@@ -37,6 +37,7 @@ describe('install', () => {
   const writeCurrentCheckout = ({ repoUpdate = true, installSetup = true } = {}) => {
     fs.mkdirSync(path.join(repoDir, 'commands'), { recursive: true });
     fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
     if (repoUpdate) {
       fs.writeFileSync(path.join(repoDir, 'commands', 'repo_update.ts'), '');
     }
@@ -207,6 +208,29 @@ esac
     assert.deepEqual(commandLog(), [
       `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
       setupCommand(),
+    ]);
+  });
+
+  it('retries an incomplete cloned checkout with fresh setup when no config was created', () => {
+    installBaseCommands();
+
+    const first = runInstall({ env: { FAKE_SETUP_STATUS: '27' } });
+
+    assert.equal(first.status, 27);
+    assert.deepEqual(commandLog(), [
+      'git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts',
+      setupCommand('fresh'),
+    ]);
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+
+    fs.writeFileSync(commandLogPath, '');
+    const retry = runInstall();
+
+    assert.equal(retry.status, 0, retry.stderr);
+    assert.notInclude(retry.stdout, 'Installation plan');
+    assert.deepEqual(commandLog(), [
+      `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
+      setupCommand('fresh'),
     ]);
   });
 

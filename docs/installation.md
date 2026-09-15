@@ -16,8 +16,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
 before cloning or making installation changes. No or end-of-file exits
 successfully without cloning. Refreshing an existing installation does not
-repeat this confirmation. After creating local configuration and command links,
-a fresh install recommends minimal anonymous analytics and asks
+repeat this confirmation. After creating local configuration, a fresh install
+recommends minimal anonymous analytics and asks
 `Enable minimal anonymous usage analytics? [Y/n]`. Enter or `y` enables it;
 `n` or end-of-file leaves it disabled. Refresh and self-update never ask this
 question and preserve an existing valid local choice.
@@ -182,10 +182,12 @@ A reconnect has no trusted base and cannot overwrite differing remote content;
 inspect and manually reconcile each conflict using the
 [conflict guidance](capabilities.md#backup-consistency-and-conflicts).
 
-If installation stops after cloning but before core setup, fix the reported
-PATH, filesystem, or configuration problem and rerun the installer. Refreshes
-reuse the existing checkout. If optional backup setup alone fails, use the
-already-installed maintenance commands and retry with `ballin backup setup`.
+If installation stops after cloning but before local configuration is created,
+fix the reported PATH, filesystem, or configuration problem and rerun the
+installer. Ballin reuses the checkout but still treats setup as fresh, including
+the analytics choice. Established refreshes remain non-interactive. If optional
+backup setup alone fails, use the already-installed maintenance commands and
+retry with `ballin backup setup`.
 
 ## Uninstall
 

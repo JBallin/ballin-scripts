@@ -904,6 +904,26 @@ exit 2
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 
+  it('reaches fresh analytics onboarding before a later symlink failure', () => {
+    installConfigSources();
+    fs.rmSync(sourceBinDir, { recursive: true });
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'n\n', env: childEnvironment(analyticsEnabledEnv),
+    });
+
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stdout, analyticsPrompt);
+    assert.isBelow(
+      result.stdout.indexOf(analyticsPrompt),
+      result.stdout.indexOf(`Unable to symlink binaries into ${binDir}`),
+    );
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
   it('runs refresh setup through the CLI without prompting for optional backup', () => {
     installConfigSources();
     fs.copyFileSync(
@@ -1040,11 +1060,14 @@ process.exitCode = configureAnalyticsPreference({
   it('keeps fresh installation usable when the analytics preference cannot be saved', () => {
     installConfigSources();
     const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
     const preloadPath = path.join(testDir, 'fail-analytics-preference.cjs');
     fs.writeFileSync(preloadPath, `const fs = require('fs');
 const original = fs.writeFileSync;
 fs.writeFileSync = function(file, contents, ...args) {
-  if (file === ${JSON.stringify(configPath)} && String(contents).includes('"enabled": "true"')) {
+  if (String(file).endsWith('.analytics.tmp') && String(contents).includes('"enabled": "true"')) {
+    original.call(this, file, '{"analytics":', ...args);
     throw new Error('simulated analytics preference failure');
   }
   return original.call(this, file, contents, ...args);
@@ -1058,8 +1081,106 @@ fs.writeFileSync = function(file, contents, ...args) {
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp')), []);
+  });
+
+  it('preserves the complete config when the analytics preference cannot be committed', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
+    const preloadPath = path.join(testDir, 'fail-analytics-preference-commit.cjs');
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+const original = fs.renameSync;
+fs.renameSync = function(source, destination) {
+  if (String(source).endsWith('.analytics.tmp') && destination === ${JSON.stringify(configPath)}) {
+    throw Object.assign(new Error('simulated analytics preference commit failure'), { code: 'EIO' });
+  }
+  return original.call(this, source, destination);
+};\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp')), []);
+  });
+
+  it('preserves an unowned analytics preference staging file after exclusive creation fails', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
+    const preloadPath = path.join(testDir, 'block-analytics-preference-stage.cjs');
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+fs.writeFileSync(${JSON.stringify(configPath)} + '.' + process.pid + '.analytics.tmp', 'unowned staging file\\n', { mode: 0o600 });\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    const stagingFiles = fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp'));
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+    assert.isAtLeast(stagingFiles.length, 1);
+    stagingFiles.forEach((name: string) => {
+      assert.equal(fs.readFileSync(path.join(repoDir, name), 'utf8'), 'unowned staging file\n');
+    });
+  });
+
+  it('keeps setup non-blocking when analytics preference staging cleanup fails', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
+    const preloadPath = path.join(testDir, 'fail-analytics-preference-cleanup.cjs');
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+const originalRename = fs.renameSync;
+fs.renameSync = function(source, destination) {
+  if (String(source).endsWith('.analytics.tmp') && destination === ${JSON.stringify(configPath)}) {
+    throw Object.assign(new Error('simulated analytics preference commit failure'), { code: 'EIO' });
+  }
+  return originalRename.call(this, source, destination);
+};
+const originalRemove = fs.rmSync;
+fs.rmSync = function(target, ...args) {
+  if (String(target).endsWith('.analytics.tmp')) {
+    throw Object.assign(new Error('simulated analytics preference cleanup failure'), { code: 'EIO' });
+  }
+  return originalRemove.call(this, target, ...args);
+};\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+    const stagingFiles = fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp'));
+    assert.isAtLeast(stagingFiles.length, 1);
+    stagingFiles.forEach((name: string) => {
+      assert.equal(fs.statSync(path.join(repoDir, name)).mode & 0o777, 0o600);
+    });
   });
 
   it('keeps fresh installation usable when analytics onboarding throws unexpectedly', () => {
@@ -1136,7 +1257,8 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings\n\n💪 symlinked binaries");
+    assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
+    assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf('\n💪 symlinked binaries'));
     assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
     assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');

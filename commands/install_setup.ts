@@ -438,10 +438,6 @@ const setup = (
     return false;
   }
 
-  if (!symlinkBinaries(repoDir, binDir)) {
-    return false;
-  }
-
   if (mode === 'fresh') {
     try {
       configureAnalyticsPreference({
@@ -451,6 +447,10 @@ const setup = (
     } catch {
       // Analytics setup must never block install.
     }
+  }
+
+  if (!symlinkBinaries(repoDir, binDir)) {
+    return false;
   }
 
   const destination = configuredBackupDestination(readJsonObject(configPathFor(repoDir)));
