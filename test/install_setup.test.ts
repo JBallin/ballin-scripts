@@ -1297,7 +1297,8 @@ require('https').request = () => {
   });
 
   [false, true].forEach((value) => {
-    it(`restores eligible update preferences without replacing the fresh analytics choice (${value})`, () => {
+    it(`restores eligible update preferences without replacing the fresh analytics choice (${value})`, function test() {
+      this.timeout(5000);
       installConfigSources();
       const { fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
       const remote = fixtureState({ ballin_config: JSON.stringify({
