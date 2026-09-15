@@ -1,10 +1,10 @@
 # Analytics
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
-enable minimal anonymous usage analytics, with Yes as the default. Pressing
-Enter accepts Yes; end-of-file without a submitted response leaves analytics
-disabled. The choice is saved only in the local Ballin config. Neither
-installation nor answering the question sends an analytics event.
+enable minimal anonymous usage analytics, with Yes as the default. End-of-file
+without a submitted response leaves analytics disabled. The choice is saved
+only in the local Ballin config. Neither installation nor answering the
+question sends an analytics event.
 
 Enable persistently:
 
@@ -66,10 +66,6 @@ included in backup snapshots or preference recovery.
 
 Ballin maintains a random local install ID under `.analytics/` when analytics
 are enabled and not suppressed by `BALLIN_NO_ANALYTICS` or CI. Creating or
-repairing the ID is silent and non-blocking. The backend hashes install IDs
-before storage, stores daily install rows plus aggregate
-command/application-version/Node/macOS-version counts, and deletes rows older
+repairing the ID is silent and non-blocking. Install IDs are hashed before
+storage. Ballin retains daily and aggregate usage data and deletes data older
 than 395 days.
-
-Events are sent only when analytics are enabled and the CLI is configured with
-the production analytics endpoint.

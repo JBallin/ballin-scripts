@@ -18,9 +18,8 @@ before cloning or making installation changes. No or end-of-file exits
 successfully without cloning. Refreshing an existing installation does not
 repeat this confirmation. After creating local configuration, a fresh install
 asks whether to enable minimal anonymous usage analytics, with Yes as the
-default. Pressing Enter accepts Yes; end-of-file without a submitted response
-leaves analytics disabled. Refresh and self-update do not ask again and preserve
-the saved setting.
+default. End-of-file without a submitted response leaves analytics disabled.
+Refresh and self-update do not ask again and preserve the saved setting.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run
