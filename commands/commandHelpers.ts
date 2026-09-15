@@ -14,6 +14,7 @@ type SpawnResult = {
 };
 
 type SpawnOptions = Omit<SpawnSyncOptionsWithStringEncoding, 'encoding' | 'shell'>;
+type PromptLine = { text: string; eof: boolean };
 
 const commandPermissionDeniedStatus = 126;
 const commandNotFoundStatus = 127;
@@ -86,6 +87,17 @@ const writeStderrLine = (text = ''): void => {
   process.stderr.write(`${text}\n`);
 };
 
+const readPromptLine = (prompt: string): PromptLine => {
+  process.stdout.write(prompt);
+  const bytes: number[] = [];
+  const byte = Buffer.alloc(1);
+  while (fs.readSync(0, byte, 0, 1, null) !== 0) {
+    if (byte[0] === 10) return { text: Buffer.from(bytes).toString('utf8'), eof: false };
+    if (byte[0] !== 13) bytes.push(byte[0]);
+  }
+  return { text: Buffer.from(bytes).toString('utf8'), eof: true };
+};
+
 const progress = (text: string): void => {
   process.stdout.write(`\n==> ${text}\n`);
 };
@@ -141,6 +153,7 @@ module.exports = {
   makeTempFile,
   progress,
   readCommandOutput,
+  readPromptLine,
   reportSpawnError,
   removeTempFile,
   runCommand,

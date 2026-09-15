@@ -96,10 +96,6 @@ const projectPortablePreferences = (input: unknown): ConfigObject => {
     }
   });
 
-  const analytics = objectSection(config, 'analytics');
-  if (analytics && hasOwn(analytics, 'enabled') && analytics.enabled === 'false') {
-    setLeaf(projected, 'analytics', 'enabled', 'false');
-  }
   return projected;
 };
 
@@ -120,16 +116,6 @@ const restorePortablePreferences = (
     const value = parseBoolean(remoteUpdate[key]);
     if (value !== null) setLeaf(config, 'update', key, String(value));
   });
-
-  const originalAnalytics = objectSection(originalConfig, 'analytics') ?? {};
-  const remoteAnalytics = objectSection(remote, 'analytics') ?? {};
-  if (
-    !hasOwn(originalAnalytics, 'enabled')
-    && hasOwn(remoteAnalytics, 'enabled')
-    && remoteAnalytics.enabled === 'false'
-  ) {
-    setLeaf(config, 'analytics', 'enabled', 'false');
-  }
 
   return config;
 };

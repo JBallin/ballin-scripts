@@ -161,6 +161,7 @@ esac
     assert.include(result.stdout, "🏀 let's ball...");
     assert.include(result.stdout, 'Installation plan');
     assert.include(result.stdout, 'create or reconnect to a private GitHub.com repository');
+    assert.include(result.stdout, 'Ask whether to enable minimal anonymous usage analytics');
     assert.include(result.stdout, 'Reconnect can recover compatible Ballin preferences');
     assert.include(result.stdout, 'leaves the configured remote backup untouched');
     assert.notInclude(result.stdout, 'secret-Gist');

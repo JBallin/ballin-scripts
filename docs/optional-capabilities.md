@@ -151,22 +151,33 @@ ballin doctor
 ## Recovering Ballin preferences
 
 Reconnecting to a backup can recover supported Ballin preferences for cleanup,
-self-updates, macOS updates, and Node/npm updates, plus an analytics opt-out.
-Existing local choices take precedence. Recovery affects later maintenance;
-it does not run updates, apply dotfiles, or install packages.
+self-updates, macOS updates, and Node/npm updates. Existing local choices take
+precedence. Recovery affects later maintenance; it does not run updates, apply
+dotfiles, install packages, or change the local analytics choice.
 
 The `ballin_config` snapshot saves only those supported preferences.
-Destination identity, custom settings, analytics identity, automatic-backup
-choices, and sensitive-source approval stay local. A newly configured backup
-gets its own automatic-backup and sensitive-source choices during setup. See
+Destination identity, custom settings, analytics choice and identity,
+automatic-backup choices, and sensitive-source approval stay local. A newly
+configured backup gets its own automatic-backup and sensitive-source choices
+during setup. See
 [Backup design](backup-design.md#portable-preferences) for the exact allowlists
 and restoration rules.
 
 ## Analytics
 
-Ballin can send minimal anonymous usage analytics after a first-run
-notice. See [Analytics](analytics.md) for what is sent, what is never sent, and
-how long it is kept.
+Analytics are disabled in the bundled defaults. During fresh installation,
+Ballin recommends enabling minimal anonymous usage analytics with a default-Yes
+choice. End-of-file leaves analytics disabled. The local choice and installation
+identity are never backed up, and installation and the choice send no analytics
+event. See [Analytics](analytics.md) for what is sent, what is never sent, and
+how long it is kept. Guided reconfiguration is tracked in
+[#352](https://github.com/JBallin/ballin-scripts/issues/352).
+
+Enable persistently:
+
+```shell
+ballin config set analytics.enabled true
+```
 
 Disable persistently:
 

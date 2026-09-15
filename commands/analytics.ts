@@ -4,7 +4,8 @@ const https = require('https');
 const os = require('os');
 const path = require('path');
 const { fetchConfig } = require('../config/index.ts');
-const { readCommandOutput } = require('./commandHelpers.ts');
+const { createConfigStore } = require('../config/store.ts');
+const { readCommandOutput, readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 
 import type { IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
@@ -67,12 +68,16 @@ type CommandAnalyticsRuntime = AnalyticsRuntime & {
 
 type AnalyticsInstallIdOptions = {
   analyticsConfig?: AnalyticsConfig;
-  docsUrl?: string;
   env?: NodeJS.ProcessEnv;
   generateInstallId?: () => string;
   installIdPath?: string;
-  noticeWriter?: (message: string) => void;
   repoDir?: string;
+};
+
+type AnalyticsPreferenceOptions = {
+  configPath: string;
+  defaultEnabled?: boolean;
+  docsUrl?: string;
 };
 
 type ConfigObject = { [key: string]: unknown };
@@ -93,12 +98,13 @@ const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', 
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
-const analyticsNoticeFor = (docsUrl = defaultAnalyticsDocsUrl): string => [
-  'Ballin collects minimal anonymous usage analytics after this notice.',
-  'Disable: ballin config set analytics.enabled false',
-  `Details: ${docsUrl}`,
-].join('\n');
-const analyticsNotice = analyticsNoticeFor();
+const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
+  `Ballin recommends minimal anonymous analytics about top-level command usage and outcomes. Details: ${docsUrl}`
+);
+const analyticsPromptFor = (defaultEnabled = true): string => (
+  `Enable minimal anonymous usage analytics? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `
+);
+const analyticsPrompt = analyticsPromptFor();
 
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 const defaultRepoDir = path.join(__dirname, '..');
@@ -167,6 +173,27 @@ const writeLocalInstallId = (installId: string, installIdPath = installIdPathFor
   }
 };
 
+const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
+  writeStdoutLine(`\n${analyticsDisclosureFor(options.docsUrl)}`);
+  const defaultEnabled = options.defaultEnabled ?? true;
+  let response: { text: string; eof: boolean };
+  try {
+    response = readPromptLine(analyticsPromptFor(defaultEnabled));
+  } catch {
+    return false;
+  }
+  if (response.eof) return true;
+
+  const enabled = response.text === ''
+    ? defaultEnabled
+    : response.text === 'y' || response.text === 'Y';
+  if (createConfigStore({ configPath: options.configPath }).writeLeafValue('analytics.enabled', String(enabled))) {
+    return true;
+  }
+  writeStdoutLine('\nUnable to save the analytics preference; the previous local choice remains authoritative.');
+  return false;
+};
+
 const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): string | null => {
   if (analyticsDisabledByEnv(options.env ?? process.env)) {
     return null;
@@ -181,7 +208,6 @@ const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): stri
     return existingInstallId;
   }
 
-  options.noticeWriter?.(analyticsNoticeFor(options.docsUrl));
   const installId = (options.generateInstallId ?? crypto.randomUUID)();
   return writeLocalInstallId(installId, installIdPath) ? installId : null;
 };
@@ -401,10 +427,12 @@ const rethrowCommandError = (error: unknown): void => {
 
 module.exports = {
   analyticsDisabledByEnv,
-  analyticsNotice,
-  analyticsNoticeFor,
+  analyticsDisclosureFor,
+  analyticsPrompt,
+  analyticsPromptFor,
   buildAnalyticsPayload,
   coarseOsVersion,
+  configureAnalyticsPreference,
   durationBucketFromMs,
   ensureAnalyticsInstallId,
   installIdPathForRepo,
