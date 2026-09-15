@@ -3,7 +3,7 @@ const { createConfigStore, stringify } = require('../config/store.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
 const { configuredBackupDestination, isConfigObject, validRepositoryName } = require('./backup_config.ts');
 const { snapshotDefinitions, configSnapshotFileName } = require('./backup_snapshots.ts');
-const { writeStdoutLine } = require('./commandHelpers.ts');
+const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 const {
   readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
   createRepositoryBackup, repositoryUrl, repositoryMessages,
@@ -12,20 +12,9 @@ const {
 import type { RepositoryRead, RepositoryError } from './backup_repository.ts';
 import type { SnapshotDefinition } from './backup_snapshots.ts';
 
-// Consent requires a submitted line. Even partial affirmative input followed by EOF cancels.
-const readSetupLine = (prompt: string): { text: string; eof: boolean } => {
-  process.stdout.write(prompt);
-  const bytes: number[] = [];
-  const byte = Buffer.alloc(1);
-  while (fs.readSync(0, byte, 0, 1, null) !== 0) {
-    if (byte[0] === 10) return { text: Buffer.from(bytes).toString('utf8'), eof: false };
-    if (byte[0] !== 13) bytes.push(byte[0]);
-  }
-  return { text: Buffer.from(bytes).toString('utf8'), eof: true };
-};
 // Preserve the established legacy/automatic-backup prompt semantics.
 const readPrompt = (prompt: string, eofResponse = ''): string => {
-  const line = readSetupLine(prompt);
+  const line = readPromptLine(prompt);
   return line.eof && !line.text ? eofResponse : line.text;
 };
 const saveBackupConfig = (configPath: string, config: Record<string, unknown>): boolean => {
@@ -126,7 +115,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     if (configured.kind === 'unconfigured') {
       writeStdoutLine('Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
-      const start = readSetupLine('Set up optional private backups now? [y/N] ');
+      const start = readPromptLine('Set up optional private backups now? [y/N] ');
       if (start.eof || !/^[yY]$/u.test(start.text)) {
         writeStdoutLine('Backup setup skipped. Run ballin backup setup when you are ready.');
         return true;
@@ -149,9 +138,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine('Validated the configured private backup; local consent and automatic-backup choices were preserved.');
       return true;
     }
-    const choice = readSetupLine('Reconnect to an existing backup or create a new one? [reconnect/create] ');
+    const choice = readPromptLine('Reconnect to an existing backup or create a new one? [reconnect/create] ');
     if (choice.eof || !['reconnect', 'create'].includes(choice.text)) return cancelled();
-    const nameLine = repositoryName === undefined ? readSetupLine('Repository name [ballin-backups]: ') : { text: repositoryName, eof: false };
+    const nameLine = repositoryName === undefined ? readPromptLine('Repository name [ballin-backups]: ') : { text: repositoryName, eof: false };
     if (nameLine.eof) return cancelled();
     const name = nameLine.text || 'ballin-backups';
     if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
@@ -178,7 +167,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return false;
     }
     writeStdoutLine('The fixed inventory and filtered-preference baseline can include private tools, identities, paths, or URLs. It is not guaranteed secret-free.');
-    const sensitive = readSetupLine('Also include raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata? [y/N] ');
+    const sensitive = readPromptLine('Also include raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata? [y/N] ');
     if (sensitive.eof) return cancelled();
     const includeSensitive = /^[yY]$/u.test(sensitive.text);
     if (includeSensitive) {
@@ -187,7 +176,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     writeStdoutLine(`Selected: inventory and filtered preferences; sensitive sources ${includeSensitive ? 'included' : 'excluded'}.`);
     writeStdoutLine('Consent covers future captures as files, symlink targets, and installed metadata change; Ballin does not detect or redact credentials. Exclusion does not remove saved history.');
-    const confirmation = readSetupLine('Confirm this destination and source selection? [y/N] ');
+    const confirmation = readPromptLine('Confirm this destination and source selection? [y/N] ');
     if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) return cancelled();
     remoteMayExist = true;
     const read: RepositoryRead = previous

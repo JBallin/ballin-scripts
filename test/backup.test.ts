@@ -2000,7 +2000,6 @@ process.stdout.write(${JSON.stringify(pipxContent)});
     const remoteConfig = fs.readFileSync(path.join(fakeGistDir, 'ballin_config'), 'utf8');
     assert.deepEqual(JSON.parse(remoteConfig), {
       update: { cleanup: 'false', npm: 'true' },
-      analytics: { enabled: 'false' },
     });
     assert.notInclude(remoteConfig, 'PRIVATE_DESTINATION');
     assert.notInclude(remoteConfig, 'CONFIG_DUMMY_SECRET');

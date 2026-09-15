@@ -83,9 +83,8 @@ const writeRawInstallId = (installId: string): void => {
 const recordWithSender = (
   input: Record<string, unknown>,
   runtime: Record<string, unknown> = {},
-): Promise<{ payloads: AnalyticsPayload[]; notices: string[]; order: string[] }> => {
+): Promise<{ payloads: AnalyticsPayload[]; order: string[] }> => {
   const payloads: AnalyticsPayload[] = [];
-  const notices: string[] = [];
   const order: string[] = [];
 
   return recordAnalyticsEvent(input, {
@@ -97,13 +96,9 @@ const recordWithSender = (
       order.push('send');
       payloads.push(payload);
     },
-    noticeWriter: (message: string) => {
-      order.push('notice');
-      notices.push(message);
-    },
     ...runtime,
   }).then(() => {
-    return { payloads, notices, order };
+    return { payloads, order };
   });
 };
 
@@ -197,13 +192,12 @@ describe('analytics client', () => {
     });
     writeInstallId();
 
-    const { payloads, notices } = await recordWithSender({
+    const { payloads } = await recordWithSender({
       command: 'ballin update',
       now: fixedNow,
     });
 
     assert.deepEqual(payloads, []);
-    assert.deepEqual(notices, []);
   });
 
   it('treats malformed analytics config as disabled', async () => {
@@ -280,7 +274,7 @@ describe('analytics client', () => {
     });
     writeInstallId();
 
-    const { payloads, notices, order } = await recordWithSender({
+    const { payloads, order } = await recordWithSender({
       command: 'ballin',
       status: 'success',
       durationBucket: '<1s',
@@ -289,7 +283,6 @@ describe('analytics client', () => {
     const updatedAnalytics = fetchConfig().configObj.analytics;
 
     assert.deepEqual(order, ['send']);
-    assert.deepEqual(notices, []);
     assert.lengthOf(payloads, 1);
     assert.equal(payloads[0].installId, fixedInstallId);
     assert.deepEqual(updatedAnalytics, {
@@ -327,13 +320,12 @@ describe('analytics client', () => {
       enabled: 'true',
     });
 
-    const { payloads, notices } = await recordWithSender({
+    const { payloads } = await recordWithSender({
       command: 'ballin update',
       now: fixedNow,
     });
 
     assert.deepEqual(payloads, []);
-    assert.deepEqual(notices, []);
   });
 
   it('skips sending and does not rewrite an invalid local install ID', async () => {
@@ -342,31 +334,26 @@ describe('analytics client', () => {
     });
     writeRawInstallId('not-a-uuid\n');
 
-    const { payloads, notices } = await recordWithSender({
+    const { payloads } = await recordWithSender({
       command: 'ballin update',
       now: fixedNow,
     });
 
     assert.deepEqual(payloads, []);
-    assert.deepEqual(notices, []);
     assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
   });
 
   it('returns no install ID when local analytics state cannot be written', () => {
     const blockedParent = path.join(tempDir, 'blocked-parent');
     fs.writeFileSync(blockedParent, 'not a directory\n');
-    const notices: string[] = [];
-
     const installId = ensureAnalyticsInstallId({
       analyticsConfig: { enabled: 'true' },
       env: {},
       generateInstallId: () => fixedInstallId,
       installIdPath: path.join(blockedParent, 'install-id'),
-      noticeWriter: (message: string) => notices.push(message),
     });
 
     assert.isNull(installId);
-    assert.lengthOf(notices, 1);
     assert.isFalse(fs.existsSync(path.join(blockedParent, 'install-id')));
   });
 

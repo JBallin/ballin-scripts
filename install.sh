@@ -19,6 +19,9 @@ if [ ! -d "$repo_dir" ]; then
   repo_existed=false
   setup_mode='fresh'
 fi
+if [ ! -f "$repo_dir/ballin.config.json" ]; then
+  setup_mode='fresh'
+fi
 
 if ! command -v git >/dev/null 2>&1 || ! git --version >/dev/null 2>&1; then
   printf '\n⚠️  ERROR: Git is required before install can continue.\n'
@@ -46,7 +49,7 @@ if [ "$repo_existed" = false ]; then
   printf '\nInstallation plan\n'
   printf -- '- Clone Ballin into %s and create its config there.\n' "$repo_dir"
   printf -- '- Link the ballin command from Homebrew\047s bin directory when available, otherwise from %s.\n' "$HOME/.local/bin"
-  printf -- '- Create a local analytics install ID when analytics are enabled; later commands may send the documented minimal event.\n'
+  printf -- '- Ask whether to enable minimal anonymous usage analytics; create a local install ID only if analytics are enabled.\n'
   printf -- '- Offer optional backup setup: create or reconnect to a private GitHub.com repository.\n'
   printf -- '- Reconnect can recover compatible Ballin preferences.\n'
   printf -- '- Treat .backup-cache as derived state; later backup setup may invalidate an unproven cache before configuring a destination.\n'

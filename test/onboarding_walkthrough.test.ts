@@ -124,10 +124,11 @@ esac
   });
 
   it('preserves one maintenance-only install through doctor, update, self-update, and backup guidance', () => {
-    const installResult = runInstaller('y\nn\n');
+    const installResult = runInstaller('y\nn\nn\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     assert.include(installResult.stdout, 'Installation plan');
+    assert.include(installResult.stdout, 'Enable minimal anonymous usage analytics? [Y/n]');
     assert.include(installResult.stdout, 'Backup setup skipped. Run ballin backup setup');
     assert.isTrue(fs.lstatSync(path.join(userBinDir, 'ballin')).isSymbolicLink());
     assert.isNull(JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8')).backup.id);
@@ -163,7 +164,7 @@ esac
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
     installGhStub();
-    const installResult = runInstaller('y\ny\ncreate\n\ny\ny\n\n');
+    const installResult = runInstaller('y\nn\ny\ncreate\n\ny\ny\n\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));

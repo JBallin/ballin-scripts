@@ -15,7 +15,7 @@ const updateKeys = ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'];
 const excludedLeaves = [
   ['update', 'backup'], ['backup', 'includeRaw'], ['backup', 'includeDetailed'],
   ['backup', 'id'], ['backup', 'host'], ['backup', 'includeFuture'],
-  ['analytics', 'installId'], ['update', 'futureIntegration'], ['custom', 'token'],
+  ['analytics', 'enabled'], ['analytics', 'installId'], ['update', 'futureIntegration'], ['custom', 'token'],
 ];
 const booleanCases = [
   { input: true, canonical: 'true' },
@@ -136,20 +136,16 @@ describe('portable Ballin preferences', () => {
       };
       const expected = {
         update: { cleanup: 'false', selfUpdate: 'true', softwareupdate: 'false', npm: 'true', nvm: 'false' },
-        analytics: { enabled: 'false' },
       };
       assert.equal(JSON.stringify(projectPortablePreferences(input)), JSON.stringify(expected));
       assert.equal(JSON.stringify(projectPortablePreferences(expected)), JSON.stringify(expected));
     });
 
-    it('exports analytics opt-out only for exact string false', () => {
-      assert.deepEqual(projectPortablePreferences({ analytics: { enabled: 'false' } }), { analytics: { enabled: 'false' } });
-      [true, false, 'true', undefined, ...invalidValues].forEach((enabled) => {
-        assert.deepEqual(projectPortablePreferences({ analytics: { enabled } }), {});
-      });
-      [false, null, [], 'false'].forEach((analytics) => {
-        assert.deepEqual(projectPortablePreferences({ analytics }), {});
-      });
+    it('does not inspect the excluded analytics section', () => {
+      assert.deepEqual(projectPortablePreferences({
+        get analytics() { throw new Error('Excluded analytics section must not be read'); },
+        update: { npm: true },
+      }), { update: { npm: 'true' } });
     });
 
     it('omits missing, destination, identity, unknown and future fields without changing local data', () => {
@@ -209,22 +205,6 @@ describe('portable Ballin preferences', () => {
       });
     });
 
-    it('imports exact analytics opt-out over newly created defaults without importing consent', () => {
-      assert.deepEqual(restorePortablePreferences(baseline(), {}, { analytics: { enabled: 'false' } }).analytics, { enabled: 'false' });
-      [true, false, 'true', undefined, ...invalidValues].forEach((value) => {
-        assert.deepEqual(restorePortablePreferences(baseline(), {}, { analytics: { enabled: value } }), baseline());
-      });
-    });
-
-    ['true', 'false', true, false, ...invalidValues].forEach((value) => {
-      it(`preserves preexisting analytics.enabled=${JSON.stringify(value)}`, () => {
-        const local = { analytics: { enabled: value } };
-        ['false', 'true'].forEach((remoteValue) => {
-          assert.deepEqual(restorePortablePreferences(local, local, { analytics: { enabled: remoteValue } }), local);
-        });
-      });
-    });
-
     excludedLeaves.forEach(([section, key]) => {
       it(`never restores excluded ${section}.${key}, including otherwise valid values`, () => {
         [undefined, ...booleanCases.map(({ input }) => input), ...invalidValues].forEach((value) => {
@@ -268,9 +248,7 @@ describe('portable Ballin preferences', () => {
     it('ignores malformed remote sections independently, while rejecting malformed roots', () => {
       [null, [], true, 'dummy-sensitive-value'].forEach((value) => {
         assert.throws(() => restorePortablePreferences({}, {}, value), PortableConfigError, 'Invalid remote config; expected a JSON object.');
-        assert.deepEqual(restorePortablePreferences({}, {}, { update: value, analytics: { enabled: 'false' } }), {
-          analytics: { enabled: 'false' },
-        });
+        assert.deepEqual(restorePortablePreferences({}, {}, { update: value, analytics: { enabled: 'false' } }), {});
         assert.deepEqual(restorePortablePreferences({}, {}, { backup: value, update: { npm: true } }), {
           update: { npm: 'true' },
         });
@@ -330,7 +308,7 @@ describe('portable Ballin preferences', () => {
       const result = runCli();
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stderr, '');
-      assert.deepEqual(JSON.parse(result.stdout), { update: { npm: 'true' }, analytics: { enabled: 'false' } });
+      assert.deepEqual(JSON.parse(result.stdout), { update: { npm: 'true' } });
       assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
     });
 
