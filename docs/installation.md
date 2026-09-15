@@ -17,10 +17,10 @@ A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
 before cloning or making installation changes. No or end-of-file exits
 successfully without cloning. Refreshing an existing installation does not
 repeat this confirmation. After creating local configuration, a fresh install
-asks whether to enable minimal anonymous usage analytics:
-`Enable minimal anonymous usage analytics? [Y/n]`. Enter or `y` enables it;
-`n` or end-of-file leaves it disabled. Refresh and self-update never ask this
-question and preserve an existing valid local choice.
+asks whether to enable minimal anonymous usage analytics, with Yes as the
+default. Pressing Enter accepts Yes; end-of-file without a submitted response
+leaves analytics disabled. Refresh and self-update do not ask again and preserve
+the saved setting.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run
@@ -42,15 +42,15 @@ The installer can create or change:
 - `~/.ballin-scripts/`, a Git checkout of `ballin-scripts`. A refresh fetches
   and merges `origin/main`. If checkout or merge recovery is needed, Ballin can
   stash tracked and untracked changes in this checkout.
-- `~/.ballin-scripts/ballin.config.json`. A new file starts with
-  `analytics.enabled` set to `false` before the fresh-install prompt. A
-  refresh adds missing known settings. Reconnecting to a backup can recover
-  supported Ballin preferences; existing local choices and custom settings are
-  preserved. The analytics setting remains local and is not restored from backup.
+- `~/.ballin-scripts/ballin.config.json`. A new file starts with analytics
+  disabled. A refresh adds missing known settings. Reconnecting to a backup can
+  recover supported Ballin preferences; existing local choices and custom
+  settings are preserved. The analytics setting remains local and is not
+  restored from backup.
 - `~/.ballin-scripts/.analytics/install-id` when analytics are enabled and the
-  environment has not opted out. Ballin creates the ID only after
-  `analytics.enabled` is saved as `true`. Neither installation nor answering the
-  analytics prompt sends an analytics event. Later instrumented commands can
+  environment allows them. Ballin silently creates or repairs this random local
+  ID, and failures are non-blocking. Neither installation nor answering the
+  analytics question sends an analytics event. Later instrumented commands can
   send the payload documented in [Analytics](analytics.md).
 - `<bin>/ballin`, a symbolic link to `~/.ballin-scripts/bin/ballin`. `<bin>` is
   `$(brew --prefix)/bin` when `brew` is available, otherwise
@@ -136,10 +136,9 @@ Reconnect restores only [portable preferences](backup-design.md#portable-prefere
 Existing local choices take precedence over values from the backup, although
 supported backup values can replace defaults added during the current setup. The
 destination, sensitive-source consent, automatic-backup choice, and unsupported
-or unknown settings remain local. Analytics is also local-only: reconnect
-ignores analytics sections in older snapshots and never changes the current
-analytics setting or installation identity. Reconnect does not apply saved
-dotfiles or install saved packages.
+or unknown settings remain local. Analytics is also local-only: reconnect does
+not restore the analytics setting or installation identity from backup.
+Reconnect does not apply saved dotfiles or install saved packages.
 
 After creating or reconnecting a backup, Ballin asks whether `ballin update`
 should run backups automatically (default: yes). The choice is stored in

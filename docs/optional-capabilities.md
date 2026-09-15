@@ -156,35 +156,19 @@ precedence. Recovery affects later maintenance; it does not run updates, apply
 dotfiles, install packages, or change the local analytics setting.
 
 The `ballin_config` snapshot saves only those supported preferences.
-Destination identity, custom settings, the local analytics setting and
-installation identity,
-automatic-backup choices, and sensitive-source approval stay local. A newly
-configured backup gets its own automatic-backup and sensitive-source choices
-during setup. See
+Destination identity, custom settings, the analytics setting and installation
+identity, automatic-backup choices, and sensitive-source approval stay local. A
+newly configured backup gets its own automatic-backup and sensitive-source
+choices during setup. See
 [Backup design](backup-design.md#portable-preferences) for the exact allowlists
 and restoration rules.
 
 ## Analytics
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
-enable minimal anonymous usage analytics, with Yes as the default. End-of-file
-leaves analytics disabled. The local analytics setting and installation identity
-are never backed up. Neither installation nor answering the analytics prompt
-sends an analytics event. See [Analytics](analytics.md) for what is sent, what is
-never sent, and how long it is kept. Guided reconfiguration is tracked in
-[#352](https://github.com/JBallin/ballin-scripts/issues/352).
-
-Enable persistently:
-
-```shell
-ballin config set analytics.enabled true
-```
-
-Disable persistently:
-
-```shell
-ballin config set analytics.enabled false
-```
+enable minimal anonymous usage analytics, with Yes as the default. The saved
+setting and installation identity remain local. See [Analytics](analytics.md)
+for persistent and temporary controls, the exact payload, and retention.
 
 ## `ballin update` settings
 

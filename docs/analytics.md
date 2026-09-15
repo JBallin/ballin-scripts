@@ -1,16 +1,10 @@
 # Analytics
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
-enable minimal anonymous usage analytics:
-
-```text
-Enable minimal anonymous usage analytics? [Y/n]
-```
-
-Press Enter or answer `y` to enable analytics, or answer `n` to keep them
-disabled. If input reaches end-of-file before a response is submitted, analytics
-remain disabled. The selected setting is saved only in the local Ballin config.
-Neither installation nor answering the analytics prompt sends an analytics event.
+enable minimal anonymous usage analytics, with Yes as the default. Pressing
+Enter accepts Yes; end-of-file without a submitted response leaves analytics
+disabled. The choice is saved only in the local Ballin config. Neither
+installation nor answering the question sends an analytics event.
 
 Enable persistently:
 
@@ -18,19 +12,13 @@ Enable persistently:
 ballin config set analytics.enabled true
 ```
 
-Disable persistently:
+Use `false` instead of `true` to disable analytics persistently.
 
-```shell
-ballin config set analytics.enabled false
-```
-
-Disable for one command:
+Disable analytics for one `ballin update` run:
 
 ```shell
 BALLIN_NO_ANALYTICS=1 ballin update
 ```
-
-Replace `ballin update` with the command you are running.
 
 Disable for a shell session or profile:
 
@@ -38,16 +26,13 @@ Disable for a shell session or profile:
 export BALLIN_NO_ANALYTICS=1
 ```
 
-CI never sends analytics. Analytics failures are ignored and never change
-command output, side effects, or exit status. Refresh and self-update do not
-prompt and preserve an existing valid local analytics choice. Temporary
-environment suppression does not rewrite that persisted choice.
+CI never sends analytics. Analytics failures are ignored; they do not interrupt
+commands or change their output or exit status. Refresh and self-update do not
+ask again and preserve the saved setting. Temporary environment suppression
+does not rewrite it.
 
-The analytics setting and installation identity are not saved in or restored
-from `ballin_config`. Analytics sections in older snapshots are ignored without
-changing the local setting. Guided reconfiguration is tracked separately in
-[#352](https://github.com/JBallin/ballin-scripts/issues/352). The exact
-portability rules are recorded in [Backup design](backup-design.md#portable-preferences).
+The analytics setting and installation identity remain local. Neither is
+included in backup snapshots or preference recovery.
 
 ## What Is Sent
 
@@ -79,16 +64,12 @@ portability rules are recorded in [Backup design](backup-design.md#portable-pref
 
 ## Storage
 
-Ballin creates a random local install ID under `.analytics/` only after
-`analytics.enabled` is saved as `true` and when the environment allows analytics.
-ID creation is silent and non-blocking. The backend hashes
-install IDs before storage, stores daily install rows plus
-aggregate command/application-version/Node/macOS-version counts, and deletes
-rows older than 395 days.
+Ballin maintains a random local install ID under `.analytics/` when analytics
+are enabled and not suppressed by `BALLIN_NO_ANALYTICS` or CI. Creating or
+repairing the ID is silent and non-blocking. The backend hashes install IDs
+before storage, stores daily install rows plus aggregate
+command/application-version/Node/macOS-version counts, and deletes rows older
+than 395 days.
 
 Events are sent only when analytics are enabled and the CLI is configured with
-the production analytics endpoint. The endpoint accepts public client telemetry,
-so valid events can be spoofed; aggregate analytics are directional and not
-security-trustworthy.
-
-For deployment details, see [Analytics backend](analytics-backend.md).
+the production analytics endpoint.
