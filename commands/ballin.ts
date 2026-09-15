@@ -1,10 +1,11 @@
 const {
   ensureAnalyticsInstallId,
+  installIdPathForRepo,
   rethrowCommandError,
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const path = require('path');
-const { configPath } = require('../config/index.ts');
+const { configPath, fetchConfig } = require('../config/index.ts');
 const {
   runConfigCli,
 } = require('../config/cli.ts');
@@ -28,6 +29,8 @@ const {
   runUpdateCommand,
 } = require('./update.ts');
 import type { DoctorReport } from './doctor_report.ts';
+
+const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
 
 const format = {
   fileName: '\x1b[4mfile name\x1b[0m',
@@ -107,14 +110,22 @@ const isAnalyticsPreferenceWrite = (args: string[]): boolean => (
   args.length === 4 && args[0] === 'config' && args[1] === 'set' && args[2] === 'analytics.enabled'
 );
 
+const repairAnalyticsInstallId = (analyticsConfig?: { enabled?: string }): void => {
+  try {
+    ensureAnalyticsInstallId({
+      analyticsConfig: analyticsConfig ?? fetchConfig().configObj.analytics,
+      env: process.env,
+      installIdPath: analyticsInstallIdPath,
+    });
+  } catch {
+    // Analytics identity repair must never affect command behavior.
+  }
+};
+
 const runConfigCommand = (args: string[]): void => {
   runConfigCli(args);
   if (process.exitCode === 0 && args[0] === 'set' && args[1] === 'analytics.enabled' && args[2] === 'true') {
-    ensureAnalyticsInstallId({
-      analyticsConfig: { enabled: 'true' },
-      env: process.env,
-      repoDir: path.dirname(configPath),
-    });
+    repairAnalyticsInstallId({ enabled: 'true' });
   }
 };
 
@@ -192,9 +203,12 @@ const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => 
 
 const runBallinCli = (): void => {
   const args = process.argv.slice(2);
+  if (!isAnalyticsPreferenceWrite(args)) {
+    repairAnalyticsInstallId();
+  }
   const analyticsRuntime = isAnalyticsPreferenceWrite(args)
-    ? { analyticsConfig: { enabled: 'false' } }
-    : { preserveLocalState: args[0] === 'uninstall' };
+    ? { analyticsConfig: { enabled: 'false' }, installIdPath: analyticsInstallIdPath }
+    : { installIdPath: analyticsInstallIdPath, preserveLocalState: args[0] === 'uninstall' };
   void runWithCommandAnalytics(
     analyticsCommandForBallinArgs(args),
     () => runBallinCommand(args),
