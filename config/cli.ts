@@ -1,6 +1,9 @@
 const { configAction } = require('./index.ts');
 const { ConfigError } = require('./store.ts');
+const { Console } = require('node:console');
 import type { ConfigError as ConfigFailure } from './store.ts';
+
+const configConsole = new Console({ stdout: process.stdout, stderr: process.stderr, colorMode: false });
 
 const configHelp = `Usage:
     ballin config [get [key]]
@@ -21,7 +24,7 @@ const runConfigCli = (args: string[] = process.argv.slice(2)): void => {
   }
 
   try {
-    console.log(configAction(args)); // eslint-disable-line no-console
+    configConsole.log(configAction(args));
     process.exitCode = 0;
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;

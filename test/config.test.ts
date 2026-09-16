@@ -617,6 +617,43 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       assert.equal(object.stderr, '');
     });
 
+    it('keeps null output plain when colors are forced', () => {
+      const result = runConfigCli(['get', 'backup.id'], { FORCE_COLOR: '1' });
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, 'null\n');
+      assert.equal(result.stderr, '');
+    });
+
+    it('suppresses a broken stdout pipe without changing command status', () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-epipe-'));
+      const preloadPath = path.join(tempDir, 'stdout-epipe.cjs');
+      fs.writeFileSync(preloadPath, `
+process.stdout.write = ((chunk, encoding, callback) => {
+  const done = typeof encoding === 'function' ? encoding : callback;
+  const error = Object.assign(new Error('simulated broken pipe'), { code: 'EPIPE' });
+  process.nextTick(() => {
+    if (done) done(error);
+    else process.stdout.emit('error', error);
+  });
+  return false;
+});
+`);
+
+      try {
+        const result = spawnSync(process.execPath, [
+          '--require', preloadPath, cliPath, 'config', 'get', 'backup.id',
+        ], {
+          encoding: 'utf8',
+          env: testChildEnvironment(),
+        });
+        assert.equal(result.status, 0);
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, '');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     ['', 'false', 'INVALID: a legitimate stored value'].forEach((value) => {
       it(`preserves successful set output and persistence for ${JSON.stringify(value)}`, () => {
         const set = runConfigCli(['set', 'backup.id', value]);
