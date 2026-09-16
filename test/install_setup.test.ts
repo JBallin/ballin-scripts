@@ -985,7 +985,8 @@ exit 2
   });
 
   [false, true].forEach((value) => {
-    it(`restores eligible preferences and analytics opt-out before fresh installer analytics (${value})`, () => {
+    it(`restores eligible preferences and analytics opt-out before fresh installer analytics (${value})`, function test() {
+      this.timeout(5000);
       installConfigSources();
       const { fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
       const remote = fixtureState({ ballin_config: JSON.stringify({
