@@ -1,20 +1,19 @@
 # Analytics
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
-enable minimal anonymous usage analytics, with Yes as the default. End-of-file
-without a submitted response leaves analytics disabled. The choice is saved
-only in the local Ballin config. Neither installation nor answering the
-question sends an analytics event.
+enable minimal anonymous usage analytics, with Yes as the default. The choice
+is saved only in the local Ballin config. Answering the question does not send
+an analytics event.
 
-Enable persistently:
+Disable persistently:
 
 ```shell
-ballin config set analytics.enabled true
+ballin config set analytics.enabled false
 ```
 
-Use `false` instead of `true` to disable analytics persistently.
+Use `true` instead of `false` to enable analytics persistently.
 
-Disable analytics for one `ballin update` run:
+Disable analytics for one command:
 
 ```shell
 BALLIN_NO_ANALYTICS=1 ballin update
@@ -27,20 +26,18 @@ export BALLIN_NO_ANALYTICS=1
 ```
 
 CI never sends analytics. Analytics failures are ignored; they do not interrupt
-commands or change their output or exit status. Refresh and self-update do not
-ask again and preserve the saved setting. Temporary environment suppression
-does not rewrite it.
+commands or change their output or exit status. Ballin preserves the saved
+setting without asking again when you rerun the installer after setup is
+complete or use self-update.
 
-The analytics setting and installation identity remain local. Neither is
-included in backup snapshots or preference recovery.
+Backups do not save or restore the analytics setting or install ID.
 
 ## What Is Sent
 
 - schema version
 - random install ID
 - date bucket, such as `YYYY-MM-DD`
-- command name for currently instrumented Ballin commands, such as `ballin`,
-  `ballin update`, and `ballin backup`
+- command name, such as `ballin`, `ballin update`, and `ballin backup`
 - status: `success`, `failure`, or `unknown`
 - coarse duration bucket: `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
   `10m+`
@@ -64,8 +61,5 @@ included in backup snapshots or preference recovery.
 
 ## Storage
 
-Ballin maintains a random local install ID under `.analytics/` when analytics
-are enabled and not suppressed by `BALLIN_NO_ANALYTICS` or CI. Creating or
-repairing the ID is silent and non-blocking. Install IDs are hashed before
-storage. Ballin retains daily and aggregate usage data and deletes data older
-than 395 days.
+Analytics use a random install ID stored locally under `.analytics/`. Ballin
+retains daily and aggregate usage data and deletes data older than 395 days.

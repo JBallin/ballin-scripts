@@ -153,22 +153,21 @@ ballin doctor
 Reconnecting to a backup can recover supported Ballin preferences for cleanup,
 self-updates, macOS updates, and Node/npm updates. Existing local choices take
 precedence. Recovery affects later maintenance; it does not run updates, apply
-dotfiles, install packages, or change the local analytics setting.
+dotfiles, install packages, or change the analytics setting.
 
-The `ballin_config` snapshot saves only those supported preferences.
-Destination identity, custom settings, the analytics setting and installation
-identity, automatic-backup choices, and sensitive-source approval stay local. A
-newly configured backup gets its own automatic-backup and sensitive-source
-choices during setup. See
+The portable `ballin_config` snapshot excludes the backup destination, custom
+settings, analytics setting and install ID, automatic-backup choice, and
+sensitive-source approval. A newly configured backup gets its own
+automatic-backup and sensitive-source choices during setup. See
 [Backup design](backup-design.md#portable-preferences) for the exact allowlists
 and restoration rules.
 
 ## Analytics
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
-enable minimal anonymous usage analytics, with Yes as the default. The saved
-setting and installation identity remain local. See [Analytics](analytics.md)
-for persistent and temporary controls, the exact payload, and retention.
+enable minimal anonymous usage analytics, with Yes as the default. See
+[Analytics](analytics.md) for persistent and temporary controls, the exact
+payload, and retention.
 
 ## `ballin update` settings
 
