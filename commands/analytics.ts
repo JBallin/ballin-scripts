@@ -84,6 +84,7 @@ type ConfigObject = { [key: string]: unknown };
 
 const schemaVersion = 1;
 const defaultTimeoutMs = 750;
+let installIdTemporarySequence = 0;
 const allowedCommands = new Set([
   'ballin',
   'ballin backup',
@@ -163,13 +164,87 @@ const preserveLocalAnalyticsState = (runtime: CommandAnalyticsRuntime): Analytic
   }
 };
 
-const writeLocalInstallId = (installId: string, installIdPath = installIdPathForRepo()): boolean => {
+const replaceInvalidLocalInstallId = (
+  temporary: string,
+  installIdPath: string,
+): string | null => {
+  const lockPath = `${installIdPath}.lock`;
+  const promotion = `${temporary}.promotion`;
+  let lockCreated = false;
+  let promotionCreated = false;
+  let removeLock = false;
+  try {
+    try {
+      fs.linkSync(temporary, lockPath);
+      lockCreated = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        return null;
+      }
+    }
+
+    const winner = readLocalInstallId(installIdPath);
+    if (winner) {
+      removeLock = true;
+      return winner;
+    }
+    if (!readLocalInstallId(lockPath)) {
+      removeLock = true;
+      return null;
+    }
+
+    fs.linkSync(lockPath, promotion);
+    promotionCreated = true;
+    const winnerBeforeCommit = readLocalInstallId(installIdPath);
+    if (winnerBeforeCommit) {
+      removeLock = true;
+      return winnerBeforeCommit;
+    }
+
+    fs.renameSync(promotion, installIdPath);
+    promotionCreated = false;
+    const persisted = readLocalInstallId(installIdPath);
+    removeLock = Boolean(persisted);
+    return persisted;
+  } catch {
+    return readLocalInstallId(installIdPath);
+  } finally {
+    if (promotionCreated) {
+      try { fs.rmSync(promotion, { force: true }); } catch { /* Best-effort private staging cleanup. */ }
+    }
+    if (lockCreated || removeLock) {
+      try { fs.rmSync(lockPath, { force: true }); } catch { /* Best-effort lock cleanup. */ }
+    }
+  }
+};
+
+const writeLocalInstallId = (installId: string, installIdPath = installIdPathForRepo()): string | null => {
+  const temporary = `${installIdPath}.${process.pid}.${installIdTemporarySequence}.tmp`;
+  installIdTemporarySequence += 1;
+  let temporaryCreated = false;
   try {
     fs.mkdirSync(path.dirname(installIdPath), { recursive: true });
-    fs.writeFileSync(installIdPath, `${installId}\n`, 'utf8');
-    return true;
+    const fd = fs.openSync(temporary, 'wx', 0o600);
+    temporaryCreated = true;
+    try { fs.writeFileSync(fd, `${installId}\n`, 'utf8'); } finally { fs.closeSync(fd); }
+
+    try {
+      fs.linkSync(temporary, installIdPath);
+      return installId;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        return null;
+      }
+    }
+
+    const winner = readLocalInstallId(installIdPath);
+    return winner ?? replaceInvalidLocalInstallId(temporary, installIdPath);
   } catch {
-    return false;
+    return null;
+  } finally {
+    if (temporaryCreated) {
+      try { fs.rmSync(temporary, { force: true }); } catch { /* Best-effort private staging cleanup. */ }
+    }
   }
 };
 
@@ -231,7 +306,7 @@ const ensureAnalyticsInstallId = (options: AnalyticsInstallIdOptions = {}): stri
   }
 
   const installId = (options.generateInstallId ?? crypto.randomUUID)();
-  return writeLocalInstallId(installId, installIdPath) ? installId : null;
+  return writeLocalInstallId(installId, installIdPath);
 };
 
 const dateBucket = (now: Date): string => now.toISOString().slice(0, 10);
