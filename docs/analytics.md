@@ -1,5 +1,7 @@
 # Analytics
 
+**Audience:** Users
+
 Ballin can send minimal anonymous usage analytics after the installer
 shows a first-run notice. Analytics show active installs, top-level command
 usage, and command success or failure.

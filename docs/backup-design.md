@@ -1,5 +1,7 @@
 # Backup design
 
+**Audience:** Maintainers
+
 This guide records the safety model behind `ballin backup`. User behavior and
 conflict recovery are documented in
 [Supported capabilities](capabilities.md#backup-consistency-and-conflicts).
