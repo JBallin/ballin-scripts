@@ -76,5 +76,4 @@ migration and retirement in [#334](https://github.com/JBallin/ballin-scripts/iss
 
 Any new source or group requires an explicit inclusion and sensitivity review.
 Unknown groups are excluded; existing or restored preferences do not authorize
-them. See [Backup design](backup-design.md#shared-inclusion-policy) and the
-[approved #332 contract](https://github.com/JBallin/ballin-scripts/issues/332).
+them. See [Backup design](backup-design.md#shared-inclusion-policy).
