@@ -1,5 +1,7 @@
 # Analytics Backend
 
+**Audience:** Maintainers
+
 Ballin uses a small Cloudflare Worker backed by D1 for usage
 analytics. The backend records only the minimal signals needed for active
 installs, top-level command usage, and command success or failure.

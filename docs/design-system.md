@@ -1,5 +1,7 @@
 # Ballin design system
 
+**Audience:** Maintainers
+
 This document is the durable source of truth for Ballin identity, product
 messaging, visual direction, and brand asset guidance. It is meant to guide
 README, docs, CLI help, social preview, hero, website, and profile copy
