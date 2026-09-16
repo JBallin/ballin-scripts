@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  configureAnalyticsPreference,
   ensureAnalyticsInstallId,
 } = require('./analytics.ts');
 const {
@@ -71,24 +72,22 @@ const readOriginalSetupConfig = (configPath: string): Record<string, unknown> | 
   }
 };
 
-const setupAnalyticsInstallId = (repoDir: string, configPath: string, docsUrl?: string): void => {
+const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as ConfigObject;
     const analyticsConfig = isConfigObject(config.analytics) ? config.analytics : undefined;
     ensureAnalyticsInstallId({
       analyticsConfig,
-      docsUrl,
       env: process.env,
       repoDir,
-      noticeWriter: (notice: string) => writeStdoutLine(`\n${notice}`),
     });
   } catch {
     // Analytics setup must never block install or update.
   }
 };
 
-const setupAnalytics = (repoDir: string, docsUrl?: string, configPath = configPathFor(repoDir)): boolean => {
-  setupAnalyticsInstallId(repoDir, configPath, docsUrl);
+const setupAnalytics = (repoDir: string, configPath = configPathFor(repoDir)): boolean => {
+  setupAnalyticsInstallId(repoDir, configPath);
   return true;
 };
 
@@ -439,6 +438,17 @@ const setup = (
     return false;
   }
 
+  if (mode === 'fresh') {
+    try {
+      configureAnalyticsPreference({
+        configPath: configPathFor(repoDir),
+        docsUrl: analyticsDocsUrl,
+      });
+    } catch {
+      // Analytics setup must never block install.
+    }
+  }
+
   if (!symlinkBinaries(repoDir, binDir)) {
     return false;
   }
@@ -455,7 +465,7 @@ const setup = (
     }
   }
 
-  setupAnalytics(repoDir, analyticsDocsUrl);
+  setupAnalytics(repoDir);
 
   if (!configExisted && fs.existsSync(configPathFor(repoDir))) {
     writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
@@ -498,7 +508,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (command === 'setup-analytics' && repoDir) {
-    process.exitCode = setupAnalytics(repoDir, option) ? 0 : 1;
+    process.exitCode = setupAnalytics(repoDir) ? 0 : 1;
     return;
   }
 

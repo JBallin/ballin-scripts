@@ -26,7 +26,7 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `.vimrc`, `.nanorc` | `vimrc`, `nanorc` | Preserve editor behavior. | Arbitrary user commands, paths, plugins, and URLs. | Sensitive; one local opt-in. |
 | VS Code and VS Code Insiders `settings.json`, `keybindings.json` | `vs_settings`, `vs_keybindings`, `vsI_settings`, `vsI_keybindings` | Preserve editor settings and keybindings. | Extension credentials, remote hosts, paths, command arguments, and arbitrary settings. | Sensitive; one local opt-in. |
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Inventory; default included. |
-| `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Five maintenance choices and analytics opt-out. Destination identity, automatic-backup and sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
+| `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Supported Ballin preferences. The backup destination, analytics setting and install ID, automatic-backup setting, sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -78,5 +78,4 @@ migration and retirement in [#334](https://github.com/JBallin/ballin-scripts/iss
 
 Any new source or group requires an explicit inclusion and sensitivity review.
 Unknown groups are excluded; existing or restored preferences do not authorize
-them. See [Backup design](backup-design.md#shared-inclusion-policy) and the
-[approved #332 contract](https://github.com/JBallin/ballin-scripts/issues/332).
+them. See [Backup design](backup-design.md#shared-inclusion-policy).

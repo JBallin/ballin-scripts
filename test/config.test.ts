@@ -613,7 +613,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
     it('preserves successful object output', () => {
       const object = runConfigCli(['get', 'analytics']);
       assert.equal(object.status, 0);
-      assert.equal(object.stdout, "{ enabled: 'true' }\n");
+      assert.equal(object.stdout, "{ enabled: 'false' }\n");
       assert.equal(object.stderr, '');
     });
 
@@ -740,18 +740,16 @@ process.stdout.write = ((chunk, encoding, callback) => {
       assert.deepEqual(fetchConfig().configObj, defaultConfig);
     });
 
-    it('adds missing nested analytics defaults without overwriting existing choices', () => {
-      fs.writeFileSync(configPath, JSON.stringify({
-        analytics: {
-          enabled: 'false',
-        },
-      }), 'utf8');
+    ['true', 'false'].forEach((enabled) => {
+      it(`adds missing defaults without overwriting analytics.enabled=${enabled}`, () => {
+        fs.writeFileSync(configPath, JSON.stringify({
+          analytics: { enabled },
+        }), 'utf8');
 
-      const result = runUpdateConfig();
+        const result = runUpdateConfig();
 
-      assert.equal(result.status, 0);
-      assert.deepEqual(fetchConfig().configObj.analytics, {
-        enabled: 'false',
+        assert.equal(result.status, 0);
+        assert.deepEqual(fetchConfig().configObj.analytics, { enabled });
       });
     });
 

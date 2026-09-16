@@ -3,9 +3,11 @@ const { testChildEnvironment, withEnvironment } = require('./helpers/environment
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-  const {
-  analyticsNotice,
-  analyticsNoticeFor,
+const {
+  analyticsDisclosureFor,
+  analyticsPrompt,
+  analyticsPromptFor,
+  configureAnalyticsPreference,
 } = require('../commands/analytics.ts');
 const {
   configHasBackupHost,
@@ -288,7 +290,7 @@ esac
     const { output, result } = withAnalyticsEnabled(() => captureStdout(() => configure(repoDir, docsUrl)));
 
     assert.isTrue(result);
-    assert.notInclude(output, analyticsNotice);
+    assert.notInclude(output, analyticsDisclosureFor());
     assert.isFalse(fs.existsSync(installIdPath()));
   });
 
@@ -338,7 +340,7 @@ esac
     );
   });
 
-  it('shows the analytics notice and creates a local install ID for enabled config', () => {
+  it('creates a local install ID silently for enabled config', () => {
     installConfigSources();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
       analytics: {
@@ -349,12 +351,11 @@ esac
     const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
-    assert.equal(output, `\n${analyticsNotice}\n`);
-    assert.include(output, 'Ballin collects minimal anonymous usage analytics after this notice.');
+    assert.equal(output, '');
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 
-  it('does not repeat the analytics notice when a local install ID already exists', () => {
+  it('leaves an existing local install ID unchanged without output', () => {
     installConfigSources();
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
       analytics: {
@@ -367,7 +368,7 @@ esac
     const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
-    assert.notInclude(output, analyticsNotice);
+    assert.equal(output, '');
     assert.equal(readInstallId(), `${fixedInstallId}\n`);
   });
 
@@ -382,7 +383,7 @@ esac
     const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
-    assert.notInclude(output, analyticsNotice);
+    assert.equal(output, '');
     assert.isFalse(fs.existsSync(installIdPath()));
   });
 
@@ -396,7 +397,7 @@ esac
     const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
-    assert.include(output, analyticsNotice);
+    assert.equal(output, '');
     assert.isFalse(fs.existsSync(installIdPath()));
   });
 
@@ -414,7 +415,7 @@ esac
   it('never blocks setup when the analytics config file disappears', () => {
     const missingConfig = path.join(repoDir, 'missing-config.json');
 
-    const result = withoutStdout(() => setupAnalytics(repoDir, docsUrl, missingConfig));
+    const result = withoutStdout(() => setupAnalytics(repoDir, missingConfig));
 
     assert.isTrue(result);
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -438,7 +439,7 @@ esac
       ));
 
       assert.isTrue(result);
-      assert.notInclude(output, analyticsNotice);
+      assert.equal(output, '');
       assert.isFalse(fs.existsSync(installIdPath()));
     });
   });
@@ -456,7 +457,7 @@ esac
     const { output, result } = withAnalyticsEnabled(() => captureStdout(() => setupAnalytics(repoDir)));
 
     assert.isTrue(result);
-    assert.include(output, analyticsNotice);
+    assert.equal(output, '');
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
     assert.notEqual(readInstallId(), 'not-a-uuid\n');
   });
@@ -498,7 +499,7 @@ esac
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, `\n${analyticsNoticeFor(docsUrl)}\n`);
+    assert.equal(result.stdout, '');
     assert.match(readInstallId(), /^[0-9a-f-]{36}\n$/);
   });
 
@@ -903,6 +904,26 @@ exit 2
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 
+  it('reaches fresh analytics onboarding before a later symlink failure', () => {
+    installConfigSources();
+    fs.rmSync(sourceBinDir, { recursive: true });
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'n\n', env: childEnvironment(analyticsEnabledEnv),
+    });
+
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stdout, analyticsPrompt);
+    assert.isBelow(
+      result.stdout.indexOf(analyticsPrompt),
+      result.stdout.indexOf(`Unable to symlink binaries into ${binDir}`),
+    );
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
   it('runs refresh setup through the CLI without prompting for optional backup', () => {
     installConfigSources();
     fs.copyFileSync(
@@ -926,7 +947,299 @@ exit 2
 
     assert.equal(result.status, 0, result.stderr);
     assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
+    assert.notInclude(result.stdout, analyticsPrompt);
     assert.include(result.stdout, '😎 ballin!');
+  });
+
+  it('owns the analytics disclosure and default-aware prompt copy', () => {
+    assert.equal(
+      analyticsDisclosureFor('https://example.test/analytics'),
+      'Ballin can send minimal anonymous usage analytics. Details: https://example.test/analytics',
+    );
+    assert.equal(analyticsPrompt, 'Enable minimal anonymous usage analytics? [Y/n] ');
+    assert.equal(analyticsPromptFor(false), 'Enable minimal anonymous usage analytics? [y/N] ');
+  });
+
+  ['true', 'false'].forEach((enabled) => {
+    it(`preserves local analytics.enabled=${enabled} during non-interactive refresh`, () => {
+      installConfigSources();
+      fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
+        analytics: { enabled },
+      }));
+
+      const result = spawnSync(process.execPath, [
+        installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'refresh',
+      ], {
+        encoding: 'utf8', input: 'UNCONSUMED_SENTINEL\n', env: childEnvironment(analyticsEnabledEnv),
+      });
+
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, analyticsPrompt);
+      assert.equal(readRepoConfig().analytics.enabled, enabled);
+      assert.equal(fs.existsSync(installIdPath()), enabled === 'true');
+    });
+  });
+
+  [
+    { name: 'blank', response: '', enabled: true },
+    { name: 'lowercase yes', response: 'y', enabled: true },
+    { name: 'uppercase yes', response: 'Y', enabled: true },
+    { name: 'lowercase no', response: 'n', enabled: false },
+    { name: 'uppercase no', response: 'N', enabled: false },
+    { name: 'EOF', response: null, enabled: false },
+  ].forEach(({ name, response, enabled }) => {
+    it(`persists the fresh analytics choice and creates an ID only when enabled: ${name}`, () => {
+      installConfigSources();
+      const result = spawnSync(process.execPath, [
+        installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+      ], {
+        encoding: 'utf8',
+        input: response === null ? '' : `${response}\nn\n`,
+        env: childEnvironment(analyticsEnabledEnv),
+      });
+
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, analyticsDisclosureFor('https://example.test/analytics'));
+      assert.include(result.stdout, analyticsPrompt);
+      assert.equal(readRepoConfig().analytics.enabled, String(enabled));
+      assert.equal(fs.existsSync(installIdPath()), enabled);
+      assert.notInclude(commandLog(), 'gh:');
+    });
+  });
+
+  it('persists a fresh yes choice while an environment opt-out suppresses ID creation', () => {
+    installConfigSources();
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ BALLIN_NO_ANALYTICS: '1' }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(readRepoConfig().analytics.enabled, 'true');
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
+  it('lets a later caller reuse the analytics choice with a default-no preference', () => {
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ analytics: { enabled: 'true' } }));
+    const script = `const { configureAnalyticsPreference } = require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))});
+process.exitCode = configureAnalyticsPreference({
+  configPath: ${JSON.stringify(configPath)},
+  defaultEnabled: false,
+  docsUrl: 'https://example.test/analytics',
+}) ? 0 : 1;`;
+
+    const result = spawnSync(process.execPath, ['-e', script], {
+      encoding: 'utf8', input: '\n', env: childEnvironment(),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, analyticsPromptFor(false));
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+  });
+
+  it('leaves the local choice unchanged when analytics prompt input fails', () => {
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ analytics: { enabled: 'false' } }));
+    const originalRead = fs.readSync;
+    fs.readSync = () => { throw new Error('simulated prompt input failure'); };
+    try {
+      const { output, result } = captureStdout(() => configureAnalyticsPreference({
+        configPath,
+        docsUrl: 'https://example.test/analytics',
+      }));
+      assert.isFalse(result);
+      assert.include(output, analyticsDisclosureFor('https://example.test/analytics'));
+    } finally {
+      fs.readSync = originalRead;
+    }
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+  });
+
+  it('keeps fresh installation usable when the analytics preference cannot be saved', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
+    const preloadPath = path.join(testDir, 'fail-analytics-preference.cjs');
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+const original = fs.writeFileSync;
+fs.writeFileSync = function(file, contents, ...args) {
+  if (String(file).endsWith('.analytics.tmp') && String(contents).includes('"enabled": "true"')) {
+    original.call(this, file, '{"analytics":', ...args);
+    throw new Error('simulated analytics preference failure');
+  }
+  return original.call(this, file, contents, ...args);
+};\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(
+      result.stdout,
+      'Unable to save the analytics preference; the existing local setting is unchanged.',
+    );
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp')), []);
+  });
+
+  it('preserves the complete config when the analytics preference cannot be committed', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
+    const preloadPath = path.join(testDir, 'fail-analytics-preference-commit.cjs');
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+const original = fs.renameSync;
+fs.renameSync = function(source, destination) {
+  if (String(source).endsWith('.analytics.tmp') && destination === ${JSON.stringify(configPath)}) {
+    throw Object.assign(new Error('simulated analytics preference commit failure'), { code: 'EIO' });
+  }
+  return original.call(this, source, destination);
+};\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+    assert.deepEqual(fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp')), []);
+  });
+
+  it('preserves an unowned analytics preference staging file after exclusive creation fails', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
+    const preloadPath = path.join(testDir, 'block-analytics-preference-stage.cjs');
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+fs.writeFileSync(${JSON.stringify(configPath)} + '.' + process.pid + '.analytics.tmp', 'unowned staging file\\n', { mode: 0o600 });\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    const stagingFiles = fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp'));
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+    assert.isAtLeast(stagingFiles.length, 1);
+    stagingFiles.forEach((name: string) => {
+      assert.equal(fs.readFileSync(path.join(repoDir, name), 'utf8'), 'unowned staging file\n');
+    });
+  });
+
+  it('keeps setup non-blocking when analytics preference staging cleanup fails', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), configPath);
+    const previousConfig = fs.readFileSync(configPath, 'utf8');
+    const preloadPath = path.join(testDir, 'fail-analytics-preference-cleanup.cjs');
+    fs.writeFileSync(preloadPath, `const fs = require('fs');
+const originalRename = fs.renameSync;
+fs.renameSync = function(source, destination) {
+  if (String(source).endsWith('.analytics.tmp') && destination === ${JSON.stringify(configPath)}) {
+    throw Object.assign(new Error('simulated analytics preference commit failure'), { code: 'EIO' });
+  }
+  return originalRename.call(this, source, destination);
+};
+const originalRemove = fs.rmSync;
+fs.rmSync = function(target, ...args) {
+  if (String(target).endsWith('.analytics.tmp')) {
+    throw Object.assign(new Error('simulated analytics preference cleanup failure'), { code: 'EIO' });
+  }
+  return originalRemove.call(this, target, ...args);
+};\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+    const stagingFiles = fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp'));
+    assert.isAtLeast(stagingFiles.length, 1);
+    stagingFiles.forEach((name: string) => {
+      assert.equal(fs.statSync(path.join(repoDir, name)).mode & 0o777, 0o600);
+    });
+  });
+
+  it('keeps fresh installation usable when analytics onboarding throws unexpectedly', () => {
+    installConfigSources();
+    const preloadPath = path.join(testDir, 'fail-analytics-onboarding.cjs');
+    fs.writeFileSync(preloadPath, `require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))}).configureAnalyticsPreference = () => {
+  throw new Error('simulated analytics onboarding failure');
+};\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'n\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
+  it('keeps fresh installation usable when the analytics install ID cannot be saved', () => {
+    installConfigSources();
+    fs.writeFileSync(path.join(repoDir, '.analytics'), 'blocks analytics directory creation\n');
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment(analyticsEnabledEnv),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(readRepoConfig().analytics.enabled, 'true');
+    assert.isFalse(fs.existsSync(installIdPath()));
+  });
+
+  it('does not send an analytics request during fresh installation or the choice', () => {
+    installConfigSources();
+    const preloadPath = path.join(testDir, 'reject-analytics-request.cjs');
+    const requestMarker = path.join(testDir, 'analytics-requested');
+    fs.writeFileSync(preloadPath, `delete process.env.CI;
+delete process.env.BALLIN_NO_ANALYTICS;
+require('https').request = () => {
+  require('fs').writeFileSync(${JSON.stringify(requestMarker)}, 'attempted');
+  throw new Error('analytics request attempted');
+};\n`);
+
+    const result = spawnSync(process.execPath, [
+      installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
+    ], {
+      encoding: 'utf8', input: '\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(readRepoConfig().analytics.enabled, 'true');
+    assert.isTrue(fs.existsSync(installIdPath()));
+    assert.isFalse(fs.existsSync(requestMarker));
   });
 
   it('completes a fresh maintenance-only setup without GitHub CLI', () => {
@@ -947,13 +1260,15 @@ exit 2
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings\n\n💪 symlinked binaries");
+    assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
+    assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf('\n💪 symlinked binaries'));
     assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
     assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
-    assert.isTrue(fs.existsSync(installIdPath()));
+    assert.equal(readRepoConfig().analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(installIdPath()));
     assert.notInclude(commandLog(), 'gh:');
     assert.equal(readRepoConfig().update.backup, 'false');
   });
@@ -970,7 +1285,7 @@ exit 2
       'fresh',
     ], {
       encoding: 'utf8',
-      input: 'y\n\n',
+      input: 'n\ny\n',
       env: childEnvironment(),
     });
 
@@ -985,7 +1300,7 @@ exit 2
   });
 
   [false, true].forEach((value) => {
-    it(`restores eligible preferences and analytics opt-out before fresh installer analytics (${value})`, function test() {
+    it(`restores eligible update preferences without replacing the fresh analytics choice (${value})`, function test() {
       this.timeout(5000);
       installConfigSources();
       const { fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
@@ -997,13 +1312,13 @@ exit 2
       fs.writeFileSync(remotePath, JSON.stringify(remote));
       installRepositoryFixture(binDir, remotePath);
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
-        encoding: 'utf8', input: `y\nreconnect\n\nn\ny\n${value ? 'y' : 'n'}\n`,
+        encoding: 'utf8', input: `y\ny\nreconnect\n\nn\ny\n${value ? 'y' : 'n'}\n`,
         env: childEnvironment(analyticsEnabledEnv),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(readRepoConfig().update.backup, String(value));
-      assert.equal(readRepoConfig().analytics.enabled, 'false');
-      assert.isFalse(fs.existsSync(installIdPath()));
+      assert.equal(readRepoConfig().analytics.enabled, 'true');
+      assert.isTrue(fs.existsSync(installIdPath()));
       ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'].forEach((key) => {
         assert.equal(readRepoConfig().update[key], String(value));
       });

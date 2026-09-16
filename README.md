@@ -19,9 +19,10 @@ updates.
 ## Installation
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
-fresh installation. It installs the maintenance commands first, then offers
-optional backup setup; a maintenance-only installation does not require Homebrew
-or GitHub CLI. When configured, backups can run automatically with `ballin update`.
+fresh installation. It asks whether to enable
+[minimal anonymous usage analytics](docs/analytics.md), then offers optional
+backup setup; a maintenance-only installation does not require Homebrew or
+GitHub CLI. When configured, backups can run automatically with `ballin update`.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
@@ -70,9 +71,9 @@ take precedence. See
 for details. Stop using the previous Mac for backups before publishing from a
 replacement Mac.
 
-Use snapshots as a rebuild reference. Ballin does not automatically apply saved
-dotfiles or install saved packages; it is not a full disk backup or one-command
-restore system.
+Use snapshots as a rebuild reference. Ballin does not automatically restore
+saved dotfiles or reinstall saved packages; it is not a full disk backup or
+one-command restore system.
 
 ## Commands
 

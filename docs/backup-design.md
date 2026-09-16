@@ -126,9 +126,8 @@ including concurrent advancement or rewind, but does not offer multi-writer sync
 
 ## Portable preferences
 
-The [approved v1 policy in #332](https://github.com/JBallin/ballin-scripts/issues/332)
-records the durable contract. Export and restoration use separate explicit
-allowlists, independent of bundled defaults:
+Export and restoration use separate explicit allowlists, independent of bundled
+defaults. The table below records the current contract:
 
 | Leaf | Export | Restore |
 | --- | --- | --- |
@@ -137,11 +136,11 @@ allowlists, independent of bundled defaults:
 | `update.softwareupdate` | Boolean, as described below | Boolean, subject to local precedence |
 | `update.npm` | Boolean, as described below | Boolean, subject to local precedence |
 | `update.nvm` | Boolean, as described below | Boolean, subject to local precedence |
-| `analytics.enabled` | Only exact string `"false"` | Only exact string `"false"`, subject to local precedence |
+| `analytics.enabled` | No | No; local setting |
 | `update.backup` | No | No; local setup choice under #344 |
 | `backup.repository`, `backup.id`, `backup.host` | No | No; independently selected destination wins |
 | Sensitive-source consent | No | No; local `backup.includeSensitive` choice |
-| Analytics installation identity | No | No |
+| Analytics install ID | No | No |
 | Unknown/custom/future settings | No | No; existing local values remain intact |
 
 For the five admitted update leaves, accept native JSON booleans and exact
@@ -153,12 +152,9 @@ discarded before remote snapshot inspection. Excluded leaves are not validated
 by projection: invalid `update.backup` or an excluded `backup` section does not
 block an otherwise valid export.
 
-Analytics portability accepts only exact string `"false"`, with no boolean
-coercion. Absent, invalid, native-boolean, and `"true"` values are omitted or
-ignored. Remote data never enables analytics or restores an installation
-identity. An eligible restored opt-out is applied before installer analytics
-initialization; otherwise the bundled default, first-run notice, and
-environment opt-outs still apply.
+`analytics.enabled` is not exported or restored as a portable preference.
+Remote backup data cannot change the local analytics setting or restore the
+analytics install ID.
 
 Setup captures local configuration before creating or refreshing defaults.
 An admitted leaf already present is authoritative, even if default-valued or
@@ -170,8 +166,7 @@ install tools, or alter integration ordering and failure handling.
 
 The setup preflight rejects malformed local JSON, a non-object root, or present
 non-object `update`, `analytics`, or `backup` sections before refresh. Missing
-sections are allowed. This prevents malformed analytics configuration from
-being replaced with enabled defaults without changing general config migration.
+sections are allowed.
 Malformed JSON or a non-object remote snapshot aborts reconnect; malformed remote
 sections and invalid, absent, or excluded leaves are ignored independently.
 An absent snapshot preserves local settings and defaults. Diagnostics do not
@@ -186,9 +181,10 @@ choice; a replacement installation establishes its own choice during setup.
 
 ## Shared inclusion policy
 
-Repository capture uses the landed #332 selection and portable-preference policy.
-Existing configured Gists explicitly select all current sources, including raw
-files and pipx. Migration and Gist runtime retirement belong to #334.
+Repository capture selects sources from the canonical definitions described
+below. Existing configured Gists explicitly select all current sources,
+including raw files and pipx. Migration and Gist runtime retirement belong to
+#334.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,

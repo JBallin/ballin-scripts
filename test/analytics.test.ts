@@ -1,4 +1,5 @@
 const { EventEmitter } = require('events');
+const { spawn } = require('child_process');
 const https = require('https');
 const { fetchConfig, configMessages, configPath, stringify } = require('../config/index.ts');
 const { runConfigCli } = require('../config/cli.ts');
@@ -40,6 +41,7 @@ const os = require('os');
 const path = require('path');
 const packageJson = require('../package.json');
 const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
+const alternateInstallId = '123e4567-e89b-42d3-a456-426614174000';
 const fixedNow = new Date('2026-06-27T20:15:00.000Z');
 const fixedOsVersionOptions = {
   platform: () => 'darwin',
@@ -83,9 +85,8 @@ const writeRawInstallId = (installId: string): void => {
 const recordWithSender = (
   input: Record<string, unknown>,
   runtime: Record<string, unknown> = {},
-): Promise<{ payloads: AnalyticsPayload[]; notices: string[]; order: string[] }> => {
+): Promise<{ payloads: AnalyticsPayload[]; order: string[] }> => {
   const payloads: AnalyticsPayload[] = [];
-  const notices: string[] = [];
   const order: string[] = [];
 
   return recordAnalyticsEvent(input, {
@@ -97,13 +98,9 @@ const recordWithSender = (
       order.push('send');
       payloads.push(payload);
     },
-    noticeWriter: (message: string) => {
-      order.push('notice');
-      notices.push(message);
-    },
     ...runtime,
   }).then(() => {
-    return { payloads, notices, order };
+    return { payloads, order };
   });
 };
 
@@ -197,13 +194,12 @@ describe('analytics client', () => {
     });
     writeInstallId();
 
-    const { payloads, notices } = await recordWithSender({
+    const { payloads } = await recordWithSender({
       command: 'ballin update',
       now: fixedNow,
     });
 
     assert.deepEqual(payloads, []);
-    assert.deepEqual(notices, []);
   });
 
   it('treats malformed analytics config as disabled', async () => {
@@ -274,13 +270,295 @@ describe('analytics client', () => {
     assert.deepEqual(payloads, []);
   });
 
+  it('makes concurrent missing install ID repairs converge on one identity', async function () {
+    this.timeout(5000);
+    const releasePath = path.join(tempDir, 'release-install-id-repair');
+    const analyticsModulePath = path.join(__dirname, '..', 'commands', 'analytics.ts');
+    const childScript = `
+const fs = require('fs');
+const { ensureAnalyticsInstallId } = require(${JSON.stringify(analyticsModulePath)});
+const waitState = new Int32Array(new SharedArrayBuffer(4));
+const result = ensureAnalyticsInstallId({
+  analyticsConfig: { enabled: 'true' },
+  env: {},
+  generateInstallId: () => {
+    fs.writeFileSync(process.env.ANALYTICS_TEST_READY_PATH, 'ready');
+    while (!fs.existsSync(process.env.ANALYTICS_TEST_RELEASE_PATH)) {
+      Atomics.wait(waitState, 0, 0, 5);
+    }
+    return process.env.ANALYTICS_TEST_CANDIDATE;
+  },
+  installIdPath: process.env.ANALYTICS_TEST_INSTALL_ID_PATH,
+});
+process.stdout.write(JSON.stringify({ result }));
+`;
+    const candidates = [fixedInstallId, alternateInstallId];
+    const children = candidates.map((candidate, index) => {
+      const readyPath = path.join(tempDir, `install-id-ready-${index}`);
+      const child = spawn(process.execPath, ['-e', childScript], {
+        env: {
+          ...process.env,
+          ANALYTICS_TEST_CANDIDATE: candidate,
+          ANALYTICS_TEST_INSTALL_ID_PATH: testInstallIdPath,
+          ANALYTICS_TEST_READY_PATH: readyPath,
+          ANALYTICS_TEST_RELEASE_PATH: releasePath,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+      child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+      const completed = new Promise<string>((resolve, reject) => {
+        child.on('error', reject);
+        child.on('close', (code: number | null) => {
+          if (code !== 0) {
+            reject(new Error(`analytics repair child exited ${code}: ${stderr}`));
+            return;
+          }
+          resolve(JSON.parse(stdout).result);
+        });
+      });
+      return { completed, readyPath };
+    });
+
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      if (children.every(({ readyPath }) => fs.existsSync(readyPath))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const bothReady = children.every(({ readyPath }) => fs.existsSync(readyPath));
+    fs.writeFileSync(releasePath, 'release');
+
+    const results = await Promise.all(children.map(({ completed }) => completed));
+    assert.isTrue(bothReady, 'both repairs reached the barrier');
+    const persistedInstallId = fs.readFileSync(testInstallIdPath, 'utf8').trim();
+    assert.include(candidates, persistedInstallId);
+    assert.deepEqual(results, [persistedInstallId, persistedInstallId]);
+
+    const laterResult = ensureAnalyticsInstallId({
+      analyticsConfig: { enabled: 'true' },
+      env: {},
+      generateInstallId: () => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      installIdPath: testInstallIdPath,
+    });
+    assert.equal(laterResult, persistedInstallId);
+    assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), `${persistedInstallId}\n`);
+  });
+
+  it('uses the valid winner when an invalid-ID repair loses its lock race', () => {
+    writeRawInstallId('not-a-uuid\n');
+    const originalLink = fs.linkSync;
+    fs.linkSync = ((source: string, destination: string) => {
+      const result = originalLink(source, destination);
+      if (destination === `${testInstallIdPath}.lock`) {
+        fs.writeFileSync(testInstallIdPath, `${fixedInstallId}\n`, 'utf8');
+      }
+      return result;
+    }) as typeof fs.linkSync;
+
+    try {
+      const result = ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => alternateInstallId,
+        installIdPath: testInstallIdPath,
+      });
+
+      assert.equal(result, fixedInstallId);
+      assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), `${fixedInstallId}\n`);
+    } finally {
+      fs.linkSync = originalLink;
+    }
+  });
+
+  it('uses the valid winner when it appears before invalid-ID promotion commits', () => {
+    writeRawInstallId('not-a-uuid\n');
+    const originalLink = fs.linkSync;
+    fs.linkSync = ((source: string, destination: string) => {
+      const result = originalLink(source, destination);
+      if (destination.endsWith('.promotion')) {
+        fs.writeFileSync(testInstallIdPath, `${fixedInstallId}\n`, 'utf8');
+      }
+      return result;
+    }) as typeof fs.linkSync;
+
+    try {
+      const result = ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => alternateInstallId,
+        installIdPath: testInstallIdPath,
+      });
+
+      assert.equal(result, fixedInstallId);
+      assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), `${fixedInstallId}\n`);
+    } finally {
+      fs.linkSync = originalLink;
+    }
+  });
+
+  it('discards an invalid stale repair claim without changing the invalid ID', () => {
+    writeRawInstallId('not-a-uuid\n');
+    fs.writeFileSync(`${testInstallIdPath}.lock`, 'also-not-a-uuid\n', { mode: 0o600 });
+
+    const result = ensureAnalyticsInstallId({
+      analyticsConfig: { enabled: 'true' },
+      env: {},
+      generateInstallId: () => fixedInstallId,
+      installIdPath: testInstallIdPath,
+    });
+
+    assert.isNull(result);
+    assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
+    assert.isFalse(fs.existsSync(`${testInstallIdPath}.lock`));
+  });
+
+  it('keeps install ID claim and repair filesystem failures non-blocking', () => {
+    const originalLink = fs.linkSync;
+    fs.linkSync = (() => {
+      throw Object.assign(new Error('simulated install ID claim failure'), { code: 'EACCES' });
+    }) as typeof fs.linkSync;
+    try {
+      assert.isNull(ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => fixedInstallId,
+        installIdPath: testInstallIdPath,
+      }));
+    } finally {
+      fs.linkSync = originalLink;
+    }
+
+    writeRawInstallId('not-a-uuid\n');
+    fs.linkSync = ((source: string, destination: string) => {
+      if (destination === `${testInstallIdPath}.lock`) {
+        throw Object.assign(new Error('simulated install ID lock failure'), { code: 'EACCES' });
+      }
+      return originalLink(source, destination);
+    }) as typeof fs.linkSync;
+    try {
+      assert.isNull(ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => fixedInstallId,
+        installIdPath: testInstallIdPath,
+      }));
+    } finally {
+      fs.linkSync = originalLink;
+    }
+
+    const originalRename = fs.renameSync;
+    fs.renameSync = (() => {
+      throw Object.assign(new Error('simulated install ID commit failure'), { code: 'EIO' });
+    }) as typeof fs.renameSync;
+    try {
+      assert.isNull(ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => fixedInstallId,
+        installIdPath: testInstallIdPath,
+      }));
+    } finally {
+      fs.renameSync = originalRename;
+    }
+
+    assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
+    assert.isFalse(fs.existsSync(`${testInstallIdPath}.lock`));
+  });
+
+  it('keeps failed invalid-ID repair non-blocking when promotion cleanup also fails', () => {
+    writeRawInstallId('not-a-uuid\n');
+    const originalRename = fs.renameSync;
+    const originalRemove = fs.rmSync;
+    let promotionCleanupAttempted = false;
+    fs.renameSync = (() => {
+      throw Object.assign(new Error('simulated install ID commit failure'), { code: 'EIO' });
+    }) as typeof fs.renameSync;
+    fs.rmSync = ((entry: string, ...args: unknown[]) => {
+      const result = Reflect.apply(originalRemove, fs, [entry, ...args]);
+      if (entry.endsWith('.promotion')) {
+        promotionCleanupAttempted = true;
+        throw Object.assign(new Error('simulated promotion cleanup failure'), { code: 'EIO' });
+      }
+      return result;
+    }) as typeof fs.rmSync;
+
+    try {
+      const result = ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => fixedInstallId,
+        installIdPath: testInstallIdPath,
+      });
+
+      assert.isNull(result);
+      assert.isTrue(promotionCleanupAttempted);
+      assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
+      assert.isFalse(fs.existsSync(`${testInstallIdPath}.lock`));
+      assert.deepEqual(
+        fs.readdirSync(path.dirname(testInstallIdPath))
+          .filter((entry: string) => entry.endsWith('.tmp') || entry.endsWith('.promotion')),
+        [],
+      );
+    } finally {
+      fs.renameSync = originalRename;
+      fs.rmSync = originalRemove;
+    }
+  });
+
+  it('keeps install ID repair successful when private cleanup reports failures', () => {
+    writeRawInstallId('not-a-uuid\n');
+    const lockPath = `${testInstallIdPath}.lock`;
+    const originalRemove = fs.rmSync;
+    fs.rmSync = ((entry: string, ...args: unknown[]) => {
+      const result = Reflect.apply(originalRemove, fs, [entry, ...args]);
+      if (entry === lockPath || entry.endsWith('.tmp')) {
+        throw Object.assign(new Error('simulated private cleanup failure'), { code: 'EIO' });
+      }
+      return result;
+    }) as typeof fs.rmSync;
+
+    try {
+      const result = ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => fixedInstallId,
+        installIdPath: testInstallIdPath,
+      });
+
+      assert.equal(result, fixedInstallId);
+      assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), `${fixedInstallId}\n`);
+      assert.isFalse(fs.existsSync(lockPath));
+    } finally {
+      fs.rmSync = originalRemove;
+    }
+  });
+
+  it('finishes a valid claimed invalid-ID repair left by another process', () => {
+    writeRawInstallId('not-a-uuid\n');
+    fs.writeFileSync(`${testInstallIdPath}.lock`, `${alternateInstallId}\n`, { mode: 0o600 });
+
+    const result = ensureAnalyticsInstallId({
+      analyticsConfig: { enabled: 'true' },
+      env: {},
+      generateInstallId: () => fixedInstallId,
+      installIdPath: testInstallIdPath,
+    });
+
+    assert.equal(result, alternateInstallId);
+    assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), `${alternateInstallId}\n`);
+    assert.isFalse(fs.existsSync(`${testInstallIdPath}.lock`));
+  });
+
   it('reads the local install ID and includes it in the payload', async () => {
     setAnalyticsConfig({
       enabled: 'true',
     });
     writeInstallId();
 
-    const { payloads, notices, order } = await recordWithSender({
+    const { payloads, order } = await recordWithSender({
       command: 'ballin',
       status: 'success',
       durationBucket: '<1s',
@@ -289,7 +567,6 @@ describe('analytics client', () => {
     const updatedAnalytics = fetchConfig().configObj.analytics;
 
     assert.deepEqual(order, ['send']);
-    assert.deepEqual(notices, []);
     assert.lengthOf(payloads, 1);
     assert.equal(payloads[0].installId, fixedInstallId);
     assert.deepEqual(updatedAnalytics, {
@@ -327,13 +604,12 @@ describe('analytics client', () => {
       enabled: 'true',
     });
 
-    const { payloads, notices } = await recordWithSender({
+    const { payloads } = await recordWithSender({
       command: 'ballin update',
       now: fixedNow,
     });
 
     assert.deepEqual(payloads, []);
-    assert.deepEqual(notices, []);
   });
 
   it('skips sending and does not rewrite an invalid local install ID', async () => {
@@ -342,31 +618,26 @@ describe('analytics client', () => {
     });
     writeRawInstallId('not-a-uuid\n');
 
-    const { payloads, notices } = await recordWithSender({
+    const { payloads } = await recordWithSender({
       command: 'ballin update',
       now: fixedNow,
     });
 
     assert.deepEqual(payloads, []);
-    assert.deepEqual(notices, []);
     assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
   });
 
   it('returns no install ID when local analytics state cannot be written', () => {
     const blockedParent = path.join(tempDir, 'blocked-parent');
     fs.writeFileSync(blockedParent, 'not a directory\n');
-    const notices: string[] = [];
-
     const installId = ensureAnalyticsInstallId({
       analyticsConfig: { enabled: 'true' },
       env: {},
       generateInstallId: () => fixedInstallId,
       installIdPath: path.join(blockedParent, 'install-id'),
-      noticeWriter: (message: string) => notices.push(message),
     });
 
     assert.isNull(installId);
-    assert.lengthOf(notices, 1);
     assert.isFalse(fs.existsSync(path.join(blockedParent, 'install-id')));
   });
 

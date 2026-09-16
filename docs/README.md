@@ -9,9 +9,9 @@ For the project overview, see the [main README](../README.md).
 - [Backup sources and sensitivity](backup-sources.md): source-by-source audit of
   current snapshots and their plausible sensitive content.
 - [Optional capabilities](optional-capabilities.md): local settings, Node.js
-  setup, optional tools, analytics opt-out, and configurable `ballin update`
+  setup, optional tools, analytics choices, and configurable `ballin update`
   settings.
-- [Analytics](analytics.md): analytics consent, payload, opt-out, and retention.
+- [Analytics](analytics.md): analytics onboarding, payload, controls, and retention.
 - [Supported capabilities](capabilities.md): the current `ballin update`
   integrations and `ballin backup` snapshots.
 

@@ -16,9 +16,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 ```
 
 A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
-before cloning or making installation changes. No or end-of-file exits
-successfully without cloning. Refreshing an existing installation does not
-repeat this confirmation.
+before cloning or making installation changes. Declining exits successfully
+without cloning. During setup, Ballin creates the local installation and asks
+whether to enable [minimal anonymous usage analytics](analytics.md).
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run
@@ -37,17 +37,14 @@ reconnect to it instead of creating another one.
 
 The installer can create or change:
 
-- `~/.ballin-scripts/`, a Git checkout of `ballin-scripts`. A refresh fetches
-  and merges `origin/main`. If checkout or merge recovery is needed, Ballin can
-  stash tracked and untracked changes in this checkout.
-- `~/.ballin-scripts/ballin.config.json`. A new file starts from the bundled
-  defaults. A refresh adds missing known settings. Reconnecting to a backup can
-  recover supported Ballin preferences; existing local choices and custom
-  settings are preserved.
-- `~/.ballin-scripts/.analytics/install-id` when analytics are enabled and the
-  environment has not opted out. Installation creates only the local random
-  ID; it sends no analytics event. Later instrumented commands can send the
-  payload documented in [Analytics](analytics.md).
+- `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Rerunning the
+  installer updates this checkout; if local changes block checkout or merge,
+  Ballin may move tracked and untracked changes to a Git stash during recovery.
+- `~/.ballin-scripts/ballin.config.json`, which stores local Ballin settings.
+  Reconnecting to a backup can recover supported portable preferences while
+  preserving existing local choices.
+- `~/.ballin-scripts/.analytics/install-id` when analytics are enabled. See
+  [Analytics](analytics.md) for the related controls and privacy details.
 - `<bin>/ballin`, a symbolic link to `~/.ballin-scripts/bin/ballin`. `<bin>` is
   `$(brew --prefix)/bin` when `brew` is available, otherwise
   `~/.local/bin`. The selected directory must already be on `PATH`.
@@ -55,9 +52,7 @@ The installer can create or change:
   derived comparison state, not the backup destination or an enablement flag.
 
 Before creating the command link, setup removes an existing non-directory
-target at `<bin>/ballin`. It refuses to replace a directory. A repository
-refresh can replace checkout files through the Git merge. Config migration can
-add bundled defaults.
+target at `<bin>/ballin`. It refuses to replace a directory.
 
 Private transport and staged config files are removed after setup. The
 installer does not run `ballin update`, collect snapshots, perform the first
@@ -68,16 +63,15 @@ backup, install optional tools, or change GitHub CLI authentication.
 The command shown above downloads `install.sh` from GitHub. The installer then:
 
 - runs local Git and Node.js prerequisite checks;
-- clones the GitHub repository on a fresh install, or fetches `origin/main` for
-  an existing checkout;
+- obtains the Ballin checkout from GitHub;
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
 - makes no GitHub CLI or Gist calls when optional backup setup is declined;
 - during repository backup setup, checks the personal GitHub.com account
   currently used by `gh` and the selected destination, then after confirmation
   either reconnects to an existing backup or creates a private backup repository;
-- sends no analytics request during installation. Later instrumented commands
-  can contact the endpoint described in [Analytics](analytics.md).
+- sends no analytics request during installation. Later Ballin commands may send
+  analytics as described in [Analytics](analytics.md).
 
 The first `ballin backup` is a separate command. It collects the current
 selected allowlisted sources, reads the destination, and saves changes that pass
@@ -128,13 +122,10 @@ first and run `ballin backup setup` again. Ballin backup repositories must be
 private, belong to the personal GitHub.com account used for setup, and meet
 Ballin's other support requirements.
 
-Reconnect restores only [portable preferences](backup-design.md#portable-preferences).
-Existing local choices take precedence over values from the backup, although
-supported backup values can replace defaults added during the current setup. The
-destination, sensitive-source consent, automatic-backup choice, and unsupported
-or unknown settings remain local. If the backup contains the supported analytics
-opt-out, Ballin applies it before initializing analytics. Reconnect does not
-apply saved dotfiles or install saved packages.
+Reconnect restores only
+[supported portable preferences](backup-design.md#portable-preferences), and
+existing local choices take precedence. It does not restore saved dotfiles or
+reinstall saved packages.
 
 After creating or reconnecting a backup, Ballin asks whether `ballin update`
 should run backups automatically (default: yes). The choice is stored in
@@ -177,10 +168,9 @@ A reconnect has no trusted base and cannot overwrite differing remote content;
 inspect and manually reconcile each conflict using the
 [conflict guidance](capabilities.md#backup-consistency-and-conflicts).
 
-If installation stops after cloning but before core setup, fix the reported
-PATH, filesystem, or configuration problem and rerun the installer. Refreshes
-reuse the existing checkout. If optional backup setup alone fails, use the
-already-installed maintenance commands and retry with `ballin backup setup`.
+If installation fails before setup completes, fix the reported problem and
+retry installation. If only optional backup setup fails, retry with
+`ballin backup setup`.
 
 ## Uninstall
 
@@ -191,7 +181,7 @@ ballin uninstall
 ```
 
 Uninstall removes Ballin-owned command symlinks and recursively deletes
-`~/.ballin-scripts`, including config, analytics identity, and backup cache. It
+`~/.ballin-scripts`, including config, analytics install ID, and backup cache. It
 does not delete a remote backup, its revision history, or GitHub CLI credentials.
 When analytics remain enabled, uninstall can send its normal final top-level
 command event using state captured before local deletion.

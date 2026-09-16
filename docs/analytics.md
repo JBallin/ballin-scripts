@@ -2,9 +2,13 @@
 
 **Audience:** Users
 
-Ballin can send minimal anonymous usage analytics after the installer
-shows a first-run notice. Analytics show active installs, top-level command
-usage, and command success or failure.
+Analytics help show which top-level Ballin commands are used and whether they
+succeed or fail.
+
+Analytics start disabled. During a fresh installation, Ballin asks whether to
+enable minimal anonymous usage analytics, with Yes as the default. The choice
+is saved only in the local Ballin config. Answering the question does not send
+an analytics event.
 
 Disable persistently:
 
@@ -12,13 +16,13 @@ Disable persistently:
 ballin config set analytics.enabled false
 ```
 
-Disable for one command:
+Use `true` instead of `false` to enable analytics persistently.
+
+Disable analytics for one command:
 
 ```shell
 BALLIN_NO_ANALYTICS=1 ballin update
 ```
-
-Replace `ballin update` with the command you are running.
 
 Disable for a shell session or profile:
 
@@ -26,22 +30,17 @@ Disable for a shell session or profile:
 export BALLIN_NO_ANALYTICS=1
 ```
 
-CI never sends analytics. Analytics failures are ignored and never change
-command output, side effects, or exit status.
+CI never sends analytics. Analytics failures are ignored; they do not interrupt
+commands or change their output or exit status.
 
-Reconnecting to a backup can recover an analytics opt-out. Existing local
-choices take precedence; backup data never enables analytics or restores an
-installation identity. Otherwise, the usual defaults, first-run notice, and
-environment opt-outs still apply. The exact restoration rules are recorded in
-[Backup design](backup-design.md#portable-preferences).
+Backups do not save or restore the analytics setting or install ID.
 
 ## What Is Sent
 
 - schema version
 - random install ID
 - date bucket, such as `YYYY-MM-DD`
-- command name for currently instrumented Ballin commands, such as `ballin`,
-  `ballin update`, and `ballin backup`
+- command name, such as `ballin`, `ballin update`, and `ballin backup`
 - status: `success`, `failure`, or `unknown`
 - coarse duration bucket: `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
   `10m+`
@@ -65,14 +64,7 @@ environment opt-outs still apply. The exact restoration rules are recorded in
 
 ## Storage
 
-The installer creates a random local install ID under `.analytics/`. The
-backend hashes install IDs before storage, stores daily install rows plus
-aggregate command/application-version/Node/macOS-version counts, and deletes
-rows older than 395 days.
-
-Events are sent only when analytics are enabled and the CLI is configured with
-the production analytics endpoint. The endpoint accepts public client telemetry,
-so valid events can be spoofed; aggregate analytics are directional and not
-security-trustworthy.
-
-For deployment details, see [Analytics backend](analytics-backend.md).
+The random install ID lives locally under `.analytics/`. When analytics are
+sent, Ballin's hosted analytics service processes them and stores server-hashed
+install IDs and aggregate analytics data. The service deletes data older than
+395 days.

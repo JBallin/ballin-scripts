@@ -211,6 +211,124 @@ exit 17
     assert.equal(result.stderr, '');
   });
 
+  it('initializes analytics after local enablement without recording the choice', () => {
+    const requestMarker = path.join(tempDir, 'analytics-requested');
+    const preloadPath = path.join(tempDir, 'reject-analytics-request.cjs');
+    fs.writeFileSync(preloadPath, `require('https').request = () => {
+  require('fs').writeFileSync(${JSON.stringify(requestMarker)}, 'attempted');
+  throw new Error('analytics request attempted');
+};\n`);
+    const env = {
+      BALLIN_NO_ANALYTICS: '',
+      NODE_OPTIONS: `--require=${preloadPath}`,
+    };
+
+    const enabled = runBallin(['config', 'set', 'analytics.enabled', 'true'], env);
+
+    assert.equal(enabled.status, 0, enabled.stderr);
+    assert.equal(enabled.stdout, '"analytics.enabled" set to: "true"\n');
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).analytics.enabled, 'true');
+    const installIdPath = path.join(tempDir, '.analytics', 'install-id');
+    assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
+    assert.isFalse(fs.existsSync(requestMarker));
+
+    const disabled = runBallin(['config', 'set', 'analytics.enabled', 'false'], env);
+
+    assert.equal(disabled.status, 0, disabled.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).analytics.enabled, 'false');
+    assert.isFalse(fs.existsSync(requestMarker));
+  });
+
+  it('keeps local analytics enablement non-blocking when ID creation fails', () => {
+    const analyticsPath = path.join(tempDir, '.analytics');
+    fs.writeFileSync(analyticsPath, 'blocks analytics directory creation\n');
+
+    const result = runBallin(['config', 'set', 'analytics.enabled', 'true'], {
+      BALLIN_NO_ANALYTICS: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '"analytics.enabled" set to: "true"\n');
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).analytics.enabled, 'true');
+    assert.isFalse(fs.existsSync(path.join(tempDir, '.analytics', 'install-id')));
+
+    fs.rmSync(analyticsPath);
+    const repaired = runBallin(['help'], {
+      BALLIN_NO_ANALYTICS: '',
+      BALLIN_NO_COMMAND_ANALYTICS: '1',
+    });
+
+    assertHelpOutput(repaired);
+    assert.match(fs.readFileSync(path.join(analyticsPath, 'install-id'), 'utf8').trim(), /^[0-9a-f-]{36}$/);
+  });
+
+  it('repairs suppressed local analytics enablement on a later eligible command', () => {
+    const requestMarker = path.join(tempDir, 'analytics-requested');
+    const preloadPath = path.join(tempDir, 'record-analytics-request.cjs');
+    fs.writeFileSync(preloadPath, `require('https').request = () => {
+  require('fs').writeFileSync(${JSON.stringify(requestMarker)}, 'attempted');
+  throw new Error('analytics request recorded');
+};\n`);
+    const suppressed = runBallin(['config', 'set', 'analytics.enabled', 'true'], {
+      BALLIN_NO_ANALYTICS: '1',
+      NODE_OPTIONS: `--require=${preloadPath}`,
+    });
+
+    assert.equal(suppressed.status, 0, suppressed.stderr);
+    assert.equal(suppressed.stdout, '"analytics.enabled" set to: "true"\n');
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).analytics.enabled, 'true');
+    const installIdPath = path.join(tempDir, '.analytics', 'install-id');
+    assert.isFalse(fs.existsSync(installIdPath));
+    assert.isFalse(fs.existsSync(requestMarker));
+
+    const resumed = runBallin(['help'], {
+      BALLIN_NO_ANALYTICS: '',
+      NODE_OPTIONS: `--require=${preloadPath}`,
+    });
+
+    assertHelpOutput(resumed);
+    assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
+    assert.isTrue(fs.existsSync(requestMarker));
+  });
+
+  it('repairs an invalid analytics identity on a later eligible command', () => {
+    const installIdPath = path.join(tempDir, '.analytics', 'install-id');
+    writeConfig({ analytics: { enabled: 'true' } });
+    fs.mkdirSync(path.dirname(installIdPath));
+    fs.writeFileSync(installIdPath, 'not-an-install-id\n');
+
+    const result = runBallin(['help'], {
+      BALLIN_NO_ANALYTICS: '',
+      BALLIN_NO_COMMAND_ANALYTICS: '1',
+    });
+
+    assertHelpOutput(result);
+    assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
+  });
+
+  it('does not repair analytics identity while disabled, malformed, or hard-suppressed', () => {
+    const installIdPath = path.join(tempDir, '.analytics', 'install-id');
+
+    const disabled = runBallin(['help'], { BALLIN_NO_ANALYTICS: '' });
+
+    assertHelpOutput(disabled);
+    assert.isFalse(fs.existsSync(installIdPath));
+
+    writeConfig({ analytics: false });
+    const malformed = runBallin(['help'], { BALLIN_NO_ANALYTICS: '' });
+
+    assertHelpOutput(malformed);
+    assert.isFalse(fs.existsSync(installIdPath));
+
+    writeConfig({ analytics: { enabled: 'true' } });
+    const environmentSuppressed = runBallin(['help'], { BALLIN_NO_ANALYTICS: '1' });
+    const ciSuppressed = runBallin(['help'], { BALLIN_NO_ANALYTICS: '', CI: 'true' });
+
+    assertHelpOutput(environmentSuppressed);
+    assertHelpOutput(ciSuppressed);
+    assert.isFalse(fs.existsSync(installIdPath));
+  });
+
   it('rejects extra arguments for no-argument command aliases', () => {
     const update = runBallin(['update', 'extra']);
     const selfUpdate = runBallin(['self-update', 'extra']);
