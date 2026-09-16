@@ -468,6 +468,46 @@ process.stdout.write(JSON.stringify({ result }));
     assert.isFalse(fs.existsSync(`${testInstallIdPath}.lock`));
   });
 
+  it('keeps failed invalid-ID repair non-blocking when promotion cleanup also fails', () => {
+    writeRawInstallId('not-a-uuid\n');
+    const originalRename = fs.renameSync;
+    const originalRemove = fs.rmSync;
+    let promotionCleanupAttempted = false;
+    fs.renameSync = (() => {
+      throw Object.assign(new Error('simulated install ID commit failure'), { code: 'EIO' });
+    }) as typeof fs.renameSync;
+    fs.rmSync = ((entry: string, ...args: unknown[]) => {
+      const result = Reflect.apply(originalRemove, fs, [entry, ...args]);
+      if (entry.endsWith('.promotion')) {
+        promotionCleanupAttempted = true;
+        throw Object.assign(new Error('simulated promotion cleanup failure'), { code: 'EIO' });
+      }
+      return result;
+    }) as typeof fs.rmSync;
+
+    try {
+      const result = ensureAnalyticsInstallId({
+        analyticsConfig: { enabled: 'true' },
+        env: {},
+        generateInstallId: () => fixedInstallId,
+        installIdPath: testInstallIdPath,
+      });
+
+      assert.isNull(result);
+      assert.isTrue(promotionCleanupAttempted);
+      assert.equal(fs.readFileSync(testInstallIdPath, 'utf8'), 'not-a-uuid\n');
+      assert.isFalse(fs.existsSync(`${testInstallIdPath}.lock`));
+      assert.deepEqual(
+        fs.readdirSync(path.dirname(testInstallIdPath))
+          .filter((entry: string) => entry.endsWith('.tmp') || entry.endsWith('.promotion')),
+        [],
+      );
+    } finally {
+      fs.renameSync = originalRename;
+      fs.rmSync = originalRemove;
+    }
+  });
+
   it('keeps install ID repair successful when private cleanup reports failures', () => {
     writeRawInstallId('not-a-uuid\n');
     const lockPath = `${testInstallIdPath}.lock`;
