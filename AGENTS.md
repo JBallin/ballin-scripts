@@ -47,7 +47,8 @@
   `config/.defaultConfig.json`, relevant validation and consumers, tests, and the
   owning user documentation. Change `config/updateConfig.ts` only when migration
   behavior itself must change.
-- Use `docs/README.md` to find the owning user or maintainer guide. For
+- Use `docs/README.md` to find the relevant guide, and use that guide's stated
+  audience to judge its abstraction level, detail, and framing. For
   documentation, CLI/help text, and other user-facing copy, apply the relevant
   copy, voice, messaging, terminology, and naming guidance in
   `docs/design-system.md` according to the surface's job and audience. Use Ballin

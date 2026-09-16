@@ -99,7 +99,7 @@ slang, forced informality, or cuteness.
 Prefer plain capability language over marketing claims. Explain benefits through
 what the tool actually does: backing up development-environment state,
 automating routine updates, and making rebuilds more repeatable and auditable.
-Where semantics permit:
+In general:
 
 - use short, active, natural sentences
 - stay conversational but technically precise
