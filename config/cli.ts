@@ -1,5 +1,6 @@
 const { configAction } = require('./index.ts');
 const { ConfigError } = require('./store.ts');
+const { formatWithOptions } = require('node:util');
 import type { ConfigError as ConfigFailure } from './store.ts';
 
 const configHelp = `Usage:
@@ -21,7 +22,7 @@ const runConfigCli = (args: string[] = process.argv.slice(2)): void => {
   }
 
   try {
-    console.log(configAction(args)); // eslint-disable-line no-console
+    process.stdout.write(`${formatWithOptions({ colors: false }, configAction(args))}\n`);
     process.exitCode = 0;
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;

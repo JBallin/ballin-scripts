@@ -617,6 +617,13 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       assert.equal(object.stderr, '');
     });
 
+    it('keeps null output plain when colors are forced', () => {
+      const result = runConfigCli(['get', 'backup.id'], { FORCE_COLOR: '1' });
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, 'null\n');
+      assert.equal(result.stderr, '');
+    });
+
     ['', 'false', 'INVALID: a legitimate stored value'].forEach((value) => {
       it(`preserves successful set output and persistence for ${JSON.stringify(value)}`, () => {
         const set = runConfigCli(['set', 'backup.id', value]);
