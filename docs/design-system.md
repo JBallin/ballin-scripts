@@ -90,10 +90,26 @@ tagline remains more concrete and action-oriented.
 
 ## Voice
 
-Ballin copy should be direct, concrete, and calm. Prefer plain capability
-language over marketing claims. Explain benefits through what the tool actually
-does: backing up development-environment state, automating routine updates, and
-making rebuilds more repeatable and auditable.
+Ballin copy should be direct, concrete, calm, technically serious,
+and grounded in actual capability. Where a surface permits, it should also feel
+approachable and lightly playful rather than corporate, bureaucratic, or
+protocol-like. This is a bounded product personality, not a mandate for jokes,
+slang, forced informality, or cuteness.
+
+Prefer plain capability language over marketing claims. Explain benefits through
+what the tool actually does: backing up development-environment state,
+automating routine updates, and making rebuilds more repeatable and auditable.
+In general:
+
+- use short, active, natural sentences
+- stay conversational but technically precise
+- present concepts in the order readers need them, not implementation order
+- express personality through Ballin's product and terminal voice and occasional
+  friendly phrasing, not marketing hype
+
+Keep safety, privacy, security, recovery, failure, compatibility, operational
+constraints, and exact technical guidance serious and precise rather than jokey
+or artificially casual.
 
 Prefer:
 
