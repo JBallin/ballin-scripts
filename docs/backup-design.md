@@ -125,8 +125,10 @@ including concurrent advancement or rewind, but does not offer multi-writer sync
 ## Portable preferences
 
 The [approved v1 policy in #332](https://github.com/JBallin/ballin-scripts/issues/332)
-records the durable contract. Export and restoration use separate explicit
-allowlists, independent of bundled defaults:
+established the original portable-preference baseline. [#351](https://github.com/JBallin/ballin-scripts/issues/351)
+supersedes only its analytics rule. The table below records the current export
+and restoration contract through separate explicit allowlists, independent of
+bundled defaults:
 
 | Leaf | Export | Restore |
 | --- | --- | --- |
@@ -139,7 +141,7 @@ allowlists, independent of bundled defaults:
 | `update.backup` | No | No; local setup choice under #344 |
 | `backup.repository`, `backup.id`, `backup.host` | No | No; independently selected destination wins |
 | Sensitive-source consent | No | No; local `backup.includeSensitive` choice |
-| Analytics installation identity | No | No |
+| Analytics install ID | No | No |
 | Unknown/custom/future settings | No | No; existing local values remain intact |
 
 For the five admitted update leaves, accept native JSON booleans and exact
@@ -151,10 +153,9 @@ discarded before remote snapshot inspection. Excluded leaves are not validated
 by projection: invalid `update.backup` or an excluded `backup` section does not
 block an otherwise valid export.
 
-The analytics setting is wholly local. Projection omits `analytics.enabled`
-without validating its value, and restoration ignores analytics sections in
-older snapshots without migration. Remote data never changes the local setting
-or restores the analytics installation identity.
+`analytics.enabled` is not exported or restored as a portable preference.
+Remote backup data cannot change the local analytics setting or restore the
+analytics install ID.
 
 Setup captures local configuration before creating or refreshing defaults.
 An admitted leaf already present is authoritative, even if default-valued or
@@ -166,8 +167,7 @@ install tools, or alter integration ordering and failure handling.
 
 The setup preflight rejects malformed local JSON, a non-object root, or present
 non-object `update`, `analytics`, or `backup` sections before refresh. Missing
-sections are allowed. This preserves established config validation independently
-of the portable preference allowlists.
+sections are allowed.
 Malformed JSON or a non-object remote snapshot aborts reconnect; malformed remote
 sections and invalid, absent, or excluded leaves are ignored independently.
 An absent snapshot preserves local settings and defaults. Diagnostics do not
@@ -182,9 +182,11 @@ choice; a replacement installation establishes its own choice during setup.
 
 ## Shared inclusion policy
 
-Repository capture uses the landed #332 selection and portable-preference policy.
-Existing configured Gists explicitly select all current sources, including raw
-files and pipx. Migration and Gist runtime retirement belong to #334.
+Repository capture uses the source-selection policy established in
+[#332](https://github.com/JBallin/ballin-scripts/issues/332). The current
+portable-preference contract is documented above. Existing configured Gists
+explicitly select all current sources, including raw files and pipx. Migration
+and Gist runtime retirement belong to #334.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,

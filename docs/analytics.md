@@ -26,9 +26,7 @@ export BALLIN_NO_ANALYTICS=1
 ```
 
 CI never sends analytics. Analytics failures are ignored; they do not interrupt
-commands or change their output or exit status. Ballin preserves the saved
-setting without asking again when you rerun the installer after setup is
-complete or use self-update.
+commands or change their output or exit status.
 
 Backups do not save or restore the analytics setting or install ID.
 
