@@ -35,7 +35,9 @@ reconnect to it instead of creating another one.
 
 The installer can create or change:
 
-- `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`.
+- `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Rerunning the
+  installer updates this checkout; if local changes block checkout or merge,
+  Ballin may move tracked and untracked changes to a Git stash during recovery.
 - `~/.ballin-scripts/ballin.config.json`, which stores local Ballin settings.
   Reconnecting to a backup can recover supported portable preferences while
   preserving existing local choices.
