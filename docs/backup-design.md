@@ -124,11 +124,8 @@ including concurrent advancement or rewind, but does not offer multi-writer sync
 
 ## Portable preferences
 
-The [approved v1 policy in #332](https://github.com/JBallin/ballin-scripts/issues/332)
-established the original portable-preference baseline. [#351](https://github.com/JBallin/ballin-scripts/issues/351)
-supersedes only its analytics rule. The table below records the current export
-and restoration contract through separate explicit allowlists, independent of
-bundled defaults:
+Export and restoration use separate explicit allowlists, independent of bundled
+defaults. The table below records the current contract:
 
 | Leaf | Export | Restore |
 | --- | --- | --- |
@@ -182,11 +179,10 @@ choice; a replacement installation establishes its own choice during setup.
 
 ## Shared inclusion policy
 
-Repository capture uses the source-selection policy established in
-[#332](https://github.com/JBallin/ballin-scripts/issues/332). The current
-portable-preference contract is documented above. Existing configured Gists
-explicitly select all current sources, including raw files and pipx. Migration
-and Gist runtime retirement belong to #334.
+Repository capture selects sources from the canonical definitions described
+below. Existing configured Gists explicitly select all current sources,
+including raw files and pipx. Migration and Gist runtime retirement belong to
+#334.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,

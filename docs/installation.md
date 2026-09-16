@@ -15,12 +15,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 
 A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
 before cloning or making installation changes. No or end-of-file exits
-successfully without cloning. Rerunning the installer for an existing
-installation does not repeat this confirmation. After creating local
-configuration, a fresh install asks whether to enable minimal anonymous usage
-analytics, with Yes as the default. End-of-file without a submitted response
-leaves analytics disabled. Ballin preserves the saved setting without asking
-again when you rerun the installer after setup is complete or use self-update.
+successfully without cloning. After creating local configuration, the installer
+asks whether to enable minimal anonymous usage analytics, with Yes as the
+default. End-of-file without a submitted response leaves analytics disabled.
+
+For a completed installation, rerunning the installer does not repeat the
+first-install confirmation or analytics onboarding and preserves the saved local
+choice. Self-update is also non-interactive for analytics onboarding and
+preserves that choice.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run

@@ -1,5 +1,8 @@
 # Analytics
 
+Analytics help show which top-level Ballin commands are used and whether they
+succeed or fail.
+
 Analytics start disabled. During a fresh installation, Ballin asks whether to
 enable minimal anonymous usage analytics, with Yes as the default. The choice
 is saved only in the local Ballin config. Answering the question does not send
@@ -59,5 +62,7 @@ Backups do not save or restore the analytics setting or install ID.
 
 ## Storage
 
-Analytics use a random install ID stored locally under `.analytics/`. Ballin
-retains daily and aggregate usage data and deletes data older than 395 days.
+The random install ID lives locally under `.analytics/`. When analytics are
+sent, Ballin's hosted analytics service processes them and stores server-hashed
+install IDs and aggregate analytics data. The service deletes data older than
+395 days.
