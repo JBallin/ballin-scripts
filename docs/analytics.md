@@ -1,5 +1,7 @@
 # Analytics
 
+**Audience:** Users
+
 Analytics help show which top-level Ballin commands are used and whether they
 succeed or fail.
 

@@ -1,5 +1,7 @@
 # Installation and removal
 
+**Audience:** Users
+
 Ballin can be installed for maintenance without configuring backups. Git and a
 supported Node.js version are the only prerequisites for the installer. Backups
 and integrations such as Homebrew are optional.

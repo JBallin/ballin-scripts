@@ -1,5 +1,7 @@
 # Backup sources and sensitivity
 
+**Audience:** Users
+
 `ballin backup` uses an explicit source allowlist. The allowlist limits which
 files and command outputs Ballin selects, but it does not make their contents
 safe: files and command outputs can contain credentials, private URLs,

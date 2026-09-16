@@ -1,5 +1,7 @@
 # Supported capabilities
 
+**Audience:** Users
+
 This reference lists Ballin's update and backup capabilities. Auto-discovered
 integrations run when available; configured integrations fail when enabled but
 unavailable.

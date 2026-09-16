@@ -1,5 +1,7 @@
 # Optional capabilities
 
+**Audience:** Users
+
 This guide covers choices for the required Node.js setup, plus optional tools
 and settings that extend Ballin. The defaults keep updates predictable
 while letting you opt in to broader automation.
