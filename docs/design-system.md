@@ -90,7 +90,7 @@ tagline remains more concrete and action-oriented.
 
 ## Voice
 
-Human-facing Ballin copy should be direct, concrete, calm, technically serious,
+Ballin copy should be direct, concrete, calm, technically serious,
 and grounded in actual capability. Where a surface permits, it should also feel
 approachable and lightly playful rather than corporate, bureaucratic, or
 protocol-like. This is a bounded product personality, not a mandate for jokes,
