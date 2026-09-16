@@ -62,4 +62,38 @@ jobs:
         run: npm run typecheck:analytics-worker
 
       - name: Run unit tests with coverage
+        id: coverage
         run: npm run test:coverage
+
+      - name: Capture coverage comparison evidence
+        if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+          const { createHash } = require('node:crypto');
+          fs.writeFileSync('coverage/runtime.json', JSON.stringify({
+            commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+            lockSha256: createHash('sha256').update(fs.readFileSync('package-lock.json')).digest('hex'),
+            node: process.version,
+            v8: process.versions.v8,
+            platform: process.platform,
+            arch: process.arch,
+            uid: process.getuid(),
+            c8: require('c8/package.json').version,
+            mocha: require('mocha/package.json').version,
+          }, null, 2) + '\n');
+          NODE
+          node node_modules/c8/bin/c8.js report --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
+
+      - name: Upload coverage comparison evidence
+        if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/runtime.json
+            coverage/coverage-final.json
+            coverage/coverage-summary.json
+            coverage/tmp/
+          retention-days: 7
