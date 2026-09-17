@@ -54,6 +54,55 @@ as the configured destination. Later backups leave `README.md` untouched and
 ignore it as backup state. If initialization cannot be confirmed safely, Ballin
 stops for inspection rather than risk creating a duplicate repository.
 
+## Managed-branch protection
+
+Personally owned private backup repositories require
+[GitHub Pro for repository rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets#who-can-use-this-feature).
+Normal `gh` OAuth credentials for the personal owner support repository creation
+and publication. The conservative fine-grained-token path uses the same personal
+resource owner, all repositories, `Administration: write`, and `Contents: write`.
+Administration is needed to create missing protection; routine publication uses
+contents permission, and already protected read/reconnect paths do not require
+administration.
+
+After the bootstrap commit and its tree/marker readback succeed, setup establishes
+one active repository branch ruleset scoped only to
+`refs/heads/<selected branch>`. The ruleset contains exactly `deletion` and
+`non_fast_forward`, with no bypass actors; it adds no pull-request, review,
+status-check, update restriction, or other collaboration gate. Ballin verifies
+the named ruleset's exact branch target and rules before saving local linkage.
+Ordinary `createCommitOnBranch` publication remains a conditional fast-forward
+using `expectedHeadOid`; Ballin never forces, bypasses, or substitutes protection
+for three-way reconciliation.
+
+Protection is a read-before-write setup transaction. Ballin lists
+repository-level branch rulesets, accepts one exact ruleset with the fixed name
+`Ballin backup branch protection`, and creates it only when that name is absent.
+A nominal creation response is verified independently through the returned
+ruleset ID. An ambiguous creation receives one list-and-detail reconciliation;
+the mutation is never retried in-process. Duplicate or mismatched named rulesets
+fail for deliberate inspection and are never updated or deleted automatically.
+Policy calls occur only during create or reconnect setup, not during ordinary
+backup, read, open, doctor, cache handling, or configured-destination
+revalidation.
+
+Creation-time verification requires GitHub to return an empty `bypass_actors`
+list. GitHub may omit that field when a later reconnect has read access but not
+ruleset-write access. Ballin accepts an otherwise exact active ruleset in that
+case so recovery does not require administration; omission is not fresh proof
+that the bypass list remains empty. An absent ruleset requires one
+administration-level creation attempt after final confirmation.
+
+Unsupported capability, denied administration, definite API rejection, or an
+unconfirmed transient response fails closed: Ballin saves no destination and
+prints no normal success. It does not delete a repository that was already
+created and initialized. Retry/reconnect identifies that repository by its
+marker and stable IDs, accepts exact protection or creates it when absent, and
+avoids both replacement repositories and duplicate rulesets. This is defense in
+depth against ordinary destructive ref operations. An authorized owner can
+still edit or remove the ruleset or delete the repository, and a compromised
+administrative account or token remains inside GitHub's authorization boundary.
+
 ## Consistency model
 
 All selected available captures are staged before remote inspection. Collector
@@ -249,15 +298,16 @@ race. Requests use the configured GitHub or Enterprise host through
 
 `test/backup_repository.test.ts` exercises protocol and publication semantics;
 `test/repository_backup.test.ts` uses a stateful fake GitHub service for public
-CLI lifecycle, consent, reconciliation and failure recovery. Existing Gist
+CLI lifecycle, consent, ruleset reconciliation and failure recovery. Existing Gist
 fixtures preserve the configured compatibility route. Installer walkthroughs,
 doctor fixtures, and the required `npm test` use temporary roots and complete
 child environments. Never manually smoke-test real user backup state.
 
-Separately authorized disposable real-GitHub service validation is a post-merge,
-pre-release checkpoint, not a merge blocker. The checklist remains tracked in
-[#333](https://github.com/JBallin/ballin-scripts/issues/333#issuecomment-5613539242)
-until completed. Normal implementation validation does not perform it.
+Automated tests prove the exact policy request and Ballin's surrounding behavior;
+they do not prove GitHub's live enforcement. Separately authorized disposable
+real-GitHub validation must still confirm `createCommitOnBranch` fast-forward
+publication and rejection of a forced ref update and branch deletion. Normal
+implementation validation does not perform that experiment.
 [#334](https://github.com/JBallin/ballin-scripts/issues/334) owns migration/Gist
 retirement; [#336](https://github.com/JBallin/ballin-scripts/issues/336) owns
 verification. The concrete repository reader/writer can be reused there without

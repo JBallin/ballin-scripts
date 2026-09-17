@@ -1299,6 +1299,29 @@ require('https').request = () => {
     assert.equal(readRepoConfig().update.backup, 'false');
   });
 
+  it('leaves core installation usable when repository protection cannot be configured', function test() {
+    this.timeout(5000);
+    installConfigSources();
+    const { fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+    const remote = fixtureState(); remote.exists = false; remote.faults.rulesetCreate = 'denied';
+    const remotePath = path.join(testDir, 'repository-protection.json');
+    fs.writeFileSync(remotePath, JSON.stringify(remote)); installRepositoryFixture(binDir, remotePath);
+
+    const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
+      encoding: 'utf8', input: 'n\ny\ncreate\n\nn\ny\n', env: childEnvironment(),
+    });
+
+    assert.equal(result.status, 1); assert.include(result.stdout, 'Administration write access');
+    assert.include(result.stdout, 'Ballin maintenance is installed. Retry with: ballin backup setup');
+    assert.include(result.stdout, 'initialized backup remains available');
+    assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
+    assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
+    assert.isUndefined(readRepoConfig().backup.repository); assert.equal(readRepoConfig().update.backup, 'false');
+    const saved = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+    assert.deepEqual(Object.keys(saved.commits[saved.head].files).sort(), ['.ballin-backup.json', 'README.md']);
+  });
+
   [false, true].forEach((value) => {
     it(`restores eligible update preferences without replacing the fresh analytics choice (${value})`, function test() {
       this.timeout(5000);

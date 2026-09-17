@@ -18,7 +18,7 @@ describe('first-run onboarding walkthroughs', function() {
   let scratchDir: string;
 
   const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
-  const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
+  const { managedBranchRulesetName, repositoryCacheDirectory } = require('../commands/backup_repository.ts');
   const remoteState = () => JSON.parse(fs.readFileSync(path.join(remoteGistDir, 'repository.json'), 'utf8'));
   const remoteFile = (name: string) => Buffer.from(remoteState().commits[remoteState().head].files[name], 'base64').toString();
 
@@ -199,6 +199,20 @@ esac
     const requests = remoteState().requests;
     assert.equal(requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 1);
     assert.equal(requests.filter((r: { endpoint: string }) => r.endpoint === 'open').length, 1);
+    const rulesetWrites = requests.filter((r: { endpoint: string; method: string }) => r.endpoint.endsWith('/rulesets') && r.method === 'POST');
+    assert.lengthOf(rulesetWrites, 1);
+    assert.deepEqual(rulesetWrites[0].payload, {
+      name: managedBranchRulesetName, target: 'branch', enforcement: 'active', bypass_actors: [],
+      conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+      rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }],
+    });
+    const publications = requests
+      .map((request: { payload?: { query?: string } }, index: number) => request.payload?.query?.includes('BallinPublish') ? index : -1)
+      .filter((index: number) => index >= 0);
+    const protection = requests.findIndex((request: { endpoint: string; method: string }) => (
+      request.endpoint.endsWith('/rulesets') && request.method === 'POST'
+    ));
+    assert.lengthOf(publications, 2); assert.isBelow(publications[0], protection); assert.isBelow(protection, publications[1]);
     assert.isTrue(requests.every((r: { endpoint: string }) => !r.endpoint.includes('gists')));
   });
 });
