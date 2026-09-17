@@ -1,0 +1,13 @@
+#compdef ballin
+
+if (( ! $+functions[compdef] )); then
+  autoload -Uz compinit
+  compinit
+fi
+
+_ballin() {
+  (( CURRENT == 2 )) || return 0
+  compadd -- backup config doctor self-update uninstall update
+}
+
+compdef _ballin ballin

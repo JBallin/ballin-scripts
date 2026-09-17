@@ -23,6 +23,8 @@ fresh installation. It asks whether to enable
 [minimal anonymous usage analytics](docs/analytics.md), then offers optional
 backup setup; a maintenance-only installation does not require Homebrew or
 GitHub CLI. When configured, backups can run automatically with `ballin update`.
+Top-level zsh and Bash command completion is included with the checkout; see
+[Shell completion](docs/installation.md#shell-completion) to enable it.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
