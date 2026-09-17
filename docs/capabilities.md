@@ -118,12 +118,21 @@ based on the inspected head. A true no-op makes no remote mutation. Rejected,
 stale, or unconfirmed publication leaves caches unchanged. After confirmation,
 cache failures report the completed remote effect without normal success markers.
 A fresh invocation re-reads and reconciles; matching remote/local bytes recover
-without another publication.
+without another publication. Ballin does not force-push, merge over conflicting
+history, blindly retry rejected publication, perform destructive recovery, or
+switch to an automatic replacement destination.
+
+A user, token, or other client with sufficient GitHub access can still rewrite
+repository history or change or delete the selected branch when it is unprotected.
+If your GitHub plan supports protecting private repositories, you may optionally
+configure [a branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/managing-a-branch-protection-rule)
+as defense in depth. This protection is not required for a safe or supported
+Ballin backup. Ballin does not configure, detect, verify, monitor, or depend on
+branch protection.
 
 Inspect each conflict with `ballin backup read <file>` or the GitHub UI. Decide
 which content to retain and deliberately reconcile local and remote bytes so
 they match before rerunning. Do not delete the cache to authorize overwrites.
-Ballin offers no force, merge, blind retry, or automatic replacement destination.
 Use only one Mac to back up to a destination. Stop using the previous Mac for
 backups before publishing from a replacement Mac. Reconnect supports recovery
 but grants no authority to overwrite saved data. Read/open do not execute
