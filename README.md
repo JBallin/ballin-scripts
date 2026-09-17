@@ -53,7 +53,10 @@ Your system is ready to brew.
 ==> Installing macOS updates
 
 ==> Backing up development environment
-✔ mas
+✔ ballin_config
+✔ bash_completions
+✔ Brewfile
+✔ brew_cask
 ...
 ✔ vs_settings
 ✔ zprofile
