@@ -54,6 +54,7 @@ Your system is ready to brew.
 
 ==> Backing up development environment
 ✔ mas
+...
 ✔ vs_settings
 ✔ zprofile
 ✔ zshrc
