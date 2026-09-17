@@ -53,11 +53,10 @@ Your system is ready to brew.
 ==> Installing macOS updates
 
 ==> Backing up development environment
+✔ mas
+✔ vs_settings
 ✔ zprofile
 ✔ zshrc
-...
-✔ vs_settings
-✔ mas
 ```
 
 ## New Mac setup

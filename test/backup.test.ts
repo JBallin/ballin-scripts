@@ -1466,12 +1466,12 @@ printf '%s\\n' 'publisher.insiders-extension'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ vs_settings',
-      '✚ vs_keybindings',
       '✚ vs_extensions',
-      '✚ vsI_settings',
-      '✚ vsI_keybindings',
+      '✚ vs_keybindings',
+      '✚ vs_settings',
       '✚ vsI_extensions',
+      '✚ vsI_keybindings',
+      '✚ vsI_settings',
     ]);
     assert.equal(fs.readFileSync(path.join(backupCacheDir, 'vs_settings'), 'utf8'), '{"fontSize":14}\n');
     assert.equal(
@@ -1515,8 +1515,8 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ npm_global',
       '✚ mas',
+      '✚ npm_global',
     ]);
     assert.equal(
       fs.readFileSync(path.join(backupCacheDir, 'npm_global'), 'utf8'),
@@ -1545,8 +1545,8 @@ printf '%s\\n' '123456 Example App'
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
       '✚ pipx',
-      '✚ uv_tools',
       '✚ pyenv_versions',
+      '✚ uv_tools',
     ]);
     assert.deepEqual(pythonToolCalls(), [
       'pipx|1|list --json',
@@ -1673,11 +1673,11 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ brew_list',
-      '✚ brew_leaves',
-      '✚ brew_cask',
-      '✚ brew_services',
       '✚ Brewfile',
+      '✚ brew_cask',
+      '✚ brew_leaves',
+      '✚ brew_list',
+      '✚ brew_services',
     ]);
     assert.deepEqual(brewCalls(), [
       '1|1|--prefix',
@@ -1869,7 +1869,7 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(recoveredResult);
     assertOwnerOnlyCache();
-    assert.equal(recoveredResult.stdout, '✔ zshrc\n✔ gitconfig\n');
+    assert.equal(recoveredResult.stdout, '✔ gitconfig\n✔ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh snapshot\n');
     assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'new git snapshot\n');
     assert.lengthOf(gistPatchCalls(), 1);
@@ -1944,6 +1944,25 @@ printf '%s\\n' '123456 Example App'
     assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new remote value\n');
     assert.equal(fs.readFileSync(backupCacheDir, 'utf8'), 'blocks cache directory creation\n');
     assert.lengthOf(gistPatchCalls(), 1);
+  });
+
+  it('sorts the final mixed-state result set without changing upload order', () => {
+    fs.writeFileSync(path.join(testHomeDir, '.zprofile'), 'new profile\n');
+    writeSnapshot('stable shell config\n');
+    seedBackupCache('stable shell config\n');
+    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), '');
+    seedCacheFile('gitconfig', 'old git config\n');
+    fs.writeFileSync(path.join(testHomeDir, '.vimrc'), 'new vim config\n');
+    seedCacheFile('vimrc', 'old vim config\n');
+
+    const result = runBackup();
+
+    assertBackupSucceeded(result);
+    assert.equal(
+      result.stdout,
+      '✖︎ gitconfig\n✎ vimrc\n✚ zprofile\n✔ zshrc\n',
+    );
+    assert.deepEqual(gistUploads(), ['zprofile.sh', 'gitconfig', 'vimrc']);
   });
 
   it('uses the final new-file marker for a first empty snapshot', () => {
@@ -2570,7 +2589,7 @@ require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup.ts'))}).runBack
     const recoveredResult = runBackup({ umask: '000' });
 
     assertBackupSucceeded(recoveredResult);
-    assert.equal(recoveredResult.stdout, '✔ zshrc\n✔ gitconfig\n');
+    assert.equal(recoveredResult.stdout, '✔ gitconfig\n✔ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh value\n');
     assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'new git value\n');
     assertOwnerOnlyCache();

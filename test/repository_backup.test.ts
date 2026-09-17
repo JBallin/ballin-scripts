@@ -121,6 +121,16 @@ describe('repository backup lifecycle', function() {
       }
     });
   });
+  it('sorts final snapshot status output without changing publication order', () => {
+    source();
+
+    const result = run();
+
+    ok(result);
+    assert.equal(result.stdout, '✚ ballin_config\n✚ zshrc\n');
+    const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string }[] } };
+    assert.deepEqual(input.fileChanges.additions.map(({ path: filePath }) => filePath), ['zshrc.sh', 'ballin_config']);
+  });
   it('reports every conflict and aborts all publication and cache promotion', () => {
     source(); fs.writeFileSync(path.join(home, '.gitconfig'), 'local git\n');
     saveState(fixtureState({ 'zshrc.sh': 'other\n', gitconfig: 'other git\n' }));
