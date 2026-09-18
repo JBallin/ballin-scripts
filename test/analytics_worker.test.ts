@@ -4,6 +4,9 @@ const {
 const {
   analyticsCommandForBallinArgs,
 } = require('../commands/ballin.ts');
+const {
+  topLevelCommandNames,
+} = require('../commands/top_level_commands.ts');
 
 type StatementRun = {
   query: string;
@@ -218,6 +221,17 @@ const streamedEventRequest = (
 };
 
 describe('analytics Worker', () => {
+  it('accepts the root event and every supported top-level command', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const commands = ['ballin', ...topLevelCommandNames.map((command: string) => `ballin ${command}`)];
+
+    for (const command of commands) {
+      const { env } = makeEnv();
+      const response = await worker.fetch(eventRequest(payloadForCommand(command)), env);
+      assert.equal(response.status, 204, command);
+    }
+  });
+
   it('accepts the current client payload for a canonical command', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, runs } = makeEnv();

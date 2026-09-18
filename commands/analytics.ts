@@ -6,6 +6,11 @@ const path = require('path');
 const { fetchConfig } = require('../config/index.ts');
 const { createConfigStore } = require('../config/store.ts');
 const { readCommandOutput, readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
+const {
+  topLevelCommandNames,
+} = require('./top_level_commands.ts') as {
+  topLevelCommandNames: readonly string[];
+};
 
 import type { IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
@@ -87,12 +92,7 @@ const defaultTimeoutMs = 750;
 let installIdTemporarySequence = 0;
 const allowedCommands = new Set([
   'ballin',
-  'ballin backup',
-  'ballin config',
-  'ballin doctor',
-  'ballin self-update',
-  'ballin uninstall',
-  'ballin update',
+  ...topLevelCommandNames.map((command) => `ballin ${command}`),
 ]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
