@@ -53,12 +53,16 @@ Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
 
-CI retains the exact reports, raw V8 data, and runtime/commit/lockfile metadata
-in a coverage artifact for seven days, including when the coverage gate fails.
-Compare those artifacts with the corresponding local run before attributing a
-difference to the OS or runtime. Platform-dependent execution can also change
-V8's range boundaries, so one newly uncovered branch may change both covered
-and total branch counts.
+When the coverage gate fails, CI attempts to retain exact reports and runtime,
+commit, tree, and lockfile metadata in a compact artifact for seven days. A
+separate failure-only artifact upload retains the raw V8 data when available,
+even if compact report generation fails. An intentional successful
+`workflow_dispatch` run retains only the compact evidence. Ordinary successful
+pull request and push runs skip diagnostic report generation and artifact
+uploads. Compare retained evidence with the corresponding local run before
+attributing a difference to the OS or runtime. Platform-dependent execution can
+also change V8's range boundaries, so one newly uncovered branch may change
+both covered and total branch counts.
 
 ## Runtime and platform limits
 
