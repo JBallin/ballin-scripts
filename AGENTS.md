@@ -24,6 +24,9 @@
   `package.json` as the source of truth for what that gate includes.
 - Add focused validation when a touched risk is not covered by `npm test`;
   `.github/workflows/ci.yml` defines the additional shell and workflow checks.
+- When changing shared validation commands, prerequisites, package metadata, or
+  CI setup, review materially affected non-PR automation consumers and update
+  their trigger, setup, and validation contracts as needed.
 - For docs-only changes such as README or guide edits, skip local validation
   and rely on CI for automated checks.
 
