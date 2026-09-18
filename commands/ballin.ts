@@ -28,6 +28,12 @@ const {
 const {
   runUpdateCommand,
 } = require('./update.ts');
+import type { TopLevelCommandName } from './top_level_commands.ts';
+const {
+  isTopLevelCommandName,
+} = require('./top_level_commands.ts') as {
+  isTopLevelCommandName: (value: unknown) => value is TopLevelCommandName;
+};
 import type { DoctorReport } from './doctor_report.ts';
 
 const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
@@ -156,6 +162,15 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case 'help':
       writeStdout(ballinHelp);
       return;
+  }
+
+  if (!isTopLevelCommandName(command)) {
+    writeStderr(`Unknown Ballin command: ${command}\nTry: ballin --help\n`);
+    process.exitCode = 2;
+    return;
+  }
+
+  switch (command) {
     case 'update':
       runNoArgCommand('ballin update', commandArgs, runUpdateCommand);
       return;
@@ -178,24 +193,16 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case 'uninstall':
       runNoArgCommand('ballin uninstall', commandArgs, runUninstallCommand);
       return;
-    default:
-      writeStderr(`Unknown Ballin command: ${command}\nTry: ballin --help\n`);
-      process.exitCode = 2;
+    default: {
+      const unhandledCommand: never = command;
+      throw new Error(`Unhandled Ballin command: ${String(unhandledCommand)}`);
+    }
   }
 }
 
-const canonicalAnalyticsCommands = new Set([
-  'backup',
-  'config',
-  'doctor',
-  'self-update',
-  'uninstall',
-  'update',
-]);
-
 const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => {
   const [command] = args;
-  if (canonicalAnalyticsCommands.has(command)) {
+  if (isTopLevelCommandName(command)) {
     return `ballin ${command}`;
   }
   return 'ballin';
