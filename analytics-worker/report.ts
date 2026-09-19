@@ -31,6 +31,7 @@ type SpawnRunner = (
 
 type ReportRows = {
   activeInstalls: D1Row[];
+  behaviorOutcomes: D1Row[];
   commandStatus: D1Row[];
   runtimeTrends: D1Row[];
 };
@@ -39,6 +40,7 @@ const defaultDatabase = 'ballin-scripts-analytics';
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const reportQueryFiles = {
   activeInstalls: 'report-active-installs.sql',
+  behaviorOutcomes: 'report-behavior-outcomes.sql',
   commandStatus: 'report-command-status.sql',
   runtimeTrends: 'report-runtime-trends.sql',
 };
@@ -150,6 +152,10 @@ const loadReportQueries = (options: ReportOptions): Record<keyof typeof reportQu
   return {
     activeInstalls: buildQuery(
       fs.readFileSync(queryPath(rootDir, reportQueryFiles.activeInstalls), 'utf8'),
+      options,
+    ),
+    behaviorOutcomes: buildQuery(
+      fs.readFileSync(queryPath(rootDir, reportQueryFiles.behaviorOutcomes), 'utf8'),
       options,
     ),
     commandStatus: buildQuery(
@@ -356,6 +362,26 @@ const formatRuntimeTrends = (rows: D1Row[]): string => {
   ].join('\n');
 };
 
+const formatBehaviorOutcomes = (rows: D1Row[]): string => {
+  const outcomes = rows.length === 0
+    ? 'No behavioral outcomes found for this range.'
+    : table(['event', 'total', 'success', 'failure', 'failure_rate'], rows.map((row) => {
+      const successes = numberValue(row.successes);
+      const failures = numberValue(row.failures);
+      const total = successes + failures;
+      const failureRate = total === 0 ? '0.0%' : `${((failures / total) * 100).toFixed(1)}%`;
+      return [stringValue(row.event), String(total), String(successes), String(failures), failureRate];
+    }));
+
+  return [
+    'Behavioral outcomes',
+    outcomes,
+    'backup.run and update.backup intentionally overlap: do not sum or subtract them, or divide by command counts, to infer backup volume or exact execution coverage.',
+    'Independent delivery loss, interruption, mixed client versions and adjacent UTC dates prevent matching; launch failure may produce only a parent stage outcome.',
+    'These are observed operations, not unique-install adoption, first/repeat backup, retention or user percentages. Selective participation and spoofable public events limit interpretation.',
+  ].join('\n');
+};
+
 const renderReport = (rows: ReportRows, options: ReportOptions): string => [
   `Analytics report (${options.from} to ${options.to})`,
   publicTelemetryCaveat,
@@ -363,6 +389,8 @@ const renderReport = (rows: ReportRows, options: ReportOptions): string => [
   formatActiveInstalls(rows.activeInstalls, options),
   '',
   formatCommandStatus(rows.commandStatus),
+  '',
+  formatBehaviorOutcomes(rows.behaviorOutcomes),
   '',
   formatRuntimeTrends(rows.runtimeTrends),
   '',
@@ -372,6 +400,7 @@ const generateReport = (options: ReportOptions, runner: D1Runner = runWrangler):
   const queries = loadReportQueries(options);
   return renderReport({
     activeInstalls: runner(queries.activeInstalls, options),
+    behaviorOutcomes: runner(queries.behaviorOutcomes, options),
     commandStatus: runner(queries.commandStatus, options),
     runtimeTrends: runner(queries.runtimeTrends, options),
   }, options);

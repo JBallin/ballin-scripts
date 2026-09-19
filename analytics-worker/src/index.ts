@@ -27,8 +27,8 @@ type Env = {
   INSTALL_ID_HASH_SECRET: string;
 };
 
-type AnalyticsEvent = {
-  schemaVersion: number;
+type CommandAnalyticsEvent = {
+  schemaVersion: 1;
   installId: string;
   dateBucket: string;
   command: string;
@@ -38,6 +38,16 @@ type AnalyticsEvent = {
   nodeMajor: string;
   osVersion: string;
 };
+
+type BehaviorAnalyticsEvent = {
+  schemaVersion: 2;
+  installId: string;
+  dateBucket: string;
+  event: string;
+  status: string;
+};
+
+type AnalyticsEvent = CommandAnalyticsEvent | BehaviorAnalyticsEvent;
 
 type ParseOptions = {
   now: Date;
@@ -63,6 +73,15 @@ const allowedPayloadKeys = new Set([
   'nodeMajor',
   'osVersion',
 ]);
+const allowedBehaviorPayloadKeys = new Set([
+  'schemaVersion',
+  'installId',
+  'dateBucket',
+  'event',
+  'status',
+]);
+const allowedBehaviorEvents = new Set(['backup.run', 'update.backup', 'update.self-update']);
+const allowedBehaviorStatuses = new Set(['success', 'failure']);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -100,8 +119,8 @@ const isObject = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-const hasOnlyAllowedPayloadKeys = (payload: Record<string, unknown>): boolean => (
-  Object.keys(payload).every((key) => allowedPayloadKeys.has(key))
+const hasOnlyAllowedPayloadKeys = (payload: Record<string, unknown>, allowedKeys: Set<string>): boolean => (
+  Object.keys(payload).every((key) => allowedKeys.has(key))
 );
 
 const stringField = (payload: Record<string, unknown>, key: string): string | null => {
@@ -187,21 +206,17 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
   if (!isObject(payload)) {
     return 'event payload must be a JSON object';
   }
-  if (!hasOnlyAllowedPayloadKeys(payload)) {
+  const allowedKeys = payload.schemaVersion === 2 ? allowedBehaviorPayloadKeys : allowedPayloadKeys;
+  if (!hasOnlyAllowedPayloadKeys(payload, allowedKeys)) {
     return 'event payload contains unsupported fields';
   }
-  if (payload.schemaVersion !== 1) {
-    return 'schemaVersion must be 1';
+  if (payload.schemaVersion !== 1 && payload.schemaVersion !== 2) {
+    return 'schemaVersion must be 1 or 2';
   }
 
   const installId = stringField(payload, 'installId');
   const dateBucket = stringField(payload, 'dateBucket');
-  const command = stringField(payload, 'command');
   const status = stringField(payload, 'status');
-  const durationBucket = stringField(payload, 'durationBucket') ?? 'unknown';
-  const appVersion = stringField(payload, 'appVersion');
-  const nodeMajor = stringField(payload, 'nodeMajor');
-  const osVersion = stringField(payload, 'osVersion');
 
   if (!installId || !installIdPattern.test(installId)) {
     return 'installId must be a lowercase UUID';
@@ -212,6 +227,22 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
   if (!isDateBucketWithinSkew(dateBucket, options.now)) {
     return 'dateBucket is outside the accepted clock skew';
   }
+  if (payload.schemaVersion === 2) {
+    const event = stringField(payload, 'event');
+    if (!event || !allowedBehaviorEvents.has(event)) {
+      return 'event is not supported';
+    }
+    if (!status || !allowedBehaviorStatuses.has(status)) {
+      return 'status is not supported';
+    }
+    return { schemaVersion: 2, installId, dateBucket, event, status };
+  }
+
+  const command = stringField(payload, 'command');
+  const durationBucket = stringField(payload, 'durationBucket') ?? 'unknown';
+  const appVersion = stringField(payload, 'appVersion');
+  const nodeMajor = stringField(payload, 'nodeMajor');
+  const osVersion = stringField(payload, 'osVersion');
   if (!command || !allowedCommands.has(command)) {
     return 'command is not supported';
   }
@@ -259,7 +290,7 @@ const hashInstallId = async (installId: string, secret: string): Promise<string>
     .join('');
 };
 
-const storeAnalyticsEvent = async (env: Env, event: AnalyticsEvent, installIdHash: string): Promise<void> => {
+const storeAnalyticsEvent = async (env: Env, event: CommandAnalyticsEvent, installIdHash: string): Promise<void> => {
   await env.ANALYTICS_DB.batch([
     env.ANALYTICS_DB.prepare(`
       INSERT OR IGNORE INTO install_days (date_bucket, install_id_hash)
@@ -290,6 +321,17 @@ const storeAnalyticsEvent = async (env: Env, event: AnalyticsEvent, installIdHas
       event.nodeMajor,
       event.osVersion,
     ),
+  ]);
+};
+
+const storeBehaviorEvent = async (env: Env, event: BehaviorAnalyticsEvent): Promise<void> => {
+  await env.ANALYTICS_DB.batch([
+    env.ANALYTICS_DB.prepare(`
+      INSERT INTO behavior_events_daily (date_bucket, event, status, count)
+      VALUES (?1, ?2, ?3, 1)
+      ON CONFLICT(date_bucket, event, status)
+      DO UPDATE SET count = count + 1
+    `).bind(event.dateBucket, event.event, event.status),
   ]);
 };
 
@@ -348,7 +390,11 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
     return installRateLimitedResponse;
   }
 
-  await storeAnalyticsEvent(env, event, installIdHash);
+  if (event.schemaVersion === 2) {
+    await storeBehaviorEvent(env, event);
+  } else {
+    await storeAnalyticsEvent(env, event, installIdHash);
+  }
   return emptyResponse(204);
 };
 
@@ -363,6 +409,7 @@ const cleanupOldRows = async (env: Env, scheduledTime: number): Promise<void> =>
     env.ANALYTICS_DB.prepare('DELETE FROM install_days WHERE date_bucket < ?1').bind(cutoff),
     env.ANALYTICS_DB.prepare('DELETE FROM command_events_daily WHERE date_bucket < ?1').bind(cutoff),
     env.ANALYTICS_DB.prepare('DELETE FROM version_events_daily WHERE date_bucket < ?1').bind(cutoff),
+    env.ANALYTICS_DB.prepare('DELETE FROM behavior_events_daily WHERE date_bucket < ?1').bind(cutoff),
   ]);
 };
 
