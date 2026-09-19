@@ -6,15 +6,19 @@ runtime analytics SDK dependencies.
 
 The backend is a Cloudflare Worker with a D1 database binding. It accepts
 versioned, strictly allowlisted payloads and stores daily aggregates for observed
-install activity, command usage, and terminal behavioral outcomes. Only command
-events retain a server-hashed installation identity.
+install activity, command usage, and terminal behavioral outcomes. Schema-v1
+ingestion stores the HMAC-derived installation ID only in the separate
+`install_days` activity table. The `command_events_daily` and
+`version_events_daily` aggregates retain no installation identity or
+install-to-command association. Schema-v2 behavioral ingestion retains neither
+raw nor hashed installation identity.
 
 ## Data Policy
 
 The worker may store:
 
 - daily bucket, in `YYYY-MM-DD` format
-- server-hashed install ID in command-derived `install_days` only
+- HMAC-derived installation ID in `install_days` only, from schema-v1 ingestion
 - command name from a fixed allowlist
 - behavioral event name: `backup.run`, `update.backup`, or `update.self-update`
 - status from a fixed allowlist

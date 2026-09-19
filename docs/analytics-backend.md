@@ -159,10 +159,13 @@ The Worker accepts public client events and relies on layered abuse controls
 instead of a client-shipped secret. It rejects oversized payloads and unsupported
 fields, validates dates and low-cardinality values, applies global/source rate
 limits before parsing, and applies an installation-HMAC rate limit before D1
-writes. Both schemas share those rate-limit budgets. Only command events retain
-the installation hash in `install_days`; behavioral ingestion uses it transiently
-for rate limiting. Request source metadata is used only as
-a transient Cloudflare rate-limit key; it is not stored, queried, logged, or
+writes. Both schemas share those rate-limit budgets. Schema-v1 ingestion stores
+the HMAC-derived installation ID only in the separate `install_days` activity
+table. The `command_events_daily` and `version_events_daily` aggregates retain
+no installation identity or install-to-command association. Schema-v2 behavioral
+ingestion uses the hash transiently for rate limiting and retains neither raw
+nor hashed installation identity. Request source metadata is used only as a
+transient Cloudflare rate-limit key; it is not stored, queried, logged, or
 reported by the application.
 
 ## Production Checklist
