@@ -161,8 +161,11 @@ allowlists and restoration rules.
 
 ## Analytics
 
-Analytics are optional and configurable. See [Analytics](analytics.md) for
-controls, payload, storage, and retention.
+Analytics are optional. The single local `analytics.enabled` setting covers
+top-level command usage and outcomes, real backup outcomes, and automatic backup
+and self-update outcomes during `ballin update`. Backups do not save or restore
+this choice. See [Analytics](analytics.md) for controls, exact payloads, storage,
+and retention.
 
 ## `ballin update` settings
 

@@ -19,7 +19,7 @@ type AnalyticsConfig = {
   enabled?: string;
 };
 
-type AnalyticsPayload = {
+type CommandAnalyticsPayload = {
   schemaVersion: 1;
   installId: string;
   dateBucket: string;
@@ -29,6 +29,22 @@ type AnalyticsPayload = {
   appVersion: string;
   nodeMajor: string;
   osVersion: string;
+};
+
+type BehavioralEvent = 'backup.run' | 'update.backup' | 'update.self-update';
+type BehavioralStatus = 'success' | 'failure';
+type BehavioralAnalyticsPayload = {
+  schemaVersion: 2;
+  installId: string;
+  dateBucket: string;
+  event: BehavioralEvent;
+  status: BehavioralStatus;
+};
+type AnalyticsPayload = CommandAnalyticsPayload | BehavioralAnalyticsPayload;
+type BehavioralRecordInput = {
+  event: BehavioralEvent;
+  status: BehavioralStatus;
+  now?: Date;
 };
 
 type AnalyticsRecordInput = {
@@ -95,12 +111,19 @@ const allowedCommands = new Set([
   ...topLevelCommandNames.map((command) => `ballin ${command}`),
 ]);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
+const allowedBehavioralEvents = new Set(['backup.run', 'update.backup', 'update.self-update']);
+const allowedBehavioralStatuses = new Set(['success', 'failure']);
+const pendingBehavioralSends = new Set<Promise<void>>();
+let currentAnalyticsRuntime: AnalyticsRuntime | undefined;
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
-  `Ballin can send minimal anonymous usage analytics. Details: ${docsUrl}`
+  'Ballin can send minimal anonymous analytics about top-level command usage and outcomes, '
+  + 'real backup outcomes, and automatic backup and self-update outcomes during ballin update. '
+  + 'Backup contents, destination identities and configuration values are not sent. '
+  + `Payload and retention details: ${docsUrl}`
 );
 const analyticsPromptFor = (defaultEnabled = true): string => (
   `Enable minimal anonymous usage analytics? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `
@@ -363,7 +386,7 @@ const buildAnalyticsPayload = (
   installId: string,
   appVersion = loadAppVersion(),
   osVersionOptions: OsVersionOptions = {},
-): AnalyticsPayload => {
+): CommandAnalyticsPayload => {
   return {
     schemaVersion,
     installId,
@@ -420,6 +443,7 @@ const sendAnalyticsPayload: AnalyticsSender = (payload, options) => new Promise(
         'content-length': Buffer.byteLength(body),
       },
     }, (response: IncomingMessage) => {
+      response.on('error', settle);
       response.on('end', settle);
       response.on('close', settle);
       response.resume();
@@ -482,6 +506,53 @@ const recordAnalyticsEvent = async (input: AnalyticsRecordInput, runtime: Analyt
   }
 };
 
+const recordBehavioralAnalyticsEvent = (
+  input: BehavioralRecordInput,
+  runtime: AnalyticsRuntime = currentAnalyticsRuntime ?? {},
+): Promise<void> => {
+  try {
+    const env = runtime.env ?? process.env;
+    if (analyticsDisabledByEnv(env)
+      || !allowedBehavioralEvents.has(input.event)
+      || !allowedBehavioralStatuses.has(input.status)) return Promise.resolve();
+
+    const analytics = runtime.analyticsConfig ?? readAnalyticsConfig().analytics;
+    if (analytics.enabled !== 'true') return Promise.resolve();
+    const installId = runtime.installId === undefined
+      ? readLocalInstallId(runtime.installIdPath)
+      : runtime.installId;
+    if (!installId || !installIdPattern.test(installId)) return Promise.resolve();
+
+    // Capture the terminal outcome now; later synchronous stages may cross UTC midnight.
+    const payload: BehavioralAnalyticsPayload = {
+      schemaVersion: 2,
+      installId,
+      dateBucket: dateBucket(input.now ?? new Date()),
+      event: input.event,
+      status: input.status,
+    };
+    const sender = runtime.sender ?? sendAnalyticsPayload;
+    const options = {
+      endpoint: runtime.endpoint ?? productionAnalyticsEndpoint,
+      timeoutMs: runtime.timeoutMs ?? defaultTimeoutMs,
+    };
+    // Start network I/O after synchronous commands yield, so later spawnSync work
+    // cannot block a running request's timeout or callbacks.
+    const pending = Promise.resolve().then(() => sender(payload, options)).catch(() => {
+      // Analytics must never affect command behavior or exit status.
+    });
+    pendingBehavioralSends.add(pending);
+    void pending.then(() => pendingBehavioralSends.delete(pending));
+    return pending;
+  } catch {
+    return Promise.resolve();
+  }
+};
+
+const flushPendingAnalytics = async (): Promise<void> => {
+  await Promise.allSettled([...pendingBehavioralSends]);
+};
+
 const analyticsStatusFromExitCode = (exitCode: string | number | null | undefined): string => {
   if (exitCode === undefined || exitCode === null || exitCode === 0 || exitCode === '0') {
     return 'success';
@@ -497,22 +568,26 @@ const runWithCommandAnalytics = (
   const nowMs = runtime.nowMs ?? Date.now;
   const startedAt = nowMs();
   const analyticsRuntime = runtime.preserveLocalState ? preserveLocalAnalyticsState(runtime) : runtime;
+  const previousRuntime = currentAnalyticsRuntime;
+  currentAnalyticsRuntime = analyticsRuntime;
   process.exitCode = undefined;
   try {
     runCommand();
-    return recordAnalyticsEvent({
+    return Promise.allSettled([recordAnalyticsEvent({
       command,
       status: analyticsStatusFromExitCode(process.exitCode),
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, analyticsRuntime);
+    }, analyticsRuntime), flushPendingAnalytics()]).then(() => {});
   } catch (error) {
-    return recordAnalyticsEvent({
+    return Promise.allSettled([recordAnalyticsEvent({
       command,
       status: 'failure',
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
-    }, analyticsRuntime).then(() => {
+    }, analyticsRuntime), flushPendingAnalytics()]).then(() => {
       throw error;
     });
+  } finally {
+    currentAnalyticsRuntime = previousRuntime;
   }
 };
 
@@ -532,10 +607,12 @@ module.exports = {
   configureAnalyticsPreference,
   durationBucketFromMs,
   ensureAnalyticsInstallId,
+  flushPendingAnalytics,
   installIdPathForRepo,
   loadAppVersion,
   readLocalInstallId,
   recordAnalyticsEvent,
+  recordBehavioralAnalyticsEvent,
   rethrowCommandError,
   runWithCommandAnalytics,
   sendAnalyticsPayload,
