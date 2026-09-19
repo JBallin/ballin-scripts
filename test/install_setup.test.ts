@@ -954,7 +954,10 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'Ballin can send minimal anonymous usage analytics. Details: https://example.test/analytics',
+      'Ballin can send minimal anonymous analytics about top-level command usage and outcomes, '
+      + 'real backup outcomes, and automatic backup and self-update outcomes during ballin update. '
+      + 'Backup contents, destination identities and configuration values are not sent. '
+      + 'Payload and retention details: https://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Enable minimal anonymous usage analytics? [Y/n] ');
     assert.equal(analyticsPromptFor(false), 'Enable minimal anonymous usage analytics? [y/N] ');

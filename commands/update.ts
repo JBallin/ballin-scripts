@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
 const {
   configPath,
 } = require('../config/index.ts');
@@ -221,6 +222,23 @@ const reportBallinReadiness = (env: NodeJS.ProcessEnv): number => {
   return report.status === 'fail' ? 1 : 0;
 };
 
+const runAutomaticStage = (
+  event: 'update.backup' | 'update.self-update',
+  runStage: () => number,
+): number => {
+  let status = 1;
+  try {
+    status = runStage();
+    return status;
+  } finally {
+    try {
+      void recordBehavioralAnalyticsEvent({ event, status: status === 0 ? 'success' : 'failure' });
+    } catch {
+      // Analytics must not replace a child result or prevent later stages.
+    }
+  }
+};
+
 function runUpdateCommand(): void {
   let settings: UpdateSettings;
   try {
@@ -315,12 +333,12 @@ function runUpdateCommand(): void {
 
   if (settings.selfUpdate) {
     progress('Updating ballin-scripts');
-    const updateStatus = runIntegrationCommand(ballinCommandPath(), ['self-update'], {
+    const updateStatus = runAutomaticStage('update.self-update', () => runIntegrationCommand(ballinCommandPath(), ['self-update'], {
       env: {
         ...childEnv,
         BALLIN_NO_COMMAND_ANALYTICS: '1',
       },
-    });
+    }));
     if (updateStatus === 0) {
       progress('Checking Ballin readiness');
       recordFailure(reportBallinReadiness(childEnv));
@@ -329,12 +347,12 @@ function runUpdateCommand(): void {
 
   if (settings.backup) {
     progress('Backing up development environment');
-    runIntegrationCommand(ballinCommandPath(), ['backup'], {
+    runAutomaticStage('update.backup', () => runIntegrationCommand(ballinCommandPath(), ['backup'], {
       env: {
         ...childEnv,
         BALLIN_NO_COMMAND_ANALYTICS: '1',
       },
-    });
+    }));
   }
 
   if (exitStatus !== 0) {
