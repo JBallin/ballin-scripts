@@ -19,6 +19,11 @@ A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
 before cloning or making installation changes. Declining exits successfully
 without cloning. During setup, Ballin creates the local installation and asks
 whether to enable [minimal anonymous usage analytics](analytics.md).
+This one local choice covers command usage and outcomes, real backup outcomes,
+and automatic backup and self-update outcomes during `ballin update`. It is
+not saved in backups or restored when reconnecting; ordinary refreshes and
+self-updates preserve the choice without asking again. Installation and the
+choice send no analytics event.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run

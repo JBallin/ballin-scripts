@@ -110,6 +110,12 @@ paths, or URLs. Ballin does not scan or redact credentials. Review the
 [sources and sensitivity](docs/backup-sources.md) before opting in. GitHub
 controls commit author and committer attribution.
 
+One optional local analytics setting covers top-level command usage and outcomes,
+real backup outcomes, and automatic backup and self-update outcomes during
+`ballin update`. Backup contents, destination identities, and configuration
+values are not sent. See [Analytics](docs/analytics.md) for the exact payloads,
+controls, storage, and retention.
+
 ## Documentation
 
 See the [documentation](docs/README.md) for installation, backup sensitivity,

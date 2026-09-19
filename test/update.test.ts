@@ -2,6 +2,9 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { createAnalyticsCapture } = require('./helpers/analytics.ts');
+const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 const {
   requiredCommandShims,
 } = require('../commands/setup_readiness.ts');
@@ -118,6 +121,17 @@ exit ${status}
   const runUpdate = (env: NodeJS.ProcessEnv = {}) => {
     writeUpdateConfig(env);
     return spawnUpdate(env);
+  };
+
+  const runUpdateWithAnalytics = (env: NodeJS.ProcessEnv = {}) => {
+    const capture = createAnalyticsCapture(tempDir);
+    writeUpdateConfig({ TEST_UPDATE_NVM: 'false', ...env });
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.analytics.enabled = 'true';
+    writeConfig(config);
+    const result = spawnUpdate({ ...capture.env, BALLIN_NO_ANALYTICS: '0', ...env });
+    const events = capture.readEvents() as CapturedAnalyticsEvent[];
+    return { result, events, outcomes: events.filter(({ schemaVersion }) => schemaVersion === 2) };
   };
 
   const installNvmStub = (nvmDir: string) => {
@@ -333,13 +347,14 @@ exit 0
     ]);
   });
 
-  it('records only the top-level update event while preserving the nested child environment', function test() {
+  it('preserves top-level command analytics and the nested child environment alongside behavioral outcomes', function test() {
     this.timeout(5000);
     const analyticsPath = path.join(__dirname, '..', 'commands', 'analytics.ts');
     const selfUpdatePath = path.join(__dirname, '..', 'commands', 'self_update.ts');
     const updatePath = path.join(__dirname, '..', 'commands', 'update.ts');
     const analyticsLogPath = path.join(tempDir, 'analytics.log');
-    const analyticsInstallIdPath = path.join(tempDir, '.ballin-scripts', '.analytics', 'install-id');
+    const capture = createAnalyticsCapture(tempDir);
+    const analyticsInstallIdPath = capture.installIdPath;
     const harnessPath = path.join(tempDir, 'run-update.ts');
     const installedCommandsDir = path.join(tempDir, '.ballin-scripts', 'commands');
     const nvmDir = path.join(tempDir, 'custom-nvm');
@@ -415,6 +430,8 @@ fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
       fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
         type: 'event',
         command: payload.command,
+        event: payload.event,
+        status: payload.status,
         installId: payload.installId,
       }) + '\\n');
     },
@@ -461,6 +478,8 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
       fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
         type: 'event',
         command: payload.command,
+        event: payload.event,
+        status: payload.status,
         installId: payload.installId,
         osVersion: payload.osVersion,
       }) + '\\n');
@@ -475,6 +494,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     const result = spawnSync(process.execPath, [harnessPath], {
       encoding: 'utf8',
       env: {
+        ...capture.env,
         HOME: tempDir,
         PATH: binDir,
         NVM_DIR: nvmDir,
@@ -495,13 +515,19 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     const integrations = analyticsLog.filter(({ type }: { type: string }) => type === 'integration');
 
     assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(capture.readEvents(), [], 'the injected sender must receive both payload schemas');
     assert.equal(fs.readFileSync(analyticsInstallIdPath, 'utf8'), `${installId}\n`);
-    assert.deepEqual(events, [{
+    assert.deepEqual(events.filter((event: { command?: string }) => event.command), [{
       type: 'event',
       command: 'ballin update',
+      status: 'success',
       installId,
       osVersion: '26.6',
     }]);
+    assert.deepEqual(events.filter((event: { event?: string }) => event.event), [
+      { type: 'event', event: 'update.self-update', status: 'success', installId },
+      { type: 'event', event: 'update.backup', status: 'success', installId },
+    ]);
     assert.deepEqual(nested.map(({ command, hardOptOut, commandOptOut, nvmMarker, path: childPath }: {
       command: string;
       hardOptOut: string;
@@ -532,6 +558,150 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
       nvmMarker: 'captured-after-nvm',
     }]);
   });
+
+  it('records the real automatic backup and parent outcome without a nested command event', () => {
+    const capture = createAnalyticsCapture(tempDir);
+    const checkout = path.join(tempDir, '.ballin-scripts');
+    fs.mkdirSync(checkout);
+    fs.symlinkSync('/bin/cat', path.join(binDir, 'cat'));
+    fs.writeFileSync(path.join(tempDir, '.zshrc'), 'fixture shell settings\n');
+    const statePath = path.join(tempDir, 'repository.json');
+    fs.writeFileSync(statePath, JSON.stringify(fixtureState()));
+    installRepositoryFixture(binDir, statePath);
+    writeUpdateConfig({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BACKUP: 'true' });
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.analytics.enabled = 'true';
+    config.backup = { repository: fixtureDestination, id: null, host: 'github.com', includeSensitive: 'true' };
+    writeConfig(config);
+
+    const result = spawnUpdate({
+      ...capture.env, BALLIN_NO_ANALYTICS: '0', BALLIN_TEST_BALLIN_PATH: ballinPath,
+      BALLIN_TEST_REPO_DIR: checkout,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const events = capture.readEvents() as CapturedAnalyticsEvent[];
+    assert.deepEqual(events.filter(({ schemaVersion }) => schemaVersion === 1).map(({ command, status }) => ({ command, status })), [
+      { command: 'ballin update', status: 'success' },
+    ]);
+    assert.deepEqual(events.filter(({ schemaVersion }) => schemaVersion === 2).map(({ event, status }) => ({ event, status })), [
+      { event: 'backup.run', status: 'success' },
+      { event: 'update.backup', status: 'success' },
+    ]);
+    const remoteState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    assert.isString(remoteState.commits[remoteState.head].files['zshrc.sh']);
+  });
+
+  for (const stage of [
+    { event: 'update.self-update', setting: 'TEST_UPDATE_BALLIN' },
+    { event: 'update.backup', setting: 'TEST_UPDATE_BACKUP' },
+  ]) {
+    for (const mode of ['success', 'nonzero', 'launch', 'signal']) {
+      it(`records ${stage.event} from its ${mode} child result`, () => {
+        installHealthyReadinessCommands();
+        installCommandStub('ballin', { status: mode === 'nonzero' ? 23 : 0, output: 'fixture stage result' });
+        if (mode === 'signal') writeTestExecutable('ballin', '#!/usr/bin/env bash\nkill -TERM "$$"\n');
+        const { result, outcomes } = runUpdateWithAnalytics({
+          [stage.setting]: 'true',
+          ...(mode === 'launch' ? { BALLIN_TEST_BALLIN_PATH: path.join(binDir, 'missing-ballin') } : {}),
+        });
+        assert.equal(result.status, { success: 0, nonzero: 23, launch: 127, signal: 143 }[mode], result.stderr);
+        assert.deepEqual(outcomes.map(({ event, status }) => ({ event, status })), [
+          { event: stage.event, status: mode === 'success' ? 'success' : 'failure' },
+        ]);
+      });
+    }
+  }
+
+  it('keeps successful stage outcomes separate from earlier integration and later readiness failures', () => {
+    installHealthyReadinessCommands();
+    installCommandStub('npm', { status: 23 });
+    installCommandStub('ballin');
+    const child = path.join(tempDir, 'stage-child');
+    fs.copyFileSync(path.join(binDir, 'ballin'), child);
+    fs.rmSync(path.join(binDir, 'ballin'));
+    const { result, events, outcomes } = runUpdateWithAnalytics({
+      TEST_UPDATE_NPM: 'true', TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true',
+      BALLIN_TEST_BALLIN_PATH: child,
+    });
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Missing command shims on PATH: ballin');
+    assert.deepEqual(outcomes.map(({ event, status }) => ({ event, status })), [
+      { event: 'update.self-update', status: 'success' },
+      { event: 'update.backup', status: 'success' },
+    ]);
+    assert.deepEqual(events.filter(({ schemaVersion }) => schemaVersion === 1).map(({ command, status }) => ({ command, status })), [
+      { command: 'ballin update', status: 'failure' },
+    ]);
+    assert.include(commandLog().join('\n'), 'ballin|,|backup');
+  });
+
+  it('emits no behavioral outcomes for disabled or unreached update stages', () => {
+    installCommandStub('ballin');
+    const { outcomes } = runUpdateWithAnalytics();
+    assert.deepEqual(outcomes, []);
+    const capture = createAnalyticsCapture(tempDir);
+    capture.clear();
+    writeConfig({ update: { selfUpdate: 'invalid' }, analytics: { enabled: 'true' } });
+    const result = spawnUpdate({ ...capture.env, BALLIN_NO_ANALYTICS: '0' });
+    assert.equal(result.status, 1);
+    assert.deepEqual(capture.readEvents().filter(({ schemaVersion }: CapturedAnalyticsEvent) => schemaVersion === 2), []);
+    assert.deepEqual(commandLog(), []);
+  });
+
+  for (const recorderThrows of [false, true]) {
+    it(`preserves an original stage exception when terminal recording ${recorderThrows ? 'throws' : 'succeeds'}`, () => {
+      const capture = createAnalyticsCapture(tempDir);
+      const preload = path.join(tempDir, 'stage-exception.cjs');
+      fs.writeFileSync(preload, `
+const helpers = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'commandHelpers.ts'))});
+helpers.runVisibleCommand = () => { throw new Error('fixture original stage exception'); };
+${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'analytics.ts'))}).recordBehavioralAnalyticsEvent = () => { throw new Error('fixture recorder exception'); };` : ''}
+`);
+      const { result, outcomes } = runUpdateWithAnalytics({
+        TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true',
+        NODE_OPTIONS: `${capture.env.NODE_OPTIONS} --require ${JSON.stringify(preload)}`,
+      });
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, 'fixture original stage exception');
+      assert.notInclude(result.stderr, 'fixture recorder exception');
+      assert.notInclude(result.stdout, 'Backing up development environment');
+      assert.deepEqual(outcomes.map(({ event, status }) => ({ event, status })), recorderThrows ? [] : [
+        { event: 'update.self-update', status: 'failure' },
+      ]);
+    });
+  }
+
+  it('continues later stages when the terminal recorder throws synchronously', () => {
+    installHealthyReadinessCommands();
+    installCommandStub('ballin');
+    const capture = createAnalyticsCapture(tempDir);
+    const preload = path.join(tempDir, 'recorder-exception.cjs');
+    fs.writeFileSync(preload, `require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'analytics.ts'))}).recordBehavioralAnalyticsEvent = () => { throw new Error('fixture recorder exception'); };`);
+    const { result, outcomes } = runUpdateWithAnalytics({
+      TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true',
+      NODE_OPTIONS: `${capture.env.NODE_OPTIONS} --require ${JSON.stringify(preload)}`,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(outcomes, []);
+    assert.equal(commandLog().at(-1), 'ballin|,|backup');
+  });
+
+  for (const mode of ['throw', 'error', 'hang']) {
+    it(`preserves later stages, output and exit status when the analytics sender ${mode}s`, function test() {
+      this.timeout(5000);
+      installHealthyReadinessCommands();
+      installCommandStub('ballin', { output: 'fixture stage output' });
+      const settings = { TEST_UPDATE_NVM: 'false', TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true' };
+      const expected = runUpdate(settings);
+      fs.rmSync(logPath);
+      const { result } = runUpdateWithAnalytics({ ...settings, BALLIN_TEST_ANALYTICS_MODE: mode });
+      assert.equal(result.status, expected.status);
+      assert.equal(result.stdout, expected.stdout);
+      assert.equal(result.stderr, expected.stderr);
+      assert.equal(commandLog().at(-1), 'ballin|,|backup');
+    });
+  }
 
   it('updates App Store apps when mas is available without requiring a setting', () => {
     installCommandStub('mas');

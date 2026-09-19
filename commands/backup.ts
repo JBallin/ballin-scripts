@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
 const {
   configPath,
   fetchConfig,
@@ -854,6 +855,35 @@ const runRepositoryBackup = (
   return true;
 };
 
+const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
+  const { config, exitStatus } = backupConfig();
+  if (!config) return exitStatus;
+
+  if (!homeDir) {
+    writeStderrLine('ballin backup: HOME is not set; unable to collect backup sources safely');
+    return 1;
+  }
+
+  if ('repository' in config) {
+    if (config.includeSensitive === null) {
+      writeStderrLine('ballin backup: invalid backup.includeSensitive; expected true or false');
+      return 1;
+    }
+    if (!secureExistingBackupCache(backupCacheDir)) return 1;
+    try {
+      return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir) ? 0 : 1;
+    } catch (error) {
+      writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
+      return 1;
+    }
+  }
+
+  if (!secureExistingBackupCache(backupCacheDir)) return 1;
+  const ghAuthenticated = ghAuthStatus(config.host);
+  if (!ghAuthenticated.ok) return ghAuthenticated.exitStatus;
+  return runStagedBackup(config.host, config.id, homeDir, backupCacheDir) ? 0 : 1;
+};
+
 function runBackupCommand(args = process.argv.slice(2)): void {
   const homeDir = process.env.HOME ?? '';
   const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
@@ -935,49 +965,44 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
+  if (!command) {
+    let status: 'success' | 'failure' = 'failure';
+    try {
+      const exitStatus = runRealBackup(homeDir, backupCacheDir);
+      status = exitStatus === 0 ? 'success' : 'failure';
+      if (exitStatus !== 0) process.exitCode = exitStatus;
+    } finally {
+      try {
+        void recordBehavioralAnalyticsEvent({ event: 'backup.run', status });
+      } catch {
+        // Analytics must not replace the operation's result or original error.
+      }
+    }
+    return;
+  }
+
   const { config, exitStatus } = backupConfig();
   if (!config) {
     process.exitCode = exitStatus;
     return;
   }
 
-  if (!command && !homeDir) {
-    writeStderrLine('ballin backup: HOME is not set; unable to collect backup sources safely');
-    process.exitCode = 1;
-    return;
-  }
-
   if ('repository' in config) {
-    if (!command && config.includeSensitive === null) {
-      writeStderrLine('ballin backup: invalid backup.includeSensitive; expected true or false');
-      process.exitCode = 1;
-      return;
-    }
-    if (!command && !secureExistingBackupCache(backupCacheDir)) { process.exitCode = 1; return; }
     try {
-      if (command) {
-        const read: RepositoryRead = requireRepositoryRead(inspectRepository(config.repository));
-        if (command === 'read') {
-          const bytes = read.snapshots.get(args[1]);
-          if (suggestionFileNames.includes(args[1]) && bytes !== undefined) process.stdout.write(bytes);
-          else { writeStdoutLine(`No supported snapshot found.\nOptions: ${fileSuggestions}`); process.exitCode = 1; }
-        } else {
-          const url = repositoryUrl(read.destination, readRepositoryAccount());
-          const result = runGh('github.com', ['repo', 'view', url, '--web'], { stdio: 'ignore' });
-          process.exitCode = result.error ? 1 : spawnResultStatus(result);
-        }
-      } else if (!runRepositoryBackup(config.repository, config.includeSensitive as boolean, homeDir, backupCacheDir)) {
-        process.exitCode = 1;
+      const read: RepositoryRead = requireRepositoryRead(inspectRepository(config.repository));
+      if (command === 'read') {
+        const bytes = read.snapshots.get(args[1]);
+        if (suggestionFileNames.includes(args[1]) && bytes !== undefined) process.stdout.write(bytes);
+        else { writeStdoutLine(`No supported snapshot found.\nOptions: ${fileSuggestions}`); process.exitCode = 1; }
+      } else {
+        const url = repositoryUrl(read.destination, readRepositoryAccount());
+        const result = runGh('github.com', ['repo', 'view', url, '--web'], { stdio: 'ignore' });
+        process.exitCode = result.error ? 1 : spawnResultStatus(result);
       }
     } catch (error) {
       writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
       process.exitCode = 1;
     }
-    return;
-  }
-
-  if (!command && !secureExistingBackupCache(backupCacheDir)) {
-    process.exitCode = 1;
     return;
   }
 
@@ -1011,10 +1036,6 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       process.exitCode = 1;
     }
     return;
-  }
-
-  if (!runStagedBackup(config.host, config.id, homeDir, backupCacheDir)) {
-    process.exitCode = 1;
   }
 }
 

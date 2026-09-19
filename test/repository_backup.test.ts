@@ -6,7 +6,9 @@ const { testChildEnvironment } = require('./helpers/environment.ts');
 const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
 const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('../commands/backup_config.ts');
+const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
 import type { FixtureState } from './helpers/repository.ts';
+import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
 const repoRoot = path.join(__dirname, '..');
 describe('repository backup lifecycle', function() {
@@ -602,5 +604,109 @@ describe('repository backup lifecycle', function() {
     [undefined, false, 'false'].forEach((value) => assert.isFalse(sensitiveSourceConsent({ backup: { includeSensitive: value } })));
     [true, 'true'].forEach((value) => assert.isTrue(sensitiveSourceConsent({ backup: { includeSensitive: value } })));
     assert.isFalse(sensitiveSourceConsent({}));
+  });
+
+  describe('behavioral analytics', () => {
+    let capture: ReturnType<typeof createAnalyticsCapture>;
+    const observedRun = (preload = '') => run([], '', capture.env, preload);
+    const assertOutcome = (status: string): void => {
+      const events: CapturedAnalyticsEvent[] = capture.readEvents();
+      assert.deepEqual(events.filter((event) => event.schemaVersion === 2), [{
+        schemaVersion: 2, installId: fixtureInstallId,
+        dateBucket: new Date().toISOString().slice(0, 10), event: 'backup.run', status,
+      }]);
+      const commands = events.filter((event) => event.schemaVersion === 1);
+      assert.lengthOf(commands, 1);
+      assert.equal(commands[0].command, 'ballin backup');
+      assert.equal(commands[0].status, status);
+    };
+    beforeEach(() => {
+      const value = config(); value.analytics.enabled = 'true'; saveConfig(value);
+      capture = createAnalyticsCapture(root);
+    });
+
+    it('emits one success for repository publication and one for an unchanged backup', () => {
+      source(); ok(observedRun()); assertOutcome('success');
+      capture.clear();
+      ok(observedRun()); assertOutcome('success');
+      assert.lengthOf(publications(), 1);
+    });
+
+    it('keeps excluded-source and unavailable-tool handling successful without source events', () => {
+      const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+      source(); saveState(fixtureState({ 'zshrc.sh': 'retained private source\n', pipx: 'retained unavailable tool\n' }));
+      ok(observedRun()); assertOutcome('success');
+      assert.equal(remote('zshrc.sh'), 'retained private source\n');
+      assert.equal(remote('pipx'), 'retained unavailable tool\n');
+    });
+
+    for (const fault of ['auth', 'collection', 'conflict', 'cache preflight']) {
+      it(`emits one failure after repository ${fault} failure`, () => {
+        source();
+        if (fault === 'auth') { const value = state(); value.faults.auth = true; saveState(value); }
+        if (fault === 'collection') {
+          fs.rmSync(path.join(bin, 'cat'));
+          fs.writeFileSync(path.join(bin, 'cat'), '#!/bin/sh\nexit 7\n', { mode: 0o755 });
+        }
+        if (fault === 'conflict') saveState(fixtureState({ 'zshrc.sh': 'conflicting remote\n' }));
+        if (fault === 'cache preflight') fs.symlinkSync(home, cacheRoot);
+
+        const result = observedRun();
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.lengthOf(publications(), 0);
+        assertOutcome('failure');
+      });
+    }
+
+    for (const mode of ['ambiguous', 'malformed']) {
+      it(`emits once after ${mode} publication is confirmed by internal readback`, () => {
+        source(); const value = state(); value.faults.publish = mode; saveState(value);
+        ok(observedRun()); assertOutcome('success');
+        assert.lengthOf(publications(), 1);
+        assert.isAbove(state().requests.filter((request) => request.payload?.query?.includes('BallinRepository')).length, 1);
+        assert.equal(cached(), 'local\n');
+      });
+    }
+
+    for (const mode of ['advance', 'denied', 'orphan', 'wrong-readback']) {
+      it(`emits one failure after ${mode} publication reaches its final outcome`, () => {
+        source(); seedCache('zshrc.sh', 'base\n');
+        const value = fixtureState({ 'zshrc.sh': 'base\n' }); value.faults.publish = mode; saveState(value);
+        const result = observedRun();
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.lengthOf(publications(), 1); assert.equal(cached(), 'base\n');
+        assertOutcome('failure');
+      });
+    }
+
+    for (const method of ['copyFileSync', 'chmodSync', 'renameSync', 'rmSync']) {
+      it(`emits one failure for cache ${method} after confirmed remote publication`, () => {
+        source();
+        const condition = method === 'copyFileSync'
+          ? "String(args[1]).includes('.ballin-backup-cache-')"
+          : "String(args[0]).includes('.ballin-backup-cache-')";
+        const result = observedRun(cacheFailure(method, condition));
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, 'publication confirmed');
+        assert.equal(remote('zshrc.sh'), 'local\n');
+        assert.lengthOf(publications(), 1); assertOutcome('failure');
+      });
+    }
+
+    it('reports a failed no-op when unchanged remote state cannot hydrate its cache', () => {
+      source(); ok(observedRun()); fs.rmSync(cache, { recursive: true }); capture.clear();
+      const result = observedRun(cacheFailure('copyFileSync', "String(args[1]).includes('.ballin-backup-cache-')"));
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'state confirmed unchanged');
+      assert.lengthOf(publications(), 1); assertOutcome('failure');
+    });
+
+    it('includes publication transport cleanup in the terminal failure despite successful readback', () => {
+      source(); const result = observedRun(transportCleanupFailure('BallinPublish'));
+      assertTransportCleanupFailed(result);
+      assert.include(result.stderr, 'repository publication confirmed');
+      assert.equal(remote('zshrc.sh'), 'local\n');
+      assertOutcome('failure');
+    });
   });
 });
