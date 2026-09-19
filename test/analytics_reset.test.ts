@@ -59,6 +59,20 @@ describe('analytics D1 reset', () => {
     assert.throws(() => parseArgs(['--dry-run', '--confirm', confirmationPhrase]), 'Choose either --dry-run or --confirm, not both');
   });
 
+  it('does not run any aggregate query for an unconfirmed reset', () => {
+    const calls: string[] = [];
+    const errors: string[] = [];
+    for (const args of [[], ['--confirm', 'DELETE']]) {
+      assert.equal(runCli(args, (sql: string): D1Row[] => {
+        calls.push(sql);
+        return [];
+      }, () => { throw new Error('No success output expected'); }, (text: string) => errors.push(text)), 1);
+    }
+    assert.deepEqual(calls, []);
+    assert.lengthOf(errors, 2);
+    assert.isTrue(errors.every((text) => text.includes('Refusing to reset analytics')));
+  });
+
   it('rejects missing option values and unknown options', () => {
     assert.throws(() => parseArgs(['--database']), '--database requires a value');
     assert.throws(() => parseArgs(['--confirm']), '--confirm requires a value');
@@ -85,6 +99,7 @@ describe('analytics D1 reset', () => {
         { rows: 2, table_name: 'install_days' },
         { rows: 3, table_name: 'command_events_daily' },
         { rows: 4, table_name: 'version_events_daily' },
+        { rows: 5, table_name: 'behavior_events_daily' },
       ];
     });
 
@@ -93,6 +108,8 @@ describe('analytics D1 reset', () => {
     assert.include(output, 'install_days: 2');
     assert.include(output, 'command_events_daily: 3');
     assert.include(output, 'version_events_daily: 4');
+    assert.include(output, 'behavior_events_daily: 5');
+    assert.notMatch(countSql, /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\b/iu);
   });
 
   it('normalizes malformed and missing aggregate counts to safe zero values', () => {
@@ -108,6 +125,7 @@ describe('analytics D1 reset', () => {
     assert.include(output, 'install_days: 2');
     assert.include(output, 'command_events_daily: 0');
     assert.include(output, 'version_events_daily: 0');
+    assert.include(output, 'behavior_events_daily: 0');
   });
 
   it('deletes only the known aggregate tables after confirmation', () => {
@@ -124,6 +142,7 @@ describe('analytics D1 reset', () => {
           { rows: 2, table_name: 'install_days' },
           { rows: 3, table_name: 'command_events_daily' },
           { rows: 4, table_name: 'version_events_daily' },
+          { rows: 5, table_name: 'behavior_events_daily' },
         ];
       }
       return aggregateTables.map((tableName: string) => ({
@@ -136,11 +155,17 @@ describe('analytics D1 reset', () => {
     assert.include(resetSql, 'DELETE FROM install_days;');
     assert.include(resetSql, 'DELETE FROM command_events_daily;');
     assert.include(resetSql, 'DELETE FROM version_events_daily;');
+    assert.include(resetSql, 'DELETE FROM behavior_events_daily;');
+    assert.deepEqual(aggregateTables, [
+      'install_days', 'command_events_daily', 'version_events_daily', 'behavior_events_daily',
+    ]);
     assert.notMatch(resetSql, /\bDROP\b/i);
     assert.include(output, 'Analytics aggregate rows before reset');
     assert.include(output, 'install_days: 2');
     assert.include(output, 'Analytics aggregate rows after reset');
     assert.include(output, 'version_events_daily: 0');
+    assert.include(output, 'behavior_events_daily: 5');
+    assert.include(output, 'behavior_events_daily: 0');
   });
 
   it('builds remote JSON Wrangler D1 execute arguments', () => {

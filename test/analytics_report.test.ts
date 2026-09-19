@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { DatabaseSync } = require('node:sqlite');
 const {
   dateRangeFromArgs,
   defaultDatabase,
@@ -67,16 +68,22 @@ describe('analytics D1 report', () => {
     assert.include(allSql, "FROM install_days");
     assert.include(allSql, "FROM command_events_daily");
     assert.include(allSql, "FROM version_events_daily");
+    assert.include(allSql, "FROM behavior_events_daily");
     assert.notInclude(allSql, '__FROM_DATE__');
     assert.notInclude(allSql, '__TO_DATE__');
     assert.notMatch(allSql, /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\b/i);
   });
 
-  it('renders active installs, command status, and runtime trends', () => {
+  it('renders separate command, behavioral, active-install, and runtime outcomes', () => {
     const output = renderReport({
       activeInstalls: [
         { date_bucket: '2026-06-01', active_installs: 2 },
         { date_bucket: '2026-06-03', active_installs: 1 },
+      ],
+      behaviorOutcomes: [
+        { event: 'backup.run', total: 5, successes: 3, failures: 2 },
+        { event: 'update.backup', total: 3, successes: 2, failures: 1 },
+        { event: 'update.self-update', total: 4, successes: 4, failures: 0 },
       ],
       commandStatus: [
         {
@@ -107,11 +114,23 @@ describe('analytics D1 report', () => {
     assert.include(output, '2026-06-02  0');
     assert.include(output, 'ballin update  5      3        1        1        20.0%');
     assert.include(output, '2026-06-01  1.0.0        24          26.6           5');
+    const behaviorSection = output.split('Behavioral outcomes\n')[1].split('\nRuntime/version trends')[0];
+    assert.match(behaviorSection, /backup\.run\s+5\s+3\s+2\s+40\.0%/);
+    assert.match(behaviorSection, /update\.backup\s+3\s+2\s+1\s+33\.3%/);
+    assert.match(behaviorSection, /update\.self-update\s+4\s+4\s+0\s+0\.0%/);
+    assert.notInclude(behaviorSection, 'unknown');
+    assert.notMatch(behaviorSection, /^total\s/mu);
+    assert.include(behaviorSection, 'backup.run and update.backup intentionally overlap: do not sum or subtract them, or divide by command counts');
+    assert.include(behaviorSection, 'Independent delivery loss, interruption, mixed client versions and adjacent UTC dates prevent matching');
+    assert.include(behaviorSection, 'launch failure may produce only a parent stage outcome');
+    assert.include(behaviorSection, 'not unique-install adoption, first/repeat backup, retention or user percentages');
+    assert.include(behaviorSection, 'Selective participation and spoofable public events');
   });
 
   it('prints clear empty states for sparse aggregate data', () => {
     const output = renderReport({
       activeInstalls: [],
+      behaviorOutcomes: [],
       commandStatus: [],
       runtimeTrends: [],
     }, {
@@ -123,11 +142,13 @@ describe('analytics D1 report', () => {
     assert.include(output, '2026-06-01  0');
     assert.include(output, 'No command events found for this range.');
     assert.include(output, 'No runtime/version events found for this range.');
+    assert.include(output, 'No behavioral outcomes found for this range.');
   });
 
   it('normalizes malformed aggregate values without misreporting failures', () => {
     const output = renderReport({
       activeInstalls: [{ date_bucket: null, active_installs: 'not-a-number' }],
+      behaviorOutcomes: [{ event: 'backup.run', total: 9, failures: Infinity }],
       commandStatus: [{ command: '', total: 0, failures: Infinity }],
       runtimeTrends: [{ events: '2' }],
     }, {
@@ -139,6 +160,7 @@ describe('analytics D1 report', () => {
     assert.include(output, '2026-06-01  0');
     assert.match(output, /unknown\s+0\s+0\s+0\s+0\s+0\.0%/);
     assert.include(output, 'unknown  unknown      unknown     unknown        2');
+    assert.match(output, /backup\.run\s+0\s+0\s+0\s+0\.0%/);
   });
 
   it('generates the report with an injected D1 runner', () => {
@@ -161,6 +183,9 @@ describe('analytics D1 report', () => {
           unknown: 0,
         }];
       }
+      if (sql.includes('behavior_events_daily')) {
+        return [{ event: 'backup.run', failures: 1, successes: 2, total: 3 }];
+      }
       return [{
         app_version: '1.0.0',
         date_bucket: '2026-06-01',
@@ -170,9 +195,63 @@ describe('analytics D1 report', () => {
       }];
     });
 
-    assert.lengthOf(sqlStatements, 3);
+    assert.lengthOf(sqlStatements, 4);
     assert.include(report, '2026-06-01  4');
     assert.include(report, 'ballin backup  2      2        0        0        0.0%');
+    assert.match(report, /backup\.run\s+3\s+2\s+1\s+33\.3%/);
+  });
+
+  it('queries terminal behavioral totals and daily outcomes over inclusive UTC dates', () => {
+    const database = new DatabaseSync(':memory:');
+    const rootDir = path.join(__dirname, '..');
+    try {
+      database.exec(fs.readFileSync(path.join(
+        rootDir, 'analytics-worker', 'migrations', '0003_behavior_events_daily.sql',
+      ), 'utf8'));
+      const insert = database.prepare(`
+        INSERT INTO behavior_events_daily (date_bucket, event, status, count)
+        VALUES (?, ?, ?, ?)
+      `);
+      const seedRows: Array<[string, string, string, number]> = [
+        ['2026-05-31', 'backup.run', 'failure', 100],
+        ['2026-06-01', 'backup.run', 'success', 3],
+        ['2026-06-02', 'backup.run', 'failure', 2],
+        ['2026-06-02', 'update.backup', 'failure', 1],
+        ['2026-06-03', 'update.backup', 'success', 2],
+        ['2026-06-03', 'update.self-update', 'success', 4],
+        ['2026-06-04', 'backup.run', 'failure', 100],
+      ];
+      for (const row of seedRows) {
+        insert.run(...row);
+      }
+      const queries = loadReportQueries({
+        database: defaultDatabase, from: '2026-06-01', to: '2026-06-03',
+      });
+      assert.deepEqual(database.prepare(queries.behaviorOutcomes).all(), [
+        { event: 'backup.run', total: 5, successes: 3, failures: 2, failure_rate: 0.4 },
+        { event: 'update.backup', total: 3, successes: 2, failures: 1, failure_rate: 1 / 3 },
+        { event: 'update.self-update', total: 4, successes: 4, failures: 0, failure_rate: 0 },
+      ]);
+
+      const dailySql = fs.readFileSync(path.join(
+        rootDir, 'analytics-worker', 'queries', 'behavior-outcomes.sql',
+      ), 'utf8');
+      assert.notMatch(dailySql.replace(/^--.*$/gmu, ''), /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER)\b/iu);
+      assert.deepEqual(database.prepare(dailySql).all('2026-06-01', '2026-06-03'), [
+        { date_bucket: '2026-06-01', event: 'backup.run', total: 3, successes: 3, failures: 0, failure_rate: 0 },
+        { date_bucket: '2026-06-02', event: 'backup.run', total: 2, successes: 0, failures: 2, failure_rate: 1 },
+        { date_bucket: '2026-06-02', event: 'update.backup', total: 1, successes: 0, failures: 1, failure_rate: 1 },
+        { date_bucket: '2026-06-03', event: 'update.backup', total: 2, successes: 2, failures: 0, failure_rate: 0 },
+        { date_bucket: '2026-06-03', event: 'update.self-update', total: 4, successes: 4, failures: 0, failure_rate: 0 },
+      ]);
+      const emptyQueries = loadReportQueries({
+        database: defaultDatabase, from: '2026-07-01', to: '2026-07-31',
+      });
+      assert.deepEqual(database.prepare(emptyQueries.behaviorOutcomes).all(), []);
+      assert.deepEqual(database.prepare(dailySql).all('2026-07-01', '2026-07-31'), []);
+    } finally {
+      database.close();
+    }
   });
 
   it('parses Wrangler D1 JSON result rows', () => {

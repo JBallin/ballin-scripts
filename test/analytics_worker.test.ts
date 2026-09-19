@@ -7,6 +7,9 @@ const {
 const {
   topLevelCommandNames,
 } = require('../commands/top_level_commands.ts');
+const fs = require('fs');
+const path = require('path');
+const { DatabaseSync } = require('node:sqlite');
 
 type StatementRun = {
   query: string;
@@ -106,6 +109,14 @@ const payloadForCommand = (command: string) => ({
   appVersion: '1.0.0',
   nodeMajor: '24',
   osVersion: '26.6',
+});
+
+const payloadForBehavior = (event = 'backup.run', status = 'success') => ({
+  schemaVersion: 2,
+  installId: '826f9faa-9995-4f66-a01b-73b4f7aebdf1',
+  dateBucket: new Date().toISOString().slice(0, 10),
+  event,
+  status,
 });
 
 const eventRequest = (
@@ -276,6 +287,149 @@ describe('analytics Worker', () => {
     assert.notInclude(runs.flatMap(({ values }) => values), '203.0.113.7');
   });
 
+  it('stores every behavioral event and terminal outcome only in its identity-free aggregate', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+
+    for (const event of ['backup.run', 'update.backup', 'update.self-update']) {
+      for (const status of ['success', 'failure']) {
+        const { env, rateLimitKeys, runs } = makeEnv();
+        const payload = payloadForBehavior(event, status);
+        const response = await worker.fetch(eventRequest(payload, { sourceIp: '203.0.113.7' }), env);
+
+        assert.equal(response.status, 204, `${event} ${status}`);
+        assert.lengthOf(runs, 1);
+        assert.include(runs[0].query, 'INSERT INTO behavior_events_daily (date_bucket, event, status, count)');
+        assert.include(runs[0].query, 'ON CONFLICT(date_bucket, event, status)');
+        assert.include(runs[0].query, 'DO UPDATE SET count = count + 1');
+        assert.deepEqual(runs[0].values, [payload.dateBucket, event, status]);
+        assert.notMatch(JSON.stringify(runs), /install_id|install_days|command_events_daily|version_events_daily/);
+        assert.notInclude(JSON.stringify(runs), payload.installId);
+        assert.notInclude(JSON.stringify(runs), '203.0.113.7');
+        assert.match(rateLimitKeys[2], /^v1-events:install:[0-9a-f]{64}$/);
+        assert.notInclude(JSON.stringify(runs), rateLimitKeys[2].split(':')[2]);
+      }
+    }
+  });
+
+  it('shares all abuse-limit keys across command and behavioral schemas', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, rateLimitKeys, runs } = makeEnv();
+
+    const commandResponse = await worker.fetch(eventRequest(payloadForCommand('ballin backup'), {
+      sourceIp: '203.0.113.7',
+    }), env);
+    const behaviorResponse = await worker.fetch(eventRequest(payloadForBehavior(), {
+      sourceIp: '203.0.113.7',
+    }), env);
+
+    assert.equal(commandResponse.status, 204);
+    assert.equal(behaviorResponse.status, 204);
+    assert.deepEqual(rateLimitKeys.slice(0, 3), rateLimitKeys.slice(3));
+    assert.lengthOf(runs, 4);
+    assert.include(runs[0].query, 'INSERT OR IGNORE INTO install_days');
+    assert.include(runs[1].query, 'INSERT INTO command_events_daily');
+    assert.include(runs[2].query, 'INSERT INTO version_events_daily');
+    assert.include(runs[3].query, 'INSERT INTO behavior_events_daily');
+  });
+
+  it('increments behavioral SQL counts without changing existing installation, command, or runtime aggregates', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const database = new DatabaseSync(':memory:');
+    const migrationsDir = path.join(__dirname, '..', 'analytics-worker', 'migrations');
+    const applyRuns = (statements: StatementRun[]) => {
+      for (const { query, values } of statements) {
+        database.prepare(query).run(Object.fromEntries(values.map((value, index) => [`?${index + 1}`, value])));
+      }
+    };
+    const existingTables = ['install_days', 'command_events_daily', 'version_events_daily'];
+    const existingRows = () => existingTables.map((table) => database.prepare(`SELECT * FROM ${table}`).all());
+
+    try {
+      for (const filename of fs.readdirSync(migrationsDir).sort()) {
+        database.exec(fs.readFileSync(path.join(migrationsDir, filename), 'utf8'));
+      }
+      assert.equal((await worker.fetch(eventRequest(payloadForCommand('ballin backup')), env)).status, 204);
+      applyRuns(runs.splice(0));
+      const beforeRows = existingRows();
+
+      for (const event of ['backup.run', 'update.backup', 'update.self-update']) {
+        for (const status of ['success', 'failure', 'success']) {
+          assert.equal((await worker.fetch(eventRequest(payloadForBehavior(event, status)), env)).status, 204);
+        }
+      }
+      applyRuns(runs);
+
+      assert.deepEqual(existingRows(), beforeRows);
+      assert.deepEqual(database.prepare('SELECT event, status, count FROM behavior_events_daily ORDER BY event, status').all(), [
+        { event: 'backup.run', status: 'failure', count: 1 },
+        { event: 'backup.run', status: 'success', count: 2 },
+        { event: 'update.backup', status: 'failure', count: 1 },
+        { event: 'update.backup', status: 'success', count: 2 },
+        { event: 'update.self-update', status: 'failure', count: 1 },
+        { event: 'update.self-update', status: 'success', count: 2 },
+      ]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('rejects missing, mistyped, unsupported, and cross-schema behavioral fields before storage', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const payload = payloadForBehavior();
+    const invalidPayloads: Array<[string, Record<string, unknown>]> = [];
+    for (const key of Object.keys(payload)) {
+      const missing: Record<string, unknown> = { ...payload };
+      delete missing[key];
+      invalidPayloads.push([`missing ${key}`, missing]);
+      for (const value of [null, '', [], {}, true]) {
+        invalidPayloads.push([`invalid ${key}: ${JSON.stringify(value)}`, { ...payload, [key]: value }]);
+      }
+    }
+    for (const key of ['command', 'durationBucket', 'appVersion', 'nodeMajor', 'osVersion', 'caller', 'origin', 'timestamp', 'installIdHash', 'path']) {
+      invalidPayloads.push([`extra ${key}`, { ...payload, [key]: 'unexpected' }]);
+    }
+    for (const event of ['backup', 'backup.run.source', 'update.readiness', 'doctor', 'BACKUP.RUN', 'backup.run ']) {
+      invalidPayloads.push([`event ${event}`, { ...payload, event }]);
+    }
+    for (const status of ['unknown', 'attempted', 'skipped', 'partial', 'SUCCESS']) {
+      invalidPayloads.push([`status ${status}`, { ...payload, status }]);
+    }
+    for (const schemaVersion of [0, 1, 3, '2']) {
+      invalidPayloads.push([`schema ${schemaVersion}`, { ...payload, schemaVersion }]);
+    }
+    for (const installId of [payload.installId.toUpperCase(), 'invalid', '826f9faa-9995-0f66-a01b-73b4f7aebdf1']) {
+      invalidPayloads.push([`UUID ${installId}`, { ...payload, installId }]);
+    }
+    for (const dateBucket of ['2026/06/01', '2026-02-30', `${payload.dateBucket}T12:00:00Z`]) {
+      invalidPayloads.push([`date ${dateBucket}`, { ...payload, dateBucket }]);
+    }
+    invalidPayloads.push(['command payload marked v2', { ...payloadForCommand('ballin backup'), schemaVersion: 2 }]);
+    invalidPayloads.push(['v1 payload with behavioral event', { ...payloadForCommand('ballin backup'), event: 'backup.run' }]);
+
+    for (const [description, invalidPayload] of invalidPayloads) {
+      const { env, rateLimitKeys, runs } = makeEnv();
+      const response = await worker.fetch(eventRequest(invalidPayload), env);
+      assert.equal(response.status, 400, description);
+      assert.deepEqual(runs, [], description);
+      assert.lengthOf(rateLimitKeys, 2, description);
+    }
+  });
+
+  it('accepts behavioral UTC date buckets within one day and rejects buckets beyond the skew', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const now = new Date();
+
+    for (const offset of [-2, -1, 0, 1, 2]) {
+      const { env, runs } = makeEnv();
+      const dateBucket = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const response = await worker.fetch(eventRequest({ ...payloadForBehavior(), dateBucket }), env);
+      const accepted = Math.abs(offset) <= 1;
+      assert.equal(response.status, accepted ? 204 : 400, `UTC day offset ${offset}`);
+      assert.lengthOf(runs, accepted ? 1 : 0);
+    }
+  });
+
   it('ignores the legacy ingest-token header from older clients', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env } = makeEnv();
@@ -307,7 +461,7 @@ describe('analytics Worker', () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const cases: Array<[Record<string, unknown> | string, string]> = [
       ['null', 'event payload must be a JSON object'],
-      [{ ...payloadForCommand('ballin'), schemaVersion: 2 }, 'schemaVersion must be 1'],
+      [{ ...payloadForCommand('ballin'), schemaVersion: 3 }, 'schemaVersion must be 1 or 2'],
       [{ ...payloadForCommand('ballin'), installId: '' }, 'installId must be a lowercase UUID'],
       [{ ...payloadForCommand('ballin'), dateBucket: '2026/06/01' }, 'dateBucket must be YYYY-MM-DD'],
       [{ ...payloadForCommand('ballin'), command: 'ballin destroy' }, 'command is not supported'],
@@ -341,6 +495,21 @@ describe('analytics Worker', () => {
     assert.includeDeepMembers(runs.map(({ values }) => values), [
       [payload.dateBucket, 'ballin backup', 'success', 'unknown'],
     ]);
+  });
+
+  it('preserves v1 unknown outcomes and its existing empty or non-string duration fallback', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+
+    for (const durationBucket of ['', null, 0]) {
+      const { env, runs } = makeEnv();
+      const payload = { ...payloadForCommand('ballin backup'), status: 'unknown', durationBucket };
+      const response = await worker.fetch(eventRequest(payload), env);
+
+      assert.equal(response.status, 204);
+      assert.lengthOf(runs, 3);
+      assert.deepEqual(runs[1].values, [payload.dateBucket, 'ballin backup', 'unknown', 'unknown']);
+      assert.notInclude(JSON.stringify(runs), 'behavior_events_daily');
+    }
   });
 
   it('rejects high-cardinality version and runtime values', async () => {
@@ -425,6 +594,29 @@ describe('analytics Worker', () => {
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { error: 'request body is too large' });
     assert.deepEqual(runs, []);
+  });
+
+  it('enforces the same bounded body reads for behavioral payloads at and beyond the byte limit', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const payload = JSON.stringify(payloadForBehavior());
+
+    for (const byteLength of [2048, 2049, 65_536]) {
+      const { env, rateLimitKeys, runs } = makeEnv();
+      const controlled = controlledBody([new TextEncoder().encode(payload.padEnd(byteLength, ' '))], {
+        maxBytesPerPull: byteLength === 2048 ? 1 : undefined,
+      });
+      const response = await worker.fetch(streamedEventRequest(controlled.body), env);
+      const accepted = byteLength === 2048;
+
+      assert.equal(response.status, accepted ? 204 : 400);
+      assert.lengthOf(runs, accepted ? 1 : 0);
+      assert.lengthOf(rateLimitKeys, accepted ? 3 : 2);
+      assert.equal(controlled.state.deliveredBytes, accepted ? 2048 : 2049);
+      assert.equal(controlled.state.cancellations, accepted ? 0 : 1);
+      if (!accepted) {
+        assert.deepEqual(await response.json(), { error: 'request body is too large' });
+      }
+    }
   });
 
   it('preserves the invalid JSON response for requests without a body', async () => {
@@ -576,6 +768,55 @@ describe('analytics Worker', () => {
     assert.deepEqual(runs, []);
   });
 
+  it('enforces all three behavioral rate limits before any aggregate write', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+
+    for (const [prefix, keyCount, readsBody] of [
+      ['v1-events:global', 1, false],
+      ['v1-events:source:', 2, false],
+      ['v1-events:install:', 3, true],
+    ] as const) {
+      const { env, rateLimitKeys, runs } = makeEnv({
+        rateLimitFailure: (key) => key.startsWith(prefix),
+      });
+      const controlled = controlledBody([new TextEncoder().encode(JSON.stringify(payloadForBehavior()))]);
+      const response = await worker.fetch(streamedEventRequest(controlled.body, { sourceIp: '203.0.113.7' }), env);
+
+      assert.equal(response.status, 429);
+      assert.lengthOf(rateLimitKeys, keyCount);
+      assert.deepEqual(runs, []);
+      assert.equal(controlled.state.pulls > 0, readsBody);
+    }
+  });
+
+  it('fails closed for behavioral requests without a hash secret or rate-limit binding', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+
+    for (const options of [{ hashSecret: '' }, { rateLimiter: false }]) {
+      const { env, rateLimitKeys, runs } = makeEnv(options);
+      const controlled = controlledBody([new TextEncoder().encode(JSON.stringify(payloadForBehavior()))]);
+      const response = await worker.fetch(streamedEventRequest(controlled.body), env);
+
+      assert.equal(response.status, 500);
+      assert.deepEqual(await response.json(), { error: 'analytics backend is not configured' });
+      assert.deepEqual(rateLimitKeys, []);
+      assert.deepEqual(runs, []);
+      assert.equal(controlled.state.pulls, 0);
+    }
+  });
+
+  it('does not acknowledge behavioral storage failures as accepted outcomes', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const error = new Error('D1 write failed');
+    const { env, runs } = makeEnv({ batchError: error });
+
+    await worker.fetch(eventRequest(payloadForBehavior()), env).then(
+      () => assert.fail('expected behavioral storage to reject'),
+      (caught: Error) => assert.strictEqual(caught, error),
+    );
+    assert.deepEqual(runs, []);
+  });
+
   it('deletes every aggregate older than the scheduled retention cutoff', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, runs } = makeEnv();
@@ -591,8 +832,9 @@ describe('analytics Worker', () => {
     });
     await cleanup;
 
-    assert.lengthOf(runs, 3);
+    assert.lengthOf(runs, 4);
     assert.deepEqual(runs.map(({ values }) => values), [
+      ['2025-05-31'],
       ['2025-05-31'],
       ['2025-05-31'],
       ['2025-05-31'],
@@ -601,7 +843,43 @@ describe('analytics Worker', () => {
       'DELETE FROM install_days WHERE date_bucket < ?1',
       'DELETE FROM command_events_daily WHERE date_bucket < ?1',
       'DELETE FROM version_events_daily WHERE date_bucket < ?1',
+      'DELETE FROM behavior_events_daily WHERE date_bucket < ?1',
     ]);
+  });
+
+  it('retains behavioral rows on the 395-day cutoff and deletes only older rows', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const database = new DatabaseSync(':memory:');
+    const migrationsDir = path.join(__dirname, '..', 'analytics-worker', 'migrations');
+    let cleanup: Promise<unknown> | undefined;
+
+    try {
+      for (const filename of fs.readdirSync(migrationsDir).sort()) {
+        database.exec(fs.readFileSync(path.join(migrationsDir, filename), 'utf8'));
+      }
+      const insert = database.prepare('INSERT INTO behavior_events_daily VALUES (?, ?, ?, 1)');
+      for (const date of ['2025-05-30', '2025-05-31', '2025-06-01']) {
+        insert.run(date, 'backup.run', 'success');
+      }
+
+      await worker.scheduled({ cron: '0 4 * * *', scheduledTime: Date.parse('2026-06-30T04:00:00.000Z') }, env, {
+        waitUntil(promise: Promise<unknown>) {
+          cleanup = promise;
+        },
+      });
+      await cleanup;
+      for (const { query, values } of runs) {
+        database.prepare(query).run({ '?1': values[0] });
+      }
+
+      assert.deepEqual(database.prepare('SELECT date_bucket FROM behavior_events_daily ORDER BY date_bucket').all(), [
+        { date_bucket: '2025-05-31' },
+        { date_bucket: '2025-06-01' },
+      ]);
+    } finally {
+      database.close();
+    }
   });
 
   it('propagates scheduled D1 cleanup failures through waitUntil', async () => {
