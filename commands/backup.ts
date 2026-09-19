@@ -97,13 +97,13 @@ type CommandOptions = {
 
 const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 
-const suggestionSortKey = (fileName: string): string => (
+const backupFileSortKey = (fileName: string): string => (
   fileName === 'Brewfile' ? 'brew' : fileName.toLowerCase()
 );
 
-const compareSuggestionFileNames = (left: string, right: string): number => {
-  const leftKey = suggestionSortKey(left);
-  const rightKey = suggestionSortKey(right);
+const compareBackupFileNames = (left: string, right: string): number => {
+  const leftKey = backupFileSortKey(left);
+  const rightKey = backupFileSortKey(right);
   if (leftKey === rightKey) {
     return 0;
   }
@@ -112,7 +112,7 @@ const compareSuggestionFileNames = (left: string, right: string): number => {
 
 const suggestionFileNames = snapshotDefinitions
   .map(({ name }: { name: string }) => name)
-  .toSorted(compareSuggestionFileNames);
+  .toSorted(compareBackupFileNames);
 
 const fileSuggestions = `\n${suggestionFileNames.map((name: string) => `  ${name}`).join('\n')}`;
 
@@ -400,6 +400,12 @@ const writeSnapshotStatus = (
   } else {
     writeStdoutLine(`✎ ${fileWithoutExtension}`);
   }
+};
+
+const writeSnapshotStatuses = (snapshots: EvaluatedSnapshot[]): void => {
+  snapshots
+    .toSorted((left, right) => compareBackupFileNames(left.snapshot.fileName, right.snapshot.fileName))
+    .forEach(({ snapshot, resultState }) => writeSnapshotStatus(snapshot, resultState));
 };
 
 const errorMessage = (error: unknown): string => (
@@ -789,7 +795,7 @@ const runStagedBackup = (
     }
   }
   if (!completed) return false;
-  completed.forEach(({ snapshot, resultState }) => writeSnapshotStatus(snapshot, resultState));
+  writeSnapshotStatuses(completed);
   return true;
 };
 
@@ -844,7 +850,7 @@ const runRepositoryBackup = (
     }
   }
   if (!completed) return false;
-  completed.forEach(({ snapshot, resultState }) => writeSnapshotStatus(snapshot, resultState));
+  writeSnapshotStatuses(completed);
   return true;
 };
 
