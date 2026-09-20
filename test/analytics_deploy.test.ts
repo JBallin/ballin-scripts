@@ -126,7 +126,40 @@ const compareVersions = (left: number[], right: number[]): number => {
   return 0;
 };
 
+const yamlListAfter = (source: string, heading: string, indentation: number): string[] => {
+  const lines = source.split('\n');
+  const headingIndex = lines.indexOf(heading);
+  assert.isAtLeast(headingIndex, 0, `missing YAML heading: ${heading.trim()}`);
+
+  const itemPattern = new RegExp(`^ {${indentation}}- (.+)$`, 'u');
+  const items: string[] = [];
+  for (const line of lines.slice(headingIndex + 1)) {
+    const match = line.match(itemPattern);
+    if (!match) {
+      break;
+    }
+    items.push(match[1].replace(/^(['"])(.*)\1$/u, '$2'));
+  }
+  return items;
+};
+
 describe('analytics Worker deployment', () => {
+  it('keeps automatic deploy triggers and setup scoped to deployment inputs', () => {
+    const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
+
+    assert.deepEqual(yamlListAfter(workflow, '    paths:', 6), [
+      'analytics-worker/**',
+      '.github/workflows/deploy-analytics-worker.yml',
+      '.nvmrc',
+    ]);
+    assert.match(
+      workflow,
+      /uses:\s*actions\/setup-node@v6[\s\S]*?node-version-file:\s*\.nvmrc/u,
+    );
+    assert.notMatch(workflow, /^\s+cache:\s*npm\s*$/mu);
+    assert.notMatch(workflow, /^\s+(?:run:\s*)?npm (?:ci|test)(?:\s|$)/mu);
+  });
+
   it('uses a compatible Wrangler version for the production rate-limit binding', () => {
     const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
     const config = fs.readFileSync(wranglerConfigPath, 'utf8');

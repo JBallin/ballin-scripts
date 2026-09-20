@@ -9,6 +9,9 @@ const {
 const {
   analyticsCommandForBallinArgs,
 } = require('../commands/ballin.ts');
+const {
+  topLevelCommandNames,
+} = require('../commands/top_level_commands.ts');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
@@ -156,16 +159,23 @@ esac
     assertHelpOutput(runBallin(['help']));
   });
 
+  it('keeps top-level help aligned with the command catalog', () => {
+    const result = runBallin(['--help']);
+    const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\nExamples:')[0];
+    const documentedCommands = [...commandSection.matchAll(/^ {4}([a-z][a-z-]*) {2,}/gmu)]
+      .map((match) => match[1]);
+
+    assert.sameMembers(documentedCommands, [...topLevelCommandNames]);
+  });
+
   it('uses canonical subcommand names for analytics', () => {
     assert.equal(analyticsCommandForBallinArgs([]), 'ballin');
     assert.equal(analyticsCommandForBallinArgs(['--help']), 'ballin');
     assert.equal(analyticsCommandForBallinArgs(['help']), 'ballin');
-    assert.equal(analyticsCommandForBallinArgs(['update']), 'ballin update');
+    topLevelCommandNames.forEach((command: string) => {
+      assert.equal(analyticsCommandForBallinArgs([command]), `ballin ${command}`);
+    });
     assert.equal(analyticsCommandForBallinArgs(['backup', 'read', 'zshrc.sh']), 'ballin backup');
-    assert.equal(analyticsCommandForBallinArgs(['config', 'get', 'update.cleanup']), 'ballin config');
-    assert.equal(analyticsCommandForBallinArgs(['doctor', '--verbose']), 'ballin doctor');
-    assert.equal(analyticsCommandForBallinArgs(['self-update']), 'ballin self-update');
-    assert.equal(analyticsCommandForBallinArgs(['uninstall']), 'ballin uninstall');
     assert.equal(analyticsCommandForBallinArgs(['upd']), 'ballin');
   });
 
