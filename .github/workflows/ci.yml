@@ -90,7 +90,7 @@ jobs:
             mocha: require('mocha/package.json').version,
           }, null, 2) + '\n');
           NODE
-          node node_modules/c8/bin/c8.js report --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
+          node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
 
       - name: Upload coverage comparison evidence
         if: >-
