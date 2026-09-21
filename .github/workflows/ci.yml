@@ -62,4 +62,56 @@ jobs:
         run: npm run typecheck:analytics-worker
 
       - name: Run unit tests with coverage
+        id: coverage
         run: npm run test:coverage
+
+      - name: Capture coverage comparison evidence
+        id: coverage_diagnostics
+        if: >-
+          ${{ !cancelled() &&
+            (steps.coverage.outcome == 'failure' ||
+              (github.event_name == 'workflow_dispatch' &&
+                steps.coverage.outcome == 'success')) }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+          const { createHash } = require('node:crypto');
+          fs.writeFileSync('coverage/runtime.json', JSON.stringify({
+            commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+            tree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim(),
+            lockSha256: createHash('sha256').update(fs.readFileSync('package-lock.json')).digest('hex'),
+            node: process.version,
+            v8: process.versions.v8,
+            platform: process.platform,
+            arch: process.arch,
+            uid: process.getuid(),
+            c8: require('c8/package.json').version,
+            mocha: require('mocha/package.json').version,
+          }, null, 2) + '\n');
+          NODE
+          node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
+
+      - name: Upload coverage comparison evidence
+        if: >-
+          ${{ !cancelled() &&
+            steps.coverage_diagnostics.outcome == 'success' &&
+            (steps.coverage.outcome == 'failure' ||
+              (github.event_name == 'workflow_dispatch' &&
+                steps.coverage.outcome == 'success')) }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/runtime.json
+            coverage/coverage-final.json
+            coverage/coverage-summary.json
+          retention-days: 7
+
+      - name: Upload raw V8 coverage evidence
+        if: ${{ !cancelled() && steps.coverage.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
+          path: coverage/tmp/
+          retention-days: 7

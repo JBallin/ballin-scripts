@@ -21,8 +21,10 @@ https://ballin-scripts-analytics.jballin.workers.dev/v1/events
 The Worker has a D1 binding, scheduled retention cleanup, an
 `INSTALL_ID_HASH_SECRET`, and an `ANALYTICS_RATE_LIMITER` binding for
 `POST /v1/events`.
-Worker-impacting changes deploy from `main` through the `Deploy Analytics
-Worker` GitHub Actions workflow.
+Worker and deployment input changes deploy from `main` through the `Deploy
+Analytics Worker` GitHub Actions workflow. The
+[Worker package README](../analytics-worker/README.md#automatic-deploys) owns
+the exact automatic-trigger and deployment-time validation contract.
 
 ## Why Cloudflare Worker and D1
 
@@ -183,9 +185,9 @@ For production setup or recreation:
 - apply all pending D1 migrations with `wrangler d1 migrations apply
   ballin-scripts-analytics --remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
-  change landed on `main`; after deploying, the workflow verifies every Worker
-  version receiving traffic has the required D1, rate-limit, and hash-secret
-  binding names and types
+  Worker or deployment input changed on `main`; after deploying, the workflow
+  verifies every Worker version receiving traffic has the required D1,
+  rate-limit, and hash-secret binding names and types
 - confirm the deployed Worker returns `204` for a valid event, `400` for
   unsupported fields or invalid enums, and `429` when rate limits are exceeded
 - query D1 to confirm only hashed install/day rows and aggregate counts are
