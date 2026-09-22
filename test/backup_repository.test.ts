@@ -67,7 +67,7 @@ describe('private repository transport', () => {
   });
   it('creates the exact minimal managed-branch ruleset and verifies the returned resource independently', () => {
     const before = read(); state.requests = []; state.rulesets = [];
-    ensureManagedBranchRuleset(before, options);
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
     assert.equal(rulesetWrites().length, 1);
     assert.deepEqual(rulesetWrites()[0].payload, {
       name: managedBranchRulesetName,
@@ -83,12 +83,27 @@ describe('private repository transport', () => {
       { method: 'GET', endpoint: 'repos/fixture-user/ballin-backups/rulesets/2?includes_parents=false' },
     ]);
   });
-  it('accepts exact protection with read-only visibility and makes no administration write', () => {
+  it('accepts exact protection without an administration write', () => {
     const before = read(); state.requests = [];
-    state.faults = { rulesetCreate: 'denied', rulesetDetail: 'omit-bypass' };
-    ensureManagedBranchRuleset(before, options);
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'present' });
     assert.equal(rulesetWrites().length, 0);
     assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
+  });
+  it('does not claim exact protection when read visibility omits bypass actors', () => {
+    const before = read(); state.requests = []; state.faults.rulesetDetail = 'omit-bypass';
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'permission-denied' });
+    assert.equal(rulesetWrites().length, 0);
+  });
+  it('matches owned ruleset invariants semantically instead of requiring raw response equality', () => {
+    const before = read(); state.requests = [];
+    state.rulesets = [fixtureRuleset({
+      source: 'FIXTURE-USER/BALLIN-BACKUPS',
+      conditions: { ref_name: { exclude: [], include: ['refs/heads/main', 'refs/heads/main'], metadata: {} }, repository_name: {} },
+      rules: [{ type: 'non_fast_forward', parameters: {} }, { type: 'deletion', updated_at: 'response metadata' }],
+      response_only: 'ignored',
+    })];
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'present' });
+    assert.equal(rulesetWrites().length, 0);
   });
   [
     { target: 'tag' },
@@ -96,57 +111,60 @@ describe('private repository transport', () => {
     { bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5, bypass_mode: 'always' }] },
     { conditions: { ref_name: { include: ['refs/heads/other'], exclude: [] } } },
     { conditions: { ref_name: { include: ['refs/heads/main'], exclude: ['refs/heads/release'] } } },
-    { conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] }, repository_name: {} } },
+    { conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] }, repository_name: { include: ['other'] } } },
     { rules: [{ type: 'deletion' }] },
     { rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }, { type: 'pull_request' }] },
-    { rules: [{ type: 'deletion', parameters: {} }, { type: 'non_fast_forward' }] },
+    { rules: [{ type: 'deletion', parameters: { protected_file_patterns: ['*'] } }, { type: 'non_fast_forward' }] },
     { rules: [{ type: 'deletion' }, { type: 'pull_request' }] },
+    { rules: [{ type: null }, { type: 'non_fast_forward' }] },
     { source_type: 'Organization' },
+    { conditions: null },
   ].forEach((override, index) => {
-    it(`refuses mismatched named branch protection without overwriting it ${index + 1}`, () => {
+    it(`leaves mismatched named branch protection unchanged ${index + 1}`, () => {
       const before = read(); state.requests = []; state.rulesets = [fixtureRuleset(override)];
-      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'does not match');
+      assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'ambiguous', reason: 'mismatch' });
       assert.equal(rulesetWrites().length, 0);
     });
   });
-  it('refuses named protection returned for another repository source', () => {
+  it('leaves named protection for another repository source unchanged', () => {
     const before = read(); state.requests = []; state.faults.rulesetDetail = 'wrong-source';
-    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'does not match');
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'ambiguous', reason: 'mismatch' });
     assert.equal(rulesetWrites().length, 0);
   });
-  it('refuses duplicate named rulesets and creates alongside an unrelated ruleset only', () => {
+  it('leaves duplicate named rulesets unchanged and creates alongside an unrelated ruleset only', () => {
     const before = read(); state.requests = [];
     state.rulesets = [fixtureRuleset(), fixtureRuleset({ id: 2 })];
-    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'duplicated');
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'ambiguous', reason: 'duplicate' });
     assert.equal(rulesetWrites().length, 0);
     state.requests = []; state.rulesets = [fixtureRuleset({ name: 'Unrelated policy' })]; state.nextRulesetId = 2;
-    ensureManagedBranchRuleset(before, options);
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
     assert.equal(rulesetWrites().length, 1);
     assert.deepEqual(state.rulesets.map(({ name }) => name), ['Unrelated policy', managedBranchRulesetName]);
   });
   [
-    { mode: 'denied', message: 'Administration write access' },
-    { mode: 'server', message: 'unconfirmed' },
-    { mode: 'malformed', message: 'unconfirmed' },
-    { mode: 'object', message: 'unconfirmed' },
-    { mode: 'invalid-id', message: 'unconfirmed' },
-    { mode: 'invalid-name', message: 'unconfirmed' },
-  ].forEach(({ mode, message }) => {
-    it(`fails closed on ${mode} ruleset-list evidence`, () => {
+    { mode: 'denied', outcome: { status: 'permission-denied' } },
+    { mode: 'server', outcome: { status: 'ambiguous' } },
+    { mode: 'malformed', outcome: { status: 'ambiguous' } },
+    { mode: 'object', outcome: { status: 'ambiguous' } },
+    { mode: 'invalid-id', outcome: { status: 'ambiguous' } },
+    { mode: 'invalid-name', outcome: { status: 'ambiguous' } },
+  ].forEach(({ mode, outcome }) => {
+    it(`classifies ${mode} ruleset-list evidence without writing`, () => {
       const before = read(); state.requests = []; state.faults.rulesetList = mode;
-      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, message);
+      const result = ensureManagedBranchRuleset(before, options);
+      assert.equal(result.status, outcome.status);
       assert.equal(rulesetWrites().length, 0);
     });
   });
   [
-    { mode: 'denied', message: 'Administration write access' },
-    { mode: 'server', message: 'unconfirmed' },
-    { mode: 'malformed', message: 'unconfirmed' },
-    { mode: 'missing', message: 'Administration write access' },
-  ].forEach(({ mode, message }) => {
-    it(`fails closed on ${mode} ruleset-detail evidence`, () => {
+    { mode: 'denied', status: 'permission-denied' },
+    { mode: 'server', status: 'ambiguous' },
+    { mode: 'malformed', status: 'ambiguous' },
+    { mode: 'missing', status: 'ambiguous' },
+  ].forEach(({ mode, status }) => {
+    it(`classifies ${mode} ruleset-detail evidence without writing`, () => {
       const before = read(); state.requests = []; state.faults.rulesetDetail = mode;
-      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, message);
+      assert.equal(ensureManagedBranchRuleset(before, options).status, status);
       assert.equal(rulesetWrites().length, 0);
     });
   });
@@ -157,33 +175,46 @@ describe('private repository transport', () => {
     assert.equal(rulesetRequests().length, 0);
   });
   [
-    { mode: 'plan', message: 'require GitHub Pro' },
-    { mode: 'denied', message: 'Administration write access' },
-    { mode: 'reject', message: 'rejected backup branch protection' },
-    { mode: 'server', message: 'unconfirmed' },
-    { mode: 'rate-limit', message: 'unconfirmed' },
-    { mode: 'spam', message: 'unconfirmed' },
-    { mode: 'ambiguous-no-effect', message: 'unconfirmed' },
-    { mode: 'no-effect', message: 'unconfirmed' },
-  ].forEach(({ mode, message }) => {
-    it(`fails closed after ${mode} protection creation without retrying`, () => {
+    { mode: 'plan', status: 'unsupported' },
+    { mode: 'plan-live-shape', status: 'unsupported' },
+    { mode: 'plan-alternate', status: 'unsupported' },
+    { mode: 'plan-private-first', status: 'unsupported' },
+    { mode: 'plan-public-alternative', status: 'unsupported' },
+    { mode: 'denied', status: 'permission-denied' },
+    { mode: 'admin-required', status: 'permission-denied' },
+    { mode: 'permission-missing', status: 'permission-denied' },
+    { mode: 'forbidden', status: 'permission-denied' },
+    { mode: 'status-only-forbidden', status: 'ambiguous' },
+    { mode: 'status-only-missing', status: 'ambiguous' },
+    { mode: 'reject', status: 'unexpected' },
+    { mode: 'generic-reject', status: 'unexpected' },
+    { mode: 'server', status: 'ambiguous' },
+    { mode: 'rate-limit', status: 'ambiguous' },
+    { mode: 'spam', status: 'ambiguous' },
+    { mode: 'ambiguous-no-effect', status: 'ambiguous' },
+    { mode: 'no-effect', status: 'ambiguous' },
+  ].forEach(({ mode, status }) => {
+    it(`classifies ${mode} protection creation without retrying`, () => {
       const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = mode;
-      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, message);
+      assert.equal(ensureManagedBranchRuleset(before, options).status, status);
       assert.equal(rulesetWrites().length, 1);
-      if (['plan', 'denied', 'reject'].includes(mode)) assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST']);
+      if (['plan', 'plan-live-shape', 'plan-alternate', 'plan-private-first', 'plan-public-alternative',
+        'denied', 'admin-required', 'permission-missing', 'forbidden', 'reject', 'generic-reject'].includes(mode)) {
+        assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST']);
+      }
     });
   });
-  ['ambiguous', 'malformed', 'server-applied'].forEach((mode) => {
+  ['ambiguous', 'malformed', 'server-applied', 'missing-id-applied'].forEach((mode) => {
     it(`reconciles ${mode} protection creation without repeating the mutation`, () => {
       const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = mode;
-      ensureManagedBranchRuleset(before, options);
+      assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
       assert.equal(rulesetWrites().length, 1);
       assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET', 'GET']);
     });
   });
   it('reconciles after the created ruleset detail is transiently unavailable', () => {
     const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetDetail = 'server-once';
-    ensureManagedBranchRuleset(before, options);
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
     assert.equal(rulesetWrites().length, 1);
     assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET', 'GET', 'GET']);
   });
@@ -200,6 +231,21 @@ describe('private repository transport', () => {
     };
     assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'private backup transport');
     assert.equal(attempts, 1);
+  });
+  it('preserves a local detail transport failure after reconciliation confirms the created ruleset', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    let failed = false;
+    options.runCommand = (command, args, opts) => {
+      const endpoint = args[args.indexOf('--method') + 2];
+      if (!failed && args.includes('--method') && args[args.indexOf('--method') + 1] === 'GET'
+        && /\/rulesets\/\d+\?/u.test(endpoint)) {
+        failed = true;
+        throw new Error('dummy local failure');
+      }
+      return run(command, args, opts);
+    };
+    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'private backup transport');
+    assert.equal(rulesetWrites().length, 1); assert.lengthOf(state.rulesets, 1);
   });
   it('fails after confirmed ambiguous creation when its private response cleanup is incomplete', () => {
     const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = 'ambiguous';
@@ -314,15 +360,15 @@ describe('private repository transport', () => {
   it('requires creation-time proof of an empty bypass list', () => {
     const before = read(); state.requests = []; state.rulesets = [];
     state.faults.rulesetDetail = 'omit-bypass';
-    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'does not match');
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'permission-denied' });
     assert.equal(rulesetWrites().length, 1);
   });
   it('recovers on a fresh invocation after creation confirmation was unavailable', () => {
     const before = read(); state.requests = []; state.rulesets = [];
     state.faults.rulesetCreate = 'confirmation-failure';
-    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'unconfirmed');
+    assert.equal(ensureManagedBranchRuleset(before, options).status, 'ambiguous');
     delete state.faults.rulesetCreate; delete state.faults.rulesetDetail;
-    ensureManagedBranchRuleset(before, options);
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'present' });
     assert.equal(rulesetWrites().length, 1);
   });
   ['extra-file', 'extra-parent'].forEach((mode) => {

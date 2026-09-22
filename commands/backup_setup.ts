@@ -9,7 +9,7 @@ const {
   createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, repositoryMessages,
   sameRepositoryRevision, unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
-import type { RepositoryRead, RepositoryError } from './backup_repository.ts';
+import type { RepositoryRead, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
 import type { SnapshotDefinition } from './backup_snapshots.ts';
 
 // Preserve the established legacy/automatic-backup prompt semantics.
@@ -95,6 +95,22 @@ const cancelled = (): false => {
   writeStdoutLine('Backup setup cancelled; no destination, consent, cache, or remote changes were made.');
   return false;
 };
+const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome): void => {
+  if (outcome.status === 'present' || outcome.status === 'unsupported') return;
+  if (outcome.status === 'enabled') {
+    writeStdoutLine('Optional GitHub branch protection enabled.');
+    return;
+  }
+  if (outcome.status === 'permission-denied') {
+    writeStdoutLine('Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun ballin backup setup after updating GitHub access.');
+    return;
+  }
+  if (outcome.status === 'unexpected') {
+    writeStdoutLine('Backup setup can continue normally, but optional GitHub branch protection could not be confirmed.');
+    return;
+  }
+  writeStdoutLine('Backup setup can continue normally, but optional GitHub branch protection is unconfirmed. Inspect the Ballin-named repository ruleset before retrying setup.');
+};
 type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig: Record<string, unknown>; repositoryName?: string;
 };
@@ -136,6 +152,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         candidate.backup = { ...candidate.backup, repository: read.destination };
         if (!saveBackupConfig(configPath, candidate)) return false;
       }
+      reportManagedBranchProtection(ensureManagedBranchRuleset(read));
       writeStdoutLine('Validated the configured private backup; local consent and automatic-backup choices were preserved.');
       return true;
     }
@@ -187,7 +204,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(repositoryMessages.moved); return false;
     }
     remoteInitialized = true;
-    ensureManagedBranchRuleset(read);
+    reportManagedBranchProtection(ensureManagedBranchRuleset(read));
     recoveryUrl = repositoryUrl(read.destination, account);
     writeStdoutLine(`Private backup confirmed: ${recoveryUrl}`);
     if (!invalidateBackupCache(backupCacheDir)) {

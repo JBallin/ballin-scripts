@@ -96,8 +96,18 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
   if (method === 'POST' && endpoint === rulesetBase) {
     const mode = fault.rulesetCreate;
     if (mode === 'plan') return reply({ message: 'Upgrade to GitHub Pro to use rulesets in private repositories', status: '422' }, 1);
+    if (mode === 'plan-live-shape') return reply({ message: 'Upgrade your account or make this repository public to enable this feature', status: '422' }, 1);
+    if (mode === 'plan-alternate') return reply({ message: 'Repository rulesets are not available for private repositories on this account', status: '403' }, 1);
+    if (mode === 'plan-private-first') return reply({ message: 'Private repositories are not supported by rulesets on this account', status: '422' }, 1);
+    if (mode === 'plan-public-alternative') return reply({ message: 'Rulesets are available if you make this repository public', status: '422' }, 1);
     if (mode === 'denied') return reply({ message: 'Resource not accessible by token', status: '403' }, 1);
+    if (mode === 'admin-required') return reply({ message: 'This operation requires repository administration permission', status: '422' }, 1);
+    if (mode === 'permission-missing') return reply({ message: 'Missing permission for repository policy', status: '403' }, 1);
+    if (mode === 'forbidden') return reply({ message: 'Forbidden', status: '403' }, 1);
+    if (mode === 'status-only-forbidden') return reply({ status: '403' }, 1);
+    if (mode === 'status-only-missing') return reply({ status: '404' }, 1);
     if (mode === 'reject') return reply({ message: 'Validation failed', status: '422' }, 1);
+    if (mode === 'generic-reject') return reply({ message: 'Request could not be processed', status: '422' }, 1);
     if (mode === 'rate-limit') return reply({ message: 'API rate limit exceeded', status: '403' }, 1);
     if (mode === 'spam') return reply({ message: 'The endpoint has been spammed', status: '422' }, 1);
     if (mode === 'server' || mode === 'ambiguous-no-effect') {
@@ -109,6 +119,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     if (mode === 'ambiguous') return reply({}, 1);
     if (mode === 'server-applied') return reply({ message: 'Internal error', status: '500' }, 1);
     if (mode === 'malformed') return { status: 0, stdout: 'truncated JSON', signal: null };
+    if (mode === 'missing-id-applied') return reply({});
     return reply(created);
   }
   if (method === 'GET' && endpoint.startsWith(`${rulesetBase}/`)) {
@@ -121,7 +132,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     const id = Number(endpoint.slice(rulesetBase.length + 1).split('?')[0]);
     const found = state.rulesets.find((ruleset) => ruleset.id === id);
     if (!found || fault.rulesetDetail === 'missing') return reply({ status: '404' }, 1);
-    const detail: Record<string, unknown> = { ...found, source: `${state.login}/${state.name}` };
+    const detail: Record<string, unknown> = { source: `${state.login}/${state.name}`, ...found };
     if (fault.rulesetDetail === 'omit-bypass') delete detail.bypass_actors;
     if (fault.rulesetDetail === 'wrong-source') detail.source = `${state.login}/other`;
     return reply(detail);

@@ -110,12 +110,12 @@ ballin backup setup my-backup-name
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
 to access the repository can read its contents.
 
-Creating a supported Ballin private backup for a personal account requires
-[GitHub Pro](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets#who-can-use-this-feature).
-Ballin protects its managed branch against force pushes and branch deletion
-while leaving normal backup updates available. This is defense in depth: the
-repository owner can still change or remove the ruleset or delete the repository,
-so the protection does not replace GitHub account and credential security.
+GitHub Free is supported. When the repository and current GitHub permissions
+support it, setup automatically adds optional branch protection against force
+pushes and branch deletion. Backup setup and normal use remain supported when
+that extra protection is unavailable. See [Supported capabilities](capabilities.md#github-side-history-protection)
+for the exact safety boundary and GitHub's
+[ruleset availability](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets).
 
 New setup offers distinct **create** and **reconnect** choices and defaults to
 `ballin-backups`. The optional argument is a repository name, not a URL or owner.
@@ -127,20 +127,17 @@ collision requires an explicit different name or reconnect choice.
 Ballin uses your existing `gh` authentication. It does not log in, switch
 accounts, or expand permissions on your behalf. Normal browser-based
 [`gh` authentication](https://cli.github.com/manual/gh_auth_login) works when
-the active personal account owns the destination. Creating a repository or
-adding missing protection during reconnect requires repository administration
-access. Routine backup publication requires contents write access. Reconnecting
-to an already protected repository, reading, opening, and recovery do not
-require administration access.
+the active personal account owns the destination. Routine backup publication
+requires contents write access. Optional policy hardening can require additional
+repository authority, but read, open, recovery, and normal publication do not.
 
 If you use a fine-grained token, choose the same personal account as its resource
-owner, grant access to all repositories, and grant `Administration: write` and
-`Contents: write`. A token limited to selected
-existing repositories may reconnect when it can access the destination, but it
-cannot be assumed to access a repository that Ballin creates later. If
-authentication is missing, run `gh auth login --hostname github.com`. If Ballin
-shows an unexpected account, check whether an environment token is overriding
-your saved `gh` login.
+owner and ensure it can access the selected repository and write backup contents.
+A token limited to selected existing repositories may reconnect when it can
+access the destination, but it cannot be assumed to access a repository that
+Ballin creates later. If authentication is missing, run
+`gh auth login --hostname github.com`. If Ballin shows an unexpected account,
+check whether an environment token is overriding your saved `gh` login.
 
 Fresh create or reconnect setup asks for one default-off choice covering raw
 configuration and pipx metadata. Reconnect fully inspects the existing backup
@@ -153,16 +150,14 @@ setup. See
 
 Final confirmation covers the destination and source selection. If you decline,
 Ballin makes no backup-specific changes. If you approve, it revalidates the
-destination, creates or reconnects to the repository, verifies the active branch
-protection, and only then saves the destination, sensitive-source choice, and
-any supported preferences recovered from the backup.
-
-An unsupported plan, insufficient permission, GitHub rejection, or uncertain
-protection response stops setup instead of leaving a configured but unprotected
-backup. If GitHub already created and initialized the repository, Ballin reports
-its URL and leaves local linkage unchanged. Retry with the reconnect choice so
-Ballin can reuse that repository and add or verify protection without creating a
-duplicate.
+destination, creates or reconnects to the repository, attempts optional branch
+protection, and then saves the destination, sensitive-source choice, and any
+supported preferences recovered from the backup. Successful new protection gets
+one concise confirmation. Unsupported protection is silent. A permission note
+or warning about unconfirmed protection is nonfatal and does not mean backup
+setup failed. After updating GitHub access, rerun `ballin backup setup` to make a
+bounded protection attempt on the configured repository without changing local
+backup choices.
 
 Renaming the repository on GitHub does not break the connection: Ballin continues
 to recognize the same backup. To switch to a different repository, disconnect

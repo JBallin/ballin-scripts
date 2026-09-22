@@ -129,6 +129,24 @@ backups before publishing from a replacement Mac. Reconnect supports recovery
 but grants no authority to overwrite saved data. Read/open do not execute
 content or change caches.
 
+### GitHub-side history protection
+
+Ballin's conditional, non-forced publication and conflict checks remain the
+backup correctness boundary. During create, reconnect, or an explicit
+`ballin backup setup` revalidation, Ballin also tries to add a narrow
+[repository ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
+when the repository supports it and the current GitHub credential can configure
+it. That optional safety floor blocks deletion and non-fast-forward updates of
+the selected backup branch. It adds no pull request, review, status-check, or
+general update restriction.
+
+GitHub Free remains supported, and backup setup continues normally when this
+optional protection is unavailable. Protection also does not block an ordinary
+external fast-forward update, stop an authorized administrator from changing
+repository policy, or replace account and credential security. Ordinary backup,
+read, open, recovery, and doctor do not depend on policy-management access or
+continuously probe protection state.
+
 Existing configured Gists retain the same three-way comparison, but their API
 has no conditional-head guarantee. See [Backup design](backup-design.md) for
 storage details and constraints; migration and verification remain separate.
