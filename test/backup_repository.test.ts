@@ -361,6 +361,55 @@ describe('private repository transport', () => {
     assert.equal(rulesetWrites().length, 1);
     assert.lengthOf(state.rulesets, 1);
   });
+  [
+    { name: 'malformed ruleset list', fault: () => { state.faults.rulesetList = 'malformed'; }, target: /\/rulesets\?/u },
+    { name: 'malformed ruleset detail', fault: () => { state.faults.rulesetDetail = 'malformed'; }, target: /\/rulesets\/\d+\?/u },
+  ].forEach(({ name, fault, target }) => {
+    it(`preserves cleanup failure for a ${name} response`, () => {
+      const before = read(); state.requests = []; fault();
+      const original = fs.rmSync;
+      let retained: string | undefined;
+      try {
+        fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+          const [entry] = args;
+          const request = state.requests.at(-1);
+          if (!retained && request?.method === 'GET' && target.test(request.endpoint)) {
+            retained = String(entry);
+            throw new Error('dummy cleanup failure');
+          }
+          return original(...args);
+        };
+        assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+      } finally {
+        fs.rmSync = original;
+        if (retained) original(retained, { recursive: true, force: true });
+      }
+      assert.equal(rulesetWrites().length, 0);
+    });
+  });
+  it('preserves cleanup failure when an invalid creation response cannot be reconciled', () => {
+    const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = 'missing-id-no-effect';
+    const original = fs.rmSync;
+    let retained: string | undefined;
+    try {
+      fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+        const [entry] = args;
+        const request = state.requests.at(-1);
+        if (!retained && request?.method === 'POST' && request.endpoint.endsWith('/rulesets')) {
+          retained = String(entry);
+          throw new Error('dummy cleanup failure');
+        }
+        return original(...args);
+      };
+      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+    } finally {
+      fs.rmSync = original;
+      if (retained) original(retained, { recursive: true, force: true });
+    }
+    assert.equal(rulesetWrites().length, 1);
+    assert.lengthOf(state.rulesets, 0);
+    assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET']);
+  });
   it('requires creation-time proof of an empty bypass list', () => {
     const before = read(); state.requests = []; state.rulesets = [];
     state.faults.rulesetDetail = 'omit-bypass';

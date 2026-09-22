@@ -66,6 +66,11 @@ type ApiResult = { ok: boolean; body: Record<string, unknown>; items?: unknown[]
 const requireCleanTransport = (result: ApiResult): void => {
   if (result.cleanupFailed) throw new RepositoryError('cleanup');
 };
+const protectionTransportFailure = (error: unknown): RepositoryError | undefined => {
+  if (!(error instanceof RepositoryError)) return undefined;
+  if (error.cleanupFailed && error.problem !== 'cleanup') return new RepositoryError('cleanup');
+  return ['local-io', 'cleanup'].includes(error.problem) ? error : undefined;
+};
 
 const object = (value: unknown): Record<string, unknown> => {
   if (!isConfigObject(value)) throw new RepositoryError('invalid-data');
@@ -383,7 +388,8 @@ const readManagedBranchRuleset = (
 ): 'match' | 'permission-denied' | 'mismatch' | ProtectionApiOutcome => {
   let detail: ApiResult;
   try { detail = api(`${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
-    if (error instanceof RepositoryError && ['local-io', 'cleanup'].includes(error.problem)) throw error;
+    const transportFailure = protectionTransportFailure(error);
+    if (transportFailure) throw transportFailure;
     return 'ambiguous';
   }
   if (!detail.ok) {
@@ -400,7 +406,8 @@ const findManagedBranchRuleset = (
   const base = `repos/${account.login}/${read.destination.name}/rulesets`;
   let list: ApiResult;
   try { list = api(`${base}?includes_parents=false&targets=branch&per_page=100`, undefined, options, true); } catch (error) {
-    if (error instanceof RepositoryError && ['local-io', 'cleanup'].includes(error.problem)) throw error;
+    const transportFailure = protectionTransportFailure(error);
+    if (transportFailure) throw transportFailure;
     return { status: 'ambiguous' };
   }
   if (!list.ok) {
@@ -446,9 +453,7 @@ const ensureManagedBranchRuleset = (
   let creation: ApiResult = { ok: false, body: {} };
   let mutationFailure: RepositoryError | undefined;
   try { creation = api(endpoint, managedBranchRulesetPayload(read.destination.branch), options); } catch (error) {
-    if (error instanceof RepositoryError && (['local-io', 'cleanup'].includes(error.problem) || error.cleanupFailed)) {
-      mutationFailure = error.cleanupFailed && error.problem !== 'cleanup' ? new RepositoryError('cleanup') : error;
-    }
+    mutationFailure = protectionTransportFailure(error);
   }
   if (!mutationFailure && !creation.ok) {
     requireCleanTransport(creation);
@@ -461,7 +466,7 @@ const ensureManagedBranchRuleset = (
     try { id = rulesetId(creation.body.id); } catch { /* Reconcile the ambiguous response below. */ }
     if (id !== undefined) {
       try { detailResult = readManagedBranchRuleset(endpoint, id, read, account, options); } catch (error) {
-        if (error instanceof RepositoryError && ['local-io', 'cleanup'].includes(error.problem)) mutationFailure = error;
+        mutationFailure = protectionTransportFailure(error);
       }
       if (detailResult === 'match') {
         if (creation.cleanupFailed) {
@@ -482,6 +487,7 @@ const ensureManagedBranchRuleset = (
     if (mutationFailure?.problem === 'local-io') throw mutationFailure;
     return confirmation;
   }
+  if (creation.cleanupFailed) throw new RepositoryError('cleanup');
   if (mutationFailure?.problem === 'local-io' || mutationFailure?.problem === 'cleanup') throw mutationFailure;
   if (confirmation) return confirmation;
   if (detailResult === 'permission-denied') return { status: 'permission-denied' };

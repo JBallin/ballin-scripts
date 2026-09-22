@@ -115,12 +115,12 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
       return mode === 'server' ? reply({ message: 'Internal error', status: '500' }, 1) : reply({}, 1);
     }
     const created = fixtureRuleset({ ...payload, id: state.nextRulesetId++, source: `${state.login}/${state.name}` });
-    if (mode !== 'no-effect') state.rulesets.push(created);
+    if (!['no-effect', 'missing-id-no-effect'].includes(mode as string)) state.rulesets.push(created);
     if (mode === 'confirmation-failure') fault.rulesetDetail = 'server';
     if (mode === 'ambiguous') return reply({}, 1);
     if (mode === 'server-applied') return reply({ message: 'Internal error', status: '500' }, 1);
     if (mode === 'malformed') return { status: 0, stdout: 'truncated JSON', signal: null };
-    if (mode === 'missing-id-applied') return reply({});
+    if (mode === 'missing-id-applied' || mode === 'missing-id-no-effect') return reply({});
     return reply(created);
   }
   if (method === 'GET' && endpoint.startsWith(`${rulesetBase}/`)) {
