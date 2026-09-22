@@ -183,7 +183,8 @@ describe('private repository transport', () => {
     { mode: 'denied', status: 'permission-denied' },
     { mode: 'admin-required', status: 'permission-denied' },
     { mode: 'permission-missing', status: 'permission-denied' },
-    { mode: 'forbidden', status: 'permission-denied' },
+    { mode: 'forbidden', status: 'ambiguous' },
+    { mode: 'not-authorized', status: 'ambiguous' },
     { mode: 'status-only-forbidden', status: 'ambiguous' },
     { mode: 'status-only-missing', status: 'ambiguous' },
     { mode: 'reject', status: 'unexpected' },
@@ -199,8 +200,11 @@ describe('private repository transport', () => {
       assert.equal(ensureManagedBranchRuleset(before, options).status, status);
       assert.equal(rulesetWrites().length, 1);
       if (['plan', 'plan-live-shape', 'plan-alternate', 'plan-private-first', 'plan-public-alternative',
-        'denied', 'admin-required', 'permission-missing', 'forbidden', 'reject', 'generic-reject'].includes(mode)) {
+        'denied', 'admin-required', 'permission-missing', 'reject', 'generic-reject'].includes(mode)) {
         assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST']);
+      }
+      if (['forbidden', 'not-authorized', 'status-only-forbidden', 'status-only-missing'].includes(mode)) {
+        assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET']);
       }
     });
   });

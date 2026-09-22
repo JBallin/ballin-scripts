@@ -114,8 +114,7 @@ GitHub Free is supported. When the repository and current GitHub permissions
 support it, setup automatically adds optional branch protection against force
 pushes and branch deletion. Backup setup and normal use remain supported when
 that extra protection is unavailable. See [Supported capabilities](capabilities.md#github-side-history-protection)
-for the exact safety boundary and GitHub's
-[ruleset availability](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets).
+for the exact safety boundary and current GitHub eligibility.
 
 New setup offers distinct **create** and **reconnect** choices and defaults to
 `ballin-backups`. The optional argument is a repository name, not a URL or owner.

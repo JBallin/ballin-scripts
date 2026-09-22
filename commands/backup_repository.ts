@@ -325,7 +325,6 @@ const classifyProtectionApiFailure = (result: ApiResult): ProtectionApiOutcome =
     /resource not accessible by (?:personal access )?token/u.test(message)
     || /(?:requires?|must have|need).*(?:admin|administration).*(?:access|permission|role)?/u.test(message)
     || /(?:insufficient|missing).*(?:permission|authority|access)/u.test(message)
-    || /not authorized|forbidden/u.test(message)
   ) return 'permission-denied';
   if (/rate limit|abuse|spam|submitted too quickly|temporar(?:y|ily)|timeout/u.test(message)) return 'ambiguous';
   if (status !== undefined && status >= 500) return 'ambiguous';

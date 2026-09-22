@@ -140,6 +140,8 @@ it. That optional safety floor blocks deletion and non-fast-forward updates of
 the selected backup branch. It adds no pull request, review, status-check, or
 general update restriction.
 
+GitHub currently limits rulesets for private repositories to
+[supporting paid plans](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets#who-can-use-this-feature).
 GitHub Free remains supported, and backup setup continues normally when this
 optional protection is unavailable. Protection also does not block an ordinary
 external fast-forward update, stop an authorized administrator from changing

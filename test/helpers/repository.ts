@@ -104,6 +104,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     if (mode === 'admin-required') return reply({ message: 'This operation requires repository administration permission', status: '422' }, 1);
     if (mode === 'permission-missing') return reply({ message: 'Missing permission for repository policy', status: '403' }, 1);
     if (mode === 'forbidden') return reply({ message: 'Forbidden', status: '403' }, 1);
+    if (mode === 'not-authorized') return reply({ message: 'Not authorized', status: '403' }, 1);
     if (mode === 'status-only-forbidden') return reply({ status: '403' }, 1);
     if (mode === 'status-only-missing') return reply({ status: '404' }, 1);
     if (mode === 'reject') return reply({ message: 'Validation failed', status: '422' }, 1);
