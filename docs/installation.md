@@ -33,6 +33,29 @@ with `ballin backup setup`. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
+## Shell completion
+
+Ballin includes top-level command completion for zsh and Bash. It does not edit
+shell profiles. To enable zsh completion, add this guarded line near the end of
+`~/.zshrc`:
+
+```zsh
+[[ -r "$HOME/.ballin-scripts/completions/_ballin" ]] && source "$HOME/.ballin-scripts/completions/_ballin"
+```
+
+Open a new terminal or run `source ~/.zshrc`. For Bash, add the equivalent line
+to the startup file your Bash session reads, such as `~/.bashrc` or
+`~/.bash_profile`:
+
+```bash
+[[ -r "$HOME/.ballin-scripts/completions/ballin.bash" ]] && source "$HOME/.ballin-scripts/completions/ballin.bash"
+```
+
+Completion covers supported top-level commands and unique prefixes such as
+`ballin upd<Tab>`. It does not complete nested commands, options, or values.
+`ballin self-update` refreshes the completion scripts; reload the startup file or
+open a new terminal to use an updated command list.
+
 ## Local effects
 
 The installer can create or change:

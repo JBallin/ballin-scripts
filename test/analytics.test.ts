@@ -15,6 +15,9 @@ const {
   runWithCommandAnalytics,
   sendAnalyticsPayload,
 } = require('../commands/analytics.ts');
+const {
+  topLevelCommandNames,
+} = require('../commands/top_level_commands.ts');
 
 import type { ClientRequest, IncomingMessage } from 'http';
 import type { RequestOptions } from 'https';
@@ -828,10 +831,14 @@ process.stdout.write(JSON.stringify({ result }));
     });
     writeInstallId();
 
-    const supportedCanonicalSubcommand = await recordWithSender({
-      command: 'ballin update',
-      now: fixedNow,
-    });
+    const supportedCommands: string[] = [];
+    for (const command of topLevelCommandNames) {
+      const result = await recordWithSender({
+        command: `ballin ${command}`,
+        now: fixedNow,
+      });
+      supportedCommands.push(...result.payloads.map(({ command: recordedCommand }) => recordedCommand));
+    }
     const unsupportedCommand = await recordWithSender({
       command: 'git',
       now: fixedNow,
@@ -847,7 +854,7 @@ process.stdout.write(JSON.stringify({ result }));
       now: fixedNow,
     });
 
-    assert.deepEqual(supportedCanonicalSubcommand.payloads.map(({ command }) => command), ['ballin update']);
+    assert.deepEqual(supportedCommands, topLevelCommandNames.map((command: string) => `ballin ${command}`));
     assert.deepEqual(unsupportedCommand.payloads, []);
     assert.deepEqual(unsupportedStatus.payloads, []);
     assert.deepEqual(unsupportedDuration.payloads, []);

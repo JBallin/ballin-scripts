@@ -9,6 +9,9 @@ const {
 const {
   analyticsCommandForBallinArgs,
 } = require('../commands/ballin.ts');
+const {
+  topLevelCommandNames,
+} = require('../commands/top_level_commands.ts');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 type StringSpawnResult = import('child_process').SpawnSyncReturns<string>;
@@ -156,16 +159,23 @@ esac
     assertHelpOutput(runBallin(['help']));
   });
 
+  it('keeps top-level help aligned with the command catalog', () => {
+    const result = runBallin(['--help']);
+    const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\nExamples:')[0];
+    const documentedCommands = [...commandSection.matchAll(/^ {4}([a-z][a-z-]*) {2,}/gmu)]
+      .map((match) => match[1]);
+
+    assert.sameMembers(documentedCommands, [...topLevelCommandNames]);
+  });
+
   it('uses canonical subcommand names for analytics', () => {
     assert.equal(analyticsCommandForBallinArgs([]), 'ballin');
     assert.equal(analyticsCommandForBallinArgs(['--help']), 'ballin');
     assert.equal(analyticsCommandForBallinArgs(['help']), 'ballin');
-    assert.equal(analyticsCommandForBallinArgs(['update']), 'ballin update');
+    topLevelCommandNames.forEach((command: string) => {
+      assert.equal(analyticsCommandForBallinArgs([command]), `ballin ${command}`);
+    });
     assert.equal(analyticsCommandForBallinArgs(['backup', 'read', 'zshrc.sh']), 'ballin backup');
-    assert.equal(analyticsCommandForBallinArgs(['config', 'get', 'update.cleanup']), 'ballin config');
-    assert.equal(analyticsCommandForBallinArgs(['doctor', '--verbose']), 'ballin doctor');
-    assert.equal(analyticsCommandForBallinArgs(['self-update']), 'ballin self-update');
-    assert.equal(analyticsCommandForBallinArgs(['uninstall']), 'ballin uninstall');
     assert.equal(analyticsCommandForBallinArgs(['upd']), 'ballin');
   });
 
@@ -264,8 +274,16 @@ exit 17
 
   it('repairs suppressed local analytics enablement on a later eligible command', () => {
     const requestMarker = path.join(tempDir, 'analytics-requested');
+    const versionMarker = path.join(tempDir, 'analytics-version-read.json');
     const preloadPath = path.join(tempDir, 'record-analytics-request.cjs');
-    fs.writeFileSync(preloadPath, `require('https').request = () => {
+    fs.writeFileSync(preloadPath, `require('os').platform = () => 'darwin';
+require('child_process').spawnSync = (command, args, options) => {
+  require('fs').writeFileSync(${JSON.stringify(versionMarker)}, JSON.stringify({
+    command, args, timeout: options.timeout,
+  }));
+  return { status: 0, stdout: '26.6.2\\n', stderr: '' };
+};
+require('https').request = () => {
   require('fs').writeFileSync(${JSON.stringify(requestMarker)}, 'attempted');
   throw new Error('analytics request recorded');
 };\n`);
@@ -280,6 +298,7 @@ exit 17
     const installIdPath = path.join(tempDir, '.analytics', 'install-id');
     assert.isFalse(fs.existsSync(installIdPath));
     assert.isFalse(fs.existsSync(requestMarker));
+    assert.isFalse(fs.existsSync(versionMarker));
 
     const resumed = runBallin(['help'], {
       BALLIN_NO_ANALYTICS: '',
@@ -289,6 +308,11 @@ exit 17
     assertHelpOutput(resumed);
     assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
     assert.isTrue(fs.existsSync(requestMarker));
+    assert.deepEqual(JSON.parse(fs.readFileSync(versionMarker, 'utf8')), {
+      command: '/usr/bin/sw_vers',
+      args: ['-productVersion'],
+      timeout: 750,
+    });
   });
 
   it('repairs an invalid analytics identity on a later eligible command', () => {
