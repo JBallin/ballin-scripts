@@ -129,15 +129,22 @@ globally, use `npx wrangler` in place of `wrangler`.
    - `CLOUDFLARE_D1_DATABASE_ID`
 
 7. Confirm the `Deploy Analytics Worker` GitHub Actions workflow completes
-   after Worker-impacting changes land on `main`.
+   after Worker or deployment input changes land on `main`.
 
 ## Automatic Deploys
 
-The deploy workflow runs `npm test`, creates an ignored runner-local
-`wrangler.toml` from `wrangler.toml.example`, fills in the D1 database ID from
-`CLOUDFLARE_D1_DATABASE_ID`, and runs `wrangler deploy` from this directory. It
-then inspects every Worker version receiving production traffic and fails unless
-each version exposes `ANALYTICS_DB` as a D1 binding,
+Pull-request CI owns full repository validation. The deploy workflow runs
+automatically after pushes to `main` that change anything under
+`analytics-worker/`, the deploy workflow itself, or `.nvmrc`. The Worker
+directory is intentionally a conservative ownership boundary so new
+Worker-local deployment inputs are not missed.
+
+Before an automatic deployment, the workflow stops if migrations must be
+applied manually. It then creates an ignored runner-local `wrangler.toml` from
+`wrangler.toml.example`, and requires `CLOUDFLARE_D1_DATABASE_ID` before running
+`wrangler deploy` from this directory. It then inspects every Worker version
+receiving production traffic and fails unless each version exposes
+`ANALYTICS_DB` as a D1 binding,
 `ANALYTICS_RATE_LIMITER` as a rate-limit binding, and
 `INSTALL_ID_HASH_SECRET` as a secret-text binding. The check uses structured
 Wrangler deployment and version metadata; it does not parse deploy output or
@@ -150,13 +157,13 @@ its value is correct. Binding metadata likewise does not prove D1 schema or
 migration state, database reachability, or runtime rate-limit behavior.
 
 Keep the Cloudflare values as environment secrets rather than repository
-secrets. The workflow runs automatically on Worker-impacting pushes to `main`
-and can also be run manually from GitHub Actions, but production deploys are
-guarded by the `analytics-worker-production` environment and a `main` ref check.
+secrets. The workflow can also be run manually from GitHub Actions, but
+production deploys are guarded by the `analytics-worker-production` environment
+and a `main` ref check.
 
-Remote D1 migrations remain manual. The deploy workflow stops before deploying
-when `analytics-worker/migrations/` changed since the last successful deploy;
-after applying the remote migration, rerun the workflow manually from `main`.
+Remote D1 migrations remain manual. An automatic deploy stops when
+`analytics-worker/migrations/` changed since the last successful deploy; after
+applying the remote migration, rerun the workflow manually from `main`.
 
 ```shell
 wrangler d1 migrations apply ballin-scripts-analytics --remote

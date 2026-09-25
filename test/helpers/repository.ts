@@ -1,14 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { repositoryReadmeContents } = require('../../commands/backup_repository.ts');
+const { managedBranchRulesetName, repositoryReadmeContents } = require('../../commands/backup_repository.ts');
 import type { SpawnSyncOptions } from 'child_process';
 
 type FixtureCommit = { files: Record<string, string>; parents: string[]; tree: string };
+type FixtureRuleset = Record<string, unknown> & { id: number; name: string };
 type Request = { endpoint: string; method: string; payload?: { query?: string; variables?: Record<string, unknown>; [key: string]: unknown }; debug?: string };
 type FixtureState = {
   exists: boolean; id: string; ownerId: string; login: string; name: string; branch: string; head: string;
-  commits: Record<string, FixtureCommit>; requests: Request[];
+  commits: Record<string, FixtureCommit>; requests: Request[]; rulesets: FixtureRuleset[]; nextRulesetId: number;
   faults: Record<string, unknown>;
 };
 type Response = { status: number; stdout: string; signal: null };
@@ -18,6 +19,18 @@ const blobHash = (base64: string): string => {
   return crypto.createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 };
 const fixtureDestination = { id: 'R_fixture', ownerId: 'U_fixture', name: 'ballin-backups', branch: 'main' };
+const fixtureRuleset = (overrides: Record<string, unknown> = {}): FixtureRuleset => ({
+  id: 1,
+  name: managedBranchRulesetName,
+  target: 'branch',
+  source_type: 'Repository',
+  source: 'fixture-user/ballin-backups',
+  enforcement: 'active',
+  bypass_actors: [],
+  conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+  rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }],
+  ...overrides,
+});
 const fixtureMarker = (): string => JSON.stringify({
   format: 'ballin-backup', version: 1, repositoryId: fixtureDestination.id, ownerId: fixtureDestination.ownerId,
 }) + '\n';
@@ -29,7 +42,10 @@ const commitFixture = (state: FixtureState, files: Record<string, string>, paren
   return head;
 };
 const fixtureState = (snapshots: Record<string, string> = {}): FixtureState => {
-  const state: FixtureState = { exists: true, ...fixtureDestination, login: 'fixture-user', head: '', commits: {}, requests: [], faults: {} };
+  const state: FixtureState = {
+    exists: true, ...fixtureDestination, login: 'fixture-user', head: '', commits: {}, requests: [],
+    rulesets: [fixtureRuleset()], nextRulesetId: 2, faults: {},
+  };
   const files = {
     '.ballin-backup.json': fixtureMarker(),
     'README.md': repositoryReadmeContents,
@@ -55,6 +71,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     if (state.exists || fault.create === 'reject') return reply({ status: '422' }, 1);
     state.exists = true;
     state.name = payload.name;
+    state.rulesets = [];
     commitFixture(state, { 'README.md': Buffer.from(`# ${state.name}\n`).toString('base64') }, []);
     if (fault.create === 'ambiguous') return reply({}, 1);
     return reply({ node_id: state.id, owner: { node_id: state.ownerId }, name: state.name, private: true, default_branch: state.branch,
@@ -65,6 +82,61 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     if (fault.candidate === 'denied') return reply({ status: '403' }, 1);
     return reply({ node_id: state.id, owner: { node_id: state.ownerId, type: 'User' }, default_branch: state.branch,
       ...(fault.candidateMetadata as Record<string, unknown> ?? {}) });
+  }
+  const rulesetBase = `repos/${state.login}/${state.name}/rulesets`;
+  if (method === 'GET' && endpoint === `${rulesetBase}?includes_parents=false&targets=branch&per_page=100`) {
+    if (fault.rulesetList === 'denied') return reply({ message: 'Resource not accessible by token', status: '403' }, 1);
+    if (fault.rulesetList === 'server') return reply({ message: 'Internal error', status: '500' }, 1);
+    if (fault.rulesetList === 'malformed') return { status: 0, stdout: 'truncated JSON', signal: null };
+    if (fault.rulesetList === 'object') return reply({ rulesets: state.rulesets });
+    if (fault.rulesetList === 'invalid-id') return reply([{ id: 0, name: managedBranchRulesetName }]);
+    if (fault.rulesetList === 'invalid-name') return reply([{ id: 1, name: 'bad\nname' }]);
+    return reply(state.rulesets.map(({ id, name, enforcement }) => ({ id, name, enforcement })));
+  }
+  if (method === 'POST' && endpoint === rulesetBase) {
+    const mode = fault.rulesetCreate;
+    if (mode === 'plan') return reply({ message: 'Upgrade to GitHub Pro to use rulesets in private repositories', status: '422' }, 1);
+    if (mode === 'plan-live-shape') return reply({ message: 'Upgrade your account or make this repository public to enable this feature', status: '422' }, 1);
+    if (mode === 'plan-alternate') return reply({ message: 'Repository rulesets are not available for private repositories on this account', status: '403' }, 1);
+    if (mode === 'plan-private-first') return reply({ message: 'Private repositories are not supported by rulesets on this account', status: '422' }, 1);
+    if (mode === 'plan-public-alternative') return reply({ message: 'Rulesets are available if you make this repository public', status: '422' }, 1);
+    if (mode === 'denied') return reply({ message: 'Resource not accessible by token', status: '403' }, 1);
+    if (mode === 'admin-required') return reply({ message: 'This operation requires repository administration permission', status: '422' }, 1);
+    if (mode === 'permission-missing') return reply({ message: 'Missing permission for repository policy', status: '403' }, 1);
+    if (mode === 'forbidden') return reply({ message: 'Forbidden', status: '403' }, 1);
+    if (mode === 'not-authorized') return reply({ message: 'Not authorized', status: '403' }, 1);
+    if (mode === 'status-only-forbidden') return reply({ status: '403' }, 1);
+    if (mode === 'status-only-missing') return reply({ status: '404' }, 1);
+    if (mode === 'reject') return reply({ message: 'Validation failed', status: '422' }, 1);
+    if (mode === 'generic-reject') return reply({ message: 'Request could not be processed', status: '422' }, 1);
+    if (mode === 'rate-limit') return reply({ message: 'API rate limit exceeded', status: '403' }, 1);
+    if (mode === 'spam') return reply({ message: 'The endpoint has been spammed', status: '422' }, 1);
+    if (mode === 'server' || mode === 'ambiguous-no-effect') {
+      return mode === 'server' ? reply({ message: 'Internal error', status: '500' }, 1) : reply({}, 1);
+    }
+    const created = fixtureRuleset({ ...payload, id: state.nextRulesetId++, source: `${state.login}/${state.name}` });
+    if (!['no-effect', 'missing-id-no-effect'].includes(mode as string)) state.rulesets.push(created);
+    if (mode === 'confirmation-failure') fault.rulesetDetail = 'server';
+    if (mode === 'ambiguous') return reply({}, 1);
+    if (mode === 'server-applied') return reply({ message: 'Internal error', status: '500' }, 1);
+    if (mode === 'malformed') return { status: 0, stdout: 'truncated JSON', signal: null };
+    if (mode === 'missing-id-applied' || mode === 'missing-id-no-effect') return reply({});
+    return reply(created);
+  }
+  if (method === 'GET' && endpoint.startsWith(`${rulesetBase}/`)) {
+    if (fault.rulesetDetail === 'denied') return reply({ message: 'Resource not accessible by token', status: '403' }, 1);
+    if (fault.rulesetDetail === 'server' || fault.rulesetDetail === 'server-once') {
+      if (fault.rulesetDetail === 'server-once') delete fault.rulesetDetail;
+      return reply({ message: 'Internal error', status: '500' }, 1);
+    }
+    if (fault.rulesetDetail === 'malformed') return { status: 0, stdout: 'truncated JSON', signal: null };
+    const id = Number(endpoint.slice(rulesetBase.length + 1).split('?')[0]);
+    const found = state.rulesets.find((ruleset) => ruleset.id === id);
+    if (!found || fault.rulesetDetail === 'missing') return reply({ status: '404' }, 1);
+    const detail: Record<string, unknown> = { source: `${state.login}/${state.name}`, ...found };
+    if (fault.rulesetDetail === 'omit-bypass') delete detail.bypass_actors;
+    if (fault.rulesetDetail === 'wrong-source') detail.source = `${state.login}/other`;
+    return reply(detail);
   }
   if (endpoint === 'graphql' && payload.query.includes('BallinRepository')) {
     if (fault.query === 'errors') return reply({ errors: [{ type: 'FORBIDDEN' }] });
@@ -131,5 +203,8 @@ const runFixtureCli = (statePath: string): void => {
   process.stdout.write(response.stdout);
   process.exitCode = response.status;
 };
-module.exports = { fixtureDestination, fixtureMarker, fixtureState, commitFixture, requestFixture, installRepositoryFixture, runFixtureCli, blobHash };
-export type { FixtureState, FixtureCommit, Request };
+module.exports = {
+  fixtureDestination, fixtureMarker, fixtureRuleset, fixtureState, commitFixture,
+  requestFixture, installRepositoryFixture, runFixtureCli, blobHash,
+};
+export type { FixtureState, FixtureCommit, FixtureRuleset, Request };

@@ -6,10 +6,10 @@ const { snapshotDefinitions, configSnapshotFileName } = require('./backup_snapsh
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 const {
   readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
-  createRepositoryBackup, repositoryUrl, repositoryMessages,
+  createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, repositoryMessages,
   sameRepositoryRevision, unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
-import type { RepositoryRead, RepositoryError } from './backup_repository.ts';
+import type { RepositoryRead, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
 import type { SnapshotDefinition } from './backup_snapshots.ts';
 
 // Preserve the established legacy/automatic-backup prompt semantics.
@@ -95,6 +95,22 @@ const cancelled = (): false => {
   writeStdoutLine('Backup setup cancelled; no destination, consent, cache, or remote changes were made.');
   return false;
 };
+const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome): void => {
+  if (outcome.status === 'present' || outcome.status === 'unsupported') return;
+  if (outcome.status === 'enabled') {
+    writeStdoutLine('Optional GitHub branch protection enabled.');
+    return;
+  }
+  if (outcome.status === 'permission-denied') {
+    writeStdoutLine('Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun ballin backup setup after updating GitHub access.');
+    return;
+  }
+  if (outcome.status === 'unexpected') {
+    writeStdoutLine('Backup setup can continue normally, but optional GitHub branch protection could not be confirmed.');
+    return;
+  }
+  writeStdoutLine('Backup setup can continue normally, but optional GitHub branch protection is unconfirmed. Inspect the Ballin-named repository ruleset before retrying setup.');
+};
 type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig: Record<string, unknown>; repositoryName?: string;
 };
@@ -102,6 +118,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   const { configPath, backupCacheDir, originalConfig, repositoryName } = options;
   let recoveryUrl: string | undefined;
   let remoteMayExist = false;
+  let remoteInitialized = false;
   try {
     let candidate = readSetupConfigContext(configPath);
     const configured = configuredBackupDestination(candidate);
@@ -135,6 +152,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         candidate.backup = { ...candidate.backup, repository: read.destination };
         if (!saveBackupConfig(configPath, candidate)) return false;
       }
+      reportManagedBranchProtection(ensureManagedBranchRuleset(read));
       writeStdoutLine('Validated the configured private backup; local consent and automatic-backup choices were preserved.');
       return true;
     }
@@ -185,6 +203,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     if (previous && !sameRepositoryRevision(read, previous)) {
       writeStdoutLine(repositoryMessages.moved); return false;
     }
+    remoteInitialized = true;
+    reportManagedBranchProtection(ensureManagedBranchRuleset(read));
     recoveryUrl = repositoryUrl(read.destination, account);
     writeStdoutLine(`Private backup confirmed: ${recoveryUrl}`);
     if (!invalidateBackupCache(backupCacheDir)) {
@@ -201,7 +221,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     writeStdoutLine(error instanceof PortableConfigError ? (error as Error).message
       : repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to prepare backup configuration.');
     if (remoteMayExist && recoveryUrl) {
-      writeStdoutLine((error as RepositoryError).completedStage === 'repository-created'
+      writeStdoutLine(remoteInitialized
+        ? `The initialized backup remains available at ${recoveryUrl}; local linkage was not saved. Reconnect to this repository; do not create a duplicate.`
+        : (error as RepositoryError).completedStage === 'repository-created'
         ? `Repository creation completed at ${recoveryUrl}; initialization is unconfirmed. Inspect it deliberately before reconnecting.`
         : `Remote creation or initialization may already have occurred at ${recoveryUrl}. Inspect it; reconnect only if initialized. Do not blindly create another backup.`);
     }
