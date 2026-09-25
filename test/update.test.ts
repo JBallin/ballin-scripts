@@ -170,19 +170,69 @@ exit ${status}
     assert.deepEqual(commandLog(), []);
   });
 
-  it('sets Homebrew flags, preserves output, cleans conditionally, and runs doctor', () => {
-    installCommandStub('brew', { output: 'visible Homebrew output' });
+  it('preserves the Homebrew environment and runs refresh, upgrade, cleanup, and doctor in order', () => {
+    writeTestExecutable('brew', `#!/usr/bin/env bash
+printf 'brew|%s|%s|%s|%s\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$HOMEBREW_NO_AUTO_UPDATE" "$UPDATE_CALLER_MARKER" "$*" >> "$UPDATE_TEST_LOG"
+printf '%s\n' 'visible Homebrew output'
+exit 0
+`);
 
-    const result = runUpdate({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_CLEANUP: 'true' });
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_CLEANUP: 'true',
+      HOMEBREW_NO_AUTO_UPDATE: '1',
+      UPDATE_CALLER_MARKER: 'caller-value',
+    });
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'visible Homebrew output');
+    [
+      'Updating Homebrew',
+      'Updating Homebrew packages',
+      'Cleaning up Homebrew packages',
+      'Checking Homebrew installation',
+    ].reduce((previousIndex, stage) => {
+      const stageIndex = result.stdout.indexOf(`==> ${stage}`);
+      assert.isAbove(stageIndex, previousIndex);
+      return stageIndex;
+    }, -1);
+    assert.deepEqual(commandLog(), [
+      'brew|1,1|1|caller-value|update',
+      'brew|1,1|1|caller-value|upgrade',
+      'brew|1,1|1|caller-value|cleanup',
+      'brew|1,1|1|caller-value|doctor',
+    ]);
+  });
+
+  it('skips package upgrade after a failed Homebrew refresh and continues later stages', () => {
+    writeTestExecutable('brew', `#!/usr/bin/env bash
+printf 'brew|%s|%s\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
+if [ "$1" = 'update' ]; then
+  printf '%s\n' 'simulated refresh failure'
+  exit 42
+fi
+exit 0
+`);
+    installCommandStub('npm');
+
+    const result = runUpdate({
+      TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_CLEANUP: 'true',
+      TEST_UPDATE_NPM: 'true',
+    });
+
+    assert.equal(result.status, 42);
+    assert.include(result.stdout, 'simulated refresh failure');
+    assert.include(result.stdout, 'Updating Homebrew');
+    assert.notInclude(result.stdout, 'Updating Homebrew packages');
     assert.include(result.stdout, 'Cleaning up Homebrew packages');
     assert.include(result.stdout, 'Checking Homebrew installation');
+    assert.include(result.stdout, 'Updating global npm packages');
     assert.deepEqual(commandLog(), [
-      'brew|1,1|upgrade',
+      'brew|1,1|update',
       'brew|1,1|cleanup',
       'brew|1,1|doctor',
+      'npm|1,1|update -g',
     ]);
   });
 
@@ -210,6 +260,7 @@ exit 0
     assert.include(result.stdout, 'Updating ballin-scripts');
     assert.include(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
+      'brew|1,1|update',
       'brew|1,1|upgrade',
       'brew|1,1|cleanup',
       'brew|1,1|doctor',
@@ -231,6 +282,7 @@ exit 0
 
     assert.equal(result.status, 0);
     assert.deepEqual(commandLog(), [
+      'brew|1,1|update',
       'brew|1,1|upgrade',
       'brew|1,1|doctor',
       'ballin|1,1|self-update',
@@ -247,10 +299,11 @@ exit 0
     assert.equal(result.status, 0);
     assert.notInclude(result.stdout, 'Cleaning up Homebrew packages');
     assert.deepEqual(commandLog(), [
+      'brew|1,1|update',
       'brew|1,1|upgrade',
       'brew|1,1|doctor',
     ]);
-    assert.equal(result.stdout.match(/brew command output/g).length, 2);
+    assert.equal(result.stdout.match(/brew command output/g).length, 3);
   });
 
   it('runs enabled npm, macOS update, ballin update, and backup integrations', function test() {

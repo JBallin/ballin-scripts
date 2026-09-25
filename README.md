@@ -41,6 +41,8 @@ example includes optional backups.
 ```shell
 $ ballin update
 
+==> Updating Homebrew
+
 ==> Updating Homebrew packages
 
 ==> Cleaning up Homebrew packages
@@ -53,11 +55,14 @@ Your system is ready to brew.
 ==> Installing macOS updates
 
 ==> Backing up development environment
-✔ zprofile
-✔ zshrc
+✔ ballin_config
+✔ bash_completions
+✔ Brewfile
+✔ brew_cask
 ...
 ✔ vs_settings
-✔ mas
+✔ zprofile
+✔ zshrc
 ```
 
 ## New Mac setup

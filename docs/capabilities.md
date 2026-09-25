@@ -19,7 +19,7 @@ invalid known setting values fail before any integration runs.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
-| Homebrew packages | Runs `brew upgrade`, optional `brew cleanup`, and `brew doctor`. | `brew` on `PATH`; `update.cleanup` controls cleanup. |
+| Homebrew | Runs `brew update`, then `brew upgrade` when the refresh succeeds. Optional `brew cleanup` and `brew doctor` still run after a failed refresh. | `brew` on `PATH`; `update.cleanup` controls cleanup. |
 | Node.js LTS | Runs `nvm install --lts`; a missing nvm installation or failure to capture its updated environment records a failure while later stages continue. | `update.nvm=true`, `NVM_DIR` set, and `nvm.sh` present. |
 | Global npm packages | Runs `npm update -g`; a missing `npm` command records a failure while later stages continue. | `update.npm=true` and `npm` on `PATH`. |
 | Mac App Store apps | Runs `mas upgrade`. | `mas` on `PATH`. |
@@ -128,6 +128,26 @@ Use only one Mac to back up to a destination. Stop using the previous Mac for
 backups before publishing from a replacement Mac. Reconnect supports recovery
 but grants no authority to overwrite saved data. Read/open do not execute
 content or change caches.
+
+### GitHub-side history protection
+
+Ballin's conditional, non-forced publication and conflict checks remain the
+backup correctness boundary. During create, reconnect, or an explicit
+`ballin backup setup` revalidation, Ballin also tries to add a narrow
+[repository ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
+when the repository supports it and the current GitHub credential can configure
+it. That optional safety floor blocks deletion and non-fast-forward updates of
+the selected backup branch. It adds no pull request, review, status-check, or
+general update restriction.
+
+GitHub currently limits rulesets for private repositories to
+[supporting paid plans](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets#who-can-use-this-feature).
+GitHub Free remains supported, and backup setup continues normally when this
+optional protection is unavailable. Protection also does not block an ordinary
+external fast-forward update, stop an authorized administrator from changing
+repository policy, or replace account and credential security. Ordinary backup,
+read, open, recovery, and doctor do not depend on policy-management access or
+continuously probe protection state.
 
 Existing configured Gists retain the same three-way comparison, but their API
 has no conditional-head guarantee. See [Backup design](backup-design.md) for

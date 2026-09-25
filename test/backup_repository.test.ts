@@ -1,10 +1,10 @@
 const fs = require('fs');
 const {
   RepositoryError, readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
-  createRepositoryBackup, publishRepositorySnapshots, repositoryCacheDirectory, repositoryUrl,
-  repositoryReadmeContents,
+  createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
+  repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
 } = require('../commands/backup_repository.ts');
-const { fixtureDestination, fixtureState, commitFixture, requestFixture } = require('./helpers/repository.ts');
+const { fixtureDestination, fixtureRuleset, fixtureState, commitFixture, requestFixture } = require('./helpers/repository.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 import type { FixtureState } from './helpers/repository.ts';
 import type { RepositoryRead, RepositoryOptions } from '../commands/backup_repository.ts';
@@ -16,6 +16,8 @@ describe('private repository transport', () => {
   const read = (): RepositoryRead => requireRepositoryRead(inspectRepository(fixtureDestination, options));
   const changes = () => new Map([['zshrc.sh', Buffer.from('updated\n')], ['gitconfig', Buffer.from('new\n')]]);
   const publications = () => state.requests.filter((r) => r.payload?.query?.includes('BallinPublish'));
+  const rulesetRequests = () => state.requests.filter((r) => r.endpoint.includes('/rulesets'));
+  const rulesetWrites = () => rulesetRequests().filter((r) => r.method === 'POST');
   const run = (_command: string, args: string[], opts: SpawnSyncOptions) => requestFixture(state, args, opts);
   beforeEach(() => {
     state = fixtureState({ 'zshrc.sh': 'original\n' });
@@ -63,6 +65,365 @@ describe('private repository transport', () => {
     const created = state.requests.find((r) => r.endpoint === 'user/repos');
     assert.deepEqual(created?.payload, { name: state.name, private: true, auto_init: true });
   });
+  it('creates the exact minimal managed-branch ruleset and verifies the returned resource independently', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
+    assert.equal(rulesetWrites().length, 1);
+    assert.deepEqual(rulesetWrites()[0].payload, {
+      name: managedBranchRulesetName,
+      target: 'branch',
+      enforcement: 'active',
+      bypass_actors: [],
+      conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] } },
+      rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }],
+    });
+    assert.deepEqual(rulesetRequests().map(({ method, endpoint }) => ({ method, endpoint })), [
+      { method: 'GET', endpoint: 'repos/fixture-user/ballin-backups/rulesets?includes_parents=false&targets=branch&per_page=100' },
+      { method: 'POST', endpoint: 'repos/fixture-user/ballin-backups/rulesets' },
+      { method: 'GET', endpoint: 'repos/fixture-user/ballin-backups/rulesets/2?includes_parents=false' },
+    ]);
+  });
+  it('accepts exact protection without an administration write', () => {
+    const before = read(); state.requests = [];
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'present' });
+    assert.equal(rulesetWrites().length, 0);
+    assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
+  });
+  it('does not claim exact protection when read visibility omits bypass actors', () => {
+    const before = read(); state.requests = []; state.faults.rulesetDetail = 'omit-bypass';
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'permission-denied' });
+    assert.equal(rulesetWrites().length, 0);
+  });
+  it('matches owned ruleset invariants semantically instead of requiring raw response equality', () => {
+    const before = read(); state.requests = [];
+    state.rulesets = [fixtureRuleset({
+      source: 'FIXTURE-USER/BALLIN-BACKUPS',
+      conditions: { ref_name: { exclude: [], include: ['refs/heads/main', 'refs/heads/main'], metadata: {} }, repository_name: {} },
+      rules: [{ type: 'non_fast_forward', parameters: {} }, { type: 'deletion', updated_at: 'response metadata' }],
+      response_only: 'ignored',
+    })];
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'present' });
+    assert.equal(rulesetWrites().length, 0);
+  });
+  [
+    { target: 'tag' },
+    { enforcement: 'disabled' },
+    { bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5, bypass_mode: 'always' }] },
+    { conditions: { ref_name: { include: ['refs/heads/other'], exclude: [] } } },
+    { conditions: { ref_name: { include: ['refs/heads/main'], exclude: ['refs/heads/release'] } } },
+    { conditions: { ref_name: { include: ['refs/heads/main'], exclude: [] }, repository_name: { include: ['other'] } } },
+    { rules: [{ type: 'deletion' }] },
+    { rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }, { type: 'pull_request' }] },
+    { rules: [{ type: 'deletion', parameters: { protected_file_patterns: ['*'] } }, { type: 'non_fast_forward' }] },
+    { rules: [{ type: 'deletion' }, { type: 'pull_request' }] },
+    { rules: [{ type: null }, { type: 'non_fast_forward' }] },
+    { source_type: 'Organization' },
+    { conditions: null },
+  ].forEach((override, index) => {
+    it(`leaves mismatched named branch protection unchanged ${index + 1}`, () => {
+      const before = read(); state.requests = []; state.rulesets = [fixtureRuleset(override)];
+      assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'ambiguous', reason: 'mismatch' });
+      assert.equal(rulesetWrites().length, 0);
+    });
+  });
+  it('leaves named protection for another repository source unchanged', () => {
+    const before = read(); state.requests = []; state.faults.rulesetDetail = 'wrong-source';
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'ambiguous', reason: 'mismatch' });
+    assert.equal(rulesetWrites().length, 0);
+  });
+  it('leaves duplicate named rulesets unchanged and creates alongside an unrelated ruleset only', () => {
+    const before = read(); state.requests = [];
+    state.rulesets = [fixtureRuleset(), fixtureRuleset({ id: 2 })];
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'ambiguous', reason: 'duplicate' });
+    assert.equal(rulesetWrites().length, 0);
+    state.requests = []; state.rulesets = [fixtureRuleset({ name: 'Unrelated policy' })]; state.nextRulesetId = 2;
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
+    assert.equal(rulesetWrites().length, 1);
+    assert.deepEqual(state.rulesets.map(({ name }) => name), ['Unrelated policy', managedBranchRulesetName]);
+  });
+  [
+    { mode: 'denied', outcome: { status: 'permission-denied' } },
+    { mode: 'server', outcome: { status: 'ambiguous' } },
+    { mode: 'malformed', outcome: { status: 'ambiguous' } },
+    { mode: 'object', outcome: { status: 'ambiguous' } },
+    { mode: 'invalid-id', outcome: { status: 'ambiguous' } },
+    { mode: 'invalid-name', outcome: { status: 'ambiguous' } },
+  ].forEach(({ mode, outcome }) => {
+    it(`classifies ${mode} ruleset-list evidence without writing`, () => {
+      const before = read(); state.requests = []; state.faults.rulesetList = mode;
+      const result = ensureManagedBranchRuleset(before, options);
+      assert.equal(result.status, outcome.status);
+      assert.equal(rulesetWrites().length, 0);
+    });
+  });
+  [
+    { mode: 'denied', status: 'permission-denied' },
+    { mode: 'server', status: 'ambiguous' },
+    { mode: 'malformed', status: 'ambiguous' },
+    { mode: 'missing', status: 'ambiguous' },
+  ].forEach(({ mode, status }) => {
+    it(`classifies ${mode} ruleset-detail evidence without writing`, () => {
+      const before = read(); state.requests = []; state.faults.rulesetDetail = mode;
+      assert.equal(ensureManagedBranchRuleset(before, options).status, status);
+      assert.equal(rulesetWrites().length, 0);
+    });
+  });
+  it('refuses protection when the effective account changes after repository inspection', () => {
+    const before = read(); state.requests = [];
+    before.destination = { ...before.destination, ownerId: 'U_previous' };
+    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'does not match');
+    assert.equal(rulesetRequests().length, 0);
+  });
+  [
+    { mode: 'plan', status: 'unsupported' },
+    { mode: 'plan-live-shape', status: 'unsupported' },
+    { mode: 'plan-alternate', status: 'unsupported' },
+    { mode: 'plan-private-first', status: 'unsupported' },
+    { mode: 'plan-public-alternative', status: 'unsupported' },
+    { mode: 'denied', status: 'permission-denied' },
+    { mode: 'admin-required', status: 'permission-denied' },
+    { mode: 'permission-missing', status: 'permission-denied' },
+    { mode: 'forbidden', status: 'ambiguous' },
+    { mode: 'not-authorized', status: 'ambiguous' },
+    { mode: 'status-only-forbidden', status: 'ambiguous' },
+    { mode: 'status-only-missing', status: 'ambiguous' },
+    { mode: 'reject', status: 'unexpected' },
+    { mode: 'generic-reject', status: 'unexpected' },
+    { mode: 'server', status: 'ambiguous' },
+    { mode: 'rate-limit', status: 'ambiguous' },
+    { mode: 'spam', status: 'ambiguous' },
+    { mode: 'ambiguous-no-effect', status: 'ambiguous' },
+    { mode: 'no-effect', status: 'ambiguous' },
+  ].forEach(({ mode, status }) => {
+    it(`classifies ${mode} protection creation without retrying`, () => {
+      const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = mode;
+      assert.equal(ensureManagedBranchRuleset(before, options).status, status);
+      assert.equal(rulesetWrites().length, 1);
+      if (['plan', 'plan-live-shape', 'plan-alternate', 'plan-private-first', 'plan-public-alternative',
+        'denied', 'admin-required', 'permission-missing', 'reject', 'generic-reject'].includes(mode)) {
+        assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST']);
+      }
+      if (['forbidden', 'not-authorized', 'status-only-forbidden', 'status-only-missing'].includes(mode)) {
+        assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET']);
+      }
+    });
+  });
+  ['ambiguous', 'malformed', 'server-applied', 'missing-id-applied'].forEach((mode) => {
+    it(`reconciles ${mode} protection creation without repeating the mutation`, () => {
+      const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = mode;
+      assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
+      assert.equal(rulesetWrites().length, 1);
+      assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET', 'GET']);
+    });
+  });
+  it('reconciles after the created ruleset detail is transiently unavailable', () => {
+    const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetDetail = 'server-once';
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });
+    assert.equal(rulesetWrites().length, 1);
+    assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET', 'GET', 'GET']);
+  });
+  it('preserves a local creation transport failure when reconciliation proves no ruleset', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    let attempts = 0;
+    options.runCommand = (command, args, opts) => {
+      if (args.includes('--method') && args[args.indexOf('--method') + 1] === 'POST'
+        && args[args.indexOf('--method') + 2].endsWith('/rulesets')) {
+        attempts += 1;
+        throw new Error('dummy local failure');
+      }
+      return run(command, args, opts);
+    };
+    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'private backup transport');
+    assert.equal(attempts, 1);
+  });
+  it('preserves a local detail transport failure after reconciliation confirms the created ruleset', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    let failed = false;
+    options.runCommand = (command, args, opts) => {
+      const endpoint = args[args.indexOf('--method') + 2];
+      if (!failed && args.includes('--method') && args[args.indexOf('--method') + 1] === 'GET'
+        && /\/rulesets\/\d+\?/u.test(endpoint)) {
+        failed = true;
+        throw new Error('dummy local failure');
+      }
+      return run(command, args, opts);
+    };
+    assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'private backup transport');
+    assert.equal(rulesetWrites().length, 1); assert.lengthOf(state.rulesets, 1);
+  });
+  it('fails after confirmed ambiguous creation when its private response cleanup is incomplete', () => {
+    const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = 'ambiguous';
+    const original = fs.rmSync;
+    let retained: string | undefined;
+    try {
+      fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+        const [entry] = args;
+        const request = state.requests.at(-1);
+        if (!retained && request?.method === 'POST' && request.endpoint.endsWith('/rulesets')) {
+          retained = String(entry);
+          throw new Error('dummy cleanup failure');
+        }
+        return original(...args);
+      };
+      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+    } finally {
+      fs.rmSync = original;
+      if (retained) original(retained, { recursive: true, force: true });
+    }
+    assert.equal(rulesetWrites().length, 1);
+    assert.lengthOf(state.rulesets, 1);
+  });
+  it('fails after directly verified creation when its private response cleanup is incomplete', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    const original = fs.rmSync;
+    let retained: string | undefined;
+    try {
+      fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+        const [entry] = args;
+        const request = state.requests.at(-1);
+        if (!retained && request?.method === 'POST' && request.endpoint.endsWith('/rulesets')) {
+          retained = String(entry);
+          throw new Error('dummy cleanup failure');
+        }
+        return original(...args);
+      };
+      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+    } finally {
+      fs.rmSync = original;
+      if (retained) original(retained, { recursive: true, force: true });
+    }
+    assert.equal(rulesetWrites().length, 1);
+    assert.lengthOf(state.rulesets, 1);
+  });
+  it('preserves malformed-response cleanup failure after reconciliation confirms creation', () => {
+    const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = 'malformed';
+    const original = fs.rmSync;
+    let retained: string | undefined;
+    try {
+      fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+        const [entry] = args;
+        const request = state.requests.at(-1);
+        if (!retained && request?.method === 'POST' && request.endpoint.endsWith('/rulesets')) {
+          retained = String(entry);
+          throw new Error('dummy cleanup failure');
+        }
+        return original(...args);
+      };
+      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+    } finally {
+      fs.rmSync = original;
+      if (retained) original(retained, { recursive: true, force: true });
+    }
+    assert.equal(rulesetWrites().length, 1);
+    assert.lengthOf(state.rulesets, 1);
+  });
+  it('preserves created-ruleset detail cleanup failure after reconciliation confirms protection', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    const original = fs.rmSync;
+    let retained: string | undefined;
+    try {
+      fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+        const [entry] = args;
+        const request = state.requests.at(-1);
+        if (!retained && request?.method === 'GET' && /\/rulesets\/\d+\?/u.test(request.endpoint)) {
+          retained = String(entry);
+          throw new Error('dummy cleanup failure');
+        }
+        return original(...args);
+      };
+      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+    } finally {
+      fs.rmSync = original;
+      if (retained) original(retained, { recursive: true, force: true });
+    }
+    assert.equal(rulesetWrites().length, 1);
+    assert.lengthOf(state.rulesets, 1);
+  });
+  it('preserves failed detail-response cleanup after reconciliation confirms protection', () => {
+    const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetDetail = 'server-once';
+    const original = fs.rmSync;
+    let retained: string | undefined;
+    try {
+      fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+        const [entry] = args;
+        const request = state.requests.at(-1);
+        if (!retained && request?.method === 'GET' && /\/rulesets\/\d+\?/u.test(request.endpoint)) {
+          retained = String(entry);
+          throw new Error('dummy cleanup failure');
+        }
+        return original(...args);
+      };
+      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+    } finally {
+      fs.rmSync = original;
+      if (retained) original(retained, { recursive: true, force: true });
+    }
+    assert.equal(rulesetWrites().length, 1);
+    assert.lengthOf(state.rulesets, 1);
+  });
+  [
+    { name: 'malformed ruleset list', fault: () => { state.faults.rulesetList = 'malformed'; }, target: /\/rulesets\?/u },
+    { name: 'malformed ruleset detail', fault: () => { state.faults.rulesetDetail = 'malformed'; }, target: /\/rulesets\/\d+\?/u },
+  ].forEach(({ name, fault, target }) => {
+    it(`preserves cleanup failure for a ${name} response`, () => {
+      const before = read(); state.requests = []; fault();
+      const original = fs.rmSync;
+      let retained: string | undefined;
+      try {
+        fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+          const [entry] = args;
+          const request = state.requests.at(-1);
+          if (!retained && request?.method === 'GET' && target.test(request.endpoint)) {
+            retained = String(entry);
+            throw new Error('dummy cleanup failure');
+          }
+          return original(...args);
+        };
+        assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+      } finally {
+        fs.rmSync = original;
+        if (retained) original(retained, { recursive: true, force: true });
+      }
+      assert.equal(rulesetWrites().length, 0);
+    });
+  });
+  it('preserves cleanup failure when an invalid creation response cannot be reconciled', () => {
+    const before = read(); state.requests = []; state.rulesets = []; state.faults.rulesetCreate = 'missing-id-no-effect';
+    const original = fs.rmSync;
+    let retained: string | undefined;
+    try {
+      fs.rmSync = (...args: Parameters<typeof fs.rmSync>) => {
+        const [entry] = args;
+        const request = state.requests.at(-1);
+        if (!retained && request?.method === 'POST' && request.endpoint.endsWith('/rulesets')) {
+          retained = String(entry);
+          throw new Error('dummy cleanup failure');
+        }
+        return original(...args);
+      };
+      assert.throws(() => ensureManagedBranchRuleset(before, options), RepositoryError, 'cleanup is incomplete');
+    } finally {
+      fs.rmSync = original;
+      if (retained) original(retained, { recursive: true, force: true });
+    }
+    assert.equal(rulesetWrites().length, 1);
+    assert.lengthOf(state.rulesets, 0);
+    assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'POST', 'GET']);
+  });
+  it('requires creation-time proof of an empty bypass list', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    state.faults.rulesetDetail = 'omit-bypass';
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'permission-denied' });
+    assert.equal(rulesetWrites().length, 1);
+  });
+  it('recovers on a fresh invocation after creation confirmation was unavailable', () => {
+    const before = read(); state.requests = []; state.rulesets = [];
+    state.faults.rulesetCreate = 'confirmation-failure';
+    assert.equal(ensureManagedBranchRuleset(before, options).status, 'ambiguous');
+    delete state.faults.rulesetCreate; delete state.faults.rulesetDetail;
+    assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'present' });
+    assert.equal(rulesetWrites().length, 1);
+  });
   ['extra-file', 'extra-parent'].forEach((mode) => {
     it(`refuses to initialize a created repository with an unexpected ${mode}`, () => {
       state.exists = false;
@@ -101,12 +462,14 @@ describe('private repository transport', () => {
     assert.equal(input.expectedHeadOid, before.revision.head);
     assert.deepEqual(input.branch, { id: 'REF_R_fixture_main' });
     assert.equal(Buffer.from(state.commits[state.head].files['README.md'], 'base64').toString(), 'User presentation\n');
+    assert.equal(rulesetRequests().length, 0);
   });
   it('does not publish a true no-op', () => {
     const before = read();
     const after = publishRepositorySnapshots(before, new Map(), options);
     assert.strictEqual(after, before);
     assert.equal(publications().length, 0);
+    assert.equal(rulesetRequests().length, 0);
   });
   it('does not require or recreate the non-authoritative README during ordinary reads or no-op backups', () => {
     const files = { ...state.commits[state.head].files };

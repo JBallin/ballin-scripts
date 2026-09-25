@@ -54,6 +54,84 @@ as the configured destination. Later backups leave `README.md` untouched and
 ignore it as backup state. If initialization cannot be confirmed safely, Ballin
 stops for inspection rather than risk creating a duplicate repository.
 
+## Managed-branch protection
+
+Managed-branch protection is progressive hardening, not a backup prerequisite or
+part of the publication correctness contract. GitHub Free remains supported.
+Ballin uses the result of the actual ruleset API operation instead of persisting
+an account-plan model. The effective `gh` credential may have enough authority
+for routine contents publication without having the additional repository
+administration authority needed to create policy.
+
+After bootstrap and marker/tree readback, create and reconnect setup try to
+establish one repository-level branch ruleset. Explicit setup of an already
+configured repository performs the same bounded revalidation. The contract is:
+
+```json
+{
+  "name": "Ballin backup branch protection",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/<selected branch>"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ]
+}
+```
+
+No pull-request, review, status-check, update-restriction, signed-commit, or
+other collaboration policy is added. Ordinary `createCommitOnBranch`
+publication remains a conditional fast-forward using `expectedHeadOid`; Ballin
+does not use a bypass and never substitutes server policy for its three-way
+comparison and confirmation model.
+
+Reconciliation is read first. Ballin lists branch rulesets and considers only
+the fixed Ballin name. Exactly one named policy is owned only when its repository
+source, selected-branch target, active enforcement, semantic rule set, and empty
+bypass list match. Matching is canonical: rule and response ordering,
+case-only repository-source differences, response metadata, and harmless empty
+or default representations do not trigger a rewrite. Additional policy-bearing
+conditions, rules, or bypass actors are a mismatch. Because GitHub can omit
+`bypass_actors` when the caller cannot write the ruleset, omission is
+permission-limited/unconfirmed and is never promoted to proof of exact
+protection.
+
+When the Ballin name is absent, Ballin makes at most one creation request and
+independently reads the returned resource. A mutation with an ambiguous outcome
+gets one list/detail reconciliation and is never blindly repeated in the same
+invocation. Duplicate or mismatched Ballin-named rulesets remain unchanged for
+inspection. Unrelated rulesets and classic branch protection are never claimed,
+weakened, replaced, removed, or bypassed; they can layer stricter policy on the
+same branch. A future Ballin policy migration must explicitly recognize a known
+prior signature rather than treating unknown mismatches as migratable.
+
+Capability and failure classification follows the strength of GitHub's evidence.
+Explicit plan/capability unavailability is `unsupported`; explicit missing
+policy authority is `permission-denied`; definite validation or API rejection is
+`unexpected`; malformed, transient, status-only, or otherwise incomplete
+evidence is `ambiguous`. HTTP status alone does not establish unsupported
+capability or missing permission, and classification does not depend on one
+exact GitHub error sentence. All protection-specific outcomes are nonfatal to an
+otherwise valid setup. Unsupported capability is silent; newly enabled policy
+gets one concise confirmation; permission, unexpected, and unresolved ambiguous
+results get setup-only notes or warnings without claiming protection.
+
+These semantics do not weaken repository identity, initialization, coherent
+read, transport-cleanup, or local-persistence failures. Protection state is not
+stored in config or cache, and ordinary backup, read, open, doctor, recovery,
+and cache handling make no policy calls. Ballin does not retarget or delete stale
+policy when a branch changes. The ruleset is defense in depth against accidental
+branch deletion and non-fast-forward history rewrite; it does not block ordinary
+external fast-forward updates or a sufficiently authorized administrator from
+altering policy or deleting the repository.
+
 ## Consistency model
 
 All selected available captures are staged before remote inspection. Collector
@@ -249,15 +327,16 @@ race. Requests use the configured GitHub or Enterprise host through
 
 `test/backup_repository.test.ts` exercises protocol and publication semantics;
 `test/repository_backup.test.ts` uses a stateful fake GitHub service for public
-CLI lifecycle, consent, reconciliation and failure recovery. Existing Gist
+CLI lifecycle, consent, ruleset reconciliation and failure recovery. Existing Gist
 fixtures preserve the configured compatibility route. Installer walkthroughs,
 doctor fixtures, and the required `npm test` use temporary roots and complete
 child environments. Never manually smoke-test real user backup state.
 
-Separately authorized disposable real-GitHub service validation is a post-merge,
-pre-release checkpoint, not a merge blocker. The checklist remains tracked in
-[#333](https://github.com/JBallin/ballin-scripts/issues/333#issuecomment-5613539242)
-until completed. Normal implementation validation does not perform it.
+Automated tests prove the exact policy request and Ballin's surrounding behavior;
+they do not prove GitHub's live enforcement. Separately authorized disposable
+real-GitHub validation must still confirm `createCommitOnBranch` fast-forward
+publication and rejection of a forced ref update and branch deletion. Normal
+implementation validation does not perform that experiment.
 [#334](https://github.com/JBallin/ballin-scripts/issues/334) owns migration/Gist
 retirement; [#336](https://github.com/JBallin/ballin-scripts/issues/336) owns
 verification. The concrete repository reader/writer can be reused there without
