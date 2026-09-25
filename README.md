@@ -36,7 +36,7 @@ and removal steps in [Installation and removal](docs/installation.md).
 ## Example output
 
 `ballin update` output depends on installed tools and enabled integrations. This
-example includes optional backups.
+example shows a fully configured run with automatic backups enabled.
 
 ```shell
 $ ballin update
@@ -48,11 +48,18 @@ $ ballin update
 ==> Cleaning up Homebrew packages
 
 ==> Checking Homebrew installation
-Your system is ready to brew.
+
+==> Updating Node.js LTS
+
+==> Updating global npm packages
 
 ==> Updating App Store apps
 
 ==> Installing macOS updates
+
+==> Updating ballin-scripts
+
+==> Checking Ballin readiness
 
 ==> Backing up development environment
 ✔ ballin_config
