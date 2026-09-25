@@ -2,6 +2,8 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
+import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const repoRoot = path.join(__dirname, '..');
@@ -82,6 +84,7 @@ type RunBackupOptions = {
   failFinalConfigCommit?: boolean;
   homeDirOverride?: string | null;
   umask?: '000' | '022' | '077';
+  env?: NodeJS.ProcessEnv;
 };
 
 describe('ballin backup', () => {
@@ -441,6 +444,7 @@ done
     failFinalConfigCommit = false,
     homeDirOverride = testHomeDir,
     umask,
+    env = {},
   }: RunBackupOptions = {}) => spawnSync(
     umask === undefined ? commandPath : path.join(testBinDir, 'bash'),
     umask === undefined ? ['backup', ...args] : [
@@ -496,6 +500,7 @@ done
       FAKE_CAT_FAILURE_PATHS: failedPaths.join(':'),
       FAKE_CAT_EMIT_STDERR: emitUnderlyingStderr ? 'true' : 'false',
       REAL_CAT: realCatPath,
+      ...env,
     },
   });
 
@@ -2792,5 +2797,178 @@ printf '%*s\\n' 1048577 '' >&2
     assert.deepEqual(gistRequests(), []);
     assert.deepEqual(gistUploads(), []);
     assert.deepEqual(fs.readdirSync(scratchDir), []);
+  });
+
+  describe('behavioral analytics', () => {
+    let capture: ReturnType<typeof createAnalyticsCapture>;
+    const observedRun = (options: RunBackupOptions = {}) => runBackup({
+      ...options,
+      env: { ...capture.env, ...options.env },
+    });
+    const assertOutcome = (status: string, commandStatus = status): void => {
+      const events: CapturedAnalyticsEvent[] = capture.readEvents();
+      const behaviors = events.filter((event) => event.schemaVersion === 2);
+      assert.lengthOf(behaviors, 1);
+      assert.deepEqual(behaviors[0], {
+        schemaVersion: 2, installId: fixtureInstallId,
+        dateBucket: new Date().toISOString().slice(0, 10), event: 'backup.run', status,
+      });
+      const commands = events.filter((event) => event.schemaVersion === 1);
+      assert.lengthOf(commands, 1);
+      assert.equal(commands[0].command, 'ballin backup');
+      assert.equal(commands[0].status, commandStatus);
+    };
+    beforeEach(() => {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      config.analytics.enabled = 'true';
+      fs.writeFileSync(configPath, JSON.stringify(config));
+      capture = createAnalyticsCapture(testHomeDir);
+    });
+
+    it('emits one terminal success for publication and one for a later no-op', () => {
+      writeSnapshot('stable\n');
+      assertBackupSucceeded(observedRun());
+      assertOutcome('success');
+      capture.clear();
+
+      const result = observedRun();
+      assertBackupSucceeded(result);
+      assert.equal(result.stdout, '✔ zshrc\n');
+      assert.lengthOf(gistPatchCalls(), 1);
+      assertOutcome('success');
+    });
+
+    it('counts an eligible real backup with only expected unavailable sources as success', () => {
+      assertBackupSucceeded(observedRun());
+      assert.deepEqual(gistPatchCalls(), []);
+      assertOutcome('success');
+    });
+
+    const failures: Array<{ name: string; prepare: () => RunBackupOptions; message: string; published?: boolean }> = [
+      {
+        name: 'missing destination configuration', message: 'backup',
+        prepare: () => {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          config.backup.id = null; fs.writeFileSync(configPath, JSON.stringify(config));
+          return {};
+        },
+      },
+      { name: 'missing HOME', message: 'HOME is not set', prepare: () => ({ homeDirOverride: null }) },
+      { name: 'authentication', message: 'auth', prepare: () => ({ ghAuthFail: true }) },
+      {
+        name: 'cache preflight', message: 'unable to secure backup cache',
+        prepare: () => {
+          seedBackupCache('before\n');
+          return { commandPath: installChmodFailureLauncher(backupCacheDir) };
+        },
+      },
+      { name: 'source collection', message: 'failed to snapshot', prepare: () => ({ failedPaths: ['.zshrc'] }) },
+      {
+        name: 'reconciliation', message: 'conflict',
+        prepare: () => { seedBackupCache('base\n'); seedFakeGist('competing\n'); return {}; },
+      },
+      { name: 'publication', message: 'upload failure', prepare: () => ({ ghUploadFail: true }) },
+      {
+        name: 'cache after remote publication', message: 'Gist outcome is known', published: true,
+        prepare: () => { fs.writeFileSync(backupCacheDir, 'blocks cache creation'); return {}; },
+      },
+      {
+        name: 'cleanup after remote publication', message: 'cleanup', published: true,
+        prepare: () => ({ commandPath: installCleanupFailureLauncher(['ballin-backup-payload-']) }),
+      },
+    ];
+    for (const { name, prepare, message, published } of failures) {
+      it(`emits exactly one terminal failure for ${name}`, () => {
+        writeSnapshot('new value\n');
+        const result = observedRun(prepare());
+        assert.isAbove(result.status ?? 0, 0, result.stdout + result.stderr);
+        assert.include(result.stderr.toLowerCase(), message.toLowerCase());
+        if (published) assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'new value\n');
+        assertOutcome('failure');
+      });
+    }
+
+    it('preserves the original thrown exception and emits one terminal failure', () => {
+      const resultPath = path.join(testHomeDir, 'original-exception');
+      writeTestExecutable('exception.cjs', `#!/usr/bin/env node
+const fs = require('fs');
+const originalError = new Error('fixture original exception');
+require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))}).observeSnapshotSources = () => { throw originalError; };
+const { runBackupCommand } = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup.ts'))});
+require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))}).runWithCommandAnalytics('ballin backup', () => runBackupCommand([])).catch((error) => {
+  if (error !== originalError) throw new Error('original exception was replaced');
+  fs.writeFileSync(${JSON.stringify(resultPath)}, 'preserved');
+  process.exitCode = 37;
+});
+`);
+      const result = observedRun({ commandPath: path.join(testBinDir, 'exception.cjs') });
+      assert.equal(result.status, 37, result.stderr);
+      assert.equal(fs.readFileSync(resultPath, 'utf8'), 'preserved');
+      assertOutcome('failure');
+    });
+
+    it('uses the real operation result even when its caller already has a failure status', () => {
+      writeTestExecutable('earlier-failure.cjs', `#!/usr/bin/env node
+const { runBackupCommand } = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup.ts'))});
+require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))}).runWithCommandAnalytics('ballin backup', () => {
+  process.exitCode = 23;
+  runBackupCommand([]);
+});
+`);
+      writeSnapshot('successful backup\n');
+      const result = observedRun({ commandPath: path.join(testBinDir, 'earlier-failure.cjs') });
+      assert.equal(result.status, 23, result.stderr);
+      assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'successful backup\n');
+      assertOutcome('success', 'failure');
+    });
+
+    for (const args of [['setup'], ['read', 'zshrc.sh'], ['open'], ['disconnect'], ['help'], ['verify'], ['invalid'], ['read'], ['open', 'extra']]) {
+      it(`does not emit a real-backup event for ${args.join(' ')}`, () => {
+        seedFakeGist('read-only fixture\n');
+        observedRun({ args, input: 'n\n' });
+        const events: CapturedAnalyticsEvent[] = capture.readEvents();
+        assert.deepEqual(events.filter((event) => event.schemaVersion === 2), []);
+        assert.lengthOf(events.filter((event) => event.schemaVersion === 1), 1);
+        assert.deepEqual(gistPatchCalls(), []);
+      });
+    }
+
+    it('keeps behavioral delivery when nested-command analytics are suppressed', () => {
+      writeSnapshot('internal backup\n');
+      assertBackupSucceeded(observedRun({ env: { BALLIN_NO_COMMAND_ANALYTICS: '1' } }));
+      const events: CapturedAnalyticsEvent[] = capture.readEvents();
+      assert.lengthOf(events, 1);
+      assert.equal(events[0].event, 'backup.run');
+      assert.equal(events[0].status, 'success');
+    });
+
+    for (const env of [{ BALLIN_NO_ANALYTICS: '1' }, { CI: 'true' }]) {
+      it(`suppresses command and behavioral events with ${Object.keys(env)[0]}`, () => {
+        writeSnapshot('still backed up\n');
+        assertBackupSucceeded(observedRun({ env }));
+        assert.deepEqual(capture.readEvents(), []);
+        assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'still backed up\n');
+      });
+    }
+
+    it('uses the single disabled local preference for both event types', () => {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      config.analytics.enabled = 'false'; fs.writeFileSync(configPath, JSON.stringify(config));
+      assertBackupSucceeded(observedRun());
+      assert.deepEqual(capture.readEvents(), []);
+    });
+
+    for (const mode of ['throw', 'error', 'hang']) {
+      it(`preserves backup output and effects when the sender ${mode === 'hang' ? 'times out' : `reports ${mode}`}`, function() {
+        this.timeout(5000);
+        writeSnapshot('sender-independent\n');
+        const result = observedRun({ env: { BALLIN_TEST_ANALYTICS_MODE: mode } });
+        assertBackupSucceeded(result);
+        assert.equal(result.stdout, '✚ zshrc\n');
+        assert.equal(fs.readFileSync(fakeGistFilePath(), 'utf8'), 'sender-independent\n');
+        assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'sender-independent\n');
+        if (mode !== 'throw') assertOutcome('success');
+      });
+    }
   });
 });
