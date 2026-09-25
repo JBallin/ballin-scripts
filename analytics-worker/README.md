@@ -1,21 +1,26 @@
 # Analytics Worker
 
-This is the backend for Ballin's minimal active-install analytics.
+This is the backend for Ballin's minimal command and behavioral analytics.
 It is intentionally isolated from the CLI so the command package does not gain
 runtime analytics SDK dependencies.
 
-The backend is a Cloudflare Worker with a D1 database binding. It accepts a
-single narrow event shape, hashes the client install ID before storage, and
-stores only daily aggregates needed for DAU/WAU/MAU, command counts, and failure
-counts.
+The backend is a Cloudflare Worker with a D1 database binding. It accepts
+versioned, strictly allowlisted payloads and stores daily aggregates for observed
+install activity, command usage, and terminal behavioral outcomes. Schema-v1
+ingestion stores the HMAC-derived installation ID only in the separate
+`install_days` activity table. The `command_events_daily` and
+`version_events_daily` aggregates retain no installation identity or
+install-to-command association. Schema-v2 behavioral ingestion retains neither
+raw nor hashed installation identity.
 
 ## Data Policy
 
 The worker may store:
 
 - daily bucket, in `YYYY-MM-DD` format
-- server-hashed install ID
+- HMAC-derived installation ID in `install_days` only, from schema-v1 ingestion
 - command name from a fixed allowlist
+- behavioral event name: `backup.run`, `update.backup`, or `update.self-update`
 - status from a fixed allowlist
 - duration bucket from a fixed allowlist
 - released Ballin version, Node.js major version, and coarse macOS product
@@ -41,7 +46,7 @@ The worker must not store:
 
 `POST /v1/events`
 
-Example payload:
+Schema-v1 command payload (unchanged):
 
 ```json
 {
@@ -57,6 +62,29 @@ Example payload:
 }
 ```
 
+Schema-v2 behavioral payload:
+
+```json
+{
+  "schemaVersion": 2,
+  "installId": "826f9faa-9995-4f66-a01b-73b4f7aebdf1",
+  "dateBucket": "2026-06-27",
+  "event": "backup.run",
+  "status": "success"
+}
+```
+
+V2 accepts exactly these five fields. `event` is one of `backup.run`,
+`update.backup`, and `update.self-update`; `status` is `success` or `failure`.
+The date is the UTC terminal-outcome bucket. No command, duration, runtime,
+caller, or other dimensions are accepted.
+
+The installation ID is used transiently to derive the existing HMAC rate-limit
+key. Behavioral ingestion increments only
+`behavior_events_daily(date_bucket, event, status, count)`, keyed by date/event/status.
+It retains no raw or hashed identity and writes nothing to install-day, command,
+or runtime aggregates. Schema v1 continues to populate those existing tables.
+
 Responses:
 
 - `204` when the event is accepted
@@ -65,28 +93,37 @@ Responses:
 - `404` for unknown paths
 - `405` for unsupported methods
 
-The event is rejected unless:
+Both schemas require:
 
 - `installId` is a lowercase UUID
 - `dateBucket` is today, yesterday, or tomorrow in UTC
+- the JSON body is 2048 bytes or smaller
+- the JSON body contains no fields outside its documented schema
+
+Schema v1 additionally requires:
+
 - `command` is one of the currently instrumented Ballin commands, including
   `ballin`, `ballin update`, `ballin backup`, `ballin config`,
   `ballin doctor`, `ballin self-update`, and `ballin uninstall`
 - `appVersion` is a released numeric version such as `1.0.0`
 - `nodeMajor` is a numeric major version
 - `osVersion` is a coarse macOS product version such as `26.6`, or `unknown`
-- the JSON body is 2048 bytes or smaller
-- the JSON body contains no fields outside the documented schema
+- `status` is `success`, `failure`, or `unknown`
+- `durationBucket` accepts `unknown`, `<1s`, `1-10s`, `10-60s`, `1-10m`, or
+  `10m+`; v1 retains its fallback to `unknown` for absent, empty, or non-string
+  duration values
 
-The worker should ignore request IP for analytics purposes. Cloudflare may still
-process request metadata operationally before the worker runs; the application
-schema does not read or persist it.
+The Worker uses request source metadata only for transient rate limiting and
+does not retain it in analytics. Cloudflare may process metadata operationally
+before the Worker runs.
 
 The endpoint accepts public client telemetry. Valid events can be spoofed, so
 aggregate analytics are directional and not security-trustworthy. The Worker
 limits abuse with strict schema validation, low-cardinality fields, body-size and
 date-skew checks, server-side install ID hashing, and Cloudflare Workers rate
-limits. Request source metadata is used only as a transient rate-limit key and is
+limits. Both schemas share the global, source, and installation rate-limit keys;
+missing rate-limit or hash-secret configuration fails closed. Request source
+metadata is used only as a transient rate-limit key and is
 not stored, queried, logged, or reported by the application. Older clients may
 still send `X-Ballin-Analytics-Token`; the Worker ignores that legacy header.
 
@@ -169,7 +206,22 @@ applying the remote migration, rerun the workflow manually from `main`.
 wrangler d1 migrations apply ballin-scripts-analytics --remote
 ```
 
-### OS-Family Removal Cutover
+### Behavioral Analytics Rollout
+
+Backend and client changes land separately because installed clients update
+directly from `main`. Follow the
+[backend-first rollout](../docs/analytics-backend.md#behavioral-analytics-rollout):
+land compatible ingestion, apply the additive migration with production
+authorization, manually deploy from `main`, and verify schema and ingestion
+readiness before landing client sends.
+
+The new migration preserves existing data. Do not reset or backfill aggregates
+for behavioral analytics. Deployment binding checks alone cannot establish that
+the migration is applied or that all serving Worker versions accept v2.
+
+### Historical OS-Family Removal Cutover
+
+This earlier destructive cutover does not apply to the behavioral migration.
 
 The migration that removes OS family recreates `version_events_daily` without
 copying its historical rows. After that change lands on `main`:
@@ -229,6 +281,15 @@ The report uses local Wrangler authentication and
 - top-level command usage
 - command success, failure, and unknown counts
 - application, Node.js, and macOS-version trends from existing aggregate rows
+- behavioral outcomes by event: total, successes, failures, and failure rate
+
+Behavioral totals include terminal outcomes only; `total = successes + failures`
+and `failure_rate = failures / total`. The query examples also support daily
+grouping. See [interpretation limits](../docs/analytics-backend.md#interpreting-behavioral-outcomes):
+automatic backup events intentionally overlap, and independent delivery loss,
+interruptions, mixed versions, and UTC date boundaries prevent matching events.
+They cannot establish exact direct-backup volume, execution coverage, unique-install
+adoption, feature retention, or user percentages.
 
 Reports are directional maintenance signals. Because ingestion is public client
 telemetry, aggregate counts are not security-trustworthy.
@@ -255,13 +316,14 @@ values into the report command. If `wrangler` is not directly available, the
 script falls back to `npx --yes wrangler`; `--yes` allows npx to install
 Wrangler without prompting.
 
-Reporting stays within the existing aggregate schema:
+Reporting reads these aggregate tables:
 
 - `install_days`
 - `command_events_daily`
 - `version_events_daily`
+- `behavior_events_daily`
 
-It does not add telemetry fields or expose feature-level events, command
+It does not expose installation-linked behavioral history, command
 arguments, local paths, backup destination details, package/editor data, raw errors,
 environment variables, arbitrary config values, IP storage, or raw install IDs.
 
@@ -278,6 +340,7 @@ The reset clears all aggregate analytics tables:
 - `install_days`
 - `command_events_daily`
 - `version_events_daily`
+- `behavior_events_daily`
 
 There is no raw event table.
 

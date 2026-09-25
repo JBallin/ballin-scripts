@@ -4,7 +4,8 @@
 
 Ballin uses a small Cloudflare Worker backed by D1 for usage
 analytics. The backend records only the minimal signals needed for active
-installs, top-level command usage, and command success or failure.
+installs, top-level command usage, and terminal backup and automatic-update
+outcomes. Command and behavioral aggregates remain separate.
 
 The backend lives in [`analytics-worker/`](../analytics-worker/). Its package
 README covers Worker setup and maintenance commands.
@@ -47,7 +48,7 @@ the exact automatic-trigger and deployment-time validation contract.
 ## Retention
 
 The Worker deletes rows older than 395 days. That keeps roughly 13 months of
-daily install and command-count data.
+daily install, command, runtime, and behavioral-outcome data.
 
 ## Reporting
 
@@ -66,9 +67,9 @@ npm run analytics:report -- --from 2026-06-01 --to 2026-06-30
 The report runs Wrangler D1 `SELECT` queries against the remote database using
 local Wrangler authentication and the ignored local
 `analytics-worker/wrangler.toml` described in the Worker README. It shows daily
-active installs, top-level command usage, command success/failure counts, and
-application/Node/macOS-version trends. It does not require, accept, or print
-Cloudflare secret values.
+active installs, top-level command usage, command success/failure counts,
+application/Node/macOS-version trends, and a separate behavioral-outcomes
+section. It does not require, accept, or print Cloudflare secret values.
 
 Run `npx wrangler login` first if local Wrangler authentication is not
 configured. The report tries a directly available `wrangler` command first. If
@@ -79,11 +80,42 @@ Analytics ingestion is public client telemetry. Valid events can be spoofed, so
 reports are directional maintenance signals rather than security-trustworthy
 counts.
 
-The report only reads the existing aggregate tables: `install_days`,
-`command_events_daily`, and `version_events_daily`. It does not introduce new
-telemetry fields or report feature-level events, command arguments, local paths,
-backup destination details, package/editor data, raw errors, environment variables,
-arbitrary config values, IPs, or raw install IDs.
+The report reads `install_days`, `command_events_daily`,
+`version_events_daily`, and `behavior_events_daily`. Behavioral rows contain
+only UTC date, event name, terminal status, and count. They contain no raw or
+hashed installation identity and do not contribute to observed-install activity
+or runtime trends.
+
+### Interpreting Behavioral Outcomes
+
+Each event has its own total, successes, failures, and failure rate
+(`failures / total`). Only terminal outcomes are counted:
+
+- `backup.run`: real backup operations across callers, including successful
+  no-ops and preflight failures. Required collection, reconciliation,
+  publication, or cache failure makes the whole operation fail.
+- `update.backup`: the automatic backup child's invocation result.
+- `update.self-update`: the automatic Ballin self-update child's invocation
+  result, before the separate readiness check. Readiness can fail overall
+  update while this event remains successful.
+
+Automatic backup can produce both `backup.run` and `update.backup`. Do not sum
+them into total backups, subtract them to infer exact direct-backup volume, or
+divide by command counts to claim exact update-stage coverage. Launch failure
+can produce a parent failure without a child backup event. Independent delivery
+loss, interruption, mixed client versions, and adjacent UTC date buckets prevent
+matching observations.
+
+These counts do not establish unique-install adoption, first/repeat backup,
+feature retention, or user percentages. Existing observed-install activity stays
+separate. Participation is selective, delivery is best-effort, and public events
+are spoofable; rate limits do not authenticate installations or outcomes.
+Product value and reasons for behavior still require separate research.
+
+The query examples include per-event totals and daily grouping. Neither the
+queries nor report expose command arguments, paths, destination details,
+package/editor data, raw errors, environment variables, configuration values,
+IPs, or raw install IDs.
 
 ## Resetting Aggregates
 
@@ -98,6 +130,7 @@ The reset scope is the full aggregate schema:
 - `install_days`
 - `command_events_daily`
 - `version_events_daily`
+- `behavior_events_daily`
 
 There is no raw event table to preserve or delete.
 
@@ -126,10 +159,15 @@ behavior as the report.
 
 The Worker accepts public client events and relies on layered abuse controls
 instead of a client-shipped secret. It rejects oversized payloads and unsupported
-fields, validates dates and low-cardinality runtime values, hashes install IDs
-before storage, applies global/source rate limits before parsing, and applies an
-install-hash rate limit before D1 writes. Request source metadata is used only as
-a transient Cloudflare rate-limit key; it is not stored, queried, logged, or
+fields, validates dates and low-cardinality values, applies global/source rate
+limits before parsing, and applies an installation-HMAC rate limit before D1
+writes. Both schemas share those rate-limit budgets. Schema-v1 ingestion stores
+the HMAC-derived installation ID only in the separate `install_days` activity
+table. The `command_events_daily` and `version_events_daily` aggregates retain
+no installation identity or install-to-command association. Schema-v2 behavioral
+ingestion uses the hash transiently for rate limiting and retains neither raw
+nor hashed installation identity. Request source metadata is used only as a
+transient Cloudflare rate-limit key; it is not stored, queried, logged, or
 reported by the application.
 
 ## Production Checklist
@@ -162,7 +200,30 @@ The deployment check verifies Cloudflare binding metadata without exposing
 secret values. It cannot verify the hash secret's value, D1 schema or migration
 state, resource reachability, or runtime rate-limit behavior.
 
-## OS-Family Removal Cutover
+## Behavioral Analytics Rollout
+
+The additive behavioral migration and compatible ingestion must reach production
+before client sends are released. Installation and self-update consume `main`,
+so backend and client changes must land separately:
+
+1. Land the backend change containing the new table and v1/v2 ingestion. Its
+   automatic deployment should stop at the existing manual-migration guard.
+2. With production authorization, apply the new migration, then manually run
+   `Deploy Analytics Worker` from `main`.
+3. Verify migration completion and that all Worker versions receiving traffic
+   run compatible ingestion. Binding verification alone does not establish
+   schema readiness or v2 support.
+4. Only then land the client change that sends behavioral events.
+
+The migration preserves existing aggregates, and compatible ingestion continues
+to accept current v1 command payloads. Do not backfill behavioral outcomes from
+command counts or reset data for this rollout. Production migration, deployment,
+reset, and live ingestion verification require separate authorization.
+
+## Historical OS-Family Removal Cutover
+
+This procedure applies only to the earlier OS-family migration, not the additive
+behavioral migration above.
 
 The migration that removes the redundant OS-family dimension intentionally
 recreates `version_events_daily` without preserving its historical rows. After
