@@ -179,7 +179,7 @@ command returns the last nonzero stage status.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
-| `update.cleanup` | `true` | Runs `brew cleanup` after upgrading Homebrew packages. |
+| `update.cleanup` | `true` | Runs `brew cleanup` after the Homebrew refresh attempt and any package upgrade. |
 | `update.selfUpdate` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
 | `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Configure a destination with `ballin backup setup` before enabling it; an explicitly requested unconfigured backup stage fails with setup guidance. |
 | `update.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |

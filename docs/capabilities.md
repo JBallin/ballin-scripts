@@ -19,7 +19,7 @@ invalid known setting values fail before any integration runs.
 
 | Area | Behavior | Requirement |
 | --- | --- | --- |
-| Homebrew packages | Runs `brew upgrade`, optional `brew cleanup`, and `brew doctor`. | `brew` on `PATH`; `update.cleanup` controls cleanup. |
+| Homebrew | Runs `brew update`, then `brew upgrade` when the refresh succeeds. Optional `brew cleanup` and `brew doctor` still run after a failed refresh. | `brew` on `PATH`; `update.cleanup` controls cleanup. |
 | Node.js LTS | Runs `nvm install --lts`; a missing nvm installation or failure to capture its updated environment records a failure while later stages continue. | `update.nvm=true`, `NVM_DIR` set, and `nvm.sh` present. |
 | Global npm packages | Runs `npm update -g`; a missing `npm` command records a failure while later stages continue. | `update.npm=true` and `npm` on `PATH`. |
 | Mac App Store apps | Runs `mas upgrade`. | `mas` on `PATH`. |
