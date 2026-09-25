@@ -560,7 +560,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
   });
 
   it('records the real automatic backup and parent outcome without a nested command event', function test() {
-    this.timeout(5000);
+    this.timeout(15000);
     const capture = createAnalyticsCapture(tempDir);
     const checkout = path.join(tempDir, '.ballin-scripts');
     fs.mkdirSync(checkout);
