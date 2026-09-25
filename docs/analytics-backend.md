@@ -206,16 +206,14 @@ The additive behavioral migration and compatible ingestion must reach production
 before client sends are released. Installation and self-update consume `main`,
 so backend and client changes must land separately:
 
-1. Land the deployment-boundary fix in [#402](https://github.com/JBallin/ballin-scripts/pull/402)
-   and verify its production workflow succeeds.
-2. Land the backend change containing the new table and v1/v2 ingestion. Its
+1. Land the backend change containing the new table and v1/v2 ingestion. Its
    automatic deployment should stop at the existing manual-migration guard.
-3. With production authorization, apply the new migration, then manually run
+2. With production authorization, apply the new migration, then manually run
    `Deploy Analytics Worker` from `main`.
-4. Verify migration completion and that all Worker versions receiving traffic
+3. Verify migration completion and that all Worker versions receiving traffic
    run compatible ingestion. Binding verification alone does not establish
    schema readiness or v2 support.
-5. Only then land the client change that sends behavioral events.
+4. Only then land the client change that sends behavioral events.
 
 The migration preserves existing aggregates, and compatible ingestion continues
 to accept current v1 command payloads. Do not backfill behavioral outcomes from

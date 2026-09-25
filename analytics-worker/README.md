@@ -211,9 +211,9 @@ wrangler d1 migrations apply ballin-scripts-analytics --remote
 Backend and client changes land separately because installed clients update
 directly from `main`. Follow the
 [backend-first rollout](../docs/analytics-backend.md#behavioral-analytics-rollout):
-land #402's deployment fix, land compatible ingestion, apply the additive
-migration with production authorization, manually deploy from `main`, and verify
-schema and ingestion readiness before landing client sends.
+land compatible ingestion, apply the additive migration with production
+authorization, manually deploy from `main`, and verify schema and ingestion
+readiness before landing client sends.
 
 The new migration preserves existing data. Do not reset or backfill aggregates
 for behavioral analytics. Deployment binding checks alone cannot establish that
