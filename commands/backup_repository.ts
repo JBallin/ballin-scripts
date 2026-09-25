@@ -51,13 +51,25 @@ type RepositoryRead = {
   revision: Revision;
   snapshots: Map<string, Buffer>;
 };
+type ManagedBranchRulesetOutcome =
+  | { status: 'present' }
+  | { status: 'enabled' }
+  | { status: 'unsupported' }
+  | { status: 'permission-denied' }
+  | { status: 'unexpected' }
+  | { status: 'ambiguous'; reason: 'unconfirmed' | 'mismatch' | 'duplicate' };
 type RepositoryInspection =
   | { status: 'complete'; read: RepositoryRead }
   | { status: 'incomplete'; problem: RepositoryProblem; inspected?: RepositoryRead };
 type RepositoryInfo = { destination: RepositoryDestination; login: string; revision: Revision };
-type ApiResult = { ok: boolean; body: Record<string, unknown>; cleanupFailed?: boolean };
+type ApiResult = { ok: boolean; body: Record<string, unknown>; items?: unknown[]; cleanupFailed?: boolean };
 const requireCleanTransport = (result: ApiResult): void => {
   if (result.cleanupFailed) throw new RepositoryError('cleanup');
+};
+const protectionTransportFailure = (error: unknown): RepositoryError | undefined => {
+  if (!(error instanceof RepositoryError)) return undefined;
+  if (error.cleanupFailed && error.problem !== 'cleanup') return new RepositoryError('cleanup');
+  return ['local-io', 'cleanup'].includes(error.problem) ? error : undefined;
 };
 
 const object = (value: unknown): Record<string, unknown> => {
@@ -74,7 +86,7 @@ const oid = (value: unknown): string => {
   if (typeof value !== 'string' || !/^[a-f0-9]{40}$/u.test(value)) throw new RepositoryError('invalid-data');
   return value;
 };
-const api = (endpoint: string, payload: unknown, options: RepositoryOptions): ApiResult => {
+const api = (endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false): ApiResult => {
   let output: string | undefined;
   let response: ApiResult = { ok: false, body: {} };
   let failure: RepositoryError | undefined;
@@ -95,10 +107,15 @@ const api = (endpoint: string, payload: unknown, options: RepositoryOptions): Ap
     // The injected runner used by readiness fixtures may return stdout directly.
     const contents = result.stdout || fs.readFileSync(output, 'utf8');
     let body: Record<string, unknown> = {};
-    try { body = object(JSON.parse(contents)); } catch {
+    let items: unknown[] | undefined;
+    try {
+      const parsed: unknown = JSON.parse(contents);
+      if (Array.isArray(parsed) && allowArray) items = parsed;
+      else body = object(parsed);
+    } catch {
       if (result.status === 0 && !result.error && !result.signal) throw new RepositoryError('invalid-data');
     }
-    response = { ok: result.status === 0 && !result.error && !result.signal, body };
+    response = { ok: result.status === 0 && !result.error && !result.signal, body, items };
   } catch (error) {
     failure = error instanceof RepositoryError ? error : new RepositoryError('local-io');
   } finally {
@@ -283,6 +300,201 @@ const sameRepositoryRevision = (left: RepositoryRead, right: RepositoryRead): bo
 const unexpectedRepositoryEntries = (read: RepositoryRead): number => (
   read.revision.entries.filter((entry) => entry.classification === 'unexpected').length
 );
+const managedBranchRulesetName = 'Ballin backup branch protection';
+const managedBranchRulesetPayload = (branch: string): Record<string, unknown> => ({
+  name: managedBranchRulesetName,
+  target: 'branch',
+  enforcement: 'active',
+  bypass_actors: [],
+  conditions: { ref_name: { include: [`refs/heads/${branch}`], exclude: [] } },
+  rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }],
+});
+const apiStatus = (result: ApiResult): number | undefined => {
+  const status = typeof result.body.status === 'string' ? Number(result.body.status) : result.body.status;
+  return typeof status === 'number' && Number.isSafeInteger(status) ? status : undefined;
+};
+type ProtectionApiOutcome = 'unsupported' | 'permission-denied' | 'unexpected' | 'ambiguous';
+const responseText = (value: Record<string, unknown>): string => JSON.stringify(value).toLowerCase();
+const classifyProtectionApiFailure = (result: ApiResult): ProtectionApiOutcome => {
+  const message = responseText(result.body);
+  const status = apiStatus(result);
+  const namesCapability = /rulesets?|branch protection/u.test(message);
+  const offersPublicAlternative = /make (?:this |the )?repository public/u.test(message);
+  if ((namesCapability && (
+    /(?:upgrade|paid|pro plan|team plan|enterprise plan)/u.test(message)
+    || /(?:not available|not supported|not enabled|unavailable).*(?:private|repository|account|plan)/u.test(message)
+    || /(?:private|repository|account|plan).*(?:not available|not supported|not enabled|unavailable)/u.test(message)
+    || offersPublicAlternative
+  )) || (/(?:upgrade|paid|\bpro\b)/u.test(message) && offersPublicAlternative)) return 'unsupported';
+  if (
+    /resource not accessible by (?:personal access )?token/u.test(message)
+    || /(?:requires?|must have|need).*(?:admin|administration).*(?:access|permission|role)?/u.test(message)
+    || /(?:insufficient|missing).*(?:permission|authority|access)/u.test(message)
+  ) return 'permission-denied';
+  if (/rate limit|abuse|spam|submitted too quickly|temporar(?:y|ily)|timeout/u.test(message)) return 'ambiguous';
+  if (status !== undefined && status >= 500) return 'ambiguous';
+  if (/validation failed|invalid (?:request|value|ruleset|condition|rule)/u.test(message)) return 'unexpected';
+  if ([400, 409, 422].includes(status ?? 0) && message.trim()) return 'unexpected';
+  return 'ambiguous';
+};
+const rulesetId = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) throw new RepositoryError('invalid-data');
+  return value;
+};
+const semanticStringSet = (value: unknown, expected: string[]): boolean => {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) return false;
+  const actual = [...new Set(value as string[])].sort();
+  return actual.length === expected.length && actual.every((entry, index) => entry === [...expected].sort()[index]);
+};
+const harmlessRepresentation = (value: unknown): boolean => (
+  value === undefined || value === null || value === false || value === ''
+  || (Array.isArray(value) && value.length === 0)
+  || (isConfigObject(value) && Object.values(value).every(harmlessRepresentation))
+);
+const managedBranchRulesetMatch = (
+  value: unknown, id: number, read: RepositoryRead, account: Account,
+): 'match' | 'permission-denied' | 'mismatch' => {
+  try {
+    const ruleset = object(value);
+    const conditions = object(ruleset.conditions);
+    const refName = object(conditions.ref_name);
+    if (
+      ruleset.id !== id || ruleset.name !== managedBranchRulesetName
+      || ruleset.target !== 'branch' || ruleset.enforcement !== 'active'
+      || ruleset.source_type !== 'Repository' || typeof ruleset.source !== 'string'
+      || ruleset.source.toLowerCase() !== `${account.login}/${read.destination.name}`.toLowerCase()
+      || !Object.hasOwn(conditions, 'ref_name')
+      || Object.entries(conditions).some(([key, entry]) => key !== 'ref_name' && !harmlessRepresentation(entry))
+      || Object.entries(refName).some(([key, entry]) => !['include', 'exclude'].includes(key) && !harmlessRepresentation(entry))
+      || !semanticStringSet(refName.include, [`refs/heads/${read.destination.branch}`])
+      || !semanticStringSet(refName.exclude, []) || !Array.isArray(ruleset.rules) || ruleset.rules.length !== 2
+    ) return 'mismatch';
+    const ruleTypes = ruleset.rules.map((rule) => {
+      const entry = object(rule);
+      if (typeof entry.type !== 'string') throw new RepositoryError('invalid-data');
+      if (Object.entries(entry).some(([key, item]) => (
+        key !== 'type' && !['id', 'node_id', 'created_at', 'updated_at'].includes(key) && !harmlessRepresentation(item)
+      ))) return undefined;
+      return entry.type as string;
+    }).sort();
+    if (!semanticStringSet(ruleTypes, ['deletion', 'non_fast_forward'])) return 'mismatch';
+    if (ruleset.bypass_actors === undefined) return 'permission-denied';
+    if (!semanticStringSet(ruleset.bypass_actors, [])) return 'mismatch';
+    return 'match';
+  } catch { return 'mismatch'; }
+};
+const readManagedBranchRuleset = (
+  base: string, id: number, read: RepositoryRead, account: Account, options: RepositoryOptions,
+): 'match' | 'permission-denied' | 'mismatch' | ProtectionApiOutcome => {
+  let detail: ApiResult;
+  try { detail = api(`${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
+    const transportFailure = protectionTransportFailure(error);
+    if (transportFailure) throw transportFailure;
+    return 'ambiguous';
+  }
+  if (!detail.ok) {
+    requireCleanTransport(detail);
+    return classifyProtectionApiFailure(detail);
+  }
+  requireCleanTransport(detail);
+  return managedBranchRulesetMatch(detail.body, id, read, account);
+};
+const findManagedBranchRuleset = (
+  read: RepositoryRead, account: Account, options: RepositoryOptions,
+): { status: 'missing' } | { status: 'found'; result: ReturnType<typeof readManagedBranchRuleset> }
+  | { status: ProtectionApiOutcome } | { status: 'duplicate' } => {
+  const base = `repos/${account.login}/${read.destination.name}/rulesets`;
+  let list: ApiResult;
+  try { list = api(`${base}?includes_parents=false&targets=branch&per_page=100`, undefined, options, true); } catch (error) {
+    const transportFailure = protectionTransportFailure(error);
+    if (transportFailure) throw transportFailure;
+    return { status: 'ambiguous' };
+  }
+  if (!list.ok) {
+    requireCleanTransport(list);
+    return { status: classifyProtectionApiFailure(list) };
+  }
+  requireCleanTransport(list);
+  if (!list.items) return { status: 'ambiguous' };
+  let named: Record<string, unknown>[];
+  try {
+    named = list.items.map((value) => {
+      const ruleset = object(value);
+      rulesetId(ruleset.id);
+      if (typeof ruleset.name !== 'string' || !ruleset.name || /[\x00-\x1f\x7f]/u.test(ruleset.name)) {
+        throw new RepositoryError('invalid-data');
+      }
+      return ruleset;
+    }).filter((ruleset) => ruleset.name === managedBranchRulesetName);
+  } catch { return { status: 'ambiguous' }; }
+  if (named.length === 0) return { status: 'missing' };
+  if (named.length !== 1) return { status: 'duplicate' };
+  const id = rulesetId(named[0].id);
+  return { status: 'found', result: readManagedBranchRuleset(base, id, read, account, options) };
+};
+const rulesetLookupOutcome = (
+  lookup: ReturnType<typeof findManagedBranchRuleset>, presentStatus: 'present' | 'enabled',
+): ManagedBranchRulesetOutcome | undefined => {
+  if (lookup.status === 'missing') return undefined;
+  if (lookup.status === 'duplicate') return { status: 'ambiguous', reason: 'duplicate' };
+  if (lookup.status !== 'found') return { status: lookup.status } as ManagedBranchRulesetOutcome;
+  if (lookup.result === 'match') return { status: presentStatus };
+  if (lookup.result === 'mismatch') return { status: 'ambiguous', reason: 'mismatch' };
+  return { status: lookup.result } as ManagedBranchRulesetOutcome;
+};
+const ensureManagedBranchRuleset = (
+  read: RepositoryRead, options: RepositoryOptions = {},
+): ManagedBranchRulesetOutcome => {
+  const account = readRepositoryAccount(options);
+  if (account.id !== read.destination.ownerId) throw new RepositoryError('identity');
+  const existing = rulesetLookupOutcome(findManagedBranchRuleset(read, account, options), 'present');
+  if (existing) return existing;
+  const endpoint = `repos/${account.login}/${read.destination.name}/rulesets`;
+  let creation: ApiResult = { ok: false, body: {} };
+  let mutationFailure: RepositoryError | undefined;
+  try { creation = api(endpoint, managedBranchRulesetPayload(read.destination.branch), options); } catch (error) {
+    mutationFailure = protectionTransportFailure(error);
+  }
+  if (!mutationFailure && !creation.ok) {
+    requireCleanTransport(creation);
+    const classified = classifyProtectionApiFailure(creation);
+    if (classified !== 'ambiguous') return { status: classified };
+  }
+  let detailResult: ReturnType<typeof readManagedBranchRuleset> | undefined;
+  if (!mutationFailure && creation.ok) {
+    let id: number | undefined;
+    try { id = rulesetId(creation.body.id); } catch { /* Reconcile the ambiguous response below. */ }
+    if (id !== undefined) {
+      try { detailResult = readManagedBranchRuleset(endpoint, id, read, account, options); } catch (error) {
+        mutationFailure = protectionTransportFailure(error);
+      }
+      if (detailResult === 'match') {
+        if (creation.cleanupFailed) {
+          writeStderrLine('ballin backup: repository protection confirmed, but transport cleanup is incomplete');
+          throw new RepositoryError('cleanup');
+        }
+        return { status: 'enabled' };
+      }
+    }
+  }
+  const confirmation = rulesetLookupOutcome(findManagedBranchRuleset(read, account, options), 'enabled');
+  if (confirmation?.status === 'enabled') {
+    if (creation.cleanupFailed || mutationFailure?.cleanupFailed || mutationFailure?.problem === 'cleanup'
+    ) {
+      writeStderrLine('ballin backup: repository protection confirmed, but transport cleanup is incomplete');
+      throw new RepositoryError('cleanup');
+    }
+    if (mutationFailure?.problem === 'local-io') throw mutationFailure;
+    return confirmation;
+  }
+  if (creation.cleanupFailed) throw new RepositoryError('cleanup');
+  if (mutationFailure?.problem === 'local-io' || mutationFailure?.problem === 'cleanup') throw mutationFailure;
+  if (confirmation) return confirmation;
+  if (detailResult === 'permission-denied') return { status: 'permission-denied' };
+  if (detailResult === 'mismatch') return { status: 'ambiguous', reason: 'mismatch' };
+  if (detailResult === 'unexpected') return { status: 'unexpected' };
+  return { status: 'ambiguous', reason: 'unconfirmed' };
+};
 const publish = (
   before: RepositoryRead, additions: Map<string, Buffer>, initialize: boolean, options: RepositoryOptions,
 ): RepositoryRead => {
@@ -375,7 +587,10 @@ const repositoryUrl = (destination: RepositoryDestination, account: Account): st
 module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
-  createRepositoryBackup, publishRepositorySnapshots, repositoryCacheDirectory, repositoryUrl,
-  repositoryReadmeContents,
+  createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
+  repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
 };
-export type { RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account };
+export type {
+  RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
+  ManagedBranchRulesetOutcome,
+};

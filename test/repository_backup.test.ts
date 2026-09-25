@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
 const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('../commands/backup_config.ts');
 import type { FixtureState } from './helpers/repository.ts';
@@ -17,7 +17,10 @@ describe('repository backup lifecycle', function() {
   const saveState = (value: FixtureState): void => fs.writeFileSync(statePath, JSON.stringify(value));
   const config = () => JSON.parse(fs.readFileSync(configPath, 'utf8'));
   const saveConfig = (value: unknown): void => fs.writeFileSync(configPath, `${JSON.stringify(value, null, 2)}\n`);
-  const mutations = () => state().requests.filter((r) => r.endpoint === 'user/repos' || r.payload?.query?.includes('BallinPublish'));
+  const rulesetRequests = () => state().requests.filter((r) => r.endpoint.includes('/rulesets'));
+  const rulesetWrites = () => rulesetRequests().filter((r) => r.method === 'POST');
+  const mutations = () => state().requests.filter((r) => r.endpoint === 'user/repos'
+    || r.payload?.query?.includes('BallinPublish') || (r.endpoint.includes('/rulesets') && r.method === 'POST'));
   const publications = () => mutations().filter((r) => r.endpoint === 'graphql');
   const remote = (name: string): string | undefined => {
     const value = state(); const content = value.commits[value.head].files[name];
@@ -56,7 +59,8 @@ describe('repository backup lifecycle', function() {
         const requests = JSON.parse(fs.readFileSync(${JSON.stringify(statePath)}, 'utf8')).requests;
         const request = requests.at(-1);
         const target = ${JSON.stringify(target)};
-        const matches = target === 'all' || request?.endpoint === target
+        const matches = target === 'all' || (target === 'ruleset-post'
+          ? request?.endpoint.endsWith('/rulesets') && request?.method === 'POST' : false) || request?.endpoint === target
           || request?.endpoint.includes(target) || request?.payload?.query?.includes(target);
         if (matches) {
           failed = true;
@@ -119,6 +123,7 @@ describe('repository backup lifecycle', function() {
         assert.equal(additions.fileChanges.additions.some((item) => item.path === 'zshrc.sh'), !!row.publish);
         ok(run()); assert.equal(publications().length, 1);
       }
+      assert.equal(rulesetRequests().length, 0);
     });
   });
   it('sorts final snapshot status output without changing publication order', () => {
@@ -263,6 +268,16 @@ describe('repository backup lifecycle', function() {
     assert.isNull(config().backup.repository); assert.isUndefined(cached());
   });
 
+  it('retains confirmed protection without linkage after its transport cleanup fails', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\n', {}, transportCleanupFailure('ruleset-post'));
+    assertTransportCleanupFailed(result);
+    assert.include(result.stderr, 'repository protection confirmed');
+    assert.include(result.stdout, 'initialized backup remains available');
+    assert.lengthOf(state().rulesets, 1); assert.equal(rulesetWrites().length, 1);
+    assert.isNull(config().backup.repository); assert.isUndefined(cached());
+  });
+
   it('preserves a local transport failure when removing its directory also fails', () => {
     const preload = transportCleanupFailure('all') + `
       const open = fs.openSync;
@@ -310,6 +325,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(run(['read', 'nonexistent']).status, 1);
     const failed = state(); failed.faults.tree = { truncated: true }; saveState(failed);
     assert.equal(run(['read', 'zshrc.sh']).status, 1);
+    assert.equal(rulesetRequests().length, 0);
   });
   it('renders repository readiness failure with repository-appropriate recovery guidance', () => {
     const value = state(); value.faults.auth = true; saveState(value);
@@ -317,7 +333,16 @@ describe('repository backup lifecycle', function() {
       encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: path.join(root, 'tmp'), BALLIN_TEST_CONFIG_PATH: configPath }),
     });
     assert.equal(result.status, 1); assert.include(result.stdout, 'ballin backup setup to revalidate');
-    assert.notInclude(result.stdout, 'Gist'); assert.equal(mutations().length, 0);
+    assert.notInclude(result.stdout, 'Gist'); assert.equal(mutations().length, 0); assert.equal(rulesetRequests().length, 0);
+  });
+  it('keeps doctor repository readiness independent of repository policy access', () => {
+    const value = state(); value.faults.rulesetList = 'denied'; saveState(value);
+    const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'doctor'], {
+      encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: path.join(root, 'tmp'), BALLIN_TEST_CONFIG_PATH: configPath }),
+    });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.isAbove(state().requests.length, 0);
+    assert.equal(rulesetRequests().length, 0);
   });
 
   it('creates and confirms the marker and explanatory README before persisting reviewed local choices', () => {
@@ -326,9 +351,61 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
     assert.equal(config().update.backup, 'true');
     assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
-    assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 2);
+    assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 3);
     assert.isBelow(result.stdout.indexOf('Selected GitHub.com account: fixture-user'), result.stdout.indexOf('Confirm this destination'));
     assert.notInclude(result.stdout, 'zshrc.sh:');
+    assert.include(result.stdout, 'Optional GitHub branch protection enabled.');
+    const requests = state().requests;
+    const created = requests.findIndex((request) => request.endpoint === 'user/repos');
+    const initialized = requests.findIndex((request) => request.payload?.query?.includes('BallinPublish'));
+    const policyLookup = requests.findIndex((request) => request.endpoint.includes('/rulesets?'));
+    const policyCreate = requests.findIndex((request) => request.endpoint.endsWith('/rulesets') && request.method === 'POST');
+    const policyDetail = requests.findIndex((request) => /\/rulesets\/\d+\?/u.test(request.endpoint));
+    assert.isBelow(created, initialized); assert.isBelow(initialized, policyLookup);
+    assert.isBelow(policyLookup, policyCreate); assert.isBelow(policyCreate, policyDetail);
+  });
+  [
+    { name: 'unsupported capability', faults: { rulesetCreate: 'plan' }, message: undefined },
+    { name: 'missing administration', faults: { rulesetCreate: 'denied' }, message: 'current permissions' },
+    { name: 'ordinary rejection', faults: { rulesetCreate: 'reject' }, message: 'could not be confirmed' },
+    { name: 'transient response', faults: { rulesetCreate: 'server' }, message: 'protection is unconfirmed' },
+    { name: 'ambiguous no-effect response', faults: { rulesetCreate: 'ambiguous-no-effect' }, message: 'protection is unconfirmed' },
+    { name: 'missing created resource', faults: { rulesetCreate: 'no-effect' }, message: 'protection is unconfirmed' },
+    { name: 'unavailable confirmation', faults: { rulesetCreate: 'confirmation-failure' }, message: 'protection is unconfirmed' },
+    { name: 'malformed policy detail', faults: { rulesetDetail: 'malformed' }, message: 'protection is unconfirmed' },
+  ].forEach(({ name, faults, message }) => {
+    it(`links the valid backup after ${name}`, () => {
+      unconfigured(); seedCache('zshrc.sh', 'untrusted\n');
+      const value = state(); value.exists = false; value.faults = faults; saveState(value);
+      const result = run(['setup'], 'y\ncreate\n\nn\ny\n');
+      ok(result);
+      if (message) assert.include(result.stdout, message);
+      else assert.notInclude(result.stdout, 'branch protection');
+      assert.include(result.stdout, 'https://github.com/fixture-user/ballin-backups');
+      assert.deepEqual(config().backup.repository, fixtureDestination); assert.isUndefined(cached());
+      assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
+      assert.equal(state().requests.filter((request) => request.endpoint === 'user/repos').length, 1);
+      assert.equal(rulesetWrites().length, 1); assert.equal(mutations().length, 3);
+    });
+  });
+  it('revalidates and protects a linked repository after an earlier permission-limited attempt', () => {
+    unconfigured(); const value = state(); value.exists = false; value.faults.rulesetCreate = 'denied'; saveState(value);
+    ok(run(['setup'], 'y\ncreate\n\nn\ny\n'));
+    const retry = state(); delete retry.faults.rulesetCreate; saveState(retry);
+    const revalidated = run(['setup']); ok(revalidated);
+    assert.include(revalidated.stdout, 'Optional GitHub branch protection enabled.');
+    assert.deepEqual(config().backup.repository, fixtureDestination);
+    assert.equal(state().requests.filter((request) => request.endpoint === 'user/repos').length, 1);
+    assert.equal(rulesetWrites().length, 2); assert.lengthOf(state().rulesets, 1);
+  });
+  it('links an unprotected reconnect without administration access', () => {
+    unconfigured(); seedCache('zshrc.sh', 'untrusted\n');
+    const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
+    const result = run(['setup'], 'y\nreconnect\n\nn\ny\n');
+    ok(result); assert.include(result.stdout, 'current permissions'); assert.include(result.stdout, 'backup setup can continue normally');
+    assert.deepEqual(config().backup.repository, fixtureDestination); assert.isUndefined(cached());
+    assert.equal(state().requests.filter((request) => request.endpoint === 'user/repos').length, 0);
+    assert.equal(rulesetWrites().length, 1);
   });
   it('does not persist initially absent destination or consent fields during cancelled review', () => {
     const value = config(); delete value.backup.repository; delete value.backup.includeSensitive; saveConfig(value);
@@ -413,7 +490,7 @@ describe('repository backup lifecycle', function() {
     saveConfig(local); seedCache('zshrc.sh', 'stale base\n');
     const value = fixtureState({ ballin_config: JSON.stringify({ update: { cleanup: true, npm: true, nvm: false, selfUpdate: 'false', softwareupdate: true, backup: true },
       analytics: { enabled: 'false' }, backup: { id: 'ignored', repository: { id: 'other' }, includeSensitive: true }, custom: 'ignored' }) });
-    value.faults.publish = 'denied'; saveState(value);
+    value.faults.publish = 'denied'; value.faults.rulesetCreate = 'denied'; saveState(value);
     ok(run(['setup'], 'y\nreconnect\n\nn\ny\nn\n'));
     const restored = config(); assert.equal(restored.update.cleanup, 'invalid'); assert.isFalse(restored.update.npm);
     assert.equal(restored.update.nvm, 'false'); assert.equal(restored.update.softwareupdate, 'true');
@@ -421,6 +498,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(restored.analytics.enabled, 'false'); assert.deepEqual(restored.custom, { preserve: true });
     assert.equal(restored.backup.host, 'preserved.test'); assert.equal(restored.backup.includeSensitive, 'false');
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 0);
+    assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
   });
   ['n\n', '', 'y', 'y\n', '\n'].forEach((automatic) => {
     it(`uses the existing automatic-backup choice after reconnect: ${JSON.stringify(automatic)}`, () => {
@@ -443,10 +521,12 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().update.backup, 'false');
   });
   it('revalidates by stable identity after a rename and preserves local choices without prompting', () => {
-    const value = state(); value.name = 'renamed'; saveState(value); seedCache('zshrc.sh', 'base\n');
+    const value = state(); value.name = 'renamed'; value.rulesets = [fixtureRuleset({ source: 'fixture-user/renamed' })];
+    saveState(value); seedCache('zshrc.sh', 'base\n');
     ok(run(['setup', 'renamed'])); assert.equal(config().backup.repository.name, 'renamed');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'false');
     assert.equal(cached(), 'base\n'); assert.equal(mutations().length, 0);
+    assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
     assert.equal(run(['setup', 'wrong']).status, 1);
   });
   ['missing', 'denied'].forEach((fault) => {
@@ -468,7 +548,8 @@ describe('repository backup lifecycle', function() {
     unconfigured(); const value = state(); value.exists = false; saveState(value); const before = config();
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n', { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
     assert.equal(result.status, 1); assert.deepEqual(config(), before); assert.include(result.stdout, 'Reconnect to the existing backup');
-    ok(run(['setup'], 'y\nreconnect\n\nn\ny\nn\n')); assert.equal(mutations().length, 2);
+    ok(run(['setup'], 'y\nreconnect\n\nn\ny\nn\n')); assert.equal(mutations().length, 3);
+    assert.equal(rulesetWrites().length, 1);
   });
   it('identifies an ambiguous creation without retrying or linking an unconfirmed seed', () => {
     unconfigured(); const value = state(); value.exists = false; value.faults.create = 'ambiguous'; saveState(value);

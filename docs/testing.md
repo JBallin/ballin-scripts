@@ -22,6 +22,11 @@ c8's `NODE_V8_COVERAGE` without inheriting unrelated shell state or
 `NODE_OPTIONS`. Node also propagates the coverage variable to existing
 complete-environment fixtures, so those children remain measured.
 
+Mocking HTTPS alone does not isolate analytics payload collection. The enabled
+CLI fixture also selects macOS and stubs its version command before production
+imports, exercising the default reader on every host. Separate analytics tests
+cover the non-macOS fallback and injected readers.
+
 Keep behavior selectors explicit in fixtures. Analytics flags can change the
 measured branches; `BALLIN_BACKUP_HOST` and
 `BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT` can change installer outcomes. Shared
@@ -47,6 +52,17 @@ and checkout path prefixes. Use the same commit, lockfile dependencies, and exac
 Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
+
+When the coverage gate fails, CI attempts to retain exact reports and runtime,
+commit, tree, and lockfile metadata in a compact artifact for seven days. A
+separate failure-only artifact upload retains the raw V8 data when available,
+even if compact report generation fails. An intentional successful
+`workflow_dispatch` run retains only the compact evidence. Ordinary successful
+pull request and push runs skip diagnostic report generation and artifact
+uploads. Compare retained evidence with the corresponding local run before
+attributing a difference to the OS or runtime. Platform-dependent execution can
+also change V8's range boundaries, so one newly uncovered branch may change
+both covered and total branch counts.
 
 ## Runtime and platform limits
 

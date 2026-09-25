@@ -41,6 +41,8 @@ example includes optional backups.
 ```shell
 $ ballin update
 
+==> Updating Homebrew
+
 ==> Updating Homebrew packages
 
 ==> Cleaning up Homebrew packages

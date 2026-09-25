@@ -252,13 +252,18 @@ function runUpdateCommand(): void {
   };
 
   if (commandExists('brew')) {
-    progress('Updating Homebrew packages');
     childEnv = {
       ...process.env,
       HOMEBREW_NO_ENV_HINTS: '1',
       HOMEBREW_NO_ASK: '1',
     };
-    runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
+    progress('Updating Homebrew');
+    const updateStatus = runIntegrationCommand('brew', ['update'], { env: childEnv });
+
+    if (updateStatus === 0) {
+      progress('Updating Homebrew packages');
+      runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
+    }
 
     if (settings.cleanup) {
       progress('Cleaning up Homebrew packages');
