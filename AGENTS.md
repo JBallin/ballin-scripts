@@ -57,3 +57,10 @@
   `docs/design-system.md` according to the surface's job and audience. Use Ballin
   for product prose, `ballin` for the executable and command examples, and
   `ballin-scripts` for repository, package, checkout, or path precision.
+
+## GitHub content
+
+- Do not put literal review-invocation strings, such as an agent's `@`-mention
+  followed by a review request, in pull-request titles, descriptions, issue
+  text, comments, or other GitHub content unless you intend to trigger that
+  reviewer. Describe the invocation in words instead.
