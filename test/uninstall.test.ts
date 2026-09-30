@@ -74,14 +74,15 @@ exit 2
     fs.writeFileSync(preloadPath, `const fs = require('fs');
 const operation = ${JSON.stringify(operation)};
 const candidatePath = ${JSON.stringify(candidatePath)};
+const errorCode = ${JSON.stringify(errorCode)};
 const originalOperation = fs[operation];
 fs[operation] = (currentPath, ...args) => {
   if (currentPath === candidatePath) {
-    if (operation === 'unlinkSync') {
+    if (operation === 'unlinkSync' && errorCode === 'ENOENT') {
       originalOperation(currentPath, ...args);
     }
     const error = new Error(operation + ' failed for ' + currentPath);
-    error.code = ${JSON.stringify(errorCode)};
+    error.code = errorCode;
     throw error;
   }
   return originalOperation(currentPath, ...args);
@@ -169,41 +170,32 @@ fs[operation] = (currentPath, ...args) => {
     assert.isFalse(fs.existsSync(repoDir));
   });
 
-  it('continues removing the repository when an owned system link cannot be unlinked', function test() {
-    if (process.platform === 'win32') {
-      this.skip();
-    }
-    if (process.getuid?.() === 0) {
-      this.skip();
-    }
-
+  it('continues removing the repository when an owned system link cannot be unlinked', () => {
     const binDir = path.join(systemRoot, 'usr', 'local', 'bin');
     const ballin = createCommand('ballin');
     const linkPath = path.join(binDir, 'ballin');
     fs.symlinkSync(ballin, linkPath);
-    fs.chmodSync(binDir, 0o555);
+    const otherLink = path.join(binDir, 'other');
+    fs.symlinkSync(createCommand('other'), otherLink);
+    const preloadPath = writeFsFailurePreload('unlinkSync', linkPath, 'EACCES');
+    const result = runUninstall({ preloadPath });
 
-    try {
-      const result = runUninstall();
-
-      assert.equal(result.status, 1, result.stderr);
-      assert.equal(
-        result.stdout,
-        "\nIt's been real...\nRemoved the local checkout, but symlink cleanup is incomplete.\n\n",
-      );
-      assert.include(result.stderr, 'ballin');
-      assert.include(result.stderr, 'Uninstall incomplete: these Ballin-owned links remain:');
-      assert.include(result.stderr, `  ${linkPath}\n`);
-      assert.include(
-        result.stderr,
-        'Remove the listed links with rm. If removal fails because of permissions, '
-          + 'rerun rm with elevated permissions (for example, sudo rm).',
-      );
-      assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
-      assert.isFalse(fs.existsSync(repoDir));
-    } finally {
-      fs.chmodSync(binDir, 0o755);
-    }
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(
+      result.stdout,
+      "\nIt's been real...\nRemoved the local checkout, but symlink cleanup is incomplete.\n\n",
+    );
+    assert.include(result.stderr, `unlinkSync failed for ${linkPath}`);
+    assert.include(result.stderr, 'Uninstall incomplete: these Ballin-owned links remain:');
+    assert.include(result.stderr, `  ${linkPath}\n`);
+    assert.include(
+      result.stderr,
+      'Remove the listed links with rm. If removal fails because of permissions, '
+        + 'rerun rm with elevated permissions (for example, sudo rm).',
+    );
+    assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
+    assert.throws(() => fs.lstatSync(otherLink), /ENOENT/);
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   it('reports an unverified candidate path when link inspection fails', () => {

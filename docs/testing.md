@@ -68,8 +68,18 @@ both covered and total branch counts.
 
 Node options and preloads take effect before Mocha setup and are not equivalent
 runtime configurations. OS metadata and filesystem behavior still vary between
-macOS and Linux; the permission-denial uninstall test skips on Windows or when
-running as root.
+macOS and Linux. Compare test selection and execution privileges alongside the
+runtime before attributing a coverage difference to Node.
+
+The uninstall permission-failure fixture injects `EACCES` for one exact temporary
+link through its existing child-process preload. It verifies retained-link
+reporting, cleanup of another owned link, and removal of the isolated checkout.
+It does not depend on chmod enforcement or skip based on UID. The former
+chmod-based fixture skipped whenever UID was zero, omitting meaningful failure
+coverage even in root-labelled sandboxes without filesystem-bypass privileges.
+This was the source of the statement/line discrepancy reported in PR #411;
+the performance change was not responsible. The `ENOENT` fixture separately
+removes its temporary link before raising the error to model disappearance.
 
 The nested-update analytics fixture injects a fixed clock so machine load cannot
 move its event across the one-second duration boundary and add a covered V8
