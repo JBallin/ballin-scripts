@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
@@ -40,7 +40,7 @@ jobs:
             | xargs -0 -r shellcheck
 
       - name: Run actionlint
-        run: docker run --rm -v "${PWD}:/repo:ro" --workdir /repo rhysd/actionlint:1.7.12 -color -ignore 'label "ubuntu-26[.]04" is unknown' .github/workflows/*.yml
+        run: docker run --rm -v "${PWD}:/repo:ro" --workdir /repo rhysd/actionlint:1.7.12 -color .github/workflows/*.yml
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -116,10 +116,9 @@ jobs:
           path: coverage/tmp/
           retention-days: 7
 
-  # PR-only, credential-free predeployment coverage. The OS label is temporarily
-  # ubuntu-26.04 for #403; restore ubuntu-latest once validated.
+  # Credential-free predeployment build; never run the production deploy workflow here.
   analytics-worker-build:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
