@@ -166,7 +166,7 @@ before cache cleanup; retrying disconnect can finish cleanup without network acc
 
 ## Coherent repository reads and publication
 
-A reader resolves stable identity and branch, pins its commit/tree, obtains a
+A full reader resolves stable identity and branch, pins its commit/tree, obtains a
 complete [tree inventory](https://docs.github.com/en/rest/git/trees#get-a-tree),
 and retrieves the marker and every current canonical snapshot by immutable
 [blob ID](https://docs.github.com/en/rest/git/blobs#get-a-blob). Transport stdout
@@ -175,6 +175,15 @@ object IDs, sizes, base64 encoding, exact bytes, and Git blob hashes are checked
 Final identity/head validation must still match the inspected revision. Incomplete
 results retain useful inspected facts but cannot establish absence/equality.
 There is no latest-file fallback, automatic read loop, or cache write in a reader.
+
+`backup read <snapshot>` uses the same identity, complete inventory, marker and
+final revision validation, but fetches only the requested supported snapshot's
+content. `backup open` fetches only marker content and prints the validated
+destination URL before opening it. Both use immutable blob IDs and the same
+content validation. Unrequested snapshot contents are not validated by these
+commands. Their partial reads remain internal to the transport module; callers
+receive only snapshot bytes or a URL, never a partial comparison/publication
+base. Backup, publication readback, readiness and reconnect keep full reads.
 
 Authorized changes use one
 [`createCommitOnBranch`](https://docs.github.com/en/graphql/reference/commits#createcommitonbranch)
@@ -201,6 +210,71 @@ matching local/remote content can recover without another commit. One active
 writer remains the product model; retire the prior writer before a replacement
 installation publishes. Conditional publication protects the inspected head,
 including concurrent advancement or rewind, but does not offer multi-writer sync.
+
+## Repository command latency investigation (#367)
+
+The issue's original Mac observations are 8.74–9.75 seconds for true no-op
+backup (median 8.97), 8.782 seconds for open, and 7.678 seconds for reading
+`mas`. These are historical observations, not a controlled baseline for this
+change. Changed/publishing backup and setup timings remain unrecorded.
+
+The shared full inspection performs, serially: effective-account resolution
+through `gh api user`, stable-ID repository/branch metadata lookup, immutable
+tree inventory retrieval, one request per marker/current snapshot blob, then
+another account and repository/revision check. Each API call starts `gh` and
+uses a private output file. This establishes request/subprocess costs; it does
+not establish which stage dominates real GitHub wall time.
+
+The following request counts were measured with the existing injected transport
+fixture against baseline commit `637e7281980644a3b50bcdfa2d44f8bd07ca5709`
+and the command-specific content reads. The fixture contains three supported
+snapshots plus the marker and explanatory README. The publishing case updates
+one existing snapshot. These are deterministic operation counts, not latency
+benchmarks; no real backup destination was used.
+
+| Path | Before calls | After calls | Account / metadata / tree / blob calls after |
+| --- | ---: | ---: | --- |
+| Read one snapshot | 9 | 7 | 2 / 2 / 1 / 2 |
+| Open | 11 | 8 | 3 / 2 / 1 / 1, plus browser-opening `gh` call |
+| True no-op backup | 11 | 11 | 3 / 3 / 1 / 4 |
+| Publishing backup | 21 | 21 | 5 / 5 / 2 / 8, plus commit mutation |
+
+With `S` current snapshots, the original read requires `S + 6` API calls;
+the narrowed read requires 7 when the requested snapshot exists. Original open
+requires `S + 8` calls including browser opening; narrowed open requires 8.
+The improvement removes unrelated serial blob reads without persistent caching
+or changing account compatibility. Initial invalid effective credentials still
+fail before dependent operations. Fresh account checks remain at final revision
+validation and before generating the opening URL. The code does not replace
+`gh api user` with aggregate saved-account status or `gh auth status --active`.
+
+The full backup stages sources before inspection, reconciles local/cache/remote
+bytes, then checks the current account and revision again before either
+publication or no-op cache promotion. A publishing run additionally performs
+one expected-head mutation and a full independent readback. No-op runs still
+create no blobs/tree/commit/ref updates. Reconnect shares the full inspection
+cost after candidate selection and repeats it after user confirmation, before
+checking revision equality and configuring the destination. Protection work
+follows separately. This change does not remove those checks or change their
+conflict, authorization or cache behavior.
+
+Remaining measurement on the maintainer Mac should compare the baseline and
+candidate with the same Node/gh versions, active credential, network and
+disposable private QA repository/source inventory. Run repeated CLI timings
+(record individual runs and medians) for one-snapshot read, open, true no-op
+backup, changed/publishing backup, and reconnect selection/validation. Keep
+analytics configuration consistent and distinguish browser-launch time and
+interactive waiting from repository work. For the publishing case, use a
+controlled fixture-source change with a known comparison base each time;
+verify one commit and confirmed readback. For no-op, verify the head stays
+unchanged. Do not use production sources/destinations for automated validation.
+
+If further optimization is justified, measure process startup, individual
+`gh api user`, metadata, tree and blob calls, collectors, reconciliation, and
+publication/readback separately before consolidating authorization checks or
+introducing batching/concurrency. No Mac speedup or dominant latency cause is
+claimed yet. #367 remains open until representative before/after measurements
+and its remaining acceptance criteria are satisfied.
 
 ## Portable preferences
 

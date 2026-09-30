@@ -320,7 +320,9 @@ describe('repository backup lifecycle', function() {
     const bytes = 'no execution $(touch forbidden)\r\n\n'; const value = fixtureState({ 'zshrc.sh': bytes });
     value.name = 'renamed'; value.faults.publish = 'denied'; saveState(value);
     fs.symlinkSync(home, cacheRoot);
-    assert.equal(run(['read', 'zshrc.sh']).stdout, bytes); ok(run(['open']));
+    assert.equal(run(['read', 'zshrc.sh']).stdout, bytes);
+    const opened = run(['open']); ok(opened);
+    assert.equal(opened.stdout, 'Opening https://github.com/fixture-user/renamed in your browser.\n');
     assert.isTrue(fs.lstatSync(cacheRoot).isSymbolicLink()); assert.equal(mutations().length, 0);
     assert.equal(run(['read', '.ballin-backup.json']).status, 1);
     assert.equal(run(['read', 'README.md']).status, 1);
@@ -336,6 +338,17 @@ describe('repository backup lifecycle', function() {
     });
     assert.equal(result.status, 1); assert.include(result.stdout, 'ballin backup setup to revalidate');
     assert.notInclude(result.stdout, 'Gist'); assert.equal(mutations().length, 0); assert.equal(rulesetRequests().length, 0);
+  });
+  it('keeps read and open request counts independent of unrelated supported snapshots', () => {
+    saveState(fixtureState({ 'zshrc.sh': 'shell\n', gitconfig: 'git\n', mas: 'apps\n' }));
+    assert.equal(run(['read', 'mas']).stdout, 'apps\n');
+    assert.lengthOf(state().requests, 7);
+    const value = state(); value.requests = []; saveState(value);
+    ok(run(['open']));
+    assert.lengthOf(state().requests, 8);
+    assert.equal(state().requests.at(-1)?.endpoint, 'open');
+    assert.equal(mutations().length, 0);
+    assert.isFalse(fs.existsSync(cacheRoot));
   });
   it('keeps doctor repository readiness independent of repository policy access', () => {
     const value = state(); value.faults.rulesetList = 'denied'; saveState(value);

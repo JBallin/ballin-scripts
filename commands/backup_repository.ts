@@ -259,6 +259,7 @@ const assertCurrent = (read: RepositoryRead, options: RepositoryOptions = {}): v
 };
 const inspect = (
   destination: RepositoryDestination, account: Account, options: RepositoryOptions, seed: boolean,
+  snapshot?: string | null,
 ): RepositoryInspection => {
   let inspected: RepositoryRead | undefined;
   try {
@@ -266,7 +267,8 @@ const inspect = (
     inspected = { destination: info.destination, revision: info.revision, snapshots: new Map() };
     info.revision.entries = readInventory(info, options);
     for (const entry of info.revision.entries) {
-      if (entry.classification === 'current' || entry.path === repositoryMarkerFileName || (seed && entry.path === repositoryReadmeFileName)) {
+      if ((entry.classification === 'current' && (snapshot === undefined || entry.path === snapshot))
+        || entry.path === repositoryMarkerFileName || (seed && entry.path === repositoryReadmeFileName)) {
         inspected.snapshots.set(entry.path, readBlob(info, entry, options));
       }
     }
@@ -292,6 +294,14 @@ const inspectRepository = (destination: RepositoryDestination, options: Reposito
 const requireRepositoryRead = (inspection: RepositoryInspection): RepositoryRead => {
   if (inspection.status !== 'complete') throw new RepositoryError(inspection.problem);
   return inspection.read;
+};
+// Partial content reads stay private: reconciliation/publication must only receive full reads.
+// Both commands still validate the complete inventory, marker and final revision.
+const readRepositorySnapshot = (
+  destination: RepositoryDestination, name: string, options: RepositoryOptions = {},
+): Buffer | undefined => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
+  return classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined;
 };
 const sameRepositoryRevision = (left: RepositoryRead, right: RepositoryRead): boolean => (
   left.destination.id === right.destination.id && left.revision.branchId === right.revision.branchId
@@ -583,9 +593,14 @@ const repositoryUrl = (destination: RepositoryDestination, account: Account): st
   if (destination.ownerId !== account.id) throw new RepositoryError('identity');
   return `https://github.com/${account.login}/${destination.name}`;
 };
+const repositoryOpenUrl = (destination: RepositoryDestination, options: RepositoryOptions = {}): string => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  return repositoryUrl(read.destination, readRepositoryAccount(options));
+};
 
 module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
+  readRepositorySnapshot, repositoryOpenUrl,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
