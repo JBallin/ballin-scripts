@@ -41,14 +41,17 @@ run replaces the raw coverage data:
 
 ```shell
 npm run test:coverage
-node node_modules/c8/bin/c8.js report --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
+node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
 CI=true npm run test:coverage
-node node_modules/c8/bin/c8.js report --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
+node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
 ```
 
 Compare exact totals in `coverage-summary.json` and file/source-location maps
 and covered/uncovered outcomes in `coverage-final.json`, ignoring hit counts
-and checkout path prefixes. Use the same commit, lockfile dependencies, and exact
+and checkout path prefixes. Reconcile the checkout commit and Git tree, test
+selection and passing/pending counts, runtime metadata (including UID), and
+lockfile dependencies before attributing a mismatch to Node. A PR merge checkout
+can have a different commit but identical tree. Use the same exact
 Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
@@ -68,8 +71,19 @@ both covered and total branch counts.
 
 Node options and preloads take effect before Mocha setup and are not equivalent
 runtime configurations. OS metadata and filesystem behavior still vary between
-macOS and Linux; the permission-denial uninstall test skips on Windows or when
-running as root.
+macOS and Linux. Permission-error fixtures must not depend on the runner's UID:
+root can bypass filesystem mode restrictions. The uninstall denial fixture
+preloads a path-scoped `unlinkSync` failure with `EACCES` before production imports,
+leaving its temporary link intact. The separate `ENOENT` fixture actually removes
+that link before throwing, preserving its disappearance-race contract. Both run
+without contacting real user state.
+
+The September 30 discrepancy in PR #411 came from the old chmod-based uninstall
+test skipping under root. CI's merge commit and the PR head had identical trees;
+CI ran the test and covered the incomplete owned-link cleanup/reporting path.
+Replacing only that fixture restores the missing coverage under the original
+local Node version, without changing production code, analytics isolation,
+coverage scope, or thresholds.
 
 The nested-update analytics fixture injects a fixed clock so machine load cannot
 move its event across the one-second duration boundary and add a covered V8
