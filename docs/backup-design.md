@@ -211,70 +211,107 @@ writer remains the product model; retire the prior writer before a replacement
 installation publishes. Conditional publication protects the inspected head,
 including concurrent advancement or rewind, but does not offer multi-writer sync.
 
-## Repository command latency investigation (#367)
+## Repository command latency (#367)
 
-The issue's original Mac observations are 8.74–9.75 seconds for true no-op
-backup (median 8.97), 8.782 seconds for open, and 7.678 seconds for reading
-`mas`. These are historical observations, not a controlled baseline for this
-change. Changed/publishing backup and setup timings remain unrecorded.
+### macOS real-GitHub measurements
 
-The shared full inspection performs, serially: effective-account resolution
-through `gh api user`, stable-ID repository/branch metadata lookup, immutable
-tree inventory retrieval, one request per marker/current snapshot blob, then
-another account and repository/revision check. Each API call starts `gh` and
-uses a private output file. This establishes request/subprocess costs; it does
-not establish which stage dominates real GitHub wall time.
+Measured on 2026-10-01 on an Apple M5 (arm64), macOS 27.0.1, Node 24.21.0
+and GitHub CLI 2.102.0. The baseline is main commit
+`91fdfc989c8325f387bc898752d0920c79b58e4d`, including the deterministic
+uninstall coverage fix. Candidate read, backup and reconnect measurements used
+`454e929f8664d46f76be178b2c64f6f03daa3091`; final open measurements used
+`0a016c4f5d07761ffcab42c2437a700713bf21f2`. The latter changes only open
+dispatch, leaving the other measured production paths identical.
 
-The following request counts were measured with the existing injected transport
-fixture against baseline commit `637e7281980644a3b50bcdfa2d44f8bd07ca5709`
-and the command-specific content reads. The fixture contains three supported
-snapshots plus the marker and explanatory README. The publishing case updates
-one existing snapshot. These are deterministic operation counts, not latency
-benchmarks; no real backup destination was used.
+Both arms ran the real `bin/ballin` CLI against the approved private dummy
+repository `JBallin/ballin-perf-367-macos-20261001`, with the same credential,
+network, marker, README and three small supported snapshots (`ballin_config`,
+`mas`, `npm_global`). Each arm had its own temporary HOME, configuration,
+cache and source files. Analytics was disabled. Collectors used dummy command
+outputs, and `GH_BROWSER` recorded the dispatched URL instead of opening a
+browser. Only `gh` subprocesses used the normal credential-storage context;
+Ballin's local state stayed isolated. No user backup data was read or published.
 
-| Path | Before calls | After calls | Account / metadata / tree / blob calls after |
-| --- | ---: | ---: | --- |
-| Read one snapshot | 9 | 7 | 2 / 2 / 1 / 2 |
-| Open | 11 | 8 | 3 / 2 / 1 / 1, plus browser-opening `gh` call |
-| True no-op backup | 11 | 11 | 3 / 3 / 1 / 4 |
-| Publishing backup | 21 | 21 | 5 / 5 / 2 / 8, plus commit mutation |
+Each scenario has ten runs per arm, paired with alternating arm order and an
+equal number of baseline-first and candidate-first pairs. Read, no-op,
+publishing and reconnect were measured in two passes of five pairs. Open was
+remeasured in ten pairs after its browser-dispatch optimization. The table
+shows whole-CLI medians and observed ranges in seconds; external head checks
+and publishing warm-ups are outside the measured interval.
 
-With `S` current snapshots, the original read requires `S + 6` API calls;
-the narrowed read requires 7 when the requested snapshot exists. Original open
-requires `S + 8` calls including browser opening; narrowed open requires 8.
-The improvement removes unrelated serial blob reads without persistent caching
-or changing account compatibility. Initial invalid effective credentials still
-fail before dependent operations. Fresh account checks remain at final revision
-validation and before generating the opening URL. The code does not replace
-`gh api user` with aggregate saved-account status or `gh auth status --active`.
+| Command/scenario | Baseline median (range) | Candidate median (range) |
+| --- | ---: | ---: |
+| `backup read mas` | 3.690 (3.285–4.150) | 2.770 (2.712–3.038) |
+| `backup open` | 4.751 (4.444–5.589) | 3.203 (2.692–4.217) |
+| Repeated true no-op `backup` | 4.694 (4.429–5.674) | 4.648 (4.554–5.024) |
+| Changed/publishing `backup` | 9.921 (9.025–10.464) | 9.545 (8.796–10.968) |
+| Reconnect through first candidate validation | 4.590 (4.302–5.175) | 4.896 (4.219–5.863) |
 
-The full backup stages sources before inspection, reconciles local/cache/remote
-bytes, then checks the current account and revision again before either
-publication or no-op cache promotion. A publishing run additionally performs
-one expected-head mutation and a full independent readback. No-op runs still
-create no blobs/tree/commit/ref updates. Reconnect shares the full inspection
-cost after candidate selection and repeats it after user confirmation, before
-checking revision equality and configuring the destination. Protection work
-follows separately. This change does not remove those checks or change their
-conflict, authorization or cache behavior.
+Read improves by 0.920 seconds (24.9%) at the median; open improves by
+1.548 seconds (32.6%). The unchanged backup and reconnect paths have overlapping
+ranges; their median differences do not establish a PR speedup.
+The issue's earlier 7–10 second observations used different uncontrolled inputs
+and are not the baseline for these comparisons.
 
-Remaining measurement on the maintainer Mac should compare the baseline and
-candidate with the same Node/gh versions, active credential, network and
-disposable private QA repository/source inventory. Run repeated CLI timings
-(record individual runs and medians) for one-snapshot read, open, true no-op
-backup, changed/publishing backup, and reconnect selection/validation. Keep
-analytics configuration consistent and distinguish browser-launch time and
-interactive waiting from repository work. For the publishing case, use a
-controlled fixture-source change with a known comparison base each time;
-verify one commit and confirmed readback. For no-op, verify the head stays
-unchanged. Do not use production sources/destinations for automated validation.
+Read returned the exact dummy `mas` bytes. Open printed and dispatched the
+validated fixture URL. Every no-op, read, open and reconnect run left the remote
+head unchanged. Each measured publishing run started from a warmed comparison
+base, changed one dummy snapshot, and produced exactly one commit whose sole
+parent was the inspected head; Ballin completed its independent full readback.
+The fixture is retained for review and requires separate authorization to delete.
 
-If further optimization is justified, measure process startup, individual
-`gh api user`, metadata, tree and blob calls, collectors, reconciliation, and
-publication/readback separately before consolidating authorization checks or
-introducing batching/concurrency. No Mac speedup or dominant latency cause is
-claimed yet. #367 remains open until representative before/after measurements
-and its remaining acceptance criteria are satisfied.
+### Costs and retained checks
+
+Timing each synchronous subprocess attributes about 96–98% of read, backup
+and reconnect wall time to `gh`. This combines CLI startup, credential access
+and GitHub transport; it does not isolate network time. Seven standalone
+`gh --version` samples averaged 0.033 seconds, while local residual time in
+the measured commands was roughly 0.10–0.13 seconds. Dummy collector
+subprocesses took about 0.06 seconds per backup; real tool inventories and
+browser UI startup are outside this fixture's results.
+
+Candidate cumulative subprocess medians, in seconds:
+
+| Scenario | Account | Repository/branch metadata | Tree | Blobs | Other remote work |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Read | 0.613 | 1.057 | 0.339 | 0.661 | — |
+| Open | 1.037 | 1.195 | 0.401 | 0.373 | Browser dispatch 0.050 |
+| No-op | 0.901 | 1.778 | 0.350 | 1.397 | — |
+| Publishing | 1.583 | 2.959 | 0.728 | 2.724 | Mutation 1.251 |
+| Reconnect | 0.961 | 1.305 | 0.368 | 1.487 | Candidate lookup 0.421 |
+
+Category medians need not sum to whole-command medians. Metadata and serial
+blob requests dominate the shared inspection. Publishing subprocess phases
+had medians of 4.455 seconds before mutation, 1.251 for mutation and 3.460
+for independent readback. A no-op still fully reads and reconciles its current
+state, then validates the account and head before promoting the cache; it
+creates no blobs, trees, commits or ref updates. Publishing retains the
+expected-head mutation and independent full readback. These measured costs
+do not justify removing required evidence or introducing a broader transport
+or caching redesign.
+
+The reconnect pause after `Candidate backup:` measured 4.174 seconds at the
+baseline median (3.858–4.691) and 4.434 in the candidate (3.765–5.387). It
+contains the candidate lookup and the same full inspection primitives. Runs
+cancelled before destination confirmation, excluding human waiting, the second
+full inspection, configuration persistence and optional protection work.
+Create/setup and those later stages are not benchmarked here.
+
+With three snapshots, read drops from 9 to 7 API calls, retrieving only the
+marker and requested supported snapshot. Open drops from 11 to 8 `gh` calls,
+retrieving only the marker. Both still validate the complete tree inventory,
+stable repository/owner identity, immutable requested blobs, marker and final
+revision. Partial reads stay private to the transport module and cannot become
+reconciliation or publication bases. Fresh effective-account checks through
+`gh api user` remain, including final validation and URL generation; compatibility
+does not depend on `gh auth status --active` or aggregate saved-account status.
+
+Open dispatches its validated URL with `gh browse --repo`, using GitHub CLI's
+browser facility without `gh repo view --web`'s extra repository metadata
+lookup. Five alternating dispatch-only pairs confirmed the identical URL and
+median 0.505 → 0.055 seconds. This removes redundant dispatch work after Ballin's
+validation. Full no-op (11 API calls),
+publishing (21) and reconnect selection/first validation (11) are unchanged.
 
 ## Portable preferences
 
