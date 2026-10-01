@@ -3,6 +3,7 @@ const {
   RepositoryError, readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
+  readRepositorySnapshot, repositoryOpenUrl,
 } = require('../commands/backup_repository.ts');
 const { fixtureDestination, fixtureRuleset, fixtureState, commitFixture, requestFixture } = require('./helpers/repository.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
@@ -41,6 +42,60 @@ describe('private repository transport', () => {
     assert.equal(inspectRepository(fixtureDestination, options).problem, 'unavailable');
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
   });
+  it('reads only the requested supported snapshot and marker without exposing a partial reconciliation read', () => {
+    state = fixtureState({ 'zshrc.sh': 'original\n', gitconfig: 'other\n', mas: 'apps\n' });
+    assert.equal(readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options)?.toString(), 'original\n');
+    assert.lengthOf(state.requests, 7);
+    assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 2);
+    for (const name of ['missing', '.ballin-backup.json', 'README.md']) {
+      state.requests = [];
+      assert.isUndefined(readRepositorySnapshot(fixtureDestination, name, options));
+      assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+    }
+  });
+  it('opens the validated renamed destination with only marker content and fresh effective-account checks', () => {
+    state = fixtureState({ 'zshrc.sh': 'original\n', gitconfig: 'other\n' });
+    state.name = 'renamed'; state.login = 'renamed-user';
+    assert.equal(repositoryOpenUrl(fixtureDestination, options), 'https://github.com/renamed-user/renamed');
+    assert.lengthOf(state.requests, 7);
+    assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+    assert.lengthOf(state.requests.filter((request) => request.endpoint === 'user'), 3);
+  });
+  for (const command of ['read', 'open']) {
+    const invoke = () => command === 'read'
+      ? readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options)
+      : repositoryOpenUrl(fixtureDestination, options);
+    it(`rejects invalid active authentication before dependent ${command} operations`, () => {
+      state.faults.auth = true;
+      assert.throws(invoke, RepositoryError, 'authentication');
+      assert.deepEqual(state.requests.map(({ endpoint }) => endpoint), ['user']);
+    });
+    it(`rejects a mismatched marker during ${command}`, () => {
+      commitFixture(state, { ...state.commits[state.head].files, '.ballin-backup.json': Buffer.from('wrong marker').toString('base64') });
+      assert.throws(invoke, RepositoryError, 'not a supported');
+    });
+    it(`rejects head movement during ${command} without mutation`, () => {
+      let queries = 0;
+      options.runCommand = (_command, args, opts) => {
+        if (String(opts.input).includes('BallinRepository') && ++queries === 2) {
+          commitFixture(state, { ...state.commits[state.head].files, gitconfig: Buffer.from('external').toString('base64') });
+        }
+        return requestFixture(state, args, opts);
+      };
+      assert.throws(invoke, RepositoryError, 'changed during inspection');
+      assert.equal(publications().length, 0);
+    });
+    it(`rejects an effective-account switch at the final ${command} revision check`, () => {
+      let accounts = 0;
+      options.runCommand = (_command, args, opts) => {
+        if (args[args.indexOf('--method') + 2] === 'user' && ++accounts === 2) {
+          state.faults.user = { node_id: 'U_other', login: 'other', type: 'User' };
+        }
+        return requestFixture(state, args, opts);
+      };
+      assert.throws(invoke, RepositoryError, 'does not match');
+    });
+  }
   it('creates a private repository and initializes the marker and Ballin README in one conditional commit', () => {
     state.exists = false;
     const result = createRepositoryBackup(state.name, readRepositoryAccount(options), options);
@@ -553,6 +608,8 @@ describe('private repository transport', () => {
   invalidNodes.forEach((node, index) => it(`fails closed on unsupported or mismatched repository metadata ${index}`, () => {
     state.faults.node = node;
     assert.equal(inspectRepository(fixtureDestination, options).status, 'incomplete');
+    assert.throws(() => readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options), RepositoryError);
+    assert.throws(() => repositoryOpenUrl(fixtureDestination, options), RepositoryError);
     assert.equal(publications().length, 0);
   }));
   [null, false, '', 'unsafe value'].forEach((nodeId) => it(`rejects malformed account identity ${JSON.stringify(nodeId)}`, () => {
@@ -576,6 +633,8 @@ describe('private repository transport', () => {
     const result = inspectRepository(fixtureDestination, options);
     assert.equal(result.status, 'incomplete');
     assert.throws(() => requireRepositoryRead(result), RepositoryError);
+    assert.throws(() => readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options), RepositoryError);
+    assert.throws(() => repositoryOpenUrl(fixtureDestination, options), RepositoryError);
   }));
   ['directory/zshrc.sh', '.github/workflows/test.yml', '..', '.', 'bad\\name', 'bad\u001bname'].forEach((name) => it(`rejects unsupported path ${JSON.stringify(name)}`, () => {
     state.faults.tree = { tree: [{ path: name, mode: '100644', type: 'blob', size: 0, sha: '0'.repeat(40) }] };

@@ -36,7 +36,7 @@ const {
 } = require('./backup_snapshots.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
-  repositoryCacheDirectory, repositoryMessages, readRepositoryAccount, repositoryUrl,
+  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshot, repositoryOpenUrl,
   unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryDestination } from './backup_config.ts';
@@ -989,14 +989,14 @@ function runBackupCommand(args = process.argv.slice(2)): void {
 
   if ('repository' in config) {
     try {
-      const read: RepositoryRead = requireRepositoryRead(inspectRepository(config.repository));
       if (command === 'read') {
-        const bytes = read.snapshots.get(args[1]);
+        const bytes = readRepositorySnapshot(config.repository, args[1]);
         if (suggestionFileNames.includes(args[1]) && bytes !== undefined) process.stdout.write(bytes);
         else { writeStdoutLine(`No supported snapshot found.\nOptions: ${fileSuggestions}`); process.exitCode = 1; }
       } else {
-        const url = repositoryUrl(read.destination, readRepositoryAccount());
-        const result = runGh('github.com', ['repo', 'view', url, '--web'], { stdio: 'ignore' });
+        const url = repositoryOpenUrl(config.repository);
+        writeStdoutLine(`Opening ${url} in your browser.`);
+        const result = runGh('github.com', ['browse', '--repo', url], { stdio: 'ignore' });
         process.exitCode = result.error ? 1 : spawnResultStatus(result);
       }
     } catch (error) {
