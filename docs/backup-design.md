@@ -232,8 +232,8 @@ outputs, and `GH_BROWSER` recorded the dispatched URL instead of opening a
 browser. Only `gh` subprocesses used the normal credential-storage context;
 Ballin's local state stayed isolated. No user backup data was read or published.
 
-Each scenario has ten runs per arm, paired with alternating arm order and an
-equal number of baseline-first and candidate-first pairs. Read, no-op,
+Each comparison scenario has ten runs per arm, paired with alternating arm
+order and an equal number of baseline-first and candidate-first pairs. Read, no-op,
 publishing and reconnect were measured in two passes of five pairs. Open was
 remeasured in ten pairs after its browser-dispatch optimization. The table
 shows whole-CLI medians and observed ranges in seconds; external head checks
@@ -295,7 +295,34 @@ baseline median (3.858–4.691) and 4.434 in the candidate (3.765–5.387). It
 contains the candidate lookup and the same full inspection primitives. Runs
 cancelled before destination confirmation, excluding human waiting, the second
 full inspection, configuration persistence and optional protection work.
-Create/setup and those later stages are not benchmarked here.
+
+The create-side pause was measured separately on production commit
+`8a4df04dbdd93cc4c6c83d800661c55d67007235`, with the same macOS/Node/gh
+versions. Ten real `backup setup` runs selected `create` with dummy name
+`ballin-perf-367-create-absent-20261001-8a4df04`. Authenticated GitHub GETs
+returned 404 before and after every run. Each run used a fresh temporary HOME,
+configuration and cache location, with analytics disabled. Input ended at the
+sensitive-source prompt, before destination confirmation; configuration bytes
+remained unchanged, no cache was created and no remote resource was created.
+A measurement guard allowed only account and candidate GETs.
+
+From `Candidate backup:` to the following inventory/sensitivity explanation,
+the create-side pause had a median of 0.290 seconds (0.239–0.341). Its only
+subprocess was the candidate repository GET returning 404: median 0.289 seconds,
+about 99.5% of the pause. Effective-account resolution ran before the candidate
+line and took 0.291 seconds (0.251–0.309). Whole CLI time through cancellation
+was 0.706 seconds (0.647–0.747), including a 0.042-second config subprocess.
+These timings combine process, credential and GitHub transport costs.
+
+Create selection therefore shares account resolution and the candidate lookup,
+but does not perform reconnect's full metadata/tree/blob inspection before
+confirmation. Reconnect's measured pause contains ten API calls; create's
+contains one. Setup is unchanged by this PR, so these observations characterize
+the two paths without attributing a setup speedup to the PR. Actual
+post-confirmation repository creation/initialization, later setup validation,
+configuration persistence and optional protection work remain outside the
+measured pauses. No further production optimization is justified by this
+single required existence lookup.
 
 With three snapshots, read drops from 9 to 7 API calls, retrieving only the
 marker and requested supported snapshot. Open drops from 11 to 8 `gh` calls,
