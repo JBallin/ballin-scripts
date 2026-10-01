@@ -173,8 +173,10 @@ fs[operation] = (currentPath, ...args) => {
     const binDir = path.join(systemRoot, 'usr', 'local', 'bin');
     const ballin = createCommand('ballin');
     const linkPath = path.join(binDir, 'ballin');
+    const otherLinkPath = path.join(binDir, 'other');
     fs.symlinkSync(ballin, linkPath);
-    // Inject denial only at this fixture link; chmod-based denial is bypassed by root.
+    fs.symlinkSync(createCommand('other'), otherLinkPath);
+    // Inject EACCES for this path; chmod behavior depends on host privileges and capabilities.
     const preloadPath = writeFsFailurePreload('unlinkSync', linkPath, 'EACCES');
 
     const result = runUninstall({ preloadPath });
@@ -193,6 +195,7 @@ fs[operation] = (currentPath, ...args) => {
         + 'rerun rm with elevated permissions (for example, sudo rm).',
     );
     assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
+    assert.throws(() => fs.lstatSync(otherLinkPath), /ENOENT/);
     assert.isFalse(fs.existsSync(repoDir));
   });
 

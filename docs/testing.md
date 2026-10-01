@@ -71,12 +71,13 @@ both covered and total branch counts.
 
 Node options and preloads take effect before Mocha setup and are not equivalent
 runtime configurations. OS metadata and filesystem behavior still vary between
-macOS and Linux. Permission-error fixtures must not depend on the runner's UID:
-root can bypass filesystem mode restrictions. The uninstall denial fixture
-preloads a path-scoped `unlinkSync` failure with `EACCES` before production imports,
-leaving its temporary link intact. The separate `ENOENT` fixture actually removes
-that link before throwing, preserving its disappearance-race contract. Both run
-without contacting real user state.
+macOS and Linux. Chmod-based permission behavior depends on host privileges and
+capabilities, so UID is not a reliable test oracle. The uninstall denial fixture
+injects a path-scoped `unlinkSync` failure with `EACCES` before production
+imports, leaving its temporary link intact while cleanup removes another owned
+link. The separate `ENOENT` fixture actually removes its link before throwing,
+preserving its disappearance-race contract. Both run without contacting real
+user state.
 
 The September 30 discrepancy in PR #411 came from the old chmod-based uninstall
 test skipping under root. CI's merge commit and the PR head had identical trees;
