@@ -323,6 +323,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(run(['read', 'zshrc.sh']).stdout, bytes);
     const opened = run(['open']); ok(opened);
     assert.equal(opened.stdout, 'Opening https://github.com/fixture-user/renamed in your browser.\n');
+    assert.deepEqual(state().requests.at(-1)?.payload?.args, ['browse', '--repo', 'https://github.com/fixture-user/renamed']);
     assert.isTrue(fs.lstatSync(cacheRoot).isSymbolicLink()); assert.equal(mutations().length, 0);
     assert.equal(run(['read', '.ballin-backup.json']).status, 1);
     assert.equal(run(['read', 'README.md']).status, 1);
@@ -358,6 +359,16 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.isAbove(state().requests.length, 0);
     assert.equal(rulesetRequests().length, 0);
+  });
+
+  it('propagates browser dispatch failure after validating and displaying the repository URL', () => {
+    const value = state(); value.faults.open = true; saveState(value);
+    const result = run(['open']);
+    assert.equal(result.status, 7);
+    assert.equal(result.stdout, 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n');
+    assert.equal(state().requests.at(-1)?.endpoint, 'open');
+    assert.equal(mutations().length, 0);
+    assert.isFalse(fs.existsSync(cacheRoot));
   });
 
   it('creates and confirms the marker and explanatory README before persisting reviewed local choices', () => {

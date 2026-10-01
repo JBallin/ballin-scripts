@@ -56,7 +56,12 @@ const fixtureState = (snapshots: Record<string, string> = {}): FixtureState => {
 };
 const reply = (body: unknown, status = 0): Response => ({ status, stdout: JSON.stringify(body), signal: null });
 const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncOptions = {}): Response => {
-  if (args[0] === 'repo') { state.requests.push({ endpoint: 'open', method: 'GET' }); return reply({}); }
+  if (args[0] === 'browse') {
+    state.requests.push({ endpoint: 'open', method: 'GET', payload: { args } });
+    const expected = ['browse', '--repo', `https://github.com/${state.login}/${state.name}`];
+    if (JSON.stringify(args) !== JSON.stringify(expected)) return reply({}, 1);
+    return reply({}, state.faults.open ? 7 : 0);
+  }
   const methodIndex = args.indexOf('--method');
   const method = methodIndex >= 0 ? args[methodIndex + 1] : 'GET';
   const endpoint = methodIndex >= 0 ? args[methodIndex + 2] : args[3];

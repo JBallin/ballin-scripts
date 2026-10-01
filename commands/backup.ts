@@ -996,7 +996,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       } else {
         const url = repositoryOpenUrl(config.repository);
         writeStdoutLine(`Opening ${url} in your browser.`);
-        const result = runGh('github.com', ['repo', 'view', url, '--web'], { stdio: 'ignore' });
+        const result = runGh('github.com', ['browse', '--repo', url], { stdio: 'ignore' });
         process.exitCode = result.error ? 1 : spawnResultStatus(result);
       }
     } catch (error) {
