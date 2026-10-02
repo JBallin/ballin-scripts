@@ -507,7 +507,7 @@ esac
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `symlinked binaries into ${binDir}`);
+    assert.notInclude(result.stdout, `symlinked binaries into ${binDir}`);
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
   });
@@ -842,8 +842,8 @@ esac
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
 
     assert.isTrue(result.result);
-    assert.include(result.output, `symlinked binaries into ${binDir}`);
-    assert.include(result.output, '😎 ballin!');
+    assert.notInclude(result.output, `symlinked binaries into ${binDir}`);
+    assert.notInclude(result.output, '😎 ballin!');
     assert.include(commandLog(), 'gh:api --hostname github.example.test user');
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
   });
@@ -907,7 +907,7 @@ exit 2
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
 
     assert.isTrue(result.result);
-    assert.include(result.output, `symlinked binaries into ${brewBinDir}`);
+    assert.notInclude(result.output, `symlinked binaries into ${brewBinDir}`);
     assert.isTrue(fs.lstatSync(path.join(brewBinDir, 'ballin')).isSymbolicLink());
   });
 
@@ -921,7 +921,7 @@ exit 2
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
 
     assert.isTrue(result.result);
-    assert.include(result.output, `symlinked binaries into ${binDir}`);
+    assert.notInclude(result.output, `symlinked binaries into ${binDir}`);
   });
 
   it('stops full setup after a symlink failure while preserving the valid config', () => {
@@ -982,16 +982,16 @@ exit 2
     assert.equal(result.status, 0, result.stderr);
     assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
     assert.notInclude(result.stdout, analyticsPrompt);
-    assert.include(result.stdout, '😎 ballin!');
+    assert.notInclude(result.stdout, '😎 ballin!');
   });
 
   for (const fail of [false, true]) {
-    it(`keeps automatic refresh output focused while preserving symlink failures (${fail})`, () => {
+    it(`keeps refresh output focused while preserving symlink failures (${fail})`, () => {
       installConfigSources();
       fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), path.join(repoDir, 'ballin.config.json'));
       if (fail) fs.rmSync(sourceBinDir, { recursive: true });
       const result = spawnSync(process.execPath, [
-        installSetupPath, 'setup', repoDir, docsUrl, '', 'refresh', 'automatic-update',
+        installSetupPath, 'setup', repoDir, docsUrl, '', 'refresh',
       ], {
         encoding: 'utf8',
         env: { HOME: path.join(testDir, 'home'), PATH: binDir, BALLIN_NO_ANALYTICS: '1' },
@@ -1318,11 +1318,13 @@ require('https').request = () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
-    assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf('\n💪 symlinked binaries'));
+    assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#shell-completion`));
     assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
     assert.include(result.stdout, `${docsUrl}#shell-completion`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
+    assert.equal(result.stdout.match(/😎 ballin!/gu)?.length, 1);
+    assert.notInclude(result.stdout, 'symlinked binaries');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1347,7 +1349,7 @@ require('https').request = () => {
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Shell completion setup could not finish. Ballin remains installed.');
-      assert.isBelow(result.stdout.indexOf('symlinked binaries'), result.stdout.indexOf('Shell completion setup'));
+      assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     });

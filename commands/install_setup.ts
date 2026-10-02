@@ -364,7 +364,7 @@ const configureBackup = (
   });
 };
 
-const symlinkBinaries = (repoDir: string, binDir: string, announceSuccess = true): boolean => {
+const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
   const sourceBinDir = path.join(repoDir, 'bin');
 
   try {
@@ -387,7 +387,6 @@ const symlinkBinaries = (repoDir: string, binDir: string, announceSuccess = true
     return false;
   }
 
-  if (announceSuccess) writeStdoutLine(`\n💪 symlinked binaries into ${binDir}`);
   return true;
 };
 
@@ -420,7 +419,6 @@ const setup = (
   docsUrl: string,
   analyticsDocsUrl?: string,
   mode: SetupMode = 'refresh',
-  context: 'standalone' | 'automatic-update' = 'standalone',
 ): boolean => {
   const originalConfig = readOriginalSetupConfig(configPathFor(repoDir));
   if (!originalConfig) {
@@ -451,7 +449,7 @@ const setup = (
     }
   }
 
-  if (!symlinkBinaries(repoDir, binDir, context !== 'automatic-update')) {
+  if (!symlinkBinaries(repoDir, binDir)) {
     return false;
   }
 
@@ -475,7 +473,7 @@ const setup = (
     writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
   }
 
-  if (backupSetupSucceeded && context !== 'automatic-update') {
+  if (backupSetupSucceeded && mode === 'fresh') {
     writeStdoutLine('\n😎 ballin!');
   }
   return backupSetupSucceeded;
@@ -502,8 +500,7 @@ const runInstallSetupCli = (): void => {
 
   if (command === 'setup' && repoDir && option) {
     const mode = process.argv[6] === 'fresh' ? 'fresh' : 'refresh';
-    const context = process.argv[7] === 'automatic-update' ? 'automatic-update' : 'standalone';
-    process.exitCode = setup(repoDir, option, process.argv[5], mode, context) ? 0 : 1;
+    process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1;
     return;
   }
 

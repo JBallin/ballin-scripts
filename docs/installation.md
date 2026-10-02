@@ -38,9 +38,9 @@ with `ballin backup setup`. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
-During `ballin update`, the automatic self-update omits routine installer success
-messages and reports readiness after the refresh. Explicit `ballin self-update`
-and fresh installs retain their setup output.
+Self-updates report “Ballin updated.” after a successful refresh. During
+`ballin update`, a readiness check follows. Fresh installs keep one completion
+message after setup.
 
 ## Shell completion
 

@@ -71,7 +71,7 @@ describe('first-run onboarding walkthroughs', function() {
     const backupResult = runInstalled(['backup']);
     assert.equal(updateResult.status, 0, updateResult.stderr);
     assert.equal(selfUpdateResult.status, 0, selfUpdateResult.stderr);
-    assert.include(selfUpdateResult.stdout, '😎 ballin!');
+    assert.equal(selfUpdateResult.stdout, 'Ballin updated.\n');
     assert.equal(backupResult.status, 1);
     assert.include(backupResult.stderr, "run 'ballin backup setup' to enable it");
     assert.notInclude(commandLog(), 'gh:');
