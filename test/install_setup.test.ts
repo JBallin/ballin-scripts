@@ -1317,10 +1317,13 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'current permissions');
     assert.include(result.stdout, 'backup setup can continue normally');
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update?');
+    assert.include(result.stdout, '"backup.includeSensitive" set to: "false"\n');
+    assert.isBelow(result.stdout.indexOf('"backup.includeSensitive" set to: "false"'), result.stdout.indexOf('Automatically run ballin backup after ballin update?'));
     assert.notInclude(result.stdout, 'Retry with: ballin backup setup');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.deepEqual(readRepoConfig().backup.repository, fixtureDestination); assert.equal(readRepoConfig().update.backup, 'false');
+    assert.equal(readRepoConfig().backup.includeSensitive, 'false');
     const saved = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
     assert.deepEqual(Object.keys(saved.commits[saved.head].files).sort(), ['.ballin-backup.json', 'README.md']);
   });

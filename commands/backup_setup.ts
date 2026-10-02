@@ -185,7 +185,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return false;
     }
     writeStdoutLine('The fixed inventory and filtered-preference baseline can include private tools, identities, paths, or URLs. It is not guaranteed secret-free.');
-    const sensitive = readPromptLine('Also include raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata? [y/N] ');
+    const sensitive = readPromptLine('Also include sensitive sources (raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata)? [y/N] ');
     if (sensitive.eof) return cancelled();
     const includeSensitive = /^[yY]$/u.test(sensitive.text);
     if (includeSensitive) {
@@ -216,6 +216,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(`Reconnect to the existing backup at ${recoveryUrl}; do not create a duplicate.`);
       return false;
     }
+    writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(includeSensitive))}`);
     return offerAutomaticUpdateBackup(configPath);
   } catch (error) {
     writeStdoutLine(error instanceof PortableConfigError ? (error as Error).message

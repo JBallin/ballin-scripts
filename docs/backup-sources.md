@@ -47,7 +47,8 @@ guaranteed public-safe or secret-free. Backups are stored in a private GitHub
 repository. GitHub and anyone authorized to access the repository can read its
 contents.
 
-One local opt-in covers raw configuration and pipx installation metadata.
+The single `backup.includeSensitive` setting controls **sensitive sources**:
+raw shell/Git/editor configuration, `.nvmrc`, and pipx installation metadata.
 New and replacement installations start with these sensitive sources off and
 make their own choice; approval is never recovered from a backup. Configured
 setup retains established local consent; fresh reconnect requires its own

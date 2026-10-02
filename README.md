@@ -77,6 +77,10 @@ $ ballin update
 On a new Mac, the installer offers optional backup setup after installing Ballin.
 You can create a new private backup repository or reconnect to an existing one;
 if you skip setup during installation, run `ballin backup setup` later.
+Setup offers one default-off choice for sensitive sources: raw shell/Git/editor
+configuration, `.nvmrc`, and pipx installation metadata. The choice is saved as
+`backup.includeSensitive`; see [source review](docs/backup-sources.md#repository-inclusion).
+
 Reconnecting can recover supported Ballin preferences; existing local choices
 take precedence. See
 [preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences)

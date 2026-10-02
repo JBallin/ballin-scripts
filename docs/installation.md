@@ -143,11 +143,13 @@ Ballin creates later. If authentication is missing, run
 `gh auth login --hostname github.com`. If Ballin shows an unexpected account,
 check whether an environment token is overriding your saved `gh` login.
 
-Fresh create or reconnect setup asks for one default-off choice covering raw
-configuration and pipx metadata. Reconnect fully inspects the existing backup
-before asking. Declining performs no sensitive-source discovery. Selecting it
-reviews logical paths, resolved regular-file targets (including symlinks outside
-`HOME`), and missing or unavailable sources. pipx is described separately. Review
+Fresh create or reconnect setup asks whether to include **sensitive sources**:
+raw shell/Git/editor configuration, `.nvmrc`, and pipx installation metadata.
+This single choice is saved as `backup.includeSensitive` and defaults off.
+Reconnect fully inspects the existing backup before asking. Declining performs
+no sensitive-source discovery. Selecting it reviews logical paths, resolved
+regular-file targets (including symlinks outside `HOME`), and missing or
+unavailable sources. pipx is described separately. Review
 reads no raw contents and runs no collectors; access or resolution errors stop
 setup. See
 [Source review](backup-sources.md#repository-inclusion).
@@ -162,6 +164,17 @@ or warning about unconfirmed protection is nonfatal and does not mean backup
 setup failed. After updating GitHub access, rerun `ballin backup setup` to make a
 bounded protection attempt on the configured repository without changing local
 backup choices.
+
+After saving the sensitive-source choice, setup confirms the config key and
+value using the same format as `ballin config set`, for example:
+
+```text
+"backup.includeSensitive" set to: "false"
+```
+
+This confirmation appears before the automatic-backup question. See
+[backup settings](optional-capabilities.md#private-repository-backups) to change
+the choice later.
 
 Renaming the repository on GitHub does not break the connection: Ballin continues
 to recognize the same backup. To switch to a different repository, disconnect
