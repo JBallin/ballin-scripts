@@ -115,24 +115,29 @@ fs.readFileSync = (file, ...args) => {
     });
   });
 
-  ['unconfigured', 'legacy-gist'].forEach((kind) => {
-    it(`reviews only applicable choices for ${kind}`, () => {
-      const initial = configFor(kind);
-      writeConfig(initial);
-      const result = run(kind === 'legacy-gist' ? 'y\ny\n' : 'y\n');
-      assert.equal(result.status, 0, result.stderr);
-      assert.notInclude(result.stdout, 'Also include sensitive sources');
-      assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
-      assert.equal(readConfig().analytics.enabled, 'true');
-      if (kind === 'legacy-gist') {
-        assert.include(result.stdout, 'Legacy Gist backups capture every available source');
-        assert.equal(readConfig().update.backup, 'true');
-      } else {
-        assert.notInclude(result.stdout, 'Automatically run');
-        assert.include(result.stdout, 'Run `ballin backup setup`');
-        assert.equal(readConfig().update.backup, 'false');
-      }
-    });
+  it('reviews only analytics when unconfigured', () => {
+    const initial = configFor('unconfigured');
+    writeConfig(initial);
+    const result = run('y\n');
+    assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, 'Also include sensitive sources');
+    assert.notInclude(result.stdout, 'Automatically run');
+    assert.include(result.stdout, 'Run `ballin backup setup`');
+    assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
+    assert.equal(readConfig().update.backup, 'false');
+    assert.equal(readConfig().analytics.enabled, 'true');
+  });
+
+  it('rejects stale Gist linkage before review and preserves local choices', () => {
+    writeConfig(configFor('legacy-gist', true));
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run('y\ny\ny\ny\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Gist backup support has been retired');
+    assert.include(result.stderr, '`ballin backup disconnect`');
+    assert.include(result.stderr, '`ballin backup setup`');
+    assert.notInclude(result.stdout, 'Review your Ballin');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
   });
 
   ['', 'y', 'y\n', 'y\ny', 'y\nn\n'].forEach((input) => {
@@ -163,7 +168,7 @@ fs.readFileSync = (file, ...args) => {
 
   ['\n', 'n\n', 'y\n', 'Y\n', '', 'y'].forEach((input) => {
     it(`uses the fresh automatic-backup default without running a backup: ${JSON.stringify(input)}`, () => {
-      writeConfig(configFor('legacy-gist', true));
+      writeConfig(configFor('repository', true));
       const result = spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH) ? 0 : 1`], {
         input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}` }),
       });
@@ -174,7 +179,7 @@ fs.readFileSync = (file, ...args) => {
   });
 
   it('preserves the pending automatic choice on EOF while onboarding still saves false', () => {
-    writeConfig(configFor('legacy-gist', true));
+    writeConfig(configFor('repository', true));
     assert.equal(run().status, 0);
     assert.equal(readConfig().update.backup, 'true');
     const result = spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH) ? 0 : 1`], {
@@ -254,8 +259,11 @@ fs.readFileSync = (file, ...args) => {
 
   ['sensitive', 'automatic'].forEach((choice) => {
     it(`stops on ${choice} preference persistence failure`, () => {
-      if (choice === 'automatic') writeConfig(configFor('legacy-gist'));
-      const result = run('y\ny\n', ['setup'], { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
+      const result = choice === 'automatic'
+        ? spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).reviewAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH, { defaultEnabled: false, cancelOnEof: true }) === 'failed' ? 1 : 0`], {
+          input: 'y\n', encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}`, BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' }),
+        })
+        : run('y\ny\n', ['setup'], { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
       assert.equal(result.status, 1);
       if (choice === 'automatic') assert.include(result.stdout, 'Unable to save the automatic-backup preference');
       assert.equal(readConfig().backup.includeSensitive, 'false');

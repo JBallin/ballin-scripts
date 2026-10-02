@@ -12,8 +12,8 @@ conflict recovery are documented in
 identity, trees/blobs, revisions, publication and confirmation. Commands/setup
 consume canonical names, exact bytes, complete/incomplete inspection outcomes,
 finite failure reasons, and a revision handle. There is no backend/provider
-registry. `commands/backup.ts` shares staging, three-way comparison, and private
-cache promotion with the bounded configured-Gist route.
+registry. `commands/backup.ts` owns staging, three-way comparison, and private
+cache promotion for repository backups.
 
 Local `backup.repository` is null or `{ id, ownerId, name, branch }`: opaque
 GitHub node IDs establish identity, the mutable name locates REST resources,
@@ -21,8 +21,8 @@ and the initial default branch remains selected. The effective `gh api ... user`
 account must be the personal GitHub.com owner. Stable-ID resolution revalidates
 owner, private visibility, supported state, selected branch, and marker. A rename
 cannot switch destinations. An explicit setup name must resolve to the same
-identity when configured. Simultaneously populated or malformed repository/Gist
-associations fail without fallback.
+identity when configured. Invalid or unsupported local destination configuration
+fails without fallback or remote operations.
 
 Repository contents use a flat layout. Current snapshots use the exact filenames
 defined by Ballin. `.ballin-backup.json` is the repository marker, and newly
@@ -392,15 +392,13 @@ print rejected values or arbitrary remote content.
 Its maintenance-only default is `"false"`. Preserve #344's newly configured
 backup prompt, existing-local-choice behavior, and post-destination save-failure
 handling described in [Installation](installation.md#optional-backup-setup-and-reconnect).
-Migration of a configured installation retains its local automatic-backup
-choice; a replacement installation establishes its own choice during setup.
+A replacement installation establishes its own automatic-backup choice during
+setup.
 
 ## Shared inclusion policy
 
 Repository capture selects sources from the canonical definitions described
-below. Existing configured Gists explicitly select all current sources,
-including raw files and pipx. Migration and Gist runtime retirement belong to
-#334.
+below.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
@@ -446,28 +444,12 @@ These are POSIX mode protections for Ballin-owned files on macOS and Linux.
 They do not manage ACLs, isolate hardlink aliases, or protect against concurrent
 path replacement through writable ancestors.
 
-## Legacy Gist constraints
-
-GitHub's [Gist update API](https://docs.github.com/en/rest/gists/gists#update-a-gist)
-supports multiple changed files while leaving omitted files unchanged. Ballin
-sends changed content only and never sends deletion entries. For
-[truncated files](https://docs.github.com/en/rest/gists/gists#about-gists), it
-requests raw content and validates the byte count before comparing files.
-
-The endpoint documents no transactional or conditional PATCH guarantee and no
-applicable universal payload maximum. Ballin therefore fails closed on rejected
-or uncertain requests and supports one active writer per Gist. It does not
-synchronize, merge, automatically resolve changes, or eliminate the read/write
-race. Requests use the configured GitHub or Enterprise host through
-[`gh api`](https://cli.github.com/manual/gh_api).
-
 ## Validation and downstream boundaries
 
 `test/backup_repository.test.ts` exercises protocol and publication semantics;
 `test/repository_backup.test.ts` uses a stateful fake GitHub service for public
-CLI lifecycle, consent, ruleset reconciliation and failure recovery. Existing Gist
-fixtures preserve the configured compatibility route. Installer walkthroughs,
-doctor fixtures, and the required `npm test` use temporary roots and complete
+CLI lifecycle, consent, ruleset reconciliation and failure recovery. Installer
+walkthroughs, doctor fixtures, and the required `npm test` use temporary roots and complete
 child environments. Never manually smoke-test real user backup state.
 
 Automated tests prove the exact policy request and Ballin's surrounding behavior;
@@ -475,7 +457,6 @@ they do not prove GitHub's live enforcement. Separately authorized disposable
 real-GitHub validation must still confirm `createCommitOnBranch` fast-forward
 publication and rejection of a forced ref update and branch deletion. Normal
 implementation validation does not perform that experiment.
-[#334](https://github.com/JBallin/ballin-scripts/issues/334) owns migration/Gist
-retirement; [#336](https://github.com/JBallin/ballin-scripts/issues/336) owns
-verification. The concrete repository reader/writer can be reused there without
-introducing another storage model here.
+[#336](https://github.com/JBallin/ballin-scripts/issues/336) owns verification.
+The concrete repository reader/writer can be reused there without introducing
+another storage model here.

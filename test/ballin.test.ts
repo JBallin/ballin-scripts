@@ -74,8 +74,8 @@ describe('ballin', () => {
         ...overrides,
       },
       backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
+        repository: null,
+        includeSensitive: 'false',
       },
       analytics: {
         enabled: 'false',
@@ -109,25 +109,11 @@ describe('ballin', () => {
 
     fs.mkdirSync(binDir, { recursive: true });
     requiredCommandShims.forEach((command: string) => writeExecutable(command));
-    writeExecutable('gh', `#!/bin/bash
-printf '%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-case "$1:$2" in
-  auth:status)
-    if [ "$*" != "auth status --active --hostname example.test" ]; then exit 2; fi
-    exit "\${FAKE_GH_AUTH_STATUS:-0}"
-    ;;
-  gist:view)
-    if [ "$*" != "gist view --files -- test-gist-id" ]; then exit 2; fi
-    exit "\${FAKE_GH_GIST_STATUS:-0}"
-    ;;
-  *) exit 2 ;;
-esac
-`);
     writeConfig({
       update: {},
       backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
+        repository: null,
+        includeSensitive: 'false',
       },
       analytics: {
         enabled: 'false',
@@ -438,10 +424,10 @@ exit 17
   });
 
   it('routes config through the existing config command implementation', () => {
-    const result = runBallin(['config', 'get', 'backup.id']);
+    const result = runBallin(['config', 'get', 'backup.includeSensitive']);
 
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, 'test-gist-id\n');
+    assert.equal(result.stdout, 'false\n');
     assert.equal(result.stderr, '');
   });
 
@@ -599,10 +585,7 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, '😎 You\'re ballin.\n');
     assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      'auth status --active --hostname example.test',
-      'gist view --files -- test-gist-id',
-    ]);
+    assert.deepEqual(commandLog(), []);
   });
 
   it('reports full Ballin-managed environment checks through verbose doctor', () => {
@@ -613,29 +596,19 @@ require('https').request = () => {
     assert.include(result.stdout, 'OK    Node.js runtime:');
     assert.include(result.stdout, 'OK    Command shims on PATH:');
     assert.include(result.stdout, 'OK    Config readability:');
-    assert.include(result.stdout, 'OK    Gist host:');
-    assert.include(result.stdout, 'OK    Gist ID:');
-    assert.include(result.stdout, 'OK    GitHub CLI:');
-    assert.include(result.stdout, 'OK    GitHub CLI authentication:');
-    assert.include(
-      result.stdout,
-      'OK    Configured Gist readability: The configured backup Gist exists and is readable. Write permission was not checked.',
-    );
+    assert.include(result.stdout, 'INFO  Optional backup:');
     assert.include(result.stdout, 'Result: Ballin-managed environment health looks good.');
     assert.notInclude(result.stdout, '😎 You\'re ballin.');
     assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      'auth status --active --hostname example.test',
-      'gist view --files -- test-gist-id',
-    ]);
+    assert.deepEqual(commandLog(), []);
   });
 
   it('reports doctor warnings without failing the command', () => {
     writeConfig({
       update: {},
       backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
+        repository: null,
+        includeSensitive: 'false',
       },
     });
 
@@ -656,100 +629,43 @@ require('https').request = () => {
     assert.equal(verboseResult.status, 0, verboseResult.stderr);
     assert.include(verboseResult.stdout, 'OK    Node.js runtime:');
     assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
-    assert.include(verboseResult.stdout, 'OK    Configured Gist readability:');
+    assert.include(verboseResult.stdout, 'INFO  Optional backup:');
     assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
   });
 
-  it('fails doctor for unusable backup prerequisites and unreadable Gists', () => {
-    writeConfig({
-      update: {},
-      backup: {
-        id: null,
-        host: 'example.test',
-      },
-      analytics: {},
-    });
-    const missingId = runBallin(['doctor']);
-    assert.equal(missingId.status, 0, missingId.stderr);
-    assert.equal(missingId.stdout, '😎 You\'re ballin.\n');
-    assert.deepEqual(commandLog(), []);
-
-    const optionalVerbose = runBallin(['doctor', '--verbose']);
-    assert.equal(optionalVerbose.status, 0, optionalVerbose.stderr);
-    assert.include(optionalVerbose.stdout, 'INFO  Optional backup:');
-    assert.include(optionalVerbose.stdout, 'ballin backup setup');
-    assert.deepEqual(commandLog(), []);
-
-    writeConfig({
-      update: {},
-      backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
-      },
-      analytics: {},
-    });
-    fs.rmSync(path.join(binDir, 'gh'));
-    const missingGh = runBallin(['doctor']);
-    assert.equal(missingGh.status, 1);
-    assert.include(missingGh.stdout, 'ERROR GitHub CLI: GitHub CLI is not discoverable on PATH.');
-
-    writeExecutable('gh', `#!/bin/bash
-printf '%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-case "$1:$2" in
-  auth:status) exit "\${FAKE_GH_AUTH_STATUS:-0}" ;;
-  gist:view) exit "\${FAKE_GH_GIST_STATUS:-0}" ;;
-  *) exit 2 ;;
-esac
-`);
-    writeConfig({
-      update: {},
-      backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
-      },
-      analytics: {},
-    });
-
-    const failedAuth = runBallin(['doctor'], { FAKE_GH_AUTH_STATUS: '4' });
-    assert.equal(failedAuth.status, 1);
-    assert.include(failedAuth.stdout, 'ERROR GitHub CLI authentication:');
-    assert.notInclude(failedAuth.stdout, 'Configured Gist readability:');
-
-    const unreadableGist = runBallin(['doctor'], { FAKE_GH_GIST_STATUS: '4' });
-    assert.equal(unreadableGist.status, 1);
-    assert.include(
-      unreadableGist.stdout,
-      'ERROR Configured Gist readability: The configured backup Gist could not be read.',
-    );
+  it('reports configured private repository readiness through doctor without publication', () => {
+    const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+    const statePath = path.join(tempDir, 'repository.json');
+    fs.writeFileSync(statePath, JSON.stringify(fixtureState()));
+    installRepositoryFixture(binDir, statePath);
+    writeConfig({ update: {}, backup: { repository: fixtureDestination, includeSensitive: 'false' }, analytics: {} });
+    const result = runBallin(['doctor', '--verbose']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'OK    Private backup readiness:');
+    assert.include(result.stdout, 'Write permission and current source coverage were not checked.');
+    const requests = JSON.parse(fs.readFileSync(statePath, 'utf8')).requests;
+    assert.isAbove(requests.length, 0);
+    assert.isFalse(requests.some((request: { method: string; payload?: { query?: string } }) => (
+      request.method !== 'GET' && !request.payload?.query?.trim().startsWith('query')
+    )));
   });
 
-  it('uses raw backup destination types in doctor', () => {
-    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
-      writeConfig({
-        update: {},
-        backup: { id, host: 'example.test' },
-        analytics: {},
-      });
-
+  it('rejects stale Gist and malformed destinations without contacting GitHub', () => {
+    for (const backup of [
+      { id: 'legacy-fixture', host: 'example.test' },
+      { id: 42 },
+      { id: ['unexpected-id'] },
+      { id: { value: 'unexpected-id' } },
+    ]) {
+      writeConfig({ update: {}, backup, analytics: {} });
       const result = runBallin(['doctor', '--verbose']);
-
       assert.equal(result.status, 1, result.stderr);
-      assert.include(result.stdout, 'ERROR Gist ID: `backup.id` must be null or a non-empty string.');
-      assert.include(result.stdout, 'Next: Run `ballin config reset` to restore valid defaults');
-    });
-
-    writeConfig({
-      update: {},
-      backup: { id: 'test-gist-id', host: { value: 'unexpected-host' } },
-      analytics: {},
-    });
-
-    const malformedHost = runBallin(['doctor']);
-
-    assert.equal(malformedHost.status, 1);
-    assert.include(malformedHost.stdout, 'ERROR Gist host: Gist host is not configured.');
-    assert.include(malformedHost.stdout, 'Next: Run `ballin backup setup` to repair the backup host.');
-    assert.deepEqual(commandLog(), []);
+      assert.include(result.stdout, 'ERROR Backup config:');
+      assert.include(result.stdout, 'ballin backup disconnect');
+      assert.include(result.stdout, 'ballin backup setup');
+      assert.notInclude(result.stdout, 'legacy-fixture');
+      assert.deepEqual(commandLog(), []);
+    }
   });
 
   it('fails doctor when a required health check fails', () => {

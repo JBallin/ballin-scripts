@@ -804,7 +804,7 @@ process.stdout.write(JSON.stringify({ result }));
       command: 'ballin config',
       status: 'failure',
       durationBucket: '1-10s',
-      args: ['get', 'backup.id'],
+      args: ['get', 'backup.repository'],
       path: '/Users/example',
       rawError: 'secret',
       now: fixedNow,
@@ -987,10 +987,10 @@ process.stdout.write(JSON.stringify({ result }));
   });
 
   [
-    { args: ['get', 'backup.id'], exitCode: 0, status: 'success' },
+    { args: ['get', 'backup.repository'], exitCode: 0, status: 'success' },
     { args: ['get', 'missing-key'], exitCode: 1, status: 'failure' },
     { args: ['wrong'], exitCode: 2, status: 'failure' },
-    { args: ['set', 'backup.id'], exitCode: 2, status: 'failure' },
+    { args: ['set', 'backup.repository'], exitCode: 2, status: 'failure' },
   ].forEach(({ args, exitCode, status }) => {
     it(`records the actual config command status for ${JSON.stringify(args)}`, async () => {
       const result = await runConfigWithAnalytics(args);

@@ -8,8 +8,6 @@
     "nvm": "false"
   },
   "backup": {
-    "id": null,
-    "host": "github.com",
     "repository": null,
     "includeSensitive": "false"
   },

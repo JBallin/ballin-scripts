@@ -3,7 +3,6 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const {
-  backupMarkerFileName,
   classifySnapshotFileName,
   collectSnapshotObservations,
   configSnapshotFileName,
@@ -118,7 +117,6 @@ describe('backup snapshot definitions', () => {
     assert.equal(new Set(snapshotDefinitions.map(({ name }: SnapshotDefinition) => name)).size, 28);
 
     assert.equal(configSnapshotFileName, 'ballin_config');
-    assert.equal(backupMarkerFileName, '.MyConfig.md');
     assert.equal(repositoryReadmeFileName, 'README.md');
   });
 
@@ -130,7 +128,6 @@ describe('backup snapshot definitions', () => {
       'brackets_keymap.json',
       'brackets_settings.json',
     ].forEach((name) => assert.equal(classifySnapshotFileName(name), 'retired'));
-    assert.equal(classifySnapshotFileName('.MyConfig.md'), 'reserved');
     assert.equal(classifySnapshotFileName('README.md'), 'reserved');
 
     [
@@ -139,6 +136,7 @@ describe('backup snapshot definitions', () => {
       'archive/gitconfig',
       'brackets_extensions.bak',
       'Brackets_settings.json',
+      '.MyConfig.md',
       '.MyConfig.md.bak',
       'unexpected',
     ].forEach((name) => assert.equal(classifySnapshotFileName(name), 'unexpected'));

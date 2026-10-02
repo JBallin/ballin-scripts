@@ -17,8 +17,7 @@ ballin setup
 Your current valid choices are the prompt defaults. Repository backups offer
 the single sensitive-source choice; any configured backup offers automatic
 backup after `ballin update`. Analytics can always be reviewed. With no backup
-configured, use `ballin backup setup` first if you want backups. Legacy Gists
-continue capturing every available source and do not offer sensitive selection.
+configured, use `ballin backup setup` first if you want backups.
 
 Selecting sensitive sources reviews paths and availability without reading raw
 contents or collecting pipx metadata. Confirm the choice to save it for future
@@ -168,11 +167,6 @@ and `ballin backup disconnect` to clear local linkage and disable automatic
 backups. Use only one Mac to back up to a destination. Stop using the previous
 Mac for backups before publishing from a replacement Mac. See
 [conflicts](capabilities.md#backup-consistency-and-conflicts).
-
-Existing configured Gists retain their current capture/read/open behavior and
-host repair, including Enterprise hosts. Secret Gists remain readable by anyone
-with their URL or ID. No new Gist setup is available. Migration and Gist retirement
-remain in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
 ## Readiness checks
 

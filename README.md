@@ -112,9 +112,7 @@ one-command restore system.
 ## Privacy and security
 
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
-to access the repository can read its contents. Existing configured Gists
-remain supported temporarily during the transition to repository backups;
-secret Gists are unlisted and readable by anyone with the URL or ID.
+to access the repository can read its contents.
 
 Repository backups include fixed inventories and filtered Ballin preferences.
 Raw configuration and pipx metadata are excluded by default and can be included

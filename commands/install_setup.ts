@@ -6,7 +6,6 @@ const {
   ensureAnalyticsInstallId,
 } = require('./analytics.ts');
 const {
-  createConfigStore,
   stringify,
 } = require('../config/store.ts');
 const {
@@ -14,30 +13,18 @@ const {
   readSetupConfigContext,
 } = require('../config/portable.ts');
 const {
-  backupDestinationFromConfig,
   configuredBackupDestination,
-  normalizeBackupHost,
 } = require('./backup_config.ts');
 const {
   commandExists,
   readCommandOutput,
-  runCommand,
   runNodeScript,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
-const {
-  backupMarkerFileName,
-} = require('./backup_snapshots.ts');
+const { configureRepositoryBackup, disconnectBackup } = require('./backup_setup.ts');
 
-const backupMarker = '### Backup of your dev environment\n'
-  + 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)\n'
-  + '\n';
-const { readPrompt, configureRepositoryBackup, disconnectBackup } = require('./backup_setup.ts');
-
-const stripTrailingNewlines = (text: string): string => text.replace(/[\r\n]+$/u, '');
 const supportedCommands = new Set([
   'configure',
-  'gist',
   'setup',
   'setup-analytics',
   'symlink-binaries',
@@ -47,7 +34,7 @@ type ConfigObject = { [key: string]: ConfigValue };
 type ConfigLeaf = string | number | boolean | null;
 type ConfigValue = ConfigLeaf | ConfigObject;
 type SetupMode = 'fresh' | 'refresh';
-type ConfigureGistOptions = {
+type ConfigureBackupOptions = {
   backupCacheDir?: string;
   configPath?: string;
   originalConfig?: Record<string, unknown>;
@@ -106,16 +93,6 @@ const readJsonObject = (filePath: string): ConfigObject | null => {
   }
 };
 
-const backupDestinationForConfig = (filePath: string) => {
-  const config = readJsonObject(filePath);
-  return config ? backupDestinationFromConfig(config) : null;
-};
-
-const configHasBackupHost = (repoDir: string, configPath = configPathFor(repoDir)): boolean => {
-  const config = readJsonObject(configPath);
-  return isConfigObject(config?.backup) && Object.prototype.hasOwnProperty.call(config.backup, 'host');
-};
-
 const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathFor(repoDir), deferBackupSelection = false): boolean => {
   const updateConfigPath = path.join(repoDir, 'config', 'updateConfig.ts');
   const childEnv = commandEnv(path.join(repoDir, 'config'));
@@ -165,199 +142,13 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
   return updateConfig(repoDir, docsUrl, configPath, deferBackupSelection);
 };
 
-const configValue = (configPath: string, key: string): ConfigLeaf | undefined => (
-  createConfigStore({ configPath }).readLeafValue(key)
-);
-
-const setConfigValue = (configPath: string, key: string, value: string): boolean => {
-  if (!createConfigStore({ configPath }).writeLeafValue(key, value)) {
-    return false;
-  }
-  process.stdout.write(`"${key}" set to: ${JSON.stringify(value)}\n`);
-  return true;
-};
-
-const replaceInvalidBackupHost = (configPath: string, value: string): boolean => {
-  const config = readJsonObject(configPath);
-  if (
-    !config
-    || !isConfigObject(config.backup)
-    || !Object.prototype.hasOwnProperty.call(config.backup, 'host')
-  ) {
-    return false;
-  }
-
-  try {
-    config.backup.host = value;
-    fs.writeFileSync(configPath, stringify(config), 'utf8');
-    process.stdout.write(`"backup.host" set to: ${JSON.stringify(value)}\n`);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const runGh = (
-  host: string,
-  args: string[],
-  options: { cwd: string } = { cwd: process.cwd() },
-) => runCommand('gh', args, {
-  cwd: options.cwd,
-  env: {
-    ...process.env,
-    GH_HOST: host,
-  },
-});
-
-const configureGist = (
-  repoDir: string,
-  docsUrl: string,
-  backupHostExisted: boolean,
-  options: ConfigureGistOptions = {},
-): boolean => {
-  const ballinConfig = options.configPath ?? configPathFor(repoDir);
-  const originalConfig = options.originalConfig ?? readOriginalSetupConfig(ballinConfig);
-  if (!originalConfig) {
-    return false;
-  }
-  const destination = backupDestinationForConfig(ballinConfig);
-  if (!destination) {
-    return false;
-  }
-  if (destination.idStatus === 'invalid') {
-    writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.id`; expected null or a non-empty string.');
-    writeStdoutLine('Run `ballin config reset` to restore valid defaults, then run `ballin backup setup` if needed.');
-    return false;
-  }
-  if (configuredBackupDestination(readJsonObject(ballinConfig)).kind === 'invalid') {
-    writeStdoutLine('Repair the backup destination configuration before using the Gist compatibility entrypoint.');
-    return false;
-  }
-
-  let backupHost = destination.host;
-  const backupId = destination.id;
-  const backupHostInvalid = backupHostExisted && !backupHost;
-  const deferHostPersistence = backupHostInvalid;
-  let pendingBackupHost: string | null = null;
-
-  if (backupHostInvalid) {
-    writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.');
-  }
-
-  if (!backupId) {
-    writeStdoutLine('New Gist setup is retired. Run `ballin backup setup` to configure a private repository.');
-    return false;
-  }
-
-  if (process.env.BALLIN_BACKUP_HOST) {
-    const replacementHost = normalizeBackupHost(process.env.BALLIN_BACKUP_HOST);
-    if (!replacementHost) {
-      return false;
-    }
-    if (deferHostPersistence) {
-      pendingBackupHost = replacementHost;
-      backupHost = replacementHost;
-    } else {
-      const hostSaved = setConfigValue(ballinConfig, 'backup.host', replacementHost);
-      if (!hostSaved) {
-        return false;
-      }
-      backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
-      if (!backupHost) {
-        return false;
-      }
-    }
-  } else if (!backupHostExisted || backupHostInvalid) {
-    const suggestedHost = backupHost ?? 'github.com';
-    const inputHost = readPrompt(`\n🤔 What GitHub host should be used for Gist backups? [${suggestedHost}] `);
-    const replacementHost = inputHost || (backupHostInvalid ? suggestedHost : null);
-    if (replacementHost) {
-      const normalizedReplacementHost = normalizeBackupHost(replacementHost);
-      if (!normalizedReplacementHost) {
-        writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.');
-        return false;
-      }
-      if (deferHostPersistence) {
-        pendingBackupHost = normalizedReplacementHost;
-        backupHost = normalizedReplacementHost;
-      } else {
-        const hostSaved = setConfigValue(ballinConfig, 'backup.host', normalizedReplacementHost);
-        if (!hostSaved) {
-          return false;
-        }
-        backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
-        if (!backupHost) {
-          writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.');
-          return false;
-        }
-      }
-    }
-  }
-
-  if (!backupHost) {
-    return false;
-  }
-  const selectedHost = backupHost;
-
-  if (!commandExists('gh')) {
-    writeStdoutLine('\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.');
-    writeStdoutLine('\nInstall `gh`, authenticate it, then run `ballin backup setup` again.');
-    writeStdoutLine(`\nSetup guide: ${docsUrl}`);
-    writeStdoutLine(`\nRun after installing \`gh\`:\n  gh auth login --hostname ${selectedHost}`);
-    return false;
-  }
-
-  const authResult = runGh(selectedHost, ['api', '--hostname', selectedHost, 'user'], {
-    cwd: repoDir,
-  });
-
-  if (authResult.status !== 0 || authResult.error) {
-    writeStdoutLine(`\n⚠️  ERROR: \`gh\` is not authenticated for ${selectedHost}.`);
-    writeStdoutLine(`\nRun:\n  gh auth login --hostname ${selectedHost}`);
-    writeStdoutLine('\nThen run `ballin backup setup` again.');
-    return false;
-  }
-
-  if (pendingBackupHost) {
-    const markerResult = runGh(
-      selectedHost,
-      ['gist', 'view', backupId, '--raw', '--filename', backupMarkerFileName],
-      { cwd: repoDir },
-    );
-    if (markerResult.stderr) {
-      process.stderr.write(markerResult.stderr);
-    }
-    if (
-      markerResult.status !== 0
-      || markerResult.error
-      || stripTrailingNewlines(markerResult.stdout) !== stripTrailingNewlines(backupMarker)
-    ) {
-      writeStdoutLine(`\n⚠️  ERROR: Gist '${backupId}' on ${selectedHost} is not a valid Ballin backup destination.`);
-      writeStdoutLine('The existing `backup.host` was not changed. Verify the host and Gist ID, then retry with `ballin backup setup`.');
-      return false;
-    }
-    if (!replaceInvalidBackupHost(ballinConfig, pendingBackupHost)) {
-      return false;
-    }
-  }
-  return true;
-};
-
 const configureBackup = (
-  repoDir: string, docsUrl: string, backupHostExisted: boolean,
-  options: ConfigureGistOptions & { repositoryName?: string } = {},
+  repoDir: string, docsUrl: string,
+  options: ConfigureBackupOptions & { repositoryName?: string } = {},
 ): boolean => {
   const configPath = options.configPath ?? configPathFor(repoDir);
   const originalConfig = options.originalConfig ?? readOriginalSetupConfig(configPath);
   if (!originalConfig) return false;
-  const destination = configuredBackupDestination(readJsonObject(configPath));
-  if (destination.kind === 'legacy-gist') {
-    if (options.repositoryName !== undefined) {
-      writeStdoutLine('This installation still uses a Gist. Migration is separate; disconnect before setting up an independent repository.');
-      return false;
-    }
-    return configureGist(repoDir, docsUrl, backupHostExisted, options);
-  }
   return configureRepositoryBackup({
     configPath, originalConfig, repositoryName: options.repositoryName,
     backupCacheDir: options.backupCacheDir ?? path.join(repoDir, '.backup-cache'),
@@ -430,7 +221,6 @@ const setup = (
   }
 
   const configExisted = fs.existsSync(configPathFor(repoDir));
-  const backupHostExisted = configExisted && configHasBackupHost(repoDir);
 
   if (!configExisted) writeStdoutLine();
   if (!configure(repoDir, docsUrl, configPathFor(repoDir), true)) {
@@ -460,7 +250,7 @@ const setup = (
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
   if (mode === 'fresh' || backupConfigured || backupInvalid) {
-    backupSetupSucceeded = configureBackup(repoDir, docsUrl, backupHostExisted, { originalConfig });
+    backupSetupSucceeded = configureBackup(repoDir, docsUrl, { originalConfig });
     if (!backupSetupSucceeded) {
       writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
       writeStdoutLine('\nBallin maintenance is installed. Retry with: `ballin backup setup`');
@@ -492,12 +282,6 @@ const runInstallSetupCli = (): void => {
     return;
   }
 
-  if (command === 'gist' && repoDir && option) {
-    const backupHostExisted = process.argv[5] === 'true';
-    process.exitCode = configureGist(repoDir, option, backupHostExisted) ? 0 : 1;
-    return;
-  }
-
   if (command === 'setup' && repoDir && option) {
     const mode = process.argv[6] === 'fresh' ? 'fresh' : 'refresh';
     process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1;
@@ -515,7 +299,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|gist|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [backup-host-existed|analytics-docs-url] [fresh|refresh]');
+    writeStdoutLine('Usage: install_setup.ts <configure|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [analytics-docs-url] [fresh|refresh]');
     process.exitCode = 1;
     return;
   }
@@ -530,8 +314,6 @@ if (require.main === module) {
 
 module.exports = {
   configure,
-  configHasBackupHost,
-  configureGist,
   configureBackup,
   disconnectBackup,
   readOriginalSetupConfig,

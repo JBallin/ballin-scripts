@@ -11,8 +11,7 @@ these snapshots.
 
 Repository capture includes the fixed inventory/preferences baseline and uses
 one default-off local `backup.includeSensitive` choice for all sensitive sources.
-Existing configured Gists still capture every available catalog source;
-`ballin_config` saves only supported preferences. Migration remains separate.
+`ballin_config` saves only supported preferences.
 
 Listed filenames may live under an application's configuration directory. To
 inspect editor files before enabling backup or sharing snapshots, check
@@ -52,7 +51,7 @@ raw shell/Git/editor configuration, `.nvmrc`, and pipx installation metadata.
 New and replacement installations start with these sensitive sources off and
 make their own choice; approval is never recovered from a backup. Configured
 setup retains established local consent; fresh reconnect requires its own
-review. This setting does not change existing Gist captures.
+review.
 
 Review shows logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
@@ -74,8 +73,7 @@ home trees remain outside direct selection. Allowed sources may still contain
 credentials.
 
 Omitting a category from future captures does not delete older remote files,
-history, or cached content. Existing configured Gists remain readable until
-migration and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+history, or cached content.
 
 Any new source or group requires an explicit inclusion and sensitivity review.
 Unknown groups are excluded; existing or restored preferences do not authorize
