@@ -1,4 +1,5 @@
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+const { runCommand, spawnResultStatus } = require('../commands/commandHelpers.ts');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -160,6 +161,163 @@ exit ${status}
   const commandLog = () => (
     fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : []
   );
+
+  describe('interruption', function() {
+    // Real local processes need headroom under coverage; readiness, not elapsed
+    // time, determines when a signal is sent. The watchdog bounds fixture hangs.
+    this.timeout(8000);
+
+    const writeNodeStub = (name: string, body: string): void => {
+      writeTestExecutable(name, `#!${process.execPath}\n${body}\n`);
+    };
+
+    const readyStub = (stage: string): string => `
+      require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, '${stage}\\n');
+      require('fs').writeSync(1, '__update_ready:${stage}:' + process.pid + '\\n');
+      setInterval(() => {}, 1000);
+    `;
+
+    const runInterruptedUpdate = async (
+      signalAt?: 'softwareupdate' | 'backup',
+    ): Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }> => {
+      const tmpDir = path.join(tempDir, 'tmp');
+      fs.mkdirSync(tmpDir);
+      const child = spawn(ballinPath, ['update'], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          HOME: tempDir,
+          PATH: binDir,
+          TMPDIR: tmpDir,
+          BALLIN_TEST_CONFIG_PATH: configPath,
+          BALLIN_TEST_BALLIN_PATH: path.join(binDir, 'ballin'),
+          BALLIN_NO_ANALYTICS: '1',
+          UPDATE_TEST_LOG: logPath,
+        },
+      });
+      let stdout = '';
+      let stderr = '';
+      let signalled = false;
+      let closed = false;
+      child.once('close', () => { closed = true; });
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      const killFixtureGroup = (signal: NodeJS.Signals): void => {
+        if (!child.pid) return;
+        try {
+          process.kill(-child.pid, signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
+      };
+      try {
+        const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+          child.once('error', reject);
+          child.once('close', (code: number | null, signal: NodeJS.Signals | null) => resolve({ code, signal }));
+          child.stdout.on('data', (chunk: Buffer) => {
+            stdout += chunk.toString();
+            if (signalAt && !signalled && stdout.includes(`__update_ready:${signalAt}:`)) {
+              signalled = true;
+              try { killFixtureGroup('SIGINT'); } catch (error) { reject(error); }
+            }
+          });
+          child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+          watchdog = setTimeout(() => {
+            try { killFixtureGroup('SIGKILL'); } catch (error) { reject(error); return; }
+            reject(new Error(`Update fixture watchdog expired. stdout: ${stdout} stderr: ${stderr}`));
+          }, 5000);
+        });
+        if (signalAt) assert.isTrue(signalled, `Missing ${signalAt} readiness handshake: ${stdout}${stderr}`);
+        assert.notInclude(stdout + stderr, 'Continue with remaining');
+        return { ...result, stdout, stderr };
+      } finally {
+        clearTimeout(watchdog);
+        killFixtureGroup('SIGKILL');
+        if (!closed) await new Promise<void>((resolve) => child.once('close', resolve));
+      }
+    };
+
+    const configureSignalStages = (): void => {
+      writeUpdateConfig({
+        TEST_UPDATE_NVM: 'false',
+        TEST_UPDATE_SOFTWAREUPDATE: 'true',
+        TEST_UPDATE_BACKUP: 'true',
+      });
+    };
+
+    it('aborts the invocation on process-group SIGINT without prompting on closed stdin', async () => {
+      configureSignalStages();
+      writeNodeStub('softwareupdate', readyStub('softwareupdate'));
+      writeNodeStub('ballin', "require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'backup\\n');");
+
+      const result = await runInterruptedUpdate('softwareupdate');
+
+      assert.isNull(result.code);
+      assert.equal(result.signal, 'SIGINT');
+      assert.deepEqual(commandLog(), ['softwareupdate']);
+      assert.notInclude(result.stdout, 'Backing up development environment');
+    });
+
+    [0, 17].forEach((backupStatus) => {
+      it(`continues after child-only SIGINT and retains ${backupStatus === 0 ? '130 after success' : 'the later failure status'}`, async () => {
+        configureSignalStages();
+        writeNodeStub('softwareupdate', `
+          require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'softwareupdate\\n');
+          require('fs').writeSync(2, 'fixture child SIGINT\\n');
+          process.kill(process.pid, 'SIGINT');
+        `);
+        writeNodeStub('ballin', `
+          require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'backup\\n');
+          ${backupStatus ? "require('fs').writeSync(2, 'fixture backup failure\\n');" : ''}
+          process.exit(${backupStatus});
+        `);
+
+        const result = await runInterruptedUpdate();
+
+        assert.isNull(result.signal);
+        assert.equal(result.code, backupStatus || 130);
+        assert.deepEqual(commandLog(), ['softwareupdate', 'backup']);
+        assert.include(result.stderr, 'fixture child SIGINT');
+        if (backupStatus) assert.include(result.stderr, 'fixture backup failure');
+      });
+    });
+
+    it('treats an ordinary exit 130 as a child failure without prompting', async () => {
+      configureSignalStages();
+      writeNodeStub('softwareupdate', "require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'softwareupdate\\n'); process.exit(130);");
+      writeNodeStub('ballin', "require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'backup\\n');");
+
+      const result = await runInterruptedUpdate();
+
+      assert.isNull(result.signal);
+      assert.equal(result.code, 130);
+      assert.deepEqual(commandLog(), ['softwareupdate', 'backup']);
+    });
+
+    it('retains the distinction between a child SIGINT and exit 130 before status normalization', () => {
+      const options = { env: { HOME: tempDir, PATH: binDir, TMPDIR: tempDir }, stdio: 'ignore' as const };
+      const interrupted = runCommand(process.execPath, ['-e', "process.kill(process.pid, 'SIGINT')"], options);
+      const exited = runCommand(process.execPath, ['-e', 'process.exit(130)'], options);
+
+      assert.equal(interrupted.signal, 'SIGINT');
+      assert.isNull(interrupted.status);
+      assert.isNull(exited.signal);
+      assert.equal(exited.status, 130);
+      assert.equal(spawnResultStatus(interrupted), 130);
+      assert.equal(spawnResultStatus(exited), 130);
+    });
+
+    it('aborts a later stage on process-group SIGINT after an earlier child-only interruption', async () => {
+      configureSignalStages();
+      writeNodeStub('softwareupdate', "require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'softwareupdate\\n'); process.kill(process.pid, 'SIGINT');");
+      writeNodeStub('ballin', readyStub('backup'));
+
+      const result = await runInterruptedUpdate('backup');
+
+      assert.isNull(result.code);
+      assert.equal(result.signal, 'SIGINT');
+      assert.deepEqual(commandLog(), ['softwareupdate', 'backup']);
+    });
+  });
 
   it('remains executable through the installed symlink model', () => {
     const installBinDir = path.join(tempDir, 'installed-bin');
@@ -1076,12 +1234,16 @@ exit 2
 printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 `);
 
+    const tmpDir = path.join(tempDir, 'tmp');
+    fs.mkdirSync(tmpDir);
     const result = runUpdate({
+      TMPDIR: tmpDir,
       NVM_DIR: nvmDir,
       TEST_UPDATE_BACKUP: 'true',
     });
 
     assert.equal(result.status, 24);
+    assert.deepEqual(fs.readdirSync(tmpDir), [], 'nvm capture directory is removed after ordinary failure');
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.deepEqual(commandLog().slice(1), [
       'backup still ran',
