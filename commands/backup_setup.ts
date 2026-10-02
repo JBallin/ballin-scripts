@@ -29,7 +29,7 @@ const cancelled = (): false => {
 const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome): void => {
   if (outcome.status === 'present' || outcome.status === 'unsupported') return;
   if (outcome.status === 'enabled') {
-    writeStdoutLine('Optional GitHub branch protection enabled.');
+    writeStdoutLine('GitHub branch protection enabled.');
     return;
   }
   if (outcome.status === 'permission-denied') {

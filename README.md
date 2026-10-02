@@ -58,7 +58,7 @@ $ ballin update
 
 ==> Installing macOS updates
 
-==> Updating ballin-scripts
+==> Updating Ballin
 
 ==> Checking Ballin readiness
 
