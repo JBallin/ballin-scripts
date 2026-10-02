@@ -398,21 +398,19 @@ choice; a replacement installation establishes its own choice during setup.
 ## Shared inclusion policy
 
 Repository capture selects sources from the canonical definitions described
-below. Existing configured Gists select the original catalog revision,
-including raw files and pipx; newly introduced Codex sources are excluded. Migration and Gist runtime retirement belong to #334.
+below. Existing configured Gists retain their original sources, including raw files
+and pipx; Codex support uses repository capture. Migration and Gist runtime retirement belong to #334.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
 23 sensitive sources, and one projected preferences snapshot.
-Sensitive catalog revision 2 introduces Codex. Local
-`backup.sensitiveSourcesVersion` records the revision confirmed by setup;
-missing or unrecognized values retain revision 1. `backup.includeSensitive`
-remains the single inclusion choice. A source's introduction revision gates
-discovery; old consent cannot collect newly introduced sensitive sources.
-Approval is never projected or recovered, and changing the boolean alone does
-not grant a new catalog revision. Fresh repository setup or confirmed
-`ballin setup` records the current revision. Configured destination revalidation
-preserves existing consent.
+`backup.includeSensitive` is the only local sensitive-source preference. Opting
+in covers the maintained sensitive catalog, including future supported sources;
+existing opt-ins therefore include Codex. Setup discloses this scope before
+acceptance and reviews the currently available source paths. Consent is never
+projected or recovered. Configured destination revalidation preserves the
+existing choice. Adding supported sources requires user-facing disclosure and
+an inclusion/sensitivity review, without another approval record.
 
 Codex file capture is intact, including embedded trust settings in main/profile
 TOML, with existing final-newline/empty-file normalization. It does not execute
@@ -422,9 +420,30 @@ with base64 `content` and an `executable` boolean. No timestamps, absolute paths
 or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
 
+New Codex capture is bounded to 16 MiB total normalized staged bytes (raw files
+and all archives, including unchanged captures) and 8,192 visited entries per
+recursive source. Incremental iterative metadata traversal and opened-file
+bounded reads reject overflow without truncation. Capture-limit failures abort
+staging before remote inspection; cache comparison and writer checks also fail
+before publication or cache promotion. Actual changed buffers are rechecked before
+outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
+not a second 16 MiB cap. Only Codex cache files actually compared are bounded,
+individually, to 16 MiB. Other sources retain their existing behavior.
+
+There is no retained-remote quota or partial-reader contract. Existing full
+remote inspection, retained snapshots, and mixed-source payloads can exceed
+the local capture envelope; this is not a global request or process-memory
+guarantee. New canonical names may recognize previously unexpected large remote
+blobs. Remote-reader resource bounds remain separate follow-up work.
+
+Successful self-update compares the Git blob identities of the source-definition
+file before/after update. Changed or unavailable comparison emits a stateless
+source-guide advisory. It never executes definitions or discovers personal
+sources; advisory failure does not turn a successful update into failure.
+
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
 The observation entrypoint accepts a native boolean, `includeSensitive`,
-default false, and the locally approved sensitive catalog revision; non-boolean supplied input fails before discovery. It is an
+default false; non-boolean supplied input fails before discovery. It is an
 internal argument parsed from the single local `backup.includeSensitive` setting.
 Inventory and preferences form the fixed baseline. Unknown groups are excluded;
 future sources/groups require an explicit inclusion and sensitivity review.

@@ -27,7 +27,7 @@ inspect editor files before enabling backup or sharing snapshots, check
 | VS Code and VS Code Insiders `settings.json`, `keybindings.json` | `vs_settings`, `vs_keybindings`, `vsI_settings`, `vsI_keybindings` | Preserve editor settings and keybindings. | Extension credentials, remote hosts, paths, command arguments, and arbitrary settings. | Sensitive; one local opt-in. |
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Inventory; default included. |
 | `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Supported Ballin preferences. The backup destination, analytics setting and install ID, automatic-backup setting, sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
-| Codex `AGENTS.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; explicit expanded-catalog review. |
+| Codex `AGENTS.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; the same local opt-in. |
 | Codex `skills/`, `rules/`, and `agents/` | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Preserve personal authoring files recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
@@ -81,11 +81,12 @@ Omitting a category from future captures does not delete older remote files,
 history, or cached content. Existing configured Gists remain readable until
 migration and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
-Codex additions require a new confirmation through `ballin setup` or fresh
-repository setup. Existing consent retains its previously reviewed source set;
-Codex is excluded before discovery until the expanded catalog is confirmed.
-The local catalog approval is not restored from a backup. Turning
-`backup.includeSensitive` on directly does not approve a newer catalog.
+The single sensitive-source choice covers the maintained catalog, including
+future supported sources. Existing opt-ins include Codex configuration; no
+additional confirmation or approval record is required. Setup states this scope
+before acceptance. New source support is disclosed in the source documentation
+and release/update guidance. Turning the choice off excludes every sensitive
+source before discovery; consent remains local and is not restored from backup.
 
 ## Codex configuration
 
@@ -109,6 +110,16 @@ and `.DS_Store` are omitted. Generated `skills/.system` is also omitted. Codex
 source paths reject descendant symlinks; an explicitly selected Codex root may
 be a symlink. Empty or generated-only directory sources are not published.
 
+Codex capture supports up to **16 MiB combined** per backup after normalization,
+including archive metadata and base64 content, and **8,192 visited entries** per
+recursive source. Compared Codex cache files have the same 16 MiB file limit;
+unused cache files are not checked for this limit. Exceeding a limit stops the
+whole backup before publication or cache promotion. Ballin does not truncate
+files or selectively omit content to fit. Reduce the supported authoring-tree
+size or turn off sensitive sources before retrying. Existing remote snapshots
+remain retained and can exceed the per-capture limit; this does not limit the
+repository size or total memory used to inspect historical remote content.
+
 Ballin does not select authentication files, sessions/history, caches, logs,
 worktrees, databases, memory/runtime state, or separate trust stores. The entire
 `plugins/` tree remains excluded because its authoring payloads and generated
@@ -119,6 +130,7 @@ Desktop-only settings whose durable storage is not independently identified
 remain outside capture; Ballin does not collect global runtime state to guess
 at branch-prefix or other workflow preferences.
 
-Any new source or group requires an explicit inclusion and sensitivity review.
-Unknown groups are excluded; existing or restored preferences do not authorize
-them. See [Backup design](backup-design.md#shared-inclusion-policy).
+New supported sources undergo repository inclusion and sensitivity review;
+the existing local sensitive-source choice then applies. Unknown groups remain
+excluded, and restored preferences cannot enable local consent. See
+[Backup design](backup-design.md#shared-inclusion-policy).

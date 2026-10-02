@@ -135,11 +135,10 @@ describe('repository backup lifecycle', function() {
       assert.equal(rulesetRequests().length, 0);
     });
   });
-  [undefined, 1, 2].forEach((revision) => {
-    it(`publishes synthetic Codex sources only with current local consent: ${revision}`, () => {
+  [false, true].forEach((included) => {
+    it(`publishes synthetic Codex sources with the existing sensitive preference: ${included}`, () => {
       const value = config();
-      if (revision === undefined) delete value.backup.sensitiveSourcesVersion;
-      else value.backup.sensitiveSourcesVersion = revision;
+      value.backup.includeSensitive = String(included);
       saveConfig(value);
       const codex = path.join(home, 'active-codex');
       fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
@@ -147,7 +146,7 @@ describe('repository backup lifecycle', function() {
       fs.writeFileSync(path.join(codex, 'config.toml'), wholeConfig);
       fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill\n');
       ok(run([], '', { CODEX_HOME: codex }));
-      if (revision === 2) {
+      if (included) {
         assert.equal(remote('codex_config.toml'), wholeConfig);
         const archive = JSON.parse(remote('codex_skills.json')!);
         assert.equal(archive.format, 'ballin-directory');
@@ -164,13 +163,100 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1);
     });
   });
+  describe('local Codex snapshot budgets', function() {
+    this.timeout(30000);
+    const mib = 1024 * 1024;
+    const sparse = (file: string, size: number): void => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const fd = fs.openSync(file, 'w');
+      try { fs.ftruncateSync(fd, size); } finally { fs.closeSync(fd); }
+    };
+    const active = (): string => path.join(home, 'budget-codex');
+
+    it('rejects combined raw and recursive staging above 16 MiB before remote reads', () => {
+      const codex = active();
+      sparse(path.join(codex, 'config.toml'), 9 * mib);
+      sparse(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 6 * mib);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: codex });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('rejects excessive recursive entries before any remote read', () => {
+      const skills = path.join(active(), 'skills');
+      fs.mkdirSync(skills, { recursive: true });
+      for (let index = 0; index < 8193; index += 1) fs.writeFileSync(path.join(skills, `synthetic-${index}`), '');
+      const result = run([], '', { CODEX_HOME: active() });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'recursive source exceeds the supported snapshot limits');
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('rejects an oversized compared Codex cache without publication or promotion', () => {
+      const codex = active();
+      fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic local\n');
+      saveState(fixtureState({ 'codex_config.toml': 'synthetic remote\n' }));
+      sparse(path.join(cache, 'codex_config.toml'), 16 * mib + 1);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: codex });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(mutations(), 0);
+      assert.equal(fs.statSync(path.join(cache, 'codex_config.toml')).size, 16 * mib + 1);
+      assert.isFalse(fs.existsSync(path.join(cache, 'ballin_config')));
+    });
+
+    [false, true].forEach((included) => {
+      it(`ignores oversized unselected or absent Codex cache: sensitive ${included}`, () => {
+        const value = config(); value.backup.includeSensitive = String(included); saveConfig(value);
+        sparse(path.join(cache, 'codex_config.toml'), 16 * mib + 1);
+        ok(run([], '', { CODEX_HOME: active() }));
+        assert.equal(fs.statSync(path.join(cache, 'codex_config.toml')).size, 16 * mib + 1);
+        assert.isUndefined(remote('codex_config.toml'));
+      });
+    });
+
+    it('publishes encoded content above 16 MiB when normalized local bytes fit', () => {
+      const codex = active(); fs.mkdirSync(codex);
+      const content = 'x'.repeat(13 * mib - 1) + '\n';
+      fs.writeFileSync(path.join(codex, 'config.toml'), content);
+      ok(run([], '', { CODEX_HOME: codex }));
+      const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string; contents: string }[] } };
+      const addition = input.fileChanges.additions.find((entry) => entry.path === 'codex_config.toml');
+      assert.exists(addition);
+      assert.isAbove(addition!.contents.length, 16 * mib);
+      assert.equal(remote('codex_config.toml'), content);
+      assert.equal(cached('codex_config.toml'), content);
+    });
+
+    it('retains old absent Codex data without imposing a remote aggregate quota', () => {
+      const retained = 'r'.repeat(12 * mib - 1) + '\n';
+      const content = 'n'.repeat(12 * mib - 1) + '\n';
+      saveState(fixtureState({ 'codex_AGENTS.md': retained }));
+      const codex = active(); fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'config.toml'), content);
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.equal(remote('codex_AGENTS.md'), retained);
+      assert.equal(remote('codex_config.toml'), content);
+      const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.equal(remote('codex_AGENTS.md'), retained);
+      assert.equal(remote('codex_config.toml'), content);
+      assert.lengthOf(publications(), 1);
+    });
+  });
   it('sorts final snapshot status output without changing publication order', () => {
     source();
 
     const result = run();
 
     ok(result);
-    assert.equal(result.stdout, 'Codex sources are excluded until you review the expanded sensitive-source catalog with `ballin setup`.\n✚ ballin_config\n✚ zshrc\n');
+    assert.equal(result.stdout, '✚ ballin_config\n✚ zshrc\n');
     const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string }[] } };
     assert.deepEqual(input.fileChanges.additions.map(({ path: filePath }) => filePath), ['zshrc.sh', 'ballin_config']);
   });
@@ -586,7 +672,6 @@ describe('repository backup lifecycle', function() {
       const result = run(['setup'], `y\nreconnect\n\n${preference === 'true' ? 'y' : 'n'}\ny\nn\n`); ok(result);
       assert.include(result.stdout, 'Also include sensitive sources (raw shell/Git/editor/Codex configuration, .nvmrc, and pipx installation metadata)? [y/N]');
       assert.equal(config().backup.includeSensitive, preference);
-      assert.equal(config().backup.sensitiveSourcesVersion, 2);
       assertSavedSensitiveChoice(result, preference);
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
     });

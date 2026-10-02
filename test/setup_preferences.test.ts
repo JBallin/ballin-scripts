@@ -79,7 +79,7 @@ fs.readFileSync = (file, ...args) => {
       assert.include(result.stdout, `update? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.deepEqual(readConfig(), { ...initial, backup: { ...initial.backup, sensitiveSourcesVersion: 2 } });
+      assert.deepEqual(readConfig(), initial);
       assert.include(result.stdout, 'preference review complete');
       if (enabled) {
         assert.include(result.stdout, 'pipx: available');
@@ -93,7 +93,6 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(result.status, 0, result.stderr);
       const config = readConfig();
       assert.equal(config.backup.includeSensitive, String(!enabled));
-      assert.equal(config.backup.sensitiveSourcesVersion, 2);
       assert.equal(config.update.backup, String(!enabled));
       assert.equal(config.analytics.enabled, String(!enabled));
       assert.include(result.stdout, `"backup.includeSensitive" set to: "${!enabled}"`);
@@ -205,6 +204,18 @@ fs.readFileSync = (file, ...args) => {
     assert.equal(readConfig().analytics.enabled, 'true');
   });
 
+  it('discloses current and future sensitive sources before acceptance without adding consent state', () => {
+    const initial = configFor('repository', false);
+    writeConfig(initial);
+    const result = run('n\ny\nn\nn\n');
+    assert.equal(result.status, 0, result.stderr);
+    const disclosure = 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.';
+    assert.isAtLeast(result.stdout.indexOf(disclosure), 0);
+    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Also include sensitive sources'));
+    assert.deepEqual(Object.keys(readConfig().backup).sort(), Object.keys(initial.backup).sort());
+    assert.equal(readConfig().backup.includeSensitive, 'false');
+  });
+
   it('stops on sensitive inspection failure without saving', () => {
     fs.writeFileSync(path.join(root, '.zshrc'), 'fixture content');
     fs.appendFileSync(guardPath, `const realpath = fs.realpathSync; fs.realpathSync = (file, ...args) => {
@@ -228,12 +239,11 @@ fs.readFileSync = (file, ...args) => {
     assert.include(result.stdout, 'codex_skills.json:');
     assert.include(result.stdout, JSON.stringify(skills));
     assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
-    assert.equal(readConfig().backup.sensitiveSourcesVersion, 2);
   });
 
-  it('preserves an existing consent revision when final confirmation is cancelled', () => {
+  it('preserves the existing sensitive choice when final confirmation is cancelled', () => {
     const initial = configFor('repository', true);
-    writeConfig({ ...initial, backup: { ...initial.backup, sensitiveSourcesVersion: 1 } });
+    writeConfig(initial);
     const before = fs.readFileSync(configPath, 'utf8');
     const result = run('y\nn\n');
     assert.equal(result.status, 0, result.stderr);

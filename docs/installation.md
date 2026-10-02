@@ -200,6 +200,9 @@ check whether an environment token is overriding your saved `gh` login.
 Fresh create or reconnect setup asks whether to include **sensitive sources**:
 raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx installation metadata.
 This single choice is saved as `backup.includeSensitive` and defaults off.
+Opting in covers current and future supported sensitive sources in the maintained
+catalog. Existing opt-ins include Codex configuration; review the
+[source list](backup-sources.md) after source support changes.
 Reconnect fully inspects the existing backup before asking. Declining performs
 no sensitive-source discovery. Selecting it reviews logical paths, resolved
 regular-file targets (including existing dotfile symlinks outside `HOME`),

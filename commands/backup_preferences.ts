@@ -92,6 +92,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('The fixed inventory and filtered-preference baseline can include private tools, identities, paths, or URLs. It is not guaranteed secret-free.');
   writeStdoutLine('Codex includes whole configuration files (including embedded trust settings), hook definitions, recursive skills/rules/agents, and the personal marketplace manifest. Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
+  writeStdoutLine('Opting in covers all currently supported sensitive sources and future additions to this maintained catalog. Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md');
   const sensitive = readPromptLine(`Also include sensitive sources (raw shell/Git/editor/Codex configuration, .nvmrc, and pipx installation metadata)? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
   if (sensitive.eof) return null;
   const includeSensitive = sensitive.text === '' ? defaultIncluded : /^[yY]$/u.test(sensitive.text);

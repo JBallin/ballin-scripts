@@ -18,7 +18,7 @@ Your current valid choices are the prompt defaults. Repository backups offer
 the single sensitive-source choice; any configured backup offers automatic
 backup after `ballin update`. Analytics can always be reviewed. With no backup
 configured, use `ballin backup setup` first if you want backups. Legacy Gists
-continue capturing every available source and do not offer sensitive selection.
+retain their original available sources and do not offer sensitive selection.
 
 Selecting sensitive sources reviews paths and availability without reading raw
 contents or collecting pipx metadata. Confirm the choice to save it for future
@@ -135,9 +135,13 @@ installation metadata. The setting accepts native booleans or exact
 consent later changes future capture selection, not saved files or history; review
 [source sensitivity](backup-sources.md) first.
 
-To review and approve the current sensitive-source inventory, including Codex additions, run `ballin setup`. Existing consent does not automatically include new sources. `backup.sensitiveSourcesVersion` records the confirmed catalog locally and is not recovered from backups.
+Opting in to sensitive sources covers the maintained catalog, including future supported sources. Existing opt-ins include the newly supported Codex configuration sources. Run `ballin setup` to review current sources or change the single local choice; it is not recovered from backups.
 
-To toggle the already-approved sensitive sources in future backups:
+After self-update, Ballin shows a source-guide advisory when backup definitions
+changed or the comparison was unavailable. Review that guide for current source
+support; the advisory does not change your local choice.
+
+To toggle sensitive sources in future backups:
 
 ```shell
 ballin config set backup.includeSensitive true

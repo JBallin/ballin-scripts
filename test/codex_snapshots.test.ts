@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { snapshotDefinitions } = require('../commands/backup_snapshots.ts');
-const { checkedPath, fileEntry, recursiveFiles, recursiveSnapshot } = require('../commands/recursive_snapshot.ts');
+const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError } = require('../commands/recursive_snapshot.ts');
 import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 
 const collectorPath = path.resolve(__dirname, '../commands/recursive_snapshot.ts');
@@ -170,15 +170,15 @@ describe('Codex durable snapshots', () => {
 
   it('reports recursive enumeration failures and rejects a changed ancestor', () => {
     write('rules/nested/entry');
-    const original = fs.readdirSync;
+    const original = fs.opendirSync;
     try {
-      fs.readdirSync = (candidate: string) => {
+      fs.opendirSync = (candidate: string) => {
         if (candidate === path.join(root, 'rules/nested')) throw Object.assign(new Error('synthetic directory failure'), { code: 'EACCES' });
         return original(candidate);
       };
       assert.equal(discover('codex_rules.json').status, 'discovery-failed');
       assert.throws(() => recursiveSnapshot(path.join(root, 'rules')), /synthetic directory failure/);
-    } finally { fs.readdirSync = original; }
+    } finally { fs.opendirSync = original; }
     const nested = path.join(root, 'rules/nested');
     fs.rmSync(nested, { recursive: true });
     fs.symlinkSync(homeDir, nested);
@@ -187,18 +187,127 @@ describe('Codex durable snapshots', () => {
 
   it('closes descriptors on read failures and rejects nonregular file entries', () => {
     write('config.toml');
-    const originalRead = fs.readFileSync;
+    const originalRead = fs.readSync;
     const originalClose = fs.closeSync;
     let closed = false;
     try {
-      fs.readFileSync = () => { throw new Error('synthetic read failure'); };
+      fs.readSync = () => { throw new Error('synthetic read failure'); };
       fs.closeSync = (fd: number) => { closed = true; return originalClose(fd); };
       assert.throws(() => fileEntry(root, 'config.toml'), /synthetic read failure/);
       assert.isTrue(closed);
-    } finally { fs.readFileSync = originalRead; fs.closeSync = originalClose; }
+    } finally { fs.readSync = originalRead; fs.closeSync = originalClose; }
     fs.mkdirSync(path.join(root, 'directory'));
     assert.throws(() => fileEntry(root, 'directory'), /not a regular file/);
     assert.deepEqual(recursiveFiles(path.join(root, 'config.toml')), []);
+  });
+
+  it('accepts exact raw byte limits and rejects larger files before reading or allocating', () => {
+    const file = write('binary', Buffer.from([0, 255, 128]));
+    assert.deepEqual(readBoundedFile(file, 3).bytes, Buffer.from([0, 255, 128]));
+    assert.deepEqual(readBoundedFile(file, 4).bytes, Buffer.from([0, 255, 128]));
+    assert.throws(() => readBoundedFile(file, 2), SnapshotLimitError);
+    fs.truncateSync(file, snapshotByteLimit + 1);
+    const originalRead = fs.readSync;
+    const originalAlloc = Buffer.alloc;
+    try {
+      fs.readSync = () => { throw new Error('Oversized file must not be read'); };
+      Buffer.alloc = () => { throw new Error('Oversized file must not allocate content'); };
+      assert.throws(() => readBoundedFile(file), SnapshotLimitError);
+    } finally { fs.readSync = originalRead; Buffer.alloc = originalAlloc; }
+  });
+
+  it('counts directories and excluded entries against traversal entry limits', () => {
+    fs.mkdirSync(path.join(root, 'empty'));
+    fs.mkdirSync(path.join(root, '.git'));
+    assert.deepEqual(recursiveFiles(root, false, false, { maxEntries: 2 }), []);
+    assert.deepEqual(recursiveFiles(root, false, false, { maxEntries: 3 }), []);
+    assert.throws(() => recursiveFiles(root, false, false, { maxEntries: 1 }), SnapshotLimitError);
+    const original = fs.opendirSync;
+    try {
+      fs.opendirSync = () => {
+        let count = 0;
+        return { readSync: () => ++count <= 8193 ? { name: '.DS_Store' } : null, closeSync: () => {} };
+      };
+      const result = discover('codex_profiles.json');
+      assert.equal(result.status, 'discovery-failed');
+      if (result.status === 'discovery-failed') assert.equal(result.reason, 'source-limit-exceeded');
+    } finally { fs.opendirSync = original; }
+  });
+
+  it('bounds serialized UTF8 metadata and base64 bytes exactly including executable modes', () => {
+    const file = write('é space', Buffer.from([0, 255, 128, 1]));
+    fs.chmodSync(file, 0o755);
+    const archive = recursiveSnapshot(root);
+    const bytes = Buffer.byteLength(archive);
+    assert.isAbove(bytes, archive.length);
+    assert.equal(recursiveSnapshot(root, false, false, { maxBytes: bytes }), archive);
+    assert.equal(recursiveSnapshot(root, false, false, { maxBytes: bytes + 1 }), archive);
+    assert.throws(() => recursiveSnapshot(root, false, false, { maxBytes: bytes - 1 }), SnapshotLimitError);
+    assert.deepEqual(Buffer.from(JSON.parse(archive).entries[0].content, 'base64'), Buffer.from([0, 255, 128, 1]));
+    assert.throws(() => recursiveFiles(root, false, false, { maxBytes: Buffer.byteLength('é space') - 1 }), SnapshotLimitError);
+  });
+
+  it('detects growth and truncation after open and closes every descriptor', () => {
+    const file = write('changing', 'abcd');
+    const originalStat = fs.fstatSync;
+    const originalClose = fs.closeSync;
+    ['growth', 'truncation'].forEach((change) => {
+      fs.writeFileSync(file, 'abcd');
+      let first = true;
+      let closed = false;
+      try {
+        fs.fstatSync = (fd: number) => {
+          const stat = originalStat(fd);
+          if (first) {
+            first = false;
+            if (change === 'growth') fs.appendFileSync(file, 'e');
+            else fs.truncateSync(file, 2);
+          }
+          return stat;
+        };
+        fs.closeSync = (fd: number) => { closed = true; return originalClose(fd); };
+        assert.throws(() => readBoundedFile(file), /changed during capture/);
+        assert.isTrue(closed);
+      } finally { fs.fstatSync = originalStat; fs.closeSync = originalClose; }
+    });
+  });
+
+  it('closes directory handles when iterative enumeration fails', () => {
+    const original = fs.opendirSync;
+    let closed = false;
+    try {
+      fs.opendirSync = () => ({
+        readSync: () => { throw new Error('synthetic entry read failure'); },
+        closeSync: () => { closed = true; },
+      });
+      assert.throws(() => recursiveFiles(root), /synthetic entry read failure/);
+      assert.isTrue(closed);
+    } finally { fs.opendirSync = original; }
+  });
+
+  it('preserves every file in deeply nested iterative traversal', () => {
+    let relative = '';
+    const expected: string[] = [];
+    for (let depth = 0; depth < 80; depth++) {
+      relative = path.join(relative, 'd');
+      const file = path.join(relative, 'entry');
+      expected.push(file);
+      write(file, String(depth));
+    }
+    assert.deepEqual(recursiveFiles(root), expected.sort());
+    assert.lengthOf(JSON.parse(recursiveSnapshot(root)).entries, 80);
+  });
+
+  it('returns safe byte-budget errors without partial collector output', () => {
+    write('SYNTHETIC_SECRET', 'abcd');
+    const result = spawnSync(process.execPath, [collectorPath, root, 'file', 'SYNTHETIC_SECRET', '--max-bytes', '3'], {
+      env: { HOME: homeDir, PATH: '' }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'Snapshot bytes limit exceeded (4 > 3).\n');
+    assert.notInclude(result.stderr, homeDir);
+    assert.notInclude(result.stderr, 'SYNTHETIC_SECRET');
   });
 
   it('fails empty or invalid captures with safe diagnostics and no stdout', () => {

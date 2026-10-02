@@ -92,14 +92,6 @@ const sensitiveSourceConsent = (config: ConfigObject): boolean | null => {
   return null;
 };
 
-// Approval is local-only. Missing or unrecognized catalog versions authorize
-// only the original sources, never newly introduced sensitive definitions.
-const approvedSensitiveSourceRevision = (config: ConfigObject): number => {
-  const backup = isConfigObject(config.backup) ? config.backup : {};
-  const current = require('./backup_snapshots.ts').currentSensitiveSourceRevision;
-  return backup.sensitiveSourcesVersion === current || backup.sensitiveSourcesVersion === String(current) ? current : 1;
-};
-
 module.exports = {
   backupDestinationFromConfig,
   configuredBackupDestination,
@@ -107,7 +99,6 @@ module.exports = {
   isConfigObject,
   normalizeBackupHost,
   sensitiveSourceConsent,
-  approvedSensitiveSourceRevision,
   validRepositoryName,
 };
 

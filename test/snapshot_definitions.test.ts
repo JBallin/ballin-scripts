@@ -96,7 +96,7 @@ describe('backup snapshot definitions', () => {
   let homeDir: string;
 
   const observations = (env: NodeJS.ProcessEnv = { PATH: '' }): SnapshotSourceObservation[] => (
-    observeSnapshotSources({ homeDir, env }, true, 2)
+    observeSnapshotSources({ homeDir, env }, true)
   );
 
   const observation = (

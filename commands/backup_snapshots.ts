@@ -63,7 +63,7 @@ type UnavailableSnapshotSource = {
 type FailedSnapshotDiscovery = {
   status: 'discovery-failed';
   source: SnapshotSourceReference;
-  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed';
+  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed' | 'source-limit-exceeded';
   error?: Error;
   exitStatus?: number | null;
   signal?: NodeJS.Signals | null;
@@ -85,7 +85,6 @@ type SnapshotDefinition = {
   category: SnapshotCategory;
   inclusionGroup: SnapshotInclusionGroup;
   prerequisites: readonly SnapshotPrerequisite[];
-  sensitiveRevision?: number;
   discover: (context: SnapshotDiscoveryContext) => SnapshotSourceDiscovery;
 };
 
@@ -133,8 +132,6 @@ type ToolDiscovery =
   | { status: 'available'; path: string }
   | { status: 'unavailable' }
   | { status: 'discovery-failed'; error: Error };
-
-const currentSensitiveSourceRevision = 2;
 
 const emptySnapshotContent = 'empty\n';
 const configSnapshotFileName = 'ballin_config';
@@ -540,7 +537,6 @@ const codexSnapshot = (name: string, relative: string, recursive = false, profil
   name,
   category: 'codex',
   inclusionGroup: 'sensitive',
-  sensitiveRevision: 2,
   prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
   discover: (context) => {
     const logicalRoot = marketplace ? context.homeDir : codexRoot(context);
@@ -571,6 +567,9 @@ const codexSnapshot = (name: string, relative: string, recursive = false, profil
         },
       };
     } catch (error) {
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotLimitError) {
+        return { status: 'discovery-failed', source, reason: 'source-limit-exceeded', error: error as Error };
+      }
       if (errorCode(error) === 'ELOOP') return { status: 'unavailable', source, reason: 'unsupported-source-type' };
       return errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
         ? { status: 'absent', source, reason: 'source-not-found' }
@@ -642,15 +641,15 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
 ];
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
+const codexSnapshotFileNames = new Set(snapshotDefinitions.filter(({ category }) => category === 'codex').map(({ name }) => name));
 
-const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: boolean, approvedRevision = 1): boolean => {
+const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: boolean): boolean => {
   switch (definition.inclusionGroup) {
     case 'inventory':
     case 'preferences':
       return true;
     case 'sensitive':
-      return includeSensitive === true && (definition.sensitiveRevision ?? 1) <= approvedRevision
-        && approvedRevision <= currentSensitiveSourceRevision;
+      return includeSensitive === true;
     default:
       return false;
   }
@@ -659,7 +658,6 @@ const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: bo
 const observeSnapshotSources = (
   context: SnapshotDiscoveryContext,
   includeSensitive = false,
-  approvedRevision = 1,
 ): SnapshotSourceObservation[] => {
   // CommonJS callers can bypass the TypeScript type. Reject invalid consent
   // before even baseline discovery starts.
@@ -668,7 +666,7 @@ const observeSnapshotSources = (
   }
   return snapshotDefinitions.map((definition) => ({
     definition,
-    ...(isSnapshotSelected(definition, includeSensitive, approvedRevision)
+    ...(isSnapshotSelected(definition, includeSensitive)
       ? definition.discover(context)
       : { status: 'excluded-by-policy' as const, reason: 'excluded-by-policy' as const }),
   }));
@@ -713,11 +711,11 @@ const classifySnapshotFileName = (fileName: string): SnapshotNameClassification 
 };
 
 module.exports = {
-  currentSensitiveSourceRevision,
   backupMarkerFileName,
   repositoryMarkerFileName,
   repositoryReadmeFileName,
   classifySnapshotFileName,
+  codexSnapshotFileNames,
   collectSnapshotObservations,
   configSnapshotFileName,
   emptySnapshotContent,

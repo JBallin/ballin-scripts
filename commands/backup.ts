@@ -15,7 +15,6 @@ const {
   configuredBackupDestination,
   isConfigObject,
   sensitiveSourceConsent,
-  approvedSensitiveSourceRevision,
 } = require('./backup_config.ts');
 const {
   configure,
@@ -34,13 +33,14 @@ const {
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 const {
-  currentSensitiveSourceRevision,
   collectSnapshotObservations,
+  codexSnapshotFileNames,
   emptySnapshotContent,
   normalizeSnapshotInput,
   observeSnapshotSources,
   snapshotDefinitions,
 } = require('./backup_snapshots.ts');
+const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryMessages, readRepositorySnapshot, repositoryOpenUrl,
@@ -88,7 +88,7 @@ type GistMetadata = {
 };
 
 type BackupConfigResult = {
-  config: { id: string; host: string } | { repository: RepositoryDestination; includeSensitive: boolean | null; sensitiveRevision: number } | null;
+  config: { id: string; host: string } | { repository: RepositoryDestination; includeSensitive: boolean | null } | null;
   exitStatus: number;
 };
 
@@ -162,7 +162,7 @@ const backupConfig = (): BackupConfigResult => {
   const { id, host, idStatus } = backupDestinationFromConfig(configObj);
   const destination = configuredBackupDestination(configObj);
   if (destination.kind === 'repository') {
-    return { config: { repository: destination.repository, includeSensitive: sensitiveSourceConsent(configObj), sensitiveRevision: approvedSensitiveSourceRevision(configObj) }, exitStatus: 0 };
+    return { config: { repository: destination.repository, includeSensitive: sensitiveSourceConsent(configObj) }, exitStatus: 0 };
   }
   if (destination.kind === 'invalid' && idStatus !== 'invalid') {
     writeStderrLine('ballin backup: invalid or conflicting destination configuration; repair backup.repository and backup.id, or disconnect');
@@ -368,12 +368,17 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
   return result.status === 0 && !result.error;
 };
 
-const snapshotFilesMatch = (leftFile: string, rightFile: string): boolean => (
-  fs.readFileSync(leftFile).equals(fs.readFileSync(rightFile))
-);
+const snapshotFilesMatch = (leftFile: string, rightFile: string, boundLeft = false): boolean => {
+  try {
+    return (boundLeft ? readBoundedFile(leftFile).bytes : fs.readFileSync(leftFile)).equals(fs.readFileSync(rightFile));
+  } catch (error) {
+    if (error instanceof SnapshotLimitError) (error as Error).message = `${path.basename(leftFile)}: ${(error as Error).message}`;
+    throw error;
+  }
+};
 
-const snapshotIsEmpty = (filePath: string): boolean => (
-  fs.readFileSync(filePath, 'utf8') === emptySnapshotContent
+const snapshotIsEmpty = (filePath: string, bound = false): boolean => (
+  (bound ? readBoundedFile(filePath).bytes.toString('utf8') : fs.readFileSync(filePath, 'utf8')) === emptySnapshotContent
 );
 
 const classifySnapshotResult = (
@@ -457,8 +462,10 @@ const removeStagedSnapshots = (stagedSnapshots: StagedSnapshot[]): boolean => {
   return removed;
 };
 
-const captureAvailableSnapshot = (source: AvailableSnapshotObservation): SnapshotCaptureResult => {
-  const snapshot = source.collector;
+const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes?: number): SnapshotCaptureResult => {
+  const snapshot = maxBytes === undefined ? source.collector : {
+    ...source.collector, args: [...(source.collector.args ?? []), '--max-bytes', String(maxBytes)],
+  };
   let inputFile: string | null = null;
   let captured = false;
   try {
@@ -466,6 +473,7 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation): Snapsho
     inputFile = createdInputFile;
     if (captureSnapshotInput(snapshot, createdInputFile)) {
       normalizeSnapshotInput(createdInputFile);
+      if (maxBytes !== undefined) requireWithinLimit('bytes', fs.statSync(createdInputFile).size, maxBytes);
       captured = true;
     }
   } catch (error) {
@@ -484,7 +492,27 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation): Snapsho
 };
 
 const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapshot[] | null => {
-  const collection = collectSnapshotObservations(observations, captureAvailableSnapshot);
+  const failure = observations.find((source) => source.status === 'discovery-failed' && source.reason === 'source-limit-exceeded');
+  if (failure && failure.status === 'discovery-failed') {
+    writeStderrLine(`ballin backup: ${failure.definition.name}: recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'} No snapshots were published.`);
+    return null;
+  }
+  let codexBytes = 0;
+  const collection = collectSnapshotObservations(observations, (source: AvailableSnapshotObservation) => {
+    const codex = source.definition.category === 'codex';
+    const result = captureAvailableSnapshot(source, codex ? snapshotByteLimit - codexBytes : undefined);
+    if (codex && result.status === 'captured') {
+      try {
+        codexBytes += fs.statSync(result.localFile).size;
+        requireWithinLimit('bytes', codexBytes, snapshotByteLimit);
+      } catch {
+        try { removeTempFile(result.localFile); } catch { reportTemporaryCleanupFailure(); }
+        writeStderrLine(`ballin backup: unable to verify the bounded capture for ${source.definition.name}`);
+        return { status: 'collector-failed' as const };
+      }
+    }
+    return result;
+  });
   const stagedSnapshots = collection.flatMap((result: SnapshotCollectionObservation) => (
     result.status === 'captured'
       ? [{ snapshot: result.source.collector, localFile: result.localFile }]
@@ -609,7 +637,7 @@ const evaluateSnapshots = (
 
     const localMatchesRemote = remote.exists
       && remote.file !== null
-      && snapshotFilesMatch(localFile, remote.file);
+      && snapshotFilesMatch(localFile, remote.file, codexSnapshotFileNames.has(snapshot.fileName));
     let shouldUpload = false;
 
     if (!baseExists && !remote.exists) {
@@ -629,7 +657,7 @@ const evaluateSnapshots = (
       });
       return;
     } else if (remote.file !== null) {
-      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file);
+      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, codexSnapshotFileNames.has(snapshot.fileName));
       if (baseMatchesRemote && !localMatchesRemote) {
         shouldUpload = true;
       } else if (!baseMatchesRemote && !localMatchesRemote) {
@@ -641,12 +669,12 @@ const evaluateSnapshots = (
       }
     }
 
-    const isEmpty = snapshotIsEmpty(localFile);
+    const isEmpty = snapshotIsEmpty(localFile, codexSnapshotFileNames.has(snapshot.fileName));
     const wasEmpty = remote.exists && remote.file !== null && snapshotIsEmpty(remote.file);
     evaluated.push({
       ...stagedSnapshot,
       cacheFile,
-      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile),
+      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile, codexSnapshotFileNames.has(snapshot.fileName)),
       resultState: classifySnapshotResult(!remote.exists, shouldUpload, isEmpty, wasEmpty),
       shouldUpload,
     });
@@ -808,12 +836,9 @@ const runStagedBackup = (
 };
 
 const runRepositoryBackup = (
-  destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string, sensitiveRevision: number,
+  destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string,
 ): boolean => {
-  if (includeSensitive && sensitiveRevision < currentSensitiveSourceRevision) {
-    writeStdoutLine('Codex sources are excluded until you review the expanded sensitive-source catalog with `ballin setup`.');
-  }
-  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive, sensitiveRevision));
+  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive));
   if (!staged) return false;
   const remote = new Map<string, RemoteSnapshot>();
   let completed: EvaluatedSnapshot[] | undefined;
@@ -833,8 +858,29 @@ const runRepositoryBackup = (
     const cacheDir = repositoryCacheDirectory(cacheRoot, destination);
     const evaluation = evaluateSnapshots(cacheDir, staged, remote);
     if (evaluation.conflicts.length) { reportConflicts(evaluation.conflicts, 'repository'); return false; }
-    const changes = new Map<string, Buffer>(evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload)
-      .map(({ snapshot, localFile }) => [snapshot.fileName, fs.readFileSync(localFile)]));
+    const changed = evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload);
+    let stagedCodexBytes = 0;
+    for (const { snapshot, localFile } of staged) {
+      if (codexSnapshotFileNames.has(snapshot.fileName)) {
+        stagedCodexBytes += fs.statSync(localFile).size;
+        requireWithinLimit('bytes', stagedCodexBytes, snapshotByteLimit);
+      }
+    }
+    const changes = new Map<string, Buffer>();
+    let changedCodexBytes = 0;
+    let encodedCodexBytes = 0;
+    for (const { snapshot, localFile } of changed) {
+      const codex = codexSnapshotFileNames.has(snapshot.fileName);
+      const bytes = codex ? readBoundedFile(localFile, snapshotByteLimit - changedCodexBytes).bytes : fs.readFileSync(localFile);
+      if (codex) {
+        changedCodexBytes += bytes.length;
+        encodedCodexBytes += 4 * Math.ceil(bytes.length / 3);
+      }
+      changes.set(snapshot.fileName, bytes);
+    }
+    // The wire allowance is derived from the stored-byte cap, not another 16 MiB cap.
+    requireWithinLimit('bytes', encodedCodexBytes,
+      4 * Math.ceil(snapshotByteLimit / 3) + 4 * (codexSnapshotFileNames.size - 1));
     publishRepositorySnapshots(read, changes);
     let promoted = false;
     try { promoted = promoteCaches(cacheDir, evaluation.evaluated); } catch {
@@ -849,6 +895,10 @@ const runRepositoryBackup = (
     }
     completed = evaluation.evaluated;
   } catch (error) {
+    if (error instanceof SnapshotLimitError) {
+      writeStderrLine(`ballin backup: ${(error as Error).message} Repository and cache contents were not changed.`);
+      return false;
+    }
     const problem = (error as RepositoryError).problem;
     writeStderrLine(`ballin backup: ${repositoryMessages[problem] ?? 'Unable to reconcile local backup files.'}`);
     return false;
@@ -881,7 +931,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
     }
     if (!secureExistingBackupCache(backupCacheDir)) return 1;
     try {
-      return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir, config.sensitiveRevision) ? 0 : 1;
+      return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir) ? 0 : 1;
     } catch (error) {
       writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
       return 1;

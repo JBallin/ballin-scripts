@@ -1,4 +1,3 @@
-const { currentSensitiveSourceRevision } = require('./backup_snapshots.ts');
 const fs = require('fs');
 const { saveBackupConfig, offerAutomaticUpdateBackup, selectSensitiveSources } = require('./backup_preferences.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
@@ -139,7 +138,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(`The remote backup remains available at ${recoveryUrl}; local linkage was not saved.`);
       return false;
     }
-    candidate.backup = { ...candidate.backup, repository: read.destination, id: null, includeSensitive: String(includeSensitive), sensitiveSourcesVersion: currentSensitiveSourceRevision };
+    candidate.backup = { ...candidate.backup, repository: read.destination, id: null, includeSensitive: String(includeSensitive) };
     if (!saveBackupConfig(configPath, candidate)) {
       writeStdoutLine(`Reconnect to the existing backup at ${recoveryUrl}; do not create a duplicate.`);
       return false;

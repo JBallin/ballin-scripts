@@ -1,5 +1,4 @@
 const fs = require('fs');
-const { currentSensitiveSourceRevision } = require('./backup_snapshots.ts');
 const { configPath } = require('../config/index.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
@@ -51,7 +50,6 @@ const runSetupCommand = (): void => {
       if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) { cancelSetup(); return; }
       const current = readSetupConfigContext(configPath);
       current.backup.includeSensitive = String(included);
-      current.backup.sensitiveSourcesVersion = currentSensitiveSourceRevision;
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
       writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(included))}`);
     } else if (destination.kind === 'legacy-gist') {
