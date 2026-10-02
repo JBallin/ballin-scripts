@@ -18,6 +18,8 @@ For the project overview, see the [main README](../README.md).
 
 ## Maintainer guides
 
+- [User interviews and trials](user-research.md): behavior-based interview guide,
+  private-backup trial gates, and a blank evidence and decision template.
 - [Testing and coverage](testing.md): test isolation, coverage comparisons, and
   runtime and platform limits.
 - [Coverage boundaries](coverage-boundaries.md): reviewed production gaps and
