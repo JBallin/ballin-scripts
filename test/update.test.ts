@@ -429,7 +429,7 @@ exit 0
     assert.equal(result.status, 42);
     assert.include(result.stdout, 'simulated cleanup failure');
     assert.include(result.stdout, 'Checking Homebrew installation');
-    assert.include(result.stdout, 'Updating ballin-scripts');
+    assert.include(result.stdout, 'Updating Ballin');
     assert.include(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'brew|1,1|update',
@@ -884,7 +884,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     });
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Updating ballin-scripts');
+    assert.include(result.stdout, 'Updating Ballin');
     assert.include(result.stdout, 'updated ballin-scripts');
     assert.include(result.stdout, 'Checking Ballin readiness');
     assert.include(result.stdout, '😎 You\'re ballin.');
@@ -1084,7 +1084,7 @@ exit 0
     assert.deepEqual(commandLog(), []);
     assert.notInclude(result.stdout, 'Updating global npm packages');
     assert.notInclude(result.stdout, 'Installing macOS updates');
-    assert.notInclude(result.stdout, 'Updating ballin-scripts');
+    assert.notInclude(result.stdout, 'Updating Ballin');
     assert.notInclude(result.stdout, 'Backing up development environment');
   });
 
@@ -1456,7 +1456,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 127);
     assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
     assert.include(result.stderr, 'ballin: command not found');
-    assert.include(result.stdout, 'Updating ballin-scripts');
+    assert.include(result.stdout, 'Updating Ballin');
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
   });
 
