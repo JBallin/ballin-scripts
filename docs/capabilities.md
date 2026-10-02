@@ -89,6 +89,14 @@ On a successful run, `ballin backup` prints one line per collected snapshot.
 | `✖︎` | Existing snapshot became empty. |
 | `✔` | Unchanged snapshot. |
 
+On a terminal, changed entries use bold emphasis; unchanged entries keep the
+normal foreground. The symbols above identify each state without emphasis.
+Piped or captured output remains plain. Set `NO_COLOR=1` to disable Ballin's
+bold and underline emphasis; `TERM=dumb` also disables it. This applies to
+Ballin's help and update stage headings too, while child tools control their
+own output. Ballin adds no styling to config values or `ballin backup read`
+contents.
+
 Empty snapshots use the same markers.
 
 Markers are printed only after the backup completes successfully; failed runs
