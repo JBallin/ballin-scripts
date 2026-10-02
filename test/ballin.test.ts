@@ -185,7 +185,8 @@ esac
           ['setup [repository-name]', 'open', 'read <file>', 'disconnect'].forEach((usage) => {
             assert.include(result.stdout, `ballin backup ${usage}`);
           });
-          assert.include(result.stdout, 'backup.includeSensitive');
+          assert.include(result.stdout, 'Repository backups exclude sensitive sources unless backup.includeSensitive is true.');
+          assert.include(result.stdout, 'Existing legacy Gist backups still capture every available source.');
         }
         assert.deepEqual(commandLog(), []);
         assert.isFalse(fs.existsSync(networkMarker));
