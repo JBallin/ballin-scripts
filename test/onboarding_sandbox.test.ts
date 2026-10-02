@@ -311,6 +311,19 @@ describe('interactive onboarding QA lifecycle', function() {
       assert.include(result.stdout, 'Onboarding sandbox removed.');
     }
   });
+  it('keeps a cancelled installation usable for inspection, install, and later commands', () => {
+    const result = run('n\nballin backup\ninspect\ninstall\ny\nn\nn\nballin doctor --verbose\nexit\n');
+    const root = findRoot(result.stdout);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Installation cancelled');
+    assert.include(result.stdout, 'Ballin is not installed in this sandbox. Run install, then retry this command.');
+    assert.include(result.stdout, 'Fake repository: (not created)');
+    assert.include(result.stdout, 'Ballin doctor');
+    assert.include(result.stdout, 'Onboarding sandbox removed.');
+    assert.notInclude(result.stderr, 'ENOENT');
+    assert.isFalse(fs.existsSync(root));
+  });
+
   it('preserves failed commands for inspection', () => {
     const result = run('y\nn\nn\nballin backup\nexit\n');
     const root = findRoot(result.stdout);

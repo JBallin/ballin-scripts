@@ -134,6 +134,11 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
         resetSandbox(sandbox, line.split(' ')[1] as 'fresh' | 'create' | 'reconnect');
         write('Reset complete. Run install after reset fresh; otherwise run ballin backup setup.');
       } else if (line === 'install' || line.startsWith('ballin ')) {
+        if (line.startsWith('ballin ') && !fs.existsSync(path.join(sandbox.bin, 'ballin'))) {
+          sandboxEnvironment(sandbox);
+          write('Ballin is not installed in this sandbox. Run install, then retry this command.');
+          continue;
+        }
         const status = await launch(line === 'install' ? ['install'] : line.split(/\s+/u).slice(1));
         if (status) { preserve = true; write(`Command exited ${status}; sandbox will be preserved.`); }
       } else if (line) write('Unknown sandbox command. Arguments are whitespace-separated; no shell expansion or quoting.');
