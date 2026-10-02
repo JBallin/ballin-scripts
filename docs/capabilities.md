@@ -48,7 +48,7 @@ and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
 
 Repository backups include a fixed baseline of inventories and filtered
 preferences; raw configuration and pipx require the single local sensitive-source
-choice. Existing Gist backups still select all available sources. Sources are:
+choice. Existing Gist backups retain their original sources; Codex requires repository capture. Sources are:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -62,6 +62,9 @@ choice. Existing Gist backups still select all available sources. Sources are:
 | VS Code | `vs_settings`, `vs_keybindings`, `vs_extensions` | VS Code user files; `code` for extension list. |
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
+| Codex configuration | `codex_AGENTS.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Approved sensitive-source catalog; files in active `CODEX_HOME` or `~/.codex`. |
+| Codex authoring directories | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Approved nonempty personal directories; deterministic recursive archives. |
+| Personal plugin marketplace | `codex_marketplace.json` | Approved `~/.agents/plugins/marketplace.json`; referenced plugin content is excluded. |
 | Ballin preferences | `ballin_config` | Local `ballin.config.json`; only supported preferences are saved. See [preference recovery](optional-capabilities.md#recovering-ballin-preferences). |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
 

@@ -18,7 +18,8 @@ type SnapshotCategory =
   | 'vscode-insiders'
   | 'editor'
   | 'ballin'
-  | 'mas';
+  | 'mas'
+  | 'codex';
 
 type SnapshotCommand = {
   fileName: string;
@@ -84,6 +85,7 @@ type SnapshotDefinition = {
   category: SnapshotCategory;
   inclusionGroup: SnapshotInclusionGroup;
   prerequisites: readonly SnapshotPrerequisite[];
+  sensitiveRevision?: number;
   discover: (context: SnapshotDiscoveryContext) => SnapshotSourceDiscovery;
 };
 
@@ -131,6 +133,8 @@ type ToolDiscovery =
   | { status: 'available'; path: string }
   | { status: 'unavailable' }
   | { status: 'discovery-failed'; error: Error };
+
+const currentSensitiveSourceRevision = 2;
 
 const emptySnapshotContent = 'empty\n';
 const configSnapshotFileName = 'ballin_config';
@@ -526,6 +530,55 @@ const portableConfigSnapshot = (): SnapshotDefinition => {
   };
 };
 
+const codexRoot = ({ homeDir, env }: SnapshotDiscoveryContext): string => (
+  env.CODEX_HOME ? path.resolve(env.CODEX_HOME) : path.join(homeDir, '.codex')
+);
+
+// Codex configuration is executable, arbitrary user-authored content. Every
+// source is sensitive; selection must happen before this discovery is called.
+const codexSnapshot = (name: string, relative: string, recursive = false, profiles = false, marketplace = false): SnapshotDefinition => ({
+  name,
+  category: 'codex',
+  inclusionGroup: 'sensitive',
+  sensitiveRevision: 2,
+  prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
+  discover: (context) => {
+    const logicalRoot = marketplace ? context.homeDir : codexRoot(context);
+    let root = logicalRoot;
+    let sourcePath = path.join(root, relative);
+    let source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
+    try {
+      root = fs.realpathSync(logicalRoot);
+      sourcePath = require('./recursive_snapshot.ts').checkedPath(root, relative);
+      source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
+      // Unlike existing dotfiles, Codex sources never follow symlinked entries.
+      const stat = fs.lstatSync(sourcePath);
+      if (stat.isSymbolicLink() || (recursive ? !stat.isDirectory() : !stat.isFile())) {
+        return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      }
+      if (recursive && require('./recursive_snapshot.ts').recursiveFiles(sourcePath, profiles, relative === 'skills').length === 0) {
+        return { status: 'absent', source, reason: 'source-not-found' };
+      }
+      return {
+        status: 'available', source,
+        collector: {
+          fileName: name,
+          command: process.execPath,
+          args: recursive
+            ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, profiles ? 'profiles' : relative === 'skills' ? 'skills' : 'directory']
+            : [path.join(__dirname, 'recursive_snapshot.ts'), root, 'file', relative],
+          env: context.env,
+        },
+      };
+    } catch (error) {
+      if (errorCode(error) === 'ELOOP') return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      return errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
+        ? { status: 'absent', source, reason: 'source-not-found' }
+        : { status: 'discovery-failed', source, reason: 'source-access-failed', error: error as Error };
+    }
+  },
+});
+
 // This is the snapshot source allowlist. Keep additions synchronized with the
 // inclusion and sensitivity review in docs/backup-sources.md.
 const snapshotDefinitions: readonly SnapshotDefinition[] = [
@@ -576,19 +629,28 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   editorExtensionsSnapshot('vscode-insiders', 'vsI_extensions', 'Code - Insiders', 'code-insiders'),
   fileSnapshot('editor', 'sensitive', 'vimrc', '.vimrc'),
   fileSnapshot('editor', 'sensitive', 'nanorc', '.nanorc'),
+  codexSnapshot('codex_AGENTS.md', 'AGENTS.md'),
+  codexSnapshot('codex_config.toml', 'config.toml'),
+  codexSnapshot('codex_profiles.json', '.', true, true),
+  codexSnapshot('codex_hooks.json', 'hooks.json'),
+  codexSnapshot('codex_skills.json', 'skills', true),
+  codexSnapshot('codex_rules.json', 'rules', true),
+  codexSnapshot('codex_agents.json', 'agents', true),
+  codexSnapshot('codex_marketplace.json', '.agents/plugins/marketplace.json', false, false, true),
   portableConfigSnapshot(),
   shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
 ];
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
 
-const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: boolean): boolean => {
+const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: boolean, approvedRevision = 1): boolean => {
   switch (definition.inclusionGroup) {
     case 'inventory':
     case 'preferences':
       return true;
     case 'sensitive':
-      return includeSensitive === true;
+      return includeSensitive === true && (definition.sensitiveRevision ?? 1) <= approvedRevision
+        && approvedRevision <= currentSensitiveSourceRevision;
     default:
       return false;
   }
@@ -597,6 +659,7 @@ const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: bo
 const observeSnapshotSources = (
   context: SnapshotDiscoveryContext,
   includeSensitive = false,
+  approvedRevision = 1,
 ): SnapshotSourceObservation[] => {
   // CommonJS callers can bypass the TypeScript type. Reject invalid consent
   // before even baseline discovery starts.
@@ -605,7 +668,7 @@ const observeSnapshotSources = (
   }
   return snapshotDefinitions.map((definition) => ({
     definition,
-    ...(isSnapshotSelected(definition, includeSensitive)
+    ...(isSnapshotSelected(definition, includeSensitive, approvedRevision)
       ? definition.discover(context)
       : { status: 'excluded-by-policy' as const, reason: 'excluded-by-policy' as const }),
   }));
@@ -650,6 +713,7 @@ const classifySnapshotFileName = (fileName: string): SnapshotNameClassification 
 };
 
 module.exports = {
+  currentSensitiveSourceRevision,
   backupMarkerFileName,
   repositoryMarkerFileName,
   repositoryReadmeFileName,

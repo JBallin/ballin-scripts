@@ -198,12 +198,13 @@ Ballin creates later. If authentication is missing, run
 check whether an environment token is overriding your saved `gh` login.
 
 Fresh create or reconnect setup asks whether to include **sensitive sources**:
-raw shell/Git/editor configuration, `.nvmrc`, and pipx installation metadata.
+raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx installation metadata.
 This single choice is saved as `backup.includeSensitive` and defaults off.
 Reconnect fully inspects the existing backup before asking. Declining performs
 no sensitive-source discovery. Selecting it reviews logical paths, resolved
-regular-file targets (including symlinks outside `HOME`), and missing or
-unavailable sources. pipx is described separately. Review
+regular-file targets (including existing dotfile symlinks outside `HOME`),
+Codex directory roots, and missing or unavailable sources. Codex directory
+discovery inspects names and file types recursively, without reading contents. pipx is described separately. Review
 reads no raw contents and runs no collectors; access or resolution errors stop
 setup. See
 [Source review](backup-sources.md#repository-inclusion).

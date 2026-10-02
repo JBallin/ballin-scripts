@@ -75,9 +75,10 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     }
     try {
       const logical = observation.source.path;
-      if (!logical || observation.source.kind !== 'file') throw new Error('Unsupported review source');
+      if (!logical || !['file', 'directory'].includes(observation.source.kind)) throw new Error('Unsupported review source');
       const resolved = fs.realpathSync(logical);
-      if (!fs.statSync(resolved).isFile()) throw new Error('Not a regular file');
+      const stat = fs.statSync(resolved);
+      if (observation.source.kind === 'directory' ? !stat.isDirectory() : !stat.isFile()) throw new Error('Unsupported source type');
       fs.accessSync(resolved, fs.constants.R_OK);
       writeStdoutLine(`${definition.name}: ${displayPath(logical)} -> ${displayPath(resolved)}`);
     } catch {
@@ -90,7 +91,8 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 // Selection and non-content inspection are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('The fixed inventory and filtered-preference baseline can include private tools, identities, paths, or URLs. It is not guaranteed secret-free.');
-  const sensitive = readPromptLine(`Also include sensitive sources (raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata)? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
+  writeStdoutLine('Codex includes whole configuration files (including embedded trust settings), hook definitions, recursive skills/rules/agents, and the personal marketplace manifest. Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
+  const sensitive = readPromptLine(`Also include sensitive sources (raw shell/Git/editor/Codex configuration, .nvmrc, and pipx installation metadata)? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
   if (sensitive.eof) return null;
   const includeSensitive = sensitive.text === '' ? defaultIncluded : /^[yY]$/u.test(sensitive.text);
   if (includeSensitive) {

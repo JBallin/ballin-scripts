@@ -11,7 +11,7 @@ these snapshots.
 
 Repository capture includes the fixed inventory/preferences baseline and uses
 one default-off local `backup.includeSensitive` choice for all sensitive sources.
-Existing configured Gists still capture every available catalog source;
+Existing configured Gists still capture their original available sources;
 `ballin_config` saves only supported preferences. Migration remains separate.
 
 Listed filenames may live under an application's configuration directory. To
@@ -27,6 +27,9 @@ inspect editor files before enabling backup or sharing snapshots, check
 | VS Code and VS Code Insiders `settings.json`, `keybindings.json` | `vs_settings`, `vs_keybindings`, `vsI_settings`, `vsI_keybindings` | Preserve editor settings and keybindings. | Extension credentials, remote hosts, paths, command arguments, and arbitrary settings. | Sensitive; one local opt-in. |
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Inventory; default included. |
 | `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Supported Ballin preferences. The backup destination, analytics setting and install ID, automatic-backup setting, sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
+| Codex `AGENTS.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; explicit expanded-catalog review. |
+| Codex `skills/`, `rules/`, and `agents/` | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Preserve personal authoring files recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
+| `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -48,17 +51,18 @@ repository. GitHub and anyone authorized to access the repository can read its
 contents.
 
 The single `backup.includeSensitive` setting controls **sensitive sources**:
-raw shell/Git/editor configuration, `.nvmrc`, and pipx installation metadata.
+raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx installation metadata.
 New and replacement installations start with these sensitive sources off and
 make their own choice; approval is never recovered from a backup. Configured
 setup retains established local consent; fresh reconnect requires its own
-review. This setting does not change existing Gist captures.
+review. This setting does not add Codex sources to existing Gist captures.
 
 Review shows logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.
-Review reads no file contents, runs no collectors, and does not recurse. Missing
+Review reads no file contents and runs no collectors. Codex directory discovery
+recursively inspects names and file types to identify nonempty sources. Missing
 and unavailable sources are shown; access or resolution errors prevent
 confirmation. EOF or declining final confirmation cancels without
 saving consent or changing destination, cache, or remote state. Excluded
@@ -76,6 +80,44 @@ credentials.
 Omitting a category from future captures does not delete older remote files,
 history, or cached content. Existing configured Gists remain readable until
 migration and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+
+Codex additions require a new confirmation through `ballin setup` or fresh
+repository setup. Existing consent retains its previously reviewed source set;
+Codex is excluded before discovery until the expanded catalog is confirmed.
+The local catalog approval is not restored from a backup. Turning
+`backup.includeSensitive` on directly does not approve a newer catalog.
+
+## Codex configuration
+
+Ballin uses the active `CODEX_HOME` when set, otherwise `~/.codex`. Personal
+marketplace configuration is selected separately at the fixed home path above.
+Project `.codex/` directories are repository-owned and are not global sources.
+
+Whole configuration files preserve inline hooks, custom instructions, and any
+workflow preferences stored there, including commit/PR instructions. They can
+also preserve embedded project trust levels and hook approval hashes. Ballin
+does not filter those values, replay approvals, execute hooks, or automatically
+restore configuration. Review configuration before manually using a backup;
+manual restoration can carry forward saved trust settings. Standalone
+`hooks.json` preserves definitions only; referenced scripts, tools, MCP servers,
+and external files are not collected merely because they are referenced.
+
+Recursive snapshots are versioned JSON archives of regular files, with sorted
+relative paths, base64 bytes, and an executable flag. Hidden files and binary
+assets are included; empty directories, symlinks, special files, `.git` metadata,
+and `.DS_Store` are omitted. Generated `skills/.system` is also omitted. Codex
+source paths reject descendant symlinks; an explicitly selected Codex root may
+be a symlink. Empty or generated-only directory sources are not published.
+
+Ballin does not select authentication files, sessions/history, caches, logs,
+worktrees, databases, memory/runtime state, or separate trust stores. The entire
+`plugins/` tree remains excluded because its authoring payloads and generated
+installation/cache state are not one reliably bounded source; the personal
+marketplace manifest preserves references, not plugin content. These exclusions
+are source boundaries, not a scan for secrets within approved authoring files.
+Desktop-only settings whose durable storage is not independently identified
+remain outside capture; Ballin does not collect global runtime state to guess
+at branch-prefix or other workflow preferences.
 
 Any new source or group requires an explicit inclusion and sensitivity review.
 Unknown groups are excluded; existing or restored preferences do not authorize

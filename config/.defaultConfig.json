@@ -11,7 +11,8 @@
     "id": null,
     "host": "github.com",
     "repository": null,
-    "includeSensitive": "false"
+    "includeSensitive": "false",
+    "sensitiveSourcesVersion": null
   },
   "analytics": {
     "enabled": "false"

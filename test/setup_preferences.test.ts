@@ -42,7 +42,7 @@ describe('guided preference setup', () => {
   const assertNoCalls = () => assert.isFalse(fs.existsSync(callsPath), 'no child workflows or raw source reads');
 
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-preferences-'));
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-preferences-')));
     configPath = path.join(root, 'ballin.config.json');
     callsPath = path.join(root, 'calls');
     guardPath = path.join(root, 'guard.cjs');
@@ -53,7 +53,7 @@ const cp = require('child_process');
 cp.spawnSync = (...args) => { fs.appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n'); throw new Error('No child workflows allowed'); };
 const read = fs.readFileSync;
 fs.readFileSync = (file, ...args) => {
-  if (file === ${JSON.stringify(path.join(root, '.zshrc'))}) {
+  if (typeof file === 'string' && (file === ${JSON.stringify(path.join(root, '.zshrc'))} || file.startsWith(${JSON.stringify(path.join(root, '.codex') + path.sep)}))) {
     fs.appendFileSync(${JSON.stringify(callsPath)}, 'raw source read\\n'); throw new Error('No source content reads allowed');
   }
   return read(file, ...args);
@@ -79,7 +79,7 @@ fs.readFileSync = (file, ...args) => {
       assert.include(result.stdout, `update? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.deepEqual(readConfig(), initial);
+      assert.deepEqual(readConfig(), { ...initial, backup: { ...initial.backup, sensitiveSourcesVersion: 2 } });
       assert.include(result.stdout, 'preference review complete');
       if (enabled) {
         assert.include(result.stdout, 'pipx: available');
@@ -93,6 +93,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(result.status, 0, result.stderr);
       const config = readConfig();
       assert.equal(config.backup.includeSensitive, String(!enabled));
+      assert.equal(config.backup.sensitiveSourcesVersion, 2);
       assert.equal(config.update.backup, String(!enabled));
       assert.equal(config.analytics.enabled, String(!enabled));
       assert.include(result.stdout, `"backup.includeSensitive" set to: "${!enabled}"`);
@@ -109,7 +110,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
       assert.equal(readConfig().analytics.enabled, 'true');
       if (kind === 'legacy-gist') {
-        assert.include(result.stdout, 'Legacy Gist backups capture every available source');
+        assert.include(result.stdout, 'Legacy Gist backups retain their original sources');
         assert.equal(readConfig().update.backup, 'true');
       } else {
         assert.notInclude(result.stdout, 'Automatically run');
@@ -216,6 +217,27 @@ fs.readFileSync = (file, ...args) => {
     assert.include(result.stdout, 'Unable to review');
     assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     assert.notInclude(result.stdout, 'Automatically run');
+  });
+
+  it('reviews recursive Codex directories with metadata without collecting their contents', () => {
+    const skills = path.join(root, '.codex', 'skills');
+    fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
+    fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_PRIVATE_CONTENT');
+    const result = run('y\ny\nn\nn\n');
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'codex_skills.json:');
+    assert.include(result.stdout, JSON.stringify(skills));
+    assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
+    assert.equal(readConfig().backup.sensitiveSourcesVersion, 2);
+  });
+
+  it('preserves an existing consent revision when final confirmation is cancelled', () => {
+    const initial = configFor('repository', true);
+    writeConfig({ ...initial, backup: { ...initial.backup, sensitiveSourcesVersion: 1 } });
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run('y\nn\n');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
   });
 
   it('reports prompt input failure without changing pending choices', () => {

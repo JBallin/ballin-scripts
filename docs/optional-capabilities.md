@@ -129,13 +129,15 @@ supports reconnect and recovery without granting write permission. See
 `backup.repository` identifies the selected destination. The fixed inventory and
 filtered-preference baseline is always selected; `backup.includeSensitive`
 controls the single **sensitive sources** choice and defaults to `"false"`.
-Enabling it adds raw shell/Git/editor configuration, `.nvmrc`, and pipx
+Enabling it adds approved raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx
 installation metadata. The setting accepts native booleans or exact
 `"true"`/`"false"` strings. Destination and consent stay local. Changing sensitive
 consent later changes future capture selection, not saved files or history; review
 [source sensitivity](backup-sources.md) first.
 
-To include or exclude sensitive sources in future backups:
+To review and approve the current sensitive-source inventory, including Codex additions, run `ballin setup`. Existing consent does not automatically include new sources. `backup.sensitiveSourcesVersion` records the confirmed catalog locally and is not recovered from backups.
+
+To toggle the already-approved sensitive sources in future backups:
 
 ```shell
 ballin config set backup.includeSensitive true

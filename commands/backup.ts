@@ -15,6 +15,7 @@ const {
   configuredBackupDestination,
   isConfigObject,
   sensitiveSourceConsent,
+  approvedSensitiveSourceRevision,
 } = require('./backup_config.ts');
 const {
   configure,
@@ -33,6 +34,7 @@ const {
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 const {
+  currentSensitiveSourceRevision,
   collectSnapshotObservations,
   emptySnapshotContent,
   normalizeSnapshotInput,
@@ -86,7 +88,7 @@ type GistMetadata = {
 };
 
 type BackupConfigResult = {
-  config: { id: string; host: string } | { repository: RepositoryDestination; includeSensitive: boolean | null } | null;
+  config: { id: string; host: string } | { repository: RepositoryDestination; includeSensitive: boolean | null; sensitiveRevision: number } | null;
   exitStatus: number;
 };
 
@@ -160,7 +162,7 @@ const backupConfig = (): BackupConfigResult => {
   const { id, host, idStatus } = backupDestinationFromConfig(configObj);
   const destination = configuredBackupDestination(configObj);
   if (destination.kind === 'repository') {
-    return { config: { repository: destination.repository, includeSensitive: sensitiveSourceConsent(configObj) }, exitStatus: 0 };
+    return { config: { repository: destination.repository, includeSensitive: sensitiveSourceConsent(configObj), sensitiveRevision: approvedSensitiveSourceRevision(configObj) }, exitStatus: 0 };
   }
   if (destination.kind === 'invalid' && idStatus !== 'invalid') {
     writeStderrLine('ballin backup: invalid or conflicting destination configuration; repair backup.repository and backup.id, or disconnect');
@@ -806,9 +808,12 @@ const runStagedBackup = (
 };
 
 const runRepositoryBackup = (
-  destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string,
+  destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string, sensitiveRevision: number,
 ): boolean => {
-  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive));
+  if (includeSensitive && sensitiveRevision < currentSensitiveSourceRevision) {
+    writeStdoutLine('Codex sources are excluded until you review the expanded sensitive-source catalog with `ballin setup`.');
+  }
+  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive, sensitiveRevision));
   if (!staged) return false;
   const remote = new Map<string, RemoteSnapshot>();
   let completed: EvaluatedSnapshot[] | undefined;
@@ -876,7 +881,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
     }
     if (!secureExistingBackupCache(backupCacheDir)) return 1;
     try {
-      return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir) ? 0 : 1;
+      return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir, config.sensitiveRevision) ? 0 : 1;
     } catch (error) {
       writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
       return 1;

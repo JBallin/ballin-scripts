@@ -31,6 +31,14 @@ const expectedFileSuggestions = `
   brew_leaves
   brew_list
   brew_services
+  codex_agents.json
+  codex_AGENTS.md
+  codex_config.toml
+  codex_hooks.json
+  codex_marketplace.json
+  codex_profiles.json
+  codex_rules.json
+  codex_skills.json
   gitconfig
   gitignore_global
   mas

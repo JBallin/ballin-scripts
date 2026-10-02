@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { currentSensitiveSourceRevision } = require('./backup_snapshots.ts');
 const { configPath } = require('../config/index.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
@@ -50,10 +51,11 @@ const runSetupCommand = (): void => {
       if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) { cancelSetup(); return; }
       const current = readSetupConfigContext(configPath);
       current.backup.includeSensitive = String(included);
+      current.backup.sensitiveSourcesVersion = currentSensitiveSourceRevision;
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
       writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(included))}`);
     } else if (destination.kind === 'legacy-gist') {
-      writeStdoutLine('Legacy Gist backups capture every available source; sensitive-source selection applies to repository backups.');
+      writeStdoutLine('Legacy Gist backups retain their original sources; Codex requires repository capture.');
     } else {
       writeStdoutLine('No backup is configured. Run `ballin backup setup` to choose a destination.');
     }

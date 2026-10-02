@@ -398,16 +398,33 @@ choice; a replacement installation establishes its own choice during setup.
 ## Shared inclusion policy
 
 Repository capture selects sources from the canonical definitions described
-below. Existing configured Gists explicitly select all current sources,
-including raw files and pipx. Migration and Gist runtime retirement belong to
-#334.
+below. Existing configured Gists select the original catalog revision,
+including raw files and pipx; newly introduced Codex sources are excluded. Migration and Gist runtime retirement belong to #334.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-15 sensitive sources, and one projected preferences snapshot.
+23 sensitive sources, and one projected preferences snapshot.
+Sensitive catalog revision 2 introduces Codex. Local
+`backup.sensitiveSourcesVersion` records the revision confirmed by setup;
+missing or unrecognized values retain revision 1. `backup.includeSensitive`
+remains the single inclusion choice. A source's introduction revision gates
+discovery; old consent cannot collect newly introduced sensitive sources.
+Approval is never projected or recovered, and changing the boolean alone does
+not grant a new catalog revision. Fresh repository setup or confirmed
+`ballin setup` records the current revision. Configured destination revalidation
+preserves existing consent.
+
+Codex file capture is intact, including embedded trust settings in main/profile
+TOML, with existing final-newline/empty-file normalization. It does not execute
+or restore configuration. Recursive authoring directories use the shared
+`ballin-directory` JSON format, version 1: sorted relative regular-file entries
+with base64 `content` and an `executable` boolean. No timestamps, absolute paths,
+or empty directories are stored. Source-specific generated exclusions and
+symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
+
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
-The observation entrypoint accepts one native boolean, `includeSensitive`,
-default false; non-boolean supplied input fails before discovery. It is an
+The observation entrypoint accepts a native boolean, `includeSensitive`,
+default false, and the locally approved sensitive catalog revision; non-boolean supplied input fails before discovery. It is an
 internal argument parsed from the single local `backup.includeSensitive` setting.
 Inventory and preferences form the fixed baseline. Unknown groups are excluded;
 future sources/groups require an explicit inclusion and sensitivity review.

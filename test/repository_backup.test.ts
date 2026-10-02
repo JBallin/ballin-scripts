@@ -135,13 +135,42 @@ describe('repository backup lifecycle', function() {
       assert.equal(rulesetRequests().length, 0);
     });
   });
+  [undefined, 1, 2].forEach((revision) => {
+    it(`publishes synthetic Codex sources only with current local consent: ${revision}`, () => {
+      const value = config();
+      if (revision === undefined) delete value.backup.sensitiveSourcesVersion;
+      else value.backup.sensitiveSourcesVersion = revision;
+      saveConfig(value);
+      const codex = path.join(home, 'active-codex');
+      fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
+      const wholeConfig = '[projects."/synthetic"]\ntrust_level = "trusted"\n';
+      fs.writeFileSync(path.join(codex, 'config.toml'), wholeConfig);
+      fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill\n');
+      ok(run([], '', { CODEX_HOME: codex }));
+      if (revision === 2) {
+        assert.equal(remote('codex_config.toml'), wholeConfig);
+        const archive = JSON.parse(remote('codex_skills.json')!);
+        assert.equal(archive.format, 'ballin-directory');
+        assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['synthetic/SKILL.md']);
+        assert.equal(Buffer.from(archive.entries[0].content, 'base64').toString(), 'synthetic skill\n');
+        assert.equal(cached('codex_config.toml'), wholeConfig);
+        assert.equal(cached('codex_skills.json'), remote('codex_skills.json'));
+      } else {
+        assert.isUndefined(remote('codex_config.toml'));
+        assert.isUndefined(remote('codex_skills.json'));
+      }
+      assert.notProperty(JSON.parse(remote('ballin_config')!), 'backup');
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.lengthOf(publications(), 1);
+    });
+  });
   it('sorts final snapshot status output without changing publication order', () => {
     source();
 
     const result = run();
 
     ok(result);
-    assert.equal(result.stdout, '✚ ballin_config\n✚ zshrc\n');
+    assert.equal(result.stdout, 'Codex sources are excluded until you review the expanded sensitive-source catalog with `ballin setup`.\n✚ ballin_config\n✚ zshrc\n');
     const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string }[] } };
     assert.deepEqual(input.fileChanges.additions.map(({ path: filePath }) => filePath), ['zshrc.sh', 'ballin_config']);
   });
@@ -555,8 +584,9 @@ describe('repository backup lifecycle', function() {
     it(`confirms the independently reviewed sensitive-source choice once after reconnect saves ${preference}`, () => {
       unconfigured(); const before = config(); before.backup.includeSensitive = preference === 'true' ? 'false' : 'true'; saveConfig(before);
       const result = run(['setup'], `y\nreconnect\n\n${preference === 'true' ? 'y' : 'n'}\ny\nn\n`); ok(result);
-      assert.include(result.stdout, 'Also include sensitive sources (raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata)? [y/N]');
+      assert.include(result.stdout, 'Also include sensitive sources (raw shell/Git/editor/Codex configuration, .nvmrc, and pipx installation metadata)? [y/N]');
       assert.equal(config().backup.includeSensitive, preference);
+      assert.equal(config().backup.sensitiveSourcesVersion, 2);
       assertSavedSensitiveChoice(result, preference);
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
     });
