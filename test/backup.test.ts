@@ -1027,6 +1027,23 @@ exit 2
     });
   });
 
+  it('keeps an empty operation on the default backup path', () => {
+    writeBackupConfig(null);
+    const result = runBackup({ args: [''] });
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, "backup is not configured; run 'ballin backup setup'");
+    assert.notInclude(result.stderr, 'unknown command');
+    assert.deepEqual(ghCalls(), []);
+  });
+
+  it('rejects unknown operations before reading malformed config', () => {
+    writeInvalidConfig();
+    const result = runBackup({ args: ['typo'] });
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, "ballin backup: unknown command 'typo'\n");
+    assert.deepEqual(ghCalls(), []);
+  });
+
   it('fails unknown commands instead of ignoring them', () => {
     const result = runBackup({ args: ['typo'] });
 
