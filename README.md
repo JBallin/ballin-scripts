@@ -20,7 +20,7 @@ updates.
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
 fresh installation. It asks whether to enable
-[minimal anonymous usage analytics](docs/analytics.md). After core setup, it offers
+[usage analytics](docs/analytics.md), disabled by default. After core setup, it offers
 optional shell completion and backup setup; a maintenance-only installation does
 not require Homebrew or GitHub CLI. When configured, backups can run automatically
 with `ballin update`.
@@ -58,7 +58,7 @@ $ ballin update
 
 ==> Installing macOS updates
 
-==> Updating ballin-scripts
+==> Updating Ballin
 
 ==> Checking Ballin readiness
 

@@ -77,7 +77,8 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, `metadata)? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `update? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `analytics? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
+      assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.deepEqual(readConfig(), initial);
       assert.include(result.stdout, 'preference review complete');
       if (enabled) {
@@ -126,7 +127,7 @@ fs.readFileSync = (file, ...args) => {
       assert.include(result.stdout, 'Preference review cancelled');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.notInclude(result.stdout, 'Automatically run');
-      assert.notInclude(result.stdout, 'Enable minimal');
+      assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
     });
   });
 
@@ -140,7 +141,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(config.update.backup, input.startsWith('n\ny\nn\n') ? 'false' : 'true');
       assert.equal(config.analytics.enabled, 'true');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved');
-      if (!input.startsWith('n\ny\nn\n')) assert.notInclude(result.stdout, 'Enable minimal');
+      if (!input.startsWith('n\ny\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
     });
   });
 

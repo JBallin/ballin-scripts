@@ -18,7 +18,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
 before cloning or making installation changes. Declining exits successfully
 without cloning. During setup, Ballin creates the local installation and asks
-whether to enable [minimal anonymous usage analytics](analytics.md).
+whether to enable [usage analytics](analytics.md), with No as the default.
 This one local choice covers command usage and outcomes, real backup outcomes,
 and automatic backup and self-update outcomes during `ballin update`. It is
 not saved in backups or restored when reconnecting; ordinary refreshes and
