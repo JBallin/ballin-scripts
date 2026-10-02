@@ -106,6 +106,9 @@ measured branches; `BALLIN_BACKUP_HOST` and
 setup clears these ambient values, and individual tests supply the overrides
 needed for their scenarios.
 
+Intentional exceptions and deliberately uncovered paths are recorded in the
+[coverage boundary ledger](coverage-boundaries.md).
+
 ## Comparing coverage
 
 Rounded global percentages can conceal different branch totals. To compare

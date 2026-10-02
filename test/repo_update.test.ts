@@ -1,4 +1,5 @@
 const { spawnSync } = require('child_process');
+const { testChildEnvironment } = require('./helpers/environment.ts');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -34,6 +35,20 @@ exit 0
     assert.equal(result.status, 1);
     assert.equal(result.stdout, 'Usage: repo_update.ts <repo-dir>\n');
     assert.equal(result.stderr, '');
+  });
+
+  it('returns failure and stops before checkout when fetching the installed repository fails', () => {
+    fs.writeFileSync(path.join(binDir, 'git'), `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_GIT_LOG"
+exit 1
+`, { mode: 0o755 });
+    const result = spawnSync(process.execPath, [repoUpdatePath, installedRepo], {
+      encoding: 'utf8', env: testChildEnvironment({ PATH: binDir, FAKE_GIT_LOG: gitLog }),
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, 'git fetch origin main failed\n');
+    assert.equal(result.stderr, '');
+    assert.deepEqual(fs.readFileSync(gitLog, 'utf8').trim().split('\n'), ['fetch origin +main:refs/remotes/origin/main']);
   });
 
   it('updates an installed repository through the direct CLI with stubbed git', () => {
