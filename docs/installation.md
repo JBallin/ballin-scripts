@@ -40,26 +40,58 @@ reconnect to it instead of creating another one.
 
 ## Shell completion
 
-Ballin includes top-level command completion for zsh and Bash. It does not edit
-shell profiles. To enable zsh completion, add this guarded line near the end of
-`~/.zshrc`:
+Ballin includes top-level command completion for zsh and Bash. A fresh interactive
+install offers to enable it after the command is installed, showing the startup
+file and exact activation line before asking for confirmation (default: no).
+Refreshes and `ballin self-update` do not enable completion or ask again.
+
+For the usual zsh setup, choose `home` during installation to use `~/.zshrc`.
+To enable completion later, add this line near the end of that file:
 
 ```zsh
 [[ -r "$HOME/.ballin-scripts/completions/_ballin" ]] && source "$HOME/.ballin-scripts/completions/_ballin"
 ```
 
-Open a new terminal or run `source ~/.zshrc`. For Bash, add the equivalent line
-to the startup file your Bash session reads, such as `~/.bashrc` or
-`~/.bash_profile`:
+Open a new terminal or run `source ~/.zshrc`. Once this line is present,
+`ballin self-update` refreshes the completion scripts; reload the startup file or
+open a new terminal to use the updated command list.
+
+If you use `ZDOTDIR`, use the `.zshrc` in that directory instead. During fresh
+setup, enter its absolute directory path rather than `home`; for manual setup,
+add the line there and reload that file. An exported `ZDOTDIR` is only a hint:
+the installer cannot see an unexported value and does not run startup files to
+discover it. If you are unsure which directory your terminal uses, press Enter
+to skip automatic setup.
+
+For Bash, choose `login` if your terminal reads login startup files, or `bashrc`
+if it reads `~/.bashrc`. Login selection uses the first existing file in Bash's
+order: `.bash_profile`, `.bash_login`, then `.profile`. To enable completion
+manually, add this line to the startup file your session reads and open a new
+terminal or reload that file:
 
 ```bash
 [[ -r "$HOME/.ballin-scripts/completions/ballin.bash" ]] && source "$HOME/.ballin-scripts/completions/ballin.bash"
 ```
 
+When only `~/.profile` exists, automatic setup skips it because other shells may
+read it. Keep that startup chain and add this Bash-only activation line instead:
+
+```sh
+[ -n "${BASH_VERSION:-}" ] && [ -r "$HOME/.ballin-scripts/completions/ballin.bash" ] && . "$HOME/.ballin-scripts/completions/ballin.bash"
+```
+
+Automatic setup appends one guarded line, preserving existing contents and
+permissions; a missing standard file is created privately. Symlinked startup
+files, uncertain or unsupported shell settings, noninteractive installs,
+unfinished line continuations, and write failures use the manual path. Completion
+setup does not make core installation fail. If an append fails, Ballin attempts
+to restore the original bytes; if restoration fails or conflicting changes are
+detected, inspect the file Ballin identifies before reloading it. If Ballin
+reports an existing activation with a trailing carriage return, replace only
+that line manually with the displayed command using LF line endings.
+
 Completion covers supported top-level commands and unique prefixes such as
 `ballin upd<Tab>`. It does not complete nested commands, options, or values.
-`ballin self-update` refreshes the completion scripts; reload the startup file or
-open a new terminal to use an updated command list.
 
 ## Local effects
 
@@ -76,6 +108,8 @@ The installer can create or change:
 - `<bin>/ballin`, a symbolic link to `~/.ballin-scripts/bin/ballin`. `<bin>` is
   `$(brew --prefix)/bin` when `brew` is available, otherwise
   `~/.local/bin`. The selected directory must already be on `PATH`.
+- Your selected shell startup file, only when you confirm optional completion
+  activation.
 - `~/.ballin-scripts/.backup-cache` during confirmed-state cache promotion. It is
   derived comparison state, not the backup destination or an enablement flag.
 
@@ -243,6 +277,10 @@ ballin uninstall
 Uninstall removes Ballin-owned command symlinks and recursively deletes
 `~/.ballin-scripts`, including config, analytics install ID, and backup cache. It
 does not delete a remote backup, its revision history, or GitHub CLI credentials.
+Completion activation lines remain in shell startup files. Their readability
+guard skips the removed asset; you can remove the displayed activation line
+manually if desired.
+
 When analytics remain enabled, uninstall can send its normal final top-level
 command event using state captured before local deletion.
 
