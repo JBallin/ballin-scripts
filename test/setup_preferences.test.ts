@@ -77,7 +77,8 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, `metadata)? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `update? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `analytics? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
+      assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.deepEqual(readConfig(), initial);
       assert.include(result.stdout, 'preference review complete');
       if (enabled) {
@@ -126,7 +127,7 @@ fs.readFileSync = (file, ...args) => {
       assert.include(result.stdout, 'Preference review cancelled');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.notInclude(result.stdout, 'Automatically run');
-      assert.notInclude(result.stdout, 'Enable minimal');
+      assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
     });
   });
 
@@ -140,7 +141,19 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(config.update.backup, input.startsWith('n\ny\nn\n') ? 'false' : 'true');
       assert.equal(config.analytics.enabled, 'true');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved');
-      if (!input.startsWith('n\ny\nn\n')) assert.notInclude(result.stdout, 'Enable minimal');
+      if (!input.startsWith('n\ny\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
+    });
+  });
+
+  ['\n', 'n\n', 'y\n', 'Y\n', '', 'y'].forEach((input) => {
+    it(`uses the fresh automatic-backup default without running a backup: ${JSON.stringify(input)}`, () => {
+      writeConfig(configFor('legacy-gist', true));
+      const result = spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH) ? 0 : 1`], {
+        input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}` }),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+      assert.equal(readConfig().update.backup, ['y\n', 'Y\n', 'y'].includes(input) ? 'true' : 'false');
     });
   });
 
