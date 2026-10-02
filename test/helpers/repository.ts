@@ -196,9 +196,10 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
   }
   return reply({ status: '404' }, 1);
 };
-const installRepositoryFixture = (directory: string, statePath: string): void => {
+const installRepositoryFixture = (directory: string, statePath: string, usePathNode = false): void => {
   const helper = path.join(__dirname, 'repository.ts');
-  fs.writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}\nrequire(${JSON.stringify(helper)}).runFixtureCli(${JSON.stringify(statePath)});\n`, { mode: 0o755 });
+  const interpreter = usePathNode ? '/usr/bin/env node' : process.execPath;
+  fs.writeFileSync(path.join(directory, 'gh'), `#!${interpreter}\nrequire(${JSON.stringify(helper)}).runFixtureCli(${JSON.stringify(statePath)});\n`, { mode: 0o755 });
 };
 const runFixtureCli = (statePath: string): void => {
   const state: FixtureState = JSON.parse(fs.readFileSync(statePath, 'utf8'));

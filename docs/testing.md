@@ -6,6 +6,79 @@ Run commands from the repository root. Use `npm test` for the complete local
 gate, or `npm run test:coverage` for coverage alone. CI runs the same coverage
 command once.
 
+## Interactive onboarding QA
+
+Use Node.js from `.nvmrc`, install development dependencies with `npm ci`, then
+run:
+
+```shell
+npm run qa:onboarding
+```
+
+The tool prints its temporary sandbox paths and starts the real installer. Answer
+the normal prompts, then use the sandbox menu to run installed commands:
+
+```text
+ballin doctor
+ballin update
+ballin backup setup
+ballin backup
+ballin backup open
+ballin backup read zshrc.sh
+inspect
+exit
+```
+
+For maintenance-only onboarding, decline backup setup. `doctor` and `update` run
+against the isolated installation and controlled tools. The default macOS update
+stage uses a fake `softwareupdate` command; other optional host maintenance tools
+are absent. Self-update uses a fake Git checkout update. Backup setup uses
+a fake personal GitHub account and repository, sharing the automated walkthrough
+fixtures. `backup open` records a fake browser request. No browser opens and no
+GitHub login is needed. The sandbox includes a harmless `.zshrc` so sensitive-source
+review has a concrete source to display.
+
+To repeat setup without recreating the checkout, run `reset create` or
+`reset reconnect`, then `ballin backup setup`. Both clear the local backup
+association, sensitive-source choice, automatic-backup choice, and comparison
+cache. The create reset supplies a missing fake destination; the reconnect reset
+supplies an existing valid fake backup. These resets replace the fake remote
+history. `reset fresh` removes the sandbox installation and fake destination;
+run `install` to repeat all onboarding prompts. Other sandbox home files remain.
+
+`inspect` prints local config, fake Git command logs, and current fake repository
+contents. The printed paths also let you inspect the cache and full fake request
+history using your editor. Menu arguments are separated by whitespace; shell
+quoting, expansion, pipelines, and arbitrary shell commands are unavailable.
+
+Normal exit or EOF cleans up automatically. Start with
+`npm run qa:onboarding -- --keep`, or enter `keep`, to preserve the sandbox.
+Failed commands, safeguard failures, and interruptions preserve it for debugging.
+Interrupting a running command stops its child process group before the session
+finishes. Preserved sandboxes are inspection artifacts; start a new session to
+run more commands. Remove a preserved or abandoned sandbox with the exact path
+printed by the tool:
+
+```shell
+npm run qa:onboarding -- --cleanup /path/printed/by/the/tool
+```
+
+Cleanup accepts only a marked temporary sandbox root and refuses a still-running
+parent or recorded child process group, including children surviving a parent
+crash. If a crash leaves an ambiguous launch marker, cleanup refuses rather than
+assuming that no child started; inspect and stop the sandbox processes before
+removing that marker and retrying cleanup. Never run its installed command
+directly from your normal shell: the menu supplies the isolation safeguards on
+every launch.
+
+The harness uses an allowlisted child environment, temporary HOME/auth/config/
+cache paths, a closed PATH, validated command stubs, disabled analytics, and a
+Node preload that blocks network calls and uncontrolled child launches. Missing
+or changed safeguards stop execution. It uses the actual production installer
+and commands; it is a guard against accidental effects from trusted repository
+code, **not an OS sandbox for hostile code**. Do not add host tools to its PATH,
+remove its preload, or use it to run untrusted code.
+
 ## Test environment and analytics safety
 
 Neither command needs an analytics opt-out or `CI=true` in your shell.

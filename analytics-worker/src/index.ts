@@ -59,6 +59,7 @@ const allowedCommands = new Set([
   'ballin config',
   'ballin doctor',
   'ballin self-update',
+  'ballin setup',
   'ballin uninstall',
   'ballin update',
 ]);
