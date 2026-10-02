@@ -38,7 +38,7 @@ describe('saved backup discovery', function() {
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     assert.isFalse(fs.existsSync(path.join(checkout, '.analytics')));
     assert.isTrue(state().requests.every((request) => request.endpoint !== 'open'
-      && (request.method === 'GET' || (request.endpoint === 'graphql' && request.payload?.query?.includes('query BallinRepository'))))); 
+      && (request.method === 'GET' || (request.endpoint === 'graphql' && request.payload?.query?.includes('query BallinRepository')))));
   };
   const expectFailure = (result: ReturnType<typeof run>, message: string): void => {
     assert.equal(result.status, 1, result.stdout + result.stderr);
