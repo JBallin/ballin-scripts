@@ -283,6 +283,20 @@ done
       });
     }
   };
+  const installChmodFailureLauncher = (failurePath: string) => {
+    const launcherName = 'backup-chmod-failure.cjs';
+    writeTestExecutable(launcherName, `#!/usr/bin/env node
+const fs = require('fs');
+const originalChmod = fs.chmodSync;
+fs.chmodSync = (entryPath, mode) => {
+  if (entryPath === ${JSON.stringify(failurePath)}) throw new Error('simulated cache chmod failure');
+  return originalChmod(entryPath, mode);
+};
+require(${JSON.stringify(ballinPath)});
+`);
+    return path.join(testBinDir, launcherName);
+  };
+
   const installCleanupFailureLauncher = (prefixes: string[]) => {
     const launcherName = 'backup-cleanup-failure.cjs';
     writeTestExecutable(launcherName, `#!/usr/bin/env node
@@ -723,6 +737,102 @@ printf '%s\\n' '123456 Example App'
       assert.lengthOf(publicationCalls(), 1);
     });
   });
+
+  for (const failure of ['directory', 'existing file']) {
+    it(`stops before authentication and collection when securing the ${failure} fails`, () => {
+      writeSnapshot('new snapshot\n');
+      fs.chmodSync(snapshotPath(), 0o600);
+      seedBackupCache('old snapshot\n');
+      makeCachePermissive();
+      const failurePath = failure === 'directory' ? backupCacheDir : cachedSnapshotPath();
+      const commandPath = installChmodFailureLauncher(failurePath);
+      const headBefore = state().head;
+
+      const result = runBackup({ commandPath, failedPaths: ['.zshrc'], umask: '000' });
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'unable to secure backup cache permissions');
+      assert.include(result.stderr, 'simulated cache chmod failure');
+      assert.notInclude(result.stderr, 'failed to snapshot');
+      assert.equal(fs.statSync(backupCacheDir).mode & 0o777, failure === 'directory' ? 0o777 : 0o700);
+      assert.equal(fs.statSync(cachedSnapshotPath()).mode & 0o777, 0o666);
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'old snapshot\n');
+      assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'old snapshot\n');
+      assert.equal(state().head, headBefore);
+      assert.deepEqual(state().requests, []);
+      assert.deepEqual(readLogLines(path.join(testHomeDir, 'collector.log')), []);
+      assert.deepEqual(fs.readdirSync(scratchDir), []);
+      assert.equal(fs.readFileSync(snapshotPath(), 'utf8'), 'new snapshot\n');
+      assert.equal(fs.statSync(snapshotPath()).mode & 0o777, 0o600);
+
+      const recoveredResult = runBackup({ umask: '000' });
+
+      assertBackupSucceeded(recoveredResult);
+      assertOwnerOnlyCache();
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new snapshot\n');
+      assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'new snapshot\n');
+      assert.equal(fs.statSync(snapshotPath()).mode & 0o777, 0o600);
+      assert.lengthOf(publicationCalls(), 1);
+    });
+  }
+
+  for (const location of ['cache root', 'cache entry']) {
+    it(`rejects a symbolic link at the ${location} without changing its target`, () => {
+      const targetDir = path.join(testHomeDir, 'outside-cache');
+      const targetFile = path.join(targetDir, 'private-file');
+      const cacheRoot = path.join(testHomeDir, '.ballin-scripts', '.backup-cache');
+      fs.mkdirSync(targetDir);
+      fs.writeFileSync(targetFile, 'external contents\n');
+      fs.chmodSync(targetDir, 0o755);
+      fs.chmodSync(targetFile, 0o644);
+      const linkPath = location === 'cache root' ? cacheRoot : cachedSnapshotPath();
+      if (location === 'cache entry') {
+        fs.mkdirSync(backupCacheDir, { recursive: true });
+        fs.chmodSync(backupCacheDir, 0o777);
+        seedCacheFile('retained-cache', 'unchanged cache bytes\n', false);
+      }
+      fs.symlinkSync(location === 'cache root' ? targetDir : targetFile, linkPath);
+      writeSnapshot('new snapshot\n');
+      seedRemote('old snapshot\n');
+      const headBefore = state().head;
+
+      const result = runBackup({ failedPaths: ['.zshrc'], umask: '000' });
+
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'unable to secure backup cache permissions');
+      assert.notInclude(result.stderr, 'failed to snapshot');
+      assert.equal(fs.statSync(targetDir).mode & 0o777, 0o755);
+      assert.equal(fs.statSync(targetFile).mode & 0o777, 0o644);
+      assert.equal(fs.readFileSync(targetFile, 'utf8'), 'external contents\n');
+      assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
+      assert.equal(state().head, headBefore);
+      assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'old snapshot\n');
+      if (location === 'cache entry') {
+        assert.equal(fs.readFileSync(cachedFilePath('retained-cache'), 'utf8'), 'unchanged cache bytes\n');
+      }
+      assert.deepEqual(state().requests, []);
+      assert.deepEqual(readLogLines(path.join(testHomeDir, 'collector.log')), []);
+      assert.deepEqual(fs.readdirSync(scratchDir), []);
+
+      fs.unlinkSync(linkPath);
+      seedBackupCache('old snapshot\n');
+      const recoveredResult = runBackup({ umask: '000' });
+
+      assertBackupSucceeded(recoveredResult);
+      assertOwnerOnlyCache();
+      assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new snapshot\n');
+      assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'new snapshot\n');
+      assert.lengthOf(publicationCalls(), 1);
+      assert.equal(fs.statSync(targetDir).mode & 0o777, 0o755);
+      assert.equal(fs.statSync(targetFile).mode & 0o777, 0o644);
+      assert.equal(fs.readFileSync(targetFile, 'utf8'), 'external contents\n');
+      if (location === 'cache entry') {
+        assert.equal(fs.readFileSync(cachedFilePath('retained-cache'), 'utf8'), 'unchanged cache bytes\n');
+      }
+    });
+  }
 
   it('repairs every existing cache entry on an unchanged run without a publication', () => {
     writeSnapshot('shared snapshot\n');
