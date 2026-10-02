@@ -1,126 +1,42 @@
-const { spawnSync } = require('child_process');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
-
-const repoRoot = path.join(__dirname, '..');
-const installPath = path.join(repoRoot, 'install.sh');
+const { createSandbox, cleanupSandbox, resetRemote, runSandbox, sandboxSuiteTimeout } = require('./helpers/onboarding.ts');
+import type { Sandbox } from './helpers/onboarding.ts';
 
 describe('first-run onboarding walkthroughs', function() {
-  this.timeout(15000);
+  this.timeout(sandboxSuiteTimeout);
   let testDir: string;
   let homeDir: string;
-  let toolDir: string;
   let userBinDir: string;
   let installedRepoDir: string;
   let commandLogPath: string;
-  let remoteGistDir: string;
-  let scratchDir: string;
+  let remoteRepositoryDir: string;
+  let sandbox: Sandbox;
 
-  const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+  const { fixtureDestination } = require('./helpers/repository.ts');
   const { managedBranchRulesetName, repositoryCacheDirectory } = require('../commands/backup_repository.ts');
-  const remoteState = () => JSON.parse(fs.readFileSync(path.join(remoteGistDir, 'repository.json'), 'utf8'));
+  const remoteState = () => JSON.parse(fs.readFileSync(path.join(remoteRepositoryDir, 'repository.json'), 'utf8'));
   const remoteFile = (name: string) => Buffer.from(remoteState().commits[remoteState().head].files[name], 'base64').toString();
 
-  const commandPath = (name: string): string => {
-    const resolved = (process.env.PATH ?? '')
-      .split(path.delimiter)
-      .map((directory) => path.join(directory, name))
-      .find((candidate) => fs.existsSync(candidate));
-    assert.exists(resolved, `${name} is required for the walkthrough harness`);
-    return resolved as string;
-  };
-
-  const linkCommand = (name: string): void => {
-    fs.symlinkSync(commandPath(name), path.join(toolDir, name));
-  };
-
-  const writeExecutable = (name: string, contents: string): void => {
-    fs.writeFileSync(path.join(toolDir, name), contents, { mode: 0o755 });
-  };
-
-  const installGitStub = (): void => {
-    writeExecutable('git', `#!/usr/bin/env bash
-printf 'git:%s\\n' "$*" >> "$BALLIN_WALKTHROUGH_LOG"
-case "$1" in
-  --version)
-    printf '%s\\n' 'git version walkthrough'
-    ;;
-  clone)
-    if [ "$2:$3" != 'https://github.com/JBallin/ballin-scripts.git:.ballin-scripts' ]; then exit 2; fi
-    mkdir -p "$HOME/.ballin-scripts"
-    cp -R "$BALLIN_WALKTHROUGH_SOURCE/commands" "$HOME/.ballin-scripts/commands"
-    cp -R "$BALLIN_WALKTHROUGH_SOURCE/config" "$HOME/.ballin-scripts/config"
-    cp -R "$BALLIN_WALKTHROUGH_SOURCE/bin" "$HOME/.ballin-scripts/bin"
-    cp "$BALLIN_WALKTHROUGH_SOURCE/package.json" "$HOME/.ballin-scripts/package.json"
-    ;;
-  rev-parse)
-    exit 1
-    ;;
-  fetch|checkout|merge|stash)
-    exit 0
-    ;;
-  *)
-    printf 'unexpected git command: %s\\n' "$*" >&2
-    exit 2
-    ;;
-esac
-`);
-  };
-
-  const installGhStub = (): void => {
-    const state = fixtureState(); state.exists = false;
-    const statePath = path.join(remoteGistDir, 'repository.json');
-    fs.writeFileSync(statePath, JSON.stringify(state));
-    installRepositoryFixture(toolDir, statePath);
-  };
-
-  const childEnv = (): NodeJS.ProcessEnv => ({
-    HOME: homeDir,
-    PATH: [toolDir, userBinDir].join(path.delimiter),
-    TMPDIR: scratchDir,
-    BALLIN_NO_ANALYTICS: '1',
-    BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: path.join(testDir, 'system'),
-    BALLIN_WALKTHROUGH_GIST: remoteGistDir,
-    BALLIN_WALKTHROUGH_LOG: commandLogPath,
-    BALLIN_WALKTHROUGH_SOURCE: repoRoot,
-  });
-
-  const runInstaller = (input: string) => spawnSync(installPath, [], {
-    encoding: 'utf8',
-    env: childEnv(),
-    input,
-  });
-
-  const runInstalled = (args: string[]) => spawnSync(path.join(userBinDir, 'ballin'), args, {
-    encoding: 'utf8',
-    env: childEnv(),
-  });
+  const runInstaller = (input: string) => runSandbox(sandbox, ['install'], input);
+  const runInstalled = (args: string[]) => runSandbox(sandbox, args);
 
   const commandLog = (): string => (
     fs.existsSync(commandLogPath) ? fs.readFileSync(commandLogPath, 'utf8') : ''
   );
 
   beforeEach(() => {
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-onboarding-walkthrough-'));
-    homeDir = path.join(testDir, 'home');
-    toolDir = path.join(testDir, 'tools');
-    userBinDir = path.join(homeDir, '.local', 'bin');
-    installedRepoDir = path.join(homeDir, '.ballin-scripts');
-    commandLogPath = path.join(testDir, 'commands.log');
-    remoteGistDir = path.join(testDir, 'remote-gist');
-    scratchDir = path.join(testDir, 'tmp');
-
-    [homeDir, toolDir, userBinDir, remoteGistDir, scratchDir].forEach((directory) => {
-      fs.mkdirSync(directory, { recursive: true });
-    });
-    ['bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'rm', 'tail'].forEach(linkCommand);
-    fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
-    installGitStub();
+    sandbox = createSandbox();
+    testDir = sandbox.root;
+    homeDir = sandbox.home;
+    userBinDir = sandbox.bin;
+    installedRepoDir = sandbox.repo;
+    commandLogPath = sandbox.log;
+    remoteRepositoryDir = sandbox.remote;
   });
 
   afterEach(() => {
-    fs.rmSync(testDir, { recursive: true, force: true });
+    if (testDir) cleanupSandbox(testDir);
   });
 
   it('preserves one maintenance-only install through doctor, update, self-update, and backup guidance', () => {
@@ -163,7 +79,7 @@ esac
   });
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
-    installGhStub();
+    resetRemote(sandbox);
     const installResult = runInstaller('y\nn\ny\ncreate\n\ny\ny\n\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
