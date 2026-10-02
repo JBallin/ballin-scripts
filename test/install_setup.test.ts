@@ -662,7 +662,7 @@ esac
     const result = runGistSetup({ env: { FAKE_GH_AUTH_STATUS: '4' } });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'gh is not authenticated for github.example.test');
+    assert.include(result.stdout, '\n⚠️  ERROR: `gh` is not authenticated for github.example.test.\n');
     assert.include(commandLog(), 'gh:api --hostname github.example.test user');
     assert.notInclude(commandLog(), 'gh:gist');
   });

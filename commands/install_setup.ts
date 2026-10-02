@@ -312,7 +312,7 @@ const configureGist = (
   });
 
   if (authResult.status !== 0 || authResult.error) {
-    writeStdoutLine(`\n⚠️  ERROR: gh is not authenticated for ${selectedHost}.`);
+    writeStdoutLine(`\n⚠️  ERROR: \`gh\` is not authenticated for ${selectedHost}.`);
     writeStdoutLine(`\nRun:\n  gh auth login --hostname ${selectedHost}`);
     writeStdoutLine('\nThen run `ballin backup setup` again.');
     return false;

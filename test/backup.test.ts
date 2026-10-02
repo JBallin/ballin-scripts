@@ -976,7 +976,7 @@ exit 2
       assert.equal(result.status, ghAuthFail ? 1 : 0);
       assert.include(result.stdout, 'Existing Gist backup remains configured. Setup does not migrate or replace it with a repository.');
       if (ghAuthFail) {
-        assert.include(result.stdout, 'gh is not authenticated for github.com');
+        assert.include(result.stdout, '`gh` is not authenticated for github.com');
         assert.include(result.stderr, 'setup did not complete');
       } else {
         assertBackupSucceeded(result);
