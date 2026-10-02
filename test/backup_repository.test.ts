@@ -42,6 +42,27 @@ describe('private repository transport', () => {
     assert.equal(inspectRepository(fixtureDestination, options).problem, 'unavailable');
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
   });
+  it('retains same-owner redirected identity for the caller to classify', () => {
+    state.faults.candidate = 'redirect';
+    assert.deepEqual(candidateRepository(state.name, readRepositoryAccount(options), options), {
+      ...fixtureDestination, id: 'R_renamed', redirected: true,
+    });
+    assert.isTrue(state.requests.every((request) => request.method === 'GET'));
+  });
+  it('keeps case-insensitive exact-name collisions', () => {
+    state.faults.candidateMetadata = { name: state.name.toUpperCase() };
+    assert.deepEqual(candidateRepository(state.name, readRepositoryAccount(options), options), fixtureDestination);
+  });
+  [undefined, '', '../invalid', 42].forEach((name) => it(`rejects malformed candidate names ${JSON.stringify(name)}`, () => {
+    state.faults.candidateMetadata = { name };
+    assert.throws(() => candidateRepository(state.name, readRepositoryAccount(options), options), RepositoryError);
+  }));
+  it('rejects foreign-owner redirects before allowing creation', () => {
+    state.faults.candidate = 'redirect';
+    state.faults.candidateMetadata = { owner: { node_id: 'U_other', type: 'User' } };
+    assert.throws(() => candidateRepository(state.name, readRepositoryAccount(options), options), RepositoryError);
+    assert.isTrue(state.requests.every((request) => request.method === 'GET'));
+  });
   it('reads only the requested supported snapshot and marker without exposing a partial reconciliation read', () => {
     state = fixtureState({ 'zshrc.sh': 'original\n', gitconfig: 'other\n', mas: 'apps\n' });
     assert.equal(readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options)?.toString(), 'original\n');

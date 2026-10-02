@@ -604,6 +604,53 @@ describe('repository backup lifecycle', function() {
       assert.equal(run(['setup'], 'y\nreconnect\n\nn\ny\n').status, 1); assert.equal(mutations().length, 0);
     });
   });
+  it('creates a fresh private backup at a redirected name without writing to the renamed repository', () => {
+    unconfigured(); const value = state(); value.exists = false; value.faults.candidate = 'redirect'; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\nn\n'); ok(result);
+    const warning = 'Creating a backup here ends that redirect';
+    assert.include(result.stdout, warning);
+    assert.isBelow(result.stdout.indexOf(warning), result.stdout.indexOf('Confirm this destination'));
+    assert.deepEqual(config().backup.repository, fixtureDestination);
+    const creates = mutations().filter((request) => request.endpoint === 'user/repos');
+    assert.lengthOf(creates, 1); assert.equal(creates[0].payload?.private, true);
+    assert.equal(creates[0].payload?.name, fixtureDestination.name);
+    assert.isTrue(publications().every((request) => JSON.stringify(request.payload).includes(fixtureDestination.id)));
+    assert.isFalse(mutations().some((request) => JSON.stringify(request.payload).includes('R_renamed')));
+  });
+  ['n\n', ''].forEach((answer) => it(`leaves a redirected name unchanged when final confirmation is ${JSON.stringify(answer)}`, () => {
+    unconfigured(); const value = state(); value.exists = false; value.faults.candidate = 'redirect'; saveState(value);
+    seedCache('zshrc.sh', 'unchanged\n'); const before = config();
+    const result = run(['setup'], `y\ncreate\n\nn\n${answer}`);
+    assert.equal(result.status, 1); assert.include(result.stdout, 'Creating a backup here ends that redirect');
+    assert.deepEqual(config(), before); assert.equal(cached(), 'unchanged\n'); assert.lengthOf(mutations(), 0);
+  }));
+  it('revalidates a configured backup through its old name using stable identity', () => {
+    const before = config(); seedCache('zshrc.sh', 'unchanged\n');
+    const value = state(); value.name = 'renamed'; value.faults.candidateAlias = fixtureDestination.name;
+    value.rulesets = [fixtureRuleset({ source: 'fixture-user/renamed' })]; saveState(value);
+    const result = run(['setup', fixtureDestination.name]); ok(result);
+    assert.equal(config().backup.repository.name, 'renamed');
+    assert.equal(config().backup.repository.id, before.backup.repository.id);
+    assert.equal(config().backup.includeSensitive, before.backup.includeSensitive);
+    assert.equal(config().update.backup, before.update.backup);
+    assert.equal(cached(), 'unchanged\n'); assert.lengthOf(mutations(), 0);
+    assert.notInclude(result.stdout, 'Creating a backup here ends that redirect');
+    assert.notInclude(result.stdout, 'Confirm this destination');
+  });
+  it('does not repeat ambiguous creation after a redirected-name lookup', () => {
+    unconfigured(); const value = state(); value.exists = false;
+    value.faults.candidate = 'redirect'; value.faults.create = 'ambiguous'; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\n');
+    assert.equal(result.status, 1); assert.isNull(config().backup.repository);
+    assert.lengthOf(mutations().filter((request) => request.endpoint === 'user/repos'), 1);
+    assert.lengthOf(publications(), 0);
+    assert.isFalse(mutations().some((request) => JSON.stringify(request.payload).includes('R_renamed')));
+  });
+  it('does not reconnect to a different repository through a renamed-name redirect', () => {
+    unconfigured(); const value = state(); value.faults.candidate = 'redirect'; saveState(value);
+    assert.equal(run(['setup'], 'y\nreconnect\n\n').status, 1);
+    assert.isNull(config().backup.repository); assert.lengthOf(mutations(), 0);
+  });
   it('rejects create collisions and malformed or conflicting destination configuration', () => {
     unconfigured(); assert.equal(run(['setup'], 'y\ncreate\n\n').status, 1); assert.equal(mutations().length, 0);
     for (const invalid of [[], {}, { ...fixtureDestination, id: '' }, { ...fixtureDestination, ownerId: 'bad id' }]) {

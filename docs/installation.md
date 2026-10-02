@@ -173,6 +173,11 @@ that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision requires an explicit different name or reconnect choice.
 
+If a name redirects to a renamed repository, **create** can reclaim it after
+setup warns you and you confirm. This ends the old redirect, so links and clones
+using that URL no longer reach the renamed repository. Its contents and
+visibility are unchanged. To reconnect, use the repository's current name.
+
 Ballin uses your existing `gh` authentication. It does not log in, switch
 accounts, or expand permissions on your behalf. Normal browser-based
 [`gh` authentication](https://cli.github.com/manual/gh_auth_login) works when

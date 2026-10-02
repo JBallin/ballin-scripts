@@ -183,7 +183,7 @@ const readInfo = (
     },
   };
 };
-const candidateRepository = (name: string, account: Account, options: RepositoryOptions = {}): RepositoryDestination | null => {
+const candidateRepository = (name: string, account: Account, options: RepositoryOptions = {}): (RepositoryDestination & { redirected?: true }) | null => {
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   const result = api(`repos/${account.login}/${name}`, undefined, options);
   if (!result.ok) {
@@ -195,11 +195,15 @@ const candidateRepository = (name: string, account: Account, options: Repository
   }
   const owner = object(result.body.owner);
   if (owner.node_id !== account.id || owner.type !== 'User') throw new RepositoryError('identity');
-  requireCleanTransport(result);
-  return {
+  const destination = {
     id: identifier(result.body.node_id), ownerId: account.id,
     name, branch: identifier(result.body.default_branch),
   };
+  if (!validRepositoryName(result.body.name)) throw new RepositoryError('invalid-data');
+  requireCleanTransport(result);
+  // Keep the stable identity available for configured-backup revalidation.
+  if ((result.body.name as string).toLowerCase() !== name.toLowerCase()) return { ...destination, redirected: true };
+  return destination;
 };
 const markerBytes = (destination: RepositoryDestination): Buffer => Buffer.from(`${JSON.stringify({
   format: 'ballin-backup', version: 1, repositoryId: destination.id, ownerId: destination.ownerId,
