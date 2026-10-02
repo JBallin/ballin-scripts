@@ -337,7 +337,7 @@ function runUpdateCommand(): void {
   }
 
   if (settings.selfUpdate) {
-    progress('Updating ballin-scripts');
+    progress('Updating Ballin');
     const updateStatus = runAutomaticStage('update.self-update', () => runIntegrationCommand(ballinCommandPath(), ['self-update'], {
       env: {
         ...childEnv,
