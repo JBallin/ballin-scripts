@@ -44,6 +44,11 @@
 
 ## Synchronization points
 
+- When adding or changing public commands, keep dispatch, help, completion,
+  documentation, analytics classification, and tests aligned where applicable.
+  Backup and config operations share pure command-owned name definitions with
+  completion generation. Run `npm run generate:completions` after changing those
+  names; tests check the committed shell assets against generated output.
 - When installer behavior or invocation changes, update its tests and the
   corresponding guidance in `README.md` and `docs/installation.md`.
 - When configuration defaults or schema change, update

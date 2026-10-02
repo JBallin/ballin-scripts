@@ -40,7 +40,7 @@ reconnect to it instead of creating another one.
 
 ## Shell completion
 
-Ballin includes top-level command completion for zsh and Bash. A fresh interactive
+Ballin includes command completion for zsh and Bash. A fresh interactive
 install offers to enable it after the command is installed, showing the startup
 file and exact activation line before asking for confirmation (default: no).
 Refreshes and `ballin self-update` do not enable completion or ask again.
@@ -90,8 +90,10 @@ detected, inspect the file Ballin identifies before reloading it. If Ballin
 reports an existing activation with a trailing carriage return, replace only
 that line manually with the displayed command using LF line endings.
 
-Completion covers supported top-level commands and unique prefixes such as
-`ballin upd<Tab>`. It does not complete nested commands, options, or values.
+Completion covers supported top-level commands and the operations under
+`ballin backup` and `ballin config`. Unique prefixes work too, such as
+`ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
+Completion does not cover options, values, or file paths.
 
 ## Local effects
 
