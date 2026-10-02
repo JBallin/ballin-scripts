@@ -41,58 +41,57 @@ reconnect to it instead of creating another one.
 ## Shell completion
 
 Ballin includes top-level command completion for zsh and Bash. A fresh interactive
-install offers to enable it after the command is installed. Ballin shows the shell,
-startup file, and exact activation line before asking for confirmation (default:
-no). Refreshes and `ballin self-update` do not ask again.
+install offers to enable it after the command is installed, showing the startup
+file and exact activation line before asking for confirmation (default: no).
+Refreshes and `ballin self-update` do not enable completion or ask again.
 
-For zsh, specify the directory where your terminal reads `.zshrc`: `home`
-or an absolute directory. Ballin can show an exported `ZDOTDIR` as a hint, but a
-value set without export is not visible to the installer. If you are unsure,
-press Enter and use manual activation below. Ballin does not run shell startup
-files to discover this setting.
-
-For Bash, select `login` only if your terminal reads login startup files, or `bashrc` if it reads `~/.bashrc`. Login selection respects the first
-existing file in Bash's order: `.bash_profile`, `.bash_login`, then `.profile`.
-When only `.profile` exists, use the manual path below rather than adding
-Bash-specific syntax to a file other shells may read.
-
-Accepting appends one guarded line while preserving existing contents and
-permissions. A missing standard file is created privately. Symlinked startup
-files, unsupported or uncertain shell settings, noninteractive installs,
-continuation boundaries, and write failures use the manual path. Completion setup
-never makes core installation fail. After a failed append, Ballin attempts to
-restore the original bytes. If restoration fails or conflicting changes are
-detected, Ballin identifies the file to inspect before reloading it. After
-successful activation, open a new terminal or reload the displayed startup file.
-If Ballin identifies an existing activation with a trailing carriage return,
-replace only that line manually with the displayed command using LF line endings.
-
-To enable completion later, or when automatic setup is skipped, add this guarded
-line near the end of `~/.zshrc` (or your `ZDOTDIR/.zshrc`):
+For the usual zsh setup, choose `home` during installation to use `~/.zshrc`.
+To enable completion later, add this line near the end of that file:
 
 ```zsh
 [[ -r "$HOME/.ballin-scripts/completions/_ballin" ]] && source "$HOME/.ballin-scripts/completions/_ballin"
 ```
 
-Open a new terminal or run `source "${ZDOTDIR:-$HOME}/.zshrc"`. For Bash, add the
-equivalent line to the existing startup file your session reads, such as
-`~/.bashrc`, `~/.bash_profile`, or `~/.bash_login`:
+Open a new terminal or run `source ~/.zshrc`. Once this line is present,
+`ballin self-update` refreshes the completion scripts; reload the startup file or
+open a new terminal to use the updated command list.
+
+If you use `ZDOTDIR`, use the `.zshrc` in that directory instead. During fresh
+setup, enter its absolute directory path rather than `home`; for manual setup,
+add the line there and reload that file. An exported `ZDOTDIR` is only a hint:
+the installer cannot see an unexported value and does not run startup files to
+discover it. If you are unsure which directory your terminal uses, press Enter
+to skip automatic setup.
+
+For Bash, choose `login` if your terminal reads login startup files, or `bashrc`
+if it reads `~/.bashrc`. Login selection uses the first existing file in Bash's
+order: `.bash_profile`, `.bash_login`, then `.profile`. To enable completion
+manually, add this line to the startup file your session reads and open a new
+terminal or reload that file:
 
 ```bash
 [[ -r "$HOME/.ballin-scripts/completions/ballin.bash" ]] && source "$HOME/.ballin-scripts/completions/ballin.bash"
 ```
 
-If your Bash login terminal currently reads `~/.profile`, keep that startup
-chain and add this line there instead. It activates completion only in Bash:
+When only `~/.profile` exists, automatic setup skips it because other shells may
+read it. Keep that startup chain and add this Bash-only activation line instead:
 
 ```sh
 [ -n "${BASH_VERSION:-}" ] && [ -r "$HOME/.ballin-scripts/completions/ballin.bash" ] && . "$HOME/.ballin-scripts/completions/ballin.bash"
 ```
 
+Automatic setup appends one guarded line, preserving existing contents and
+permissions; a missing standard file is created privately. Symlinked startup
+files, uncertain or unsupported shell settings, noninteractive installs,
+unfinished line continuations, and write failures use the manual path. Completion
+setup does not make core installation fail. If an append fails, Ballin attempts
+to restore the original bytes; if restoration fails or conflicting changes are
+detected, inspect the file Ballin identifies before reloading it. If Ballin
+reports an existing activation with a trailing carriage return, replace only
+that line manually with the displayed command using LF line endings.
+
 Completion covers supported top-level commands and unique prefixes such as
 `ballin upd<Tab>`. It does not complete nested commands, options, or values.
-`ballin self-update` refreshes the completion scripts; reload the startup file or
-open a new terminal to use an updated command list.
 
 ## Local effects
 
