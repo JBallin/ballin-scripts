@@ -22,6 +22,12 @@ below. Additional test execution exposes eight covered V8 branch ranges;
 the dispatch annotation itself preserves its branch map and affects only the
 default arm. No previously covered outcome became uncovered.
 
+The integration gate including main `2059e2a` passed with 1,325 tests:
+7,361/7,399 lines and statements (99.48%), 2,575/2,649 branches (97.20%),
+and 370/370 functions (100%). After accounting for source-line shifts, the
+same 38 lines and 74 branch outcomes remain measured; terminal styling adds
+no uncovered outcomes. Thresholds and the sole annotation's scope are unchanged.
+
 ## Reading the dispositions
 
 - **Tested:** add assertions about observable results and effects using existing
