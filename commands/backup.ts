@@ -1,3 +1,4 @@
+const { withTemporaryStatus, clearTemporaryStatus } = require('./temporaryStatus.ts');
 import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
@@ -200,6 +201,7 @@ const fileExists = (filePath: string): boolean => {
 
 const writeFileToStderr = (filePath: string): void => {
   if (fs.statSync(filePath).size > 0) {
+    clearTemporaryStatus();
     process.stderr.write(fs.readFileSync(filePath));
   }
 };
@@ -886,7 +888,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
   if (!secureExistingBackupCache(backupCacheDir)) return 1;
   const ghAuthenticated = ghAuthStatus(config.host);
   if (!ghAuthenticated.ok) return ghAuthenticated.exitStatus;
-  return runStagedBackup(config.host, config.id, homeDir, backupCacheDir) ? 0 : 1;
+  return withTemporaryStatus('Backing up...', () => runStagedBackup(config.host, config.id, homeDir, backupCacheDir)) ? 0 : 1;
 };
 
 function runBackupCommand(args = process.argv.slice(2)): void {
@@ -975,7 +977,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   if (!command) {
     let status: 'success' | 'failure' = 'failure';
     try {
-      const exitStatus = runRealBackup(homeDir, backupCacheDir);
+      const exitStatus = withTemporaryStatus('Backing up...', () => runRealBackup(homeDir, backupCacheDir));
       status = exitStatus === 0 ? 'success' : 'failure';
       if (exitStatus !== 0) process.exitCode = exitStatus;
     } finally {
