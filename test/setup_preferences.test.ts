@@ -144,6 +144,18 @@ fs.readFileSync = (file, ...args) => {
     });
   });
 
+  ['\n', 'n\n', 'y\n', 'Y\n', '', 'y'].forEach((input) => {
+    it(`uses the fresh automatic-backup default without running a backup: ${JSON.stringify(input)}`, () => {
+      writeConfig(configFor('legacy-gist', true));
+      const result = spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH) ? 0 : 1`], {
+        input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}` }),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+      assert.equal(readConfig().update.backup, ['y\n', 'Y\n', 'y'].includes(input) ? 'true' : 'false');
+    });
+  });
+
   it('preserves the pending automatic choice on EOF while onboarding still saves false', () => {
     writeConfig(configFor('legacy-gist', true));
     assert.equal(run().status, 0);

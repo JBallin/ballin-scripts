@@ -143,7 +143,7 @@ ballin config set backup.includeSensitive false
 ```
 
 After new linkage, setup asks whether updates should run backups automatically,
-with yes as the default. Change that independent choice later with:
+with no as the default. Change that independent choice later with:
 
 ```shell
 ballin config set update.backup true

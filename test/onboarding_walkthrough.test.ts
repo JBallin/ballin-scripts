@@ -80,7 +80,7 @@ describe('first-run onboarding walkthroughs', function() {
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
     resetRemote(sandbox);
-    const installResult = runInstaller('y\nn\ny\ncreate\n\ny\ny\n\n');
+    const installResult = runInstaller('y\nn\ny\ncreate\n\ny\ny\ny\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));

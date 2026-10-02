@@ -197,7 +197,7 @@ existing local choices take precedence. It does not restore saved dotfiles or
 reinstall saved packages.
 
 After creating or reconnecting a backup, Ballin asks whether `ballin update`
-should run backups automatically (default: yes). The choice is stored in
+should run backups automatically (default: no). The choice is stored in
 `update.backup`; change it later with `ballin config set update.backup true` or
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.
