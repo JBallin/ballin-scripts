@@ -28,7 +28,7 @@ const saveBackupConfig = (configPath: string, config: Record<string, unknown>): 
 };
 type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean };
 const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
-  const defaultEnabled = options.defaultEnabled ?? true;
+  const defaultEnabled = options.defaultEnabled ?? false;
   const response = readPromptLine(`\n🤔 Automatically run ballin backup after ballin update? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `);
   if (response.eof && options.cancelOnEof) return 'cancelled';
   // Existing destination onboarding treats empty EOF as no; guided review cancels instead.
