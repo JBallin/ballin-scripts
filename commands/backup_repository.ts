@@ -183,7 +183,7 @@ const readInfo = (
     },
   };
 };
-const candidateRepository = (name: string, account: Account, options: RepositoryOptions = {}): RepositoryDestination | null => {
+const candidateRepository = (name: string, account: Account, options: RepositoryOptions = {}): (RepositoryDestination & { redirected?: true }) | null => {
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   const result = api(`repos/${account.login}/${name}`, undefined, options);
   if (!result.ok) {
@@ -201,8 +201,8 @@ const candidateRepository = (name: string, account: Account, options: Repository
   };
   if (!validRepositoryName(result.body.name)) throw new RepositoryError('invalid-data');
   requireCleanTransport(result);
-  // A renamed repository redirects its old URL, but explicit creation can reclaim that name.
-  if ((result.body.name as string).toLowerCase() !== name.toLowerCase()) return null;
+  // Keep the stable identity available for configured-backup revalidation.
+  if ((result.body.name as string).toLowerCase() !== name.toLowerCase()) return { ...destination, redirected: true };
   return destination;
 };
 const markerBytes = (destination: RepositoryDestination): Buffer => Buffer.from(`${JSON.stringify({

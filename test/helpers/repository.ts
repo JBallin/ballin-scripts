@@ -82,7 +82,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     return reply({ node_id: state.id, owner: { node_id: state.ownerId }, name: state.name, private: true, default_branch: state.branch,
       ...(fault.createdMetadata as Record<string, unknown> ?? {}) });
   }
-  if (endpoint === `repos/${state.login}/${state.name}` || endpoint === `repos/${state.login}/alternate`) {
+  if (endpoint === `repos/${state.login}/${state.name}` || endpoint === `repos/${state.login}/alternate` || endpoint === `repos/${state.login}/${fault.candidateAlias}`) {
     if (fault.candidate === 'redirect') return reply({ node_id: 'R_renamed', name: 'renamed-backup', private: false, owner: { node_id: state.ownerId, type: 'User' }, default_branch: state.branch, ...(fault.candidateMetadata as Record<string, unknown> ?? {}) });
     if (!state.exists || fault.candidate === 'missing') return reply({ status: '404' }, 1);
     if (fault.candidate === 'denied') return reply({ status: '403' }, 1);

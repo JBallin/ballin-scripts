@@ -98,7 +98,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const found = candidateRepository(name, account);
     let previous: RepositoryRead | undefined;
     if (choice.text === 'reconnect') {
-      if (!found) { writeStdoutLine(repositoryMessages.unavailable); return false; }
+      if (!found || found.redirected) { writeStdoutLine(repositoryMessages.unavailable); return false; }
       const existing: RepositoryRead = requireRepositoryRead(inspectRepository(found));
       writeStdoutLine(`Unexpected retained entries: ${unexpectedRepositoryEntries(existing)}`);
       previous = existing;
@@ -111,9 +111,12 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         candidate = restorePortablePreferences(candidate, originalConfig, remote);
       }
       writeStdoutLine('Retire the previous writer before this installation publishes. Recovery does not establish a comparison base or authorize overwriting different saved data.');
-    } else if (found) {
+    } else if (found && !found.redirected) {
       writeStdoutLine('That repository name is already in use. Reconnect to a valid backup, or explicitly choose another name.');
       return false;
+    }
+    if (found?.redirected) {
+      writeStdoutLine('This name redirects to a renamed repository. Creating a backup here ends that redirect; links and clones using the old URL will no longer reach the renamed repository.');
     }
     const includeSensitive = selectSensitiveSources();
     if (includeSensitive === null) return cancelled();

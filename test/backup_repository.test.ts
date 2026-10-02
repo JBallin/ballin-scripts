@@ -42,9 +42,11 @@ describe('private repository transport', () => {
     assert.equal(inspectRepository(fixtureDestination, options).problem, 'unavailable');
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
   });
-  it('treats a same-owner renamed-repository redirect as a candidate for explicit creation only', () => {
+  it('retains same-owner redirected identity for the caller to classify', () => {
     state.faults.candidate = 'redirect';
-    assert.isNull(candidateRepository(state.name, readRepositoryAccount(options), options));
+    assert.deepEqual(candidateRepository(state.name, readRepositoryAccount(options), options), {
+      ...fixtureDestination, id: 'R_renamed', redirected: true,
+    });
     assert.isTrue(state.requests.every((request) => request.method === 'GET'));
   });
   it('keeps case-insensitive exact-name collisions', () => {
