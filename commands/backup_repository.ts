@@ -46,6 +46,8 @@ type Account = { id: string; login: string };
 type Entry = { path: string; sha: string; size: number; classification: SnapshotNameClassification };
 // A revision is a storage-local handle. Callers pass it back without interpreting Git objects.
 type Revision = { head: string; tree: string; branchId: string; parents: string[]; entries: Entry[] };
+// Inventory-only results cannot be used as a full comparison/publication base.
+type RepositoryInventory = { entries: readonly Entry[] };
 type RepositoryRead = {
   destination: RepositoryDestination;
   revision: Revision;
@@ -306,6 +308,12 @@ const readRepositorySnapshot = (
 ): Buffer | undefined => {
   const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
   return classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined;
+};
+const readRepositoryInventory = (
+  destination: RepositoryDestination, options: RepositoryOptions = {},
+): RepositoryInventory => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  return { entries: read.revision.entries };
 };
 const sameRepositoryRevision = (left: RepositoryRead, right: RepositoryRead): boolean => (
   left.destination.id === right.destination.id && left.revision.branchId === right.revision.branchId
@@ -606,12 +614,12 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 
 module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
-  readRepositorySnapshot, repositoryOpenUrl,
+  readRepositorySnapshot, readRepositoryInventory, repositoryOpenUrl,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
 };
 export type {
-  RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
+  RepositoryRead, RepositoryInventory, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
   ManagedBranchRulesetOutcome,
 };
