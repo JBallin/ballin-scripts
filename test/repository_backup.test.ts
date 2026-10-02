@@ -388,7 +388,7 @@ describe('repository backup lifecycle', function() {
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 3);
     assert.isBelow(result.stdout.indexOf('Selected GitHub.com account: fixture-user'), result.stdout.indexOf('Confirm this destination'));
     assert.notInclude(result.stdout, 'zshrc.sh:');
-    assert.include(result.stdout, 'Optional GitHub branch protection enabled.');
+    assert.include(result.stdout, 'GitHub branch protection enabled.');
     const requests = state().requests;
     const created = requests.findIndex((request) => request.endpoint === 'user/repos');
     const initialized = requests.findIndex((request) => request.payload?.query?.includes('BallinPublish'));
@@ -427,7 +427,7 @@ describe('repository backup lifecycle', function() {
     ok(run(['setup'], 'y\ncreate\n\nn\ny\n'));
     const retry = state(); delete retry.faults.rulesetCreate; saveState(retry);
     const revalidated = run(['setup']); ok(revalidated);
-    assert.include(revalidated.stdout, 'Optional GitHub branch protection enabled.');
+    assert.include(revalidated.stdout, 'GitHub branch protection enabled.');
     assert.deepEqual(config().backup.repository, fixtureDestination);
     assert.equal(state().requests.filter((request) => request.endpoint === 'user/repos').length, 1);
     assert.equal(rulesetWrites().length, 2); assert.lengthOf(state().rulesets, 1);
