@@ -92,6 +92,35 @@ Examples:
     ballin doctor
 
 `;
+const updateHelp = `Usage:
+    ballin update
+    ballin update --help
+
+Update the Ballin-managed macOS development environment.
+Configured stages can update Homebrew, Node.js LTS, global npm packages,
+macOS, and Ballin, then back up environment state.
+Use ballin config get update to inspect settings.
+`;
+
+const backupHelp = `Usage:
+    ballin backup
+    ballin backup setup [repository-name]
+    ballin backup open
+    ballin backup read <file>
+    ballin backup disconnect
+    ballin backup --help
+
+Back up Ballin-managed environment state to the configured backup.
+setup creates or reconnects to an optional backup; open opens it in a browser.
+read prints a backed-up file; disconnect stops local backups and clears comparison state.
+Sensitive sources are excluded unless backup.includeSensitive is true.
+`;
+
+const isCommandHelp = (args: string[]): boolean => (
+  args.length === 2 && args[1] === '--help'
+  && ['config', 'update', 'backup'].includes(args[0])
+);
+
 const writeStdout = (text: string): void => {
   process.stdout.write(text);
 };
@@ -173,9 +202,17 @@ function runBallinCommand(args = process.argv.slice(2)): void {
 
   switch (command) {
     case 'update':
+      if (isCommandHelp(args)) {
+        writeStdout(updateHelp);
+        return;
+      }
       runNoArgCommand('ballin update', commandArgs, runUpdateCommand);
       return;
     case 'backup':
+      if (isCommandHelp(args)) {
+        writeStdout(backupHelp);
+        return;
+      }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
         writeStdout(ballinHelp);
         return;
@@ -211,6 +248,10 @@ const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => 
 
 const runBallinCli = (): void => {
   const args = process.argv.slice(2);
+  if (isCommandHelp(args)) {
+    runBallinCommand(args);
+    return;
+  }
   if (!isAnalyticsPreferenceWrite(args)) {
     repairAnalyticsInstallId();
   }

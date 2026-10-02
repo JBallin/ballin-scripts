@@ -16,6 +16,10 @@ updates.
 - `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
   Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
 
+Use `ballin config --help`, `ballin update --help`, or `ballin backup --help`
+for command usage. These help commands work offline without reading your config
+or running maintenance or backup tasks.
+
 ## Installation
 
 The installer checks Git and Node.js, shows its plan, and asks before making a

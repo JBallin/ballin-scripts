@@ -160,6 +160,42 @@ esac
     assertHelpOutput(runBallin(['help']));
   });
 
+  ['config', 'update', 'backup'].forEach((command) => {
+    it(`prints offline ${command} --help without config or workflow effects`, () => {
+      const preloadPath = path.join(tempDir, 'reject-network.cjs');
+      const networkMarker = path.join(tempDir, 'network-request');
+      fs.writeFileSync(preloadPath, `require('https').request = () => {
+  require('fs').writeFileSync(${JSON.stringify(networkMarker)}, 'attempted');
+  throw new Error('network request attempted');
+};`);
+      for (const contents of [undefined, '{invalid', '{"analytics":{"enabled":"true"}}']) {
+        if (contents === undefined) fs.rmSync(configPath);
+        else fs.writeFileSync(configPath, contents);
+        const result = runBallin([command, '--help'], {
+          NODE_ENV: 'production',
+          BALLIN_NO_ANALYTICS: '',
+          NODE_OPTIONS: `--require=${preloadPath}`,
+        });
+        assert.equal(result.status, 0);
+        assert.equal(result.stderr, '');
+        assert.include(result.stdout, `ballin ${command} --help`);
+        assert.notInclude(result.stdout, 'ballin config help');
+        if (command === 'update') assert.include(result.stdout, 'ballin config get update');
+        if (command === 'backup') {
+          ['setup [repository-name]', 'open', 'read <file>', 'disconnect'].forEach((usage) => {
+            assert.include(result.stdout, `ballin backup ${usage}`);
+          });
+          assert.include(result.stdout, 'backup.includeSensitive');
+        }
+        assert.deepEqual(commandLog(), []);
+        assert.isFalse(fs.existsSync(networkMarker));
+        assert.isFalse(fs.existsSync(path.join(tempDir, '.analytics', 'install-id')));
+        if (contents === undefined) assert.isFalse(fs.existsSync(configPath));
+        else assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
+      }
+    });
+  });
+
   it('keeps top-level help aligned with the command catalog', () => {
     const result = runBallin(['--help']);
     const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\nExamples:')[0];
