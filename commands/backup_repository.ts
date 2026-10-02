@@ -195,11 +195,15 @@ const candidateRepository = (name: string, account: Account, options: Repository
   }
   const owner = object(result.body.owner);
   if (owner.node_id !== account.id || owner.type !== 'User') throw new RepositoryError('identity');
-  requireCleanTransport(result);
-  return {
+  const destination = {
     id: identifier(result.body.node_id), ownerId: account.id,
     name, branch: identifier(result.body.default_branch),
   };
+  if (!validRepositoryName(result.body.name)) throw new RepositoryError('invalid-data');
+  requireCleanTransport(result);
+  // A renamed repository redirects its old URL, but explicit creation can reclaim that name.
+  if ((result.body.name as string).toLowerCase() !== name.toLowerCase()) return null;
+  return destination;
 };
 const markerBytes = (destination: RepositoryDestination): Buffer => Buffer.from(`${JSON.stringify({
   format: 'ballin-backup', version: 1, repositoryId: destination.id, ownerId: destination.ownerId,
