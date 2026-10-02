@@ -115,7 +115,6 @@ Back up Ballin-managed environment state to the configured backup.
 setup creates or reconnects to an optional backup; open opens it in a browser.
 read prints a backed-up file; disconnect stops local backups and clears comparison state.
 Repository backups exclude sensitive sources unless backup.includeSensitive is true.
-Existing legacy Gist backups still capture every available source.
 `;
 
 const isCommandHelp = (args: string[]): boolean => (
