@@ -68,6 +68,22 @@ fs.readFileSync = (file, ...args) => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it('lists sensitive source labels alphabetically with their existing paths and statuses', () => {
+    fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
+    const result = run('y\ny\nn\nn\n');
+    assert.equal(result.status, 0, result.stderr);
+    const labels = result.stdout.split('Selected: inventory and filtered preferences')[0].split('\n')
+      .map((line: string) => /([\w.]+): (?:absent|unavailable|available|"|unsupported)/u.exec(line)?.[1])
+      .filter(Boolean);
+    assert.deepEqual(labels, [
+      'bash_profile.sh', 'bashrc.sh', 'gitconfig', 'gitignore_global', 'nanorc',
+      'nvmrc', 'pipx', 'profile.sh', 'vimrc', 'vs_keybindings', 'vs_settings',
+      'vsI_keybindings', 'vsI_settings', 'zprofile.sh', 'zshrc.sh',
+    ]);
+    assert.include(result.stdout, `zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))} ->`);
+    assert.notInclude(result.stdout, 'fixture private content');
+  });
+
   [false, true].forEach((enabled) => {
     it(`accepts current ${enabled} defaults and preserves custom settings`, () => {
       const initial = configFor('repository', enabled);

@@ -58,8 +58,10 @@ const offerAutomaticUpdateBackup = (configPath: string): boolean => (
 
 const displayPath = (value: string): string => JSON.stringify(value);
 const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolean => {
-  for (const definition of snapshotDefinitions as SnapshotDefinition[]) {
-    if (definition.inclusionGroup !== 'sensitive') continue;
+  const sensitiveDefinitions = (snapshotDefinitions as readonly SnapshotDefinition[])
+    .filter((definition) => definition.inclusionGroup === 'sensitive')
+    .sort((left, right) => left.name.localeCompare(right.name, 'en'));
+  for (const definition of sensitiveDefinitions) {
     const observation = definition.discover({ homeDir, env });
     if (observation.status === 'discovery-failed') {
       writeStdoutLine(`Unable to review ${definition.name}: source access failed.`);
