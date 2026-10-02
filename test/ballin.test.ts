@@ -160,6 +160,102 @@ esac
     assertHelpOutput(runBallin(['help']));
   });
 
+  [[], ['--help'], ['help']].forEach((args) => {
+    ['missing', 'malformed', 'unreadable', 'enabled'].forEach((config) => {
+      [undefined, 'invalid-id\n', '11111111-1111-4111-8111-111111111111\n'].forEach((identity) => {
+        it(`keeps ${JSON.stringify(args)} offline with ${config} config and ${identity === undefined ? 'missing' : identity.trim()} identity`, () => {
+          const expectedOutput = runBallin(args).stdout;
+          const analyticsPath = path.join(tempDir, '.analytics');
+          const attemptPath = path.join(tempDir, 'forbidden-actions.jsonl');
+          const preloadPath = path.join(tempDir, 'reject-help-effects.cjs');
+          fs.writeFileSync(preloadPath, `const fs = require('fs');
+const path = require('path');
+const append = fs.appendFileSync.bind(fs);
+const reject = (action) => {
+  append(${JSON.stringify(attemptPath)}, JSON.stringify(action) + '\\n');
+  const error = new Error('Forbidden help action: ' + action);
+  error.code = 'EACCES';
+  throw error;
+};
+for (const name of ['readFileSync', 'writeFileSync', 'appendFileSync', 'openSync',
+  'accessSync', 'existsSync', 'statSync', 'lstatSync', 'mkdirSync', 'readdirSync',
+  'renameSync', 'linkSync', 'unlinkSync', 'rmSync']) {
+  const original = fs[name];
+  fs[name] = (...values) => {
+    const targets = name === 'renameSync' || name === 'linkSync' ? values.slice(0, 2) : values.slice(0, 1);
+    for (const target of targets) {
+      if (typeof target !== 'string' && !Buffer.isBuffer(target)) continue;
+      const resolved = path.resolve(String(target));
+      if (resolved === ${JSON.stringify(configPath)}
+        || resolved === ${JSON.stringify(path.join(__dirname, '..', 'config', '.defaultConfig.json'))}
+        || resolved === ${JSON.stringify(analyticsPath)}
+        || resolved.startsWith(${JSON.stringify(analyticsPath + path.sep)})) reject('fs.' + name);
+    }
+    return original(...values);
+  };
+}
+for (const module of ['http', 'https']) {
+  for (const name of ['request', 'get']) require(module)[name] = () => reject(module + '.' + name);
+}
+for (const name of ['connect', 'createConnection']) require('net')[name] = () => reject('net.' + name);
+globalThis.fetch = () => reject('fetch');
+for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {
+  require('child_process')[name] = () => reject('child_process.' + name);
+}
+const analytics = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'analytics.ts'))});
+analytics.ensureAnalyticsInstallId = () => reject('identity repair');
+analytics.runWithCommandAnalytics = () => reject('command analytics');
+`);
+          fs.rmSync(configPath, { force: true });
+          const contents = config === 'malformed' ? '{invalid' : '{"analytics":{"enabled":"true"}}';
+          if (config !== 'missing') fs.writeFileSync(configPath, contents);
+          // The preload rejects attempted reads with EACCES, including this readable sentinel.
+          fs.rmSync(analyticsPath, { recursive: true, force: true });
+          if (identity !== undefined) {
+            fs.mkdirSync(analyticsPath);
+            fs.writeFileSync(path.join(analyticsPath, 'install-id'), identity);
+            fs.writeFileSync(path.join(analyticsPath, 'state-sentinel'), 'unchanged\n');
+          }
+          const result = runBallin(args, {
+            NODE_ENV: 'production',
+            BALLIN_NO_ANALYTICS: undefined,
+            BALLIN_NO_COMMAND_ANALYTICS: undefined,
+            NODE_OPTIONS: `--require=${preloadPath}`,
+          });
+          assertHelpOutput(result);
+          assert.equal(result.stdout, expectedOutput);
+          assert.isFalse(fs.existsSync(attemptPath), `${config}: ${identity}`);
+          assert.deepEqual(commandLog(), []);
+          if (config === 'missing') assert.isFalse(fs.existsSync(configPath));
+          else assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
+          if (identity === undefined) assert.isFalse(fs.existsSync(analyticsPath));
+          else {
+            assert.deepEqual(fs.readdirSync(analyticsPath).sort(), ['install-id', 'state-sentinel']);
+            assert.equal(fs.readFileSync(path.join(analyticsPath, 'install-id'), 'utf8'), identity);
+            assert.equal(fs.readFileSync(path.join(analyticsPath, 'state-sentinel'), 'utf8'), 'unchanged\n');
+          }
+        });
+      });
+    });
+  });
+
+  it('preserves overview output and analytics eligibility with extra help arguments', () => {
+    const expectedOutput = runBallin(['help']).stdout;
+    for (const args of [['help', 'extra'], ['--help', 'extra']]) {
+      writeConfig({ analytics: { enabled: 'true' } });
+      const installIdPath = path.join(tempDir, '.analytics', 'install-id');
+      fs.rmSync(path.dirname(installIdPath), { recursive: true, force: true });
+      const result = runBallin(args, {
+        BALLIN_NO_ANALYTICS: '',
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
+      });
+      assertHelpOutput(result);
+      assert.equal(result.stdout, expectedOutput);
+      assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
+      assert.deepEqual(commandLog(), []);
+    }
+  });
+
   ['config', 'update', 'backup', 'setup'].forEach((command) => {
     it(`prints offline ${command} --help without config or workflow effects`, () => {
       const preloadPath = path.join(tempDir, 'reject-network.cjs');
@@ -303,12 +399,13 @@ exit 17
     assert.isFalse(fs.existsSync(path.join(tempDir, '.analytics', 'install-id')));
 
     fs.rmSync(analyticsPath);
-    const repaired = runBallin(['help'], {
+    const repaired = runBallin(['config', 'get', 'analytics.enabled'], {
       BALLIN_NO_ANALYTICS: '',
       BALLIN_NO_COMMAND_ANALYTICS: '1',
     });
 
-    assertHelpOutput(repaired);
+    assert.equal(repaired.status, 0, repaired.stderr);
+    assert.equal(repaired.stdout, 'true\n');
     assert.match(fs.readFileSync(path.join(analyticsPath, 'install-id'), 'utf8').trim(), /^[0-9a-f-]{36}$/);
   });
 
@@ -340,12 +437,13 @@ require('https').request = () => {
     assert.isFalse(fs.existsSync(requestMarker));
     assert.isFalse(fs.existsSync(versionMarker));
 
-    const resumed = runBallin(['help'], {
+    const resumed = runBallin(['config', 'get', 'analytics.enabled'], {
       BALLIN_NO_ANALYTICS: '',
       NODE_OPTIONS: `--require=${preloadPath}`,
     });
 
-    assertHelpOutput(resumed);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(resumed.stdout, 'true\n');
     assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
     assert.isTrue(fs.existsSync(requestMarker));
     assert.deepEqual(JSON.parse(fs.readFileSync(versionMarker, 'utf8')), {
@@ -361,12 +459,13 @@ require('https').request = () => {
     fs.mkdirSync(path.dirname(installIdPath));
     fs.writeFileSync(installIdPath, 'not-an-install-id\n');
 
-    const result = runBallin(['help'], {
+    const result = runBallin(['config', 'get', 'analytics.enabled'], {
       BALLIN_NO_ANALYTICS: '',
       BALLIN_NO_COMMAND_ANALYTICS: '1',
     });
 
-    assertHelpOutput(result);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'true\n');
     assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
   });
 

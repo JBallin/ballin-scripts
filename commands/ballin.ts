@@ -264,7 +264,7 @@ const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => 
 
 const runBallinCli = (): void => {
   const args = process.argv.slice(2);
-  if (isCommandHelp(args)) {
+  if (args.length === 0 || (args.length === 1 && ['help', '--help'].includes(args[0])) || isCommandHelp(args)) {
     runBallinCommand(args);
     return;
   }
