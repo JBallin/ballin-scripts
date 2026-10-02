@@ -44,7 +44,7 @@ describe('first-run onboarding walkthroughs', function() {
 
     assert.equal(installResult.status, 0, installResult.stderr);
     assert.include(installResult.stdout, 'Installation plan');
-    assert.include(installResult.stdout, 'Enable minimal anonymous usage analytics? [Y/n]');
+    assert.include(installResult.stdout, 'Share usage analytics to help improve Ballin? [y/N]');
     assert.include(installResult.stdout, 'Backup setup skipped. Run ballin backup setup');
     assert.isTrue(fs.lstatSync(path.join(userBinDir, 'ballin')).isSymbolicLink());
     assert.isNull(JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8')).backup.id);
@@ -80,7 +80,7 @@ describe('first-run onboarding walkthroughs', function() {
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
     resetRemote(sandbox);
-    const installResult = runInstaller('y\nn\ny\ncreate\n\ny\ny\n\n');
+    const installResult = runInstaller('y\nn\ny\ncreate\n\ny\ny\ny\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));
