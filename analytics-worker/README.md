@@ -104,7 +104,7 @@ Schema v1 additionally requires:
 
 - `command` is one of the currently instrumented Ballin commands, including
   `ballin`, `ballin update`, `ballin backup`, `ballin config`,
-  `ballin doctor`, `ballin self-update`, and `ballin uninstall`
+  `ballin doctor`, `ballin self-update`, `ballin setup`, and `ballin uninstall`
 - `appVersion` is a released numeric version such as `1.0.0`
 - `nodeMajor` is a numeric major version
 - `osVersion` is a coarse macOS product version such as `26.6`, or `unknown`

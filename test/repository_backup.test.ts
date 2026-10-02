@@ -522,6 +522,18 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 1); assert.include(result.stdout, 'changed during inspection');
     assert.isNull(config().backup.repository); assert.equal(mutations().length, 0);
   });
+  it('stops backup setup when installed config migration fails before any remote request', () => {
+    const before = fs.readFileSync(configPath, 'utf8');
+    fs.writeFileSync(path.join(checkout, 'config', 'updateConfig.ts'), "process.stderr.write('fixture migration failed\\n'); process.exitCode = 1;\n");
+    const result = run(['setup']);
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'fixture migration failed');
+    assert.include(result.stderr, 'ballin backup setup: unable to create or update config');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.equal(state().requests.length, 0);
+    assert.isFalse(fs.existsSync(cacheRoot));
+  });
+
   it('reconnects without write permission or a cached base and restores only eligible preferences with local precedence', () => {
     const local = { backup: { id: null, host: 'preserved.test', repository: null, includeSensitive: 'true' },
       update: { cleanup: 'invalid', npm: false }, analytics: {}, custom: { preserve: true } };

@@ -13,6 +13,7 @@ const {
   configHasBackupHost,
   configure,
   configureGist,
+  configureBackup,
   setup,
   setupAnalytics,
   symlinkBinaries,
@@ -264,6 +265,38 @@ esac
     assert.isFalse(result);
     assert.equal(output, '');
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
+  it('propagates an installed config migration failure without reporting success or changing config', () => {
+    installConfigSources();
+    const configFile = path.join(repoDir, 'ballin.config.json');
+    const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+    fs.writeFileSync(configFile, original);
+    fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'), "process.stderr.write('fixture migration failed\\n'); process.exitCode = 1;\n");
+    const result = spawnSync(process.execPath, [installSetupPath, 'configure', repoDir, docsUrl], {
+      encoding: 'utf8', env: childEnvironment(),
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, 'fixture migration failed\n');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(configFile, 'utf8'), original);
+    assert.equal(commandLog(), '');
+  });
+
+  it('rejects repository setup while a Gist is configured before contacting GitHub or changing config', () => {
+    const configFile = path.join(repoDir, 'ballin.config.json');
+    const original = '{"backup":{"id":"returning-gist-id","host":"github.example.test"}}\n';
+    fs.writeFileSync(configFile, original);
+    installFakeGhCommand();
+    const { output, result } = withEnvironment(childEnvironment({
+      FAKE_COMMAND_LOG: commandLogPath, FAKE_GH_AUTH_STATUS: '0',
+    }), () => captureStdout(() => configureBackup(repoDir, docsUrl, true, {
+      configPath: configFile, repositoryName: 'independent-backup',
+    })));
+    assert.isFalse(result);
+    assert.include(output, 'Migration is separate; disconnect before setting up an independent repository.');
+    assert.equal(fs.readFileSync(configFile, 'utf8'), original);
+    assert.equal(commandLog(), '');
   });
 
   it('treats malformed config structures as having no usable backup host', () => {
@@ -644,6 +677,7 @@ esac
 
     assert.equal(result.status, 0, result.stderr);
     assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
+    assert.notInclude(result.stdout, 'shell completion');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.notInclude(result.stdout, 'Secret Gists are unlisted');
     assert.include(commandLog(), 'gh:api --hostname github.example.test user');
@@ -1266,6 +1300,8 @@ require('https').request = () => {
     assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
     assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf('\n💪 symlinked binaries'));
     assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
+    assert.include(result.stdout, `${docsUrl}#shell-completion`);
+    assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -1275,6 +1311,27 @@ require('https').request = () => {
     assert.notInclude(commandLog(), 'gh:');
     assert.equal(readRepoConfig().update.backup, 'false');
   });
+
+  for (const backupFails of [false, true]) {
+    it(`preserves the original setup result when completion fails (backup failure: ${backupFails})`, () => {
+      installConfigSources();
+      const home = path.join(testDir, 'home');
+      fs.mkdirSync(home, { recursive: true });
+      const profile = path.join(home, '.zshrc');
+      fs.mkdirSync(profile); // A nonregular startup file is never replaced.
+      const preloadPath = path.join(testDir, 'interactive-completion.cjs');
+      fs.writeFileSync(preloadPath, 'process.stdin.isTTY = true;\n');
+      const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
+        encoding: 'utf8', input: backupFails ? 'n\nhome\ny\n' : 'n\nhome\nn\n',
+        env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
+      });
+      assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Shell completion setup could not finish. Ballin remains installed.');
+      assert.isBelow(result.stdout.indexOf('symlinked binaries'), result.stdout.indexOf('Shell completion setup'));
+      assert.isTrue(fs.lstatSync(profile).isDirectory());
+      assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
+    });
+  }
 
   it('leaves core installation usable when requested backup setup fails', () => {
     installConfigSources();
