@@ -130,10 +130,13 @@ describe('setup readiness', () => {
     writeConfig({ backup: { repository: fixtureDestination, includeSensitive: 'invalid' } });
     const report = collect({ runCommand: (_command, args, options) => ({ ...requestFixture(state, args, options), stderr: '' }) });
     assert.equal(checkById(report, 'backup.consent').status, 'fail');
+    assert.equal(checkById(report, 'backup.consent').summary, '`backup.includeSensitive` must be true or false; read-only recovery remains available.');
     assert.equal(checkById(report, 'backup.read').status, 'fail');
     fs.rmSync(path.join(binDir, 'gh')); assert.equal(checkById(collect(), 'backup.gh').status, 'fail');
     writeConfig({ backup: { repository: fixtureDestination, id: 'legacy' } });
-    assert.equal(checkById(collect(), 'backup.config').status, 'fail'); assert.deepEqual(commandLog, []);
+    assert.equal(checkById(collect(), 'backup.config').status, 'fail');
+    assert.equal(checkById(collect(), 'backup.config').summary, 'Invalid or conflicting backup destination. Repair linkage or run `ballin backup disconnect`.');
+    assert.deepEqual(commandLog, []);
   });
 
   it('reports supported and unsupported Node.js runtimes', () => {
@@ -175,6 +178,7 @@ describe('setup readiness', () => {
     const commandCheck = checkById(report, 'commands.path');
 
     assert.equal(commandCheck.status, 'fail');
+    assert.equal(commandCheck.summary, 'Missing command shims on PATH: `ballin`.');
     assert.deepEqual(commandCheck.data?.missing, ['ballin']);
   });
 
@@ -194,6 +198,7 @@ describe('setup readiness', () => {
 
     assert.equal(checkById(readableConfig, 'config.read').status, 'pass');
     assert.equal(sectionCheck.status, 'warn');
+    assert.equal(sectionCheck.summary, 'Config is readable but missing sections: `update`, `analytics`.');
     assert.deepEqual(sectionCheck.data?.missingSections, ['update', 'analytics']);
   });
 
@@ -208,7 +213,7 @@ describe('setup readiness', () => {
 
     assert.equal(report.status, 'fail');
     assert.equal(checkById(report, 'config.read').status, 'fail');
-    assert.include(checkById(report, 'config.read').summary, 'backup');
+    assert.equal(checkById(report, 'config.read').summary, 'Config sections must be JSON objects: `backup`.');
     assert.equal(checkById(report, 'backup.config').status, 'info');
     assert.isUndefined(report.checks.find((check) => check.id === 'backup.optional'));
     assert.deepEqual(commandLog, []);
@@ -255,7 +260,7 @@ describe('setup readiness', () => {
 
     assert.equal(report.status, 'pass');
     assert.equal(checkById(report, 'backup.optional').status, 'info');
-    assert.include(checkById(report, 'backup.optional').summary, 'ballin backup setup');
+    assert.equal(checkById(report, 'backup.optional').summary, 'Backup is not configured. Maintenance-only Ballin is supported; run `ballin backup setup` to enable it.');
     assert.deepEqual(report.checks.filter((check) => check.id.startsWith('backup.')).map((check) => check.id), [
       'backup.optional',
     ]);
@@ -295,7 +300,7 @@ describe('setup readiness', () => {
 
       assert.equal(report.status, 'fail');
       assert.equal(checkById(report, 'backup.gist').status, 'fail');
-      assert.equal(checkById(report, 'backup.gist').summary, 'backup.id must be null or a non-empty string.');
+      assert.equal(checkById(report, 'backup.gist').summary, '`backup.id` must be null or a non-empty string.');
       assert.deepEqual(commandLog, []);
     });
 
@@ -329,6 +334,8 @@ describe('setup readiness', () => {
     assert.equal(checkById(missingHost, 'backup.host').status, 'fail');
     assert.equal(checkById(missingHost, 'backup.auth').status, 'info');
     assert.equal(checkById(missingHost, 'backup.read').status, 'info');
+    assert.equal(checkById(missingHost, 'backup.auth').summary, 'Skipping GitHub CLI authentication check until `backup.host` is configured.');
+    assert.equal(checkById(missingHost, 'backup.read').summary, 'Skipping configured Gist readability check until `backup.host` is configured.');
     assert.deepEqual(commandLog, []);
 
     writeConfig({
@@ -346,6 +353,14 @@ describe('setup readiness', () => {
     assert.equal(checkById(authFailed, 'backup.read').status, 'info');
     assert.equal(authFailed.status, 'fail');
     assert.deepEqual(commandLog, ['gh auth status --active --hostname example.test']);
+  });
+
+  it('marks the executable in skipped legacy readiness checks', () => {
+    fs.rmSync(path.join(binDir, 'gh'));
+    const report = collect();
+    assert.equal(checkById(report, 'backup.auth').summary, 'Skipping GitHub CLI authentication check because `gh` is not on PATH.');
+    assert.equal(checkById(report, 'backup.read').summary, 'Skipping configured Gist readability check because `gh` is not on PATH.');
+    assert.deepEqual(commandLog, []);
   });
 
   it('fails when the configured Gist cannot be read', () => {
