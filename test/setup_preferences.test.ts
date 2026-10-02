@@ -76,7 +76,10 @@ fs.readFileSync = (file, ...args) => {
       .map((line: string) => /([\w.]+): (?:absent|unavailable|available|"|unsupported)/u.exec(line)?.[1])
       .filter(Boolean);
     assert.deepEqual(labels, [
-      'bash_profile.sh', 'bashrc.sh', 'gitconfig', 'gitignore_global', 'nanorc',
+      'bash_profile.sh', 'bashrc.sh', 'codex_agents.json', 'codex_AGENTS.md',
+      'codex_config.toml', 'codex_hooks.json', 'codex_marketplace.json',
+      'codex_profiles.json', 'codex_rules.json', 'codex_skills.json',
+      'gitconfig', 'gitignore_global', 'nanorc',
       'nvmrc', 'pipx', 'profile.sh', 'vimrc', 'vs_keybindings', 'vs_settings',
       'vsI_keybindings', 'vsI_settings', 'zprofile.sh', 'zshrc.sh',
     ]);
