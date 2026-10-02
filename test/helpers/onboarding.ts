@@ -39,7 +39,7 @@ const validateSandbox = (sandbox: Sandbox): void => {
     || fs.realpathSync(sandbox.repo) !== sandbox.repo)) throw new Error('Sandbox checkout was replaced');
   const state = path.join(sandbox.remote, 'repository.json');
   if (existsWithoutFollowingLinks(state) && fs.lstatSync(state).isSymbolicLink()) throw new Error('Sandbox remote state was replaced');
-  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, 'node', 'git', 'gh'].sort().join(',')
+  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, 'node', 'git', 'gh', 'softwareupdate'].sort().join(',')
     || fs.readdirSync(sandbox.bin).some((name: string) => name !== 'ballin')) throw new Error('Unexpected sandbox command');
   for (const [file, contents] of sandbox.expected) {
     if (fs.readFileSync(file, 'utf8') !== contents || fs.lstatSync(file).isSymbolicLink()) {
@@ -129,7 +129,9 @@ const createSandbox = (): Sandbox => {
     const git = path.join(sandbox.tools, 'git');
     fs.writeFileSync(git, `#!${process.execPath}\nconst fs = require('fs');\nconst path = require('path');\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(sandbox.log)}, 'git:' + args.join(' ') + '\\n');\nconst exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);\nif (exact(['--version'])) process.stdout.write('git version onboarding fixture\\n');\nelse if (exact(['clone', 'https://github.com/JBallin/ballin-scripts.git', '.ballin-scripts']) && process.cwd() === ${JSON.stringify(sandbox.home)}) {\n  fs.mkdirSync(${JSON.stringify(sandbox.repo)}, { recursive: true });\n  for (const name of ['commands', 'config', 'bin', 'completions', 'package.json']) fs.cpSync(path.join(${JSON.stringify(source)}, name), path.join(${JSON.stringify(sandbox.repo)}, name), { recursive: true });\n} else if (exact(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])) process.exitCode = 1;\nelse if (process.cwd() === ${JSON.stringify(sandbox.repo)} && [\n  ['fetch', 'origin', '+main:refs/remotes/origin/main'], ['checkout', 'main'], ['merge', 'origin/main'], ['stash', 'push', '--include-untracked']\n].some(exact)) {}\nelse { process.stderr.write('Unsupported sandbox Git operation\\n'); process.exitCode = 2; }\n`, { mode: 0o755 });
     installRepositoryFixture(sandbox.tools, path.join(sandbox.remote, 'repository.json'));
-    for (const file of [git, path.join(sandbox.tools, 'gh'), sandbox.guard]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
+    const softwareUpdate = path.join(sandbox.tools, 'softwareupdate');
+    fs.writeFileSync(softwareUpdate, `#!${process.execPath}\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
+    for (const file of [git, path.join(sandbox.tools, 'gh'), softwareUpdate, sandbox.guard]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
     fs.writeFileSync(path.join(sandbox.home, '.zshrc'), '# Harmless onboarding QA fixture\nexport BALLIN_QA_EXAMPLE=1\n');
     resetRemote(sandbox);
     return sandbox;

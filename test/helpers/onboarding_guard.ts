@@ -23,6 +23,7 @@ for (const resolver of [require('dns'), require('dns').promises]) {
 globalThis.fetch = deny;
 
 const childProcess = require('child_process');
+const installedBallin = path.join(root, 'home/.ballin-scripts/bin/ballin');
 for (const name of ['exec', 'execSync']) childProcess[name] = deny;
 for (const name of ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork']) {
   const original = childProcess[name];
@@ -30,7 +31,11 @@ for (const name of ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork']) {
     if (name === 'fork') fail();
     const candidate = command.includes(path.sep) ? path.resolve(command) : path.join(root, 'tools', command);
     if (candidate !== process.execPath && !candidate.startsWith(path.join(root, 'tools') + path.sep)
-      && candidate !== path.join(root, 'home/.local/bin/ballin')) fail();
+      && candidate !== path.join(root, 'home/.local/bin/ballin') && candidate !== installedBallin) fail();
+    if (candidate === installedBallin) {
+      if (fs.realpathSync(candidate) !== installedBallin || !fs.lstatSync(candidate).isFile()) fail();
+      fs.accessSync(candidate, fs.constants.X_OK);
+    }
     const options = args.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as { env?: NodeJS.ProcessEnv; shell?: unknown; cwd?: string } | undefined;
     const env = options?.env ?? process.env;
     if (options?.shell || env.HOME !== process.env.HOME || env.PATH !== process.env.PATH

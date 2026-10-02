@@ -35,12 +35,17 @@ describe('onboarding sandbox', function() {
   });
 
   it('refuses missing or changed safeguards before launching', () => {
-    for (const file of [sandbox.guard, path.join(sandbox.tools, 'gh'), path.join(sandbox.tools, 'git')]) {
+    for (const file of [sandbox.guard, path.join(sandbox.tools, 'gh'), path.join(sandbox.tools, 'git'), path.join(sandbox.tools, 'softwareupdate')]) {
       const original = fs.readFileSync(file, 'utf8');
       fs.writeFileSync(file, original + '\n// changed');
       assert.throws(() => runSandbox(sandbox, ['install'], 'y\n'), /safeguard was changed/u);
       fs.writeFileSync(file, original);
     }
+    const systemUpdate = path.join(sandbox.tools, 'softwareupdate');
+    const contents = fs.readFileSync(systemUpdate, 'utf8');
+    fs.unlinkSync(systemUpdate);
+    assert.throws(() => runSandbox(sandbox, ['install'], 'y\n'), /Unexpected sandbox command/u);
+    fs.writeFileSync(systemUpdate, contents, { mode: 0o755 });
     fs.unlinkSync(path.join(sandbox.tools, 'node'));
     assert.throws(() => runSandbox(sandbox, ['install'], 'y\n'), /Unexpected sandbox command/u);
     assert.isFalse(fs.existsSync(sandbox.repo));
@@ -112,7 +117,56 @@ describe('onboarding sandbox', function() {
     }
     const result = spawnSync(path.join(sandbox.tools, 'gh'), ['auth', 'login'], { cwd: sandbox.home, env });
     assert.notEqual(result.status, 0);
+    const systemUpdate = spawnSync(path.join(sandbox.tools, 'softwareupdate'), ['--list'], { cwd: sandbox.home, env, encoding: 'utf8' });
+    assert.equal(systemUpdate.status, 2);
+    assert.include(systemUpdate.stderr, 'Unsupported sandbox softwareupdate operation');
     assert.isFalse(remote().exists);
+  });
+
+  it('runs maintenance with fresh installation defaults and the guarded installed self-update path', () => {
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
+    assert.equal(config.update.selfUpdate, 'true');
+    const update = runSandbox(sandbox, ['update']);
+    assert.equal(update.status, 0, update.stdout + update.stderr);
+    assert.include(update.stdout, 'Checking Ballin readiness');
+    assert.include(update.stdout, "You're ballin.");
+    assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'git:fetch origin +main:refs/remotes/origin/main');
+    assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'softwareupdate:-ia');
+    assert.isEmpty(remote().requests);
+  });
+
+  it('runs self-update and automatic backup through the real guarded installed CLI', () => {
+    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\ncreate\n\ny\ny\n\n');
+    assert.equal(install.status, 0, install.stdout + install.stderr);
+    const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
+    assert.equal(config.update.selfUpdate, 'true');
+    assert.equal(config.update.backup, 'true');
+    const update = runSandbox(sandbox, ['update']);
+    assert.equal(update.status, 0, update.stdout + update.stderr);
+    assert.include(update.stdout, 'Checking Ballin readiness');
+    assert.include(update.stdout, 'Backing up development environment');
+    assert.include(update.stdout, '✚ zshrc');
+    const state = remote();
+    assert.equal(Buffer.from(state.commits[state.head].files['zshrc.sh'], 'base64').toString(), fs.readFileSync(path.join(sandbox.home, '.zshrc'), 'utf8'));
+    assert.lengthOf(state.requests.filter((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish')), 2);
+  });
+
+  it('refuses sibling executables and redirected targets beside the exact installed CLI', () => {
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    const executable = path.join(sandbox.repo, 'bin/ballin');
+    const sibling = path.join(sandbox.repo, 'bin/other');
+    fs.symlinkSync(executable, sibling);
+    const siblingResult = runNode(`require('child_process').spawnSync(${JSON.stringify(sibling)}, ['--help'])`);
+    assert.equal(siblingResult.status, 1);
+    assert.include(siblingResult.stderr, 'sandbox safeguard refused');
+    const outside = path.join(sandbox.root, 'other-ballin');
+    fs.copyFileSync(executable, outside);
+    fs.unlinkSync(executable);
+    fs.symlinkSync(outside, executable);
+    const redirected = runNode(`require('child_process').spawnSync(${JSON.stringify(executable)}, ['--help'])`);
+    assert.equal(redirected.status, 1);
+    assert.include(redirected.stderr, 'sandbox safeguard refused');
   });
 
   it('reuses an install for later opt-in and clean create/reconnect walkthrough resets', () => {

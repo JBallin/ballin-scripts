@@ -30,8 +30,9 @@ exit
 ```
 
 For maintenance-only onboarding, decline backup setup. `doctor` and `update` run
-against the isolated installation and controlled tools; optional host maintenance
-tools are absent. Self-update uses a fake Git checkout update. Backup setup uses
+against the isolated installation and controlled tools. The default macOS update
+stage uses a fake `softwareupdate` command; other optional host maintenance tools
+are absent. Self-update uses a fake Git checkout update. Backup setup uses
 a fake personal GitHub account and repository, sharing the automated walkthrough
 fixtures. `backup open` records a fake browser request. No browser opens and no
 GitHub login is needed. The sandbox includes a harmless `.zshrc` so sensitive-source
