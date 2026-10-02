@@ -225,7 +225,7 @@ const configureGist = (
     return false;
   }
   if (destination.idStatus === 'invalid') {
-    writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.id; expected null or a non-empty string.');
+    writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.id`; expected null or a non-empty string.');
     writeStdoutLine('Run `ballin config reset` to restore valid defaults, then run `ballin backup setup` if needed.');
     return false;
   }
@@ -241,7 +241,7 @@ const configureGist = (
   let pendingBackupHost: string | null = null;
 
   if (backupHostInvalid) {
-    writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
+    writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.');
   }
 
   if (!backupId) {
@@ -274,7 +274,7 @@ const configureGist = (
     if (replacementHost) {
       const normalizedReplacementHost = normalizeBackupHost(replacementHost);
       if (!normalizedReplacementHost) {
-        writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
+        writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.');
         return false;
       }
       if (deferHostPersistence) {
@@ -287,7 +287,7 @@ const configureGist = (
         }
         backupHost = normalizeBackupHost(configValue(ballinConfig, 'backup.host'));
         if (!backupHost) {
-          writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.host; expected a non-empty string.');
+          writeStdoutLine('\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.');
           return false;
         }
       }
@@ -464,7 +464,7 @@ const setup = (
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, backupHostExisted, { originalConfig });
     if (!backupSetupSucceeded) {
       writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
-      writeStdoutLine('\nBallin maintenance is installed. Retry with: ballin backup setup');
+      writeStdoutLine('\nBallin maintenance is installed. Retry with: `ballin backup setup`');
     }
   }
 

@@ -874,7 +874,7 @@ exit 2
     });
 
     assertBackupSucceeded(result);
-    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'Invalid config value `backup.host`; expected a non-empty string.');
     assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
     assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host, 'github.com');
     assert.deepEqual(ghCalls(), [
@@ -896,7 +896,7 @@ exit 2
     });
 
     assertBackupSucceeded(result);
-    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'Invalid config value `backup.host`; expected a non-empty string.');
     assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
     assert.equal(
       JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host,
