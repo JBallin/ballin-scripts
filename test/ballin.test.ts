@@ -32,6 +32,7 @@ describe('ballin', () => {
     assert.include(result.stdout, 'back up Ballin-managed environment state to the configured backup');
     assert.notInclude(result.stdout, 'your private backup');
     assert.include(result.stdout, 'setup');
+    assert.include(result.stdout, 'sensitive sources: backup.includeSensitive (default: false)');
     assert.include(result.stdout, 'doctor');
     assert.include(result.stdout, 'config');
     assert.include(result.stdout, 'self-update');
