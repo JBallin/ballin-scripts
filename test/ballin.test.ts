@@ -28,16 +28,22 @@ describe('ballin', () => {
     assert.include(result.stdout, 'Back up your dotfiles and update your macOS development environment.');
     assert.include(result.stdout, 'Usage:');
     assert.include(result.stdout, 'ballin <command> [options]');
-    assert.include(result.stdout, 'update');
-    assert.include(result.stdout, 'back up Ballin-managed environment state to the configured backup');
-    assert.notInclude(result.stdout, 'your private backup');
-    assert.include(result.stdout, 'setup');
-    assert.include(result.stdout, 'sensitive sources: backup.includeSensitive (default: false)');
-    assert.include(result.stdout, 'doctor');
-    assert.include(result.stdout, 'config');
-    assert.include(result.stdout, 'self-update');
-    assert.include(result.stdout, 'uninstall');
-    assert.include(result.stdout, '--verbose');
+    const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\n')[0];
+    const commandLines = commandSection.split('\n');
+    assert.lengthOf(commandLines, topLevelCommandNames.length);
+    const documentedCommands = commandLines.map((line: string) => {
+      const match = /^ {4}([a-z][a-z-]*) {2,}([a-z].*)$/u.exec(line);
+      assert.isNotNull(match, line);
+      return match![1];
+    });
+    assert.sameMembers(documentedCommands, [...topLevelCommandNames]);
+    assert.include(result.stdout, 'back up Ballin-managed environment state');
+    assert.include(result.stdout, 'view or change Ballin configuration');
+    assert.include(result.stdout, 'Run `ballin <command> --help` for command-specific help.');
+    for (const detail of ['Examples:', '--verbose', 'backup.includeSensitive', 'configured backup',
+      '[repository-name]', 'file name', '(ex:', 'local checkout', 'command shims']) {
+      assert.notInclude(result.stdout, detail);
+    }
     assert.equal(result.stderr, '');
   };
 
@@ -256,7 +262,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
     }
   });
 
-  ['config', 'update', 'backup', 'setup'].forEach((command) => {
+  topLevelCommandNames.forEach((command: string) => {
     it(`prints offline ${command} --help without config or workflow effects`, () => {
       const preloadPath = path.join(tempDir, 'reject-network.cjs');
       const networkMarker = path.join(tempDir, 'network-request');
@@ -276,6 +282,9 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         assert.equal(result.stderr, '');
         assert.include(result.stdout, `ballin ${command} --help`);
         assert.notInclude(result.stdout, 'ballin config help');
+        if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
+        if (command === 'self-update') assert.include(result.stdout, 'local `ballin-scripts` checkout, command shims, and configuration');
+        if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
         if (command === 'update') assert.include(result.stdout, 'Use `ballin config get update` to inspect settings.\n');
         if (command === 'setup') assert.include(result.stdout, 'Use `ballin config get/set/reset` for direct configuration.\n');
         if (command === 'backup') {
@@ -295,9 +304,91 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
     });
   });
 
+  ['doctor', 'self-update', 'uninstall'].forEach((command) => {
+    it(`rejects malformed ${command} help without running its workflow`, () => {
+      for (const args of [['--help', 'extra'], ['extra', '--help'], ['help']]) {
+        const result = runBallin([command, ...args]);
+        assert.equal(result.status, 2);
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, `Usage: ballin ${command}${command === 'doctor' ? ' [--verbose]' : ''}\n`);
+        assert.deepEqual(commandLog(), []);
+      }
+    });
+
+    it(`keeps ${command} help free of config, identity, analytics, and workflow attempts`, () => {
+      const attemptPath = path.join(tempDir, 'forbidden-help-actions');
+      const preloadPath = path.join(tempDir, 'reject-help-effects.cjs');
+      const analyticsPath = path.join(tempDir, '.analytics');
+      const checkoutPath = path.join(tempDir, '.ballin-scripts');
+      fs.mkdirSync(checkoutPath);
+      fs.writeFileSync(path.join(checkoutPath, 'sentinel'), 'retained');
+      fs.mkdirSync(analyticsPath);
+      fs.writeFileSync(path.join(analyticsPath, 'install-id'), 'invalid-id\n');
+      fs.writeFileSync(preloadPath, `const fs = require('fs');
+const path = require('path');
+const append = fs.appendFileSync.bind(fs);
+const reject = (action) => {
+  append(${JSON.stringify(attemptPath)}, action + '\\n');
+  const error = new Error('Forbidden help action: ' + action);
+  error.code = 'EACCES';
+  throw error;
+};
+for (const name of ['readFileSync', 'writeFileSync', 'appendFileSync', 'openSync',
+  'accessSync', 'existsSync', 'statSync', 'lstatSync', 'mkdirSync', 'readdirSync',
+  'renameSync', 'linkSync', 'unlinkSync', 'rmSync']) {
+  const original = fs[name];
+  fs[name] = (...values) => {
+    const targets = name === 'renameSync' || name === 'linkSync' ? values.slice(0, 2) : values.slice(0, 1);
+    for (const target of targets) {
+      if (typeof target !== 'string' && !Buffer.isBuffer(target)) continue;
+      const resolved = path.resolve(String(target));
+      if (resolved === ${JSON.stringify(configPath)}
+        || resolved === ${JSON.stringify(path.join(__dirname, '..', 'config', '.defaultConfig.json'))}
+        || resolved === ${JSON.stringify(analyticsPath)}
+        || resolved.startsWith(${JSON.stringify(analyticsPath + path.sep)})
+        || resolved === ${JSON.stringify(checkoutPath)}
+        || resolved.startsWith(${JSON.stringify(checkoutPath + path.sep)})) reject('fs.' + name);
+    }
+    return original(...values);
+  };
+}
+for (const module of ['http', 'https']) {
+  for (const name of ['request', 'get']) require(module)[name] = () => reject(module + '.' + name);
+}
+for (const name of ['connect', 'createConnection']) require('net')[name] = () => reject('net.' + name);
+globalThis.fetch = () => reject('fetch');
+for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {
+  require('child_process')[name] = () => reject('child_process.' + name);
+}
+const analytics = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'analytics.ts'))});
+analytics.ensureAnalyticsInstallId = () => reject('identity repair');
+analytics.runWithCommandAnalytics = () => reject('command analytics');
+`);
+      for (const contents of [undefined, '{invalid', '{"analytics":{"enabled":"true"}}']) {
+        fs.rmSync(configPath, { force: true });
+        if (contents !== undefined) fs.writeFileSync(configPath, contents);
+        const result = runBallin([command, '--help'], {
+          NODE_ENV: 'production',
+          BALLIN_NO_ANALYTICS: undefined,
+          BALLIN_NO_COMMAND_ANALYTICS: undefined,
+          NODE_OPTIONS: `--require=${preloadPath}`,
+        });
+        assert.equal(result.status, 0, result.stderr);
+        assert.include(result.stdout, `ballin ${command} --help`);
+        assert.equal(result.stderr, '');
+        assert.isFalse(fs.existsSync(attemptPath));
+        assert.deepEqual(commandLog(), []);
+        assert.equal(fs.readFileSync(path.join(analyticsPath, 'install-id'), 'utf8'), 'invalid-id\n');
+        assert.equal(fs.readFileSync(path.join(checkoutPath, 'sentinel'), 'utf8'), 'retained');
+        if (contents === undefined) assert.isFalse(fs.existsSync(configPath));
+        else assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
+      }
+    });
+  });
+
   it('keeps top-level help aligned with the command catalog', () => {
     const result = runBallin(['--help']);
-    const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\nExamples:')[0];
+    const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\n')[0];
     const documentedCommands = [...commandSection.matchAll(/^ {4}([a-z][a-z-]*) {2,}/gmu)]
       .map((match) => match[1]);
 
@@ -343,10 +434,7 @@ exit 17
   it('routes backup through the backup command implementation', () => {
     const result = runBallin(['backup', 'help']);
 
-    assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Ballin');
-    assert.include(result.stdout, 'ballin backup');
-    assert.equal(result.stderr, '');
+    assertHelpOutput(result);
   });
 
   it('routes config through the existing config command implementation', () => {
