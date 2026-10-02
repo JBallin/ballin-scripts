@@ -276,12 +276,15 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         assert.equal(result.stderr, '');
         assert.include(result.stdout, `ballin ${command} --help`);
         assert.notInclude(result.stdout, 'ballin config help');
-        if (command === 'update') assert.include(result.stdout, 'ballin config get update');
+        if (command === 'update') assert.include(result.stdout, 'Use `ballin config get update` to inspect settings.\n');
+        if (command === 'setup') assert.include(result.stdout, 'Use `ballin config get/set/reset` for direct configuration.\n');
         if (command === 'backup') {
+          assert.include(result.stdout, '`setup` creates or reconnects to an optional backup; `open` opens it in a browser.\n');
+          assert.include(result.stdout, '`read` prints a backed-up file; `disconnect` stops local backups and clears comparison state.\n');
           ['setup [repository-name]', 'open', 'read <file>', 'disconnect'].forEach((usage) => {
             assert.include(result.stdout, `ballin backup ${usage}`);
           });
-          assert.include(result.stdout, 'Repository backups exclude sensitive sources unless backup.includeSensitive is true.');
+          assert.include(result.stdout, 'Repository backups exclude sensitive sources unless `backup.includeSensitive` is true.');
         }
         assert.deepEqual(commandLog(), []);
         assert.isFalse(fs.existsSync(networkMarker));
@@ -551,8 +554,8 @@ require('https').request = () => {
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
-    assert.include(result.stdout, '\nNext: Run ballin config reset to recreate the config.');
+    assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
+    assert.include(result.stdout, '\nNext: Run `ballin config reset` to recreate the config.');
     assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
     assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
@@ -564,7 +567,7 @@ require('https').request = () => {
 
     assert.equal(verboseResult.status, 0, verboseResult.stderr);
     assert.include(verboseResult.stdout, 'OK    Node.js runtime:');
-    assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
+    assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
     assert.include(verboseResult.stdout, 'OK    Configured Gist readability:');
     assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
   });
@@ -643,8 +646,8 @@ esac
       const result = runBallin(['doctor', '--verbose']);
 
       assert.equal(result.status, 1, result.stderr);
-      assert.include(result.stdout, 'ERROR Gist ID: backup.id must be null or a non-empty string.');
-      assert.include(result.stdout, 'Next: Run ballin config reset to restore valid defaults');
+      assert.include(result.stdout, 'ERROR Gist ID: `backup.id` must be null or a non-empty string.');
+      assert.include(result.stdout, 'Next: Run `ballin config reset` to restore valid defaults');
     });
 
     writeConfig({
@@ -657,7 +660,7 @@ esac
 
     assert.equal(malformedHost.status, 1);
     assert.include(malformedHost.stdout, 'ERROR Gist host: Gist host is not configured.');
-    assert.include(malformedHost.stdout, 'Next: Run ballin backup setup to repair the backup host.');
+    assert.include(malformedHost.stdout, 'Next: Run `ballin backup setup` to repair the backup host.');
     assert.deepEqual(commandLog(), []);
   });
 
@@ -677,7 +680,7 @@ esac
     const missingShim = runBallin(['doctor']);
 
     assert.equal(missingShim.status, 1);
-    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
+    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: `ballin`.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
     assert.notInclude(missingShim.stdout, 'Gist ID:');
     assert.notInclude(missingShim.stdout, 'GitHub CLI:');
@@ -692,7 +695,7 @@ esac
 
     assert.equal(missingConfig.status, 1);
     assert.include(missingConfig.stdout, 'ERROR Config readability: Unable to read');
-    assert.include(missingConfig.stdout, 'Next: Run ballin config reset to recreate the config.');
+    assert.include(missingConfig.stdout, 'Next: Run `ballin config reset` to recreate the config.');
   });
 
   it('rejects invalid doctor usage', () => {

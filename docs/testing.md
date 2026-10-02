@@ -143,6 +143,102 @@ attributing a difference to the OS or runtime. Platform-dependent execution can
 also change V8's range boundaries, so one newly uncovered branch may change
 both covered and total branch counts.
 
+## Test runtime and timeouts
+
+Use `npm run test:unit` for a focused development run, for example:
+
+```shell
+npm run test:unit -- --grep 'scenario name'
+```
+
+Keep `npm test` as the complete local gate. A gate passes only when the command
+finishes successfully and all required stages complete; a passing Mocha count
+alone does not establish that coverage checks or later stages passed. A killed,
+interrupted, tool-expired, or disconnected command without a confirmed exit
+status is incomplete. Record the command, last completed stage, and diagnostic
+output. Distinguish that interruption from Mocha reporting a test timeout.
+
+Before adding timeout headroom, remove unnecessary waits and accumulated work.
+Give each independent matrix combination its own `it` with the same assertions.
+In [PR #438](https://github.com/JBallin/ballin-scripts/pull/438), three help tests
+each bundled twelve independent CLI scenarios and exceeded the default two-second
+timeout in Linux CI. That is evidence about the test boundary and process cost,
+not evidence of intermittent flakiness or a reason to increase the global limit.
+
+Keep a focused override when one coherent integration workflow legitimately
+needs more time. Existing Mocha allowances apply to each test or hook in their
+scope, rather than the combined suite runtime.
+
+The inventory identifies current limits. Justify test boundaries and allowance
+choices from the behavior and guards in each case.
+
+| Scope | Allowance | Purpose |
+| --- | --- | --- |
+| Tests without an override | 2s | Default Mocha limit |
+| Selected installer, analytics, backup and update cases | 5s | Coherent process workflows, concurrent repair, or bounded sender failures |
+| Update interruption cases | 8s | Readiness handshake and a separate 5s child-process watchdog |
+| Repository lifecycle and nested-update backup | 15s | Multiple real CLI and fixture processes within one workflow |
+| Native Tab-completion cases | 20s | Isolated interactive shell and terminal subprocesses |
+| Onboarding sandbox and walkthroughs | 300s | Outer allowance for multi-step command and process-group cleanup guards |
+
+Recent Linux integration evidence includes a 2.122s installer case and a 7.137s
+repository lifecycle case, supporting scoped headroom rather than a larger
+default. Automated onboarding commands have a 120s child limit; interactive QA
+test wrappers have a 240s limit. They check shutdown and preserve ambiguous live
+session state. These are guard budgets, not expected runtimes. Any adjustment
+must account for nested command limits and cleanup, as well as measured case
+duration. Use readiness signals rather than fixed sleeps to coordinate children.
+
+### Measuring runtime
+
+Coordinate a quiet local window with no overlapping test suites. Hold the source
+tree, runtime, dependencies and test selection fixed using the provenance rules
+in [Comparing coverage](#comparing-coverage). Record wall time, exit status,
+passing/pending counts and per-case durations for each command. Preserve stdout
+and stderr, and compare `npm run test:unit` with `npm run test:coverage` on that
+same checkout when estimating whole-suite instrumentation overhead. Focused
+results cannot establish whole-suite overhead, and macOS and Linux timings are
+not interchangeable.
+
+A separate October 2, 2026 whole-suite pair used Node 24.21.0 on macOS arm64
+and the frozen PR #438 head `8476f23`, including its split help matrix. Unit
+execution took 222.34s; coverage took 241.09s, an observed 18.74s (8.43%)
+overhead relative to unit execution. Both commands exited successfully with
+1,486 passing tests and no pending tests. Coverage retained the configured gate
+and reported 99.49% statements and lines, 97.27% branches and 100% functions.
+This is one serial pair, not an estimate of timing variance or a comparison
+between the earlier fixture patch and this later source tree.
+
+The October 2, 2026 fixture-startup comparison used Node 24.21.0 on macOS arm64,
+baseline `3c924f9`, and the helper change delivered in
+[PR #437](https://github.com/JBallin/ballin-scripts/pull/437):
+
+| Command and selection | Before | After | Observations |
+| --- | --- | --- | --- |
+| Unit, nine representative scenarios | 12.00s | 9.08s | Median of three alternating pairs |
+| Coverage, the same nine scenarios | 12.57s | 9.77s | Median of three alternating pairs |
+| Complete `npm test`, 1,427 tests | 272.44s | 238.30s | One pair |
+
+The full pair saved 34.14s while preserving production coverage source maps and
+covered/uncovered outcomes. It is one observation, not a runtime guarantee.
+Repository lifecycle cases contributed at least 153s of the baseline's printed
+test time, compared with about 35s for legacy backup; printed durations omit
+fast cases and setup. Lint and both typechecks added about 2.1s to the optimized
+local gate.
+
+Linux CI on baseline `3c924f9` spent 476s in coverage within a 510s job. Merged
+commit `1cb157a` passed 1,443 tests and spent 383s in coverage within a 408s job.
+That merged tree includes other changes, so these runs are not a controlled
+before/after estimate of the optimization. Use exact run provenance before
+attributing differences to a patch or resource contention.
+
+Retain serial execution and the single complete gate. Mocha's parallel workers
+load required setup once per worker and can run multiple files, while the current
+root `afterAll` removes its config and restores the environment after a file.
+Worker reuse would need a compatible fixture lifecycle before enabling parallel
+mode. Splitting suites adds maintenance cost without a demonstrated additional
+benefit; use focused selection for feedback and retain complete final validation.
+
 ## Runtime and platform limits
 
 Node options and preloads take effect before Mocha setup and are not equivalent

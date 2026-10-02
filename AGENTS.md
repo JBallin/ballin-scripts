@@ -22,6 +22,11 @@
 - Install dependencies with `npm ci`.
 - Run `npm test` after changes to code, config, scripts, or tests. Treat
   `package.json` as the source of truth for what that gate includes.
+- Report validation as passing only after the command completes successfully.
+  A killed, interrupted, tool-expired, or disconnected run without a confirmed
+  exit status is incomplete, even if its output includes passing tests.
+  Distinguish a Mocha test timeout from an interrupted validation command;
+  retain the command, last completed stage, and failure or interruption evidence.
 - Add focused validation when a touched risk is not covered by `npm test`;
   `.github/workflows/ci.yml` defines the additional shell and workflow checks.
 - When changing shared validation commands, prerequisites, package metadata, or

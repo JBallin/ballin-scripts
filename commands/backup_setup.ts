@@ -33,7 +33,7 @@ const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome): vo
     return;
   }
   if (outcome.status === 'permission-denied') {
-    writeStdoutLine('Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun ballin backup setup after updating GitHub access.');
+    writeStdoutLine('Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun `ballin backup setup` after updating GitHub access.');
     return;
   }
   if (outcome.status === 'unexpected') {
@@ -65,7 +65,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine('Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
       const start = readPromptLine('Set up optional private backups now? [y/N] ');
       if (start.eof || !/^[yY]$/u.test(start.text)) {
-        writeStdoutLine('Backup setup skipped. Run ballin backup setup when you are ready.');
+        writeStdoutLine('Backup setup skipped. Run `ballin backup setup` when you are ready.');
         return true;
       }
     }
@@ -162,10 +162,10 @@ const disconnectBackup = (configPath: string, cacheDir: string): boolean => {
     config.update = { ...(isConfigObject(config.update) ? config.update : {}), backup: 'false' };
     if (!saveBackupConfig(configPath, config)) return false;
     if (!invalidateBackupCache(cacheDir)) {
-      writeStdoutLine('Backup disconnected; writes are disabled, but local cache cleanup is incomplete. Rerun ballin backup disconnect.');
+      writeStdoutLine('Backup disconnected; writes are disabled, but local cache cleanup is incomplete. Rerun `ballin backup disconnect`.');
       return false;
     }
-    writeStdoutLine('Backup disconnected. Remote history and shared gh authentication are unchanged.');
+    writeStdoutLine('Backup disconnected. Remote history and shared `gh` authentication are unchanged.');
     return true;
   } catch {
     writeStdoutLine('Unable to read local backup configuration; disconnect did not complete.');
