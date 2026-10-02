@@ -382,7 +382,8 @@ describe('repository backup lifecycle', function() {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n\n'); ok(result);
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
-    assert.equal(config().update.backup, 'true');
+    assert.equal(config().update.backup, 'false');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
     assertSavedSensitiveChoice(result, 'false');
     assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 3);
@@ -560,10 +561,10 @@ describe('repository backup lifecycle', function() {
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
     });
   });
-  ['n\n', '', 'y', 'y\n', '\n'].forEach((automatic) => {
-    it(`uses the existing automatic-backup choice after reconnect: ${JSON.stringify(automatic)}`, () => {
+  ['n\n', '', 'y', 'y\n', 'Y\n', '\n'].forEach((automatic) => {
+    it(`defaults automatic backups off unless explicitly enabled after reconnect: ${JSON.stringify(automatic)}`, () => {
       unconfigured(); ok(run(['setup', 'ballin-backups'], `y\nreconnect\nn\ny\n${automatic}`));
-      assert.equal(config().update.backup, ['y', 'y\n', '\n'].includes(automatic) ? 'true' : 'false');
+      assert.equal(config().update.backup, ['y', 'y\n', 'Y\n'].includes(automatic) ? 'true' : 'false');
     });
   });
   it('retains a configured destination when the subsequent automatic preference save fails', () => {
