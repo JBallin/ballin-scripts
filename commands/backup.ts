@@ -1,3 +1,4 @@
+const { terminalEmphasis } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -395,11 +396,11 @@ const writeSnapshotStatus = (
   if (resultState === 'unchanged') {
     writeStdoutLine(`✔ ${fileWithoutExtension}`);
   } else if (resultState === 'created') {
-    writeStdoutLine(`✚ ${fileWithoutExtension}`);
+    writeStdoutLine(terminalEmphasis(`✚ ${fileWithoutExtension}`, 'bold'));
   } else if (resultState === 'removed') {
-    writeStdoutLine(`✖︎ ${fileWithoutExtension}`);
+    writeStdoutLine(terminalEmphasis(`✖︎ ${fileWithoutExtension}`, 'bold'));
   } else {
-    writeStdoutLine(`✎ ${fileWithoutExtension}`);
+    writeStdoutLine(terminalEmphasis(`✎ ${fileWithoutExtension}`, 'bold'));
   }
 };
 
