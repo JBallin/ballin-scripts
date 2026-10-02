@@ -161,7 +161,9 @@ describe('private repository transport', () => {
     assert.include(repositoryReadmeContents, 'github.com/JBallin/ballin-scripts/tree/main/docs');
     assert.include(repositoryReadmeContents, 'uses `.ballin-backup.json` to identify this repository');
     const created = state.requests.find((r) => r.endpoint === 'user/repos');
-    assert.deepEqual(created?.payload, { name: state.name, private: true, auto_init: true });
+    assert.deepEqual(created?.payload, {
+      name: state.name, description: 'Developer environment backups created by Ballin', private: true, auto_init: true,
+    });
   });
   it('creates the exact minimal managed-branch ruleset and verifies the returned resource independently', () => {
     const before = read(); state.requests = []; state.rulesets = [];
