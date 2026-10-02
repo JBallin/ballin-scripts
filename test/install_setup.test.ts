@@ -13,6 +13,7 @@ const {
   configHasBackupHost,
   configure,
   configureGist,
+  configureBackup,
   setup,
   setupAnalytics,
   symlinkBinaries,
@@ -264,6 +265,38 @@ esac
     assert.isFalse(result);
     assert.equal(output, '');
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
+  it('propagates an installed config migration failure without reporting success or changing config', () => {
+    installConfigSources();
+    const configFile = path.join(repoDir, 'ballin.config.json');
+    const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+    fs.writeFileSync(configFile, original);
+    fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'), "process.stderr.write('fixture migration failed\\n'); process.exitCode = 1;\n");
+    const result = spawnSync(process.execPath, [installSetupPath, 'configure', repoDir, docsUrl], {
+      encoding: 'utf8', env: childEnvironment(),
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, 'fixture migration failed\n');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(configFile, 'utf8'), original);
+    assert.equal(commandLog(), '');
+  });
+
+  it('rejects repository setup while a Gist is configured before contacting GitHub or changing config', () => {
+    const configFile = path.join(repoDir, 'ballin.config.json');
+    const original = '{"backup":{"id":"returning-gist-id","host":"github.example.test"}}\n';
+    fs.writeFileSync(configFile, original);
+    installFakeGhCommand();
+    const { output, result } = withEnvironment(childEnvironment({
+      FAKE_COMMAND_LOG: commandLogPath, FAKE_GH_AUTH_STATUS: '0',
+    }), () => captureStdout(() => configureBackup(repoDir, docsUrl, true, {
+      configPath: configFile, repositoryName: 'independent-backup',
+    })));
+    assert.isFalse(result);
+    assert.include(output, 'Migration is separate; disconnect before setting up an independent repository.');
+    assert.equal(fs.readFileSync(configFile, 'utf8'), original);
+    assert.equal(commandLog(), '');
   });
 
   it('treats malformed config structures as having no usable backup host', () => {
