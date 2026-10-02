@@ -954,13 +954,14 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'Ballin can send minimal anonymous analytics about top-level command usage and outcomes, '
+      'Ballin can send minimal analytics about top-level command usage and outcomes, '
       + 'real backup outcomes, and automatic backup and self-update outcomes during ballin update. '
       + 'Backup contents, destination identities and configuration values are not sent. '
       + 'Payload and retention details: https://example.test/analytics',
     );
-    assert.equal(analyticsPrompt, 'Enable minimal anonymous usage analytics? [Y/n] ');
-    assert.equal(analyticsPromptFor(false), 'Enable minimal anonymous usage analytics? [y/N] ');
+    assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
+    assert.equal(analyticsPromptFor(true), 'Share usage analytics to help improve Ballin? [Y/n] ');
+    assert.equal(analyticsPromptFor(false), 'Share usage analytics to help improve Ballin? [y/N] ');
   });
 
   ['true', 'false'].forEach((enabled) => {
@@ -984,7 +985,7 @@ exit 2
   });
 
   [
-    { name: 'blank', response: '', enabled: true },
+    { name: 'blank', response: '', enabled: false },
     { name: 'lowercase yes', response: 'y', enabled: true },
     { name: 'uppercase yes', response: 'Y', enabled: true },
     { name: 'lowercase no', response: 'n', enabled: false },
@@ -1004,6 +1005,7 @@ exit 2
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, analyticsDisclosureFor('https://example.test/analytics'));
       assert.include(result.stdout, analyticsPrompt);
+      assert.notInclude(result.stdout, 'Usage analytics are currently');
       assert.equal(readRepoConfig().analytics.enabled, String(enabled));
       assert.equal(fs.existsSync(installIdPath()), enabled);
       assert.notInclude(commandLog(), 'gh:');
@@ -1040,6 +1042,26 @@ process.exitCode = configureAnalyticsPreference({
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, analyticsPromptFor(false));
     assert.equal(readRepoConfig().analytics.enabled, 'false');
+  });
+
+  ['true', 'false'].forEach((enabled) => {
+    [false, true].forEach((eof) => {
+      it(`preserves the current analytics choice ${enabled} on ${eof ? 'EOF' : 'Enter'} when revisiting`, () => {
+        const configPath = path.join(repoDir, 'ballin.config.json');
+        fs.writeFileSync(configPath, JSON.stringify({ analytics: { enabled } }));
+        const script = `const { configureAnalyticsPreference } = require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))});
+process.exitCode = configureAnalyticsPreference({
+  configPath: ${JSON.stringify(configPath)},
+  defaultEnabled: ${enabled === 'true'},
+}) ? 0 : 1;`;
+        const result = spawnSync(process.execPath, ['-e', script], {
+          encoding: 'utf8', input: eof ? '' : '\n', env: childEnvironment(),
+        });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.include(result.stdout, analyticsPromptFor(enabled === 'true'));
+        assert.equal(readRepoConfig().analytics.enabled, enabled);
+      });
+    });
   });
 
   it('leaves the local choice unchanged when analytics prompt input fails', () => {
@@ -1236,7 +1258,7 @@ require('https').request = () => {
     const result = spawnSync(process.execPath, [
       installSetupPath, 'setup', repoDir, docsUrl, 'https://example.test/analytics', 'fresh',
     ], {
-      encoding: 'utf8', input: '\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
+      encoding: 'utf8', input: 'y\nn\n', env: childEnvironment({ NODE_OPTIONS: `--require=${preloadPath}` }),
     });
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
