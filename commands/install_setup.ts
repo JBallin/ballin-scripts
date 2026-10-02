@@ -410,7 +410,7 @@ const validateBinDirInPath = (binDir: string): boolean => {
   }
 
   writeStdoutLine(`\n⚠️  ERROR: ${binDir} doesn't seem to be in your path.`);
-  writeStdoutLine(`Add 'export PATH="${binDir}:$PATH"' to your shell profile.`);
+  writeStdoutLine(`Add \`export PATH="${binDir}:$PATH"\` to your shell profile.`);
   writeStdoutLine('and open a new terminal window and run this installation again.');
   return false;
 };

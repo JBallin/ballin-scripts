@@ -867,7 +867,7 @@ esac
 
     assert.isFalse(result.result);
     assert.include(result.output, `${binDir} doesn't seem to be in your path.`);
-    assert.include(result.output, `export PATH="${binDir}:$PATH"`);
+    assert.include(result.output, `Add \`export PATH="${binDir}:$PATH"\` to your shell profile.\n`);
   });
 
   it('stops safely when neither Homebrew nor HOME can provide a command directory', () => {
