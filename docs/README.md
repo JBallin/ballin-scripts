@@ -20,6 +20,8 @@ For the project overview, see the [main README](../README.md).
 
 - [Testing and coverage](testing.md): test isolation, coverage comparisons, and
   runtime and platform limits.
+- [Coverage boundaries](coverage-boundaries.md): reviewed production gaps and
+  their test, ignore, or measured dispositions.
 - [Backup design](backup-design.md): backup safety model and GitHub constraints.
 - [Design system](design-system.md): Ballin identity, product messaging,
   visual guidance, and brand asset conventions.
