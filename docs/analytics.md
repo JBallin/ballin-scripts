@@ -7,8 +7,7 @@ finish, and whether automatic backup and Ballin self-update steps succeed
 during `ballin update`.
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
-enable usage analytics, with No as the default. Submitting blank input, `n`,
-or closing input leaves them disabled; `y` enables analytics.
+enable usage analytics, with No as the default.
 The choice is saved only in the local Ballin config. Installation and answering
 the question send no analytics event. Refreshes and self-updates preserve an
 existing local choice without asking again.
