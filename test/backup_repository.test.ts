@@ -96,6 +96,28 @@ describe('private repository transport', () => {
       assert.throws(invoke, RepositoryError, 'does not match');
     });
   }
+  for (const [label, metadata] of [
+    ['owner', { owner: { node_id: 'U_other' } }],
+    ['visibility', { private: false }],
+    ['name', { name: 'another-backup' }],
+  ] as const) {
+    it(`rejects a mismatched created repository ${label} before initialization`, () => {
+      state.exists = false;
+      state.faults.createdMetadata = metadata;
+      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount(options), options), RepositoryError, 'does not match');
+      assert.equal(state.requests.filter((request) => request.endpoint === 'user/repos').length, 1);
+      assert.equal(publications().length, 0);
+      assert.deepEqual(state.requests.map(({ endpoint }) => endpoint), ['user', 'user', 'user/repos']);
+    });
+  }
+  it('stops repository creation when the effective account changes before the write', () => {
+    state.exists = false;
+    const account = readRepositoryAccount(options);
+    state.faults.user = { node_id: 'U_other', login: 'other', type: 'User' };
+    assert.throws(() => createRepositoryBackup(state.name, account, options), RepositoryError, 'does not match');
+    assert.equal(state.requests.filter((request) => request.endpoint === 'user/repos').length, 0);
+    assert.equal(publications().length, 0);
+  });
   it('creates a private repository and initializes the marker and Ballin README in one conditional commit', () => {
     state.exists = false;
     const result = createRepositoryBackup(state.name, readRepositoryAccount(options), options);

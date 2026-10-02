@@ -244,6 +244,9 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case 'uninstall':
       runNoArgCommand('ballin uninstall', commandArgs, runUninstallCommand);
       return;
+    // The name guard and exhaustive cases reject all external unknown commands above.
+    // Retain this fail-safe for future dispatcher edits; reaching it needs an invalid internal command union.
+    /* c8 ignore next 4 */
     default: {
       const unhandledCommand: never = command;
       throw new Error(`Unhandled Ballin command: ${String(unhandledCommand)}`);
