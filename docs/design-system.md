@@ -351,3 +351,21 @@ This has impressive graphics.
 
 Every design decision should reinforce the feeling that Ballin quietly handles
 development-environment maintenance so the developer can focus on building.
+
+## Terminal emphasis
+
+Use sparse bold emphasis for update stage headings and changed backup entries.
+Existing help terms may use bold or underline. Keep the terminal's default
+foreground; do not add a fixed color palette or dim unchanged entries. Backup
+symbols and stage labels carry meaning even when emphasis is unavailable.
+
+Ballin adds emphasis only on a TTY when `TERM` is not `dumb` and `NO_COLOR` is
+unset or empty. A nonempty `NO_COLOR` disables all Ballin emphasis, including
+bold and underline. This is deliberately broader than the color-only
+[NO_COLOR convention](https://no-color.org/). `FORCE_COLOR` does not override
+this policy. Child tools retain their own presentation behavior.
+
+Never add styling to config output or backed-up file contents, even on a TTY.
+Doctor reports, prompts, warnings, and errors stay plain for now. Avoid adding
+styling to these surfaces without a concrete readability benefit; the broader
+CLI wording and spacing audit is separate from this emphasis contract.

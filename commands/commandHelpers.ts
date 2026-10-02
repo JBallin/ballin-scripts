@@ -2,6 +2,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { terminalEmphasis } = require('./terminalStyle.ts');
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
 
@@ -99,7 +100,7 @@ const readPromptLine = (prompt: string): PromptLine => {
 };
 
 const progress = (text: string): void => {
-  process.stdout.write(`\n==> ${text}\n`);
+  process.stdout.write(`\n${terminalEmphasis(`==> ${text}`, 'bold')}\n`);
 };
 
 const reportSpawnError = (command: string, error: Error): number => {
