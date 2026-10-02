@@ -155,6 +155,9 @@ const runNativeCompletion = (shell: 'zsh' | 'bash', asset: string, input?: strin
     'trap \'printf "\\nCHILD_EXIT:%s:%s\\n" "$FIXTURE_MARKER" "$?"\' EXIT',
     ...readyChecks,
     'expected_ballin="$(typeset -f ballin)"',
+    // Native completion uses the shell's bundled functions; host directory audits
+    // and completion dump files are outside this closed fixture's test contract.
+    ...(shell === 'zsh' ? ['autoload -Uz compinit', 'compinit -C -D || exit 82'] : []),
     'source "$COMPLETION_ASSET" || exit 82',
     ...readyChecks,
     "PS1='fixture> '",
