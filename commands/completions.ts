@@ -1,8 +1,23 @@
+import type { TopLevelCommandName } from './top_level_commands.ts';
+import type { BackupCommandName } from './backup_commands.ts';
+import type { ConfigOperationName } from '../config/commands.ts';
 const fs = require('fs');
 const path = require('path');
 const {
   topLevelCommandNames,
 } = require('./top_level_commands.ts');
+
+const { backupCommandNames } = require('./backup_commands.ts') as {
+  backupCommandNames: readonly BackupCommandName[];
+};
+const { configOperationNames } = require('../config/commands.ts') as {
+  configOperationNames: readonly ConfigOperationName[];
+};
+
+const nestedCommandNames = {
+  backup: backupCommandNames,
+  config: configOperationNames,
+} satisfies Partial<Record<TopLevelCommandName, readonly string[]>>;
 
 const completionWords = topLevelCommandNames.join(' ');
 
@@ -15,8 +30,16 @@ const renderZshCompletion = (): string => [
   'fi',
   '',
   '_ballin() {',
-  '  (( CURRENT == 2 )) || return 0',
-  `  compadd -- ${completionWords}`,
+  '  case "$CURRENT" in',
+  `    2) compadd -- ${completionWords} ;;`,
+  '    3)',
+  '      case "${words[2]}" in',
+  ...Object.entries(nestedCommandNames).map(([command, names]) => (
+    `        ${command}) compadd -- ${names.join(' ')} ;;`
+  )),
+  '      esac',
+  '      ;;',
+  '  esac',
   '}',
   '',
   'compdef _ballin ballin',
@@ -26,15 +49,25 @@ const renderZshCompletion = (): string => [
 const renderBashCompletion = (): string => [
   '_ballin_completion() {',
   '  COMPREPLY=()',
-  '  if [[ "$COMP_CWORD" -ne 1 ]]; then',
-  '    return 0',
-  '  fi',
+  '  local candidates',
+  '  case "$COMP_CWORD" in',
+  `    1) candidates='${completionWords}' ;;`,
+  '    2)',
+  '      case "${COMP_WORDS[1]}" in',
+  ...Object.entries(nestedCommandNames).map(([command, names]) => (
+    `        ${command}) candidates='${names.join(' ')}' ;;`
+  )),
+  '        *) return 0 ;;',
+  '      esac',
+  '      ;;',
+  '    *) return 0 ;;',
+  '  esac',
   '',
   '  local current="${COMP_WORDS[$COMP_CWORD]}"',
   '  local candidate',
   '  while IFS= read -r candidate; do',
   '    COMPREPLY+=("$candidate")',
-  `  done < <(compgen -W '${completionWords}' -- "$current")`,
+  '  done < <(compgen -W "$candidates" -- "$current")',
   '}',
   '',
   'complete -F _ballin_completion ballin',

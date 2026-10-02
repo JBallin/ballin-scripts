@@ -678,6 +678,10 @@ process.stdout.write = ((chunk, encoding, callback) => {
     it('() should return a String', () => {
       assert.isString(configAction());
     });
+    it('preserves empty-operation defaults', () => {
+      assert.equal(configAction(['']), configAction([]));
+      assert.isNull(configAction(['', 'backup.id']));
+    });
     it('("get") should return a String', () => {
       assert.isString(configAction(['get']));
     });
