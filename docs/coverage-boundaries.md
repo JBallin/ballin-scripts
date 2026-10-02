@@ -13,20 +13,19 @@ The baseline is commit `e778c429`, Node `v24.21.0`, V8
 369/369 functions. The review starts with 54 uncovered lines and 83 branch
 outcomes. Coverage scope and thresholds remain unchanged.
 
-The feature gate before integration passed with 1,309 tests: 7,346/7,384 lines and statements
-(99.48%), 2,568/2,642 branches (97.19%), and 369/369 functions (100%).
-Tests cover 13 previously uncovered lines and eight baseline branch outcomes;
-the sole invariant ignore covers three lines and one branch outcome. The
-remaining 38 lines and 74 branch outcomes reconcile to the measured entries
-below. Additional test execution exposes eight covered V8 branch ranges;
-the dispatch annotation itself preserves its branch map and affects only the
-default arm. No previously covered outcome became uncovered.
+The measured-gap inventory below corresponds to source revision `c93b4fd`:
+7,635/7,673 lines and statements (99.50%), 2,759/2,836 branches (97.28%),
+and 382/382 functions (100%), from an isolated `npm test` run with 1,427
+passing tests. These figures describe that revision, not later main commits.
 
-The integration gate including main `2059e2a` passed with 1,325 tests:
-7,361/7,399 lines and statements (99.48%), 2,575/2,649 branches (97.20%),
-and 370/370 functions (100%). After accounting for source-line shifts, the
-same 38 lines and 74 branch outcomes remain measured; terminal styling adds
-no uncovered outcomes. Thresholds and the sole annotation's scope are unchanged.
+Compared with the baseline, behavioral tests cover 13 previously uncovered
+lines and eight branch outcomes; the sole invariant ignore covers three lines
+and one branch outcome. The remaining inventory contains 38 uncovered lines
+and 77 branch outcomes. All 74 outcomes retained by the original audit remain
+measured, including four now anchored in `commands/backup_preferences.ts`.
+The other three are the exported `readPrompt` EOF operands and completion
+setup's missing-target fallback. Each has a disposition below.
+Coverage scope, thresholds and the sole ignore are unchanged.
 
 ## Reading the dispositions
 
@@ -86,13 +85,15 @@ justify hiding additional failure causes in these paths.
 | `commands/backup_repository.ts`, `protectionTransportFailure`, `!(error instanceof RepositoryError)`; `inspect`, `inspectRepository`, error classification; `createRepositoryBackup`, error normalization | 70, 286, 291, 585 | Unknown exceptions remain measurable as local-I/O/uncertain outcomes. Current transport helpers classify their own failures; unfamiliar exceptions must still fail closed, so no broad catch exclusion. `test/backup_repository.test.ts`. |
 | `commands/backup_repository.ts`, `ensureManagedBranchRuleset`, `mutationFailure` / `detailResult` after reconciliation | 501, 503, 504, 505 | These combine creation/detail and confirmation failures; retain signal for local-I/O, permission, mismatch and unexpected outcomes. Existing single-failure/reconciliation cases protect no-repeat behavior, but cannot justify excluding these combinations. `test/backup_repository.test.ts`. |
 | `commands/backup_repository.ts`, `publish`, `confirmation.status !== 'complete'` | 540 | Incomplete readback must prevent publication success. Existing ambiguous/missing-commit and malformed readback cases remain relevant; preserve this separate confirmation boundary for future fixture coverage. `test/backup_repository.test.ts`. |
-| `commands/backup_setup.ts`, `saveBackupConfig`, `finally`; `offerAutomaticUpdateBackup`, `catch` | 33, 48 | Staging cleanup and later preference persistence failures remain measured. The saved destination must remain authoritative even if subsequent preference access fails. Existing failed-save assertions cover the public recovery contract, without suppressing other read/write causes. `test/repository_backup.test.ts`. |
-| `commands/backup_setup.ts`, `reviewSensitiveSources`, `!logical` / non-file source / `!isFile()` | 82, 84 | Current sensitive definitions, except separately handled pipx, discover file sources. Keep schema guards and post-discovery filesystem checks measurable: a source can change type during review, and future definitions must still fail closed. Sensitive-review fixtures in `test/repository_backup.test.ts`. |
+| `commands/backup_preferences.ts`, `saveBackupConfig`, `finally`; `reviewAutomaticUpdateBackup`, `catch` | 33, 48 | Staging cleanup and later preference persistence failures remain measured. The saved destination must remain authoritative even if subsequent preference access fails. Existing failed-save assertions cover the public recovery contract, without suppressing other read/write causes. `test/repository_backup.test.ts` and `test/setup_preferences.test.ts`. |
+| `commands/backup_preferences.ts`, `reviewSensitiveSources`, `!logical` / non-file source / `!isFile()` | 82, 84 | Current sensitive definitions, except separately handled pipx, discover file sources. Keep schema guards and post-discovery filesystem checks measurable: a source can change type during review, and future definitions must still fail closed. Sensitive-review fixtures in `test/repository_backup.test.ts` and `test/setup_preferences.test.ts`. |
+| `commands/backup_setup.ts`, exported `readPrompt`, `line.eof && !line.text ? eofResponse : line.text` | Current `c93b4fd`: two outcomes at 17 | The legacy Gist host prompt in `commands/install_setup.ts`, `configureGist`, still calls this helper. EOF handling can affect the selected host and remains measured; newline-response fixtures do not establish empty-EOF or partial-line EOF behavior. Keep these reachable outcomes visible for future caller-level regression assertions. Owning suite: `test/install_setup.test.ts`. |
 | `commands/backup_setup.ts`, `configureRepositoryBackup`, renamed destination `!saveBackupConfig`; message fallback | 153, 223 | Renamed-destination persistence is ordinary I/O; keep its failure measurable. Unknown diagnostic codes likewise remain visible. Revalidation/failed-linkage fixtures in `test/repository_backup.test.ts`. |
 | `commands/backup_setup.ts`, `disconnectBackup`, backup/update shape fallbacks | 237, 238 | Validated configuration normally supplies object sections. Keep fallback signal without constructing an internal config shape that prior validation rejects. Disconnect fixtures in `test/repository_backup.test.ts`. |
 | `commands/backup_snapshots.ts`, `errorCode`, `inspectPath`, `inspectTool`, `error instanceof Error` | 155, 172, 197 | Filesystem/process errors normally use Error objects. Keep unexpected thrown-value handling measured rather than injecting primitives only for coverage. `test/snapshot_definitions.test.ts`. |
 | `commands/backup_snapshots.ts`, `inspectTool`, `env.PATH ?? ''` | 178 | Keep absent-PATH discovery behavior measurable. Tool-discovery fixtures supply isolated PATH entries and avoid host tools. `test/snapshot_definitions.test.ts`. |
 | `commands/ballin.ts`, `runDoctorCommand`, config-path environment fallback | 149 | Public fixtures supply isolated config paths. Keep installed-config resolution measurable instead of reading real user configuration to execute the fallback. Doctor cases in `test/ballin.test.ts`. |
+| `commands/completion_setup.ts`, `offerCompletionSetup`, `if (!target)` | Current `c93b4fd`: 122 | A skipped, unsupported or unconfirmed startup target must show the manual-completion guidance without writing a profile. Target-level tests exercise those decisions, but do not cover this caller's fallback. Keep this reachable behavior measured for a future caller-level regression assertion. `test/completion_setup.test.ts`. |
 | `commands/doctor_report.ts`, `formatDoctorCheck`, `nextSteps[check.id] ??` | 38 | Current readiness check IDs have next-step entries. Retain the fallback for future IDs and its signal without inventing an unsupported check solely for formatting coverage. Doctor report cases in `test/ballin.test.ts`. |
 | `commands/install_setup.ts`, `readOriginalSetupConfig`, unknown-error message fallback | 68 | Filesystem/JSON failures supply Error objects. Keep unknown diagnostic handling measured; config-read failure fixtures already assert recovery behavior. `test/install_setup.test.ts`. |
 | `commands/install_setup.ts`, `setConfigValue`, unsuccessful write; `replaceInvalidBackupHost`, shape guard / write `catch` | 172, 185, 194; lines 173–174, 186–187, 195–196 | Ordinary persistence failures and config mutation remain measurable. Do not suppress shared write catches merely because immediate shape changes are uncommon. Config preservation/host-repair fixtures in `test/install_setup.test.ts`. |
