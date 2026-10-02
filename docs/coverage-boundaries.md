@@ -13,7 +13,7 @@ The baseline is commit `e778c429`, Node `v24.21.0`, V8
 369/369 functions. The review starts with 54 uncovered lines and 83 branch
 outcomes. Coverage scope and thresholds remain unchanged.
 
-The final gate passed with 1,309 tests: 7,346/7,384 lines and statements
+The feature gate before integration passed with 1,309 tests: 7,346/7,384 lines and statements
 (99.48%), 2,568/2,642 branches (97.19%), and 369/369 functions (100%).
 Tests cover 13 previously uncovered lines and eight baseline branch outcomes;
 the sole invariant ignore covers three lines and one branch outcome. The
