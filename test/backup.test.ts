@@ -1081,6 +1081,18 @@ exit 2
     ]);
   });
 
+  it('preserves snapshot bytes on a simulated TTY even when colors are forced', () => {
+    const bytes = '\x1b[31moriginal snapshot\x1b[0m\n\n';
+    seedFakeGistFile('vimrc', bytes);
+    const preload = path.join(testHomeDir, 'tty.cjs');
+    fs.writeFileSync(preload, 'Object.defineProperty(process.stdout, "isTTY", { value: true });');
+    const result = runBackup({ args: ['read', 'vimrc'], env: {
+      NODE_OPTIONS: `--require ${preload}`, TERM: 'xterm', FORCE_COLOR: '1',
+    } });
+    assertBackupSucceeded(result);
+    assert.equal(result.stdout, bytes);
+  });
+
   it('fails read when extra arguments are provided', () => {
     const result = runBackup({ args: ['read', 'vimrc', 'extra'] });
 
@@ -1968,24 +1980,35 @@ printf '%s\\n' '123456 Example App'
     assert.lengthOf(gistPatchCalls(), 1);
   });
 
-  it('sorts the final mixed-state result set without changing upload order', () => {
-    fs.writeFileSync(path.join(testHomeDir, '.zprofile'), 'new profile\n');
-    writeSnapshot('stable shell config\n');
-    seedBackupCache('stable shell config\n');
-    fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), '');
-    seedCacheFile('gitconfig', 'old git config\n');
-    fs.writeFileSync(path.join(testHomeDir, '.vimrc'), 'new vim config\n');
-    seedCacheFile('vimrc', 'old vim config\n');
+  for (const mode of ['plain', 'tty', 'no-color']) {
+    it(`sorts mixed-state results and emphasizes only changes in ${mode} output`, () => {
+      fs.writeFileSync(path.join(testHomeDir, '.zprofile'), 'new profile\n');
+      writeSnapshot('stable shell config\n');
+      seedBackupCache('stable shell config\n');
+      fs.writeFileSync(path.join(testHomeDir, '.gitconfig'), '');
+      seedCacheFile('gitconfig', 'old git config\n');
+      fs.writeFileSync(path.join(testHomeDir, '.vimrc'), 'new vim config\n');
+      seedCacheFile('vimrc', 'old vim config\n');
 
-    const result = runBackup();
+      const preload = path.join(testHomeDir, 'tty.cjs');
+      fs.writeFileSync(preload, 'Object.defineProperty(process.stdout, "isTTY", { value: true });');
+      const result = runBackup({ env: mode === 'plain' ? {} : {
+        NODE_OPTIONS: `--require ${preload}`,
+        TERM: 'xterm',
+        NO_COLOR: mode === 'no-color' ? '1' : '',
+        FORCE_COLOR: '1',
+      } });
 
-    assertBackupSucceeded(result);
-    assert.equal(
-      result.stdout,
-      '✖︎ gitconfig\n✎ vimrc\n✚ zprofile\n✔ zshrc\n',
-    );
-    assert.deepEqual(gistUploads(), ['zprofile.sh', 'gitconfig', 'vimrc']);
-  });
+      assertBackupSucceeded(result);
+      assert.equal(
+        result.stdout,
+        mode === 'tty'
+          ? '\x1b[1m✖︎ gitconfig\x1b[0m\n\x1b[1m✎ vimrc\x1b[0m\n\x1b[1m✚ zprofile\x1b[0m\n✔ zshrc\n'
+          : '✖︎ gitconfig\n✎ vimrc\n✚ zprofile\n✔ zshrc\n',
+      );
+      assert.deepEqual(gistUploads(), ['zprofile.sh', 'gitconfig', 'vimrc']);
+    });
+  }
 
   it('uses the final new-file marker for a first empty snapshot', () => {
     writeSnapshot('');
