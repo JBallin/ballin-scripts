@@ -570,7 +570,9 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   // Confirm the effective account immediately before creating under /user.
   if (readRepositoryAccount(options).id !== account.id) throw new RepositoryError('identity');
-  const result = api('user/repos', { name, private: true, auto_init: true }, options);
+  const result = api('user/repos', {
+    name, description: 'Developer environment backups created by Ballin', private: true, auto_init: true,
+  }, options);
   if (!result.ok) throw new RepositoryError('uncertain');
   if (object(result.body.owner).node_id !== account.id || result.body.private !== true || result.body.name !== name) {
     throw new RepositoryError('identity');
