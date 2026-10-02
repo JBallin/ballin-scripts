@@ -382,13 +382,14 @@ describe('repository backup lifecycle', function() {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n\n'); ok(result);
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
-    assert.equal(config().update.backup, 'true');
+    assert.equal(config().update.backup, 'false');
+    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
     assertSavedSensitiveChoice(result, 'false');
     assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 3);
     assert.isBelow(result.stdout.indexOf('Selected GitHub.com account: fixture-user'), result.stdout.indexOf('Confirm this destination'));
     assert.notInclude(result.stdout, 'zshrc.sh:');
-    assert.include(result.stdout, 'Optional GitHub branch protection enabled.');
+    assert.include(result.stdout, 'GitHub branch protection enabled.');
     const requests = state().requests;
     const created = requests.findIndex((request) => request.endpoint === 'user/repos');
     const initialized = requests.findIndex((request) => request.payload?.query?.includes('BallinPublish'));
@@ -427,7 +428,7 @@ describe('repository backup lifecycle', function() {
     ok(run(['setup'], 'y\ncreate\n\nn\ny\n'));
     const retry = state(); delete retry.faults.rulesetCreate; saveState(retry);
     const revalidated = run(['setup']); ok(revalidated);
-    assert.include(revalidated.stdout, 'Optional GitHub branch protection enabled.');
+    assert.include(revalidated.stdout, 'GitHub branch protection enabled.');
     assert.deepEqual(config().backup.repository, fixtureDestination);
     assert.equal(state().requests.filter((request) => request.endpoint === 'user/repos').length, 1);
     assert.equal(rulesetWrites().length, 2); assert.lengthOf(state().rulesets, 1);
@@ -522,6 +523,18 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 1); assert.include(result.stdout, 'changed during inspection');
     assert.isNull(config().backup.repository); assert.equal(mutations().length, 0);
   });
+  it('stops backup setup when installed config migration fails before any remote request', () => {
+    const before = fs.readFileSync(configPath, 'utf8');
+    fs.writeFileSync(path.join(checkout, 'config', 'updateConfig.ts'), "process.stderr.write('fixture migration failed\\n'); process.exitCode = 1;\n");
+    const result = run(['setup']);
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'fixture migration failed');
+    assert.include(result.stderr, 'ballin backup setup: unable to create or update config');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.equal(state().requests.length, 0);
+    assert.isFalse(fs.existsSync(cacheRoot));
+  });
+
   it('reconnects without write permission or a cached base and restores only eligible preferences with local precedence', () => {
     const local = { backup: { id: null, host: 'preserved.test', repository: null, includeSensitive: 'true' },
       update: { cleanup: 'invalid', npm: false }, analytics: {}, custom: { preserve: true } };
@@ -548,10 +561,10 @@ describe('repository backup lifecycle', function() {
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
     });
   });
-  ['n\n', '', 'y', 'y\n', '\n'].forEach((automatic) => {
-    it(`uses the existing automatic-backup choice after reconnect: ${JSON.stringify(automatic)}`, () => {
+  ['n\n', '', 'y', 'y\n', 'Y\n', '\n'].forEach((automatic) => {
+    it(`defaults automatic backups off unless explicitly enabled after reconnect: ${JSON.stringify(automatic)}`, () => {
       unconfigured(); ok(run(['setup', 'ballin-backups'], `y\nreconnect\nn\ny\n${automatic}`));
-      assert.equal(config().update.backup, ['y', 'y\n', '\n'].includes(automatic) ? 'true' : 'false');
+      assert.equal(config().update.backup, ['y', 'y\n', 'Y\n'].includes(automatic) ? 'true' : 'false');
     });
   });
   it('retains a configured destination when the subsequent automatic preference save fails', () => {

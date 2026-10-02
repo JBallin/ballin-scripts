@@ -145,7 +145,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('runs self-update and automatic backup through the real guarded installed CLI', () => {
-    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\ncreate\n\ny\ny\n\n');
+    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\ncreate\n\ny\ny\ny\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.update.selfUpdate, 'true');

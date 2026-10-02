@@ -98,6 +98,8 @@ type AnalyticsInstallIdOptions = {
 type AnalyticsPreferenceOptions = {
   configPath: string;
   defaultEnabled?: boolean;
+  currentEnabled?: boolean;
+  onCancelled?: () => void;
   docsUrl?: string;
 };
 
@@ -120,13 +122,13 @@ const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
-  'Ballin can send minimal anonymous analytics about top-level command usage and outcomes, '
+  'Ballin can send minimal analytics about top-level command usage and outcomes, '
   + 'real backup outcomes, and automatic backup and self-update outcomes during ballin update. '
   + 'Backup contents, destination identities and configuration values are not sent. '
   + `Payload and retention details: ${docsUrl}`
 );
-const analyticsPromptFor = (defaultEnabled = true): string => (
-  `Enable minimal anonymous usage analytics? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `
+const analyticsPromptFor = (defaultEnabled = false): string => (
+  `Share usage analytics to help improve Ballin? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `
 );
 const analyticsPrompt = analyticsPromptFor();
 
@@ -295,14 +297,20 @@ const writeAnalyticsPreference = (configPath: string, enabled: boolean): boolean
 
 const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
   writeStdoutLine(`\n${analyticsDisclosureFor(options.docsUrl)}`);
-  const defaultEnabled = options.defaultEnabled ?? true;
+  if (options.currentEnabled !== undefined) {
+    writeStdoutLine(`Usage analytics are currently ${options.currentEnabled ? 'enabled' : 'disabled'}.`);
+  }
+  const defaultEnabled = options.defaultEnabled ?? false;
   let response: { text: string; eof: boolean };
   try {
     response = readPromptLine(analyticsPromptFor(defaultEnabled));
   } catch {
     return false;
   }
-  if (response.eof) return true;
+  if (response.eof) {
+    options.onCancelled?.();
+    return true;
+  }
 
   const enabled = response.text === ''
     ? defaultEnabled

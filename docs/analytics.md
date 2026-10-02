@@ -7,8 +7,7 @@ finish, and whether automatic backup and Ballin self-update steps succeed
 during `ballin update`.
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
-enable minimal anonymous usage analytics, with Yes as the default. Submitting
-blank input or `y` enables analytics; `n` or closing input leaves them disabled.
+enable usage analytics, with No as the default.
 The choice is saved only in the local Ballin config. Installation and answering
 the question send no analytics event. Refreshes and self-updates preserve an
 existing local choice without asking again.
@@ -24,7 +23,12 @@ Disable persistently:
 ballin config set analytics.enabled false
 ```
 
-Use `true` instead of `false` to enable analytics persistently.
+Use `true` instead of `false` to enable analytics persistently, or run
+`ballin setup` to review the analytics choice and its explanation. It shows
+whether analytics are currently enabled or disabled and uses that choice as the
+default. Setup uses the ordinary top-level command event contract and sends no
+additional preference event. `ballin setup --help` runs offline without reading
+local configuration or sending analytics.
 
 Disable analytics for one command:
 

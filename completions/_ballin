@@ -7,7 +7,7 @@ fi
 
 _ballin() {
   (( CURRENT == 2 )) || return 0
-  compadd -- backup config doctor self-update uninstall update
+  compadd -- backup config doctor self-update setup uninstall update
 }
 
 compdef _ballin ballin
