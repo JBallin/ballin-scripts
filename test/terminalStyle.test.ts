@@ -41,7 +41,7 @@ describe('terminal emphasis', () => {
       const plainHelp = run(['--help']);
       assert.equal(plainHelp.status, 0, plainHelp.stderr);
       assert.equal(stripAnsi(plainHelp.stdout), plainHelp.stdout);
-      assert.include(plainHelp.stdout, 'sensitive sources: backup.includeSensitive (default: false)');
+      assert.include(plainHelp.stdout, 'Run `ballin <command> --help` for command-specific help.');
       for (const env of [
         { NODE_OPTIONS: `--require ${preload}`, TERM: 'xterm' },
         { NODE_OPTIONS: `--require ${preload}`, TERM: 'dumb' },
