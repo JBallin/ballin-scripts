@@ -6,6 +6,33 @@ This guide covers choices for the required Node.js setup, plus optional tools
 and settings that extend Ballin. The defaults keep updates predictable
 while letting you opt in to broader automation.
 
+## Guided preference review
+
+Run `ballin setup` to review onboarding choices again without reinstalling:
+
+```shell
+ballin setup
+```
+
+Your current valid choices are the prompt defaults. Repository backups offer
+the single sensitive-source choice; any configured backup offers automatic
+backup after `ballin update`. Analytics can always be reviewed. With no backup
+configured, use `ballin backup setup` first if you want backups. Legacy Gists
+continue capturing every available source and do not offer sensitive selection.
+
+Selecting sensitive sources reviews paths and availability without reading raw
+contents or collecting pipx metadata. Confirm the choice to save it for future
+backups. Excluding sources does not remove saved files or history; read
+[source sensitivity](backup-sources.md) before opting in.
+
+Each confirmed choice is saved locally. Cancelling or closing input leaves the
+pending choice unchanged; earlier confirmed choices remain saved. Invalid
+configuration must be repaired before review. The command does not reinstall
+Ballin, change or validate remote destinations, or run backup/update operations.
+
+Use `ballin config get/set/reset` for direct, scriptable configuration. Guided
+review covers these onboarding choices rather than every setting.
+
 ## Working with settings
 
 Use `ballin config` to read and update local settings. Settings use dot paths,
