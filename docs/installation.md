@@ -38,6 +38,10 @@ with `ballin backup setup`. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
+During `ballin update`, the automatic self-update omits routine installer success
+messages and reports readiness after the refresh. Explicit `ballin self-update`
+and fresh installs retain their setup output.
+
 ## Shell completion
 
 Ballin includes top-level command completion for zsh and Bash. A fresh interactive
@@ -92,10 +96,6 @@ that line manually with the displayed command using LF line endings.
 
 Completion covers supported top-level commands and unique prefixes such as
 `ballin upd<Tab>`. It does not complete nested commands, options, or values.
-
-During `ballin update`, the automatic self-update omits routine installer success
-messages and reports readiness after the refresh. Explicit `ballin self-update`
-and fresh installs retain their setup output.
 
 ## Local effects
 
