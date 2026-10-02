@@ -12,6 +12,15 @@ type Sandbox = {
 const markerName = '.ballin-onboarding-sandbox.json';
 const source = path.resolve(__dirname, '../..');
 const systemTools = ['bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'rm', 'tail'];
+const sandboxCommandTimeout = 120000;
+const sandboxSuiteTimeout = 300000;
+const processIsAlive = (pid: number): boolean => {
+  try { process.kill(pid, 0); return true; } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    if ((error as NodeJS.ErrnoException).code === 'EPERM') return true;
+    throw error;
+  }
+};
 const existsWithoutFollowingLinks = (file: string): boolean => {
   try { fs.lstatSync(file); return true; } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
@@ -29,6 +38,15 @@ const validateRoot = (root: string): void => {
   const marker = JSON.parse(fs.readFileSync(path.join(root, markerName), 'utf8'));
   if (fs.lstatSync(path.join(root, markerName)).isSymbolicLink()
     || marker.root !== root || marker.version !== 1) throw new Error('Invalid onboarding sandbox marker');
+};
+const recordSession = (sandbox: Sandbox, groups: number[], launchPending = false): void => {
+  validateRoot(sandbox.root);
+  const active = path.join(sandbox.root, '.active');
+  const staging = `${active}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(staging, JSON.stringify({ parent: process.pid, groups, launchPending }), { flag: 'wx', mode: 0o600 });
+    fs.renameSync(staging, active);
+  } finally { fs.rmSync(staging, { force: true }); }
 };
 const validateSandbox = (sandbox: Sandbox): void => {
   validateRoot(sandbox.root);
@@ -63,7 +81,7 @@ const sandboxEnvironment = (sandbox: Sandbox): NodeJS.ProcessEnv => {
     GH_CONFIG_DIR: path.join(sandbox.home, '.config/gh'), XDG_CONFIG_HOME: path.join(sandbox.home, '.config'),
     BALLIN_NO_ANALYTICS: '1', BALLIN_QA_ROOT: sandbox.root,
     BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: path.join(sandbox.root, 'system'),
-    NODE_OPTIONS: `--require=${sandbox.guard}`,
+    NODE_OPTIONS: `--require=${JSON.stringify(sandbox.guard)}`,
   };
 };
 const resetRemote = (sandbox: Sandbox, existing = false): void => {
@@ -91,17 +109,16 @@ const resetSandbox = (sandbox: Sandbox, mode: 'fresh' | 'create' | 'reconnect'):
 const cleanupSandbox = (root: string): void => {
   validateRoot(root);
   const active = path.join(root, '.active');
-  if (fs.existsSync(active)) {
-    const pid = Number(fs.readFileSync(active, 'utf8'));
-    if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error('Invalid sandbox session marker');
-    try {
-      process.kill(pid, 0);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-      fs.rmSync(root, { recursive: true });
-      return;
+  if (existsWithoutFollowingLinks(active)) {
+    if (!fs.lstatSync(active).isFile()) throw new Error('Invalid sandbox session marker');
+    const session = JSON.parse(fs.readFileSync(active, 'utf8'));
+    const validPid = (pid: unknown): pid is number => Number.isInteger(pid) && Number(pid) > 0 && Number(pid) <= 2147483647;
+    if (!validPid(session.parent) || !Array.isArray(session.groups) || !session.groups.every(validPid)
+      || typeof session.launchPending !== 'boolean') throw new Error('Invalid sandbox session marker');
+    if ([session.parent, ...session.groups.map((group: number) => -group)].some(processIsAlive)) {
+      throw new Error('Sandbox session or child process group is still running; stop it before cleanup');
     }
-    throw new Error('Sandbox session is still running; exit it before cleanup');
+    if (session.launchPending) throw new Error('Sandbox launch state is ambiguous; cleanup cannot verify child shutdown');
   }
   fs.rmSync(root, { recursive: true });
 };
@@ -127,10 +144,10 @@ const createSandbox = (): Sandbox => {
     sandbox.links.set(path.join(sandbox.tools, 'node'), process.execPath);
     fs.copyFileSync(path.join(__dirname, 'onboarding_guard.ts'), sandbox.guard);
     const git = path.join(sandbox.tools, 'git');
-    fs.writeFileSync(git, `#!${process.execPath}\nconst fs = require('fs');\nconst path = require('path');\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(sandbox.log)}, 'git:' + args.join(' ') + '\\n');\nconst exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);\nif (exact(['--version'])) process.stdout.write('git version onboarding fixture\\n');\nelse if (exact(['clone', 'https://github.com/JBallin/ballin-scripts.git', '.ballin-scripts']) && process.cwd() === ${JSON.stringify(sandbox.home)}) {\n  fs.mkdirSync(${JSON.stringify(sandbox.repo)}, { recursive: true });\n  for (const name of ['commands', 'config', 'bin', 'completions', 'package.json']) fs.cpSync(path.join(${JSON.stringify(source)}, name), path.join(${JSON.stringify(sandbox.repo)}, name), { recursive: true });\n} else if (exact(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])) process.exitCode = 1;\nelse if (process.cwd() === ${JSON.stringify(sandbox.repo)} && [\n  ['fetch', 'origin', '+main:refs/remotes/origin/main'], ['checkout', 'main'], ['merge', 'origin/main'], ['stash', 'push', '--include-untracked']\n].some(exact)) {}\nelse { process.stderr.write('Unsupported sandbox Git operation\\n'); process.exitCode = 2; }\n`, { mode: 0o755 });
-    installRepositoryFixture(sandbox.tools, path.join(sandbox.remote, 'repository.json'));
+    fs.writeFileSync(git, `#!/usr/bin/env node\nconst fs = require('fs');\nconst path = require('path');\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(sandbox.log)}, 'git:' + args.join(' ') + '\\n');\nconst exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);\nif (exact(['--version'])) process.stdout.write('git version onboarding fixture\\n');\nelse if (exact(['clone', 'https://github.com/JBallin/ballin-scripts.git', '.ballin-scripts']) && process.cwd() === ${JSON.stringify(sandbox.home)}) {\n  fs.mkdirSync(${JSON.stringify(sandbox.repo)}, { recursive: true });\n  for (const name of ['commands', 'config', 'bin', 'completions', 'package.json']) fs.cpSync(path.join(${JSON.stringify(source)}, name), path.join(${JSON.stringify(sandbox.repo)}, name), { recursive: true });\n} else if (exact(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])) process.exitCode = 1;\nelse if (process.cwd() === ${JSON.stringify(sandbox.repo)} && [\n  ['fetch', 'origin', '+main:refs/remotes/origin/main'], ['checkout', 'main'], ['merge', 'origin/main'], ['stash', 'push', '--include-untracked']\n].some(exact)) {}\nelse { process.stderr.write('Unsupported sandbox Git operation\\n'); process.exitCode = 2; }\n`, { mode: 0o755 });
+    installRepositoryFixture(sandbox.tools, path.join(sandbox.remote, 'repository.json'), true);
     const softwareUpdate = path.join(sandbox.tools, 'softwareupdate');
-    fs.writeFileSync(softwareUpdate, `#!${process.execPath}\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
+    fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
     for (const file of [git, path.join(sandbox.tools, 'gh'), softwareUpdate, sandbox.guard]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
     fs.writeFileSync(path.join(sandbox.home, '.zshrc'), '# Harmless onboarding QA fixture\nexport BALLIN_QA_EXAMPLE=1\n');
     resetRemote(sandbox);
@@ -140,11 +157,34 @@ const createSandbox = (): Sandbox => {
     throw error;
   }
 };
-const runSandbox = (sandbox: Sandbox, args: string[], input?: string) => spawnSync(
-  args[0] === 'install' ? path.join(source, 'install.sh') : path.join(sandbox.bin, 'ballin'),
-  args[0] === 'install' ? [] : args,
-  { cwd: sandbox.home, env: sandboxEnvironment(sandbox), input, encoding: 'utf8', timeout: 15000 },
-);
+const runSandbox = (sandbox: Sandbox, args: string[], input?: string, timeout = sandboxCommandTimeout) => {
+  const env = sandboxEnvironment(sandbox);
+  recordSession(sandbox, [], true);
+  const result = spawnSync(
+    args[0] === 'install' ? path.join(source, 'install.sh') : path.join(sandbox.bin, 'ballin'),
+    args[0] === 'install' ? [] : args,
+    { cwd: sandbox.home, env, input, encoding: 'utf8', timeout, detached: true },
+  );
+  if (result.pid) {
+    recordSession(sandbox, [result.pid]);
+    if (processIsAlive(-result.pid)) {
+      try { process.kill(-result.pid, 'SIGKILL'); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+      const deadline = Date.now() + 5000;
+      while (processIsAlive(-result.pid) && Date.now() < deadline) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+      if (processIsAlive(-result.pid)) throw new Error('Sandbox child shutdown could not be verified; preserving session marker');
+    }
+    fs.rmSync(path.join(sandbox.root, '.active'));
+  } else if (result.error) {
+    // spawnSync returned without starting a child, so no process group exists.
+    fs.rmSync(path.join(sandbox.root, '.active'));
+  }
+  if (result.error?.code === 'ETIMEDOUT') throw new Error(`Sandbox command exceeded the ${timeout}ms test timeout`);
+  return result;
+};
 
-module.exports = { createSandbox, validateSandbox, sandboxEnvironment, resetSandbox, resetRemote, cleanupSandbox, runSandbox };
+module.exports = { createSandbox, validateSandbox, sandboxEnvironment, resetSandbox, resetRemote, cleanupSandbox, runSandbox, recordSession, processIsAlive, sandboxCommandTimeout, sandboxSuiteTimeout };
 export type { Sandbox };

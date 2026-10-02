@@ -64,8 +64,12 @@ npm run qa:onboarding -- --cleanup /path/printed/by/the/tool
 ```
 
 Cleanup accepts only a marked temporary sandbox root and refuses a still-running
-session. Never run its installed command directly from your normal shell: the
-menu supplies the isolation safeguards on every launch.
+parent or recorded child process group, including children surviving a parent
+crash. If a crash leaves an ambiguous launch marker, cleanup refuses rather than
+assuming that no child started; inspect and stop the sandbox processes before
+removing that marker and retrying cleanup. Never run its installed command
+directly from your normal shell: the menu supplies the isolation safeguards on
+every launch.
 
 The harness uses an allowlisted child environment, temporary HOME/auth/config/
 cache paths, a closed PATH, validated command stubs, disabled analytics, and a

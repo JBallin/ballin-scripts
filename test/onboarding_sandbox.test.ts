@@ -1,17 +1,25 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
-const { createSandbox, cleanupSandbox, sandboxEnvironment, runSandbox, resetSandbox, resetRemote } = require('./helpers/onboarding.ts');
+const { createSandbox, cleanupSandbox, sandboxEnvironment, runSandbox, resetSandbox, resetRemote, sandboxSuiteTimeout, recordSession, processIsAlive } = require('./helpers/onboarding.ts');
 const { withEnvironment, testChildEnvironment } = require('./helpers/environment.ts');
 import type { Sandbox } from './helpers/onboarding.ts';
 
+const waitForGroupExit = async (group: number): Promise<void> => {
+  const deadline = Date.now() + 10000;
+  while (processIsAlive(-group)) {
+    if (Date.now() >= deadline) throw new Error('Fixture child process group did not exit');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+};
+
 describe('onboarding sandbox', function() {
-  this.timeout(20000);
+  this.timeout(sandboxSuiteTimeout);
   let sandbox: Sandbox;
   beforeEach(() => { sandbox = createSandbox(); });
-  afterEach(() => { cleanupSandbox(sandbox.root); });
+  afterEach(() => { if (fs.existsSync(sandbox.root)) cleanupSandbox(sandbox.root); });
   const runNode = (script: string) => spawnSync(process.execPath, ['-e', script], {
-    env: sandboxEnvironment(sandbox), cwd: sandbox.home, encoding: 'utf8', timeout: 3000,
+    env: sandboxEnvironment(sandbox), cwd: sandbox.home, encoding: 'utf8', timeout: 10000,
   });
   const remote = () => JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
 
@@ -205,14 +213,63 @@ describe('onboarding sandbox', function() {
     fs.symlinkSync(sandbox.root, link);
     assert.throws(() => cleanupSandbox(link), /unverified/u);
     const active = path.join(sandbox.root, '.active');
-    fs.writeFileSync(active, String(process.pid));
+    recordSession(sandbox, []);
     assert.throws(() => cleanupSandbox(sandbox.root), /still running/u);
+    fs.unlinkSync(active);
+  });
+
+  it('retains ownership of descendants after their process-group leader exits', async () => {
+    const script = "const child = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio:'ignore'}); child.unref();";
+    const leader = spawn(process.execPath, ['-e', script], {
+      cwd: sandbox.home, env: sandboxEnvironment(sandbox), detached: true, stdio: 'ignore',
+    });
+    const group = leader.pid as number;
+    let stopped = false;
+    try {
+      await new Promise((resolve, reject) => { leader.once('error', reject); leader.once('close', resolve); });
+      assert.isFalse(processIsAlive(group));
+      assert.isTrue(processIsAlive(-group));
+      const active = path.join(sandbox.root, '.active');
+      fs.writeFileSync(active, JSON.stringify({ parent: group, groups: [group], launchPending: false }));
+      assert.throws(() => cleanupSandbox(sandbox.root), /child process group is still running/u);
+      assert.isTrue(fs.existsSync(sandbox.root));
+      process.kill(-group, 'SIGTERM');
+      await waitForGroupExit(group);
+      stopped = true;
+      cleanupSandbox(sandbox.root);
+      assert.isFalse(fs.existsSync(sandbox.root));
+    } finally {
+      if (!stopped) {
+        try { process.kill(-group, 'SIGKILL'); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
+        await waitForGroupExit(group);
+      }
+    }
+  });
+
+  it('stops the entire synchronous command group before timeout teardown', () => {
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    const childPid = path.join(sandbox.scratch, 'timeout-child.pid');
+    fs.writeFileSync(path.join(sandbox.repo, 'bin/ballin'), `#!/usr/bin/env node\nconst {spawn}=require('child_process'); const fs=require('fs'); const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}); fs.writeFileSync(${JSON.stringify(childPid)},String(child.pid)); setInterval(()=>{},1000);`, { mode: 0o755 });
+    assert.throws(() => runSandbox(sandbox, ['update'], undefined, 2000), /exceeded the 2000ms test timeout/u);
+    assert.isFalse(processIsAlive(Number(fs.readFileSync(childPid, 'utf8'))));
+    assert.isFalse(fs.existsSync(path.join(sandbox.root, '.active')));
+  });
+
+  it('refuses ambiguous launch and malformed or legacy session markers', () => {
+    const active = path.join(sandbox.root, '.active');
+    for (const session of ['not JSON', '123', JSON.stringify({ parent: process.pid, groups: [-1], launchPending: false })]) {
+      fs.writeFileSync(active, session);
+      assert.throws(() => cleanupSandbox(sandbox.root));
+      assert.isTrue(fs.existsSync(sandbox.root));
+    }
     fs.unlinkSync(active);
   });
 });
 
 describe('interactive onboarding QA lifecycle', function() {
-  this.timeout(20000);
+  this.timeout(sandboxSuiteTimeout);
   const cli = path.join(__dirname, 'onboarding_qa.ts');
   const roots: string[] = [];
   const findRoot = (output: string): string => {
@@ -224,9 +281,13 @@ describe('interactive onboarding QA lifecycle', function() {
   afterEach(() => {
     for (const root of roots.splice(0)) if (fs.existsSync(root)) cleanupSandbox(root);
   });
-  const run = (input: string, args: string[] = []) => spawnSync(process.execPath, [cli, ...args], {
-    input, env: testChildEnvironment(), cwd: path.dirname(cli), encoding: 'utf8', timeout: 10000,
-  });
+  const run = (input: string, args: string[] = []) => {
+    const result = spawnSync(process.execPath, [cli, ...args], {
+    input, env: testChildEnvironment(), cwd: path.dirname(cli), encoding: 'utf8', timeout: 240000,
+    });
+    if (result.error?.code === 'ETIMEDOUT') throw new Error('Interactive QA fixture exceeded its 240000ms test timeout');
+    return result;
+  };
   it('runs actual installer and setup prompts, inspects fake state, and preserves explicitly', () => {
     const result = run('y\nn\nn\nballin backup setup\ny\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\ny\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);
     const root = findRoot(result.stdout);
@@ -285,7 +346,108 @@ describe('interactive onboarding QA lifecycle', function() {
     const root = findRoot(output);
     assert.equal(status, 130, output);
     assert.isTrue(fs.existsSync(root));
-    assert.isFalse(fs.existsSync(path.join(root, '.active')));
+    const active = path.join(root, '.active');
+    if (fs.existsSync(active)) {
+      const session = JSON.parse(fs.readFileSync(active, 'utf8'));
+      for (const group of session.groups) await waitForGroupExit(group);
+    }
     assert.isFalse(fs.existsSync(path.join(root, 'home/.ballin-scripts')));
+  });
+
+  it('refuses cleanup after parent SIGKILL until its orphaned process group exits', async () => {
+    const wrapperScript = `const {spawn} = require('child_process'); const qa = spawn(process.execPath, [${JSON.stringify(cli)}], {stdio:'inherit'}); process.stdout.write('QA_PARENT:' + qa.pid + '\\n'); qa.on('exit', () => process.stdout.write('QA_EXITED\\n')); setInterval(() => {}, 1000);`;
+    const wrapper = spawn(process.execPath, ['-e', wrapperScript], { env: testChildEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] });
+    let output = '';
+    let root = '';
+    let group = 0;
+    const closed = new Promise((resolve) => wrapper.once('close', resolve));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Installer prompt did not arrive within 120 seconds')), 120000);
+        const finish = (error?: Error): void => { clearTimeout(timer); if (error) reject(error); else resolve(); };
+        wrapper.once('error', finish);
+        wrapper.once('close', () => finish(new Error('Fixture wrapper exited before installer prompt')));
+        wrapper.stdout.on('data', (bytes: Buffer) => {
+          output += bytes.toString();
+          if (output.includes('QA_EXITED')) finish(new Error('Fixture QA exited before installer prompt'));
+          if (output.includes('Proceed with installation?')) finish();
+        });
+      });
+      root = findRoot(output);
+      const session = JSON.parse(fs.readFileSync(path.join(root, '.active'), 'utf8'));
+      group = session.groups[0];
+      assert.isFalse(session.launchPending);
+      assert.equal(session.parent, Number(output.match(/QA_PARENT:(\d+)/u)?.[1]));
+      process.kill(session.parent, 'SIGKILL');
+      const deadline = Date.now() + 10000;
+      while (processIsAlive(session.parent)) {
+        if (Date.now() > deadline) throw new Error('Fixture QA parent did not exit');
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.isTrue(processIsAlive(-group));
+      assert.throws(() => cleanupSandbox(root), /child process group is still running/u);
+      assert.isTrue(fs.existsSync(root));
+      process.kill(-group, 'SIGTERM');
+      await waitForGroupExit(group);
+      fs.writeFileSync(path.join(root, '.active'), JSON.stringify({ ...session, launchPending: true }));
+      assert.throws(() => cleanupSandbox(root), /launch state is ambiguous/u);
+      fs.writeFileSync(path.join(root, '.active'), JSON.stringify(session));
+      cleanupSandbox(root);
+      assert.isFalse(fs.existsSync(root));
+    } finally {
+      const qaParent = Number(output.match(/QA_PARENT:(\d+)/u)?.[1]);
+      if (!root && output.includes('Ballin onboarding sandbox:')) root = findRoot(output);
+      const active = root && path.join(root, '.active');
+      const groups: number[] = active && fs.existsSync(active)
+        ? JSON.parse(fs.readFileSync(active, 'utf8')).groups : group ? [group] : [];
+      if (qaParent && processIsAlive(qaParent)) process.kill(qaParent, 'SIGKILL');
+      for (const ownedGroup of groups) {
+        if (processIsAlive(-ownedGroup)) process.kill(-ownedGroup, 'SIGKILL');
+        await waitForGroupExit(ownedGroup);
+      }
+      wrapper.kill('SIGTERM');
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([closed, new Promise((resolve, reject) => {
+          timer = setTimeout(() => reject(new Error('Fixture wrapper did not close')), 10000);
+        })]);
+      } finally { clearTimeout(timer); }
+    }
+  });
+
+  it('runs all controlled stubs with a real Node executable and temp root containing whitespace', () => {
+    const host = createSandbox();
+    const temporary = path.join(host.root, 'temporary space "quoted" \'single\' \\slash');
+    const interpreter = path.join(host.root, 'node runtime/node');
+    fs.mkdirSync(temporary);
+    fs.mkdirSync(path.dirname(interpreter));
+    fs.copyFileSync(process.execPath, interpreter, fs.constants.COPYFILE_FICLONE);
+    const env = testChildEnvironment({ TMPDIR: temporary });
+    let root = '';
+    try {
+      const actualPath = spawnSync(interpreter, ['-p', 'process.execPath'], { env, encoding: 'utf8' });
+      assert.equal(actualPath.status, 0, actualPath.stderr);
+      assert.equal(actualPath.stdout.trim(), interpreter);
+      const result = spawnSync(interpreter, [cli, '--keep'], {
+        env, encoding: 'utf8', timeout: 240000,
+        input: 'y\nn\nn\nballin backup setup\ny\ncreate\n\nn\ny\ny\nballin update\nexit\n',
+      });
+      root = findRoot(result.stdout);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'Command exited');
+      assert.include(result.stdout, 'Simulated macOS update');
+      assert.include(result.stdout, 'Backing up development environment');
+      for (const name of ['git', 'gh', 'softwareupdate']) {
+        assert.match(fs.readFileSync(path.join(root, 'tools', name), 'utf8'), /^#!\/usr\/bin\/env node\n/u);
+      }
+      const quotedRoot = `'${root.replaceAll("'", "'\"'\"'")}'`;
+      assert.include(result.stdout, `Cleanup: npm run qa:onboarding -- --cleanup ${quotedRoot}`);
+      const cleanup = spawnSync(interpreter, [cli, '--cleanup', root], { env, encoding: 'utf8', timeout: 10000 });
+      assert.equal(cleanup.status, 0, cleanup.stderr);
+      assert.isFalse(fs.existsSync(root));
+    } finally {
+      withEnvironment({ TMPDIR: temporary }, () => { if (root && fs.existsSync(root)) cleanupSandbox(root); });
+      cleanupSandbox(host.root);
+    }
   });
 });

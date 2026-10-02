@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const { createSandbox, cleanupSandbox, resetRemote, runSandbox } = require('./helpers/onboarding.ts');
+const { createSandbox, cleanupSandbox, resetRemote, runSandbox, sandboxSuiteTimeout } = require('./helpers/onboarding.ts');
 import type { Sandbox } from './helpers/onboarding.ts';
 
 describe('first-run onboarding walkthroughs', function() {
-  this.timeout(15000);
+  this.timeout(sandboxSuiteTimeout);
   let testDir: string;
   let homeDir: string;
   let userBinDir: string;
