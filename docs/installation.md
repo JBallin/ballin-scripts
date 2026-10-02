@@ -40,7 +40,7 @@ reconnect to it instead of creating another one.
 
 ## Shell completion
 
-Ballin includes top-level command completion for zsh and Bash. It does not edit
+Ballin includes command completion for zsh and Bash. It does not edit
 shell profiles. To enable zsh completion, add this guarded line near the end of
 `~/.zshrc`:
 
@@ -56,8 +56,10 @@ to the startup file your Bash session reads, such as `~/.bashrc` or
 [[ -r "$HOME/.ballin-scripts/completions/ballin.bash" ]] && source "$HOME/.ballin-scripts/completions/ballin.bash"
 ```
 
-Completion covers supported top-level commands and unique prefixes such as
-`ballin upd<Tab>`. It does not complete nested commands, options, or values.
+Completion covers supported top-level commands and the operations under
+`ballin backup` and `ballin config`. Unique prefixes work too, such as
+`ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
+Completion does not cover options, values, or file paths.
 `ballin self-update` refreshes the completion scripts; reload the startup file or
 open a new terminal to use an updated command list.
 

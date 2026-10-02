@@ -32,6 +32,12 @@ $ npm test
 $ git push --set-upstream fork "$BRANCH_NAME"
 ```
 
+When adding or changing public commands, keep dispatch, help, completion,
+documentation, analytics classification, and tests aligned where applicable.
+Backup and config operations share pure command-owned name definitions with
+completion generation. Run `npm run generate:completions` after changing those
+names; tests check the committed shell assets against generated output.
+
 For more repo context, see [AGENTS.md](AGENTS.md).
 
 For deeper user and maintainer documentation, see the

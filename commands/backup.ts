@@ -1,3 +1,7 @@
+import type { BackupCommandName } from './backup_commands.ts';
+const { isBackupCommandName } = require('./backup_commands.ts') as {
+  isBackupCommandName: (value: unknown) => value is BackupCommandName;
+};
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -888,19 +892,21 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   const homeDir = process.env.HOME ?? '';
   const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
   const backupCacheDir = path.join(repoDir, '.backup-cache');
-  const command = args[0];
+  const requestedCommand = args[0];
 
-  if (command === 'help') {
+  if (requestedCommand === 'help') {
     writeStderrLine('ballin backup help: expected no arguments');
     process.exitCode = 1;
     return;
   }
 
-  if (command && !['open', 'read', 'setup', 'disconnect'].includes(command)) {
-    writeStderrLine(`ballin backup: unknown command '${command}'`);
+  if (requestedCommand !== undefined && requestedCommand !== '' && !isBackupCommandName(requestedCommand)) {
+    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'`);
     process.exitCode = 1;
     return;
   }
+
+  const command = requestedCommand || undefined;
 
   if (command === 'open' && args.length !== 1) {
     writeStderrLine('ballin backup open: expected no arguments');
@@ -1037,6 +1043,10 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     }
     return;
   }
+
+  /* c8 ignore next 3 -- The catalog predicate supplies the supported command union; handled cases and the never check enforce that contract. */
+  const unhandledCommand: never = command;
+  throw new Error(`Unhandled backup command: ${String(unhandledCommand)}`);
 }
 
 module.exports = {
