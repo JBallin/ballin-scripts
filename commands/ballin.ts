@@ -1,3 +1,4 @@
+const { terminalEmphasis } = require('./terminalStyle.ts');
 const {
   ensureAnalyticsInstallId,
   installIdPathForRepo,
@@ -40,17 +41,17 @@ import type { DoctorReport } from './doctor_report.ts';
 const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
 
 const format = {
-  fileName: '\x1b[4mfile name\x1b[0m',
-  key: '\x1b[4mkey\x1b[0m',
-  value: '\x1b[4mvalue\x1b[0m',
-  get: '\x1b[1mget\x1b[0m',
-  set: '\x1b[1mset\x1b[0m',
-  setup: '\x1b[1msetup\x1b[0m',
-  empty: "\x1b[1m''\x1b[0m",
-  reset: '\x1b[1mreset\x1b[0m',
-  open: '\x1b[1mopen\x1b[0m',
-  read: '\x1b[1mread\x1b[0m',
-  verbose: '\x1b[1m--verbose\x1b[0m',
+  fileName: terminalEmphasis('file name', 'underline'),
+  key: terminalEmphasis('key', 'underline'),
+  value: terminalEmphasis('value', 'underline'),
+  get: terminalEmphasis('get', 'bold'),
+  set: terminalEmphasis('set', 'bold'),
+  setup: terminalEmphasis('setup', 'bold'),
+  empty: terminalEmphasis("''", 'bold'),
+  reset: terminalEmphasis('reset', 'bold'),
+  open: terminalEmphasis('open', 'bold'),
+  read: terminalEmphasis('read', 'bold'),
+  verbose: terminalEmphasis('--verbose', 'bold'),
 };
 
 const examples = {
