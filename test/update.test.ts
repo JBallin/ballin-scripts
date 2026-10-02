@@ -785,7 +785,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
       BALLIN_TEST_BALLIN_PATH: child,
     });
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Missing command shims on PATH: ballin');
+    assert.include(result.stdout, 'Missing command shims on PATH: `ballin`');
     assert.deepEqual(outcomes.map(({ event, status }) => ({ event, status })), [
       { event: 'update.self-update', status: 'success' },
       { event: 'update.backup', status: 'success' },
@@ -1044,7 +1044,7 @@ exit 0
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Checking Ballin readiness');
-    assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
+    assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: `ballin`.');
     assert.include(result.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
     assert.notInclude(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [

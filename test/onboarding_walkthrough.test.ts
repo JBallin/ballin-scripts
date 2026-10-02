@@ -45,7 +45,7 @@ describe('first-run onboarding walkthroughs', function() {
     assert.equal(installResult.status, 0, installResult.stderr);
     assert.include(installResult.stdout, 'Installation plan');
     assert.include(installResult.stdout, 'Share usage analytics to help improve Ballin? [y/N]');
-    assert.include(installResult.stdout, 'Backup setup skipped. Run ballin backup setup');
+    assert.include(installResult.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.isTrue(fs.lstatSync(path.join(userBinDir, 'ballin')).isSymbolicLink());
     assert.isNull(JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8')).backup.id);
 
