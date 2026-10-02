@@ -59,7 +59,6 @@ $ ballin update
 ==> Installing macOS updates
 
 ==> Updating Ballin
-Ballin updated.
 
 ==> Checking Ballin readiness
 
@@ -73,9 +72,6 @@ Ballin updated.
 ✔ zprofile
 ✔ zshrc
 ```
-
-Self-updates report “Ballin updated.” on success. Automatic updates then check
-readiness.
 
 ## New Mac setup
 
