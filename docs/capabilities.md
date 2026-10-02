@@ -8,9 +8,11 @@ unavailable.
 
 ## `ballin update`
 
-`ballin update` runs these integrations in order. A failure does not stop later
-integrations. The command exits nonzero after all configured stages finish,
-using the last nonzero stage status when several stages fail.
+`ballin update` runs these integrations in order. Ordinary child-command
+failures do not stop later integrations. The command exits nonzero after all
+configured stages finish, using the last nonzero stage status when several
+stages fail. Ctrl-C that terminates Ballin prevents later stages from running;
+see [interruption behavior](optional-capabilities.md#interrupting-updates).
 
 Before starting, Ballin loads and validates the update settings once. Missing
 known settings use bundled defaults in memory and produce one warning; the
