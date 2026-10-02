@@ -103,16 +103,10 @@ one-command restore system.
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
 | `ballin backup read <file>` | Prints a backed-up file from the destination. |
 | `ballin update` | Runs configured update tasks. |
-| `ballin setup` | Guides you through local onboarding preferences again. |
+| `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
 | `ballin config` | Reads and updates local Ballin settings. |
 | `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
 | `ballin uninstall` | Removes installed command shims and the local checkout. |
-
-Run `ballin setup` to revisit sensitive-source capture, automatic backups, and
-analytics using your current choices as defaults. It changes local preferences
-without reinstalling Ballin, changing backup destinations, or running backup or
-update. Use `ballin config get/set/reset` for direct, scriptable edits. See
-[guided preference review](docs/optional-capabilities.md#guided-preference-review).
 
 ## Privacy and security
 
