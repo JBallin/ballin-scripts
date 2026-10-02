@@ -185,8 +185,8 @@ known settings use bundled defaults in memory for the current run and appear in
 one warning. The config file remains unchanged, and this behavior does not
 depend on self-update. Malformed JSON, invalid config structure, or known values
 other than booleans and canonical `"true"` or `"false"` strings fail before any
-integration runs. Later stages continue after failures; if several fail, the
-command returns the last nonzero stage status.
+integration runs. Later stages continue after ordinary child-command failures;
+if several fail, the command returns the last nonzero stage status.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
@@ -196,3 +196,25 @@ command returns the last nonzero stage status.
 | `update.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
 | `update.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
 | `update.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |
+
+### Interrupting updates
+
+Ctrl-C that terminates Ballin stops the update invocation, so later stages,
+including an enabled backup, do not run. Ballin does not offer a prompt to skip
+an interrupted stage or resume the remaining steps. Terminating Ballin does not
+undo completed changes or guarantee that every subprocess or macOS update
+service has stopped or that temporary files have been cleaned up.
+
+If only a child command is interrupted and Ballin remains running, the existing
+failure behavior applies: later stages continue, and the command returns the
+last nonzero stage status. For example, a child terminated by SIGINT contributes
+status 130; a later failure can replace that status.
+
+To run macOS updates separately, disable that stage in advance:
+
+```shell
+ballin config set update.softwareupdate false
+```
+
+This setting persists for future runs until you enable it again; it does not
+skip a stage only for the current run or resume an interrupted update.
