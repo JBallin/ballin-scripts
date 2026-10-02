@@ -13,30 +13,19 @@ The baseline is commit `e778c429`, Node `v24.21.0`, V8
 369/369 functions. The review starts with 54 uncovered lines and 83 branch
 outcomes. Coverage scope and thresholds remain unchanged.
 
-The feature gate before integration passed with 1,309 tests: 7,346/7,384 lines and statements
-(99.48%), 2,568/2,642 branches (97.19%), and 369/369 functions (100%).
-Tests cover 13 previously uncovered lines and eight baseline branch outcomes;
-the sole invariant ignore covers three lines and one branch outcome. The
-remaining 38 lines and 74 branch outcomes reconcile to the measured entries
-below. Additional test execution exposes eight covered V8 branch ranges;
-the dispatch annotation itself preserves its branch map and affects only the
-default arm. No previously covered outcome became uncovered.
-
-The integration gate including main `2059e2a` passed with 1,325 tests:
-7,361/7,399 lines and statements (99.48%), 2,575/2,649 branches (97.20%),
-and 370/370 functions (100%). After accounting for source-line shifts, the
-same 38 lines and 74 branch outcomes remain measured; terminal styling adds
-no uncovered outcomes. Thresholds and the sole annotation's scope are unchanged.
-
-The follow-up gate on main `c93b4fd` passed with 1,427 tests:
+The measured-gap inventory below corresponds to source revision `c93b4fd`:
 7,635/7,673 lines and statements (99.50%), 2,759/2,836 branches (97.28%),
-and 382/382 functions (100%). The exact maps retain 38 uncovered lines
-and now report 77 branch outcomes. The original 74 measured outcomes remain;
-backup preference anchors moved to `commands/backup_preferences.ts`. The three
-additional outcomes are the exported `readPrompt` EOF operands and completion
-setup's missing-target fallback, recorded below. `commands/setup.ts` has no
-uncovered outcomes. These are current measurements; earlier totals describe their named
-historical gates. Coverage scope, thresholds and the sole ignore are unchanged.
+and 382/382 functions (100%), from an isolated `npm test` run with 1,427
+passing tests. These figures describe that revision, not later main commits.
+
+Compared with the baseline, behavioral tests cover 13 previously uncovered
+lines and eight branch outcomes; the sole invariant ignore covers three lines
+and one branch outcome. The remaining inventory contains 38 uncovered lines
+and 77 branch outcomes. All 74 outcomes retained by the original audit remain
+measured, including four now anchored in `commands/backup_preferences.ts`.
+The other three are the exported `readPrompt` EOF operands and completion
+setup's missing-target fallback. Each has a disposition below.
+Coverage scope, thresholds and the sole ignore are unchanged.
 
 ## Reading the dispositions
 
