@@ -2,6 +2,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { clearTemporaryStatus } = require('./temporaryStatus.ts');
 const { terminalEmphasis } = require('./terminalStyle.ts');
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
@@ -24,11 +25,18 @@ const runCommand = (
   command: string,
   args: string[] = [],
   options: SpawnOptions = {},
-): SpawnResult => spawnSync(command, args, {
-  ...options,
-  encoding: 'utf8',
-  shell: false,
-});
+): SpawnResult => {
+  const spawn = (): SpawnResult => spawnSync(command, args, {
+    ...options,
+    encoding: 'utf8',
+    shell: false,
+  });
+  const stdio = options.stdio;
+  if (stdio === 'inherit' || (Array.isArray(stdio) && stdio.slice(1).some((entry) => entry === 'inherit' || entry === 1 || entry === 2))) {
+    clearTemporaryStatus();
+  }
+  return spawn();
+};
 
 const runNodeScript = (
   scriptPath: string,
@@ -81,10 +89,12 @@ const readCommandOutput = (
 };
 
 const writeStdoutLine = (text = ''): void => {
+  clearTemporaryStatus();
   process.stdout.write(`${text}\n`);
 };
 
 const writeStderrLine = (text = ''): void => {
+  clearTemporaryStatus();
   process.stderr.write(`${text}\n`);
 };
 
