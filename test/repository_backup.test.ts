@@ -344,7 +344,7 @@ describe('repository backup lifecycle', function() {
     const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'doctor'], {
       encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: path.join(root, 'tmp'), BALLIN_TEST_CONFIG_PATH: configPath }),
     });
-    assert.equal(result.status, 1); assert.include(result.stdout, 'ballin backup setup to revalidate');
+    assert.equal(result.status, 1); assert.include(result.stdout, '`ballin backup setup` to revalidate');
     assert.notInclude(result.stdout, 'Gist'); assert.equal(mutations().length, 0); assert.equal(rulesetRequests().length, 0);
   });
   it('keeps read and open request counts independent of unrelated supported snapshots', () => {

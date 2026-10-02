@@ -931,7 +931,7 @@ exit 2
 
       assert.equal(result.status, 1);
       assert.include(result.stdout, "Gist 'test-gist-id' on github.enterprise.test is not a valid Ballin backup destination.");
-      assert.include(result.stdout, 'The existing backup.host was not changed.');
+      assert.include(result.stdout, 'The existing `backup.host` was not changed.');
       assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
       assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
       assert.deepEqual(ghCalls(), [

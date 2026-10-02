@@ -226,7 +226,7 @@ const configureGist = (
   }
   if (destination.idStatus === 'invalid') {
     writeStdoutLine('\n⚠️  ERROR: Invalid config value backup.id; expected null or a non-empty string.');
-    writeStdoutLine('Run ballin config reset to restore valid defaults, then run ballin backup setup if needed.');
+    writeStdoutLine('Run `ballin config reset` to restore valid defaults, then run `ballin backup setup` if needed.');
     return false;
   }
   if (configuredBackupDestination(readJsonObject(ballinConfig)).kind === 'invalid') {
@@ -245,7 +245,7 @@ const configureGist = (
   }
 
   if (!backupId) {
-    writeStdoutLine('New Gist setup is retired. Run ballin backup setup to configure a private repository.');
+    writeStdoutLine('New Gist setup is retired. Run `ballin backup setup` to configure a private repository.');
     return false;
   }
 
@@ -301,7 +301,7 @@ const configureGist = (
 
   if (!commandExists('gh')) {
     writeStdoutLine('\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.');
-    writeStdoutLine('\nInstall gh, authenticate it, then run ballin backup setup again.');
+    writeStdoutLine('\nInstall gh, authenticate it, then run `ballin backup setup` again.');
     writeStdoutLine(`\nSetup guide: ${docsUrl}`);
     writeStdoutLine(`\nRun after installing gh:\n  gh auth login --hostname ${selectedHost}`);
     return false;
@@ -314,7 +314,7 @@ const configureGist = (
   if (authResult.status !== 0 || authResult.error) {
     writeStdoutLine(`\n⚠️  ERROR: gh is not authenticated for ${selectedHost}.`);
     writeStdoutLine(`\nRun:\n  gh auth login --hostname ${selectedHost}`);
-    writeStdoutLine('\nThen run ballin backup setup again.');
+    writeStdoutLine('\nThen run `ballin backup setup` again.');
     return false;
   }
 
@@ -333,7 +333,7 @@ const configureGist = (
       || stripTrailingNewlines(markerResult.stdout) !== stripTrailingNewlines(backupMarker)
     ) {
       writeStdoutLine(`\n⚠️  ERROR: Gist '${backupId}' on ${selectedHost} is not a valid Ballin backup destination.`);
-      writeStdoutLine('The existing backup.host was not changed. Verify the host and Gist ID, then retry with ballin backup setup.');
+      writeStdoutLine('The existing `backup.host` was not changed. Verify the host and Gist ID, then retry with `ballin backup setup`.');
       return false;
     }
     if (!replaceInvalidBackupHost(ballinConfig, pendingBackupHost)) {

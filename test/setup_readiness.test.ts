@@ -130,10 +130,13 @@ describe('setup readiness', () => {
     writeConfig({ backup: { repository: fixtureDestination, includeSensitive: 'invalid' } });
     const report = collect({ runCommand: (_command, args, options) => ({ ...requestFixture(state, args, options), stderr: '' }) });
     assert.equal(checkById(report, 'backup.consent').status, 'fail');
+    assert.equal(checkById(report, 'backup.consent').summary, '`backup.includeSensitive` must be true or false; read-only recovery remains available.');
     assert.equal(checkById(report, 'backup.read').status, 'fail');
     fs.rmSync(path.join(binDir, 'gh')); assert.equal(checkById(collect(), 'backup.gh').status, 'fail');
     writeConfig({ backup: { repository: fixtureDestination, id: 'legacy' } });
-    assert.equal(checkById(collect(), 'backup.config').status, 'fail'); assert.deepEqual(commandLog, []);
+    assert.equal(checkById(collect(), 'backup.config').status, 'fail');
+    assert.equal(checkById(collect(), 'backup.config').summary, 'Invalid or conflicting backup destination. Repair linkage or run `ballin backup disconnect`.');
+    assert.deepEqual(commandLog, []);
   });
 
   it('reports supported and unsupported Node.js runtimes', () => {
@@ -255,7 +258,7 @@ describe('setup readiness', () => {
 
     assert.equal(report.status, 'pass');
     assert.equal(checkById(report, 'backup.optional').status, 'info');
-    assert.include(checkById(report, 'backup.optional').summary, 'ballin backup setup');
+    assert.equal(checkById(report, 'backup.optional').summary, 'Backup is not configured. Maintenance-only Ballin is supported; run `ballin backup setup` to enable it.');
     assert.deepEqual(report.checks.filter((check) => check.id.startsWith('backup.')).map((check) => check.id), [
       'backup.optional',
     ]);
@@ -295,7 +298,7 @@ describe('setup readiness', () => {
 
       assert.equal(report.status, 'fail');
       assert.equal(checkById(report, 'backup.gist').status, 'fail');
-      assert.equal(checkById(report, 'backup.gist').summary, 'backup.id must be null or a non-empty string.');
+      assert.equal(checkById(report, 'backup.gist').summary, '`backup.id` must be null or a non-empty string.');
       assert.deepEqual(commandLog, []);
     });
 

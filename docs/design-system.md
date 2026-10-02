@@ -369,3 +369,9 @@ Never add styling to config output or backed-up file contents, even on a TTY.
 Doctor reports, prompts, warnings, and errors stay plain for now. Avoid adding
 styling to these surfaces without a concrete readability benefit; the broader
 CLI wording and spacing audit is separate from this emphasis contract.
+
+In explanatory terminal prose, use literal backticks around command references
+and configuration keys so readers can distinguish them from the sentence.
+Command shorthand may also use backticks; usage lines, command tables, standalone
+command examples, and structured configuration output retain their own formatting.
+Backticks do not add ANSI styling or change the existing emphasis policy.

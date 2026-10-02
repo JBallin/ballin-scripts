@@ -270,13 +270,13 @@ const guConfigChecks = (
   const selected = configuredBackupDestination(config);
   if (selected.kind === 'invalid' && destination.idStatus !== 'invalid') {
     return [{ id: 'backup.config', label: 'Backup config', status: 'fail',
-      summary: 'Invalid or conflicting backup destination. Repair linkage or run ballin backup disconnect.' }];
+      summary: 'Invalid or conflicting backup destination. Repair linkage or run `ballin backup disconnect`.' }];
   }
   if (selected.kind === 'repository') {
     const checks: SetupReadinessCheck[] = [];
     if (sensitiveSourceConsent(config) === null) checks.push({
       id: 'backup.consent', label: 'Sensitive-source preference', status: 'fail',
-      summary: 'backup.includeSensitive must be true or false; read-only recovery remains available.',
+      summary: '`backup.includeSensitive` must be true or false; read-only recovery remains available.',
     });
     if (!commandExists('gh', { env })) return [...checks, {
       id: 'backup.gh', label: 'GitHub CLI', status: 'fail', summary: 'GitHub CLI is not discoverable on PATH.',
@@ -296,7 +296,7 @@ const guConfigChecks = (
       id: 'backup.gist',
       label: 'Gist ID',
       status: 'fail',
-      summary: 'backup.id must be null or a non-empty string.',
+      summary: '`backup.id` must be null or a non-empty string.',
       data: { configured: false, invalid: true },
     }];
   }
@@ -306,7 +306,7 @@ const guConfigChecks = (
       id: 'backup.optional',
       label: 'Optional backup',
       status: 'info',
-      summary: 'Backup is not configured. Maintenance-only Ballin is supported; run ballin backup setup to enable it.',
+      summary: 'Backup is not configured. Maintenance-only Ballin is supported; run `ballin backup setup` to enable it.',
       data: { configured: false },
     }];
   }

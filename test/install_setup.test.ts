@@ -1324,7 +1324,7 @@ require('https').request = () => {
     assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
     assert.include(result.stdout, `${docsUrl}#shell-completion`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
-    assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
+    assert.include(result.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());

@@ -102,7 +102,7 @@ const updateHelp = `Usage:
 Update the Ballin-managed macOS development environment.
 Configured stages can update Homebrew, Node.js LTS, global npm packages,
 macOS, and Ballin, then back up environment state.
-Use ballin config get update to inspect settings.
+Use \`ballin config get update\` to inspect settings.
 `;
 
 const backupHelp = `Usage:
@@ -114,9 +114,9 @@ const backupHelp = `Usage:
     ballin backup --help
 
 Back up Ballin-managed environment state to the configured backup.
-setup creates or reconnects to an optional backup; open opens it in a browser.
-read prints a backed-up file; disconnect stops local backups and clears comparison state.
-Repository backups exclude sensitive sources unless backup.includeSensitive is true.
+\`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
+\`read\` prints a backed-up file; \`disconnect\` stops local backups and clears comparison state.
+Repository backups exclude sensitive sources unless \`backup.includeSensitive\` is true.
 `;
 
 const isCommandHelp = (args: string[]): boolean => (

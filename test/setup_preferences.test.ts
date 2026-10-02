@@ -113,7 +113,7 @@ fs.readFileSync = (file, ...args) => {
         assert.equal(readConfig().update.backup, 'true');
       } else {
         assert.notInclude(result.stdout, 'Automatically run');
-        assert.include(result.stdout, 'Run ballin backup setup');
+        assert.include(result.stdout, 'Run `ballin backup setup`');
         assert.equal(readConfig().update.backup, 'false');
       }
     });
@@ -282,7 +282,7 @@ fs.readFileSync = (file, ...args) => {
     fs.rmSync(configPath);
     const result = run('y\n');
     assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Local config is missing');
+    assert.equal(result.stderr, 'ballin setup: Local config is missing.\nRepair the local configuration before retrying. Use `ballin config get` to inspect it or `ballin config reset` to restore defaults.\n');
     assert.isFalse(fs.existsSync(configPath));
   });
 
