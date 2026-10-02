@@ -10,6 +10,7 @@
     "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "typecheck:analytics-worker": "node node_modules/@typescript/native/bin/tsc --noEmit --strict --target ES2023 --module ESNext --lib ES2023,WebWorker --ignoreConfig analytics-worker/src/index.ts",
     "test:unit": "mocha",
+    "qa:onboarding": "node test/onboarding_qa.ts",
     "test:coverage": "c8 npm run test:unit",
     "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage"
   },
