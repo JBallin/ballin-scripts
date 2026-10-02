@@ -784,7 +784,8 @@ exit 2
 
     assertBackupSucceeded(result);
     assert.include(result.stdout, 'Ballin');
-    assert.include(result.stdout, 'ballin backup');
+    assert.include(result.stdout, 'back up Ballin-managed environment state');
+    assert.include(result.stdout, 'Run `ballin <command> --help` for command-specific help.');
     assert.include(result.stdout, 'setup');
   });
 
@@ -793,7 +794,8 @@ exit 2
 
     assertBackupSucceeded(result);
     assert.include(result.stdout, 'Ballin');
-    assert.include(result.stdout, 'ballin backup');
+    assert.include(result.stdout, 'back up Ballin-managed environment state');
+    assert.include(result.stdout, 'Run `ballin <command> --help` for command-specific help.');
     assert.deepEqual(gistReads(), []);
   });
 

@@ -40,25 +40,6 @@ import type { DoctorReport } from './doctor_report.ts';
 
 const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
 
-const format = {
-  fileName: terminalEmphasis('file name', 'underline'),
-  key: terminalEmphasis('key', 'underline'),
-  value: terminalEmphasis('value', 'underline'),
-  get: terminalEmphasis('get', 'bold'),
-  set: terminalEmphasis('set', 'bold'),
-  setup: terminalEmphasis('setup', 'bold'),
-  empty: terminalEmphasis("''", 'bold'),
-  reset: terminalEmphasis('reset', 'bold'),
-  open: terminalEmphasis('open', 'bold'),
-  read: terminalEmphasis('read', 'bold'),
-  verbose: terminalEmphasis('--verbose', 'bold'),
-};
-
-const examples = {
-  get: '(ex: get update.cleanup)',
-  set: '(ex: set update.cleanup false)',
-};
-
 const ballinHelp = `
 Ballin
 Back up your dotfiles and update your macOS development environment.
@@ -72,27 +53,14 @@ Usage:
 Commands:
 
     update                update the Ballin-managed macOS development environment
-    backup                back up Ballin-managed environment state to the configured backup
-                          ${format.setup} [repository-name] create or reconnect to an optional backup
-                          sensitive sources: backup.includeSensitive (default: false)
-                          ${format.open} open the configured backup
-                          ${format.read} ${format.fileName} read a backed-up file
-                          disconnect stop local backups and clear comparison state
+    backup                back up Ballin-managed environment state
     doctor                check whether the Ballin-managed environment is healthy
-                          ${format.verbose} show full readiness details
-    config                ${format.empty}/${format.get} view entire config
-                          ${format.get} ${format.key} ${examples.get}
-                          ${format.set} ${format.key} ${format.value} ${examples.set}
-                          ${format.reset} (to defaults)
+    config                view or change Ballin configuration
     setup                 review local onboarding preferences
-    self-update           update Ballin's local checkout, shims, and config
-    uninstall             remove Ballin command shims and local checkout
+    self-update           update Ballin itself
+    uninstall             remove Ballin
 
-Examples:
-
-    ballin update
-    ballin backup
-    ballin doctor
+Run \`${terminalEmphasis('ballin <command> --help', 'bold')}\` for command-specific help.
 
 `;
 const updateHelp = `Usage:
@@ -119,9 +87,31 @@ read prints a backed-up file; disconnect stops local backups and clears comparis
 Repository backups exclude sensitive sources unless backup.includeSensitive is true.
 `;
 
+const doctorHelp = `Usage:
+    ballin doctor [--verbose]
+    ballin doctor --help
+
+Check whether the Ballin-managed environment is healthy.
+Use \`--verbose\` to show full readiness details.
+`;
+
+const selfUpdateHelp = `Usage:
+    ballin self-update
+    ballin self-update --help
+
+Update Ballin's local checkout, command shims, and configuration.
+`;
+
+const uninstallHelp = `Usage:
+    ballin uninstall
+    ballin uninstall --help
+
+Remove Ballin-owned command links and the local Ballin checkout.
+`;
+
 const isCommandHelp = (args: string[]): boolean => (
   args.length === 2 && args[1] === '--help'
-  && ['config', 'update', 'backup', 'setup'].includes(args[0])
+  && isTopLevelCommandName(args[0])
 );
 
 const writeStdout = (text: string): void => {
@@ -223,6 +213,10 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       runBackupCommand(commandArgs);
       return;
     case 'doctor':
+      if (isCommandHelp(args)) {
+        writeStdout(doctorHelp);
+        return;
+      }
       runDoctorCommand(commandArgs);
       return;
     case 'config':
@@ -239,9 +233,17 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       });
       return;
     case 'self-update':
+      if (isCommandHelp(args)) {
+        writeStdout(selfUpdateHelp);
+        return;
+      }
       runNoArgCommand('ballin self-update', commandArgs, runSelfUpdateCommand);
       return;
     case 'uninstall':
+      if (isCommandHelp(args)) {
+        writeStdout(uninstallHelp);
+        return;
+      }
       runNoArgCommand('ballin uninstall', commandArgs, runUninstallCommand);
       return;
     // The name guard and exhaustive cases reject all external unknown commands above.
