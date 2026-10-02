@@ -14,8 +14,6 @@ const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/do
 function runSelfUpdateCommand(): void {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
 
-  writeStdoutLine('👟 getting fresh kicks...');
-
   if (!updateInstalledRepo(repoDir)) {
     process.exitCode = 1;
     return;
@@ -32,6 +30,7 @@ function runSelfUpdateCommand(): void {
     cwd: repoDir,
     env: commandEnv(repoDir),
   });
+  if (process.exitCode === 0) writeStdoutLine('Ballin updated.');
 }
 
 module.exports = {

@@ -387,7 +387,6 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
     return false;
   }
 
-  writeStdoutLine(`\n💪 symlinked binaries into ${binDir}`);
   return true;
 };
 
@@ -474,7 +473,7 @@ const setup = (
     writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
   }
 
-  if (backupSetupSucceeded) {
+  if (backupSetupSucceeded && mode === 'fresh') {
     writeStdoutLine('\n😎 ballin!');
   }
   return backupSetupSucceeded;
