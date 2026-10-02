@@ -378,6 +378,53 @@ describe('repository backup lifecycle', function() {
     assert.isFalse(fs.existsSync(cacheRoot));
   });
 
+  const progressPreload = (): string => `
+    for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+    const fs = require('fs'); const write = fs.writeSync; const child = require('child_process'); const spawn = child.spawnSync;
+    let status = '';
+    fs.writeSync = function(fd, text, ...rest) { if (fd === 2) status = text === '\\r\\x1b[2K' ? '' : text; return write.call(this, fd, text, ...rest); };
+    child.spawnSync = function(command, args, ...rest) {
+      fs.appendFileSync(${JSON.stringify(path.join(root, 'progress.log'))}, JSON.stringify({ args, status }) + '\\n');
+      return spawn.call(this, command, args, ...rest);
+    };
+  `;
+  const progressRequests = (): { args: string[]; status: string }[] => fs.readFileSync(path.join(root, 'progress.log'), 'utf8')
+    .trim().split('\n').map((line: string) => JSON.parse(line));
+  const ttyEnv = { TERM: 'xterm', NO_COLOR: '' };
+  it('shows create status before creation and clears before setup results', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\nn\n', ttyEnv, progressPreload()); ok(result);
+    assert.include(result.stderr, 'Creating and initializing private backup...\r\x1b[2K');
+    assert.equal(progressRequests().find((r) => r.args.includes('user/repos'))?.status, 'Creating and initializing private backup...');
+    assert.notInclude(result.stdout, 'Creating and initializing'); assert.include(result.stdout, 'Private backup confirmed:');
+  });
+  it('clears failed creation status before existing recovery guidance', () => {
+    unconfigured(); const value = state(); value.exists = false; value.faults.create = 'reject'; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\n', ttyEnv, progressPreload());
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^Creating and initializing private backup\.\.\.\r\x1b\[2Kballin backup setup:/);
+    assert.include(result.stdout, 'Remote creation or initialization may already have occurred');
+    assert.notInclude(result.stdout, 'Private backup confirmed:');
+  });
+  it('shows reconnect status during revalidation and leaves cancellation quiet', () => {
+    unconfigured();
+    const result = run(['setup'], 'y\nreconnect\n\nn\ny\nn\n', ttyEnv, progressPreload()); ok(result);
+    assert.include(result.stderr, 'Checking existing private backup...\r\x1b[2K');
+    assert.isTrue(progressRequests().some((r) => r.status === 'Checking existing private backup...'));
+    unconfigured();
+    const cancelled = run(['setup'], 'y\nreconnect\n\nn\nn\n', ttyEnv, progressPreload());
+    assert.equal(cancelled.status, 1); assert.equal(cancelled.stderr.includes('Checking existing'), false);
+    assert.include(cancelled.stdout, 'Backup setup cancelled;');
+  });
+  it('shows backup status before quiet work and removes it on success and failure', () => {
+    source(); const result = run([], '', ttyEnv, progressPreload()); ok(result);
+    assert.match(result.stderr, /^Backing up\.\.\.\r\x1b\[2K$/);
+    assert.isTrue(progressRequests().some((r) => r.status === 'Backing up...'));
+    const value = state(); value.faults.query = 'errors'; saveState(value);
+    const failed = run([], '', ttyEnv, progressPreload());
+    assert.equal(failed.status, 1); assert.match(failed.stderr, /^Backing up\.\.\.\r\x1b\[2Kballin backup:/);
+    assert.notMatch(failed.stdout, /[✔✚✎✖]/u);
+  });
   it('creates and confirms the marker and explanatory README before persisting reviewed local choices', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n\n'); ok(result);

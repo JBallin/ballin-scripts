@@ -1,3 +1,4 @@
+const { withTemporaryStatus, clearTemporaryStatus } = require('./temporaryStatus.ts');
 import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
@@ -142,6 +143,7 @@ const fileExists = (filePath: string): boolean => {
 
 const writeFileToStderr = (filePath: string): void => {
   if (fs.statSync(filePath).size > 0) {
+    clearTemporaryStatus();
     process.stderr.write(fs.readFileSync(filePath));
   }
 };
@@ -600,7 +602,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   if (!command) {
     let status: 'success' | 'failure' = 'failure';
     try {
-      const exitStatus = runRealBackup(homeDir, backupCacheDir);
+      const exitStatus = withTemporaryStatus('Backing up...', () => runRealBackup(homeDir, backupCacheDir));
       status = exitStatus === 0 ? 'success' : 'failure';
       if (exitStatus !== 0) process.exitCode = exitStatus;
     } finally {

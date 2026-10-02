@@ -1,3 +1,4 @@
+const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
 const { saveBackupConfig, offerAutomaticUpdateBackup, selectSensitiveSources } = require('./backup_preferences.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
@@ -119,14 +120,20 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const confirmation = readPromptLine('Confirm this destination and source selection? [y/N] ');
     if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) return cancelled();
     remoteMayExist = true;
-    const read: RepositoryRead = previous
-      ? requireRepositoryRead(inspectRepository(previous.destination))
-      : createRepositoryBackup(name, account);
+    const read: RepositoryRead = withTemporaryStatus(previous
+      ? 'Checking existing private backup...' : 'Creating and initializing private backup...', () => {
+      const read: RepositoryRead = previous
+        ? requireRepositoryRead(inspectRepository(previous.destination))
+        : createRepositoryBackup(name, account);
+      if (!previous || sameRepositoryRevision(read, previous)) {
+        remoteInitialized = true;
+        reportManagedBranchProtection(ensureManagedBranchRuleset(read));
+      }
+      return read;
+    });
     if (previous && !sameRepositoryRevision(read, previous)) {
       writeStdoutLine(repositoryMessages.moved); return false;
     }
-    remoteInitialized = true;
-    reportManagedBranchProtection(ensureManagedBranchRuleset(read));
     recoveryUrl = repositoryUrl(read.destination, account);
     writeStdoutLine(`Private backup confirmed: ${recoveryUrl}`);
     if (!invalidateBackupCache(backupCacheDir)) {
