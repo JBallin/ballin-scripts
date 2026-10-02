@@ -8,7 +8,7 @@ _ballin_completion() {
   local candidate
   while IFS= read -r candidate; do
     COMPREPLY+=("$candidate")
-  done < <(compgen -W 'backup config doctor self-update uninstall update' -- "$current")
+  done < <(compgen -W 'backup config doctor self-update setup uninstall update' -- "$current")
 }
 
 complete -F _ballin_completion ballin

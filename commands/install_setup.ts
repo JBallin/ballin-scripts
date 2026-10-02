@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { offerCompletionSetup } = require('./completion_setup.ts');
 const path = require('path');
 const {
   configureAnalyticsPreference,
@@ -453,6 +454,8 @@ const setup = (
   if (!symlinkBinaries(repoDir, binDir, context !== 'automatic-update')) {
     return false;
   }
+
+  if (mode === 'fresh') offerCompletionSetup(docsUrl);
 
   const destination = configuredBackupDestination(readJsonObject(configPathFor(repoDir)));
   const backupConfigured = destination.kind === 'repository' || destination.kind === 'legacy-gist';

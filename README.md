@@ -20,9 +20,10 @@ updates.
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
 fresh installation. It asks whether to enable
-[minimal anonymous usage analytics](docs/analytics.md), then offers optional
-backup setup; a maintenance-only installation does not require Homebrew or
-GitHub CLI. When configured, backups can run automatically with `ballin update`.
+[minimal anonymous usage analytics](docs/analytics.md). After core setup, it offers
+optional shell completion and backup setup; a maintenance-only installation does
+not require Homebrew or GitHub CLI. When configured, backups can run automatically
+with `ballin update`.
 
 Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
@@ -106,6 +107,7 @@ one-command restore system.
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
 | `ballin backup read <file>` | Prints a backed-up file from the destination. |
 | `ballin update` | Runs configured update tasks. |
+| `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
 | `ballin config` | Reads and updates local Ballin settings. |
 | `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
 | `ballin uninstall` | Removes installed command shims and the local checkout. |
