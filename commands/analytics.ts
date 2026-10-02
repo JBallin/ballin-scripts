@@ -98,6 +98,7 @@ type AnalyticsInstallIdOptions = {
 type AnalyticsPreferenceOptions = {
   configPath: string;
   defaultEnabled?: boolean;
+  onCancelled?: () => void;
   docsUrl?: string;
 };
 
@@ -302,7 +303,10 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
   } catch {
     return false;
   }
-  if (response.eof) return true;
+  if (response.eof) {
+    options.onCancelled?.();
+    return true;
+  }
 
   const enabled = response.text === ''
     ? defaultEnabled

@@ -111,6 +111,21 @@ fs[operation] = (currentPath, ...args) => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
+  it('leaves guarded completion activation inert after removing the checkout', () => {
+    const { activationLine } = require('../commands/completion_setup.ts');
+    const profile = path.join(homeDir, '.bashrc');
+    const contents = `# user settings\n${activationLine('bash')}\n`;
+    fs.writeFileSync(profile, contents);
+    const result = runUninstall();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+    const reload = spawnSync(path.join(toolDir, 'bash'), ['--noprofile', '--norc', '-c', 'source "$HOME/.bashrc"; printf "reloaded"'], {
+      encoding: 'utf8', env: { HOME: homeDir, PATH: toolDir },
+    });
+    assert.equal(reload.status, 0, reload.stderr);
+    assert.equal(reload.stdout, 'reloaded');
+  });
+
   it('preserves absolute legacy bin dirs outside the test system root', () => {
     assert.equal(relocateSystemPath('', '/usr/local/bin'), '/usr/local/bin');
     assert.equal(

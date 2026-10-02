@@ -6,6 +6,7 @@ const {
   runWithCommandAnalytics,
 } = require('./analytics.ts');
 const path = require('path');
+const { runSetupCommand, setupHelp } = require('./setup.ts');
 const { configPath, fetchConfig } = require('../config/index.ts');
 const {
   runConfigCli,
@@ -83,6 +84,7 @@ Commands:
                           ${format.get} ${format.key} ${examples.get}
                           ${format.set} ${format.key} ${format.value} ${examples.set}
                           ${format.reset} (to defaults)
+    setup                 review local onboarding preferences
     self-update           update Ballin's local checkout, shims, and config
     uninstall             remove Ballin command shims and local checkout
 
@@ -189,6 +191,16 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case 'config':
       runConfigCommand(commandArgs);
       return;
+    case 'setup':
+      if (commandArgs.length === 1 && commandArgs[0] === '--help') {
+        writeStdout(setupHelp);
+        return;
+      }
+      runNoArgCommand('ballin setup', commandArgs, () => {
+        runSetupCommand();
+        if (process.exitCode === 0) repairAnalyticsInstallId();
+      });
+      return;
     case 'self-update':
       runNoArgCommand('ballin self-update', commandArgs, runSelfUpdateCommand);
       return;
@@ -212,6 +224,10 @@ const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => 
 
 const runBallinCli = (): void => {
   const args = process.argv.slice(2);
+  if (args.length === 2 && args[0] === 'setup' && args[1] === '--help') {
+    runBallinCommand(args);
+    return;
+  }
   if (!isAnalyticsPreferenceWrite(args)) {
     repairAnalyticsInstallId();
   }

@@ -2,7 +2,7 @@ _ballin_completion() {
   COMPREPLY=()
   local candidates
   case "$COMP_CWORD" in
-    1) candidates='backup config doctor self-update uninstall update' ;;
+    1) candidates='backup config doctor self-update setup uninstall update' ;;
     2)
       case "${COMP_WORDS[1]}" in
         backup) candidates='open read setup disconnect' ;;
