@@ -64,7 +64,7 @@ const runSetupCommand = (): void => {
       if (outcome === 'failed') { process.exitCode = 1; return; }
     }
     let cancelled = false;
-    if (!configureAnalyticsPreference({ configPath, defaultEnabled: analytics, onCancelled: () => { cancelled = true; } })) {
+    if (!configureAnalyticsPreference({ configPath, defaultEnabled: analytics, currentEnabled: analytics, onCancelled: () => { cancelled = true; } })) {
       process.exitCode = 1;
       return;
     }
