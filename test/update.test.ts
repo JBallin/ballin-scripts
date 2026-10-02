@@ -572,6 +572,7 @@ fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
   commandOptOut: process.env.BALLIN_NO_COMMAND_ANALYTICS ?? null,
   nvmMarker: process.env.BALLIN_NVM_TEST_MARKER ?? null,
   path: process.env.PATH,
+  automaticSelfUpdate: process.env.BALLIN_AUTOMATIC_SELF_UPDATE ?? null,
 }) + '\\n');
 
 (async () => {
@@ -670,6 +671,8 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
       .map((line: string) => JSON.parse(line));
     const events = analyticsLog.filter(({ type }: { type: string }) => type === 'event');
     const nested = analyticsLog.filter(({ type }: { type: string }) => type === 'nested');
+    assert.deepEqual(nested.map(({ automaticSelfUpdate }: { automaticSelfUpdate: string | null }) => automaticSelfUpdate), ['1', null]);
+    assert.notInclude(result.stdout, 'getting fresh kicks');
     const integrations = analyticsLog.filter(({ type }: { type: string }) => type === 'integration');
 
     assert.equal(result.status, 0, result.stderr);

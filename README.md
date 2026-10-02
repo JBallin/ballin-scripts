@@ -72,6 +72,9 @@ $ ballin update
 ✔ zshrc
 ```
 
+Automatic self-updates omit routine setup success messages and finish with
+a readiness check. Explicit `ballin self-update` retains its setup output.
+
 ## New Mac setup
 
 On a new Mac, the installer offers optional backup setup after installing Ballin.

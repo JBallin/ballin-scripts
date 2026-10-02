@@ -951,6 +951,26 @@ exit 2
     assert.include(result.stdout, '😎 ballin!');
   });
 
+  for (const fail of [false, true]) {
+    it(`keeps automatic refresh output focused while preserving symlink failures (${fail})`, () => {
+      installConfigSources();
+      fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), path.join(repoDir, 'ballin.config.json'));
+      if (fail) fs.rmSync(sourceBinDir, { recursive: true });
+      const result = spawnSync(process.execPath, [
+        installSetupPath, 'setup', repoDir, docsUrl, '', 'refresh', 'automatic-update',
+      ], {
+        encoding: 'utf8',
+        env: { HOME: path.join(testDir, 'home'), PATH: binDir, BALLIN_NO_ANALYTICS: '1' },
+      });
+
+      assert.equal(result.status, fail ? 1 : 0, result.stderr);
+      assert.notInclude(result.stdout, 'symlinked binaries into');
+      assert.notInclude(result.stdout, '😎 ballin!');
+      if (fail) assert.include(result.stdout, `Unable to symlink binaries into ${binDir}`);
+      else assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+    });
+  }
+
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),

@@ -102,6 +102,7 @@ esac
     fs.writeFileSync(path.join(commandsDir, 'install_setup.ts'), `const fs = require('fs');
 fs.appendFileSync(process.env.BALLIN_UPDATE_TEST_LOG, process.cwd() + '|install_setup:' + process.argv.slice(2).join(' ') + '\\n');
 process.stdout.write(process.env.FAKE_SETUP_STDOUT || '');
+process.stderr.write(process.env.FAKE_SETUP_STDERR || '');
 if (process.env.FAKE_SETUP_SIGNAL) {
   process.kill(process.pid, process.env.FAKE_SETUP_SIGNAL);
 }
@@ -178,6 +179,28 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       `${repoDir}|git:merge origin/main`,
       setupLog(),
     ]);
+  });
+
+  it('omits automatic chatter while preserving setup stdout, stderr and failure status', () => {
+    const result = runSelfUpdate({
+      BALLIN_AUTOMATIC_SELF_UPDATE: '1',
+      FAKE_SETUP_STDOUT: 'operational output\n',
+      FAKE_SETUP_STDERR: 'setup warning\n',
+      FAKE_SETUP_STATUS: '19',
+    });
+
+    assert.equal(result.status, 19);
+    assert.equal(result.stdout, 'operational output\n');
+    assert.equal(result.stderr, 'setup warning\n');
+    assert.equal(commandLog().at(-1), `${setupLog()} automatic-update`);
+  });
+
+  it('preserves fetch failure output during automatic self-update', () => {
+    const result = runSelfUpdate({ BALLIN_AUTOMATIC_SELF_UPDATE: '1', FAKE_GIT_FETCH_STATUS: '17' });
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, 'git fetch origin main failed\n');
+    assert.notInclude(commandLog().join('\n'), 'install_setup:');
   });
 
   it('does not add a blank line before setup output', () => {

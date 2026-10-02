@@ -61,6 +61,10 @@ Completion covers supported top-level commands and unique prefixes such as
 `ballin self-update` refreshes the completion scripts; reload the startup file or
 open a new terminal to use an updated command list.
 
+During `ballin update`, the automatic self-update omits routine installer success
+messages and reports readiness after the refresh. Explicit `ballin self-update`
+and fresh installs retain their setup output.
+
 ## Local effects
 
 The installer can create or change:
