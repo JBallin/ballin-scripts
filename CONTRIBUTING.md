@@ -26,7 +26,7 @@ $ cd ~/.ballin-scripts
 $ ballin self-update
 $ git checkout -b "$BRANCH_NAME"
 $ nvm use # If you use nvm
-$ npm install
+$ npm ci
 # MAKE CHANGES
 $ npm test
 $ git push --set-upstream fork "$BRANCH_NAME"
