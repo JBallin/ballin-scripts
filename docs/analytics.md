@@ -24,7 +24,11 @@ Disable persistently:
 ballin config set analytics.enabled false
 ```
 
-Use `true` instead of `false` to enable analytics persistently.
+Use `true` instead of `false` to enable analytics persistently, or run
+`ballin setup` to review the analytics choice and its explanation, with your current value as the
+default. Setup uses the ordinary top-level command event contract and sends no
+additional preference event. `ballin setup --help` runs offline without reading
+local configuration or sending analytics.
 
 Disable analytics for one command:
 

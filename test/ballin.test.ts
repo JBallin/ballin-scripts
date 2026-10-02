@@ -160,7 +160,7 @@ esac
     assertHelpOutput(runBallin(['help']));
   });
 
-  ['config', 'update', 'backup'].forEach((command) => {
+  ['config', 'update', 'backup', 'setup'].forEach((command) => {
     it(`prints offline ${command} --help without config or workflow effects`, () => {
       const preloadPath = path.join(tempDir, 'reject-network.cjs');
       const networkMarker = path.join(tempDir, 'network-request');

@@ -3,6 +3,7 @@ const topLevelCommandNames = [
   'config',
   'doctor',
   'self-update',
+  'setup',
   'uninstall',
   'update',
 ] as const;
