@@ -139,6 +139,15 @@ The first `ballin backup` is a separate command. It collects the current
 selected allowlisted sources, reads the destination, and saves changes that pass
 the conflict checks. See [Backup sources and sensitivity](backup-sources.md).
 
+## Revisiting onboarding choices
+
+After installation, run `ballin setup` to review your local sensitive-source,
+automatic-backup, and analytics choices using their current values as defaults.
+It does not reinstall Ballin, change backup destinations, or run backup/update.
+See [guided preference review](optional-capabilities.md#guided-preference-review)
+for applicable choices and cancellation behavior. Use `ballin backup setup`
+when you need to create or reconnect a destination.
+
 ## Optional backup setup and reconnect
 
 ```shell
