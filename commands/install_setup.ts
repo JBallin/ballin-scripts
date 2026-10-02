@@ -301,9 +301,9 @@ const configureGist = (
 
   if (!commandExists('gh')) {
     writeStdoutLine('\n⚠️  ERROR: GitHub CLI is required for Gist backup setup.');
-    writeStdoutLine('\nInstall gh, authenticate it, then run `ballin backup setup` again.');
+    writeStdoutLine('\nInstall `gh`, authenticate it, then run `ballin backup setup` again.');
     writeStdoutLine(`\nSetup guide: ${docsUrl}`);
-    writeStdoutLine(`\nRun after installing gh:\n  gh auth login --hostname ${selectedHost}`);
+    writeStdoutLine(`\nRun after installing \`gh\`:\n  gh auth login --hostname ${selectedHost}`);
     return false;
   }
 

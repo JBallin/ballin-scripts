@@ -643,7 +643,8 @@ esac
 
     assert.equal(result.status, 1, result.stderr);
     assert.include(result.stdout, 'GitHub CLI is required for Gist backup setup');
-    assert.include(result.stdout, 'gh auth login --hostname github.example.test');
+    assert.include(result.stdout, '\nInstall `gh`, authenticate it, then run `ballin backup setup` again.\n');
+    assert.include(result.stdout, '\nRun after installing `gh`:\n  gh auth login --hostname github.example.test\n');
     assert.notInclude(commandLog(), 'gh:');
   });
 
