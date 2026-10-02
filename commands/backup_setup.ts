@@ -165,7 +165,7 @@ const disconnectBackup = (configPath: string, cacheDir: string): boolean => {
       writeStdoutLine('Backup disconnected; writes are disabled, but local cache cleanup is incomplete. Rerun `ballin backup disconnect`.');
       return false;
     }
-    writeStdoutLine('Backup disconnected. Remote history and shared gh authentication are unchanged.');
+    writeStdoutLine('Backup disconnected. Remote history and shared `gh` authentication are unchanged.');
     return true;
   } catch {
     writeStdoutLine('Unable to read local backup configuration; disconnect did not complete.');

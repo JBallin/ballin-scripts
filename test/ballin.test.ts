@@ -455,7 +455,7 @@ require('https').request = () => {
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
+    assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
     assert.include(result.stdout, '\nNext: Run `ballin config reset` to recreate the config.');
     assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
@@ -468,7 +468,7 @@ require('https').request = () => {
 
     assert.equal(verboseResult.status, 0, verboseResult.stderr);
     assert.include(verboseResult.stdout, 'OK    Node.js runtime:');
-    assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
+    assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
     assert.include(verboseResult.stdout, 'OK    Configured Gist readability:');
     assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
   });
@@ -581,7 +581,7 @@ esac
     const missingShim = runBallin(['doctor']);
 
     assert.equal(missingShim.status, 1);
-    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
+    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: `ballin`.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
     assert.notInclude(missingShim.stdout, 'Gist ID:');
     assert.notInclude(missingShim.stdout, 'GitHub CLI:');

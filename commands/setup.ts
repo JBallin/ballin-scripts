@@ -19,7 +19,7 @@ This review does not reinstall Ballin, change backup destinations, or run backup
 const preferenceBoolean = (value: unknown, key: string): boolean => {
   if (value === true || value === 'true') return true;
   if (value === false || value === 'false') return false;
-  throw new Error(`Invalid ${key}; expected true or false.`);
+  throw new Error(`Invalid \`${key}\`; expected true or false.`);
 };
 const cancelSetup = (): void => {
   writeStdoutLine('Preference review cancelled; unconfirmed choices are unchanged. Earlier confirmed choices remain saved.');
@@ -34,7 +34,7 @@ const runSetupCommand = (): void => {
     const destination = configuredBackupDestination(config);
     if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
     const sensitive = destination.kind === 'repository' ? sensitiveSourceConsent(config) : false;
-    if (sensitive === null) throw new Error('Invalid backup.includeSensitive; expected true or false.');
+    if (sensitive === null) throw new Error('Invalid `backup.includeSensitive`; expected true or false.');
     const automatic = destination.kind !== 'unconfigured'
       ? preferenceBoolean(config.update?.backup, 'update.backup') : false;
     const analytics = preferenceBoolean(config.analytics?.enabled, 'analytics.enabled');

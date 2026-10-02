@@ -647,7 +647,10 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 1); assert.include(result.stdout, 'cleanup is incomplete');
     assert.isNull(config().backup.repository); assert.isNull(config().backup.id); assert.equal(config().update.backup, 'false');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().backup.host, before.backup.host);
-    assert.equal(run().status, 1); ok(run(['disconnect'])); assert.isFalse(fs.existsSync(cacheRoot));
+    assert.equal(run().status, 1);
+    const disconnected = run(['disconnect']); ok(disconnected);
+    assert.equal(disconnected.stdout, 'Backup disconnected. Remote history and shared `gh` authentication are unchanged.\n');
+    assert.isFalse(fs.existsSync(cacheRoot));
     assert.equal(state().requests.length, 0);
   });
   it('keeps the previous destination and cache when disconnect persistence fails', () => {

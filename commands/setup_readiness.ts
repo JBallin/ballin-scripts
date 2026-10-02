@@ -156,7 +156,7 @@ const commandShimCheck = (env: NodeJS.ProcessEnv): SetupReadinessCheck => {
     label: 'Command shims on PATH',
     status: missing.length ? 'fail' : 'pass',
     summary: missing.length
-      ? `Missing command shims on PATH: ${missing.join(', ')}.`
+      ? `Missing command shims on PATH: ${missing.map((name) => `\`${name}\``).join(', ')}.`
       : 'All command shims are discoverable on PATH.',
     data: { commands, missing },
   };
@@ -222,7 +222,7 @@ const readConfig = (configPath: string): {
         id: 'config.read',
         label: 'Config readability',
         status: 'fail',
-        summary: `Config sections must be JSON objects: ${invalidSections.join(', ')}.`,
+        summary: `Config sections must be JSON objects: ${invalidSections.map((name) => `\`${name}\``).join(', ')}.`,
         data: { configPath, invalidSections },
       },
     };
@@ -235,7 +235,7 @@ const readConfig = (configPath: string): {
       label: 'Config readability',
       status: missingSections.length ? 'warn' : 'pass',
       summary: missingSections.length
-        ? `Config is readable but missing sections: ${missingSections.join(', ')}.`
+        ? `Config is readable but missing sections: ${missingSections.map((name) => `\`${name}\``).join(', ')}.`
         : 'Config is readable and has the expected top-level sections.',
       data: { configPath, missingSections },
     },
@@ -346,13 +346,13 @@ const guConfigChecks = (
       id: 'backup.auth',
       label: 'GitHub CLI authentication',
       status: 'info',
-      summary: 'Skipping GitHub CLI authentication check until backup.host is configured.',
+      summary: 'Skipping GitHub CLI authentication check until `backup.host` is configured.',
     });
     checks.push({
       id: 'backup.read',
       label: 'Configured Gist readability',
       status: 'info',
-      summary: 'Skipping configured Gist readability check until backup.host is configured.',
+      summary: 'Skipping configured Gist readability check until `backup.host` is configured.',
     });
     return checks;
   }
@@ -362,14 +362,14 @@ const guConfigChecks = (
       id: 'backup.auth',
       label: 'GitHub CLI authentication',
       status: 'info',
-      summary: 'Skipping GitHub CLI authentication check because gh is not on PATH.',
+      summary: 'Skipping GitHub CLI authentication check because `gh` is not on PATH.',
       data: { host },
     });
     checks.push({
       id: 'backup.read',
       label: 'Configured Gist readability',
       status: 'info',
-      summary: 'Skipping configured Gist readability check because gh is not on PATH.',
+      summary: 'Skipping configured Gist readability check because `gh` is not on PATH.',
       data: { host },
     });
     return checks;
