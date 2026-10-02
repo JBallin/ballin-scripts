@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { managedBranchRulesetName, repositoryReadmeContents } = require('../../commands/backup_repository.ts');
+const repositoryConstants = () => require('../../commands/backup_repository.ts');
 import type { SpawnSyncOptions } from 'child_process';
 
 type FixtureCommit = { files: Record<string, string>; parents: string[]; tree: string };
@@ -21,7 +21,7 @@ const blobHash = (base64: string): string => {
 const fixtureDestination = { id: 'R_fixture', ownerId: 'U_fixture', name: 'ballin-backups', branch: 'main' };
 const fixtureRuleset = (overrides: Record<string, unknown> = {}): FixtureRuleset => ({
   id: 1,
-  name: managedBranchRulesetName,
+  name: repositoryConstants().managedBranchRulesetName,
   target: 'branch',
   source_type: 'Repository',
   source: 'fixture-user/ballin-backups',
@@ -48,7 +48,7 @@ const fixtureState = (snapshots: Record<string, string> = {}): FixtureState => {
   };
   const files = {
     '.ballin-backup.json': fixtureMarker(),
-    'README.md': repositoryReadmeContents,
+    'README.md': repositoryConstants().repositoryReadmeContents,
     ...snapshots,
   };
   commitFixture(state, Object.fromEntries(Object.entries(files).map(([name, value]) => [name, Buffer.from(value).toString('base64')])), []);
@@ -94,7 +94,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     if (fault.rulesetList === 'server') return reply({ message: 'Internal error', status: '500' }, 1);
     if (fault.rulesetList === 'malformed') return { status: 0, stdout: 'truncated JSON', signal: null };
     if (fault.rulesetList === 'object') return reply({ rulesets: state.rulesets });
-    if (fault.rulesetList === 'invalid-id') return reply([{ id: 0, name: managedBranchRulesetName }]);
+    if (fault.rulesetList === 'invalid-id') return reply([{ id: 0, name: repositoryConstants().managedBranchRulesetName }]);
     if (fault.rulesetList === 'invalid-name') return reply([{ id: 1, name: 'bad\nname' }]);
     return reply(state.rulesets.map(({ id, name, enforcement }) => ({ id, name, enforcement })));
   }
