@@ -161,12 +161,14 @@ esac
   });
 
   [[], ['--help'], ['help']].forEach((args) => {
-    it(`keeps the top-level overview offline for ${JSON.stringify(args)}`, () => {
-      const expectedOutput = runBallin(args).stdout;
-      const analyticsPath = path.join(tempDir, '.analytics');
-      const attemptPath = path.join(tempDir, 'forbidden-actions.jsonl');
-      const preloadPath = path.join(tempDir, 'reject-help-effects.cjs');
-      fs.writeFileSync(preloadPath, `const fs = require('fs');
+    ['missing', 'malformed', 'unreadable', 'enabled'].forEach((config) => {
+      [undefined, 'invalid-id\n', '11111111-1111-4111-8111-111111111111\n'].forEach((identity) => {
+        it(`keeps ${JSON.stringify(args)} offline with ${config} config and ${identity === undefined ? 'missing' : identity.trim()} identity`, () => {
+          const expectedOutput = runBallin(args).stdout;
+          const analyticsPath = path.join(tempDir, '.analytics');
+          const attemptPath = path.join(tempDir, 'forbidden-actions.jsonl');
+          const preloadPath = path.join(tempDir, 'reject-help-effects.cjs');
+          fs.writeFileSync(preloadPath, `const fs = require('fs');
 const path = require('path');
 const append = fs.appendFileSync.bind(fs);
 const reject = (action) => {
@@ -204,12 +206,10 @@ const analytics = require(${JSON.stringify(path.join(__dirname, '..', 'commands'
 analytics.ensureAnalyticsInstallId = () => reject('identity repair');
 analytics.runWithCommandAnalytics = () => reject('command analytics');
 `);
-      for (const config of ['missing', 'malformed', 'unreadable', 'enabled']) {
-        fs.rmSync(configPath, { force: true });
-        const contents = config === 'malformed' ? '{invalid' : '{"analytics":{"enabled":"true"}}';
-        if (config !== 'missing') fs.writeFileSync(configPath, contents);
-        // The preload rejects attempted reads with EACCES, including this readable sentinel.
-        for (const identity of [undefined, 'invalid-id\n', '11111111-1111-4111-8111-111111111111\n']) {
+          fs.rmSync(configPath, { force: true });
+          const contents = config === 'malformed' ? '{invalid' : '{"analytics":{"enabled":"true"}}';
+          if (config !== 'missing') fs.writeFileSync(configPath, contents);
+          // The preload rejects attempted reads with EACCES, including this readable sentinel.
           fs.rmSync(analyticsPath, { recursive: true, force: true });
           if (identity !== undefined) {
             fs.mkdirSync(analyticsPath);
@@ -234,8 +234,8 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
             assert.equal(fs.readFileSync(path.join(analyticsPath, 'install-id'), 'utf8'), identity);
             assert.equal(fs.readFileSync(path.join(analyticsPath, 'state-sentinel'), 'utf8'), 'unchanged\n');
           }
-        }
-      }
+        });
+      });
     });
   });
 
