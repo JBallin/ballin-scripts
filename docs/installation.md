@@ -64,6 +64,8 @@ never makes core installation fail. After a failed append, Ballin attempts to
 restore the original bytes. If restoration fails or conflicting changes are
 detected, Ballin identifies the file to inspect before reloading it. After
 successful activation, open a new terminal or reload the displayed startup file.
+If Ballin identifies an existing activation with a trailing carriage return,
+replace only that line manually with the displayed command using LF line endings.
 
 To enable completion later, or when automatic setup is skipped, add this guarded
 line near the end of `~/.zshrc` (or your `ZDOTDIR/.zshrc`):

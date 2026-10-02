@@ -47,7 +47,7 @@ describe('optional completion setup', () => {
       const profile = path.join(home, '.zshrc');
       fs.writeFileSync(profile, contents, { mode: 0o640 });
       assert.isTrue(appendActivation(target()));
-      const newline = contents.includes('\r\n') ? '\r\n' : '\n';
+      const newline = '\n';
       const separator = contents && !contents.endsWith('\n') ? newline : '';
       assert.strictEqual(fs.readFileSync(profile, 'utf8'), `${contents}${separator}${activationLine('zsh')}${newline}`);
       assert.strictEqual(fs.statSync(profile).mode & 0o777, 0o640);
@@ -239,6 +239,46 @@ describe('optional completion setup', () => {
         : change === 'appended-suffix' ? Buffer.from('keepuser')
         : Buffer.concat([Buffer.from('keep'), append.subarray(0, 12)]);
       assert.deepEqual(fs.readFileSync(profile), expected);
+    });
+  }
+
+  for (const contents of ['# existing comment\r\n', '# existing comment\r\n# no final newline']) {
+    it(`loads Bash completion after preserving CRLF profile bytes: ${JSON.stringify(contents)}`, () => {
+      env.SHELL = '/bin/bash';
+      const profile = path.join(home, '.bashrc');
+      fs.writeFileSync(profile, contents);
+      const assetDirectory = path.join(home, '.ballin-scripts', 'completions');
+      fs.mkdirSync(assetDirectory, { recursive: true });
+      fs.copyFileSync(path.join(__dirname, '..', 'completions', 'ballin.bash'), path.join(assetDirectory, 'ballin.bash'));
+      const bashTarget = completionTarget(env, response('bashrc'));
+      assert.isTrue(appendActivation(bashTarget));
+      const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', '. "$HOME/.bashrc"; complete -p ballin'], {
+        encoding: 'utf8', env: testChildEnvironment(env),
+      });
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.stderr, '');
+      assert.include(result.stdout, 'complete -F _ballin_completion ballin');
+      const expected = `${contents}${contents.endsWith('\n') ? '' : '\n'}${activationLine('bash')}\n`;
+      assert.strictEqual(fs.readFileSync(profile, 'utf8'), expected);
+      assert.isFalse(appendActivation(bashTarget));
+      assert.strictEqual(fs.readFileSync(profile, 'utf8'), expected);
+    });
+  }
+
+  for (const ending of ['\r\n', '\r', '\nvalid-and-malformed']) {
+    it(`requests manual repair of an existing CRLF activation without changing bytes: ${JSON.stringify(ending)}`, () => {
+      env.SHELL = '/bin/bash';
+      const profile = path.join(home, '.bashrc');
+      const line = activationLine('bash');
+      const contents = ending === '\nvalid-and-malformed' ? `${line}\n${line}\r\n` : `# user settings\n${line}${ending}`;
+      fs.writeFileSync(profile, contents);
+      const output = offer(['bashrc', 'y']);
+      assert.include(output, `The completion activation in ${profile} has a trailing carriage return`);
+      assert.include(output, 'Replace only that activation line manually');
+      assert.include(output, 'using LF before reloading');
+      assert.notInclude(output, 'already enabled');
+      assert.notInclude(output, 'Shell completion enabled.');
+      assert.strictEqual(fs.readFileSync(profile, 'utf8'), contents);
     });
   }
 

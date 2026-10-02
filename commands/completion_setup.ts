@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 
-class CompletionRestoreError extends Error {}
+class CompletionProfileError extends Error {}
 
 type CompletionTarget = { shell: 'zsh' | 'bash'; profile: string; line: string };
 type CompletionSetupOptions = {
@@ -77,12 +77,16 @@ const appendActivation = (target: CompletionTarget): boolean => {
       throw new Error('Startup file changed');
     }
     const contents = fs.readFileSync(fd) as Buffer;
-    if (contents.toString('utf8').split(/\r?\n/u).includes(target.line)) return false;
+    const lines = contents.toString('utf8').split('\n');
+    if (lines.includes(`${target.line}\r`)) {
+      throw new CompletionProfileError(`The completion activation in ${target.profile} has a trailing carriage return. Replace only that activation line manually with the displayed command using LF before reloading this file.`);
+    }
+    if (lines.includes(target.line)) return false;
     const trailingBackslashes = contents.toString('utf8').match(/(\\+)(?:\r?\n)?$/u)?.[1];
     if (trailingBackslashes && trailingBackslashes.length % 2 !== 0) {
       throw new Error('Startup file ends at a continuation boundary');
     }
-    const newline = contents.includes(Buffer.from('\r\n')) ? '\r\n' : '\n';
+    const newline = '\n';
     const separator = contents.length && contents[contents.length - 1] !== 10 ? newline : '';
     const appended = Buffer.from(`${separator}${target.line}${newline}`);
     try { fs.writeFileSync(fd, appended); } catch (error) {
@@ -100,7 +104,7 @@ const appendActivation = (target: CompletionTarget): boolean => {
         }
         fs.ftruncateSync(fd, contents.length);
       } catch {
-        throw new CompletionRestoreError(`The completion append could not be restored. Inspect ${target.profile} for incomplete activation before reloading it.`);
+        throw new CompletionProfileError(`The completion append could not be restored. Inspect ${target.profile} for incomplete activation before reloading it.`);
       }
       throw error;
     }
@@ -124,7 +128,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     write(appended ? 'Shell completion enabled. Open a new terminal or reload this startup file.'
       : 'Shell completion is already enabled. Open a new terminal or reload this startup file.');
   } catch (error) {
-    if (error instanceof CompletionRestoreError) write(error.message);
+    if (error instanceof CompletionProfileError) write(error.message);
     write('Shell completion setup could not finish. Ballin remains installed.');
     fallback();
   }
