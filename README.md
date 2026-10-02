@@ -59,6 +59,7 @@ $ ballin update
 ==> Installing macOS updates
 
 ==> Updating Ballin
+Ballin updated.
 
 ==> Checking Ballin readiness
 
