@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 
+class CompletionRestoreError extends Error {}
+
 type CompletionTarget = { shell: 'zsh' | 'bash'; profile: string; line: string };
 type CompletionSetupOptions = {
   env?: NodeJS.ProcessEnv;
@@ -33,7 +35,10 @@ const completionTarget = (
   const shell = path.basename(env.SHELL);
   let profile: string;
   if (shell === 'zsh') {
-    const directory = env.ZDOTDIR || home;
+    const hint = env.ZDOTDIR ? ` Exported ZDOTDIR: ${env.ZDOTDIR}.` : '';
+    const choice = prompt(`Which directory contains the .zshrc your terminal reads?${hint} [home or absolute directory; Enter to skip] `);
+    if (choice.eof) return null;
+    const directory = choice.text === 'home' ? home : choice.text;
     if (!path.isAbsolute(directory)) return null;
     profile = path.join(directory, '.zshrc');
   } else if (shell === 'bash') {
@@ -73,9 +78,32 @@ const appendActivation = (target: CompletionTarget): boolean => {
     }
     const contents = fs.readFileSync(fd) as Buffer;
     if (contents.toString('utf8').split(/\r?\n/u).includes(target.line)) return false;
+    const trailingBackslashes = contents.toString('utf8').match(/(\\+)(?:\r?\n)?$/u)?.[1];
+    if (trailingBackslashes && trailingBackslashes.length % 2 !== 0) {
+      throw new Error('Startup file ends at a continuation boundary');
+    }
     const newline = contents.includes(Buffer.from('\r\n')) ? '\r\n' : '\n';
     const separator = contents.length && contents[contents.length - 1] !== 10 ? newline : '';
-    fs.writeFileSync(fd, `${separator}${target.line}${newline}`);
+    const appended = Buffer.from(`${separator}${target.line}${newline}`);
+    try { fs.writeFileSync(fd, appended); } catch (error) {
+      try {
+        // Restore the original length only when the observed bytes match this append.
+        const failedSize = fs.fstatSync(fd).size;
+        if (failedSize < contents.length || failedSize > contents.length + appended.length) {
+          throw new Error('Startup file changed during append');
+        }
+        const failed = Buffer.alloc(failedSize);
+        if (fs.readSync(fd, failed, 0, failedSize, 0) !== failedSize
+          || !failed.subarray(0, contents.length).equals(contents)
+          || !failed.subarray(contents.length).equals(appended.subarray(0, failedSize - contents.length))) {
+          throw new Error('Startup file changed during append');
+        }
+        fs.ftruncateSync(fd, contents.length);
+      } catch {
+        throw new CompletionRestoreError(`The completion append could not be restored. Inspect ${target.profile} for incomplete activation before reloading it.`);
+      }
+      throw error;
+    }
     return true;
   } finally { fs.closeSync(fd); }
 };
@@ -95,7 +123,8 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     const appended = appendActivation(target);
     write(appended ? 'Shell completion enabled. Open a new terminal or reload this startup file.'
       : 'Shell completion is already enabled. Open a new terminal or reload this startup file.');
-  } catch {
+  } catch (error) {
+    if (error instanceof CompletionRestoreError) write(error.message);
     write('Shell completion setup could not finish. Ballin remains installed.');
     fallback();
   }

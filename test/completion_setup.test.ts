@@ -14,12 +14,13 @@ describe('optional completion setup', () => {
     env = { HOME: home, SHELL: '/bin/zsh', PATH: home };
   });
   afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
-  const target = () => completionTarget(env, response(''));
-  const offer = (answers: string[], interactive = true, onPrompt?: () => void) => {
+  const target = () => completionTarget(env, response(env.ZDOTDIR ?? 'home'));
+  const offer = (answers: string[], interactive = true, onPrompt?: (text: string) => void) => {
     const output: string[] = [];
+    const choices = env.SHELL === '/bin/zsh' ? [env.ZDOTDIR ?? 'home', ...answers] : answers;
     offerCompletionSetup('https://example.test/install', {
       env, interactive, write: (text: string) => output.push(text),
-      prompt: () => { onPrompt?.(); const text = answers.shift(); return { text: text ?? '', eof: text === undefined }; },
+      prompt: (prompt: string) => { onPrompt?.(prompt); const text = choices.shift(); return { text: text ?? '', eof: text === undefined }; },
     });
     return output.join('\n');
   };
@@ -93,7 +94,7 @@ describe('optional completion setup', () => {
     fs.mkdirSync(profile);
     assert.include(offer(['y']), 'could not finish');
     fs.rmdirSync(profile);
-    assert.include(offer(['y'], true, () => fs.symlinkSync(outside, profile)), 'could not finish');
+    assert.include(offer(['y'], true, (prompt) => { if (prompt === 'Enable shell completion? [y/N] ') fs.symlinkSync(outside, profile); }), 'could not finish');
     assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'keep');
   });
   it('contains filesystem and prompt failures with manual fallback', () => {
@@ -104,7 +105,7 @@ describe('optional completion setup', () => {
   });
   it('uses real default prompting and environment only inside an isolated child', () => {
     const script = `process.stdin.isTTY = true; require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'completion_setup.ts'))}).offerCompletionSetup('guide');`;
-    const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', input: 'y\n', env: testChildEnvironment(env) });
+    const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', input: 'home\ny\n', env: testChildEnvironment(env) });
     assert.strictEqual(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Enable shell completion? [y/N]');
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
@@ -154,5 +155,91 @@ describe('optional completion setup', () => {
       assert.strictEqual(result.stdout, shell === '/bin/bash' ? 'activatedfinished' : 'finished');
     }
   });
+
+  it('requires explicit zsh directory selection without reading or sourcing .zshenv', () => {
+    const directory = path.join(home, 'custom-zsh');
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(home, '.zshenv'), `ZDOTDIR=${directory}\nprintf touched > "${home}/startup-ran"\n`);
+    assert.isNull(completionTarget(env, response('')));
+    assert.isNull(completionTarget(env, () => ({ text: 'home', eof: true })));
+    assert.strictEqual(completionTarget(env, response(directory)).profile, path.join(directory, '.zshrc'));
+    const script = `process.stdin.isTTY = true; require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'completion_setup.ts'))}).offerCompletionSetup('guide');`;
+    const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', input: `${directory}\ny\n`, env: testChildEnvironment(env) });
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+    assert.isFalse(fs.existsSync(path.join(home, 'startup-ran')));
+    assert.include(fs.readFileSync(path.join(directory, '.zshrc'), 'utf8'), activationLine('zsh'));
+  });
+  for (const ending of ['\\', '\\'.repeat(3), '\\\n', '\\\r\n']) {
+    it(`leaves a continuation boundary unchanged: ${JSON.stringify(ending)}`, () => {
+      const profile = path.join(home, '.zshrc');
+      const contents = `value=original${ending}`;
+      fs.writeFileSync(profile, contents);
+      assert.include(offer(['y']), 'could not finish');
+      assert.strictEqual(fs.readFileSync(profile, 'utf8'), contents);
+    });
+  }
+  it('allows an even trailing backslash run without changing the original bytes', () => {
+    const profile = path.join(home, '.zshrc');
+    const contents = 'value=original\\\\';
+    fs.writeFileSync(profile, contents);
+    assert.isTrue(appendActivation(target()));
+    assert.strictEqual(fs.readFileSync(profile, 'utf8'), `${contents}\n${activationLine('zsh')}\n`);
+  });
+  for (const contents of ['', 'keep', 'keep\r\n']) {
+    it(`restores original bytes and mode after a short append and ENOSPC: ${JSON.stringify(contents)}`, () => {
+      const profile = path.join(home, '.zshrc');
+      fs.writeFileSync(profile, contents, { mode: 0o640 });
+      const original = fs.writeFileSync;
+      fs.writeFileSync = (fd: number, appended: Buffer) => {
+        fs.writeSync(fd, appended.subarray(0, 12));
+        const error = new Error('quota exhausted') as NodeJS.ErrnoException;
+        error.code = 'ENOSPC';
+        throw error;
+      };
+      try { assert.include(offer(['y']), 'could not finish'); } finally { fs.writeFileSync = original; }
+      assert.strictEqual(fs.readFileSync(profile, 'utf8'), contents);
+      assert.strictEqual(fs.statSync(profile).mode & 0o777, 0o640);
+    });
+  }
+  it('identifies the profile if rollback itself fails', () => {
+    const profile = path.join(home, '.zshrc');
+    fs.writeFileSync(profile, 'keep');
+    const originalWrite = fs.writeFileSync;
+    const originalTruncate = fs.ftruncateSync;
+    fs.writeFileSync = (fd: number, appended: Buffer) => { fs.writeSync(fd, appended.subarray(0, 12)); throw new Error('short write'); };
+    fs.ftruncateSync = () => { throw new Error('I/O failure'); };
+    try {
+      const output = offer(['y']);
+      assert.include(output, `Inspect ${profile}`);
+      assert.include(output, 'before reloading');
+      assert.include(output, 'Ballin remains installed');
+    } finally { fs.writeFileSync = originalWrite; fs.ftruncateSync = originalTruncate; }
+  });
+  for (const change of ['larger', 'smaller', 'original-prefix', 'appended-suffix', 'short-read']) {
+    it(`preserves another writer's changes instead of truncating them: ${change}`, () => {
+      const profile = path.join(home, '.zshrc');
+      fs.writeFileSync(profile, 'keep');
+      const originalWrite = fs.writeFileSync;
+      const originalRead = fs.readSync;
+      fs.writeFileSync = (fd: number, appended: Buffer) => {
+        if (change === 'larger') fs.writeSync(fd, Buffer.alloc(appended.length + 1, 'x'));
+        else if (change === 'smaller') fs.ftruncateSync(fd, 1);
+        else if (change === 'original-prefix') { fs.ftruncateSync(fd, 0); fs.writeSync(fd, 'user'); }
+        else if (change === 'appended-suffix') fs.writeSync(fd, 'user');
+        else { fs.writeSync(fd, appended.subarray(0, 12)); fs.readSync = () => 0; }
+        throw new Error('write failed');
+      };
+      try { assert.include(offer(['y']), `Inspect ${profile}`); }
+      finally { fs.writeFileSync = originalWrite; fs.readSync = originalRead; }
+      const append = Buffer.from(`\n${activationLine('zsh')}\n`);
+      const expected = change === 'larger' ? Buffer.concat([Buffer.from('keep'), Buffer.alloc(append.length + 1, 'x')])
+        : change === 'smaller' ? Buffer.from('k')
+        : change === 'original-prefix' ? Buffer.from('user')
+        : change === 'appended-suffix' ? Buffer.from('keepuser')
+        : Buffer.concat([Buffer.from('keep'), append.subarray(0, 12)]);
+      assert.deepEqual(fs.readFileSync(profile), expected);
+    });
+  }
 
 });

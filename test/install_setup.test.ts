@@ -1289,7 +1289,7 @@ require('https').request = () => {
       const preloadPath = path.join(testDir, 'interactive-completion.cjs');
       fs.writeFileSync(preloadPath, 'process.stdin.isTTY = true;\n');
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
-        encoding: 'utf8', input: backupFails ? 'n\ny\n' : 'n\nn\n',
+        encoding: 'utf8', input: backupFails ? 'n\nhome\ny\n' : 'n\nhome\nn\n',
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);

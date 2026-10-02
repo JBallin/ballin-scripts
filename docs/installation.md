@@ -45,18 +45,25 @@ install offers to enable it after the command is installed. Ballin shows the she
 startup file, and exact activation line before asking for confirmation (default:
 no). Refreshes and `ballin self-update` do not ask again.
 
-For zsh, Ballin uses `.zshrc` in `ZDOTDIR` when set, otherwise in your home
-directory. For Bash, select `login` only if your terminal reads login startup
-files, or `bashrc` if it reads `~/.bashrc`. Login selection respects the first
+For zsh, specify the directory where your terminal reads `.zshrc`: `home`
+or an absolute directory. Ballin can show an exported `ZDOTDIR` as a hint, but a
+value set without export is not visible to the installer. If you are unsure,
+press Enter and use manual activation below. Ballin does not run shell startup
+files to discover this setting.
+
+For Bash, select `login` only if your terminal reads login startup files, or `bashrc` if it reads `~/.bashrc`. Login selection respects the first
 existing file in Bash's order: `.bash_profile`, `.bash_login`, then `.profile`.
 When only `.profile` exists, use the manual path below rather than adding
 Bash-specific syntax to a file other shells may read.
 
 Accepting appends one guarded line while preserving existing contents and
 permissions. A missing standard file is created privately. Symlinked startup
-files, unsupported or uncertain shell settings, noninteractive installs, and
-write failures use the manual path; completion setup never makes core installation
-fail. Open a new terminal or reload the displayed startup file afterward.
+files, unsupported or uncertain shell settings, noninteractive installs,
+continuation boundaries, and write failures use the manual path. Completion setup
+never makes core installation fail. After a failed append, Ballin attempts to
+restore the original bytes. If restoration fails or conflicting changes are
+detected, Ballin identifies the file to inspect before reloading it. After
+successful activation, open a new terminal or reload the displayed startup file.
 
 To enable completion later, or when automatic setup is skipped, add this guarded
 line near the end of `~/.zshrc` (or your `ZDOTDIR/.zshrc`):
