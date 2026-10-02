@@ -20,14 +20,14 @@ const statusLabels: Record<DoctorStatus, string> = {
 const nextSteps: Record<string, string> = {
   'runtime.node': 'Install a supported Node.js version and reopen your shell.',
   'commands.path': 'Run the installer again or add the Ballin command directory to PATH.',
-  'config.read': 'Run ballin config reset to recreate the config.',
-  'backup.host': 'Run ballin backup setup to repair the backup host.',
-  'backup.gist': 'Run ballin config reset to restore valid defaults, then run ballin backup setup if needed.',
+  'config.read': 'Run `ballin config reset` to recreate the config.',
+  'backup.host': 'Run `ballin backup setup` to repair the backup host.',
+  'backup.gist': 'Run `ballin config reset` to restore valid defaults, then run `ballin backup setup` if needed.',
   'backup.gh': 'Install GitHub CLI and authenticate it for your backup host.',
-  'backup.auth': 'Run gh auth login for the configured backup host.',
-  'backup.read': 'Check access to the selected backup, then run ballin backup setup to revalidate it.',
-  'backup.config': 'Repair the selected backup configuration or run ballin backup disconnect.',
-  'backup.consent': 'Set backup.includeSensitive to true or false; read-only recovery remains available.',
+  'backup.auth': 'Run `gh auth login` for the configured backup host.',
+  'backup.read': 'Check access to the selected backup, then run `ballin backup setup` to revalidate it.',
+  'backup.config': 'Repair the selected backup configuration or run `ballin backup disconnect`.',
+  'backup.consent': 'Set `backup.includeSensitive` to true or false; read-only recovery remains available.',
 };
 
 const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): string => {

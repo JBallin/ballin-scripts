@@ -876,7 +876,7 @@ exit 2
     });
 
     assertBackupSucceeded(result);
-    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'Invalid config value `backup.host`; expected a non-empty string.');
     assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
     assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host, 'github.com');
     assert.deepEqual(ghCalls(), [
@@ -898,7 +898,7 @@ exit 2
     });
 
     assertBackupSucceeded(result);
-    assert.include(result.stdout, 'Invalid config value backup.host; expected a non-empty string.');
+    assert.include(result.stdout, 'Invalid config value `backup.host`; expected a non-empty string.');
     assert.include(result.stdout, 'What GitHub host should be used for Gist backups? [github.com]');
     assert.equal(
       JSON.parse(fs.readFileSync(configPath, 'utf8')).backup.host,
@@ -933,7 +933,7 @@ exit 2
 
       assert.equal(result.status, 1);
       assert.include(result.stdout, "Gist 'test-gist-id' on github.enterprise.test is not a valid Ballin backup destination.");
-      assert.include(result.stdout, 'The existing backup.host was not changed.');
+      assert.include(result.stdout, 'The existing `backup.host` was not changed.');
       assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
       assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'preserve configured cache\n');
       assert.deepEqual(ghCalls(), [
@@ -978,7 +978,7 @@ exit 2
       assert.equal(result.status, ghAuthFail ? 1 : 0);
       assert.include(result.stdout, 'Existing Gist backup remains configured. Setup does not migrate or replace it with a repository.');
       if (ghAuthFail) {
-        assert.include(result.stdout, 'gh is not authenticated for github.com');
+        assert.include(result.stdout, '`gh` is not authenticated for github.com');
         assert.include(result.stderr, 'setup did not complete');
       } else {
         assertBackupSucceeded(result);

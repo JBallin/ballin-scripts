@@ -317,6 +317,14 @@ esac
     assert.equal(commandLog(), '');
   });
 
+  it('marks the invalid Gist key and recovery commands in installer output', () => {
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({ backup: { id: 42, host: 'github.com' } }));
+    const { output, result } = captureStdout(() => configureGist(repoDir, docsUrl, true));
+    assert.isFalse(result);
+    assert.equal(output, '\n⚠️  ERROR: Invalid config value `backup.id`; expected null or a non-empty string.\nRun `ballin config reset` to restore valid defaults, then run `ballin backup setup` if needed.\n');
+    assert.equal(commandLog(), '');
+  });
+
   it('does not create a local install ID while creating config', () => {
     installConfigSources();
 
@@ -635,7 +643,8 @@ esac
 
     assert.equal(result.status, 1, result.stderr);
     assert.include(result.stdout, 'GitHub CLI is required for Gist backup setup');
-    assert.include(result.stdout, 'gh auth login --hostname github.example.test');
+    assert.include(result.stdout, '\nInstall `gh`, authenticate it, then run `ballin backup setup` again.\n');
+    assert.include(result.stdout, '\nRun after installing `gh`:\n  gh auth login --hostname github.example.test\n');
     assert.notInclude(commandLog(), 'gh:');
   });
 
@@ -653,7 +662,7 @@ esac
     const result = runGistSetup({ env: { FAKE_GH_AUTH_STATUS: '4' } });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'gh is not authenticated for github.example.test');
+    assert.include(result.stdout, '\n⚠️  ERROR: `gh` is not authenticated for github.example.test.\n');
     assert.include(commandLog(), 'gh:api --hostname github.example.test user');
     assert.notInclude(commandLog(), 'gh:gist');
   });
@@ -797,7 +806,7 @@ esac
     });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Invalid config value backup.host');
+    assert.include(result.stdout, '\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.\n');
     assert.equal(commandLog(), '');
   });
 
@@ -858,7 +867,7 @@ esac
 
     assert.isFalse(result.result);
     assert.include(result.output, `${binDir} doesn't seem to be in your path.`);
-    assert.include(result.output, `export PATH="${binDir}:$PATH"`);
+    assert.include(result.output, `Add \`export PATH="${binDir}:$PATH"\` to your shell profile.\n`);
   });
 
   it('stops safely when neither Homebrew nor HOME can provide a command directory', () => {
@@ -1324,7 +1333,7 @@ require('https').request = () => {
     assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
     assert.include(result.stdout, `${docsUrl}#shell-completion`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
-    assert.include(result.stdout, 'Backup setup skipped. Run ballin backup setup');
+    assert.include(result.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1373,7 +1382,7 @@ require('https').request = () => {
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'GitHub.com authentication is required');
-    assert.include(result.stdout, 'Ballin maintenance is installed. Retry with: ballin backup setup');
+    assert.include(result.stdout, '\nBallin maintenance is installed. Retry with: `ballin backup setup`\n');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1398,7 +1407,7 @@ require('https').request = () => {
     assert.include(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.include(result.stdout, '"backup.includeSensitive" set to: "false"\n');
     assert.isBelow(result.stdout.indexOf('"backup.includeSensitive" set to: "false"'), result.stdout.indexOf('Automatically run ballin backup after ballin update?'));
-    assert.notInclude(result.stdout, 'Retry with: ballin backup setup');
+    assert.notInclude(result.stdout, 'Retry with: `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.deepEqual(readRepoConfig().backup.repository, fixtureDestination); assert.equal(readRepoConfig().update.backup, 'false');

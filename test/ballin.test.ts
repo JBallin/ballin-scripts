@@ -166,6 +166,102 @@ esac
     assertHelpOutput(runBallin(['help']));
   });
 
+  [[], ['--help'], ['help']].forEach((args) => {
+    ['missing', 'malformed', 'unreadable', 'enabled'].forEach((config) => {
+      [undefined, 'invalid-id\n', '11111111-1111-4111-8111-111111111111\n'].forEach((identity) => {
+        it(`keeps ${JSON.stringify(args)} offline with ${config} config and ${identity === undefined ? 'missing' : identity.trim()} identity`, () => {
+          const expectedOutput = runBallin(args).stdout;
+          const analyticsPath = path.join(tempDir, '.analytics');
+          const attemptPath = path.join(tempDir, 'forbidden-actions.jsonl');
+          const preloadPath = path.join(tempDir, 'reject-help-effects.cjs');
+          fs.writeFileSync(preloadPath, `const fs = require('fs');
+const path = require('path');
+const append = fs.appendFileSync.bind(fs);
+const reject = (action) => {
+  append(${JSON.stringify(attemptPath)}, JSON.stringify(action) + '\\n');
+  const error = new Error('Forbidden help action: ' + action);
+  error.code = 'EACCES';
+  throw error;
+};
+for (const name of ['readFileSync', 'writeFileSync', 'appendFileSync', 'openSync',
+  'accessSync', 'existsSync', 'statSync', 'lstatSync', 'mkdirSync', 'readdirSync',
+  'renameSync', 'linkSync', 'unlinkSync', 'rmSync']) {
+  const original = fs[name];
+  fs[name] = (...values) => {
+    const targets = name === 'renameSync' || name === 'linkSync' ? values.slice(0, 2) : values.slice(0, 1);
+    for (const target of targets) {
+      if (typeof target !== 'string' && !Buffer.isBuffer(target)) continue;
+      const resolved = path.resolve(String(target));
+      if (resolved === ${JSON.stringify(configPath)}
+        || resolved === ${JSON.stringify(path.join(__dirname, '..', 'config', '.defaultConfig.json'))}
+        || resolved === ${JSON.stringify(analyticsPath)}
+        || resolved.startsWith(${JSON.stringify(analyticsPath + path.sep)})) reject('fs.' + name);
+    }
+    return original(...values);
+  };
+}
+for (const module of ['http', 'https']) {
+  for (const name of ['request', 'get']) require(module)[name] = () => reject(module + '.' + name);
+}
+for (const name of ['connect', 'createConnection']) require('net')[name] = () => reject('net.' + name);
+globalThis.fetch = () => reject('fetch');
+for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {
+  require('child_process')[name] = () => reject('child_process.' + name);
+}
+const analytics = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'analytics.ts'))});
+analytics.ensureAnalyticsInstallId = () => reject('identity repair');
+analytics.runWithCommandAnalytics = () => reject('command analytics');
+`);
+          fs.rmSync(configPath, { force: true });
+          const contents = config === 'malformed' ? '{invalid' : '{"analytics":{"enabled":"true"}}';
+          if (config !== 'missing') fs.writeFileSync(configPath, contents);
+          // The preload rejects attempted reads with EACCES, including this readable sentinel.
+          fs.rmSync(analyticsPath, { recursive: true, force: true });
+          if (identity !== undefined) {
+            fs.mkdirSync(analyticsPath);
+            fs.writeFileSync(path.join(analyticsPath, 'install-id'), identity);
+            fs.writeFileSync(path.join(analyticsPath, 'state-sentinel'), 'unchanged\n');
+          }
+          const result = runBallin(args, {
+            NODE_ENV: 'production',
+            BALLIN_NO_ANALYTICS: undefined,
+            BALLIN_NO_COMMAND_ANALYTICS: undefined,
+            NODE_OPTIONS: `--require=${preloadPath}`,
+          });
+          assertHelpOutput(result);
+          assert.equal(result.stdout, expectedOutput);
+          assert.isFalse(fs.existsSync(attemptPath), `${config}: ${identity}`);
+          assert.deepEqual(commandLog(), []);
+          if (config === 'missing') assert.isFalse(fs.existsSync(configPath));
+          else assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
+          if (identity === undefined) assert.isFalse(fs.existsSync(analyticsPath));
+          else {
+            assert.deepEqual(fs.readdirSync(analyticsPath).sort(), ['install-id', 'state-sentinel']);
+            assert.equal(fs.readFileSync(path.join(analyticsPath, 'install-id'), 'utf8'), identity);
+            assert.equal(fs.readFileSync(path.join(analyticsPath, 'state-sentinel'), 'utf8'), 'unchanged\n');
+          }
+        });
+      });
+    });
+  });
+
+  it('preserves overview output and analytics eligibility with extra help arguments', () => {
+    const expectedOutput = runBallin(['help']).stdout;
+    for (const args of [['help', 'extra'], ['--help', 'extra']]) {
+      writeConfig({ analytics: { enabled: 'true' } });
+      const installIdPath = path.join(tempDir, '.analytics', 'install-id');
+      fs.rmSync(path.dirname(installIdPath), { recursive: true, force: true });
+      const result = runBallin(args, {
+        BALLIN_NO_ANALYTICS: '',
+        BALLIN_NO_COMMAND_ANALYTICS: '1',
+      });
+      assertHelpOutput(result);
+      assert.equal(result.stdout, expectedOutput);
+      assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
+      assert.deepEqual(commandLog(), []);
+    }
+  });
+
   topLevelCommandNames.forEach((command: string) => {
     it(`prints offline ${command} --help without config or workflow effects`, () => {
       const preloadPath = path.join(tempDir, 'reject-network.cjs');
@@ -189,12 +285,15 @@ esac
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
         if (command === 'self-update') assert.include(result.stdout, 'local `ballin-scripts` checkout, command shims, and configuration');
         if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
-        if (command === 'update') assert.include(result.stdout, 'ballin config get update');
+        if (command === 'update') assert.include(result.stdout, 'Use `ballin config get update` to inspect settings.\n');
+        if (command === 'setup') assert.include(result.stdout, 'Use `ballin config get/set/reset` for direct configuration.\n');
         if (command === 'backup') {
+          assert.include(result.stdout, '`setup` creates or reconnects to an optional backup; `open` opens it in a browser.\n');
+          assert.include(result.stdout, '`read` prints a backed-up file; `disconnect` stops local backups and clears comparison state.\n');
           ['setup [repository-name]', 'open', 'read <file>', 'disconnect'].forEach((usage) => {
             assert.include(result.stdout, `ballin backup ${usage}`);
           });
-          assert.include(result.stdout, 'Repository backups exclude sensitive sources unless backup.includeSensitive is true.');
+          assert.include(result.stdout, 'Repository backups exclude sensitive sources unless `backup.includeSensitive` is true.');
         }
         assert.deepEqual(commandLog(), []);
         assert.isFalse(fs.existsSync(networkMarker));
@@ -388,12 +487,13 @@ exit 17
     assert.isFalse(fs.existsSync(path.join(tempDir, '.analytics', 'install-id')));
 
     fs.rmSync(analyticsPath);
-    const repaired = runBallin(['help'], {
+    const repaired = runBallin(['config', 'get', 'analytics.enabled'], {
       BALLIN_NO_ANALYTICS: '',
       BALLIN_NO_COMMAND_ANALYTICS: '1',
     });
 
-    assertHelpOutput(repaired);
+    assert.equal(repaired.status, 0, repaired.stderr);
+    assert.equal(repaired.stdout, 'true\n');
     assert.match(fs.readFileSync(path.join(analyticsPath, 'install-id'), 'utf8').trim(), /^[0-9a-f-]{36}$/);
   });
 
@@ -425,12 +525,13 @@ require('https').request = () => {
     assert.isFalse(fs.existsSync(requestMarker));
     assert.isFalse(fs.existsSync(versionMarker));
 
-    const resumed = runBallin(['help'], {
+    const resumed = runBallin(['config', 'get', 'analytics.enabled'], {
       BALLIN_NO_ANALYTICS: '',
       NODE_OPTIONS: `--require=${preloadPath}`,
     });
 
-    assertHelpOutput(resumed);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(resumed.stdout, 'true\n');
     assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
     assert.isTrue(fs.existsSync(requestMarker));
     assert.deepEqual(JSON.parse(fs.readFileSync(versionMarker, 'utf8')), {
@@ -446,12 +547,13 @@ require('https').request = () => {
     fs.mkdirSync(path.dirname(installIdPath));
     fs.writeFileSync(installIdPath, 'not-an-install-id\n');
 
-    const result = runBallin(['help'], {
+    const result = runBallin(['config', 'get', 'analytics.enabled'], {
       BALLIN_NO_ANALYTICS: '',
       BALLIN_NO_COMMAND_ANALYTICS: '1',
     });
 
-    assertHelpOutput(result);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'true\n');
     assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
   });
 
@@ -540,8 +642,8 @@ require('https').request = () => {
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
-    assert.include(result.stdout, '\nNext: Run ballin config reset to recreate the config.');
+    assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
+    assert.include(result.stdout, '\nNext: Run `ballin config reset` to recreate the config.');
     assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
     assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
@@ -553,7 +655,7 @@ require('https').request = () => {
 
     assert.equal(verboseResult.status, 0, verboseResult.stderr);
     assert.include(verboseResult.stdout, 'OK    Node.js runtime:');
-    assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: analytics.');
+    assert.include(verboseResult.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
     assert.include(verboseResult.stdout, 'OK    Configured Gist readability:');
     assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
   });
@@ -632,8 +734,8 @@ esac
       const result = runBallin(['doctor', '--verbose']);
 
       assert.equal(result.status, 1, result.stderr);
-      assert.include(result.stdout, 'ERROR Gist ID: backup.id must be null or a non-empty string.');
-      assert.include(result.stdout, 'Next: Run ballin config reset to restore valid defaults');
+      assert.include(result.stdout, 'ERROR Gist ID: `backup.id` must be null or a non-empty string.');
+      assert.include(result.stdout, 'Next: Run `ballin config reset` to restore valid defaults');
     });
 
     writeConfig({
@@ -646,7 +748,7 @@ esac
 
     assert.equal(malformedHost.status, 1);
     assert.include(malformedHost.stdout, 'ERROR Gist host: Gist host is not configured.');
-    assert.include(malformedHost.stdout, 'Next: Run ballin backup setup to repair the backup host.');
+    assert.include(malformedHost.stdout, 'Next: Run `ballin backup setup` to repair the backup host.');
     assert.deepEqual(commandLog(), []);
   });
 
@@ -666,7 +768,7 @@ esac
     const missingShim = runBallin(['doctor']);
 
     assert.equal(missingShim.status, 1);
-    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: ballin.');
+    assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: `ballin`.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
     assert.notInclude(missingShim.stdout, 'Gist ID:');
     assert.notInclude(missingShim.stdout, 'GitHub CLI:');
@@ -681,7 +783,7 @@ esac
 
     assert.equal(missingConfig.status, 1);
     assert.include(missingConfig.stdout, 'ERROR Config readability: Unable to read');
-    assert.include(missingConfig.stdout, 'Next: Run ballin config reset to recreate the config.');
+    assert.include(missingConfig.stdout, 'Next: Run `ballin config reset` to recreate the config.');
   });
 
   it('rejects invalid doctor usage', () => {

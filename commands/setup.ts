@@ -12,14 +12,14 @@ const setupHelp = `Usage:
 
 Review local sensitive-source, automatic-backup, and analytics preferences.
 Backup choices appear when a backup is configured; sensitive-source review applies to repository backups.
-Use ballin config get/set/reset for direct configuration.
+Use \`ballin config get/set/reset\` for direct configuration.
 This review does not reinstall Ballin, change backup destinations, or run backup/update.
 `;
 
 const preferenceBoolean = (value: unknown, key: string): boolean => {
   if (value === true || value === 'true') return true;
   if (value === false || value === 'false') return false;
-  throw new Error(`Invalid ${key}; expected true or false.`);
+  throw new Error(`Invalid \`${key}\`; expected true or false.`);
 };
 const cancelSetup = (): void => {
   writeStdoutLine('Preference review cancelled; unconfirmed choices are unchanged. Earlier confirmed choices remain saved.');
@@ -34,7 +34,7 @@ const runSetupCommand = (): void => {
     const destination = configuredBackupDestination(config);
     if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
     const sensitive = destination.kind === 'repository' ? sensitiveSourceConsent(config) : false;
-    if (sensitive === null) throw new Error('Invalid backup.includeSensitive; expected true or false.');
+    if (sensitive === null) throw new Error('Invalid `backup.includeSensitive`; expected true or false.');
     const automatic = destination.kind !== 'unconfigured'
       ? preferenceBoolean(config.update?.backup, 'update.backup') : false;
     const analytics = preferenceBoolean(config.analytics?.enabled, 'analytics.enabled');
@@ -55,7 +55,7 @@ const runSetupCommand = (): void => {
     } else if (destination.kind === 'legacy-gist') {
       writeStdoutLine('Legacy Gist backups capture every available source; sensitive-source selection applies to repository backups.');
     } else {
-      writeStdoutLine('No backup is configured. Run ballin backup setup to choose a destination.');
+      writeStdoutLine('No backup is configured. Run `ballin backup setup` to choose a destination.');
     }
 
     if (destination.kind !== 'unconfigured') {
@@ -75,7 +75,7 @@ const runSetupCommand = (): void => {
     writeStderrLine(`ballin setup: ${(error as Error).message}`);
     writeStderrLine(reviewing
       ? 'Unable to complete preference review; unconfirmed choices are unchanged.'
-      : 'Repair the local configuration before retrying. Use ballin config get to inspect it or ballin config reset to restore defaults.');
+      : 'Repair the local configuration before retrying. Use `ballin config get` to inspect it or `ballin config reset` to restore defaults.');
     process.exitCode = 1;
   }
 };

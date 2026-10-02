@@ -71,6 +71,10 @@ The existing schema-v1 command payload contains:
 `ballin update` sends one top-level command event. Its internally invoked
 backup and self-update do not send additional command events. Direct
 `ballin doctor` and `ballin self-update` retain their ordinary command events.
+The top-level overview (`ballin`, `ballin --help`, and `ballin help`) runs
+offline without reading user configuration, sending analytics, or creating or
+repairing local analytics state.
+
 All command-specific help (`ballin <command> --help`) runs offline without
 reading user configuration, sending analytics, or creating or repairing an
 installation ID.
