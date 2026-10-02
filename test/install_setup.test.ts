@@ -10,9 +10,7 @@ const {
   configureAnalyticsPreference,
 } = require('../commands/analytics.ts');
 const {
-  configHasBackupHost,
   configure,
-  configureGist,
   configureBackup,
   setup,
   setupAnalytics,
@@ -98,128 +96,6 @@ describe('install setup', () => {
     });
   };
 
-  const installFakeGhCommand = () => {
-    writeExecutable('gh', `#!/bin/bash
-printf 'gh:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-expected_host="\${FAKE_GH_HOST:-github.example.test}"
-case "$1:$2" in
-  api:--hostname)
-    if [ "$3:$4:$#" != "$expected_host:user:4" ]; then exit 2; fi
-    exit "$FAKE_GH_AUTH_STATUS"
-    ;;
-  auth:status)
-    if [ "$3" = '--active' ] && [ "$FAKE_GH_ACTIVE_FLAG_UNSUPPORTED" = '1' ]; then exit 1; fi
-    if [ "$*" = "auth status --hostname $expected_host" ] && [ "$FAKE_GH_INACTIVE_ACCOUNT_EXPIRED" = '1' ]; then exit 4; fi
-    if [ "$*" != "auth status --active --hostname $expected_host" ]; then exit 2; fi
-    exit "$FAKE_GH_AUTH_STATUS"
-    ;;
-  gist:view)
-    if [ "$GH_HOST" != "$expected_host" ]; then
-      printf '%s\\n' 'Unexpected GH_HOST' >&2
-      exit 2
-    fi
-    if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:.MyConfig.md' ]; then
-      if [ "$FAKE_MARKER_WITHOUT_TRAILING_NEWLINE" = '1' ]; then
-        printf '%s\\n' '### Backup of your dev environment'
-        printf '%s' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
-        exit 0
-      fi
-      printf '%s\\n' '### Backup of your dev environment'
-      printf '%s\\n' 'Created by [ballin-scripts](https://github.com/JBallin/ballin-scripts)'
-      printf '\\n'
-      exit 0
-    fi
-    if [ "$3" = 'wrong-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:.MyConfig.md' ]; then
-      printf '%s\\n' 'not a ballin backup'
-      exit 0
-    fi
-    if [ "$3:$4:$5" = '--files:--:returning-gist-id' ]; then
-      if [ "$FAKE_GIST_FILE_LIST_SIGNAL" = '1' ]; then kill -TERM "$$"; fi
-      if [ -n "$FAKE_GIST_FILE_LIST_STDERR" ]; then printf '%s\\n' "$FAKE_GIST_FILE_LIST_STDERR" >&2; fi
-      if [ "\${FAKE_GIST_FILE_LIST_STATUS:-0}" != '0' ]; then exit "$FAKE_GIST_FILE_LIST_STATUS"; fi
-      printf '%s\\n' '.MyConfig.md'
-      if [ "$FAKE_GIST_CONFIG_ABSENT" != '1' ]; then
-        printf '%s\\n' 'ballin_config'
-      fi
-      exit 0
-    fi
-    if [ "$3" = 'returning-gist-id' ] && [ "$4:$5:$6" = '--raw:--filename:ballin_config' ]; then
-      if [ "$FAKE_GIST_CONFIG_SIGNAL" = '1' ]; then kill -TERM "$$"; fi
-      if [ -n "$FAKE_GIST_CONFIG_STDERR" ]; then printf '%s\\n' "$FAKE_GIST_CONFIG_STDERR" >&2; fi
-      printf '%s\\n' "$FAKE_RESTORED_CONFIG"
-      exit "$FAKE_GIST_CONFIG_STATUS"
-    fi
-    exit 2
-    ;;
-  gist:create)
-    if [ "$GH_HOST" != "$expected_host" ]; then
-      printf '%s\\n' 'Unexpected GH_HOST' >&2
-      exit 2
-    fi
-    if [ -e "$TEST_REPO_DIR/.backup-cache" ] || [ -L "$TEST_REPO_DIR/.backup-cache" ]; then
-      printf '%s\n' 'backup cache still existed during Gist creation' >&2
-      exit 9
-    fi
-    if [ "$3:$4" != '.MyConfig.md:--desc' ]; then exit 2; fi
-    if [ -n "$FAKE_GIST_CREATE_STDERR" ]; then printf '%s\\n' "$FAKE_GIST_CREATE_STDERR" >&2; fi
-    if [ "\${FAKE_GIST_CREATE_STATUS:-0}" != '0' ]; then exit "$FAKE_GIST_CREATE_STATUS"; fi
-    if [ "$FAKE_GIST_REMOVE_CONFIG" = '1' ]; then /bin/rm -f "$TEST_REPO_DIR/ballin.config.json"; fi
-    printf '%s\\n' 'https://gist.github.com/new-gist-id'
-    ;;
-  *) exit 2 ;;
-esac
-`);
-  };
-
-  const runGistSetup = ({
-    confirmBackup = true,
-    env = {},
-    guHostExisted = 'true',
-    input,
-    preserveBackupConfig = false,
-  }: {
-    confirmBackup?: boolean;
-    env?: NodeJS.ProcessEnv;
-    guHostExisted?: 'true' | 'false';
-    input?: string;
-    preserveBackupConfig?: boolean;
-  } = {}) => {
-    const configPath = path.join(repoDir, 'ballin.config.json');
-    if (fs.existsSync(configPath) && !preserveBackupConfig) {
-      const config = readRepoConfig();
-      config.backup = {
-        ...config.backup,
-        host: 'github.example.test',
-      };
-      fs.writeFileSync(configPath, JSON.stringify(config));
-    }
-    const configuredId = readRepoConfig().backup?.id;
-    const setupInput = configuredId
-      ? input
-      : `${confirmBackup ? 'y' : 'n'}\n${input ?? ''}`;
-
-    return spawnSync(process.execPath, [
-      installSetupPath,
-      'gist',
-      repoDir,
-      docsUrl,
-      guHostExisted,
-    ], {
-      encoding: 'utf8',
-      input: setupInput,
-      env: childEnvironment({
-        FAKE_COMMAND_LOG: commandLogPath,
-        FAKE_GH_AUTH_STATUS: '0',
-        FAKE_GIST_FILE_LIST_STATUS: '0',
-        FAKE_GIST_CONFIG_STATUS: '0',
-        FAKE_RESTORED_CONFIG: '{"update":{"cleanup":"false","selfUpdate":"true","backup":"true","softwareupdate":"false","npm":"true","nvm":"true"},"backup":{"id":null,"host":"github.example.test"}}',
-        TEST_DIR: testDir,
-        TEST_REPO_DIR: repoDir,
-        ...env,
-      }),
-    });
-  };
-
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-install-setup-'));
     repoDir = path.join(testDir, 'repo');
@@ -287,41 +163,16 @@ esac
     const configFile = path.join(repoDir, 'ballin.config.json');
     const original = '{"backup":{"id":"returning-gist-id","host":"github.example.test"}}\n';
     fs.writeFileSync(configFile, original);
-    installFakeGhCommand();
     const { output, result } = withEnvironment(childEnvironment({
       FAKE_COMMAND_LOG: commandLogPath, FAKE_GH_AUTH_STATUS: '0',
-    }), () => captureStdout(() => configureBackup(repoDir, docsUrl, true, {
+    }), () => captureStdout(() => configureBackup(repoDir, docsUrl, {
       configPath: configFile, repositoryName: 'independent-backup',
     })));
     assert.isFalse(result);
-    assert.include(output, 'Migration is separate; disconnect before setting up an independent repository.');
+    assert.include(output, 'Gist');
+    assert.include(output, 'retired');
+    assert.include(output, 'ballin backup disconnect');
     assert.equal(fs.readFileSync(configFile, 'utf8'), original);
-    assert.equal(commandLog(), '');
-  });
-
-  it('treats malformed config structures as having no usable backup host', () => {
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), 'null\n');
-    assert.isFalse(configHasBackupHost(repoDir));
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{\n');
-    assert.isFalse(configHasBackupHost(repoDir));
-  });
-
-  it('rejects a missing Gist config without prompting or contacting GitHub', () => {
-    const missingConfig = path.join(repoDir, 'missing-config.json');
-
-    const result = withoutStdout(() => configureGist(repoDir, docsUrl, false, {
-      configPath: missingConfig,
-    }));
-
-    assert.isFalse(result);
-    assert.equal(commandLog(), '');
-  });
-
-  it('marks the invalid Gist key and recovery commands in installer output', () => {
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({ backup: { id: 42, host: 'github.com' } }));
-    const { output, result } = captureStdout(() => configureGist(repoDir, docsUrl, true));
-    assert.isFalse(result);
-    assert.equal(output, '\n⚠️  ERROR: Invalid config value `backup.id`; expected null or a non-empty string.\nRun `ballin config reset` to restore valid defaults, then run `ballin backup setup` if needed.\n');
     assert.equal(commandLog(), '');
   });
 
@@ -628,233 +479,6 @@ esac
 
     assert.isFalse(result);
     assert.isTrue(fs.statSync(path.join(binDir, 'ballin')).isDirectory());
-  });
-
-  it('reports missing GitHub CLI before Gist setup', () => {
-    installConfigSources();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-    const configured = readRepoConfig();
-    configured.backup.id = 'returning-gist-id';
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(configured));
-    const result = runGistSetup();
-
-    assert.equal(result.status, 1, result.stderr);
-    assert.include(result.stdout, 'GitHub CLI is required for Gist backup setup');
-    assert.include(result.stdout, '\nInstall `gh`, authenticate it, then run `ballin backup setup` again.\n');
-    assert.include(result.stdout, '\nRun after installing `gh`:\n  gh auth login --hostname github.example.test\n');
-    assert.notInclude(commandLog(), 'gh:');
-  });
-
-  it('reports invalid effective-account authentication for a configured Gist', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-
-    const configured = readRepoConfig();
-    configured.backup.id = 'returning-gist-id';
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(configured));
-    const result = runGistSetup({ env: { FAKE_GH_AUTH_STATUS: '4' } });
-
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, '\n⚠️  ERROR: `gh` is not authenticated for github.example.test.\n');
-    assert.include(commandLog(), 'gh:api --hostname github.example.test user');
-    assert.notInclude(commandLog(), 'gh:gist');
-  });
-
-  it('skips adoption and creation when a Gist ID is already configured', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-    const config = readRepoConfig();
-    config.backup.id = 'existing-gist-id';
-    config.update.backup = 'true';
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
-    const cachePath = path.join(repoDir, '.backup-cache');
-    fs.mkdirSync(cachePath);
-    fs.writeFileSync(path.join(cachePath, 'known-base'), 'preserve me\n');
-
-    const result = runGistSetup();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
-    assert.notInclude(result.stdout, 'shell completion');
-    assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
-    assert.notInclude(result.stdout, 'Secret Gists are unlisted');
-    assert.include(commandLog(), 'gh:api --hostname github.example.test user');
-    assert.notInclude(commandLog(), 'gh:gist');
-    assert.equal(fs.readFileSync(path.join(cachePath, 'known-base'), 'utf8'), 'preserve me\n');
-    assert.equal(readRepoConfig().update.backup, 'true');
-  });
-
-  it('uses the valid active account without auth status --active on the selected host', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-    const configured = readRepoConfig();
-    configured.backup.id = 'returning-gist-id';
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(configured));
-    const result = runGistSetup({
-      env: {
-        BALLIN_BACKUP_HOST: 'github.enterprise.test',
-        FAKE_GH_HOST: 'github.enterprise.test',
-        FAKE_GH_ACTIVE_FLAG_UNSUPPORTED: '1',
-        FAKE_GH_INACTIVE_ACCOUNT_EXPIRED: '1',
-      },
-      input: 'n\n',
-    });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
-    assert.include(commandLog(), 'gh:api --hostname github.enterprise.test user');
-    assert.notInclude(commandLog(), 'gh:gist create');
-  });
-
-  it('rejects a blank backup host before authentication or remote mutation', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-
-    const configured = readRepoConfig();
-    configured.backup.id = 'returning-gist-id';
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(configured));
-    const result = runGistSetup({ env: { BALLIN_BACKUP_HOST: '   ' } });
-
-    assert.equal(result.status, 1);
-    assert.equal(commandLog(), '');
-    assert.equal(readRepoConfig().backup.id, 'returning-gist-id');
-  });
-
-  it('prompts for a host when config migration adds backup.host', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-    const config = readRepoConfig();
-    config.backup.id = 'existing-gist-id';
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
-
-    const result = withEnvironment({
-      BALLIN_BACKUP_HOST: 'ambient.example.test',
-      FAKE_GH_AUTH_STATUS: '4',
-    }, () => runGistSetup({
-      env: { FAKE_GH_HOST: 'github.enterprise.test' },
-      guHostExisted: 'false',
-      input: 'github.enterprise.test\n',
-    }));
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
-    assert.include(commandLog(), 'gh:api --hostname github.enterprise.test user');
-    assert.notInclude(commandLog(), 'gh:gist');
-  });
-
-  it('defers an environment-provided host repair until the retained Gist is validated', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-    const config = readRepoConfig();
-    config.backup = { host: 42, id: 'returning-gist-id' };
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
-
-    const result = runGistSetup({
-      env: {
-        BALLIN_BACKUP_HOST: 'github.enterprise.test',
-        FAKE_GH_HOST: 'github.enterprise.test',
-      },
-      preserveBackupConfig: true,
-    });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(readRepoConfig().backup.host, 'github.enterprise.test');
-    assert.include(commandLog(), 'gh:gist view returning-gist-id --raw --filename .MyConfig.md');
-  });
-
-  it('rejects a whitespace-only prompted replacement for an invalid host', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-    const config = readRepoConfig();
-    config.backup = { host: 42, id: 'returning-gist-id' };
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
-
-    const result = runGistSetup({
-      input: '   \n',
-      preserveBackupConfig: true,
-    });
-
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, '\n⚠️  ERROR: Invalid config value `backup.host`; expected a non-empty string.\n');
-    assert.equal(commandLog(), '');
-  });
-
-  it('fails safely when a legacy configured Gist has no host and none is selected', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.copyFileSync(
-      path.join(repoDir, 'config', '.defaultConfig.json'),
-      path.join(repoDir, 'ballin.config.json'),
-    );
-    const config = readRepoConfig();
-    config.backup = { id: 'existing-gist-id' };
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
-
-    const result = runGistSetup({
-      guHostExisted: 'false',
-      input: '\n',
-      preserveBackupConfig: true,
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(commandLog(), '');
-  });
-
-  it('uses the active account during configured install and self-update setup', () => {
-    installConfigSources();
-    installFakeGhCommand();
-    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify({
-      backup: { id: 'existing-gist-id', host: 'github.example.test' },
-      analytics: { enabled: 'false' },
-    }));
-
-    const result = withEnvironment({
-      HOME: path.join(testDir, 'home'),
-      PATH: binDir,
-      FAKE_COMMAND_LOG: commandLogPath,
-      FAKE_GH_ACTIVE_FLAG_UNSUPPORTED: '1',
-      FAKE_GH_AUTH_STATUS: '0',
-      FAKE_GH_INACTIVE_ACCOUNT_EXPIRED: '1',
-      TEST_DIR: testDir,
-      TEST_REPO_DIR: repoDir,
-    }, () => captureStdout(() => setup(repoDir, docsUrl)));
-
-    assert.isTrue(result.result);
-    assert.notInclude(result.output, `symlinked binaries into ${binDir}`);
-    assert.notInclude(result.output, '😎 ballin!');
-    assert.include(commandLog(), 'gh:api --hostname github.example.test user');
-    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
   });
 
   it('stops before setup work when the command directory is missing from PATH', () => {
@@ -1408,7 +1032,7 @@ require('https').request = () => {
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
-    assert.isNull(readRepoConfig().backup.id);
+    assert.notExists(readRepoConfig().backup.repository);
     assert.equal(readRepoConfig().update.backup, 'false');
   });
 
@@ -1490,22 +1114,13 @@ require('https').request = () => {
     });
   });
 
-  it('rejects new Gist creation and adoption through the internal compatibility entrypoint', () => {
-    installConfigSources();
-    fs.copyFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), path.join(repoDir, 'ballin.config.json'));
-    installFakeGhCommand();
-    const result = runGistSetup({ input: 'y\nreturning-gist-id\n' });
+  it('removes the internal Gist setup entrypoint without contacting GitHub', () => {
+    const result = spawnSync(process.execPath, [installSetupPath, 'gist', repoDir, docsUrl], {
+      encoding: 'utf8', env: childEnvironment(),
+    });
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'New Gist setup is retired');
+    assert.include(result.stdout, 'Unknown install setup command: gist');
     assert.equal(commandLog(), '');
-    assert.isNull(readRepoConfig().backup.id);
-  });
-  it('rejects malformed and conflicting destination associations through the compatibility entrypoint', () => {
-    const { fixtureDestination } = require('./helpers/repository.ts');
-    for (const value of [{ backup: { id: 42 } }, { backup: { id: 'legacy', repository: fixtureDestination } }, { backup: [] }]) {
-      fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(value));
-      assert.isFalse(withoutStdout(() => configureGist(repoDir, docsUrl, true)));
-      assert.equal(commandLog(), '');
-    }
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 });

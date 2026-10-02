@@ -33,8 +33,8 @@ const invalidPathCases = [
   ['backup.missing.nested', 'backup.missing'],
   ['update.cleanup.nested', 'update.cleanup.nested'],
   ['update.cleanup.nested.deeper', 'update.cleanup.nested'],
-  ['backup.id.nested', 'backup.id.nested'],
-  ['backup.id.nested.deeper', 'backup.id.nested'],
+  ['backup.repository.nested', 'backup.repository.nested'],
+  ['backup.repository.nested.deeper', 'backup.repository.nested'],
   ['constructor', 'constructor'],
   ['__proto__.nested', '__proto__'],
 ];
@@ -116,16 +116,16 @@ describe('config', () => {
         ...defaultConfig,
         backup: {
           ...defaultConfig.backup,
-          id: 'explicit-gist-id',
+          repository: 'explicit-value',
         },
       });
 
       assert.notEqual(explicitConfigPath, configPath);
-      assert.equal(store.readLeafValue('backup.id'), 'explicit-gist-id');
-      assert.isNull(getConfig('backup.id'));
-      assert.isTrue(store.writeLeafValue('backup.host', 'github.explicit.test'));
-      assert.equal(JSON.parse(fs.readFileSync(explicitConfigPath, 'utf8')).backup.host, 'github.explicit.test');
-      assert.equal(getConfig('backup.host'), 'github.com');
+      assert.equal(store.readLeafValue('backup.repository'), 'explicit-value');
+      assert.isNull(getConfig('backup.repository'));
+      assert.isTrue(store.writeLeafValue('backup.includeSensitive', 'github.explicit.test'));
+      assert.equal(JSON.parse(fs.readFileSync(explicitConfigPath, 'utf8')).backup.includeSensitive, 'github.explicit.test');
+      assert.equal(getConfig('backup.includeSensitive'), 'false');
     });
 
     it('preserves nested path validation for explicit-path reads and writes', () => {
@@ -146,12 +146,12 @@ describe('config', () => {
     it('returns leaf values and rejects malformed explicit config files without mutating them', () => {
       const store = writeExplicitConfig(defaultConfig);
 
-      assert.isNull(store.readLeafValue('backup.id'));
-      assert.equal(store.readLeafValue('backup.host'), 'github.com');
+      assert.isNull(store.readLeafValue('backup.repository'));
+      assert.equal(store.readLeafValue('backup.includeSensitive'), 'false');
 
       fs.writeFileSync(explicitConfigPath, '{not json\n', 'utf8');
-      assert.isUndefined(store.readLeafValue('backup.host'));
-      assert.isFalse(store.writeLeafValue('backup.host', 'github.example.test'));
+      assert.isUndefined(store.readLeafValue('backup.includeSensitive'));
+      assert.isFalse(store.writeLeafValue('backup.includeSensitive', 'github.example.test'));
       assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), '{not json\n');
     });
 
@@ -169,7 +169,7 @@ describe('config', () => {
         assert.notInclude(String(error), defaultsPath);
         assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), before);
       }
-      assert.equal(store.readLeafValue('backup.host'), 'github.com');
+      assert.equal(store.readLeafValue('backup.includeSensitive'), 'false');
     });
 
     it('rejects direct get/set usage before reading config and preserves leaf-helper failures', () => {
@@ -179,8 +179,8 @@ describe('config', () => {
         assert.propertyVal(error, 'exitCode', 2);
       }
       fs.writeFileSync(explicitConfigPath, 'null');
-      assert.isUndefined(store.readLeafValue('backup.id'));
-      assert.isFalse(store.writeLeafValue('backup.id', 'value'));
+      assert.isUndefined(store.readLeafValue('backup.repository'));
+      assert.isFalse(store.writeLeafValue('backup.repository', 'value'));
       assert.equal(fs.readFileSync(explicitConfigPath, 'utf8'), 'null');
     });
 
@@ -200,7 +200,7 @@ describe('config', () => {
       const cases = [
         { owner: fs, method: 'readFileSync', action: () => executeConfigCli(['get']) },
         { owner: fs, method: 'readFileSync', action: () => store.resetConfig() },
-        { owner: fs, method: 'writeFileSync', action: () => store.setConfig('backup.id', 'value') },
+        { owner: fs, method: 'writeFileSync', action: () => store.setConfig('backup.repository', 'value') },
         { owner: JSON, method: 'parse', action: () => store.getConfig() },
       ];
       try {
@@ -232,11 +232,11 @@ describe('config', () => {
     it('("update") should return an Object', () => {
       assert.isObject(getConfig('update'));
     });
-    it('("backup.id") should return null by default', () => {
-      assert.isNull(getConfig('backup.id'));
+    it('("backup.repository") should return null by default', () => {
+      assert.isNull(getConfig('backup.repository'));
     });
-    it('("backup.host") should return github.com by default', () => {
-      assert.equal(getConfig('backup.host'), 'github.com');
+    it('("backup.includeSensitive") should return false by default', () => {
+      assert.equal(getConfig('backup.includeSensitive'), 'false');
     });
     it('("update.cleanup") should return true or false', () => {
       assert.include(['true', 'false'], getConfig('update.cleanup'));
@@ -276,8 +276,8 @@ describe('config', () => {
     it('should set update.cleanup', () => {
       setTest('update.cleanup', 'test');
     });
-    it('should set backup.id', () => {
-      setTest('backup.id', '123');
+    it('should set backup.repository', () => {
+      setTest('backup.repository', '123');
     });
     it('should give error if given no arguments', () => {
       assert.throws(() => setConfig(), ConfigError, configMessages.setArgsErr);
@@ -346,7 +346,7 @@ describe('config', () => {
   });
 
   it('CLI remains executable through its shebang', () => {
-    const result = spawnSync(cliPath, ['config', 'get', 'backup.id'], {
+    const result = spawnSync(cliPath, ['config', 'get', 'backup.repository'], {
       encoding: 'utf8',
       env: testChildEnvironment(),
     });
@@ -363,7 +363,7 @@ describe('config', () => {
     try {
       fs.symlinkSync(cliPath, symlinkPath);
 
-      const result = spawnSync(symlinkPath, ['config', 'get', 'backup.id'], {
+      const result = spawnSync(symlinkPath, ['config', 'get', 'backup.repository'], {
         encoding: 'utf8',
         env: testChildEnvironment(),
       });
@@ -377,7 +377,7 @@ describe('config', () => {
   });
 
   it('CLI reset restores the default config', () => {
-    setConfig('backup.id', 'changed-id');
+    setConfig('backup.repository', 'changed-id');
     const changedConfig = fetchConfigJSON();
 
     const result = runConfigCli(['reset']);
@@ -385,7 +385,7 @@ describe('config', () => {
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Config has been reset...\nFROM:');
     assert.include(result.stdout, changedConfig);
-    assert.isNull(getConfig('backup.id'));
+    assert.isNull(getConfig('backup.repository'));
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
   });
 
@@ -457,12 +457,12 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
   describe('CLI error contract', () => {
     const usageCases = [
       { args: ['wrong'], message: configMessages.actionErr },
-      { args: ['get', 'backup.id', ''], message: configMessages.getArgsErr },
-      { args: ['', 'backup.id', '', 'extra'], message: configMessages.getArgsErr },
+      { args: ['get', 'backup.repository', ''], message: configMessages.getArgsErr },
+      { args: ['', 'backup.repository', '', 'extra'], message: configMessages.getArgsErr },
       { args: ['set'], message: configMessages.setArgsErr },
-      { args: ['set', 'backup.id'], message: configMessages.setArgsErr },
+      { args: ['set', 'backup.repository'], message: configMessages.setArgsErr },
       { args: ['set', '', 'value'], message: configMessages.setArgsErr },
-      { args: ['set', 'backup.id', 'value', ''], message: configMessages.setArgsErr },
+      { args: ['set', 'backup.repository', 'value', ''], message: configMessages.setArgsErr },
       { args: ['reset', ''], message: configMessages.resetArgsErr },
       { args: ['help', 'extra'], message: configMessages.actionErr },
       { args: ['--help', 'extra'], message: configMessages.actionErr },
@@ -507,7 +507,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
     ].forEach(({ contents, reason }) => {
       it(`rejects invalid config ${contents} for full reads, keyed reads, and writes`, () => {
         fs.writeFileSync(configPath, contents);
-        for (const args of [[], ['get', 'backup.id'], ['set', 'backup.id', 'changed']]) {
+        for (const args of [[], ['get', 'backup.repository'], ['set', 'backup.repository', 'changed']]) {
           const result = runConfigCli(args);
           assert.equal(result.status, 1);
           assert.equal(result.stdout, '');
@@ -518,7 +518,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
     });
 
     [
-      ...[['get'], ['set', 'backup.id', 'value']].flatMap((args) => [
+      ...[['get'], ['set', 'backup.repository', 'value']].flatMap((args) => [
         {
           args, missing: true,
           message: 'ballin config: Unable to read config. Run ballin config reset to restore defaults.\n',
@@ -552,7 +552,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       const before = fetchConfigJSON();
       const writeMessage = 'Unable to save config. Check that the config file and its parent directory are writable.';
       const cases = [
-        { args: ['set', 'backup.id', 'changed'], method: 'writeFileSync', code: 'EACCES', message: writeMessage },
+        { args: ['set', 'backup.repository', 'changed'], method: 'writeFileSync', code: 'EACCES', message: writeMessage },
         { args: ['reset'], method: 'writeFileSync', code: 'EACCES', message: writeMessage },
         {
           args: ['get'], method: 'readFileSync', code: 'ERR_FS_FILE_TOO_LARGE',
@@ -618,7 +618,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
     });
 
     it('keeps null output plain when colors are forced', () => {
-      const result = runConfigCli(['get', 'backup.id'], { FORCE_COLOR: '1' });
+      const result = runConfigCli(['get', 'backup.repository'], { FORCE_COLOR: '1' });
       assert.equal(result.status, 0);
       assert.equal(result.stdout, 'null\n');
       assert.equal(result.stderr, '');
@@ -641,7 +641,7 @@ process.stdout.write = ((chunk, encoding, callback) => {
 
       try {
         const result = spawnSync(process.execPath, [
-          '--require', preloadPath, cliPath, 'config', 'get', 'backup.id',
+          '--require', preloadPath, cliPath, 'config', 'get', 'backup.repository',
         ], {
           encoding: 'utf8',
           env: testChildEnvironment(),
@@ -656,20 +656,20 @@ process.stdout.write = ((chunk, encoding, callback) => {
 
     ['', 'false', 'INVALID: a legitimate stored value'].forEach((value) => {
       it(`preserves successful set output and persistence for ${JSON.stringify(value)}`, () => {
-        const set = runConfigCli(['set', 'backup.id', value]);
+        const set = runConfigCli(['set', 'backup.repository', value]);
         assert.equal(set.status, 0);
-        assert.equal(set.stdout, `${configMessages.set('backup.id', value)}\n`);
+        assert.equal(set.stdout, `${configMessages.set('backup.repository', value)}\n`);
         assert.equal(set.stderr, '');
-        assert.strictEqual(getConfig('backup.id'), value);
+        assert.strictEqual(getConfig('backup.repository'), value);
       });
 
       it(`reads ${JSON.stringify(value)} through the empty-action alias`, () => {
-        setConfig('backup.id', value);
-        const get = runConfigCli(['', 'backup.id']);
+        setConfig('backup.repository', value);
+        const get = runConfigCli(['', 'backup.repository']);
         assert.equal(get.status, 0);
         assert.equal(get.stdout, `${value}\n`);
         assert.equal(get.stderr, '');
-        assert.strictEqual(getConfig('backup.id'), value);
+        assert.strictEqual(getConfig('backup.repository'), value);
       });
     });
   });
@@ -680,7 +680,7 @@ process.stdout.write = ((chunk, encoding, callback) => {
     });
     it('preserves empty-operation defaults', () => {
       assert.equal(configAction(['']), configAction([]));
-      assert.isNull(configAction(['', 'backup.id']));
+      assert.isNull(configAction(['', 'backup.repository']));
     });
     it('("get") should return a String', () => {
       assert.isString(configAction(['get']));
@@ -688,19 +688,19 @@ process.stdout.write = ((chunk, encoding, callback) => {
     it('("set") should return a setConfig error', () => {
       assert.throws(() => configAction(['set']), ConfigError, configMessages.setArgsErr);
     });
-    it('("get", "backup.id") should return null by default', () => {
-      assert.isNull(configAction(['get', 'backup.id']));
+    it('("get", "backup.repository") should return null by default', () => {
+      assert.isNull(configAction(['get', 'backup.repository']));
     });
     it('("wrong") should return an invalid error', () => {
       assert.throws(() => configAction(['wrong']), ConfigError, configMessages.actionErr);
     });
-    it('("set", "backup.id", "123") should set backup.id to "123"', () => {
-      setTest('backup.id', '123', setConfigAction);
+    it('("set", "backup.repository", "123") should set backup.repository to "123"', () => {
+      setTest('backup.repository', '123', setConfigAction);
     });
     it('("reset") should reset config', () => {
-      setTest('backup.id', '123', setConfigAction);
+      setTest('backup.repository', '123', setConfigAction);
       assert.include(configAction(['reset']), 'Config has been reset...\nFROM:');
-      assert.isNull(getConfig('backup.id'));
+      assert.isNull(getConfig('backup.repository'));
     });
   });
 
@@ -797,8 +797,8 @@ process.stdout.write = ((chunk, encoding, callback) => {
           selfUpdate: 'new-self-update',
         },
         backup: {
-          id: 'new-gist-id',
-          host: 'new.example.test',
+          repository: 'new-repository-value',
+          includeSensitive: 'new-choice',
         },
         analytics: {
           enabled: 'false',
@@ -811,8 +811,8 @@ process.stdout.write = ((chunk, encoding, callback) => {
       assert.equal(getConfig('update.cleanup'), 'new-cleanup');
       assert.equal(getConfig('update.selfUpdate'), 'new-self-update');
       assert.equal(getConfig('update.backup'), defaultConfig.update.backup);
-      assert.equal(getConfig('backup.id'), 'new-gist-id');
-      assert.equal(getConfig('backup.host'), 'new.example.test');
+      assert.equal(getConfig('backup.repository'), 'new-repository-value');
+      assert.equal(getConfig('backup.includeSensitive'), 'new-choice');
     });
   });
 });

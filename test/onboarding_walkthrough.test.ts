@@ -47,7 +47,7 @@ describe('first-run onboarding walkthroughs', function() {
     assert.include(installResult.stdout, 'Share usage analytics to help improve Ballin? [y/N]');
     assert.include(installResult.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.isTrue(fs.lstatSync(path.join(userBinDir, 'ballin')).isSymbolicLink());
-    assert.isNull(JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8')).backup.id);
+    assert.notProperty(JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8')).backup, 'repository');
 
     const doctorResult = runInstalled(['doctor']);
     const verboseDoctorResult = runInstalled(['doctor', '--verbose']);
@@ -73,7 +73,7 @@ describe('first-run onboarding walkthroughs', function() {
     assert.equal(selfUpdateResult.status, 0, selfUpdateResult.stderr);
     assert.equal(selfUpdateResult.stdout, 'Ballin updated.\n');
     assert.equal(backupResult.status, 1);
-    assert.include(backupResult.stderr, "run 'ballin backup setup' to enable it");
+    assert.include(backupResult.stderr, "run `ballin backup setup` to enable it");
     assert.notInclude(commandLog(), 'gh:');
     assert.include(commandLog(), 'git:fetch origin +main:refs/remotes/origin/main');
   });
@@ -84,7 +84,7 @@ describe('first-run onboarding walkthroughs', function() {
 
     assert.equal(installResult.status, 0, installResult.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));
-    assert.equal(config.backup.host, 'github.com');
+    assert.notProperty(config.backup, 'host');
     assert.deepEqual(config.backup.repository, fixtureDestination);
     assert.equal(config.update.backup, 'true');
     assert.deepEqual(Object.keys(remoteState().commits[remoteState().head].files).sort(), ['.ballin-backup.json', 'README.md']);

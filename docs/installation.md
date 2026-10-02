@@ -134,7 +134,7 @@ The command shown above downloads `install.sh` from GitHub. The installer then:
 - obtains the Ballin checkout from GitHub;
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
-- makes no GitHub CLI or Gist calls when optional backup setup is declined;
+- makes no GitHub CLI calls when optional backup setup is declined;
 - during repository backup setup, checks the personal GitHub.com account
   currently used by `gh` and the selected destination, then after confirmation
   either reconnects to an existing backup or creates a private backup repository;
@@ -247,11 +247,11 @@ should run backups automatically (default: no). The choice is stored in
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.
 
-Existing configured Gists retain compatibility temporarily. `ballin backup setup`
-reports that the existing Gist remains configured; it does not migrate or replace
-it with a repository. Gist retirement after repository cutover is tracked in
-[#334](https://github.com/JBallin/ballin-scripts/issues/334); backup verification
-belongs to [#336](https://github.com/JBallin/ballin-scripts/issues/336).
+Historical Gists remain independent archives. Ballin no longer captures, reads,
+or opens Gist backups, and does not import or delete them. Secret Gists remain
+readable by anyone with their URL or ID. Clear stale local linkage with
+`ballin backup disconnect`, then use `ballin backup setup` for a fresh repository
+backup.
 
 ## Disconnect
 
@@ -259,9 +259,9 @@ belongs to [#336](https://github.com/JBallin/ballin-scripts/issues/336).
 ballin backup disconnect
 ```
 
-Disconnect atomically clears both repository and legacy Gist associations and
+Disconnect atomically clears local backup associations and
 sets `update.backup="false"`, then removes `.backup-cache`. It preserves sensitive
-consent, legacy host, and unrelated preferences. It requires no authentication
+consent and unrelated preferences. It requires no authentication
 or network operation and leaves remote history intact. A failed config save
 retains the prior selection. If cleanup fails after saving, writes stay disabled;
 repeat disconnect to retry cleanup even when already unconfigured.

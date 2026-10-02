@@ -11,11 +11,6 @@ const {
 } = require('./backup_repository.ts');
 import type { RepositoryRead, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
 
-// Preserve the established legacy/automatic-backup prompt semantics.
-const readPrompt = (prompt: string, eofResponse = ''): string => {
-  const line = readPromptLine(prompt);
-  return line.eof && !line.text ? eofResponse : line.text;
-};
 const invalidateBackupCache = (cacheDir: string): boolean => {
   try { fs.rmSync(cacheDir, { recursive: true, force: true }); return true; } catch {
     writeStdoutLine('Unable to invalidate local backup comparison state. Check cache access and retry.');
@@ -54,7 +49,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     let candidate = readSetupConfigContext(configPath);
     const configured = configuredBackupDestination(candidate);
     if (configured.kind === 'invalid' || configured.kind === 'legacy-gist') {
-      writeStdoutLine('Repair the backup destination configuration before repository setup; legacy migration is separate.');
+      writeStdoutLine('Gist backup support has been retired or the destination configuration is invalid. Run `ballin backup disconnect`, then `ballin backup setup`. Historical Gists remain on GitHub.');
       return false;
     }
     if (repositoryName !== undefined && !validRepositoryName(repositoryName)) {
@@ -176,4 +171,4 @@ const disconnectBackup = (configPath: string, cacheDir: string): boolean => {
   }
 };
 
-module.exports = { readPrompt, offerAutomaticUpdateBackup, configureRepositoryBackup, disconnectBackup };
+module.exports = { offerAutomaticUpdateBackup, configureRepositoryBackup, disconnectBackup };

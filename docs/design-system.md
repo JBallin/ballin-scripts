@@ -224,8 +224,8 @@ descriptions, install commands, or future-state claims.
 Avoid labels such as `Private backups`, `Always current`, `Restore-ready`,
 `Rebuild anywhere`, or `Install in 60 seconds` because they can overstate current
 behavior or distract from the hero. New backups use private GitHub repositories,
-but existing configured secret Gists remain readable by anyone with their URL.
-Broad privacy claims also omit GitHub and authorized-account access to snapshots.
+and GitHub and authorized accounts can read their contents. Broad privacy claims
+also omit sensitive content within allowed backup sources.
 
 A possible future-safe label set, if a strip is ever needed, is:
 

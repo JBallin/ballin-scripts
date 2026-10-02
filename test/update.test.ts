@@ -45,13 +45,19 @@ exit ${status}
     fs.writeFileSync(configPath, `${JSON.stringify(config)}\n`);
   };
 
+  const installReadinessRepository = () => {
+    const statePath = path.join(tempDir, 'readiness-repository.json');
+    fs.writeFileSync(statePath, JSON.stringify(fixtureState()));
+    installRepositoryFixture(binDir, statePath);
+  };
+
   const installHealthyReadinessCommands = () => {
     requiredCommandShims.forEach((command: string) => {
       if (!fs.existsSync(path.join(binDir, command))) {
         installCommandStub(command);
       }
     });
-    installCommandStub('gh');
+    installReadinessRepository();
   };
 
   beforeEach(() => {
@@ -72,8 +78,8 @@ exit ${status}
         backup: 'false',
       },
       backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
+        repository: fixtureDestination,
+        includeSensitive: 'false',
       },
       analytics: {
         enabled: 'false',
@@ -96,8 +102,8 @@ exit ${status}
         backup: env.TEST_UPDATE_BACKUP ?? 'false',
       },
       backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
+        repository: fixtureDestination,
+        includeSensitive: 'false',
       },
       analytics: {
         enabled: 'false',
@@ -437,8 +443,6 @@ exit 0
       'brew|1,1|cleanup',
       'brew|1,1|doctor',
       'ballin|1,1|self-update',
-      'gh|1,1|auth status --active --hostname example.test',
-      'gh|1,1|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -458,8 +462,6 @@ exit 0
       'brew|1,1|upgrade',
       'brew|1,1|doctor',
       'ballin|1,1|self-update',
-      'gh|1,1|auth status --active --hostname example.test',
-      'gh|1,1|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -499,8 +501,6 @@ exit 0
       'npm|,|update -g',
       'softwareupdate|,|-ia',
       'ballin|,|self-update',
-      'gh|,|auth status --active --hostname example.test',
-      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -599,7 +599,7 @@ fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
   process.exitCode = 1;
 });
 `, { mode: 0o755 });
-    installCommandStub('gh');
+    installReadinessRepository();
     writeConfig({
       update: {
         cleanup: 'false',
@@ -610,8 +610,8 @@ fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
         backup: 'true',
       },
       backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
+        repository: fixtureDestination,
+        includeSensitive: 'false',
       },
       analytics: {
         enabled: 'true',
@@ -732,7 +732,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     writeUpdateConfig({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BACKUP: 'true' });
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     config.analytics.enabled = 'true';
-    config.backup = { repository: fixtureDestination, id: null, host: 'github.com', includeSensitive: 'true' };
+    config.backup = { repository: fixtureDestination, includeSensitive: 'true' };
     writeConfig(config);
 
     const result = spawnUpdate({
@@ -887,11 +887,12 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     assert.include(result.stdout, 'Updating Ballin');
     assert.include(result.stdout, 'updated ballin-scripts');
     assert.include(result.stdout, 'Checking Ballin readiness');
+    const readinessState = JSON.parse(fs.readFileSync(path.join(tempDir, 'readiness-repository.json'), 'utf8'));
+    assert.isAbove(readinessState.requests.length, 0);
+    assert.isFalse(readinessState.requests.some((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish')));
     assert.include(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
-      'gh|,|auth status --active --hostname example.test',
-      'gh|,|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -948,7 +949,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Backing up development environment');
-    assert.include(result.stderr, "run 'ballin backup setup' to enable it");
+    assert.include(result.stderr, "run `ballin backup setup` to enable it");
     assert.deepEqual(commandLog(), []);
   });
 
@@ -973,8 +974,8 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
       const result = spawnUpdate();
 
       assert.equal(result.status, 1);
-      assert.include(result.stderr, 'invalid config value backup.id; expected null or a non-empty string');
-      assert.include(result.stderr, 'run ballin config reset to restore valid defaults');
+      assert.include(result.stderr, 'invalid or conflicting destination configuration');
+      assert.include(result.stderr, '`ballin backup disconnect`, then `ballin backup setup`');
     });
 
     writeConfig({
@@ -986,7 +987,8 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     const malformedHost = spawnUpdate();
 
     assert.equal(malformedHost.status, 1);
-    assert.include(malformedHost.stderr, 'run ballin backup setup to repair it');
+    assert.include(malformedHost.stderr, 'Gist backup support has been retired');
+    assert.include(malformedHost.stderr, '`ballin backup disconnect`, then `ballin backup setup`');
     assert.deepEqual(commandLog(), []);
   });
 
@@ -1021,8 +1023,6 @@ exit 2
       'node|,|-e process.stdout.write(JSON.stringify(process.env))',
       'ballin|,|self-update',
       'node|,|-p process.versions.node',
-      'gh|,|auth status --active --hostname example.test',
-      'gh|,|gist view --files -- test-gist-id',
     ]);
   });
 
@@ -1049,8 +1049,6 @@ exit 0
     assert.notInclude(result.stdout, '😎 You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
-      'gh|,|auth status --active --hostname example.test',
-      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -1106,8 +1104,6 @@ exit 0
     assert.deepEqual(commandLog(), [
       'npm|,|update -g',
       'ballin|,|self-update',
-      'gh|,|auth status --active --hostname example.test',
-      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -1134,8 +1130,6 @@ exit 0
     assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
-      'gh|,|auth status --active --hostname example.test',
-      'gh|,|gist view --files -- test-gist-id',
       'ballin|,|backup',
     ]);
   });
@@ -1391,8 +1385,8 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
   it('uses bundled update defaults in memory when the update section is missing', () => {
     writeConfig({
       backup: {
-        id: 'test-gist-id',
-        host: 'example.test',
+        repository: fixtureDestination,
+        includeSensitive: 'false',
       },
       analytics: {},
     });
@@ -1410,8 +1404,6 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.deepEqual(commandLog(), [
       'softwareupdate|,|-ia',
       'ballin|,|self-update',
-      'gh|,|auth status --active --hostname example.test',
-      'gh|,|gist view --files -- test-gist-id',
     ]);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
   });
