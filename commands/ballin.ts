@@ -99,14 +99,14 @@ const selfUpdateHelp = `Usage:
     ballin self-update
     ballin self-update --help
 
-Update Ballin's local checkout, command shims, and configuration.
+Update the local \`ballin-scripts\` checkout, command shims, and configuration.
 `;
 
 const uninstallHelp = `Usage:
     ballin uninstall
     ballin uninstall --help
 
-Remove Ballin-owned command links and the local Ballin checkout.
+Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
 `;
 
 const isCommandHelp = (args: string[]): boolean => (

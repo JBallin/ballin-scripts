@@ -187,8 +187,8 @@ esac
         assert.include(result.stdout, `ballin ${command} --help`);
         assert.notInclude(result.stdout, 'ballin config help');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
-        if (command === 'self-update') assert.include(result.stdout, 'local checkout, command shims, and configuration');
-        if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local Ballin checkout.');
+        if (command === 'self-update') assert.include(result.stdout, 'local `ballin-scripts` checkout, command shims, and configuration');
+        if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
         if (command === 'update') assert.include(result.stdout, 'ballin config get update');
         if (command === 'backup') {
           ['setup [repository-name]', 'open', 'read <file>', 'disconnect'].forEach((usage) => {
