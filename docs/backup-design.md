@@ -21,8 +21,8 @@ and the initial default branch remains selected. The effective `gh api ... user`
 account must be the personal GitHub.com owner. Stable-ID resolution revalidates
 owner, private visibility, supported state, selected branch, and marker. A rename
 cannot switch destinations. An explicit setup name must resolve to the same
-identity when configured. Malformed associations and stale legacy configuration
-fail without fallback or remote Gist operations.
+identity when configured. Invalid or unsupported local destination configuration
+fails without fallback or remote operations.
 
 Repository contents use a flat layout. Current snapshots use the exact filenames
 defined by Ballin. `.ballin-backup.json` is the repository marker, and newly

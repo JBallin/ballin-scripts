@@ -168,9 +168,6 @@ backups. Use only one Mac to back up to a destination. Stop using the previous
 Mac for backups before publishing from a replacement Mac. See
 [conflicts](capabilities.md#backup-consistency-and-conflicts).
 
-For historical Gist archives and stale local linkage, see
-[Installation](installation.md#optional-backup-setup-and-reconnect).
-
 ## Readiness checks
 
 Use `ballin doctor` to check the managed environment. Maintenance-only Ballin

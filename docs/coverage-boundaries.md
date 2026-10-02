@@ -20,9 +20,9 @@ passing tests. These figures describe that revision, not later main commits.
 
 At that revision, behavioral tests covered 13 previously uncovered lines and
 eight branch outcomes; the sole invariant ignore covered three lines and one
-branch outcome. Retirement removes the Gist-only runtime boundaries from the
-ledger below. Surviving collection, reconciliation, cache, and repository safety
-boundaries remain measured. Coverage scope and thresholds are unchanged.
+branch outcome. The ledger below records current collection, reconciliation,
+cache, and repository safety boundaries. Coverage scope and thresholds are
+unchanged.
 
 ## Reading the dispositions
 
@@ -34,8 +34,8 @@ boundaries remain measured. Coverage scope and thresholds are unchanged.
   the coverage gate. A representative public failure test does not make every
   cause of a shared catch safe to ignore.
 
-Gist-only production code was retired. Tests of normal I/O, persistence, identity,
-cleanup, platform behavior and optional protection remain in coverage scope.
+Tests of normal I/O, persistence, identity, cleanup, platform behavior and
+optional protection remain in coverage scope.
 A measured location is a deliberate decision to retain signal, not a claim that
 its execution is impossible or that a future behavioral test would be useless.
 

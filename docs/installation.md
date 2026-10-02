@@ -247,12 +247,6 @@ should run backups automatically (default: no). The choice is stored in
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.
 
-Historical Gists remain independent archives. Ballin no longer captures, reads,
-or opens Gist backups, and does not import or delete them. Secret Gists remain
-readable by anyone with their URL or ID. Clear stale local linkage with
-`ballin backup disconnect`, then use `ballin backup setup` for a fresh repository
-backup.
-
 ## Disconnect
 
 ```shell
