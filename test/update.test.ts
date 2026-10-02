@@ -670,6 +670,8 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
       .map((line: string) => JSON.parse(line));
     const events = analyticsLog.filter(({ type }: { type: string }) => type === 'event');
     const nested = analyticsLog.filter(({ type }: { type: string }) => type === 'nested');
+    assert.notInclude(result.stdout, 'getting fresh kicks');
+    assert.equal(result.stdout.match(/Ballin updated\./gu)?.length, 1);
     const integrations = analyticsLog.filter(({ type }: { type: string }) => type === 'integration');
 
     assert.equal(result.status, 0, result.stderr);
