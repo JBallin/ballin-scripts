@@ -18,7 +18,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
 before cloning or making installation changes. Declining exits successfully
 without cloning. During setup, Ballin creates the local installation and asks
-whether to enable [minimal anonymous usage analytics](analytics.md).
+whether to enable [usage analytics](analytics.md), with No as the default.
 This one local choice covers command usage and outcomes, real backup outcomes,
 and automatic backup and self-update outcomes during `ballin update`. It is
 not saved in backups or restored when reconnecting; ordinary refreshes and
@@ -233,7 +233,7 @@ existing local choices take precedence. It does not restore saved dotfiles or
 reinstall saved packages.
 
 After creating or reconnecting a backup, Ballin asks whether `ballin update`
-should run backups automatically (default: yes). The choice is stored in
+should run backups automatically (default: no). The choice is stored in
 `update.backup`; change it later with `ballin config set update.backup true` or
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.
