@@ -32,6 +32,11 @@ const runSetupCommand = (): void => {
     if (!fs.existsSync(configPath)) throw new Error('Local config is missing.');
     const config = readSetupConfigContext(configPath);
     const destination = configuredBackupDestination(config);
+    if (destination.kind === 'legacy-gist') {
+      writeStderrLine('Gist backup support has been retired. Run `ballin backup disconnect`, then `ballin backup setup` for a fresh repository backup.');
+      process.exitCode = 1;
+      return;
+    }
     if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
     const sensitive = destination.kind === 'repository' ? sensitiveSourceConsent(config) : false;
     if (sensitive === null) throw new Error('Invalid `backup.includeSensitive`; expected true or false.');
@@ -52,8 +57,6 @@ const runSetupCommand = (): void => {
       current.backup.includeSensitive = String(included);
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
       writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(included))}`);
-    } else if (destination.kind === 'legacy-gist') {
-      writeStdoutLine('Legacy Gist backups retain their original sources; Codex requires repository capture.');
     } else {
       writeStdoutLine('No backup is configured. Run `ballin backup setup` to choose a destination.');
     }

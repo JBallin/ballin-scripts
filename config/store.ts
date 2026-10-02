@@ -175,7 +175,7 @@ const createConfigStore = ({
     }
     const prevVal = nestedObj[keyToSet];
 
-    // Objects are containers, but null is a valid leaf value (for example, backup.id).
+    // Objects are containers, but null is a valid leaf value (for example, backup.repository).
     if (typeof prevVal === 'object' && prevVal !== null) {
       throw new ConfigError(configMessages.setObjErr(keys));
     }

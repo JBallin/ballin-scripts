@@ -135,7 +135,6 @@ type ToolDiscovery =
 
 const emptySnapshotContent = 'empty\n';
 const configSnapshotFileName = 'ballin_config';
-const backupMarkerFileName = '.MyConfig.md';
 const repositoryMarkerFileName = '.ballin-backup.json';
 const repositoryReadmeFileName = 'README.md';
 
@@ -147,7 +146,6 @@ const retiredSnapshotFileNames = new Set([
 ]);
 
 const reservedSnapshotFileNames = new Set([
-  backupMarkerFileName,
   repositoryMarkerFileName,
   repositoryReadmeFileName,
 ]);
@@ -711,7 +709,6 @@ const classifySnapshotFileName = (fileName: string): SnapshotNameClassification 
 };
 
 module.exports = {
-  backupMarkerFileName,
   repositoryMarkerFileName,
   repositoryReadmeFileName,
   classifySnapshotFileName,

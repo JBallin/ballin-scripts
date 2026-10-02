@@ -3,11 +3,8 @@ const { formatDefaultDoctorReport, formatVerboseDoctorReport } = require('../com
 describe('doctor literal recovery guidance', () => {
   const cases = {
     'config.read': 'Run `ballin config reset` to recreate the config.',
-    'backup.host': 'Run `ballin backup setup` to repair the backup host.',
-    'backup.gist': 'Run `ballin config reset` to restore valid defaults, then run `ballin backup setup` if needed.',
-    'backup.auth': 'Run `gh auth login` for the configured backup host.',
     'backup.read': 'Check access to the selected backup, then run `ballin backup setup` to revalidate it.',
-    'backup.config': 'Repair the selected backup configuration or run `ballin backup disconnect`.',
+    'backup.config': 'Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.',
     'backup.consent': 'Set `backup.includeSensitive` to true or false; read-only recovery remains available.',
   };
   Object.entries(cases).forEach(([id, guidance]) => {

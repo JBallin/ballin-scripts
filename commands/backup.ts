@@ -1,3 +1,4 @@
+const { withTemporaryStatus, clearTemporaryStatus } = require('./temporaryStatus.ts');
 import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
@@ -11,14 +12,12 @@ const {
   fetchConfig,
 } = require('../config/index.ts');
 const {
-  backupDestinationFromConfig,
   configuredBackupDestination,
   isConfigObject,
   sensitiveSourceConsent,
 } = require('./backup_config.ts');
 const {
   configure,
-  configHasBackupHost,
   configureBackup,
   disconnectBackup,
   readOriginalSetupConfig,
@@ -76,31 +75,9 @@ type EvaluatedSnapshot = StagedSnapshot & {
   shouldUpload: boolean;
 };
 
-type GistFileMetadata = {
-  content?: unknown;
-  size?: unknown;
-  truncated?: unknown;
-};
-
-type GistMetadata = {
-  files: Record<string, GistFileMetadata>;
-  truncated?: unknown;
-};
-
 type BackupConfigResult = {
-  config: { id: string; host: string } | { repository: RepositoryDestination; includeSensitive: boolean | null } | null;
+  config: { repository: RepositoryDestination; includeSensitive: boolean | null } | null;
   exitStatus: number;
-};
-
-type CommandCheckResult = {
-  ok: boolean;
-  exitStatus: number;
-};
-
-type CommandOptions = {
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
-  stdio?: unknown;
 };
 
 const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
@@ -124,21 +101,6 @@ const suggestionFileNames = snapshotDefinitions
 
 const fileSuggestions = `\n${suggestionFileNames.map((name: string) => `  ${name}`).join('\n')}`;
 
-const runGh = (
-  host: string,
-  args: string[],
-  options: CommandOptions = {},
-): ReturnType<typeof runCommand> => (
-  runCommand('gh', args, {
-    ...options,
-    env: {
-      ...process.env,
-      ...options.env,
-      GH_HOST: host,
-    },
-  })
-);
-
 const backupConfig = (): BackupConfigResult => {
   let configObj: Record<string, unknown>;
   try {
@@ -159,37 +121,18 @@ const backupConfig = (): BackupConfigResult => {
     return { config: null, exitStatus: 1 };
   }
 
-  const { id, host, idStatus } = backupDestinationFromConfig(configObj);
   const destination = configuredBackupDestination(configObj);
   if (destination.kind === 'repository') {
     return { config: { repository: destination.repository, includeSensitive: sensitiveSourceConsent(configObj) }, exitStatus: 0 };
   }
-  if (destination.kind === 'invalid' && idStatus !== 'invalid') {
-    writeStderrLine('ballin backup: invalid or conflicting destination configuration; repair backup.repository and backup.id, or disconnect');
-    return { config: null, exitStatus: 1 };
+  if (destination.kind === 'legacy-gist') {
+    writeStderrLine('ballin backup: Gist backup support has been retired. Run `ballin backup disconnect`, then `ballin backup setup`. Historical Gists remain on GitHub.');
+  } else if (destination.kind === 'invalid') {
+    writeStderrLine('ballin backup: invalid or conflicting destination configuration; repair the local configuration or run `ballin backup disconnect`, then `ballin backup setup`.');
+  } else {
+    writeStderrLine("ballin backup: backup is not configured; run `ballin backup setup` to enable it");
   }
-
-  if (idStatus === 'invalid') {
-    writeStderrLine('ballin backup: invalid config value backup.id; expected null or a non-empty string');
-    writeStderrLine('ballin backup: run ballin config reset to restore valid defaults, then run ballin backup setup if needed');
-    return { config: null, exitStatus: 1 };
-  }
-
-  if (id && host) {
-    return { config: { id, host }, exitStatus: 0 };
-  }
-
-  if (!id) {
-    writeStderrLine("ballin backup: backup is not configured; run 'ballin backup setup' to enable it");
-    return { config: null, exitStatus: 1 };
-  }
-  if (!host) {
-    writeStderrLine('ballin backup: missing or invalid config value backup.host; run ballin backup setup to repair it');
-  }
-  return {
-    config: null,
-    exitStatus: 1,
-  };
+  return { config: null, exitStatus: 1 };
 };
 
 const fileExists = (filePath: string): boolean => {
@@ -202,48 +145,9 @@ const fileExists = (filePath: string): boolean => {
 
 const writeFileToStderr = (filePath: string): void => {
   if (fs.statSync(filePath).size > 0) {
+    clearTemporaryStatus();
     process.stderr.write(fs.readFileSync(filePath));
   }
-};
-
-const ghAuthStatus = (host: string): CommandCheckResult => {
-  const result = runGh(host, ['api', '--hostname', host, 'user'], {
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
-  if (result.error) {
-    return {
-      ok: false,
-      exitStatus: reportSpawnError('gh', result.error),
-    };
-  }
-  if (result.status !== 0) {
-    writeStderrLine(`ballin backup: GitHub CLI authentication is required for ${host}`);
-    writeStderrLine(`ballin backup: run 'gh auth login --hostname ${host}'`);
-    return { ok: false, exitStatus: spawnResultStatus(result) };
-  }
-  return { ok: true, exitStatus: 0 };
-};
-
-const readGistFileToFile = (
-  host: string,
-  id: string,
-  fileName: string,
-  outputFile: string,
-  stderr: 'inherit' | 'ignore',
-): boolean => {
-  const outputFd = fs.openSync(outputFile, 'w');
-  let result: ReturnType<typeof runCommand>;
-  try {
-    result = runGh(host, ['gist', 'view', id, '--raw', '--filename', fileName], {
-      stdio: ['ignore', outputFd, stderr],
-    });
-  } finally {
-    fs.closeSync(outputFd);
-  }
-  if (result.error) {
-    reportSpawnError('gh', result.error);
-  }
-  return result.status === 0 && !result.error;
 };
 
 const reportTemporaryCleanupFailure = (): void => {
@@ -255,90 +159,6 @@ const removeTransportFile = (file: string): void => {
     reportTemporaryCleanupFailure();
     throw new Error('Unable to remove a private backup transport file');
   }
-};
-
-const readGistMetadata = (host: string, id: string): GistMetadata | null => {
-  const metadataFile = makeTempFile('ballin-backup-gist-metadata-');
-  const outputFd = fs.openSync(metadataFile, 'w');
-  let result: ReturnType<typeof runCommand>;
-  try {
-    result = runGh(host, [
-      'api',
-      '--hostname', host,
-      '--method', 'GET',
-      `gists/${id}`,
-    ], { stdio: ['ignore', outputFd, 'inherit'] });
-  } finally {
-    fs.closeSync(outputFd);
-  }
-
-  if (result.error) {
-    reportSpawnError('gh', result.error);
-    removeTransportFile(metadataFile);
-    return null;
-  }
-  if (result.status !== 0) {
-    removeTransportFile(metadataFile);
-    return null;
-  }
-
-  try {
-    const metadata: unknown = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
-    if (
-      typeof metadata !== 'object'
-      || metadata === null
-      || !('files' in metadata)
-      || typeof metadata.files !== 'object'
-      || metadata.files === null
-      || Array.isArray(metadata.files)
-    ) {
-      writeStderrLine('ballin backup: GitHub returned invalid Gist metadata');
-      return null;
-    }
-    const parsedMetadata = metadata as GistMetadata;
-    if (
-      parsedMetadata.truncated !== undefined
-      && typeof parsedMetadata.truncated !== 'boolean'
-    ) {
-      writeStderrLine('ballin backup: GitHub returned an invalid Gist truncation marker');
-      return null;
-    }
-    if (parsedMetadata.truncated === true) {
-      writeStderrLine('ballin backup: the remote Gist file list was truncated; refusing to infer missing files');
-      return null;
-    }
-    return parsedMetadata;
-  } catch (error) {
-    const message = error instanceof Error ? `: ${error.message}` : '';
-    writeStderrLine(`ballin backup: unable to parse Gist metadata${message}`);
-    return null;
-  } finally {
-    removeTransportFile(metadataFile);
-  }
-};
-
-const verifyGistReadable = (host: string, id: string): CommandCheckResult => {
-  const result = runGh(host, ['gist', 'view', id, '--files'], { stdio: ['ignore', 'ignore', 'inherit'] });
-  if (result.error) {
-    return {
-      ok: false,
-      exitStatus: reportSpawnError('gh', result.error),
-    };
-  }
-  if (result.status !== 0) {
-    return { ok: false, exitStatus: spawnResultStatus(result) };
-  }
-  return { ok: true, exitStatus: 0 };
-};
-
-const readGistFileToStdout = (host: string, id: string, fileName: string): boolean => {
-  const result = runGh(host, ['gist', 'view', id, '--raw', '--filename', fileName], {
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
-  if (result.error) {
-    reportSpawnError('gh', result.error);
-  }
-  return result.status === 0 && !result.error;
 };
 
 const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boolean => {
@@ -536,88 +356,6 @@ const removeRemoteSnapshots = (remoteSnapshots: Map<string, RemoteSnapshot>): bo
   return removed;
 };
 
-const readRemoteSnapshots = (
-  host: string,
-  id: string,
-  stagedSnapshots: StagedSnapshot[],
-): Map<string, RemoteSnapshot> | null => {
-  const remoteSnapshots = new Map<string, RemoteSnapshot>();
-  const metadata = readGistMetadata(host, id);
-  if (!metadata) {
-    writeStderrLine('ballin backup: failed to read current Gist state');
-    return null;
-  }
-
-  let complete = false;
-  try {
-    for (const { snapshot } of stagedSnapshots) {
-      const { fileName } = snapshot;
-      if (!Object.prototype.hasOwnProperty.call(metadata.files, fileName)) {
-        remoteSnapshots.set(fileName, { exists: false, file: null });
-        continue;
-      }
-
-      const fileMetadata = metadata.files[fileName];
-      if (typeof fileMetadata !== 'object' || fileMetadata === null) {
-        writeStderrLine(`ballin backup: invalid remote metadata for ${fileName}`);
-        return null;
-      }
-      if (
-        fileMetadata.truncated !== undefined
-        && typeof fileMetadata.truncated !== 'boolean'
-      ) {
-        writeStderrLine(`ballin backup: invalid truncation metadata for remote snapshot ${fileName}`);
-        return null;
-      }
-
-      const remoteFile = makeTempFile('ballin-backup-remote-');
-      remoteSnapshots.set(fileName, { exists: true, file: remoteFile });
-      let readSucceeded = false;
-      try {
-        if (fileMetadata.truncated === true) {
-          readSucceeded = readGistFileToFile(host, id, fileName, remoteFile, 'inherit');
-        } else if (typeof fileMetadata.content === 'string') {
-          fs.writeFileSync(remoteFile, fileMetadata.content);
-          readSucceeded = true;
-        }
-
-        const expectedSize = fileMetadata.size;
-        const hasValidExpectedSize = (
-          typeof expectedSize === 'number'
-          && Number.isSafeInteger(expectedSize)
-          && expectedSize >= 0
-        );
-        if (!hasValidExpectedSize) {
-          writeStderrLine(`ballin backup: missing or invalid size metadata for remote snapshot ${fileName}`);
-          readSucceeded = false;
-        }
-        if (
-          readSucceeded
-          && fs.statSync(remoteFile).size !== expectedSize
-        ) {
-          writeStderrLine(`ballin backup: remote snapshot ${fileName} was incomplete or changed while reading`);
-          readSucceeded = false;
-        }
-        if (!readSucceeded) {
-          writeStderrLine(`ballin backup: failed to read remote snapshot ${fileName}`);
-          return null;
-        }
-      } catch (error) {
-        writeStderrLine(`ballin backup: failed to read remote snapshot ${fileName}${errorMessage(error)}`);
-        return null;
-      }
-    }
-    complete = true;
-  } catch (error) {
-    writeStderrLine(`ballin backup: failed to read current Gist state${errorMessage(error)}`);
-    return null;
-  } finally {
-    if (!complete && !removeRemoteSnapshots(remoteSnapshots)) reportTemporaryCleanupFailure();
-  }
-
-  return remoteSnapshots;
-};
-
 const evaluateSnapshots = (
   cacheDir: string,
   stagedSnapshots: StagedSnapshot[],
@@ -683,55 +421,13 @@ const evaluateSnapshots = (
   return { evaluated, conflicts };
 };
 
-const reportConflicts = (conflicts: { fileName: string; reason: string }[], destination = 'Gist'): void => {
+const reportConflicts = (conflicts: { fileName: string; reason: string }[], destination = 'repository'): void => {
   conflicts.forEach(({ fileName, reason }) => {
     writeStderrLine(`ballin backup: conflict for ${fileName}: ${reason}`);
   });
   writeStderrLine(`ballin backup: conflicts detected; Ballin changed neither the ${destination} nor the backup cache contents`);
   writeStderrLine(`ballin backup: inspect each remote snapshot with 'ballin backup read <file>' or the ${destination} UI`);
   writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun ballin backup');
-};
-
-const updateGist = (host: string, id: string, snapshots: EvaluatedSnapshot[]): boolean => {
-  const changedSnapshots = snapshots.filter(({ shouldUpload }) => shouldUpload);
-  if (changedSnapshots.length === 0) {
-    return true;
-  }
-
-  const payloadFile = makeTempFile('ballin-backup-payload-');
-  try {
-    const files = Object.fromEntries(changedSnapshots.map(({ snapshot, localFile }) => [
-      snapshot.fileName,
-      { content: fs.readFileSync(localFile, 'utf8') },
-    ]));
-    fs.writeFileSync(payloadFile, JSON.stringify({ files }));
-
-    const result = runGh(host, [
-      'api',
-      '--hostname', host,
-      '--method', 'PATCH',
-      `gists/${id}`,
-      '--input', payloadFile,
-      '--silent',
-    ], { stdio: ['ignore', 'ignore', 'inherit'] });
-
-    if (result.error) {
-      reportSpawnError('gh', result.error);
-    }
-    if (result.status === 0 && !result.error && !result.signal) {
-      return true;
-    }
-    writeStderrLine(
-      'ballin backup: the Gist update failed or its outcome is unknown; backup cache contents were left unchanged',
-    );
-    writeStderrLine('ballin backup: rerun ballin backup to re-read and reconcile current remote state');
-    return false;
-  } catch (error) {
-    writeStderrLine(`ballin backup: failed to prepare the Gist update${errorMessage(error)}`);
-    return false;
-  } finally {
-    removeTransportFile(payloadFile);
-  }
 };
 
 const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolean => {
@@ -775,64 +471,6 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
   } finally {
     fs.rmSync(stagingDir, { recursive: true, force: true });
   }
-};
-
-const runStagedBackup = (
-  host: string,
-  id: string,
-  homeDir: string,
-  backupCacheDir: string,
-): boolean => {
-  // Configured Gists retain all sources until #334 retires this path.
-  const sourceObservations = observeSnapshotSources(
-    { homeDir, env: process.env },
-    true,
-  );
-  const stagedSnapshots = stageSnapshots(sourceObservations);
-  if (!stagedSnapshots) return false;
-  let remoteSnapshots: Map<string, RemoteSnapshot> | null = null;
-  let completed: EvaluatedSnapshot[] | undefined;
-  try {
-    remoteSnapshots = readRemoteSnapshots(host, id, stagedSnapshots);
-    if (!remoteSnapshots) return false;
-
-    let evaluation: ReturnType<typeof evaluateSnapshots>;
-    try {
-      evaluation = evaluateSnapshots(backupCacheDir, stagedSnapshots, remoteSnapshots);
-    } catch (error) {
-      writeStderrLine(`ballin backup: failed to reconcile staged snapshots${errorMessage(error)}`);
-      return false;
-    }
-    if (evaluation.conflicts.length > 0) {
-      reportConflicts(evaluation.conflicts);
-      return false;
-    }
-    if (!updateGist(host, id, evaluation.evaluated)) return false;
-
-    let promoted = false;
-    try { promoted = promoteCaches(backupCacheDir, evaluation.evaluated); } catch {
-      writeStderrLine('ballin backup: unable to finish private cache staging cleanup');
-    }
-    if (!promoted) {
-      writeStderrLine('ballin backup: the Gist outcome is known, but one or more cache updates failed or their cleanup is incomplete');
-      writeStderrLine('ballin backup: rerun ballin backup to re-read and reconcile current remote state');
-      return false;
-    }
-    completed = evaluation.evaluated;
-  } catch (error) {
-    writeStderrLine(`ballin backup: unable to complete Gist backup${errorMessage(error)}`);
-    return false;
-  } finally {
-    const remoteRemoved = remoteSnapshots === null || removeRemoteSnapshots(remoteSnapshots);
-    const stagedRemoved = removeStagedSnapshots(stagedSnapshots);
-    if (!remoteRemoved || !stagedRemoved) {
-      reportTemporaryCleanupFailure();
-      completed = undefined;
-    }
-  }
-  if (!completed) return false;
-  writeSnapshotStatuses(completed);
-  return true;
 };
 
 const runRepositoryBackup = (
@@ -924,24 +562,17 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
     return 1;
   }
 
-  if ('repository' in config) {
-    if (config.includeSensitive === null) {
-      writeStderrLine('ballin backup: invalid backup.includeSensitive; expected true or false');
-      return 1;
-    }
-    if (!secureExistingBackupCache(backupCacheDir)) return 1;
-    try {
-      return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir) ? 0 : 1;
-    } catch (error) {
-      writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
-      return 1;
-    }
+  if (config.includeSensitive === null) {
+    writeStderrLine('ballin backup: invalid backup.includeSensitive; expected true or false');
+    return 1;
   }
-
   if (!secureExistingBackupCache(backupCacheDir)) return 1;
-  const ghAuthenticated = ghAuthStatus(config.host);
-  if (!ghAuthenticated.ok) return ghAuthenticated.exitStatus;
-  return runStagedBackup(config.host, config.id, homeDir, backupCacheDir) ? 0 : 1;
+  try {
+    return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir) ? 0 : 1;
+  } catch (error) {
+    writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
+    return 1;
+  }
 };
 
 function runBackupCommand(args = process.argv.slice(2)): void {
@@ -984,17 +615,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
     const configExisted = fs.existsSync(configPath);
-    const backupHostExisted = configHasBackupHost(repoDir, configPath);
     if (!configure(repoDir, backupSetupDocsUrl, configPath, true)) {
       writeStderrLine('ballin backup setup: unable to create or update config');
       process.exitCode = 1;
       return;
     }
     if (!configExisted) writeStdoutLine();
-    if (args[1] === undefined && configuredBackupDestination(originalConfig).kind === 'legacy-gist') {
-      writeStdoutLine('Existing Gist backup remains configured. Setup does not migrate or replace it with a repository.');
-    }
-    const configured = configureBackup(repoDir, backupSetupDocsUrl, backupHostExisted, {
+    const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
       configPath,
       originalConfig,
@@ -1030,7 +657,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   if (!command) {
     let status: 'success' | 'failure' = 'failure';
     try {
-      const exitStatus = runRealBackup(homeDir, backupCacheDir);
+      const exitStatus = withTemporaryStatus('Backing up...', () => runRealBackup(homeDir, backupCacheDir));
       status = exitStatus === 0 ? 'success' : 'failure';
       if (exitStatus !== 0) process.exitCode = exitStatus;
     } finally {
@@ -1049,60 +676,25 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if ('repository' in config) {
-    try {
-      if (command === 'read') {
-        const bytes = readRepositorySnapshot(config.repository, args[1]);
-        if (suggestionFileNames.includes(args[1]) && bytes !== undefined) process.stdout.write(bytes);
-        else { writeStdoutLine(`No supported snapshot found.\nOptions: ${fileSuggestions}`); process.exitCode = 1; }
-      } else {
-        const url = repositoryOpenUrl(config.repository);
-        writeStdoutLine(`Opening ${url} in your browser.`);
-        const result = runGh('github.com', ['browse', '--repo', url], { stdio: 'ignore' });
-        process.exitCode = result.error ? 1 : spawnResultStatus(result);
-      }
-    } catch (error) {
-      writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
-      process.exitCode = 1;
-    }
-    return;
-  }
-
-  const ghAuthenticated = ghAuthStatus(config.host);
-  if (!ghAuthenticated.ok) {
-    process.exitCode = ghAuthenticated.exitStatus;
-    return;
-  }
-
-  if (command === 'open') {
-    const result = runGh(config.host, ['gist', 'view', config.id, '--web'], { stdio: 'inherit' });
-    if (result.error) {
-      process.exitCode = reportSpawnError('gh', result.error);
+  try {
+    if (command === 'read') {
+      const bytes = readRepositorySnapshot(config.repository, args[1]);
+      if (suggestionFileNames.includes(args[1]) && bytes !== undefined) process.stdout.write(bytes);
+      else { writeStdoutLine(`No supported snapshot found.\nOptions: ${fileSuggestions}`); process.exitCode = 1; }
+    } else if (command === 'open') {
+      const url = repositoryOpenUrl(config.repository);
+      writeStdoutLine(`Opening ${url} in your browser.`);
+      const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
+      process.exitCode = result.error ? 1 : spawnResultStatus(result);
     } else {
-      process.exitCode = spawnResultStatus(result);
+      /* c8 ignore next 3 -- The catalog predicate and handled cases enforce the supported command union. */
+      const unhandledCommand: never = command;
+      throw new Error(`Unhandled backup command: ${String(unhandledCommand)}`);
     }
-    return;
+  } catch (error) {
+    writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
+    process.exitCode = 1;
   }
-
-  if (command === 'read') {
-    const gistReadable = verifyGistReadable(config.host, config.id);
-    if (!gistReadable.ok) {
-      writeStdoutLine("Error retrieving your gist, please run 'ballin self-update'.");
-      process.exitCode = gistReadable.exitStatus;
-      return;
-    }
-    if (readGistFileToStdout(config.host, config.id, args[1])) {
-      return;
-    } else {
-      process.stdout.write(`\nOptions: ${fileSuggestions}\n`);
-      process.exitCode = 1;
-    }
-    return;
-  }
-
-  /* c8 ignore next 3 -- The catalog predicate supplies the supported command union; handled cases and the never check enforce that contract. */
-  const unhandledCommand: never = command;
-  throw new Error(`Unhandled backup command: ${String(unhandledCommand)}`);
 }
 
 module.exports = {

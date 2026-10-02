@@ -37,18 +37,16 @@ effective personal GitHub.com account, expected private destination identity,
 supported layout, and coherent readability. Invalid configuration or failed
 checks affect overall health. Doctor does not collect snapshots, probe writes,
 repair cache permissions, or claim freshness, coverage, or verified publication.
-Configured legacy Gists retain host, authentication, and readability checks.
 
 ## `ballin backup`
 
 `ballin backup` saves changed snapshots to the configured destination. New setup
 uses private GitHub.com repositories; run `ballin backup setup [repository-name]`
-to create or reconnect. Existing configured Gists remain supported until migration
-and retirement in [#334](https://github.com/JBallin/ballin-scripts/issues/334).
+to create or reconnect.
 
 Repository backups include a fixed baseline of inventories and filtered
 preferences; raw configuration and pipx require the single local sensitive-source
-choice. Existing Gist backups retain their original sources; Codex requires repository capture. Sources are:
+choice. Sources are:
 
 | Area | Snapshot files | Requirement |
 | --- | --- | --- |
@@ -162,6 +160,4 @@ repository policy, or replace account and credential security. Ordinary backup,
 read, open, recovery, and doctor do not depend on policy-management access or
 continuously probe protection state.
 
-Existing configured Gists retain the same three-way comparison, but their API
-has no conditional-head guarantee. See [Backup design](backup-design.md) for
-storage details and constraints; migration and verification remain separate.
+See [Backup design](backup-design.md) for storage details and constraints.

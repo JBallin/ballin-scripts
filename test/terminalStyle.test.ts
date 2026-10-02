@@ -30,7 +30,7 @@ describe('terminal emphasis', () => {
     const preload = path.join(directory, 'tty.cjs');
     const config = path.join(directory, 'ballin.config.json');
     fs.writeFileSync(preload, 'Object.defineProperty(process.stdout, "isTTY", { value: true });');
-    fs.writeFileSync(config, JSON.stringify({ backup: { id: null }, analytics: { enabled: 'false' } }));
+    fs.writeFileSync(config, JSON.stringify({ backup: { repository: null }, analytics: { enabled: 'false' } }));
     const run = (args: string[], env: NodeJS.ProcessEnv = {}, stage = false) => spawnSync(process.execPath,
       stage ? ['-e', `require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'commandHelpers.ts'))}).progress('Updating Homebrew')`]
         : [path.join(__dirname, '..', 'bin', 'ballin'), ...args], {
@@ -57,7 +57,7 @@ describe('terminal emphasis', () => {
         assert.equal(stage.status, 0, stage.stderr);
         assert.equal(stripAnsi(stage.stdout), '\n==> Updating Homebrew\n');
         assert.equal(stage.stdout.includes('\x1b['), styled);
-        const value = run(['config', 'get', 'backup.id'], env);
+        const value = run(['config', 'get', 'backup.repository'], env);
         assert.equal(value.status, 0, value.stderr);
         assert.equal(value.stdout, 'null\n');
       }

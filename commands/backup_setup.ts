@@ -1,3 +1,4 @@
+const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
 const { saveBackupConfig, offerAutomaticUpdateBackup, selectSensitiveSources } = require('./backup_preferences.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
@@ -11,11 +12,6 @@ const {
 } = require('./backup_repository.ts');
 import type { RepositoryRead, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
 
-// Preserve the established legacy/automatic-backup prompt semantics.
-const readPrompt = (prompt: string, eofResponse = ''): string => {
-  const line = readPromptLine(prompt);
-  return line.eof && !line.text ? eofResponse : line.text;
-};
 const invalidateBackupCache = (cacheDir: string): boolean => {
   try { fs.rmSync(cacheDir, { recursive: true, force: true }); return true; } catch {
     writeStdoutLine('Unable to invalidate local backup comparison state. Check cache access and retry.');
@@ -54,7 +50,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     let candidate = readSetupConfigContext(configPath);
     const configured = configuredBackupDestination(candidate);
     if (configured.kind === 'invalid' || configured.kind === 'legacy-gist') {
-      writeStdoutLine('Repair the backup destination configuration before repository setup; legacy migration is separate.');
+      writeStdoutLine('Gist backup support has been retired or the destination configuration is invalid. Run `ballin backup disconnect`, then `ballin backup setup`. Historical Gists remain on GitHub.');
       return false;
     }
     if (repositoryName !== undefined && !validRepositoryName(repositoryName)) {
@@ -124,14 +120,20 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const confirmation = readPromptLine('Confirm this destination and source selection? [y/N] ');
     if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) return cancelled();
     remoteMayExist = true;
-    const read: RepositoryRead = previous
-      ? requireRepositoryRead(inspectRepository(previous.destination))
-      : createRepositoryBackup(name, account);
+    const read: RepositoryRead = withTemporaryStatus(previous
+      ? 'Checking existing private backup...' : 'Creating and initializing private backup...', () => {
+      const read: RepositoryRead = previous
+        ? requireRepositoryRead(inspectRepository(previous.destination))
+        : createRepositoryBackup(name, account);
+      if (!previous || sameRepositoryRevision(read, previous)) {
+        remoteInitialized = true;
+        reportManagedBranchProtection(ensureManagedBranchRuleset(read));
+      }
+      return read;
+    });
     if (previous && !sameRepositoryRevision(read, previous)) {
       writeStdoutLine(repositoryMessages.moved); return false;
     }
-    remoteInitialized = true;
-    reportManagedBranchProtection(ensureManagedBranchRuleset(read));
     recoveryUrl = repositoryUrl(read.destination, account);
     writeStdoutLine(`Private backup confirmed: ${recoveryUrl}`);
     if (!invalidateBackupCache(backupCacheDir)) {
@@ -176,4 +178,4 @@ const disconnectBackup = (configPath: string, cacheDir: string): boolean => {
   }
 };
 
-module.exports = { readPrompt, offerAutomaticUpdateBackup, configureRepositoryBackup, disconnectBackup };
+module.exports = { offerAutomaticUpdateBackup, configureRepositoryBackup, disconnectBackup };

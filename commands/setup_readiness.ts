@@ -3,10 +3,8 @@ const path = require('path');
 const {
   commandExists,
   runCommand: defaultRunCommand,
-  spawnResultStatus,
 } = require('./commandHelpers.ts');
 const {
-  backupDestinationFromConfig,
   configuredBackupDestination,
   sensitiveSourceConsent,
 } = require('./backup_config.ts');
@@ -264,13 +262,12 @@ const guConfigChecks = (
     ];
   }
 
-  const destination = backupDestinationFromConfig(config);
-  const host = destination.host ?? '';
-  const id = destination.id;
   const selected = configuredBackupDestination(config);
-  if (selected.kind === 'invalid' && destination.idStatus !== 'invalid') {
+  if (selected.kind === 'invalid' || selected.kind === 'legacy-gist') {
     return [{ id: 'backup.config', label: 'Backup config', status: 'fail',
-      summary: 'Invalid or conflicting backup destination. Repair linkage or run `ballin backup disconnect`.' }];
+      summary: selected.kind === 'legacy-gist'
+        ? 'Gist backups have been retired. Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository. Existing Gists are preserved.'
+        : 'Invalid or conflicting backup destination. Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.' }];
   }
   if (selected.kind === 'repository') {
     const checks: SetupReadinessCheck[] = [];
@@ -291,140 +288,13 @@ const guConfigChecks = (
     return checks;
   }
 
-  if (destination.idStatus === 'invalid') {
-    return [{
-      id: 'backup.gist',
-      label: 'Gist ID',
-      status: 'fail',
-      summary: '`backup.id` must be null or a non-empty string.',
-      data: { configured: false, invalid: true },
-    }];
-  }
-
-  if (!id) {
-    return [{
-      id: 'backup.optional',
-      label: 'Optional backup',
-      status: 'info',
-      summary: 'Backup is not configured. Maintenance-only Ballin is supported; run `ballin backup setup` to enable it.',
-      data: { configured: false },
-    }];
-  }
-
-  const checks: SetupReadinessCheck[] = [
-    {
-      id: 'backup.host',
-      label: 'Gist host',
-      status: host ? 'pass' : 'fail',
-      summary: host
-        ? `Gist host is configured as ${host}.`
-        : 'Gist host is not configured.',
-      data: { host: host || null },
-    },
-    {
-      id: 'backup.gist',
-      label: 'Gist ID',
-      status: 'pass',
-      summary: 'Backup Gist ID is configured.',
-      data: { configured: true },
-    },
-  ];
-
-  const ghAvailable = commandExists('gh', { env });
-  checks.push({
-    id: 'backup.gh',
-    label: 'GitHub CLI',
-    status: ghAvailable ? 'pass' : 'fail',
-    summary: ghAvailable
-      ? 'GitHub CLI is discoverable on PATH.'
-      : 'GitHub CLI is not discoverable on PATH.',
-    data: { command: 'gh', found: ghAvailable },
-  });
-
-  if (!host) {
-    checks.push({
-      id: 'backup.auth',
-      label: 'GitHub CLI authentication',
-      status: 'info',
-      summary: 'Skipping GitHub CLI authentication check until `backup.host` is configured.',
-    });
-    checks.push({
-      id: 'backup.read',
-      label: 'Configured Gist readability',
-      status: 'info',
-      summary: 'Skipping configured Gist readability check until `backup.host` is configured.',
-    });
-    return checks;
-  }
-
-  if (!ghAvailable) {
-    checks.push({
-      id: 'backup.auth',
-      label: 'GitHub CLI authentication',
-      status: 'info',
-      summary: 'Skipping GitHub CLI authentication check because `gh` is not on PATH.',
-      data: { host },
-    });
-    checks.push({
-      id: 'backup.read',
-      label: 'Configured Gist readability',
-      status: 'info',
-      summary: 'Skipping configured Gist readability check because `gh` is not on PATH.',
-      data: { host },
-    });
-    return checks;
-  }
-
-  const authResult = runCommand('gh', ['auth', 'status', '--active', '--hostname', host], {
-    env: {
-      ...env,
-      GH_HOST: host,
-    },
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
-  const exitStatus = authResult.error ? 1 : spawnResultStatus(authResult);
-  const authenticated = !authResult.error && exitStatus === 0;
-  checks.push({
-    id: 'backup.auth',
-    label: 'GitHub CLI authentication',
-    status: authenticated ? 'pass' : 'fail',
-    summary: authenticated
-      ? `GitHub CLI is authenticated for ${host}.`
-      : `GitHub CLI is not authenticated for ${host}.`,
-    data: { host, exitStatus },
-  });
-
-  if (!authenticated) {
-    checks.push({
-      id: 'backup.read',
-      label: 'Configured Gist readability',
-      status: 'info',
-      summary: 'Skipping configured Gist readability check until GitHub CLI authentication succeeds.',
-      data: { host },
-    });
-    return checks;
-  }
-
-  const readResult = runCommand('gh', ['gist', 'view', '--files', '--', id], {
-    env: {
-      ...env,
-      GH_HOST: host,
-    },
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
-  const readExitStatus = readResult.error ? 1 : spawnResultStatus(readResult);
-  const readable = !readResult.error && readExitStatus === 0;
-  checks.push({
-    id: 'backup.read',
-    label: 'Configured Gist readability',
-    status: readable ? 'pass' : 'fail',
-    summary: readable
-      ? 'The configured backup Gist exists and is readable. Write permission was not checked.'
-      : 'The configured backup Gist could not be read.',
-    data: { host, exitStatus: readExitStatus },
-  });
-
-  return checks;
+  return [{
+    id: 'backup.optional',
+    label: 'Optional backup',
+    status: 'info',
+    summary: 'Backup is not configured. Maintenance-only Ballin is supported; run `ballin backup setup` to enable it.',
+    data: { configured: false },
+  }];
 };
 
 const overallStatus = (checks: SetupReadinessCheck[]): SetupReadinessOverallStatus => {

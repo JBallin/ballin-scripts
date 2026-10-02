@@ -4,7 +4,7 @@ type BackupDestination =
   | { kind: 'unconfigured' }
   | { kind: 'invalid' }
   | { kind: 'repository'; repository: RepositoryDestination }
-  | { kind: 'legacy-gist'; id: string; host: string | null };
+  | { kind: 'legacy-gist' };
 type BackupIdStatus = 'unconfigured' | 'configured' | 'invalid';
 type BackupIdState = {
   id: string | null;
@@ -29,29 +29,6 @@ const classifyBackupId = (value: unknown): BackupIdState => {
     : { id: null, status: 'unconfigured' };
 };
 
-const normalizeBackupHost = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const host = value.trim();
-  return host || null;
-};
-
-const backupDestinationFromConfig = (config: ConfigObject): {
-  host: string | null;
-  id: string | null;
-  idStatus: BackupIdStatus;
-} => {
-  const backup = isConfigObject(config.backup) ? config.backup : {};
-  const idState = classifyBackupId(backup.id);
-  return {
-    host: normalizeBackupHost(backup.host),
-    id: idState.id,
-    idStatus: idState.status,
-  };
-};
-
 const validRepositoryName = (value: unknown): value is string => (
   typeof value === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(value)
   && value !== '.' && value !== '..'
@@ -66,8 +43,8 @@ const configuredBackupDestination = (config: ConfigObject): BackupDestination =>
     return { kind: 'invalid' };
   }
   const backup = isConfigObject(config.backup) ? config.backup : {};
-  const legacy = backupDestinationFromConfig(config);
-  if (legacy.idStatus === 'invalid') return { kind: 'invalid' };
+  const legacy = classifyBackupId(backup.id);
+  if (legacy.status === 'invalid') return { kind: 'invalid' };
   const repository = backup.repository;
   if (repository !== undefined && repository !== null) {
     if (
@@ -80,7 +57,7 @@ const configuredBackupDestination = (config: ConfigObject): BackupDestination =>
     } };
   }
   return legacy.id
-    ? { kind: 'legacy-gist', id: legacy.id, host: legacy.host }
+    ? { kind: 'legacy-gist' }
     : { kind: 'unconfigured' };
 };
 
@@ -93,11 +70,9 @@ const sensitiveSourceConsent = (config: ConfigObject): boolean | null => {
 };
 
 module.exports = {
-  backupDestinationFromConfig,
   configuredBackupDestination,
   classifyBackupId,
   isConfigObject,
-  normalizeBackupHost,
   sensitiveSourceConsent,
   validRepositoryName,
 };
