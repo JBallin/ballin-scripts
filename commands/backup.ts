@@ -483,6 +483,7 @@ const runRepositoryBackup = (
   if (!staged) return false;
   const remote = new Map<string, RemoteSnapshot>();
   let completed: EvaluatedSnapshot[] | undefined;
+  let publishedCommitUrl: string | undefined;
   try {
     const read: RepositoryRead = requireRepositoryRead(inspectRepository(destination));
     const unexpected = unexpectedRepositoryEntries(read);
@@ -522,7 +523,8 @@ const runRepositoryBackup = (
     // The wire allowance is derived from the stored-byte cap, not another 16 MiB cap.
     requireWithinLimit('bytes', encodedCodexBytes,
       4 * Math.ceil(snapshotByteLimit / 3) + 4 * (codexSnapshotFileNames.size - 1));
-    publishRepositorySnapshots(read, changes);
+    const published = publishRepositorySnapshots(read, changes);
+    if (changes.size) publishedCommitUrl = published.commitUrl;
     let promoted = false;
     try { promoted = promoteCaches(cacheDir, evaluation.evaluated); } catch {
       writeStderrLine('ballin backup: unable to finish private cache staging cleanup');
@@ -553,6 +555,7 @@ const runRepositoryBackup = (
   }
   if (!completed) return false;
   writeSnapshotStatuses(completed);
+  if (publishedCommitUrl) writeStdoutLine(`View changes: ${publishedCommitUrl}`);
   return true;
 };
 

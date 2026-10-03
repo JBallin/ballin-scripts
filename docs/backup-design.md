@@ -207,9 +207,14 @@ transport, unreachable-object cleanup, or implicit replacement destination.
 Only confirmed publication or revalidated unchanged state permits cache
 promotion. Remote success followed by cache failure reports that partial result
 without normal success markers. A fresh invocation reads and reconciles again;
-matching local/remote content can recover without another commit. One active
-writer remains the product model; retire the prior writer before a replacement
-installation publishes. Conditional publication protects the inspected head,
+matching local/remote content can recover without another commit.
+
+After cache promotion and private temporary-file cleanup succeed, a changed
+backup prints the confirmed commit's GitHub URL using the validated repository
+owner and name. No extra remote lookup or persisted revision pointer is needed.
+Unchanged or failed runs print no commit link, and Ballin does not open a browser.
+One active writer remains the product model; retire the prior writer before a
+replacement installation publishes. Conditional publication protects the inspected head,
 including concurrent advancement or rewind, but does not offer multi-writer sync.
 
 ## Repository command latency (#367)
@@ -516,6 +521,6 @@ they do not prove GitHub's live enforcement. Separately authorized disposable
 real-GitHub validation must still confirm `createCommitOnBranch` fast-forward
 publication and rejection of a forced ref update and branch deletion. Normal
 implementation validation does not perform that experiment.
-[#336](https://github.com/JBallin/ballin-scripts/issues/336) owns verification.
-The concrete repository reader/writer can be reused there without introducing
-another storage model here.
+
+Identity, coherent-read, and publication checks do not certify that saved
+snapshots match current sources after subsequent changes.

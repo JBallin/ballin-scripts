@@ -86,6 +86,7 @@ describe('repository backup lifecycle', function() {
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_CLEANUP_ERROR');
     assert.notInclude(result.stdout + result.stderr, 'dummy-secret-error');
     assert.notMatch(result.stdout, /[✔✚✎✖]/u);
+    assert.notInclude(result.stdout, 'View changes:');
     const attempts = fs.readFileSync(path.join(root, 'cleanup.log'), 'utf8').trim().split('\n');
     assert.lengthOf(attempts, 1);
     assert.isTrue(fs.existsSync(attempts[0]));
@@ -388,9 +389,37 @@ describe('repository backup lifecycle', function() {
     const result = run();
 
     ok(result);
-    assert.equal(result.stdout, '✚ ballin_config\n✚ zshrc\n');
+    assert.equal(result.stdout, `✚ ballin_config\n✚ zshrc\nView changes: https://github.com/fixture-user/ballin-backups/commit/${state().head}\n`);
     const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string }[] } };
     assert.deepEqual(input.fileChanges.additions.map(({ path: filePath }) => filePath), ['zshrc.sh', 'ballin_config']);
+  });
+  it('links the confirmed publication using the current owner and repository name, then omits no-op links', () => {
+    source(); const value = state(); value.login = 'renamed-user'; value.name = 'renamed-backups'; saveState(value);
+    const result = run(); ok(result);
+    assert.include(result.stdout, `View changes: https://github.com/renamed-user/renamed-backups/commit/${state().head}\n`);
+    assert.isFalse(state().requests.some((request) => request.endpoint === 'open'));
+    const unchanged = run(); ok(unchanged);
+    assert.notInclude(unchanged.stdout, 'View changes:'); assert.lengthOf(publications(), 1);
+  });
+  it('keeps the link pinned when the remote head advances after publication confirmation', () => {
+    source();
+    const evidence = path.join(root, 'confirmed-head');
+    const preload = `
+      const fs = require('fs'); const rename = fs.renameSync;
+      fs.renameSync = function(...args) {
+        const result = rename.apply(this, args);
+        if (String(args[0]).includes('.ballin-backup-cache-') && !fs.existsSync(${JSON.stringify(evidence)})) {
+          const file = ${JSON.stringify(statePath)}; const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+          fs.writeFileSync(${JSON.stringify(evidence)}, state.head);
+          state.head = 'a'.repeat(40); fs.writeFileSync(file, JSON.stringify(state));
+        }
+        return result;
+      };
+    `;
+    const result = run([], '', {}, preload); ok(result);
+    const confirmed = fs.readFileSync(evidence, 'utf8');
+    assert.include(result.stdout, `/commit/${confirmed}\n`);
+    assert.notInclude(result.stdout, `/commit/${state().head}`);
   });
   it('reports every conflict and aborts all publication and cache promotion', () => {
     source(); fs.writeFileSync(path.join(home, '.gitconfig'), 'local git\n');
@@ -431,14 +460,18 @@ describe('repository backup lifecycle', function() {
   ['ambiguous', 'malformed'].forEach((mode) => {
     it(`confirms ${mode} publication and never duplicates it on the next run`, () => {
       source(); const value = state(); value.faults.publish = mode; saveState(value);
-      ok(run()); ok(run()); assert.equal(publications().length, 1); assert.equal(cached(), 'local\n');
+      const result = run(); ok(result);
+      assert.include(result.stdout, `/commit/${state().head}\n`);
+      const unchanged = run(); ok(unchanged); assert.notInclude(unchanged.stdout, 'View changes:');
+      assert.equal(publications().length, 1); assert.equal(cached(), 'local\n');
     });
   });
   ['advance', 'denied', 'orphan', 'wrong-readback'].forEach((mode) => {
     it(`leaves comparison bytes intact after ${mode}`, () => {
       source(); seedCache('zshrc.sh', 'base\n'); const value = fixtureState({ 'zshrc.sh': 'base\n' });
       value.faults.publish = mode; saveState(value);
-      assert.equal(run().status, 1); assert.equal(cached(), 'base\n'); assert.equal(publications().length, 1);
+      const result = run(); assert.equal(result.status, 1); assert.notInclude(result.stdout, 'View changes:');
+      assert.equal(cached(), 'base\n'); assert.equal(publications().length, 1);
     });
   });
   ['chmodSync', 'renameSync'].forEach((method) => {
@@ -447,6 +480,7 @@ describe('repository backup lifecycle', function() {
         "String(args[0]).includes('.ballin-backup-cache-') && String(args[0]).endsWith('zshrc.sh')"));
       assert.equal(result.status, 1); assert.include(result.stderr, 'publication confirmed');
       assert.notMatch(result.stdout, /[✔✚✎]/u); assert.isUndefined(cached());
+      assert.notInclude(result.stdout, 'View changes:');
       ok(run()); assert.equal(publications().length, 1); assert.equal(cached(), 'local\n');
     });
   });
@@ -552,6 +586,7 @@ describe('repository backup lifecycle', function() {
     const result = run([], '', {}, cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-remote-')"));
     assert.equal(result.status, 1); assert.include(result.stderr, 'temporary-file cleanup is incomplete');
     assert.equal(cached(), 'local\n'); assert.notMatch(result.stdout, /[✔✚✎]/u);
+    assert.notInclude(result.stdout, 'View changes:');
   });
   it('reports a confirmed no-op separately when hydrating the missing cache fails', () => {
     source(); ok(run()); fs.rmSync(cache, { recursive: true });

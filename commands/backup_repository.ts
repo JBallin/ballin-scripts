@@ -50,6 +50,7 @@ type RepositoryRead = {
   destination: RepositoryDestination;
   revision: Revision;
   snapshots: Map<string, Buffer>;
+  commitUrl: string;
 };
 type ManagedBranchRulesetOutcome =
   | { status: 'present' }
@@ -268,7 +269,10 @@ const inspect = (
   let inspected: RepositoryRead | undefined;
   try {
     const info = readInfo(destination, account, options);
-    inspected = { destination: info.destination, revision: info.revision, snapshots: new Map() };
+    inspected = {
+      destination: info.destination, revision: info.revision, snapshots: new Map(),
+      commitUrl: `https://github.com/${info.login}/${info.destination.name}/commit/${info.revision.head}`,
+    };
     info.revision.entries = readInventory(info, options);
     for (const entry of info.revision.entries) {
       if ((entry.classification === 'current' && (snapshot === undefined || entry.path === snapshot))
