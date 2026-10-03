@@ -18,4 +18,4 @@ To help us review and triage the report effectively, please include:
 - **Impact:** What an attacker or unauthorized user could achieve with this issue.
 - **Sanitized Reproduction:** Step-by-step reproduction instructions or a proof-of-concept (PoC) with all tokens, credentials, and private backup paths scrubbed.
 
-Thank you for practicing responsible disclosure and helping keep the community safe.
+Thanks for helping keep Ballin secure.
