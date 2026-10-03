@@ -81,21 +81,14 @@ them. See [Backup design](backup-design.md#shared-inclusion-policy).
 
 ## Last successful backup
 
-After a successful backup, Ballin records the run time locally for the configured
-destination and branch. An unchanged backup also counts, without creating a
-repository commit just to record activity. Before the next backup begins, Ballin
-shows `Previous successful backup:` with the recorded local date, time and UTC
-offset. It shows the previous run, even if the current attempt later fails. The
-new time is saved only after success, without another timestamp line at the end.
-`ballin backup setup` also shows the record when validating an existing setup.
+Before collecting sources, Ballin shows `Previous successful backup:` with the
+last recorded successful run's local date, time and UTC offset for this
+installation, destination and branch. With no usable record, the line is omitted.
+`ballin backup setup` also shows the record or unavailable status; setup and
+recovery do not invent a previous time.
 
-This is the last recorded successful run on this installation. It does not prove
-that every supported source was captured. It does not show
-whether the repository matches your Mac now, whether the latest attempt succeeded,
-or whether the backup is fresh. Repository commit time is not substituted for it.
-With no usable local record, the previous-backup line is omitted. Setup shows
-unavailable status, including on a replacement installation. Setup and recovery
-do not invent a previous success time.
-
-If Ballin cannot save the local time after a successful backup, it reports that
-bookkeeping problem while keeping backup success and the prior recorded time.
+Changed and unchanged successful runs update the local record; failed attempts
+do not. An unchanged run creates no repository commit just to record activity.
+If saving the time fails, Ballin reports an advisory while preserving backup
+success and the prior record. This time does not prove that every source was
+captured, that the repository matches your Mac now, or that the backup is fresh.

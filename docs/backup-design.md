@@ -346,25 +346,19 @@ Normal repository backup records one canonical UTC time after publication or
 no-op confirmation, required comparison-cache work and temporary cleanup complete.
 Timestamp eligibility follows normal writer success, including runs that skip
 sources after discovery failure.
-The owner-only local file is colocated in the existing cache namespace keyed by
-stable owner/repository identity and selected branch. Mutable repository name and
-current revision are not part of the record. Rename and later remote changes do
-not erase a prior local successful run; disconnect/new linkage invalidates it
-through existing cache-root lifecycle handling.
 
-Timestamp replacement is atomic and advisory. Failure preserves the prior valid
-time and does not fail, roll back or republish the completed data operation. Status
-is excluded from required snapshot-cache permission repair; reads do not repair or
-create state and reject missing, malformed, insecure or future times as unavailable.
-It is never exported through `ballin_config`, written to GitHub, or sent in analytics.
-There is no receipt, current-state verification or freshness policy associated with it.
+Store the owner-only local file in the existing cache namespace keyed by stable
+owner/repository identity and selected branch, excluding mutable name and current
+revision. Rename and later remote changes preserve the record; disconnect/new
+linkage invalidates it through existing cache-root lifecycle handling.
 
-Ordinary backup reads the previous valid local record once before source collection
-and displays its full local date/time with an explicit UTC offset. Missing or unsafe
-records produce no line. This historical context remains visible if the current
-attempt fails; there is no post-run timestamp line. Saving the new record remains
-at the normal writer success boundary. Existing-setup validation uses its separate
-observational status line, including unavailable status.
+Replacement is atomic and advisory: failure preserves the prior valid time and
+does not fail, roll back or republish completed data work. Status is excluded from
+required snapshot-cache permission repair. Reads never repair or create state and
+reject missing, malformed, insecure or future times. The record is never exported
+through `ballin_config`, written to GitHub or sent in analytics; it is not a receipt, current-state
+verification or freshness policy. See [Last successful backup](backup-sources.md#last-successful-backup)
+for display behavior.
 
 ## Portable preferences
 

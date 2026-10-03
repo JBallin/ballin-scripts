@@ -38,7 +38,6 @@ and removal steps in [Installation and removal](docs/installation.md).
 
 `ballin update` output depends on installed tools and enabled integrations. This
 example shows a fully configured run with automatic backups enabled.
-The previous backup time below is illustrative.
 
 ```shell
 $ ballin update
