@@ -195,6 +195,7 @@ describe('repository backup lifecycle', function() {
   });
   it('reports unavailable during validated setup without creating status; reads never advance it', () => {
     const before = config(); const setup = run(['setup']); ok(setup);
+    assert.equal(setup.stdout, 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: unavailable\n');
     assert.include(setup.stdout, 'on this installation: unavailable'); assert.isFalse(fs.existsSync(statusFile()));
     assert.deepEqual(config(), before);
     source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
@@ -202,6 +203,82 @@ describe('repository backup lifecycle', function() {
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
     ok(run(['disconnect'])); assert.isFalse(fs.existsSync(cacheRoot));
   });
+  for (const representation of ['boolean', 'string']) {
+    for (const sensitive of [false, true]) {
+      for (const automatic of [false, true]) {
+        it(`summarizes existing setup with ${representation} sensitive=${sensitive} automatic=${automatic} without changing state`, () => {
+          const before = config();
+          before.backup.includeSensitive = representation === 'string' ? String(sensitive) : sensitive;
+          before.update.backup = representation === 'string' ? String(automatic) : automatic;
+          saveConfig(before); seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess(); source('different local bytes\n');
+          const configBytes = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+          const noPromptsOrDiscovery = `
+            const helpers = require(${JSON.stringify(path.join(repoRoot, 'commands', 'commandHelpers.ts'))});
+            helpers.readPromptLine = () => { throw new Error('Unexpected setup prompt'); };
+            const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
+            snapshots.observeSnapshotSources = () => { throw new Error('Unexpected snapshot discovery'); };
+            snapshots.snapshotDefinitions.forEach((definition) => {
+              definition.discover = () => { throw new Error('Unexpected source review'); };
+            });
+          `;
+          const result = run(['setup'], '', {}, noPromptsOrDiscovery); ok(result);
+          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${priorSuccess}`);
+          assert.equal(fs.readFileSync(configPath, 'utf8'), configBytes);
+          assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+          assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+          assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
+        });
+      }
+    }
+  }
+  it('summarizes absent sensitive consent as excluded without saving consent', () => {
+    const before = config(); delete before.backup.includeSensitive; saveConfig(before);
+    const result = run(['setup']); ok(result);
+    assert.include(result.stdout, 'Sensitive sources: excluded\n'); assert.deepEqual(config(), before);
+    assert.lengthOf(mutations(), 0);
+  });
+  it('summarizes the automatic-backup default supplied by existing setup configuration', () => {
+    const before = config(); delete before.update.backup; saveConfig(before);
+    const result = run(['setup']); ok(result);
+    assert.include(result.stdout, 'Automatic backup during update: disabled\n');
+    assert.deepEqual(config(), { ...before, update: { ...before.update, backup: 'false' } });
+    assert.lengthOf(mutations(), 0);
+  });
+  for (const preference of ['sensitive', 'automatic']) {
+    for (const invalid of [null, 'TRUE', {}]) {
+      it(`summarizes invalid ${preference} preference ${JSON.stringify(invalid)} explicitly without repairing it`, () => {
+        const before = config();
+        const sensitive = preference === 'sensitive';
+        if (sensitive) before.backup.includeSensitive = invalid;
+        else before.update.backup = invalid;
+        saveConfig(before); seedSuccess();
+        const result = run(['setup']); ok(result);
+        assert.include(result.stdout, sensitive
+          ? 'Sensitive sources: invalid `backup.includeSensitive` (expected true or false)\n'
+          : 'Automatic backup during update: invalid `update.backup` (expected true or false)\n');
+        assert.deepEqual(config(), before); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.lengthOf(mutations(), 0);
+      });
+    }
+  }
+  for (const failure of ['invalid configuration', 'unavailable repository', 'public repository', 'unreadable tree', 'unavailable account']) {
+    it(`omits the settings summary when existing setup has ${failure}`, () => {
+      const before = config(); const value = state();
+      if (failure === 'invalid configuration') before.backup.repository = {};
+      if (failure === 'unavailable repository') value.exists = false;
+      if (failure === 'public repository') value.faults.node = { isPrivate: false };
+      if (failure === 'unreadable tree') value.faults.tree = 'unreadable';
+      if (failure === 'unavailable account') value.faults.auth = true;
+      saveConfig(before); saveState(value); seedCache('zshrc.sh', 'unchanged\n'); seedSuccess();
+      const result = run(['setup']); assert.equal(result.status, 1);
+      assert.notInclude(result.stdout, 'Validated private backup:');
+      assert.notInclude(result.stdout, 'Sensitive sources:');
+      assert.notInclude(result.stdout, 'Automatic backup during update:');
+      assert.notInclude(result.stdout, 'Last recorded successful backup');
+      assert.deepEqual(config(), before); assert.equal(cached(), 'unchanged\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(mutations(), 0);
+    });
+  }
   it('retains historical local success through same-identity rename and later remote change', () => {
     source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
     const value = state(); value.name = 'renamed';
@@ -797,9 +874,12 @@ describe('repository backup lifecycle', function() {
     assert.notInclude(result.stdout, '"update.backup" set to:');
   });
   it('revalidates by stable identity after a rename and preserves local choices without prompting', () => {
-    const value = state(); value.name = 'renamed'; value.rulesets = [fixtureRuleset({ source: 'fixture-user/renamed' })];
+    const value = state(); value.name = 'renamed'; value.login = 'renamed-user';
+    value.rulesets = [fixtureRuleset({ source: 'renamed-user/renamed' })];
     saveState(value); seedCache('zshrc.sh', 'base\n');
     const result = run(['setup', 'renamed']); ok(result); assert.equal(config().backup.repository.name, 'renamed');
+    assert.include(result.stdout, 'Validated private backup: https://github.com/renamed-user/renamed\nSensitive sources: included\nAutomatic backup during update: disabled\n');
+    assert.notInclude(result.stdout, 'https://github.com/fixture-user/ballin-backups');
     assert.notInclude(result.stdout, '"backup.includeSensitive" set to:');
     assert.notInclude(result.stdout, 'Also include sensitive sources');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'false');

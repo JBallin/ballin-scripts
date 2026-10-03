@@ -219,6 +219,12 @@ setup failed. After updating GitHub access, rerun `ballin backup setup` to make 
 bounded protection attempt on the configured repository without changing local
 backup choices.
 
+For an already-configured backup, setup shows the validated destination,
+whether sensitive sources are included, and whether automatic backup during
+update is enabled. It preserves these choices and shows the
+[local last-success record](backup-sources.md#last-successful-backup) separately.
+This summary does not compare current sources with saved snapshots.
+
 After saving the sensitive-source choice, setup confirms the config key and
 value using the same format as `ballin config set`, for example:
 
