@@ -359,6 +359,13 @@ create state and reject missing, malformed, insecure or future times as unavaila
 It is never exported through `ballin_config`, written to GitHub, or sent in analytics.
 There is no receipt, current-state verification or freshness policy associated with it.
 
+Ordinary backup reads the previous valid local record once before source collection
+and displays its full local date/time with an explicit UTC offset. Missing or unsafe
+records produce no line. This historical context remains visible if the current
+attempt fails; there is no post-run timestamp line. Saving the new record remains
+at the normal writer success boundary. Existing-setup validation uses its separate
+observational status line, including unavailable status.
+
 ## Portable preferences
 
 Export and restoration use separate explicit allowlists, independent of bundled

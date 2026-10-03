@@ -44,7 +44,7 @@ const {
   unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryDestination } from './backup_config.ts';
-const { lastSuccessFileName, recordLastBackupSuccess, lastBackupSuccessLine } = require('./backup_status.ts');
+const { lastSuccessFileName, recordLastBackupSuccess, previousBackupSuccessLine } = require('./backup_status.ts');
 import type { RepositoryError, RepositoryRead } from './backup_repository.ts';
 
 import type {
@@ -449,6 +449,8 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
 const runRepositoryBackup = (
   destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string,
 ): boolean => {
+  const previous = previousBackupSuccessLine(cacheRoot, destination);
+  if (previous) writeStdoutLine(previous);
   const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive));
   if (!staged) return false;
   const remote = new Map<string, RemoteSnapshot>();
@@ -501,7 +503,6 @@ const runRepositoryBackup = (
   if (!recordLastBackupSuccess(cacheRoot, destination)) {
     writeStderrLine('Backup succeeded, but Ballin could not record the local last-success time.');
   }
-  writeStdoutLine(lastBackupSuccessLine(cacheRoot, destination));
   return true;
 };
 

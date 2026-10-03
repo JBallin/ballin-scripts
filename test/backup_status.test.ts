@@ -3,7 +3,8 @@ const os = require('os');
 const path = require('path');
 const { fixtureDestination } = require('./helpers/repository.ts');
 const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
-const { lastSuccessFileName, readLastBackupSuccess, recordLastBackupSuccess, lastBackupSuccessLine } = require('../commands/backup_status.ts');
+const { lastSuccessFileName, readLastBackupSuccess, recordLastBackupSuccess, lastBackupSuccessLine, previousBackupSuccessLine } = require('../commands/backup_status.ts');
+const { withEnvironment } = require('./helpers/environment.ts');
 
 describe('destination-scoped local last-success status', () => {
   let root: string; let directory: string; let file: string;
@@ -45,6 +46,7 @@ describe('destination-scoped local last-success status', () => {
   });
   it('reports unavailable without creating or repairing state', () => {
     assert.include(lastBackupSuccessLine(root, fixtureDestination), 'unavailable');
+    assert.isNull(previousBackupSuccessLine(root, fixtureDestination));
     for (const text of ['bad', '2026-10-02T12:00:00Z\n', `${new Date(now + 1).toISOString()}\n`, 'x'.repeat(1000), '1969-12-31T23:59:59.000Z\n']) {
       seed(text);
       assert.isNull(readLastBackupSuccess(root, fixtureDestination, now));
@@ -52,6 +54,7 @@ describe('destination-scoped local last-success status', () => {
     }
     seed(); fs.chmodSync(file, 0o644);
     assert.isNull(readLastBackupSuccess(root, fixtureDestination, now));
+    assert.isNull(previousBackupSuccessLine(root, fixtureDestination));
     assert.equal(fs.statSync(file).mode & 0o777, 0o644);
     fs.chmodSync(file, 0o600); fs.chmodSync(directory, 0o755);
     assert.isNull(readLastBackupSuccess(root, fixtureDestination, now));
@@ -66,12 +69,32 @@ describe('destination-scoped local last-success status', () => {
     const target = path.join(root, 'target'); fs.writeFileSync(target, 'target bytes');
     fs.symlinkSync(target, file);
     assert.isNull(readLastBackupSuccess(root, fixtureDestination, now));
+    assert.isNull(previousBackupSuccessLine(root, fixtureDestination));
     assert.isFalse(recordLastBackupSuccess(root, fixtureDestination, now));
     assert.equal(fs.readFileSync(target, 'utf8'), 'target bytes');
     assert.isTrue(fs.lstatSync(file).isSymbolicLink());
     fs.unlinkSync(file); fs.mkdirSync(file, { mode: 0o700 });
     assert.isNull(readLastBackupSuccess(root, fixtureDestination, now));
     assert.isFalse(recordLastBackupSuccess(root, fixtureDestination, now));
+  });
+  it('formats the full local date and distinguishes repeated daylight-saving hours', () => {
+    withEnvironment({ TZ: 'America/Los_Angeles' }, () => {
+      seed('2025-11-02T08:30:00.000Z\n');
+      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Previous successful backup: Nov 2, 2025, 1:30:00 AM GMT-07:00');
+      seed('2025-11-02T09:30:00.000Z\n');
+      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Previous successful backup: Nov 2, 2025, 1:30:00 AM GMT-08:00');
+    });
+    withEnvironment({ TZ: 'Asia/Kolkata' }, () => {
+      seed('2020-01-01T00:00:00.000Z\n');
+      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Previous successful backup: Jan 1, 2020, 5:30:00 AM GMT+05:30');
+    });
+  });
+  it('omits malformed and future records without rewriting them', () => {
+    for (const text of ['invalid\n', '2020-01-01T00:00:00Z\n', '2099-01-01T00:00:00.000Z\n']) {
+      seed(text);
+      assert.isNull(previousBackupSuccessLine(root, fixtureDestination));
+      assert.equal(fs.readFileSync(file, 'utf8'), text);
+    }
   });
   it('preserves prior bytes on write/rename failure and retries normally', () => {
     seed();

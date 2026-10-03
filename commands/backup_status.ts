@@ -63,5 +63,14 @@ const recordLastBackupSuccess = (
 const lastBackupSuccessLine = (root: string, destination: RepositoryDestination): string => (
   `Last recorded successful backup on this installation: ${readLastBackupSuccess(root, destination) ?? 'unavailable'}`
 );
+const previousBackupSuccessLine = (root: string, destination: RepositoryDestination): string | null => {
+  const previous = readLastBackupSuccess(root, destination);
+  if (!previous) return null;
+  const time = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'longOffset',
+  }).format(new Date(previous));
+  return `Previous successful backup: ${time}`;
+};
 
-module.exports = { lastSuccessFileName, readLastBackupSuccess, recordLastBackupSuccess, lastBackupSuccessLine };
+module.exports = { lastSuccessFileName, readLastBackupSuccess, recordLastBackupSuccess, lastBackupSuccessLine, previousBackupSuccessLine };
