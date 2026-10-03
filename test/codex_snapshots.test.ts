@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { snapshotDefinitions } = require('../commands/backup_snapshots.ts');
+const { snapshotDefinitions, observeSnapshotSources } = require('../commands/backup_snapshots.ts');
 const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError, SnapshotCwdError, sourceStat } = require('../commands/recursive_snapshot.ts');
 import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 
@@ -126,7 +126,7 @@ describe('Codex durable snapshots', () => {
     assert.equal(discover('codex_config.toml').status, 'absent');
     assert.equal(capture('codex_marketplace.json').stdout, '{"plugins":[{"source":"/synthetic/external"}]}');
     assert.deepEqual((snapshotDefinitions as SnapshotDefinition[]).filter(({ category }) => category === 'codex').map(({ name }) => name), [
-      'codex_AGENTS.md', 'codex_config.toml', 'codex_profiles.json', 'codex_hooks.json',
+      'codex_AGENTS.md', 'codex_AGENTS.override.md', 'codex_config.toml', 'codex_profiles.json', 'codex_hooks.json',
       'codex_skills.json', 'codex_rules.json', 'codex_agents.json', 'codex_marketplace.json',
     ]);
   });
@@ -581,6 +581,36 @@ describe('Codex durable snapshots', () => {
       assert.equal(opens, 8);
       assert.equal(reads, 0);
     } finally { fs.openSync = originalOpen; fs.readSync = originalRead; }
+  });
+
+  it('preserves override instructions independently from ordinary instructions and active-home precedence', () => {
+    write('AGENTS.override.md', 'synthetic override');
+    assert.equal(discover('codex_AGENTS.md').status, 'absent');
+    assert.equal(capture('codex_AGENTS.override.md').stdout, 'synthetic override');
+    write('AGENTS.md', 'synthetic ordinary');
+    assert.equal(capture('codex_AGENTS.md').stdout, 'synthetic ordinary');
+    assert.equal(capture('codex_AGENTS.override.md').stdout, 'synthetic override');
+    const active = path.join(homeDir, 'custom codex');
+    write('AGENTS.override.md', 'synthetic custom override', active);
+    assert.equal(capture('codex_AGENTS.override.md', { CODEX_HOME: active }).stdout, 'synthetic custom override');
+    const observed = observeSnapshotSources({ homeDir, env: { PATH: '' } }, false);
+    const override = observed.find(({ definition }: { definition: SnapshotDefinition }) => definition.name === 'codex_AGENTS.override.md');
+    assert.exists(override);
+    assert.equal(override!.status, 'excluded-by-policy');
+  });
+
+  it('rejects symlinked override instructions and enforces their raw byte budget', () => {
+    const outside = write('outside', 'synthetic outside', homeDir);
+    fs.symlinkSync(outside, path.join(root, 'AGENTS.override.md'));
+    assert.equal(discover('codex_AGENTS.override.md').status, 'unavailable');
+    fs.unlinkSync(path.join(root, 'AGENTS.override.md'));
+    write('AGENTS.override.md', 'abcd');
+    const result = spawnSync(process.execPath, [collectorPath, root, 'file', 'AGENTS.override.md', '--max-bytes', '3'], {
+      env: { HOME: homeDir, PATH: '' }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'Snapshot bytes limit exceeded (4 > 3).\n');
   });
 
   it('fails empty or invalid captures with safe diagnostics and no stdout', () => {

@@ -136,7 +136,8 @@ altering policy or deleting the repository.
 
 All selected available captures are staged before remote inspection. Collector
 or projection failures abort without publication or cache promotion. Discovery
-failure skips that source; exclusion gates discovery itself. Only fresh local
+failure for a selected Codex source aborts before staging; other discovery
+failures skip that source. Exclusion gates discovery itself. Only fresh local
 captures receive established empty-file/final-newline normalization. Remote and
 cache bytes, including legacy `empty\n`, remain observable unchanged.
 
@@ -402,7 +403,7 @@ below.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-23 sensitive sources, and one projected preferences snapshot.
+24 sensitive sources, and one projected preferences snapshot.
 `backup.includeSensitive` is the only local sensitive-source preference. Opting
 in covers the maintained sensitive catalog, including future supported sources;
 existing opt-ins therefore include Codex. Setup discloses this scope before
@@ -411,6 +412,8 @@ projected or recovered. Configured destination revalidation preserves the
 existing choice. Adding supported sources requires user-facing disclosure and
 an inclusion/sensitivity review, without another approval record.
 
+Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
+sources: both are captured when present, regardless of instruction precedence.
 Codex file capture is intact, including embedded trust settings in main/profile
 TOML, with existing final-newline/empty-file normalization. It does not execute
 or restore configuration. Recursive authoring directories use the shared

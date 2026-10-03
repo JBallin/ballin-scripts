@@ -98,7 +98,7 @@ fs.readFileSync = (file, ...args) => {
       .map((line: string) => /([\w.]+): (?:absent|unavailable|available|"|unsupported)/u.exec(line)?.[1])
       .filter(Boolean);
     assert.deepEqual(labels, [
-      'bash_profile.sh', 'bashrc.sh', 'codex_agents.json', 'codex_AGENTS.md',
+      'bash_profile.sh', 'bashrc.sh', 'codex_agents.json', 'codex_AGENTS.md', 'codex_AGENTS.override.md',
       'codex_config.toml', 'codex_hooks.json', 'codex_marketplace.json',
       'codex_profiles.json', 'codex_rules.json', 'codex_skills.json',
       'gitconfig', 'gitignore_global', 'nanorc',
@@ -107,6 +107,32 @@ fs.readFileSync = (file, ...args) => {
     ]);
     assert.include(result.stdout, `zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))} ->`);
     assert.notInclude(result.stdout, 'fixture private content');
+  });
+
+  [false, true].forEach((included) => {
+    it(`reviews the override instruction source only after sensitive opt-in: ${included}`, () => {
+      const codex = path.join(root, '.codex'); fs.mkdirSync(codex);
+      const override = path.join(codex, 'AGENTS.override.md');
+      fs.writeFileSync(override, 'SYNTHETIC_OVERRIDE_CONTENT');
+      const probes = path.join(root, 'override-probes');
+      fs.appendFileSync(guardPath, `const definitions = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'backup_snapshots.ts'))}).snapshotDefinitions;
+        const overrideDefinition = definitions.find((definition) => definition.name === 'codex_AGENTS.override.md');
+        if (!overrideDefinition) throw new Error('Missing override source definition');
+        const discoverOverride = overrideDefinition.discover;
+        overrideDefinition.discover = (context) => {
+          fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
+          return discoverOverride(context);
+        };\n`);
+      const result = run(`${included ? 'y' : 'n'}\ny\nn\nn\n`);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.existsSync(probes), included);
+      assert.equal(readConfig().backup.includeSensitive, String(included));
+      assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
+      if (included) assert.include(result.stdout, `codex_AGENTS.override.md: ${JSON.stringify(override)} -> ${JSON.stringify(override)}`);
+      else assert.notInclude(result.stdout, 'codex_AGENTS.override.md:');
+      assert.include(result.stdout, 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
+      assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
+    });
   });
 
   [false, true].forEach((enabled) => {

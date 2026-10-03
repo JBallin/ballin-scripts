@@ -169,6 +169,53 @@ describe('repository backup lifecycle', function() {
   });
 
   [
+    { tree: 'skills', operation: 'opendirSync' },
+    { tree: 'rules', operation: 'readSync' },
+    { tree: 'agents', operation: 'lstatSync' },
+    { tree: 'profiles', operation: 'opendirSync' },
+  ].forEach(({ tree, operation }) => {
+    it(`aborts before staging when selected Codex ${tree} directory discovery fails at ${operation}`, () => {
+      const codex = path.join(fs.realpathSync(home), '.codex');
+      const directory = tree === 'profiles' ? codex : path.join(codex, tree, 'nested');
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(path.join(directory, tree === 'profiles' ? 'personal.config.toml' : 'entry'), 'synthetic');
+      source('local shell\n');
+      const snapshot = `codex_${tree}.json`;
+      seedCache(snapshot, 'prior Codex cache\n');
+      seedCache('zshrc.sh', 'prior shell cache\n');
+      const before = state();
+      before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
+      saveState(before);
+      const result = run([], '', {}, `
+        const fs = require('fs');
+        const denied = () => { const error = new Error('synthetic directory denial'); error.code = 'EACCES'; throw error; };
+        const original = fs[${JSON.stringify(operation)}];
+        if (${JSON.stringify(operation)} === 'readSync') {
+          const open = fs.opendirSync;
+          fs.opendirSync = (...args) => {
+            const dir = open(...args);
+            if (process.cwd() === ${JSON.stringify(directory)}) dir.readSync = denied;
+            return dir;
+          };
+        } else {
+          fs[${JSON.stringify(operation)}] = (...args) => {
+            if (process.cwd() === ${JSON.stringify(directory)}) denied();
+            return original(...args);
+          };
+        }
+      `);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, snapshot);
+      assert.include(result.stderr, 'No snapshots were published');
+      assert.deepEqual(state().requests, [], 'discovery failure must precede all remote reads');
+      assert.equal(cached(snapshot), 'prior Codex cache\n');
+      assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh'].sort());
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    });
+  });
+
+  [
     { base: undefined, remote: undefined, local: 'local\n', publish: true },
     { base: undefined, remote: 'local\n', local: 'local\n', publish: false },
     { base: undefined, remote: 'other\n', local: 'local\n', conflict: true },

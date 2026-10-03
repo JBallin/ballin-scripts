@@ -312,9 +312,12 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes
 };
 
 const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapshot[] | null => {
-  const failure = observations.find((source) => source.status === 'discovery-failed' && source.reason === 'source-limit-exceeded');
+  const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || source.definition.category === 'codex'));
   if (failure && failure.status === 'discovery-failed') {
-    writeStderrLine(`ballin backup: ${failure.definition.name}: recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'} No snapshots were published.`);
+    const diagnostic = failure.reason === 'source-limit-exceeded'
+      ? `recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'}`
+      : 'selected Codex source could not be discovered completely';
+    writeStderrLine(`ballin backup: ${failure.definition.name}: ${diagnostic}. No snapshots were published.`);
     return null;
   }
   let codexBytes = 0;

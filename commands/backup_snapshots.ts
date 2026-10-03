@@ -629,6 +629,7 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   fileSnapshot('editor', 'sensitive', 'vimrc', '.vimrc'),
   fileSnapshot('editor', 'sensitive', 'nanorc', '.nanorc'),
   codexSnapshot('codex_AGENTS.md', 'AGENTS.md'),
+  codexSnapshot('codex_AGENTS.override.md', 'AGENTS.override.md'),
   codexSnapshot('codex_config.toml', 'config.toml'),
   codexSnapshot('codex_profiles.json', '.', true, true),
   codexSnapshot('codex_hooks.json', 'hooks.json'),
