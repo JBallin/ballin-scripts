@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { snapshotDefinitions } = require('../commands/backup_snapshots.ts');
-const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError, SnapshotCwdError, sourceStat } = require('../commands/recursive_snapshot.ts');
+const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError, SnapshotCwdError, sourceStat } = require('../commands/recursive_snapshot.ts');
 import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 
 const collectorPath = path.resolve(__dirname, '../commands/recursive_snapshot.ts');
@@ -534,6 +534,53 @@ describe('Codex durable snapshots', () => {
       assert.equal(captured.size, insideStat.size);
       assert.equal(reads, 0);
     } finally { fs.lstatSync = originalStat; fs.readSync = originalRead; }
+  });
+
+  it('keeps unreadable leaves available in metadata discovery but fails review and capture', () => {
+    const originalOpen = fs.openSync;
+    const originalRead = fs.readSync;
+    const previous = process.cwd();
+    const previousStat = fs.statSync('.');
+    const cases = [
+      { name: 'codex_skills.json', relative: 'skills/leaf', directory: 'skills', profiles: false, skills: true },
+      { name: 'codex_rules.json', relative: 'rules/leaf', directory: 'rules', profiles: false, skills: false },
+      { name: 'codex_agents.json', relative: 'agents/leaf', directory: 'agents', profiles: false, skills: false },
+      { name: 'codex_profiles.json', relative: 'guard.config.toml', directory: '.', profiles: true, skills: false },
+    ];
+    cases.forEach(({ relative }) => write(relative, 'SYNTHETIC_UNREADABLE_CONTENT'));
+    let opens = 0;
+    let reads = 0;
+    try {
+      fs.openSync = (candidate: string, flags: number) => {
+        if (['leaf', 'guard.config.toml'].includes(path.basename(candidate))) {
+          opens++;
+          throw Object.assign(new Error('synthetic unreadable leaf'), { code: 'EACCES' });
+        }
+        return originalOpen(candidate, flags);
+      };
+      fs.readSync = (...args: unknown[]) => { reads++; return originalRead(...args); };
+      cases.forEach(({ name, directory, profiles, skills }) => {
+        const sourceRoot = path.join(root, directory);
+        assert.equal(discover(name).status, 'available');
+        assert.isNotEmpty(recursiveFiles(sourceRoot, profiles, skills));
+        assert.equal(opens, 0);
+        assert.equal(reads, 0);
+      });
+      cases.forEach(({ directory, profiles, skills }) => {
+        const sourceRoot = path.join(root, directory);
+        for (const operation of [() => reviewRecursiveFiles(sourceRoot, profiles, skills), () => recursiveSnapshot(sourceRoot, profiles, skills)]) {
+          let failure: NodeJS.ErrnoException | undefined;
+          try { operation(); } catch (error) { failure = error as NodeJS.ErrnoException; }
+          assert.equal(failure?.code, 'EACCES');
+        }
+        assert.equal(process.cwd(), previous);
+        const restored = fs.statSync('.');
+        assert.equal(restored.ino, previousStat.ino);
+        assert.equal(restored.dev, previousStat.dev);
+      });
+      assert.equal(opens, 8);
+      assert.equal(reads, 0);
+    } finally { fs.openSync = originalOpen; fs.readSync = originalRead; }
   });
 
   it('fails empty or invalid captures with safe diagnostics and no stdout', () => {

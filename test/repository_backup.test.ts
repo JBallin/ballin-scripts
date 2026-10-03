@@ -132,6 +132,42 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
   });
 
+  ['skills', 'rules', 'agents', 'profiles'].forEach((tree) => {
+    it(`aborts ordinary backup without cache promotion when a selected Codex ${tree} leaf is unreadable`, () => {
+      const codex = path.join(fs.realpathSync(home), '.codex');
+      const leaf = tree === 'profiles' ? path.join(codex, 'personal.config.toml') : path.join(codex, tree, 'entry');
+      fs.mkdirSync(path.dirname(leaf), { recursive: true });
+      fs.writeFileSync(leaf, 'synthetic');
+      source('local shell\n');
+      const snapshot = `codex_${tree}.json`;
+      seedCache(snapshot, 'prior Codex cache\n');
+      seedCache('zshrc.sh', 'prior shell cache\n');
+      const before = state();
+      before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
+      saveState(before);
+      const attempts = path.join(root, 'unreadable-attempts');
+      const result = run([], '', { NODE_OPTIONS: `--require=${JSON.stringify(path.join(root, 'preload.cjs'))}` }, `
+        const fs = require('fs'), path = require('path'), open = fs.openSync;
+        fs.openSync = (file, ...args) => {
+          if (typeof file === 'string' && path.resolve(file) === ${JSON.stringify(leaf)}) {
+            fs.appendFileSync(${JSON.stringify(attempts)}, process.argv[1] + '\\n');
+            const error = new Error('synthetic denied leaf'); error.code = 'EACCES'; throw error;
+          }
+          return open(file, ...args);
+        };
+      `);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, `failed to snapshot ${snapshot}`);
+      assert.deepEqual(state().requests, [], 'capture must fail before remote reads or publication');
+      assert.equal(cached(snapshot), 'prior Codex cache\n');
+      assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh'].sort());
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+      assert.isTrue(fs.readFileSync(attempts, 'utf8').trim().split('\n').every((entry: string) => entry.endsWith('recursive_snapshot.ts')),
+        'denied leaf opens belong to capture, not discovery');
+    });
+  });
+
   [
     { base: undefined, remote: undefined, local: 'local\n', publish: true },
     { base: undefined, remote: 'local\n', local: 'local\n', publish: false },

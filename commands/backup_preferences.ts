@@ -81,13 +81,13 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
       if (!logical || !['file', 'directory'].includes(observation.source.kind)) throw new Error('Unsupported review source');
       let resolved: string;
       if (definition.category === 'codex') {
-        const { fileStat, recursiveFiles, sourceStat } = require('./recursive_snapshot.ts');
+        const { fileStat, reviewRecursiveFiles, sourceStat } = require('./recursive_snapshot.ts');
         const args = observation.collector.args;
         if (!args || !args[1]) throw new Error('Unsupported review source');
         resolved = observation.source.kind === 'directory' ? args[1] : path.join(args[1], args[3]);
         if (observation.source.kind === 'directory') {
           if (!sourceStat(path.dirname(resolved), path.basename(resolved)).isDirectory()) throw new Error('Unsupported source type');
-          recursiveFiles(resolved, args[2] === 'profiles', args[2] === 'skills');
+          reviewRecursiveFiles(resolved, args[2] === 'profiles', args[2] === 'skills');
         } else {
           fileStat(args[1], args[3]);
         }

@@ -111,7 +111,7 @@ const fileEntry = (root: string, relative: string, maxBytes = snapshotByteLimit)
   return { path: relative.split(path.sep).join('/'), executable, content: bytes.toString('base64') };
 };
 
-const recursiveFiles = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}): string[] => {
+const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits: SnapshotLimits, reviewReadability: boolean): string[] => {
   if (!sourceStat(path.dirname(root), path.basename(root)).isDirectory()) return [];
   const files: string[] = [];
   const pending = [''];
@@ -133,13 +133,23 @@ const recursiveFiles = (root: string, profilesOnly = false, skills = false, limi
           requireWithinLimit('bytes', pathBytes, limits.maxBytes ?? snapshotByteLimit);
           const stat = fs.lstatSync(name);
           if (stat.isDirectory() && !profilesOnly) pending.push(entry);
-          else if (stat.isFile()) { readableFileStat(name); files.push(entry); }
+          else if (stat.isFile()) {
+            if (reviewReadability) readableFileStat(name);
+            files.push(entry);
+          }
         }
       } finally { directory.closeSync(); }
     });
   }
   return files.sort();
 };
+// Discovery must not turn a capture-time read failure into an optional skip.
+const recursiveFiles = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}): string[] => (
+  walkFiles(root, profilesOnly, skills, limits, false)
+);
+const reviewRecursiveFiles = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}): string[] => (
+  walkFiles(root, profilesOnly, skills, limits, true)
+);
 
 const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}): string => {
   const files = recursiveFiles(root, profilesOnly, skills, limits);
@@ -169,7 +179,7 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
   return snapshot;
 };
 
-module.exports = { checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, recursiveSnapshot,
+module.exports = { checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
   snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, requireWithinLimit };
 export type { RecursiveEntry, SnapshotLimits };
 
