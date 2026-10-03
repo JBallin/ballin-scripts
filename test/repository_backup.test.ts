@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture, commitFixture } = require('./helpers/repository.ts');
 const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('../commands/backup_config.ts');
 const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
@@ -106,6 +106,97 @@ describe('repository backup lifecycle', function() {
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
+  const priorSuccess = '2020-01-01T00:00:00.000Z\n';
+  const statusFile = () => path.join(cache, '.last-success');
+  const seedSuccess = () => {
+    fs.mkdirSync(cache, { recursive: true, mode: 0o700 }); fs.chmodSync(cacheRoot, 0o700); fs.chmodSync(cache, 0o700);
+    fs.writeFileSync(statusFile(), priorSuccess, { mode: 0o600 });
+  };
+  const statusClock = (time: number) => `Date.now = () => ${time};`;
+  it('records changed and genuine no-op completion locally without another publication', () => {
+    source(); seedSuccess();
+    const firstTime = Date.parse('2026-01-01T00:00:00.000Z');
+    const first = run([], '', {}, statusClock(firstTime)); ok(first);
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), `${new Date(firstTime).toISOString()}\n`);
+    assert.include(first.stdout, `Last recorded successful backup on this installation: ${new Date(firstTime).toISOString()}`);
+    assert.equal(cached(), 'local\n'); assert.equal(publications().length, 1);
+    const head = state().head; const second = run([], '', {}, statusClock(firstTime + 1)); ok(second);
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), `${new Date(firstTime + 1).toISOString()}\n`);
+    assert.equal(state().head, head); assert.equal(publications().length, 1);
+    assert.notProperty(state().commits[head].files, '.last-success');
+  });
+  for (const fault of ['reject', 'advance', 'orphan', 'wrong-readback']) {
+    it(`preserves prior local success after ${fault} publication failure`, () => {
+      source(); seedSuccess(); const value = state(); value.faults.publish = fault; saveState(value);
+      assert.equal(run().status, 1);
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  for (const fault of ['ambiguous', 'malformed']) {
+    it(`records success when ${fault} transport is resolved by coherent writer confirmation`, () => {
+      source(); seedSuccess(); const value = state(); value.faults.publish = fault; saveState(value);
+      ok(run()); assert.notEqual(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  it('preserves the record after collection failure and conflict', () => {
+    source(); seedSuccess(); fs.unlinkSync(path.join(bin, 'cat'));
+    fs.writeFileSync(path.join(bin, 'cat'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    assert.equal(run().status, 1); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    fs.unlinkSync(path.join(bin, 'cat')); fs.symlinkSync('/bin/cat', path.join(bin, 'cat'));
+    saveState(fixtureState({ 'zshrc.sh': 'conflicting\n' }));
+    assert.equal(run().status, 1); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+  });
+  for (const condition of ["String(args[1]).includes('.ballin-backup-cache-')", "String(args[0]).includes('ballin-backup-remote-')"]) {
+    it(`preserves the record when required cache or temporary cleanup fails: ${condition}`, () => {
+      source(); seedSuccess();
+      if (condition.includes('remote-')) saveState(fixtureState({ 'zshrc.sh': 'local\n' }));
+      const method = condition.includes('cache-') ? 'copyFileSync' : 'rmSync';
+      assert.equal(run([], '', {}, cacheFailure(method, condition)).status, 1);
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  for (const method of ['writeFileSync', 'renameSync']) {
+    it(`treats local timestamp ${method} failure as advisory after data success`, () => {
+      source(); seedSuccess();
+      const result = run([], '', {}, cacheFailure(method, "String(args[0]).includes('.last-success-')"));
+      ok(result); assert.include(result.stderr, 'Backup succeeded, but Ballin could not record the local last-success time.');
+      assert.equal(remote('zshrc.sh'), 'local\n'); assert.equal(cached(), 'local\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.equal(publications().length, 1);
+      assert.notInclude(result.stderr, 'fixture failure'); ok(run());
+      assert.notEqual(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  it('does not make unsafe advisory status a fatal snapshot-cache error', () => {
+    source(); seedSuccess(); fs.unlinkSync(statusFile());
+    const target = path.join(root, 'external-status'); fs.writeFileSync(target, priorSuccess); fs.symlinkSync(target, statusFile());
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = run(); ok(result); assert.include(result.stdout, 'on this installation: unavailable');
+      assert.include(result.stderr, 'could not record'); assert.equal(fs.readFileSync(target, 'utf8'), priorSuccess);
+      assert.isTrue(fs.lstatSync(statusFile()).isSymbolicLink());
+    }
+    assert.equal(publications().length, 1);
+  });
+  it('reports unavailable during validated setup without creating status; reads never advance it', () => {
+    const before = config(); const setup = run(['setup']); ok(setup);
+    assert.include(setup.stdout, 'on this installation: unavailable'); assert.isFalse(fs.existsSync(statusFile()));
+    assert.deepEqual(config(), before);
+    source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
+    ok(run(['setup'])); ok(run(['read', 'zshrc.sh'])); ok(run(['open']));
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
+    ok(run(['disconnect'])); assert.isFalse(fs.existsSync(cacheRoot));
+  });
+  it('retains historical local success through same-identity rename and later remote change', () => {
+    source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
+    const value = state(); value.name = 'renamed';
+    commitFixture(value, { ...value.commits[value.head].files, 'zshrc.sh': Buffer.from('later remote bytes\n').toString('base64') });
+    saveState(value);
+    const setup = run(['setup']); ok(setup);
+    assert.include(setup.stdout, `on this installation: ${recorded.trim()}`);
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
+    assert.equal(config().backup.repository.name, 'renamed');
+    assert.equal(publications().length, 1);
+  });
+
   [
     { base: undefined, remote: undefined, local: 'local\n', publish: true },
     { base: undefined, remote: 'local\n', local: 'local\n', publish: false },
@@ -141,7 +232,7 @@ describe('repository backup lifecycle', function() {
     const result = run();
 
     ok(result);
-    assert.equal(result.stdout, '✚ ballin_config\n✚ zshrc\n');
+    assert.equal(result.stdout, '✚ ballin_config\n✚ zshrc\n' + `Last recorded successful backup on this installation: ${fs.readFileSync(path.join(cache, '.last-success'), 'utf8').trim()}\n`);
     const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string }[] } };
     assert.deepEqual(input.fileChanges.additions.map(({ path: filePath }) => filePath), ['zshrc.sh', 'ballin_config']);
   });

@@ -44,6 +44,7 @@ const {
   unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryDestination } from './backup_config.ts';
+const { lastSuccessFileName, recordLastBackupSuccess, lastBackupSuccessLine } = require('./backup_status.ts');
 import type { RepositoryError, RepositoryRead } from './backup_repository.ts';
 
 import type {
@@ -238,12 +239,14 @@ const errorMessage = (error: unknown): string => (
   error instanceof Error ? `: ${error.message}` : ''
 );
 
-const restrictCacheEntryPermissions = (entryPath: string): void => {
+const restrictCacheEntryPermissions = (entryPath: string, depth = 0): void => {
   const stat = fs.lstatSync(entryPath);
   if (stat.isDirectory()) {
     fs.chmodSync(entryPath, 0o700);
     for (const name of fs.readdirSync(entryPath)) {
-      restrictCacheEntryPermissions(path.join(entryPath, name));
+      // Advisory status must not participate in required snapshot-cache repair.
+      if (depth === 1 && /^[a-f0-9]{64}$/u.test(path.basename(entryPath)) && name === lastSuccessFileName) continue;
+      restrictCacheEntryPermissions(path.join(entryPath, name), depth + 1);
     }
   } else if (stat.isFile()) {
     fs.chmodSync(entryPath, 0o600);
@@ -495,6 +498,10 @@ const runRepositoryBackup = (
   }
   if (!completed) return false;
   writeSnapshotStatuses(completed);
+  if (!recordLastBackupSuccess(cacheRoot, destination)) {
+    writeStderrLine('Backup succeeded, but Ballin could not record the local last-success time.');
+  }
+  writeStdoutLine(lastBackupSuccessLine(cacheRoot, destination));
   return true;
 };
 

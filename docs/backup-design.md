@@ -340,6 +340,25 @@ median 0.505 → 0.055 seconds. This removes redundant dispatch work after Balli
 validation. Full no-op (11 API calls),
 publishing (21) and reconnect selection/first validation (11) are unchanged.
 
+## Local last-success time
+
+Normal repository backup records one canonical UTC time after publication or
+no-op confirmation, required comparison-cache work and temporary cleanup complete.
+Timestamp eligibility follows normal writer success, including runs that skip
+sources after discovery failure.
+The owner-only local file is colocated in the existing cache namespace keyed by
+stable owner/repository identity and selected branch. Mutable repository name and
+current revision are not part of the record. Rename and later remote changes do
+not erase a prior local successful run; disconnect/new linkage invalidates it
+through existing cache-root lifecycle handling.
+
+Timestamp replacement is atomic and advisory. Failure preserves the prior valid
+time and does not fail, roll back or republish the completed data operation. Status
+is excluded from required snapshot-cache permission repair; reads do not repair or
+create state and reject missing, malformed, insecure or future times as unavailable.
+It is never exported through `ballin_config`, written to GitHub, or sent in analytics.
+There is no receipt, current-state verification or freshness policy associated with it.
+
 ## Portable preferences
 
 Export and restoration use separate explicit allowlists, independent of bundled
