@@ -197,20 +197,16 @@ Ballin creates later. If authentication is missing, run
 `gh auth login --hostname github.com`. If Ballin shows an unexpected account,
 check whether an environment token is overriding your saved `gh` login.
 
-Fresh create or reconnect setup asks whether to include **sensitive sources**:
-raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx installation metadata.
-This single choice is saved as `backup.includeSensitive` and defaults off.
-Opting in covers current and future supported sensitive sources in the maintained
-catalog. Existing opt-ins include Codex configuration; review the
-[source list](backup-sources.md) after source support changes.
-Reconnect fully inspects the existing backup before asking. Declining performs
-no sensitive-source discovery. Selecting it reviews logical paths, resolved
-regular-file targets (including existing dotfile symlinks outside `HOME`),
-Codex directory roots, and missing or unavailable sources. Codex directory
-discovery inspects names and file types recursively, without reading contents. pipx is described separately. Review
-reads no raw contents and runs no collectors; access or resolution errors stop
-setup. See
-[Source review](backup-sources.md#repository-inclusion).
+Fresh create or reconnect setup offers one default-off `backup.includeSensitive`
+choice for raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx metadata.
+Opting in covers current and future supported sensitive sources; existing opt-ins
+include added sources. Review the [source list](backup-sources.md) when support
+changes.
+
+Reconnect inspects the existing backup before asking. Declining skips
+sensitive-source discovery. Selecting it reviews paths, resolved targets, and
+availability without reading file contents or running collectors. Access or
+resolution errors stop setup. See [source review](backup-sources.md#repository-inclusion).
 
 Final confirmation covers the destination and source selection. If you decline,
 Ballin makes no backup-specific changes. If you approve, it revalidates the

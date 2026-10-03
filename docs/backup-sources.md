@@ -55,7 +55,9 @@ raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx installation metada
 New and replacement installations start with these sensitive sources off and
 make their own choice; approval is never recovered from a backup. Configured
 setup retains established local consent; fresh reconnect requires its own
-review.
+review. The choice covers current and future supported sensitive sources,
+including Codex for existing opt-ins. Setup discloses this scope; source changes
+are documented in the source guide and release/update guidance.
 
 Review shows logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
@@ -80,13 +82,6 @@ credentials.
 Omitting a category from future captures does not delete older remote files,
 history, or cached content.
 
-The single sensitive-source choice covers the maintained catalog, including
-future supported sources. Existing opt-ins include Codex configuration; no
-additional confirmation or approval record is required. Setup states this scope
-before acceptance. New source support is disclosed in the source documentation
-and release/update guidance. Turning the choice off excludes every sensitive
-source before discovery; consent remains local and is not restored from backup.
-
 ## Codex configuration
 
 Ballin uses the active `CODEX_HOME` when set, otherwise `~/.codex`. Personal
@@ -94,8 +89,6 @@ skills at `~/.agents/skills/` and marketplace configuration are selected
 separately at fixed home paths, independent of `CODEX_HOME`.
 `codex_skills.json` retains the legacy `CODEX_HOME/skills/` location for
 compatibility; `codex_user_skills.json` captures the current shared personal root.
-If both origins resolve to the same directory, both snapshot identities are
-preserved and both archive outputs count toward the combined capture limit.
 Project `.codex/` directories are repository-owned and are not global sources.
 Both global instruction files, `AGENTS.md` and `AGENTS.override.md`, are backed
 up separately when present, regardless of which Codex currently uses.
@@ -104,9 +97,8 @@ A discovery failure for a selected Codex source stops the backup before staging;
 Ballin does not publish a partial capture. Absent or policy-excluded sources
 remain skipped.
 
-Whole configuration files preserve inline hooks, custom instructions, and any
-workflow preferences stored there, including commit/PR instructions. They can
-also preserve embedded project trust levels and hook approval hashes. Ballin
+Whole configuration files preserve instructions, inline hooks, workflow
+preferences, and embedded project trust levels or hook approval hashes. Ballin
 does not filter those values, replay approvals, execute hooks, or automatically
 restore configuration. Review configuration before manually using a backup;
 manual restoration can carry forward saved trust settings. Standalone
@@ -116,24 +108,21 @@ and external files are not collected merely because they are referenced.
 Recursive snapshots are versioned JSON archives of regular files, with sorted
 relative paths, base64 bytes, and an executable flag. Hidden files and binary
 assets are included; empty directories, symlinks, special files, `.git` metadata,
-and `.DS_Store` are omitted. The root `.system` directory is also omitted from both skill sources. Codex
+and `.DS_Store` are omitted. Both skill sources omit root `.system`. Codex
 source paths reject descendant symlinks; an explicitly selected Codex root may
 be a symlink. Empty or generated-only directory sources are not published.
-Traversal and reads temporarily pin each selected directory object, verify its
-identity, and use immediate names within it. Replacing an ancestor cannot
-redirect those operations to another tree. Review opens and closes selected
-regular files to check readability without reading their contents. Capture is
-not an atomic snapshot of concurrent file edits; failures stop the capture.
+Review opens and closes selected regular files to check readability without
+reading their contents. Capture is not an atomic snapshot of concurrent edits.
+See [directory handling](backup-design.md#shared-inclusion-policy).
 
 Codex capture supports up to **16 MiB combined** per backup after normalization,
 including archive metadata and base64 content, and **8,192 visited entries** per
-recursive source. Compared Codex cache files have the same 16 MiB file limit;
-unused cache files are not checked for this limit. Exceeding a limit stops the
-whole backup before publication or cache promotion. Ballin does not truncate
+recursive source. Both skill archives count toward the combined limit, even
+when their roots overlap. Exceeding a limit stops the whole backup before publication or cache promotion. Ballin does not truncate
 files or selectively omit content to fit. Reduce the supported authoring-tree
 size or turn off sensitive sources before retrying. Existing remote snapshots
-remain retained and can exceed the per-capture limit; this does not limit the
-repository size or total memory used to inspect historical remote content.
+remain retained; these limits do not bound repository size or total memory
+used to inspect historical remote content.
 
 Ballin does not select authentication files, sessions/history, caches, logs,
 worktrees, databases, memory/runtime state, or separate trust stores. The entire
@@ -141,11 +130,9 @@ worktrees, databases, memory/runtime state, or separate trust stores. The entire
 installation/cache state are not one reliably bounded source; the personal
 marketplace manifest preserves references, not plugin content. These exclusions
 are source boundaries, not a scan for secrets within approved authoring files.
-Desktop-only settings whose durable storage is not independently identified
-remain outside capture; Ballin does not collect global runtime state to guess
-at branch-prefix or other workflow preferences.
+Desktop-only settings without independently identified durable storage remain
+outside capture. Deprecated `CODEX_HOME/prompts/` is excluded.
 
 New supported sources undergo repository inclusion and sensitivity review;
-the existing local sensitive-source choice then applies. Unknown groups remain
-excluded, and restored preferences cannot enable local consent. See
+unknown groups remain excluded. See
 [Backup design](backup-design.md#shared-inclusion-policy).

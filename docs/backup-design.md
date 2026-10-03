@@ -421,12 +421,9 @@ Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
 sources: both are captured when present, regardless of instruction precedence.
 Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.json`,
 independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
-`codex_skills.json`. Both use the skills archive exclusions, including root
-`.system`, share the combined Codex byte budget, and have separate per-source
-entry limits.
-The legacy and current personal skill sources retain distinct canonical snapshot
-identities even when `CODEX_HOME=HOME/.agents` selects the same directory. Both
-staged archive outputs count toward the combined Codex capture budget.
+`codex_skills.json`. Both omit root `.system` and retain distinct snapshot
+identities, even when `CODEX_HOME=HOME/.agents` selects the same directory. Both staged archives count
+toward the combined byte budget, with separate per-source entry limits.
 
 Codex file capture is intact, including embedded trust settings in main/profile
 TOML, with existing final-newline/empty-file normalization. It does not execute
@@ -455,7 +452,8 @@ blobs. Remote-reader resource bounds remain separate follow-up work.
 Codex traversal and reads use a private synchronous cwd-pinning helper. Each
 directory identity is captured from its pinned parent and verified after entry;
 callbacks use only the pinned directory or immediate names. Leaf opens reject
-symlinks, and caller cwd identity is verified after restoration. Restoration
+symlinks; review opens and closes regular files to check readability without
+reading contents. Caller cwd identity is verified after restoration. Restoration
 failure is fatal and bypasses optional-source handling. These checks pin selected
 directory objects; they do not provide an atomic snapshot of concurrent edits.
 
@@ -469,10 +467,8 @@ disclose the expanded catalog independently of that advisory.
 
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
 The observation entrypoint accepts a native boolean, `includeSensitive`,
-default false; non-boolean supplied input fails before discovery. It is an
-internal argument parsed from the single local `backup.includeSensitive` setting.
-Inventory and preferences form the fixed baseline. Unknown groups are excluded;
-future sources/groups require an explicit inclusion and sensitivity review.
+default false; non-boolean supplied input fails before discovery.
+Inventory and preferences form the fixed baseline; unknown groups are excluded.
 
 Policy-aware observation gates discovery itself. `excluded-by-policy` carries
 the definition and reason, without a source or collector; collection records
@@ -484,8 +480,7 @@ content a current capture.
 
 `backup.includeSensitive` defaults off and accepts native booleans or exact
 `"true"`/`"false"` strings. Invalid capture consent fails before discovery. Setup
-uses one review/confirmation, covering raw files and pipx, and never restores
-consent. Configured revalidation preserves it. Setup default refresh defers new
+uses one review/confirmation for sensitive sources. Setup default refresh defers new
 destination/consent leaves until the confirmed configuration transaction.
 See [source review](backup-sources.md#repository-inclusion).
 

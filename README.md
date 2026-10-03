@@ -82,7 +82,7 @@ if you skip setup during installation, run `ballin backup setup` later.
 Setup offers one default-off choice for sensitive sources: raw shell/Git/editor/Codex
 configuration, `.nvmrc`, and pipx installation metadata. The choice is saved as
 `backup.includeSensitive` and covers current and future supported sensitive
-sources. Codex configuration is now included for existing opt-ins; see [source review](docs/backup-sources.md#repository-inclusion).
+sources. See [source review](docs/backup-sources.md#repository-inclusion).
 
 Reconnecting can recover supported Ballin preferences; existing local choices
 take precedence. See
