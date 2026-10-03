@@ -271,6 +271,25 @@ coverage, or successful publication.
 `ballin backup read <file>` prints exact supported snapshot bytes;
 `ballin backup open` opens the validated destination. Both work with read-only
 access and leave caches unchanged. Use only one Mac to back up to a destination.
+
+To inspect changes already saved, copy a full commit SHA from the backup's GitHub
+commit page, or list recent IDs with
+`gh api repos/<owner>/<repository>/commits --jq '.[].sha'`. Then run `ballin backup diff <full-commit-sha>` for a summary
+against that revision's immediate parent. This compares saved snapshots, without
+collecting current local sources or changing the backup or comparison cache.
+
+Request text content deliberately with `--snapshot <canonical-name>`. Configuration
+values may appear in that output and terminal logs. Binary or oversized detail is
+refused; rerun without `--snapshot` for the summary. A removed snapshot means the
+saved file was removed; it does not establish why. A clean comparison does not
+prove a successful backup run, completeness or freshness.
+
+Inspection requires complete repository evidence. It refuses merges, unsupported
+initialization baselines, unreachable revisions, destination changes and exhausted
+read limits; older revisions may need deliberate inspection in GitHub. Exit 0
+means the comparison completed, with or without changes; 1 means inspection or
+requested detail could not complete; 2 means invalid arguments.
+
 Stop using the previous Mac for backups before publishing from a replacement Mac.
 A reconnect has no trusted base and cannot overwrite differing remote content;
 inspect and manually reconcile each conflict using the

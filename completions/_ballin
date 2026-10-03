@@ -10,7 +10,7 @@ _ballin() {
     2) compadd -- backup config doctor self-update setup uninstall update ;;
     3)
       case "${words[2]}" in
-        backup) compadd -- open read setup disconnect ;;
+        backup) compadd -- open read diff setup disconnect ;;
         config) compadd -- get set reset ;;
       esac
       ;;
