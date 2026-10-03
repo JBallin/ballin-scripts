@@ -70,7 +70,8 @@ $ ballin update
 ...
 ✔ vs_settings
 ✔ zprofile
-✔ zshrc
+✎ zshrc
+View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```
 
 ## New Mac setup
