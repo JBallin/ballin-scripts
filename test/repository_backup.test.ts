@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture, commitFixture } = require('./helpers/repository.ts');
 const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('../commands/backup_config.ts');
 const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
@@ -144,6 +144,7 @@ describe('repository backup lifecycle', function() {
       const snapshot = `codex_${tree}.json`;
       seedCache(snapshot, 'prior Codex cache\n');
       seedCache('zshrc.sh', 'prior shell cache\n');
+      seedSuccess();
       const before = state();
       before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
       saveState(before);
@@ -163,7 +164,8 @@ describe('repository backup lifecycle', function() {
       assert.deepEqual(state().requests, [], 'capture must fail before remote reads or publication');
       assert.equal(cached(snapshot), 'prior Codex cache\n');
       assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
-      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh'].sort());
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess, 'failed Codex capture must not refresh success time');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh', '.last-success'].sort());
       assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
       assert.isTrue(fs.readFileSync(attempts, 'utf8').trim().split('\n').every((entry: string) => entry.endsWith('recursive_snapshot.ts')),
         'denied leaf opens belong to capture, not discovery');
@@ -187,6 +189,7 @@ describe('repository backup lifecycle', function() {
       const snapshot = `codex_${tree}.json`;
       seedCache(snapshot, 'prior Codex cache\n');
       seedCache('zshrc.sh', 'prior shell cache\n');
+      seedSuccess();
       const before = state();
       before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
       saveState(before);
@@ -214,9 +217,117 @@ describe('repository backup lifecycle', function() {
       assert.deepEqual(state().requests, [], 'discovery failure must precede all remote reads');
       assert.equal(cached(snapshot), 'prior Codex cache\n');
       assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
-      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh'].sort());
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess, 'failed Codex capture must not refresh success time');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh', '.last-success'].sort());
       assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
     });
+  });
+
+  const priorSuccess = '2020-01-01T00:00:00.000Z\n';
+  const statusFile = () => path.join(cache, '.last-success');
+  const seedSuccess = () => {
+    fs.mkdirSync(cache, { recursive: true, mode: 0o700 }); fs.chmodSync(cacheRoot, 0o700); fs.chmodSync(cache, 0o700);
+    fs.writeFileSync(statusFile(), priorSuccess, { mode: 0o600 });
+  };
+  const statusClock = (time: number) => `Date.now = () => ${time};`;
+  it('records changed and genuine no-op completion locally without another publication', () => {
+    source(); seedSuccess();
+    const firstTime = Date.parse('2026-01-01T00:00:00.000Z');
+    const beforeCollection = `
+      let output = ''; const write = process.stdout.write.bind(process.stdout);
+      process.stdout.write = (...args) => { output += args[0]; return write(...args); };
+      const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
+      const observe = snapshots.observeSnapshotSources;
+      snapshots.observeSnapshotSources = (...args) => {
+        if (output !== 'Previous successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\\n') throw new Error('prior context missing before collection');
+        return observe(...args);
+      };
+    `;
+    const first = run([], '', { TZ: 'America/Los_Angeles' }, statusClock(firstTime) + beforeCollection); ok(first);
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), `${new Date(firstTime).toISOString()}\n`);
+    assert.equal(first.stdout, `Previous successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\n✚ ballin_config\n✚ zshrc\nView changes: https://github.com/fixture-user/ballin-backups/commit/${state().head}\n`);
+    assert.equal(cached(), 'local\n'); assert.equal(publications().length, 1);
+    const head = state().head; const second = run([], '', { TZ: 'America/Los_Angeles' }, statusClock(firstTime + 1)); ok(second);
+    assert.equal(second.stdout, 'Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00\n✔ ballin_config\n✔ zshrc\n');
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), `${new Date(firstTime + 1).toISOString()}\n`);
+    assert.equal(state().head, head); assert.equal(publications().length, 1);
+    assert.notProperty(state().commits[head].files, '.last-success');
+  });
+  for (const fault of ['reject', 'advance', 'orphan', 'wrong-readback']) {
+    it(`preserves prior local success after ${fault} publication failure`, () => {
+      source(); seedSuccess(); const value = state(); value.faults.publish = fault; saveState(value);
+      const result = run([], '', { TZ: 'America/Los_Angeles' }); assert.equal(result.status, 1);
+      assert.equal(result.stdout, 'Previous successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.notInclude(result.stdout, 'View changes:');
+    });
+  }
+  for (const fault of ['ambiguous', 'malformed']) {
+    it(`records success when ${fault} transport is resolved by coherent writer confirmation`, () => {
+      source(); seedSuccess(); const value = state(); value.faults.publish = fault; saveState(value);
+      ok(run()); assert.notEqual(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  it('preserves the record after collection failure and conflict', () => {
+    source(); seedSuccess(); fs.unlinkSync(path.join(bin, 'cat'));
+    fs.writeFileSync(path.join(bin, 'cat'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    assert.equal(run().status, 1); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    fs.unlinkSync(path.join(bin, 'cat')); fs.symlinkSync('/bin/cat', path.join(bin, 'cat'));
+    saveState(fixtureState({ 'zshrc.sh': 'conflicting\n' }));
+    assert.equal(run().status, 1); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+  });
+  for (const condition of ["String(args[1]).includes('.ballin-backup-cache-')", "String(args[0]).includes('ballin-backup-remote-')"]) {
+    it(`preserves the record when required cache or temporary cleanup fails: ${condition}`, () => {
+      source(); seedSuccess();
+      if (condition.includes('remote-')) saveState(fixtureState({ 'zshrc.sh': 'local\n' }));
+      const method = condition.includes('cache-') ? 'copyFileSync' : 'rmSync';
+      assert.equal(run([], '', {}, cacheFailure(method, condition)).status, 1);
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  for (const method of ['writeFileSync', 'renameSync']) {
+    it(`treats local timestamp ${method} failure as advisory after data success`, () => {
+      source(); seedSuccess();
+      const result = run([], '', {}, cacheFailure(method, "String(args[0]).includes('.last-success-')"));
+      ok(result); assert.include(result.stderr, 'Backup succeeded, but Ballin could not record the local last-success time.');
+      assert.equal(remote('zshrc.sh'), 'local\n'); assert.equal(cached(), 'local\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.equal(publications().length, 1);
+      assert.include(result.stdout, `/commit/${state().head}\n`);
+      assert.notInclude(result.stderr, 'fixture failure');
+      const retry = run(); ok(retry); assert.notInclude(retry.stdout, 'View changes:');
+      assert.notEqual(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  it('does not make unsafe advisory status a fatal snapshot-cache error', () => {
+    source(); seedSuccess(); fs.unlinkSync(statusFile());
+    const target = path.join(root, 'external-status'); fs.writeFileSync(target, priorSuccess); fs.symlinkSync(target, statusFile());
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = run(); ok(result); assert.notInclude(result.stdout, 'Previous successful backup:');
+      assert.notInclude(result.stdout, 'unavailable');
+      assert.include(result.stderr, 'could not record'); assert.equal(fs.readFileSync(target, 'utf8'), priorSuccess);
+      assert.isTrue(fs.lstatSync(statusFile()).isSymbolicLink());
+    }
+    assert.equal(publications().length, 1);
+  });
+  it('reports unavailable during validated setup without creating status; reads never advance it', () => {
+    const before = config(); const setup = run(['setup']); ok(setup);
+    assert.include(setup.stdout, 'on this installation: unavailable'); assert.isFalse(fs.existsSync(statusFile()));
+    assert.deepEqual(config(), before);
+    source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
+    ok(run(['setup'])); ok(run(['read', 'zshrc.sh'])); ok(run(['open']));
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
+    ok(run(['disconnect'])); assert.isFalse(fs.existsSync(cacheRoot));
+  });
+  it('retains historical local success through same-identity rename and later remote change', () => {
+    source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
+    const value = state(); value.name = 'renamed';
+    commitFixture(value, { ...value.commits[value.head].files, 'zshrc.sh': Buffer.from('later remote bytes\n').toString('base64') });
+    saveState(value);
+    const setup = run(['setup']); ok(setup);
+    assert.include(setup.stdout, `on this installation: ${recorded.trim()}`);
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
+    assert.equal(config().backup.repository.name, 'renamed');
+    assert.equal(publications().length, 1);
   });
 
   [
@@ -706,6 +817,26 @@ describe('repository backup lifecycle', function() {
     const failed = run([], '', ttyEnv, progressPreload());
     assert.equal(failed.status, 1); assert.match(failed.stderr, /^Backing up\.\.\.\r\x1b\[2Kballin backup:/);
     assert.notMatch(failed.stdout, /[✔✚✎✖]/u);
+  });
+  it('keeps progress active after previous-run context during changed, no-op and failed backups', () => {
+    source(); seedSuccess();
+    for (const outcome of ['changed', 'no-op', 'failed']) {
+      fs.rmSync(path.join(root, 'progress.log'), { force: true });
+      if (outcome === 'failed') { const value = state(); value.faults.query = 'errors'; saveState(value); }
+      const result = run([], '', { ...ttyEnv, TZ: 'America/Los_Angeles' }, progressPreload());
+      assert.equal(result.status, outcome === 'failed' ? 1 : 0, result.stderr);
+      assert.match(result.stdout, /^Previous successful backup: .+ GMT-0[78]:00\n/);
+      assert.lengthOf(result.stdout.match(/Previous successful backup:/g), 1);
+      assert.notInclude(result.stdout, 'Last recorded successful backup');
+      if (outcome === 'changed') assert.include(result.stdout, `/commit/${state().head}\n`);
+      else assert.notInclude(result.stdout, 'View changes:');
+      const requests = progressRequests();
+      assert.isTrue(requests.some((request) => request.args.some((arg) => arg.endsWith('.zshrc'))));
+      assert.isTrue(requests.some((request) => request.args.includes('graphql')));
+      assert.isTrue(requests.every((request) => request.status === 'Backing up...'), JSON.stringify(requests));
+      assert.match(result.stderr, /^Backing up\.\.\.\r\x1b\[2K/);
+    }
+    assert.equal(publications().length, 1);
   });
   it('creates and confirms the marker and explanatory README before persisting reviewed local choices', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);

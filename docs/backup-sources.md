@@ -118,8 +118,8 @@ See [directory handling](backup-design.md#shared-inclusion-policy).
 Codex capture supports up to **16 MiB combined** per backup after normalization,
 including archive metadata and base64 content, and **8,192 visited entries** per
 recursive source. Both skill archives count toward the combined limit, even
-when their roots overlap. Exceeding a limit stops the whole backup before publication or cache promotion. Ballin does not truncate
-files or selectively omit content to fit. Reduce the supported authoring-tree
+when their roots overlap. Exceeding a limit stops the whole backup before
+publication or cache promotion. Ballin does not truncate files or selectively omit content to fit. Reduce the supported authoring-tree
 size or turn off sensitive sources before retrying. Existing remote snapshots
 remain retained; these limits do not bound repository size or total memory
 used to inspect historical remote content.
@@ -136,3 +136,17 @@ outside capture. Deprecated `CODEX_HOME/prompts/` is excluded.
 New supported sources undergo repository inclusion and sensitivity review;
 unknown groups remain excluded. See
 [Backup design](backup-design.md#shared-inclusion-policy).
+
+## Last successful backup
+
+Before collecting sources, Ballin shows `Previous successful backup:` with the
+last recorded successful run's local date, time and UTC offset for this
+installation, destination and branch. With no usable record, the line is omitted.
+`ballin backup setup` also shows the record or unavailable status; setup and
+recovery do not invent a previous time.
+
+Changed and unchanged successful runs update the local record; failed attempts
+do not. An unchanged run creates no repository commit just to record activity.
+If saving the time fails, Ballin reports an advisory while preserving backup
+success and the prior record. This time does not prove that every source was
+captured, that the repository matches your Mac now, or that the backup is fresh.
