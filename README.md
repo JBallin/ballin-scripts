@@ -37,8 +37,7 @@ and removal steps in [Installation and removal](docs/installation.md).
 ## Example output
 
 `ballin update` output depends on installed tools and enabled integrations. This
-example shows a fully configured run with automatic backups enabled. The commit
-URL is illustrative.
+example shows a fully configured run with automatic backups enabled.
 
 ```shell
 $ ballin update
