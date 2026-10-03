@@ -11,8 +11,8 @@ const configHelp = `Usage:
     ballin config reset
     ballin config --help
 
-Read settings with dot paths, such as update.cleanup.
-set updates an existing leaf; reset restores defaults.
+Read settings with dot paths, such as \`update.cleanup\`.
+\`set\` changes an existing setting; \`reset\` restores defaults.
 `;
 
 const runConfigCli = (args: string[] = process.argv.slice(2)): void => {

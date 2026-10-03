@@ -112,8 +112,8 @@ const runUninstallCommand = (): void => {
         process.stderr.write(`  ${linkPath}\n`);
       });
       process.stderr.write(
-        'Remove the listed links with rm. If removal fails because of permissions, '
-          + 'rerun rm with elevated permissions (for example, sudo rm).\n',
+        'Remove the listed links with `rm`. If removal fails because of permissions, '
+          + 'rerun `rm` with elevated permissions (for example, `sudo rm`).\n',
       );
     }
     if (unverifiedLinkPaths.length > 0) {
@@ -130,8 +130,7 @@ const runUninstallCommand = (): void => {
     return;
   }
 
-  writeStdoutLine('Deleted symlinked binaries');
-  writeStdoutLine('PEACE! You still ballin tho...');
+  writeStdoutLine('Removed Ballin command links and the local checkout.');
   writeStdoutLine();
 };
 

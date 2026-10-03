@@ -188,7 +188,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
   }
 
   if (!isTopLevelCommandName(command)) {
-    writeStderr(`Unknown Ballin command: ${command}\nTry: ballin --help\n`);
+    writeStderr(`Unknown Ballin command: ${command}\nTry: \`ballin --help\`\n`);
     process.exitCode = 2;
     return;
   }
