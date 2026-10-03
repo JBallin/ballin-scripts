@@ -1,0 +1,59 @@
+name: Manual Claude review
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  eligibility:
+    # Fetch PR state with read access before invoking the runtime.
+    if: >-
+      github.event.comment.body == '/claude-review' &&
+      github.event.comment.user.type == 'User' &&
+      github.event.sender.type == 'User' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      (github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.eligibility.outputs.eligible }}
+    steps:
+      - name: Check PR eligibility
+        id: eligibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          pr=$(timeout 30s gh api "repos/$REPO/pulls/$PR_NUMBER")
+          eligible=$(printf '%s' "$pr" | jq -er --arg repo "$REPO" --argjson number "$PR_NUMBER" '
+            if type != "object" then error("Invalid PR response")
+            elif (.number | type) != "number" or .number != $number
+              then error("Unexpected PR number")
+            else
+              .state == "open" and .draft == false and
+              .head.repo.full_name == $repo and .base.repo.full_name == $repo
+            end | tostring')
+          printf 'eligible=%s\n' "$eligible" >> "$GITHUB_OUTPUT"
+
+  review:
+    needs: eligibility
+    # Eligibility is checked before joining the runtime's per-PR queue.
+    if: >-
+      needs.eligibility.outputs.eligible == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      issues: write
+      id-token: write
+    uses: JBallin/claude-review-runtime/.github/workflows/claude.yml@d63506dda127e0509346c19457c1d992292a9c29
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
