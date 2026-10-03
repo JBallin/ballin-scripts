@@ -80,16 +80,18 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
       const logical = observation.source.path;
       if (!logical || !['file', 'directory'].includes(observation.source.kind)) throw new Error('Unsupported review source');
       let resolved: string;
-      if (definition.category === 'codex') {
+      if (definition.category === 'codex' || definition.category === 'claude') {
         const { fileStat, reviewRecursiveFiles, sourceStat } = require('./recursive_snapshot.ts');
         const args = observation.collector.args;
         if (!args || !args[1]) throw new Error('Unsupported review source');
         resolved = observation.source.kind === 'directory' ? args[1] : path.join(args[1], args[3]);
         if (observation.source.kind === 'directory') {
           if (!sourceStat(path.dirname(resolved), path.basename(resolved)).isDirectory()) throw new Error('Unsupported source type');
-          reviewRecursiveFiles(resolved, args[2] === 'profiles', args[2] === 'skills');
+          reviewRecursiveFiles(resolved, args[2] === 'profiles', args[2] === 'skills', {}, {
+            markdownOnly: args[2] === 'markdown', rejectHardlinks: definition.category === 'claude',
+          });
         } else {
-          fileStat(args[1], args[3]);
+          fileStat(args[1], args[3], definition.category === 'claude');
         }
       } else {
         resolved = fs.realpathSync(logical);
@@ -110,8 +112,9 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('The fixed inventory and filtered-preference baseline can include private tools, identities, paths, or URLs. It is not guaranteed secret-free.');
   writeStdoutLine('Codex includes whole configuration files (including embedded trust settings), hook definitions, recursive skills/rules/agents, and the personal marketplace manifest. Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
+  writeStdoutLine('Claude Code includes personal CLAUDE.md and Markdown rules, agents, and legacy commands. Settings, skills, credential stores, runtime state, and installed plugins are excluded. Selected Markdown may contain secrets.');
   writeStdoutLine('Opting in covers all currently supported sensitive sources and future additions to this maintained catalog. Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md');
-  const sensitive = readPromptLine(`Also include sensitive sources (raw shell/Git/editor/Codex configuration, .nvmrc, and pipx installation metadata)? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
+  const sensitive = readPromptLine(`Also include sensitive sources (raw shell/Git/editor/Codex/Claude configuration, .nvmrc, and pipx installation metadata)? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
   if (sensitive.eof) return null;
   const includeSensitive = sensitive.text === '' ? defaultIncluded : /^[yY]$/u.test(sensitive.text);
   if (includeSensitive) {
