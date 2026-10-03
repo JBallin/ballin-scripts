@@ -107,6 +107,14 @@ describe('repository backup lifecycle', function() {
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
+  const priorSuccess = '2020-01-01T00:00:00.000Z\n';
+  const statusFile = () => path.join(cache, '.last-success');
+  const seedSuccess = () => {
+    fs.mkdirSync(cache, { recursive: true, mode: 0o700 }); fs.chmodSync(cacheRoot, 0o700); fs.chmodSync(cache, 0o700);
+    fs.writeFileSync(statusFile(), priorSuccess, { mode: 0o600 });
+  };
+  const statusClock = (time: number) => `Date.now = () => ${time};`;
+
   it('aborts before collection or remote effects when Codex cwd restoration fails', () => {
     const codex = fs.realpathSync(home) + '/.codex';
     fs.mkdirSync(path.join(codex, 'skills'), { recursive: true });
@@ -223,13 +231,6 @@ describe('repository backup lifecycle', function() {
     });
   });
 
-  const priorSuccess = '2020-01-01T00:00:00.000Z\n';
-  const statusFile = () => path.join(cache, '.last-success');
-  const seedSuccess = () => {
-    fs.mkdirSync(cache, { recursive: true, mode: 0o700 }); fs.chmodSync(cacheRoot, 0o700); fs.chmodSync(cache, 0o700);
-    fs.writeFileSync(statusFile(), priorSuccess, { mode: 0o600 });
-  };
-  const statusClock = (time: number) => `Date.now = () => ${time};`;
   it('records changed and genuine no-op completion locally without another publication', () => {
     source(); seedSuccess();
     const firstTime = Date.parse('2026-01-01T00:00:00.000Z');
