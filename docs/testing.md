@@ -1,6 +1,6 @@
 # Testing and coverage
 
-**Audience:** Maintainers
+*Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
 Run commands from the repository root. Use `npm test` for the complete local
 gate, or `npm run test:coverage` for coverage alone. CI runs the same coverage

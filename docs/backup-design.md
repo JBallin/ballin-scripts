@@ -1,6 +1,6 @@
 # Backup design
 
-**Audience:** Maintainers
+*Maintainer guide to backup architecture, GitHub transport constraints, and conflict guarantees.*
 
 This guide records the safety model behind `ballin backup`. User behavior and
 conflict recovery are documented in

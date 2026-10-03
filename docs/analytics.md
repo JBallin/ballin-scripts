@@ -1,6 +1,6 @@
 # Analytics
 
-**Audience:** Users
+*User guide to telemetry collection, event payloads, opt-in controls, and data retention.*
 
 Analytics help show which top-level Ballin commands are used, how real backups
 finish, and whether automatic backup and Ballin self-update steps succeed
