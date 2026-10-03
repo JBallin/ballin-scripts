@@ -39,7 +39,7 @@ const {
 } = require('./backup_snapshots.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
-  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshot, readRepositoryInventory, repositoryOpenUrl,
+  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryDestination } from './backup_config.ts';
@@ -604,17 +604,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if (command === 'read' && !args[1]) {
-    writeStderrLine('ballin backup read: expected one snapshot; use `ballin backup read <snapshot>`.');
-    writeStderrLine('Find saved snapshots with `ballin backup list`.');
+  if (command === 'read' && args.length > 2) {
+    writeStderrLine('ballin backup read: expected exactly one snapshot');
     process.exitCode = 1;
     return;
   }
 
-  if (command === 'read' && args.length !== 2) {
-    writeStderrLine('ballin backup read: expected exactly one snapshot');
+  const missingReadArgument = command === 'read' && !args[1];
+  if (missingReadArgument) {
+    writeStderrLine('ballin backup read: expected one snapshot; use `ballin backup read <snapshot>`.');
     process.exitCode = 1;
-    return;
   }
 
   if (!command) {
@@ -640,11 +639,14 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   try {
-    if (command === 'read') {
-      const bytes = readRepositorySnapshot(config.repository, args[1]);
+    if (missingReadArgument) {
+      writeSavedSnapshots(readRepositoryInventory(config.repository));
+    } else if (command === 'read') {
+      const { bytes, inventory } = readRepositorySnapshotWithInventory(config.repository, args[1]);
       if (bytes !== undefined) process.stdout.write(bytes);
       else {
-        writeStderrLine('ballin backup read: no supported snapshot found. Find saved snapshots with `ballin backup list`.');
+        writeStderrLine('ballin backup read: no supported snapshot found.');
+        writeSavedSnapshots(inventory);
         process.exitCode = 1;
       }
     } else if (command === 'list') {

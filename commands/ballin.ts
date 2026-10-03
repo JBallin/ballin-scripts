@@ -85,6 +85,7 @@ const backupHelp = `Usage:
 Back up Ballin-managed environment state to the configured backup.
 \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
 \`list\` finds saved snapshots; \`read\` prints one supported snapshot.
+Without a snapshot selector, \`read\` shows usage and lists saved options when readable.
 \`disconnect\` stops local backups and clears comparison state.
 Repository backups exclude sensitive sources unless \`backup.includeSensitive\` is true.
 `;

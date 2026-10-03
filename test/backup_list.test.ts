@@ -195,19 +195,71 @@ describe('saved backup discovery', function() {
     fs.writeFileSync(configPath, '{broken');
     for (const args of [['read'], ['list', 'extra'], ['list', '--verbose'], ['--help']]) {
       const result = run(args); assert.equal(result.status, args[0] === '--help' ? 0 : 1);
-      assert.include(result.stdout + result.stderr, args[0] === '--help' ? 'ballin backup list' : args[0] === 'read' ? 'backup list' : 'expected no arguments');
+      assert.include(result.stdout + result.stderr, args[0] === '--help' ? 'ballin backup list' : args[0] === 'read' ? 'expected one snapshot' : 'expected no arguments');
       assert.notInclude(result.stdout + result.stderr, 'Options:');
       assert.deepEqual(state().requests, []);
       assert.equal(fs.readFileSync(configPath, 'utf8'), '{broken');
       assert.isFalse(fs.existsSync(path.join(root, 'collector.log')));
     }
   });
-  it('points confirmed missing and unsupported explicit reads to saved discovery without echoing selectors', () => {
-    for (const name of ['zshrc.sh', 'brackets_extensions', '.ballin-backup.json', 'DUMMY_PRIVATE_SELECTOR']) {
-      const result = run(['read', name]); assert.equal(result.status, 1);
-      assert.equal(result.stdout, ''); assert.include(result.stderr, 'no supported snapshot found');
-      assert.include(result.stderr, 'backup list'); assert.notInclude(result.stderr, name); preserved();
+  it('rejects excess read arguments before any inventory lookup, including an empty selector', () => {
+    for (const selector of ['', 'gitconfig']) {
+      const result = run(['read', selector, 'extra']);
+      assert.equal(result.status, 1); assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'expected exactly one snapshot');
+      assert.deepEqual(state().requests, []); preserved();
     }
+  });
+  it('shows actual saved options for read without a selector while preserving the usage error', () => {
+    save(fixtureState({ 'zshrc.sh': 'DUMMY_PRIVATE_CONTENT\n', gitconfig: 'private git\n', brackets_extensions: 'old\n', DUMMY_PRIVATE_NAME: 'unrelated\n' }));
+    const before = state(); const result = run(['read']);
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'expected one snapshot');
+    assert.include(result.stderr, 'ballin backup read <snapshot>');
+    assert.notInclude(result.stdout + result.stderr, 'backup list');
+    assert.equal(result.stdout, run(['list']).stdout);
+    assert.include(result.stdout, 'Saved snapshots:\n  gitconfig\n  zshrc.sh\n');
+    for (const hidden of ['DUMMY_PRIVATE_CONTENT', 'DUMMY_PRIVATE_NAME', 'README.md', '.ballin-backup.json', 'ballin_config']) {
+      assert.notInclude(result.stdout, hidden);
+    }
+    const after = state(); assert.deepEqual({ ...after, requests: [] }, { ...before, requests: [] });
+    assert.lengthOf(after.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 2);
+    preserved();
+  });
+  it('does not invent read options when remote inventory is unavailable', () => {
+    const value = state(); value.faults.tree = { truncated: true }; save(value);
+    const result = run(['read']);
+    assert.equal(result.status, 1); assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'expected one snapshot');
+    assert.include(result.stderr, 'could not be read completely');
+    assert.notInclude(result.stderr, 'no supported snapshot found'); preserved();
+  });
+  it('keeps no-selector usage available without configured storage', () => {
+    fs.writeFileSync(configPath, JSON.stringify({ backup: { repository: null }, analytics: { enabled: 'false' } }));
+    const result = run(['read']); assert.equal(result.status, 1); assert.equal(result.stdout, '');
+    assert.include(result.stderr, 'expected one snapshot'); assert.include(result.stderr, 'not configured');
+    assert.deepEqual(state().requests, []);
+  });
+  it('shows actual saved options for unmatched selectors using the same complete inventory', () => {
+    save(fixtureState({ gitconfig: 'saved git\n', brackets_extensions: 'retired\n', DUMMY_PRIVATE_NAME: 'unrelated\n' }));
+    for (const name of ['zshrc.sh', 'brackets_extensions', '.ballin-backup.json', 'DUMMY_PRIVATE_SELECTOR']) {
+      const before = state(); before.requests = []; save(before);
+      const result = run(['read', name]); assert.equal(result.status, 1);
+      assert.include(result.stdout, 'Saved snapshots:\n  gitconfig\n');
+      assert.include(result.stderr, 'no supported snapshot found');
+      assert.notInclude(result.stdout + result.stderr, 'backup list');
+      assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE');
+      assert.notInclude(result.stdout, '  zshrc.sh');
+      assert.lengthOf(state().requests, 6);
+      assert.lengthOf(state().requests.filter((request) => request.endpoint.includes('/git/trees/')), 1);
+      assert.lengthOf(state().requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+      assert.deepEqual({ ...state(), requests: [] }, before); preserved();
+    }
+  });
+  it('reports a complete marker-only inventory for unmatched reads without inventing options', () => {
+    const result = run(['read', 'zshrc.sh']); assert.equal(result.status, 1);
+    assert.equal(result.stdout, 'No current snapshots are saved in this backup.\n');
+    assert.include(result.stderr, 'no supported snapshot found'); assert.notInclude(result.stderr, 'backup list'); preserved();
   });
   it('keeps list plain on a TTY and preserves exact explicit-read bytes without execution', () => {
     const bytes = '\x1b[31m$(touch forbidden)\x1b[0m\r\n\n'; save(fixtureState({ 'zshrc.sh': bytes }));
