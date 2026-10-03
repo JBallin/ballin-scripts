@@ -531,13 +531,13 @@ const codexRoot = ({ homeDir, env }: SnapshotDiscoveryContext): string => (
 
 // Codex configuration is executable, arbitrary user-authored content. Every
 // source is sensitive; selection must happen before this discovery is called.
-const codexSnapshot = (name: string, relative: string, recursive = false, profiles = false, marketplace = false): SnapshotDefinition => ({
+const codexSnapshot = (name: string, relative: string, recursive = false, profiles = false, homeRoot = false, skills = relative === 'skills'): SnapshotDefinition => ({
   name,
   category: 'codex',
   inclusionGroup: 'sensitive',
   prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
   discover: (context) => {
-    const logicalRoot = marketplace ? context.homeDir : codexRoot(context);
+    const logicalRoot = homeRoot ? context.homeDir : codexRoot(context);
     let root = logicalRoot;
     let sourcePath = path.join(root, relative);
     const source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
@@ -549,7 +549,7 @@ const codexSnapshot = (name: string, relative: string, recursive = false, profil
       if (stat.isSymbolicLink() || (recursive ? !stat.isDirectory() : !stat.isFile())) {
         return { status: 'unavailable', source, reason: 'unsupported-source-type' };
       }
-      if (recursive && require('./recursive_snapshot.ts').recursiveFiles(sourcePath, profiles, relative === 'skills').length === 0) {
+      if (recursive && require('./recursive_snapshot.ts').recursiveFiles(sourcePath, profiles, skills).length === 0) {
         return { status: 'absent', source, reason: 'source-not-found' };
       }
       return {
@@ -558,7 +558,7 @@ const codexSnapshot = (name: string, relative: string, recursive = false, profil
           fileName: name,
           command: process.execPath,
           args: recursive
-            ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, profiles ? 'profiles' : relative === 'skills' ? 'skills' : 'directory']
+            ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, profiles ? 'profiles' : skills ? 'skills' : 'directory']
             : [path.join(__dirname, 'recursive_snapshot.ts'), root, 'file', relative],
           env: context.env,
         },
@@ -634,6 +634,7 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   codexSnapshot('codex_profiles.json', '.', true, true),
   codexSnapshot('codex_hooks.json', 'hooks.json'),
   codexSnapshot('codex_skills.json', 'skills', true),
+  codexSnapshot('codex_user_skills.json', '.agents/skills', true, false, true, true),
   codexSnapshot('codex_rules.json', 'rules', true),
   codexSnapshot('codex_agents.json', 'agents', true),
   codexSnapshot('codex_marketplace.json', '.agents/plugins/marketplace.json', false, false, true),

@@ -61,7 +61,8 @@ choice. Sources are:
 | VS Code Insiders | `vsI_settings`, `vsI_keybindings`, `vsI_extensions` | VS Code Insiders user files; `code-insiders` for extension list. |
 | Editor config files | `vimrc`, `nanorc` | Matching dotfiles in `HOME`. |
 | Codex configuration | `codex_AGENTS.md`, `codex_AGENTS.override.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Approved sensitive-source catalog; files in active `CODEX_HOME` or `~/.codex`. |
-| Codex authoring directories | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Approved nonempty personal directories; deterministic recursive archives. |
+| Shared personal skills | `codex_user_skills.json` | Approved nonempty `~/.agents/skills/`, independent of `CODEX_HOME`; recursive archive. |
+| Codex authoring directories | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Approved nonempty legacy `CODEX_HOME/skills/` and personal `rules/`/`agents/`; deterministic recursive archives. |
 | Personal plugin marketplace | `codex_marketplace.json` | Approved `~/.agents/plugins/marketplace.json`; referenced plugin content is excluded. |
 | Ballin preferences | `ballin_config` | Local `ballin.config.json`; only supported preferences are saved. See [preference recovery](optional-capabilities.md#recovering-ballin-preferences). |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |

@@ -53,7 +53,7 @@ const cp = require('child_process');
 cp.spawnSync = (...args) => { fs.appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n'); throw new Error('No child workflows allowed'); };
 const path = require('path');
 const sourceFds = new Set();
-const sourcePath = (file) => typeof file === 'string' && (path.resolve(file) === ${JSON.stringify(path.join(root, '.zshrc'))} || path.resolve(file).startsWith(${JSON.stringify(path.join(root, '.codex') + path.sep)}));
+const sourcePath = (file) => typeof file === 'string' && (path.resolve(file) === ${JSON.stringify(path.join(root, '.zshrc'))} || [${JSON.stringify(path.join(root, '.codex') + path.sep)}, ${JSON.stringify(path.join(root, '.agents', 'skills') + path.sep)}].some((prefix) => path.resolve(file).startsWith(prefix)));
 const open = fs.openSync;
 fs.openSync = (file, flags, ...args) => {
   const source = sourcePath(file);
@@ -100,7 +100,7 @@ fs.readFileSync = (file, ...args) => {
     assert.deepEqual(labels, [
       'bash_profile.sh', 'bashrc.sh', 'codex_agents.json', 'codex_AGENTS.md', 'codex_AGENTS.override.md',
       'codex_config.toml', 'codex_hooks.json', 'codex_marketplace.json',
-      'codex_profiles.json', 'codex_rules.json', 'codex_skills.json',
+      'codex_profiles.json', 'codex_rules.json', 'codex_skills.json', 'codex_user_skills.json',
       'gitconfig', 'gitignore_global', 'nanorc',
       'nvmrc', 'pipx', 'profile.sh', 'vimrc', 'vs_keybindings', 'vs_settings',
       'vsI_keybindings', 'vsI_settings', 'zprofile.sh', 'zshrc.sh',
@@ -132,6 +132,33 @@ fs.readFileSync = (file, ...args) => {
       else assert.notInclude(result.stdout, 'codex_AGENTS.override.md:');
       assert.include(result.stdout, 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
       assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
+    });
+  });
+
+  [false, true].forEach((included) => {
+    it(`reviews fixed HOME user skills independently of CODEX_HOME only after opt-in: ${included}`, () => {
+      const skills = path.join(root, '.agents', 'skills');
+      fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
+      fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_USER_SKILL_CONTENT');
+      const active = path.join(root, '.codex', 'active'); fs.mkdirSync(active, { recursive: true });
+      const probes = path.join(root, 'user-skills-probes');
+      fs.appendFileSync(guardPath, `const userSkillsDefinitions = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'backup_snapshots.ts'))}).snapshotDefinitions;
+        const userSkillsDefinition = userSkillsDefinitions.find((definition) => definition.name === 'codex_user_skills.json');
+        if (!userSkillsDefinition) throw new Error('Missing user skills source definition');
+        const discoverUserSkills = userSkillsDefinition.discover;
+        userSkillsDefinition.discover = (context) => {
+          fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
+          return discoverUserSkills(context);
+        };\n`);
+      const result = run(`${included ? 'y' : 'n'}\ny\nn\nn\n`, ['setup'], { CODEX_HOME: active });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.existsSync(probes), included);
+      assert.equal(readConfig().backup.includeSensitive, String(included));
+      assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
+      if (included) {
+        assert.include(result.stdout, `codex_user_skills.json: ${JSON.stringify(skills)} -> ${JSON.stringify(skills)}`);
+        assert.include(result.stdout, 'codex_skills.json: absent');
+      } else assert.notInclude(result.stdout, 'codex_user_skills.json:');
     });
   });
 

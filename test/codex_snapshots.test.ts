@@ -127,7 +127,7 @@ describe('Codex durable snapshots', () => {
     assert.equal(capture('codex_marketplace.json').stdout, '{"plugins":[{"source":"/synthetic/external"}]}');
     assert.deepEqual((snapshotDefinitions as SnapshotDefinition[]).filter(({ category }) => category === 'codex').map(({ name }) => name), [
       'codex_AGENTS.md', 'codex_AGENTS.override.md', 'codex_config.toml', 'codex_profiles.json', 'codex_hooks.json',
-      'codex_skills.json', 'codex_rules.json', 'codex_agents.json', 'codex_marketplace.json',
+      'codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'codex_agents.json', 'codex_marketplace.json',
     ]);
   });
 
@@ -611,6 +611,65 @@ describe('Codex durable snapshots', () => {
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, 'Snapshot bytes limit exceeded (4 > 3).\n');
+  });
+
+  it('preserves both canonical skill origins when their selected directories overlap', () => {
+    write('.agents/skills/demo/SKILL.md', 'synthetic overlap', homeDir);
+    const env = { CODEX_HOME: path.join(homeDir, '.agents') };
+    const legacy = discover('codex_skills.json', env);
+    const current = discover('codex_user_skills.json', env);
+    assert.equal(legacy.status, 'available');
+    assert.equal(current.status, 'available');
+    if (legacy.status !== 'available' || current.status !== 'available') throw new Error('Expected both skill origins');
+    assert.equal(legacy.source.path, current.source.path);
+    assert.notEqual(legacy.collector.fileName, current.collector.fileName);
+    assert.equal(capture('codex_skills.json', env).stdout, capture('codex_user_skills.json', env).stdout);
+  });
+
+  it('captures fixed home user skills independently of the active Codex skills root', () => {
+    write('.agents/skills/nested/.hidden', Buffer.from([0, 255, 128]), homeDir);
+    const executable = write('.agents/skills/nested/run.sh', '#!/bin/sh\n', homeDir);
+    fs.chmodSync(executable, 0o755);
+    write('.agents/skills/.system/generated', 'excluded', homeDir);
+    write('.agents/skills/nested/.system/user', 'retained', homeDir);
+    write('skills/default', 'default Codex skill');
+    const active = path.join(homeDir, 'active codex');
+    write('skills/custom', 'custom Codex skill', active);
+    const defaultSkills = JSON.parse(capture('codex_skills.json').stdout);
+    assert.deepEqual(defaultSkills.entries.map((entry: { path: string }) => entry.path), ['default']);
+    const customSkills = JSON.parse(capture('codex_skills.json', { CODEX_HOME: active }).stdout);
+    assert.deepEqual(customSkills.entries.map((entry: { path: string }) => entry.path), ['custom']);
+    const user = capture('codex_user_skills.json');
+    assert.equal(user.status, 0, user.stderr);
+    assert.equal(capture('codex_user_skills.json', { CODEX_HOME: active }).stdout, user.stdout);
+    const archive = JSON.parse(user.stdout);
+    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['nested/.hidden', 'nested/.system/user', 'nested/run.sh']);
+    assert.deepEqual(Buffer.from(archive.entries[0].content, 'base64'), Buffer.from([0, 255, 128]));
+    assert.isTrue(archive.entries[2].executable);
+    const definition = (snapshotDefinitions as SnapshotDefinition[]).find(({ name }) => name === 'codex_user_skills.json')!;
+    const originalDiscover = definition.discover;
+    try {
+      definition.discover = () => { throw new Error('Excluded user skills must not be inspected'); };
+      const observations = observeSnapshotSources({ homeDir, env: { PATH: '', CODEX_HOME: active } }, false);
+      assert.equal(observations.find(({ definition: entry }: { definition: SnapshotDefinition }) => entry.name === definition.name)!.status, 'excluded-by-policy');
+    } finally { definition.discover = originalDiscover; }
+  });
+
+  it('rejects symlinked home skills ancestors and skips descendant symlinks', () => {
+    const outside = path.join(homeDir, 'outside');
+    write('skill', 'outside', outside);
+    fs.symlinkSync(outside, path.join(homeDir, '.agents'));
+    assert.equal(discover('codex_user_skills.json').status, 'unavailable');
+    fs.unlinkSync(path.join(homeDir, '.agents'));
+    fs.mkdirSync(path.join(homeDir, '.agents'));
+    fs.symlinkSync(outside, path.join(homeDir, '.agents/skills'));
+    assert.equal(discover('codex_user_skills.json').status, 'unavailable');
+    fs.unlinkSync(path.join(homeDir, '.agents/skills'));
+    write('.agents/skills/inside', 'inside', homeDir);
+    fs.symlinkSync(outside, path.join(homeDir, '.agents/skills/outside-directory'));
+    fs.symlinkSync(path.join(outside, 'skill'), path.join(homeDir, '.agents/skills/outside-file'));
+    const archive = JSON.parse(capture('codex_user_skills.json').stdout);
+    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['inside']);
   });
 
   it('fails empty or invalid captures with safe diagnostics and no stdout', () => {

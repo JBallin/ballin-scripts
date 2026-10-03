@@ -27,7 +27,8 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Inventory; default included. |
 | `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Supported Ballin preferences. The backup destination, analytics setting and install ID, automatic-backup setting, sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
 | Codex `AGENTS.md`, `AGENTS.override.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_AGENTS.override.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; the same local opt-in. |
-| Codex `skills/`, `rules/`, and `agents/` | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Preserve personal authoring files recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
+| `~/.agents/skills/` | `codex_user_skills.json` | Preserve current shared personal skills recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
+| Codex `skills/`, `rules/`, and `agents/` | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Preserve legacy Codex-home skills and personal rules/agents recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
@@ -89,7 +90,12 @@ source before discovery; consent remains local and is not restored from backup.
 ## Codex configuration
 
 Ballin uses the active `CODEX_HOME` when set, otherwise `~/.codex`. Personal
-marketplace configuration is selected separately at the fixed home path above.
+skills at `~/.agents/skills/` and marketplace configuration are selected
+separately at fixed home paths, independent of `CODEX_HOME`.
+`codex_skills.json` retains the legacy `CODEX_HOME/skills/` location for
+compatibility; `codex_user_skills.json` captures the current shared personal root.
+If both origins resolve to the same directory, both snapshot identities are
+preserved and both archive outputs count toward the combined capture limit.
 Project `.codex/` directories are repository-owned and are not global sources.
 Both global instruction files, `AGENTS.md` and `AGENTS.override.md`, are backed
 up separately when present, regardless of which Codex currently uses.
@@ -110,7 +116,7 @@ and external files are not collected merely because they are referenced.
 Recursive snapshots are versioned JSON archives of regular files, with sorted
 relative paths, base64 bytes, and an executable flag. Hidden files and binary
 assets are included; empty directories, symlinks, special files, `.git` metadata,
-and `.DS_Store` are omitted. Generated `skills/.system` is also omitted. Codex
+and `.DS_Store` are omitted. The root `.system` directory is also omitted from both skill sources. Codex
 source paths reject descendant symlinks; an explicitly selected Codex root may
 be a symlink. Empty or generated-only directory sources are not published.
 Traversal and reads temporarily pin each selected directory object, verify its

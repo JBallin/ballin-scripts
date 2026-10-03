@@ -403,7 +403,7 @@ below.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-24 sensitive sources, and one projected preferences snapshot.
+25 sensitive sources, and one projected preferences snapshot.
 `backup.includeSensitive` is the only local sensitive-source preference. Opting
 in covers the maintained sensitive catalog, including future supported sources;
 existing opt-ins therefore include Codex. Setup discloses this scope before
@@ -414,6 +414,15 @@ an inclusion/sensitivity review, without another approval record.
 
 Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
 sources: both are captured when present, regardless of instruction precedence.
+Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.json`,
+independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
+`codex_skills.json`. Both use the skills archive exclusions, including root
+`.system`, share the combined Codex byte budget, and have separate per-source
+entry limits.
+The legacy and current personal skill sources retain distinct canonical snapshot
+identities even when `CODEX_HOME=HOME/.agents` selects the same directory. Both
+staged archive outputs count toward the combined Codex capture budget.
+
 Codex file capture is intact, including embedded trust settings in main/profile
 TOML, with existing final-newline/empty-file normalization. It does not execute
 or restore configuration. Recursive authoring directories use the shared

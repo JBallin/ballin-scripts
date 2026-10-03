@@ -132,10 +132,11 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
   });
 
-  ['skills', 'rules', 'agents', 'profiles'].forEach((tree) => {
+  ['skills', 'rules', 'agents', 'profiles', 'user_skills'].forEach((tree) => {
     it(`aborts ordinary backup without cache promotion when a selected Codex ${tree} leaf is unreadable`, () => {
       const codex = path.join(fs.realpathSync(home), '.codex');
-      const leaf = tree === 'profiles' ? path.join(codex, 'personal.config.toml') : path.join(codex, tree, 'entry');
+      const leaf = tree === 'user_skills' ? path.join(fs.realpathSync(home), '.agents', 'skills', 'entry')
+        : tree === 'profiles' ? path.join(codex, 'personal.config.toml') : path.join(codex, tree, 'entry');
       fs.mkdirSync(path.dirname(leaf), { recursive: true });
       fs.writeFileSync(leaf, 'synthetic');
       source('local shell\n');
@@ -173,10 +174,12 @@ describe('repository backup lifecycle', function() {
     { tree: 'rules', operation: 'readSync' },
     { tree: 'agents', operation: 'lstatSync' },
     { tree: 'profiles', operation: 'opendirSync' },
+    { tree: 'user_skills', operation: 'opendirSync' },
   ].forEach(({ tree, operation }) => {
     it(`aborts before staging when selected Codex ${tree} directory discovery fails at ${operation}`, () => {
       const codex = path.join(fs.realpathSync(home), '.codex');
-      const directory = tree === 'profiles' ? codex : path.join(codex, tree, 'nested');
+      const directory = tree === 'user_skills' ? path.join(fs.realpathSync(home), '.agents', 'skills', 'nested')
+        : tree === 'profiles' ? codex : path.join(codex, tree, 'nested');
       fs.mkdirSync(directory, { recursive: true });
       fs.writeFileSync(path.join(directory, tree === 'profiles' ? 'personal.config.toml' : 'entry'), 'synthetic');
       source('local shell\n');
@@ -290,6 +293,26 @@ describe('repository backup lifecycle', function() {
       const result = run([], '', { CODEX_HOME: codex });
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.equal(state().head, before);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('shares the aggregate capture budget across legacy and current personal skills', () => {
+      sparse(path.join(active(), 'skills', 'legacy', 'SKILL.md'), 7 * mib);
+      sparse(path.join(home, '.agents', 'skills', 'current', 'SKILL.md'), 7 * mib);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: active() });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('counts both skill archive identities when CODEX_HOME overlaps the fixed user root', () => {
+      const shared = path.join(home, '.agents');
+      sparse(path.join(shared, 'skills', 'demo', 'SKILL.md'), 7 * mib);
+      const result = run([], '', { CODEX_HOME: shared });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.lengthOf(state().requests, 0);
       assert.isFalse(fs.existsSync(cache));
     });
