@@ -38,6 +38,7 @@ type ConfigureBackupOptions = {
   backupCacheDir?: string;
   configPath?: string;
   originalConfig?: Record<string, unknown>;
+  onCancelled?: () => void;
 };
 
 const isConfigObject = (value: unknown): value is ConfigObject => (
@@ -150,7 +151,7 @@ const configureBackup = (
   const originalConfig = options.originalConfig ?? readOriginalSetupConfig(configPath);
   if (!originalConfig) return false;
   return configureRepositoryBackup({
-    configPath, originalConfig, repositoryName: options.repositoryName,
+    configPath, originalConfig, repositoryName: options.repositoryName, onCancelled: options.onCancelled,
     backupCacheDir: options.backupCacheDir ?? path.join(repoDir, '.backup-cache'),
   });
 };
@@ -201,7 +202,7 @@ const validateBinDirInPath = (binDir: string): boolean => {
 
   writeStdoutLine(`\n⚠️  ERROR: ${binDir} doesn't seem to be in your path.`);
   writeStdoutLine(`Add \`export PATH="${binDir}:$PATH"\` to your shell profile.`);
-  writeStdoutLine('and open a new terminal window and run this installation again.');
+  writeStdoutLine('Then open a new terminal window and run the installer again.');
   return false;
 };
 
@@ -250,9 +251,10 @@ const setup = (
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
   if (mode === 'fresh' || backupConfigured || backupInvalid) {
-    backupSetupSucceeded = configureBackup(repoDir, docsUrl, { originalConfig });
+    let backupSetupCancelled = false;
+    backupSetupSucceeded = configureBackup(repoDir, docsUrl, { originalConfig, onCancelled: () => { backupSetupCancelled = true; } });
     if (!backupSetupSucceeded) {
-      writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
+      if (!backupSetupCancelled) writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
       writeStdoutLine('\nBallin maintenance is installed. Retry with: `ballin backup setup`');
     }
   }
