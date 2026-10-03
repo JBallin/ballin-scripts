@@ -457,6 +457,6 @@ they do not prove GitHub's live enforcement. Separately authorized disposable
 real-GitHub validation must still confirm `createCommitOnBranch` fast-forward
 publication and rejection of a forced ref update and branch deletion. Normal
 implementation validation does not perform that experiment.
-[#336](https://github.com/JBallin/ballin-scripts/issues/336) owns verification.
-The concrete repository reader/writer can be reused there without introducing
-another storage model here.
+
+Identity, coherent-read, and publication checks do not certify that saved
+snapshots match current sources after subsequent changes.
