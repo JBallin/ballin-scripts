@@ -63,6 +63,7 @@ $ ballin update
 ==> Checking Ballin readiness
 
 ==> Backing up development environment
+Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✔ ballin_config
 ✔ bash_completions
 ✔ Brewfile

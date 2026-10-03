@@ -78,3 +78,17 @@ history, or cached content.
 Any new source or group requires an explicit inclusion and sensitivity review.
 Unknown groups are excluded; existing or restored preferences do not authorize
 them. See [Backup design](backup-design.md#shared-inclusion-policy).
+
+## Last successful backup
+
+Before collecting sources, Ballin shows `Previous successful backup:` with the
+last recorded successful run's local date, time and UTC offset for this
+installation, destination and branch. With no usable record, the line is omitted.
+`ballin backup setup` also shows the record or unavailable status; setup and
+recovery do not invent a previous time.
+
+Changed and unchanged successful runs update the local record; failed attempts
+do not. An unchanged run creates no repository commit just to record activity.
+If saving the time fails, Ballin reports an advisory while preserving backup
+success and the prior record. This time does not prove that every source was
+captured, that the repository matches your Mac now, or that the backup is fresh.
