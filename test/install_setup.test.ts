@@ -1027,7 +1027,8 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'GitHub.com authentication is required');
+    assert.include(result.stdout, 'Check gh, service availability, and account access; the cause is unconfirmed.');
+    assert.notInclude(result.stdout, 'GitHub.com authentication is required');
     assert.include(result.stdout, '\nBallin maintenance is installed. Retry with: `ballin backup setup`\n');
     assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
