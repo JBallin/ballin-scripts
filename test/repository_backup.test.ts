@@ -491,6 +491,7 @@ describe('repository backup lifecycle', function() {
   });
   for (const [label, response, message] of [
     ['DNS', { status: 1, stdout: '', stderr: 'dial tcp: lookup api.github.com: no such host' }, 'Unable to connect'],
+    ['gh connection diagnostic', { status: 1, stdout: '', stderr: 'error connecting to api.github.com\ncheck your internet connection or https://githubstatus.com\nDUMMY_PRIVATE_CONTENT' }, 'Unable to connect'],
     ['timeout', { status: 1, stdout: '', stderr: 'dial tcp: i/o timeout' }, 'request timed out'],
     ['authentication', { status: 1, stdout: '{"status":"401","message":"DUMMY_PRIVATE_CONTENT"}', stderr: '' }, 'authentication is required'],
     ['unconfirmed cause', { status: 1, stdout: '', stderr: 'DUMMY_PRIVATE_CONTENT' }, 'cause is unconfirmed'],

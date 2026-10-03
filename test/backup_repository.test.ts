@@ -45,6 +45,8 @@ describe('private repository transport', () => {
   for (const [label, response, problem] of [
     ['DNS', { status: 1, stderr: 'dial tcp: lookup api.github.com: no such host' }, 'connection'],
     ['connection', { status: 1, stderr: 'dial tcp: connection refused' }, 'connection'],
+    ['gh connection diagnostic', { status: 1, stderr: 'error connecting to api.github.com\ncheck your internet connection or https://githubstatus.com' }, 'connection'],
+    ['connection advice without evidence', { status: 1, stderr: 'check your internet connection or https://githubstatus.com' }, 'request'],
     ['timeout', { status: 1, stderr: 'net/http: TLS handshake timeout' }, 'timeout'],
     ['HTTP authentication', { status: 1, stderr: 'gh: Bad credentials (HTTP 401)\n' }, 'authentication'],
     ['authentication exit code', { status: 4 }, 'authentication'],

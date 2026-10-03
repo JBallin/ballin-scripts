@@ -75,7 +75,8 @@ const transportProblem = (
   if (result.error?.code === 'ETIMEDOUT'
     || /(?:i\/o|TLS handshake|connection|request) (?:timeout|timed out)|context deadline exceeded|Client\.Timeout exceeded/iu.test(stderr)) return 'timeout';
   if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH'].includes(result.error?.code ?? '')
-    || /dial (?:tcp|udp).*lookup .*: (?:no such host|temporary failure in name resolution)|connection (?:refused|reset by peer)|network is unreachable|no route to host|could not resolve host/iu.test(stderr)) return 'connection';
+    || /dial (?:tcp|udp).*lookup .*: (?:no such host|temporary failure in name resolution)|connection (?:refused|reset by peer)|network is unreachable|no route to host|could not resolve host/iu.test(stderr)
+    || /(?:^|\n)error connecting to (?:api\.)?github\.com(?:\r?\n|$)/iu.test(stderr)) return 'connection';
   if (String(body.status) === '401' || /\(HTTP 401\)(?:\r?\n|$)/u.test(stderr)
     || (result.status === 4 && !result.error && !result.signal)) return 'authentication';
   return undefined;
