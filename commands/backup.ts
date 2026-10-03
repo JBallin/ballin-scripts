@@ -449,8 +449,6 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
 const runRepositoryBackup = (
   destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string,
 ): boolean => {
-  const previous = previousBackupSuccessLine(cacheRoot, destination);
-  if (previous) writeStdoutLine(previous);
   const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive));
   if (!staged) return false;
   const remote = new Map<string, RemoteSnapshot>();
@@ -521,7 +519,12 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
   }
   if (!secureExistingBackupCache(backupCacheDir)) return 1;
   try {
-    return runRepositoryBackup(config.repository, config.includeSensitive, homeDir, backupCacheDir) ? 0 : 1;
+    const previous = previousBackupSuccessLine(backupCacheDir, config.repository);
+    if (previous) writeStdoutLine(previous);
+    const includeSensitive = config.includeSensitive;
+    return withTemporaryStatus('Backing up...', () => (
+      runRepositoryBackup(config.repository, includeSensitive, homeDir, backupCacheDir) ? 0 : 1
+    ));
   } catch (error) {
     writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
     return 1;
@@ -610,7 +613,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   if (!command) {
     let status: 'success' | 'failure' = 'failure';
     try {
-      const exitStatus = withTemporaryStatus('Backing up...', () => runRealBackup(homeDir, backupCacheDir));
+      const exitStatus = runRealBackup(homeDir, backupCacheDir);
       status = exitStatus === 0 ? 'success' : 'failure';
       if (exitStatus !== 0) process.exitCode = exitStatus;
     } finally {

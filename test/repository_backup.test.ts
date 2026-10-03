@@ -529,6 +529,24 @@ describe('repository backup lifecycle', function() {
     assert.equal(failed.status, 1); assert.match(failed.stderr, /^Backing up\.\.\.\r\x1b\[2Kballin backup:/);
     assert.notMatch(failed.stdout, /[✔✚✎✖]/u);
   });
+  it('keeps progress active after previous-run context during changed, no-op and failed backups', () => {
+    source(); seedSuccess();
+    for (const outcome of ['changed', 'no-op', 'failed']) {
+      fs.rmSync(path.join(root, 'progress.log'), { force: true });
+      if (outcome === 'failed') { const value = state(); value.faults.query = 'errors'; saveState(value); }
+      const result = run([], '', { ...ttyEnv, TZ: 'America/Los_Angeles' }, progressPreload());
+      assert.equal(result.status, outcome === 'failed' ? 1 : 0, result.stderr);
+      assert.match(result.stdout, /^Previous successful backup: .+ GMT-0[78]:00\n/);
+      assert.lengthOf(result.stdout.match(/Previous successful backup:/g), 1);
+      assert.notInclude(result.stdout, 'Last recorded successful backup');
+      const requests = progressRequests();
+      assert.isTrue(requests.some((request) => request.args.some((arg) => arg.endsWith('.zshrc'))));
+      assert.isTrue(requests.some((request) => request.args.includes('graphql')));
+      assert.isTrue(requests.every((request) => request.status === 'Backing up...'), JSON.stringify(requests));
+      assert.match(result.stderr, /^Backing up\.\.\.\r\x1b\[2K/);
+    }
+    assert.equal(publications().length, 1);
+  });
   it('creates and confirms the marker and explanatory README before persisting reviewed local choices', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n\n'); ok(result);
