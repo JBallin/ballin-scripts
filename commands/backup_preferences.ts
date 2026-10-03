@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { createConfigStore, stringify } = require('../config/store.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
@@ -77,12 +78,28 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     }
     try {
       const logical = observation.source.path;
-      if (!logical || observation.source.kind !== 'file') throw new Error('Unsupported review source');
-      const resolved = fs.realpathSync(logical);
-      if (!fs.statSync(resolved).isFile()) throw new Error('Not a regular file');
-      fs.accessSync(resolved, fs.constants.R_OK);
+      if (!logical || !['file', 'directory'].includes(observation.source.kind)) throw new Error('Unsupported review source');
+      let resolved: string;
+      if (definition.category === 'codex') {
+        const { fileStat, reviewRecursiveFiles, sourceStat } = require('./recursive_snapshot.ts');
+        const args = observation.collector.args;
+        if (!args || !args[1]) throw new Error('Unsupported review source');
+        resolved = observation.source.kind === 'directory' ? args[1] : path.join(args[1], args[3]);
+        if (observation.source.kind === 'directory') {
+          if (!sourceStat(path.dirname(resolved), path.basename(resolved)).isDirectory()) throw new Error('Unsupported source type');
+          reviewRecursiveFiles(resolved, args[2] === 'profiles', args[2] === 'skills');
+        } else {
+          fileStat(args[1], args[3]);
+        }
+      } else {
+        resolved = fs.realpathSync(logical);
+        const stat = fs.statSync(resolved);
+        if (observation.source.kind === 'directory' ? !stat.isDirectory() : !stat.isFile()) throw new Error('Unsupported source type');
+        fs.accessSync(resolved, fs.constants.R_OK);
+      }
       writeStdoutLine(`${definition.name}: ${displayPath(logical)} -> ${displayPath(resolved)}`);
-    } catch {
+    } catch (error) {
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
       writeStdoutLine(`Unable to review ${definition.name}: resolution or read access failed.`);
       return false;
     }
@@ -92,7 +109,9 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 // Selection and non-content inspection are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('The fixed inventory and filtered-preference baseline can include private tools, identities, paths, or URLs. It is not guaranteed secret-free.');
-  const sensitive = readPromptLine(`Also include sensitive sources (raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata)? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
+  writeStdoutLine('Codex includes whole configuration files (including embedded trust settings), hook definitions, recursive skills/rules/agents, and the personal marketplace manifest. Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
+  writeStdoutLine('Opting in covers all currently supported sensitive sources and future additions to this maintained catalog. Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md');
+  const sensitive = readPromptLine(`Also include sensitive sources (raw shell/Git/editor/Codex configuration, .nvmrc, and pipx installation metadata)? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
   if (sensitive.eof) return null;
   const includeSensitive = sensitive.text === '' ? defaultIncluded : /^[yY]$/u.test(sensitive.text);
   if (includeSensitive) {
