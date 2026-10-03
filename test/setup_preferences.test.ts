@@ -51,9 +51,31 @@ describe('guided preference setup', () => {
 const fs = require('fs');
 const cp = require('child_process');
 cp.spawnSync = (...args) => { fs.appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n'); throw new Error('No child workflows allowed'); };
+const path = require('path');
+const sourceFds = new Set();
+const sourcePath = (file) => typeof file === 'string' && (path.resolve(file) === ${JSON.stringify(path.join(root, '.zshrc'))} || path.resolve(file).startsWith(${JSON.stringify(path.join(root, '.codex') + path.sep)}));
+const open = fs.openSync;
+fs.openSync = (file, flags, ...args) => {
+  const source = sourcePath(file);
+  if (source && flags !== (fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK)) {
+    fs.appendFileSync(${JSON.stringify(callsPath)}, 'unexpected source open\\n'); throw new Error('Only metadata source opens allowed');
+  }
+  const fd = open(file, flags, ...args);
+  if (source) sourceFds.add(fd);
+  return fd;
+};
+const close = fs.closeSync;
+fs.closeSync = (fd) => { const result = close(fd); sourceFds.delete(fd); return result; };
+const descriptorRead = fs.readSync;
+fs.readSync = (fd, ...args) => {
+  if (sourceFds.has(fd)) {
+    fs.appendFileSync(${JSON.stringify(callsPath)}, 'source descriptor read\\n'); throw new Error('No source descriptor reads allowed');
+  }
+  return descriptorRead(fd, ...args);
+};
 const read = fs.readFileSync;
 fs.readFileSync = (file, ...args) => {
-  if (typeof file === 'string' && (file === ${JSON.stringify(path.join(root, '.zshrc'))} || file.startsWith(${JSON.stringify(path.join(root, '.codex') + path.sep)}))) {
+  if (sourceFds.has(file) || sourcePath(file)) {
     fs.appendFileSync(${JSON.stringify(callsPath)}, 'raw source read\\n'); throw new Error('No source content reads allowed');
   }
   return read(file, ...args);
@@ -252,6 +274,119 @@ fs.readFileSync = (file, ...args) => {
     assert.include(result.stdout, 'Unable to review');
     assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     assert.notInclude(result.stdout, 'Automatically run');
+  });
+
+  const denyReadAccess = (file: string): string => {
+    const attempts = path.join(root, 'access-attempts');
+    fs.appendFileSync(guardPath, `const metadataOpen = fs.openSync; fs.openSync = (entry, ...args) => {
+      if (typeof entry === 'string' && path.resolve(entry) === ${JSON.stringify(file)}) {
+        fs.appendFileSync(${JSON.stringify(attempts)}, 'denied\\n');
+        const error = new Error('synthetic unreadable leaf'); error.code = 'EACCES'; throw error;
+      }
+      return metadataOpen(entry, ...args);
+    };\n`);
+    return attempts;
+  };
+
+  ['skills', 'rules', 'agents'].forEach((tree) => {
+    it(`refuses opt-in when a selected recursive ${tree} leaf is unreadable`, () => {
+      const leaf = path.join(root, '.codex', tree, 'synthetic', 'instructions.md');
+      fs.mkdirSync(path.dirname(leaf), { recursive: true });
+      fs.writeFileSync(leaf, 'SYNTHETIC_PRIVATE_CONTENT');
+      const attempts = denyReadAccess(leaf);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run('y\ny\ny\ny\n');
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, `Unable to review codex_${tree}.json`);
+      assert.isTrue(fs.existsSync(attempts), 'selected leaf must receive a metadata access check');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.notInclude(result.stdout, 'Automatically run');
+      assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
+    });
+  });
+
+  [false, true].forEach((selected) => {
+    it(`checks read access only for selected named TOML profiles: selected ${selected}`, () => {
+      const codex = path.join(root, '.codex'); fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'synthetic.config.toml'), 'synthetic profile');
+      const denied = path.join(codex, selected ? 'synthetic.config.toml' : 'history.jsonl');
+      if (!selected) fs.writeFileSync(denied, 'synthetic runtime');
+      const attempts = denyReadAccess(denied);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run('y\ny\nn\nn\n');
+      assert.equal(result.status, selected ? 1 : 0, result.stdout + result.stderr);
+      assert.equal(fs.existsSync(attempts), selected);
+      if (selected) {
+        assert.include(result.stdout, 'Unable to review codex_profiles.json');
+        assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      } else assert.equal(readConfig().backup.includeSensitive, 'true');
+    });
+  });
+
+  it('aborts opt-in after fatal snapshot working-directory restoration without later discovery', () => {
+    const codex = path.join(root, '.codex');
+    fs.mkdirSync(path.join(codex, 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'agents', 'synthetic.md'), 'synthetic agent');
+    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic later source');
+    const restored = path.join(root, 'restore-attempt');
+    const later = path.join(root, 'later-discovery');
+    fs.appendFileSync(guardPath, `const originalCwd = process.cwd(); const chdir = process.chdir;
+      process.chdir = (directory) => {
+        if (directory === originalCwd) {
+          fs.writeFileSync(${JSON.stringify(restored)}, 'failed'); throw new Error('synthetic restore failure');
+        }
+        return chdir(directory);
+      };
+      const lstat = fs.lstatSync;
+      fs.lstatSync = (entry, ...args) => {
+        if (typeof entry === 'string' && path.resolve(entry) === ${JSON.stringify(path.join(codex, 'config.toml'))}) fs.writeFileSync(${JSON.stringify(later)}, 'continued');
+        return lstat(entry, ...args);
+      };\n`);
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run('y\ny\ny\ny\n');
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.isTrue(fs.existsSync(restored));
+    assert.isFalse(fs.existsSync(later), 'fatal restoration must stop later source discovery');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.notInclude(result.stdout, 'Automatically run');
+  });
+
+  it('displays configured Codex aliases and canonical paths for raw and recursive sources', () => {
+    const codex = path.join(root, '.codex');
+    fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic config');
+    fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill');
+    const alias = path.join(root, 'codex-alias'); fs.symlinkSync(codex, alias);
+    const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
+    assert.include(result.stdout, `codex_skills.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.equal(readConfig().backup.includeSensitive, 'true');
+  });
+
+  it('reviews Codex source metadata without following absolute descendant paths', () => {
+    const codex = path.join(root, '.codex');
+    fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic config');
+    fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill');
+    const alias = path.join(root, 'metadata-alias'); fs.symlinkSync(codex, alias);
+    fs.appendFileSync(guardPath, `const selectedDescendant = (entry) => typeof entry === 'string' && path.isAbsolute(entry)
+      && [${JSON.stringify(codex + path.sep)}, ${JSON.stringify(alias + path.sep)}].some((prefix) => entry.startsWith(prefix));
+      for (const method of ['realpathSync', 'statSync', 'accessSync']) {
+        const original = fs[method];
+        fs[method] = (entry, ...args) => {
+          if (selectedDescendant(entry)) {
+            fs.appendFileSync(${JSON.stringify(callsPath)}, method + ' followed absolute source\\n');
+            throw new Error('Synthetic forbidden absolute source lookup');
+          }
+          return original(entry, ...args);
+        };
+      }\n`);
+    const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
+    assert.include(result.stdout, `codex_skills.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.equal(readConfig().backup.includeSensitive, 'true');
   });
 
   it('reviews recursive Codex directories with metadata without collecting their contents', () => {

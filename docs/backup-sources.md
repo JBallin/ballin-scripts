@@ -107,6 +107,11 @@ assets are included; empty directories, symlinks, special files, `.git` metadata
 and `.DS_Store` are omitted. Generated `skills/.system` is also omitted. Codex
 source paths reject descendant symlinks; an explicitly selected Codex root may
 be a symlink. Empty or generated-only directory sources are not published.
+Traversal and reads temporarily pin each selected directory object, verify its
+identity, and use immediate names within it. Replacing an ancestor cannot
+redirect those operations to another tree. Review opens and closes selected
+regular files to check readability without reading their contents. Capture is
+not an atomic snapshot of concurrent file edits; failures stop the capture.
 
 Codex capture supports up to **16 MiB combined** per backup after normalization,
 including archive metadata and base64 content, and **8,192 visited entries** per

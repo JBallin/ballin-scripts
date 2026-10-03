@@ -106,6 +106,32 @@ describe('repository backup lifecycle', function() {
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
+  it('aborts before collection or remote effects when Codex cwd restoration fails', () => {
+    const codex = fs.realpathSync(home) + '/.codex';
+    fs.mkdirSync(path.join(codex, 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'skills', 'SKILL.md'), 'synthetic');
+    seedCache('zshrc.sh', 'prior cache');
+    const effects = path.join(root, 'unexpected-effects');
+    const result = run([], '', {}, `
+      const fs = require('fs'), path = require('path'), cp = require('child_process');
+      const previous = process.cwd(), chdir = process.chdir, lstat = fs.lstatSync;
+      process.chdir = (directory) => {
+        if (directory === previous) throw new Error('synthetic restore failure');
+        return chdir(directory);
+      };
+      fs.lstatSync = (file, ...args) => {
+        if (path.resolve(file) === ${JSON.stringify(path.join(codex, 'rules'))}) fs.appendFileSync(${JSON.stringify(effects)}, 'continued discovery');
+        return lstat(file, ...args);
+      };
+      cp.spawnSync = () => { fs.appendFileSync(${JSON.stringify(effects)}, 'child workflow'); throw new Error('No child workflows'); };
+    `);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.isFalse(fs.existsSync(effects), 'fatal restoration must prevent later discovery and collection');
+    assert.deepEqual(state().requests, []);
+    assert.equal(cached('zshrc.sh'), 'prior cache');
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+
   [
     { base: undefined, remote: undefined, local: 'local\n', publish: true },
     { base: undefined, remote: 'local\n', local: 'local\n', publish: false },

@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { createConfigStore, stringify } = require('../config/store.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
@@ -78,12 +79,27 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     try {
       const logical = observation.source.path;
       if (!logical || !['file', 'directory'].includes(observation.source.kind)) throw new Error('Unsupported review source');
-      const resolved = fs.realpathSync(logical);
-      const stat = fs.statSync(resolved);
-      if (observation.source.kind === 'directory' ? !stat.isDirectory() : !stat.isFile()) throw new Error('Unsupported source type');
-      fs.accessSync(resolved, fs.constants.R_OK);
+      let resolved: string;
+      if (definition.category === 'codex') {
+        const { fileStat, recursiveFiles, sourceStat } = require('./recursive_snapshot.ts');
+        const args = observation.collector.args;
+        if (!args || !args[1]) throw new Error('Unsupported review source');
+        resolved = observation.source.kind === 'directory' ? args[1] : path.join(args[1], args[3]);
+        if (observation.source.kind === 'directory') {
+          if (!sourceStat(path.dirname(resolved), path.basename(resolved)).isDirectory()) throw new Error('Unsupported source type');
+          recursiveFiles(resolved, args[2] === 'profiles', args[2] === 'skills');
+        } else {
+          fileStat(args[1], args[3]);
+        }
+      } else {
+        resolved = fs.realpathSync(logical);
+        const stat = fs.statSync(resolved);
+        if (observation.source.kind === 'directory' ? !stat.isDirectory() : !stat.isFile()) throw new Error('Unsupported source type');
+        fs.accessSync(resolved, fs.constants.R_OK);
+      }
       writeStdoutLine(`${definition.name}: ${displayPath(logical)} -> ${displayPath(resolved)}`);
-    } catch {
+    } catch (error) {
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
       writeStdoutLine(`Unable to review ${definition.name}: resolution or read access failed.`);
       return false;
     }

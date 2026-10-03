@@ -435,10 +435,20 @@ the local capture envelope; this is not a global request or process-memory
 guarantee. New canonical names may recognize previously unexpected large remote
 blobs. Remote-reader resource bounds remain separate follow-up work.
 
+Codex traversal and reads use a private synchronous cwd-pinning helper. Each
+directory identity is captured from its pinned parent and verified after entry;
+callbacks use only the pinned directory or immediate names. Leaf opens reject
+symlinks, and caller cwd identity is verified after restoration. Restoration
+failure is fatal and bypasses optional-source handling. These checks pin selected
+directory objects; they do not provide an atomic snapshot of concurrent edits.
+
 Successful self-update compares the Git blob identities of the source-definition
 file before/after update. Changed or unavailable comparison emits a stateless
 source-guide advisory. It never executes definitions or discovers personal
 sources; advisory failure does not turn a successful update into failure.
+The first upgrade installing this updater still runs the earlier loaded code;
+the comparison applies to subsequent updates. Setup and the source guide
+disclose the expanded catalog independently of that advisory.
 
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
 The observation entrypoint accepts a native boolean, `includeSensitive`,

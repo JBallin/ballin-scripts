@@ -139,6 +139,8 @@ Opting in to sensitive sources covers the maintained catalog, including future s
 After self-update, Ballin shows a source-guide advisory when backup definitions
 changed or the comparison was unavailable. Review that guide for current source
 support; the advisory does not change your local choice.
+The first upgrade that installs this advisory still runs the earlier updater
+and cannot show it. Review the source guide when adopting this release.
 
 To toggle sensitive sources in future backups:
 

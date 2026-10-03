@@ -540,13 +540,12 @@ const codexSnapshot = (name: string, relative: string, recursive = false, profil
     const logicalRoot = marketplace ? context.homeDir : codexRoot(context);
     let root = logicalRoot;
     let sourcePath = path.join(root, relative);
-    let source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
+    const source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
     try {
       root = fs.realpathSync(logicalRoot);
       sourcePath = require('./recursive_snapshot.ts').checkedPath(root, relative);
-      source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
       // Unlike existing dotfiles, Codex sources never follow symlinked entries.
-      const stat = fs.lstatSync(sourcePath);
+      const stat = require('./recursive_snapshot.ts').sourceStat(root, relative);
       if (stat.isSymbolicLink() || (recursive ? !stat.isDirectory() : !stat.isFile())) {
         return { status: 'unavailable', source, reason: 'unsupported-source-type' };
       }
@@ -565,6 +564,9 @@ const codexSnapshot = (name: string, relative: string, recursive = false, profil
         },
       };
     } catch (error) {
+      // A failed cwd restoration is fatal; ordinary optional-source handling
+      // must never continue discovery or publication from a different cwd.
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
       if (error instanceof require('./recursive_snapshot.ts').SnapshotLimitError) {
         return { status: 'discovery-failed', source, reason: 'source-limit-exceeded', error: error as Error };
       }

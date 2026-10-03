@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { snapshotDefinitions } = require('../commands/backup_snapshots.ts');
-const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError } = require('../commands/recursive_snapshot.ts');
+const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError, SnapshotCwdError, sourceStat } = require('../commands/recursive_snapshot.ts');
 import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 
 const collectorPath = path.resolve(__dirname, '../commands/recursive_snapshot.ts');
@@ -60,6 +60,24 @@ describe('Codex durable snapshots', () => {
     [active, alias].forEach((CODEX_HOME) => {
       assert.equal(capture('codex_config.toml', { CODEX_HOME }).stdout, 'active');
     });
+  });
+
+  it('reports logical active-home aliases while collecting from canonical paths', () => {
+    const active = path.join(homeDir, 'active codex');
+    write('config.toml', 'synthetic alias config', active);
+    write('rules/nested/rule', 'synthetic alias rule', active);
+    const alias = path.join(homeDir, 'active alias');
+    fs.symlinkSync(active, alias);
+    const raw = discover('codex_config.toml', { CODEX_HOME: alias });
+    const recursive = discover('codex_rules.json', { CODEX_HOME: alias });
+    assert.equal(raw.status, 'available');
+    assert.equal(recursive.status, 'available');
+    if (raw.status !== 'available' || recursive.status !== 'available') throw new Error('Expected synthetic alias sources');
+    assert.equal(raw.source.path, path.join(alias, 'config.toml'));
+    assert.equal(raw.source.root, alias);
+    assert.deepEqual(raw.collector.args, [collectorPath, active, 'file', 'config.toml']);
+    assert.equal(recursive.source.path, path.join(alias, 'rules'));
+    assert.deepEqual(recursive.collector.args, [collectorPath, path.join(active, 'rules'), 'directory']);
   });
 
   it('reports missing, empty, generated-only and wrong-type sources distinctly', () => {
@@ -146,12 +164,14 @@ describe('Codex durable snapshots', () => {
     assert.deepEqual(recursiveFiles(path.join(root, 'rules')), ['regular']);
     fs.symlinkSync(path.join(homeDir, 'outside'), path.join(root, 'config.toml'));
     assert.equal(discover('codex_config.toml').status, 'unavailable');
-    assert.throws(() => fileEntry(root, 'config.toml'), /Symlinked snapshot source/);
+    let symlinkFailure: NodeJS.ErrnoException | undefined;
+    try { fileEntry(root, 'config.toml'); } catch (error) { symlinkFailure = error as NodeJS.ErrnoException; }
+    assert.equal(symlinkFailure?.code, 'ELOOP');
     assert.throws(() => checkedPath(root, '../outside'), /Invalid snapshot path/);
     assert.throws(() => checkedPath(root, path.join(homeDir, 'outside')), /Invalid snapshot path/);
     const alias = path.join(homeDir, 'root-alias');
     fs.symlinkSync(root, alias);
-    assert.throws(() => checkedPath(alias, '.'), /Snapshot root changed/);
+    assert.throws(() => checkedPath(alias, '.'), /Symlinked snapshot source/);
   });
 
   it('reports source access failures without pretending the source is absent', () => {
@@ -159,7 +179,7 @@ describe('Codex durable snapshots', () => {
     const original = fs.lstatSync;
     try {
       fs.lstatSync = (candidate: string) => {
-        if (candidate === path.join(root, 'config.toml')) throw Object.assign(new Error('synthetic access failure'), { code: 'EACCES' });
+        if (path.resolve(candidate) === path.join(root, 'config.toml')) throw Object.assign(new Error('synthetic access failure'), { code: 'EACCES' });
         return original(candidate);
       };
       const result = discover('codex_config.toml');
@@ -173,7 +193,7 @@ describe('Codex durable snapshots', () => {
     const original = fs.opendirSync;
     try {
       fs.opendirSync = (candidate: string) => {
-        if (candidate === path.join(root, 'rules/nested')) throw Object.assign(new Error('synthetic directory failure'), { code: 'EACCES' });
+        if (candidate === '.' && process.cwd() === path.join(root, 'rules/nested')) throw Object.assign(new Error('synthetic directory failure'), { code: 'EACCES' });
         return original(candidate);
       };
       assert.equal(discover('codex_rules.json').status, 'discovery-failed');
@@ -308,6 +328,212 @@ describe('Codex durable snapshots', () => {
     assert.equal(result.stderr, 'Snapshot bytes limit exceeded (4 > 3).\n');
     assert.notInclude(result.stderr, homeDir);
     assert.notInclude(result.stderr, 'SYNTHETIC_SECRET');
+  });
+
+  it('reads the held parent after an ancestor is replaced at leaf open', () => {
+    write('rules/nested/entry', 'inside approved');
+    const outside = path.join(homeDir, 'outside');
+    write('entry', 'OUTSIDE_SYNTHETIC_SECRET', outside);
+    const nested = path.join(root, 'rules/nested');
+    const originalOpen = fs.openSync;
+    const previous = process.cwd();
+    let swapped = false;
+    try {
+      fs.openSync = (candidate: string, flags: number) => {
+        if (candidate === 'entry' && !swapped) {
+          swapped = true;
+          fs.renameSync(nested, `${nested}-original`);
+          fs.symlinkSync(outside, nested);
+        }
+        return originalOpen(candidate, flags);
+      };
+      const entry = fileEntry(root, 'rules/nested/entry');
+      assert.isTrue(swapped);
+      assert.equal(Buffer.from(entry.content, 'base64').toString(), 'inside approved');
+      assert.equal(process.cwd(), previous);
+    } finally { fs.openSync = originalOpen; }
+  });
+
+  it('rejects replacement before directory entry and rename before verification', () => {
+    ['before-entry', 'before-verification'].forEach((phase) => {
+      const nested = path.join(root, phase);
+      write(`${phase}/entry`, 'inside');
+      const outside = path.join(homeDir, `outside-${phase}`);
+      write('entry', 'outside', outside);
+      const originalChdir = process.chdir;
+      let swapped = false;
+      try {
+        process.chdir = (candidate: string) => {
+          if (candidate === phase && !swapped) {
+            swapped = true;
+            if (phase === 'before-verification') originalChdir(candidate);
+            fs.renameSync(nested, `${nested}-original`);
+            fs.symlinkSync(outside, nested);
+            if (phase === 'before-verification') return;
+          }
+          return originalChdir(candidate);
+        };
+        assert.throws(() => fileEntry(root, `${phase}/entry`), /Snapshot directory changed/);
+        assert.isTrue(swapped);
+      } finally { process.chdir = originalChdir; }
+    });
+  });
+
+  it('enumerates the held directory after its path is replaced', () => {
+    write('rules/inside', 'inside');
+    const directory = path.join(root, 'rules');
+    const outside = path.join(homeDir, 'outside');
+    write('OUTSIDE_NAME', 'outside', outside);
+    const originalOpen = fs.opendirSync;
+    let swapped = false;
+    try {
+      fs.opendirSync = (candidate: string) => {
+        if (candidate === '.' && process.cwd() === directory && !swapped) {
+          swapped = true;
+          fs.renameSync(directory, `${directory}-original`);
+          fs.symlinkSync(outside, directory);
+        }
+        return originalOpen(candidate);
+      };
+      assert.deepEqual(recursiveFiles(directory), ['inside']);
+      assert.isTrue(swapped);
+    } finally { fs.opendirSync = originalOpen; }
+  });
+
+  it('rejects a leaf replaced with a symlink at actual open', () => {
+    const leaf = write('entry', 'inside');
+    const outside = write('outside', 'outside', homeDir);
+    const originalOpen = fs.openSync;
+    let swapped = false;
+    try {
+      fs.openSync = (candidate: string, flags: number) => {
+        if (candidate === 'entry' && !swapped) {
+          swapped = true;
+          fs.unlinkSync(leaf);
+          fs.symlinkSync(outside, leaf);
+        }
+        return originalOpen(candidate, flags);
+      };
+      assert.throws(() => fileEntry(root, 'entry'));
+      assert.isTrue(swapped);
+    } finally { fs.openSync = originalOpen; }
+  });
+
+  it('restores caller directory on success and failure and reports restoration failures', () => {
+    const caller = path.join(homeDir, 'caller');
+    fs.mkdirSync(caller);
+    write('entry');
+    const previous = process.cwd();
+    const originalChdir = process.chdir;
+    try {
+      process.chdir(caller);
+      const inode = fs.statSync('.').ino;
+      fileEntry(root, 'entry');
+      assert.equal(process.cwd(), caller);
+      assert.equal(fs.statSync('.').ino, inode);
+      assert.throws(() => fileEntry(root, 'entry', 0), SnapshotLimitError);
+      assert.equal(process.cwd(), caller);
+      assert.equal(fs.statSync('.').ino, inode);
+      process.chdir = (candidate: string) => {
+        if (candidate === caller) throw new Error('synthetic restoration failure');
+        return originalChdir(candidate);
+      };
+      assert.throws(() => fileEntry(root, 'entry'), SnapshotCwdError);
+      process.chdir = originalChdir;
+      process.chdir(caller);
+      const originalOpen = fs.openSync;
+      try {
+        fs.openSync = (candidate: string, flags: number) => {
+          if (candidate === 'entry') {
+            fs.renameSync(caller, `${caller}-original`);
+            fs.mkdirSync(caller);
+          }
+          return originalOpen(candidate, flags);
+        };
+        assert.throws(() => fileEntry(root, 'entry'), SnapshotCwdError);
+      } finally { fs.openSync = originalOpen; }
+    } finally { process.chdir = originalChdir; process.chdir(previous); }
+  });
+
+  it('keeps CLI raw capture inside the held root during an ancestor replacement', () => {
+    write('config.toml', 'ORIGINAL_INSIDE_BYTES');
+    const outside = path.join(homeDir, 'outside');
+    write('config.toml', 'OUTSIDE_SYNTHETIC_SECRET', outside);
+    const preload = write('capture-preload.cjs', `
+      const fs = require('fs');
+      const open = fs.openSync;
+      let swapped = false;
+      fs.openSync = (candidate, flags, ...args) => {
+        if (candidate === 'config.toml' && !swapped) {
+          swapped = true;
+          fs.renameSync(process.env.SYNTHETIC_INSIDE, process.env.SYNTHETIC_INSIDE + '-original');
+          fs.symlinkSync(process.env.SYNTHETIC_OUTSIDE, process.env.SYNTHETIC_INSIDE);
+        }
+        return open(candidate, flags, ...args);
+      };
+    `, homeDir);
+    const result = spawnSync(process.execPath, ['--require', preload, collectorPath, root, 'file', 'config.toml'], {
+      env: { HOME: homeDir, PATH: '', SYNTHETIC_INSIDE: root, SYNTHETIC_OUTSIDE: outside }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'ORIGINAL_INSIDE_BYTES');
+    assert.notInclude(result.stdout, 'OUTSIDE_SYNTHETIC_SECRET');
+    assert.equal(fs.readlinkSync(root), outside);
+  });
+
+  it('rejects a CLI root replacement before entry without returning outside bytes', () => {
+    write('config.toml', 'ORIGINAL_INSIDE_BYTES');
+    const outside = path.join(homeDir, 'outside');
+    write('config.toml', 'OUTSIDE_SYNTHETIC_SECRET', outside);
+    const preload = write('entry-preload.cjs', `
+      const fs = require('fs');
+      const path = require('path');
+      const chdir = process.chdir;
+      let swapped = false;
+      process.chdir = (candidate) => {
+        if (candidate === path.basename(process.env.SYNTHETIC_INSIDE) && !swapped) {
+          swapped = true;
+          fs.renameSync(process.env.SYNTHETIC_INSIDE, process.env.SYNTHETIC_INSIDE + '-original');
+          fs.symlinkSync(process.env.SYNTHETIC_OUTSIDE, process.env.SYNTHETIC_INSIDE);
+        }
+        return chdir(candidate);
+      };
+    `, homeDir);
+    const result = spawnSync(process.execPath, ['--require', preload, collectorPath, root, 'file', 'config.toml'], {
+      env: { HOME: homeDir, PATH: '', SYNTHETIC_INSIDE: root, SYNTHETIC_OUTSIDE: outside }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'Unable to capture recursive snapshot.\n');
+    assert.equal(fs.readlinkSync(root), outside);
+  });
+
+  it('inspects only held-parent metadata if its ancestor changes before final lstat', () => {
+    write('rules/nested/entry', 'inside');
+    const nested = path.join(root, 'rules/nested');
+    const insideStat = fs.lstatSync(path.join(nested, 'entry'));
+    const outside = path.join(homeDir, 'outside');
+    write('entry', 'OUTSIDE_DIFFERENT_LENGTH', outside);
+    const originalStat = fs.lstatSync;
+    const originalRead = fs.readSync;
+    let swapped = false;
+    let reads = 0;
+    try {
+      fs.lstatSync = (candidate: string) => {
+        if (candidate === 'entry' && !swapped) {
+          swapped = true;
+          fs.renameSync(nested, `${nested}-original`);
+          fs.symlinkSync(outside, nested);
+        }
+        return originalStat(candidate);
+      };
+      fs.readSync = (...args: unknown[]) => { reads++; return originalRead(...args); };
+      const captured = sourceStat(root, 'rules/nested/entry');
+      assert.isTrue(swapped);
+      assert.equal(captured.ino, insideStat.ino);
+      assert.equal(captured.size, insideStat.size);
+      assert.equal(reads, 0);
+    } finally { fs.lstatSync = originalStat; fs.readSync = originalRead; }
   });
 
   it('fails empty or invalid captures with safe diagnostics and no stdout', () => {
