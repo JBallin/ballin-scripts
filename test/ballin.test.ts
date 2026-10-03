@@ -279,7 +279,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
           ['setup [repository-name]', 'open', 'read <file>', 'disconnect'].forEach((usage) => {
             assert.include(result.stdout, `ballin backup ${usage}`);
           });
-          assert.include(result.stdout, 'Repository backups exclude sensitive sources unless `backup.includeSensitive` is true.');
+          assert.include(result.stdout, 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');
         }
         assert.deepEqual(commandLog(), []);
         assert.isFalse(fs.existsSync(networkMarker));

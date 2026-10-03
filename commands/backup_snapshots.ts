@@ -18,7 +18,8 @@ type SnapshotCategory =
   | 'vscode-insiders'
   | 'editor'
   | 'ballin'
-  | 'mas';
+  | 'mas'
+  | 'codex';
 
 type SnapshotCommand = {
   fileName: string;
@@ -62,7 +63,7 @@ type UnavailableSnapshotSource = {
 type FailedSnapshotDiscovery = {
   status: 'discovery-failed';
   source: SnapshotSourceReference;
-  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed';
+  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed' | 'source-limit-exceeded';
   error?: Error;
   exitStatus?: number | null;
   signal?: NodeJS.Signals | null;
@@ -524,6 +525,59 @@ const portableConfigSnapshot = (): SnapshotDefinition => {
   };
 };
 
+const codexRoot = ({ homeDir, env }: SnapshotDiscoveryContext): string => (
+  env.CODEX_HOME ? path.resolve(env.CODEX_HOME) : path.join(homeDir, '.codex')
+);
+
+// Codex configuration is executable, arbitrary user-authored content. Every
+// source is sensitive; selection must happen before this discovery is called.
+const codexSnapshot = (name: string, relative: string, recursive = false, profiles = false, homeRoot = false, skills = relative === 'skills'): SnapshotDefinition => ({
+  name,
+  category: 'codex',
+  inclusionGroup: 'sensitive',
+  prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
+  discover: (context) => {
+    const logicalRoot = homeRoot ? context.homeDir : codexRoot(context);
+    let root = logicalRoot;
+    let sourcePath = path.join(root, relative);
+    const source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
+    try {
+      root = fs.realpathSync(logicalRoot);
+      sourcePath = require('./recursive_snapshot.ts').checkedPath(root, relative);
+      // Unlike existing dotfiles, Codex sources never follow symlinked entries.
+      const stat = require('./recursive_snapshot.ts').sourceStat(root, relative);
+      if (stat.isSymbolicLink() || (recursive ? !stat.isDirectory() : !stat.isFile())) {
+        return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      }
+      if (recursive && require('./recursive_snapshot.ts').recursiveFiles(sourcePath, profiles, skills).length === 0) {
+        return { status: 'absent', source, reason: 'source-not-found' };
+      }
+      return {
+        status: 'available', source,
+        collector: {
+          fileName: name,
+          command: process.execPath,
+          args: recursive
+            ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, profiles ? 'profiles' : skills ? 'skills' : 'directory']
+            : [path.join(__dirname, 'recursive_snapshot.ts'), root, 'file', relative],
+          env: context.env,
+        },
+      };
+    } catch (error) {
+      // A failed cwd restoration is fatal; ordinary optional-source handling
+      // must never continue discovery or publication from a different cwd.
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotLimitError) {
+        return { status: 'discovery-failed', source, reason: 'source-limit-exceeded', error: error as Error };
+      }
+      if (errorCode(error) === 'ELOOP') return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      return errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
+        ? { status: 'absent', source, reason: 'source-not-found' }
+        : { status: 'discovery-failed', source, reason: 'source-access-failed', error: error as Error };
+    }
+  },
+});
+
 // This is the snapshot source allowlist. Keep additions synchronized with the
 // inclusion and sensitivity review in docs/backup-sources.md.
 const snapshotDefinitions: readonly SnapshotDefinition[] = [
@@ -574,11 +628,22 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   editorExtensionsSnapshot('vscode-insiders', 'vsI_extensions', 'Code - Insiders', 'code-insiders'),
   fileSnapshot('editor', 'sensitive', 'vimrc', '.vimrc'),
   fileSnapshot('editor', 'sensitive', 'nanorc', '.nanorc'),
+  codexSnapshot('codex_AGENTS.md', 'AGENTS.md'),
+  codexSnapshot('codex_AGENTS.override.md', 'AGENTS.override.md'),
+  codexSnapshot('codex_config.toml', 'config.toml'),
+  codexSnapshot('codex_profiles.json', '.', true, true),
+  codexSnapshot('codex_hooks.json', 'hooks.json'),
+  codexSnapshot('codex_skills.json', 'skills', true),
+  codexSnapshot('codex_user_skills.json', '.agents/skills', true, false, true, true),
+  codexSnapshot('codex_rules.json', 'rules', true),
+  codexSnapshot('codex_agents.json', 'agents', true),
+  codexSnapshot('codex_marketplace.json', '.agents/plugins/marketplace.json', false, false, true),
   portableConfigSnapshot(),
   shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
 ];
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
+const codexSnapshotFileNames = new Set(snapshotDefinitions.filter(({ category }) => category === 'codex').map(({ name }) => name));
 
 const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: boolean): boolean => {
   switch (definition.inclusionGroup) {
@@ -651,6 +716,7 @@ module.exports = {
   repositoryMarkerFileName,
   repositoryReadmeFileName,
   classifySnapshotFileName,
+  codexSnapshotFileNames,
   collectSnapshotObservations,
   configSnapshotFileName,
   emptySnapshotContent,

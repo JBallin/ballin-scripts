@@ -42,6 +42,17 @@ describe('ballin self-update', () => {
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
 case "$1" in
   rev-parse)
+    if [ "$2" = '--verify' ] && [ "$3" = 'HEAD:commands/backup_snapshots.ts' ]; then
+      if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
+        if [ "\${FAKE_SOURCE_POST_STATUS:-0}" != '0' ]; then exit "$FAKE_SOURCE_POST_STATUS"; fi
+        if [ "\${FAKE_SOURCE_CHANGED:-0}" = '1' ]; then
+          printf '%s\\n' bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          exit 0
+        fi
+      elif [ "\${FAKE_SOURCE_PRE_STATUS:-0}" != '0' ]; then exit "$FAKE_SOURCE_PRE_STATUS"; fi
+      printf '%s\\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      exit 0
+    fi
     if [ "$FAKE_GIT_MERGE_IN_PROGRESS" = '1' ]; then
       exit 0
     fi
@@ -137,9 +148,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     },
   });
 
-  const commandLog = () => (
+  const commandLog = (includeSourceChecks = false) => (
     fs.existsSync(commandLogPath)
-      ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter(Boolean)
+      ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter((line: string) => line
+        && (includeSourceChecks || !line.endsWith('|git:rev-parse --verify HEAD:commands/backup_snapshots.ts')))
       : []
   );
 
@@ -165,6 +177,33 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
 
   afterEach(() => {
     fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('discloses changed backup definitions after successful refresh without executing them', () => {
+    const result = runSelfUpdate({ FAKE_SOURCE_CHANGED: '1' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Backup source definitions may have changed.');
+    assert.include(result.stdout, 'Sensitive-source opt-in covers current and future supported sources.');
+    assert.include(result.stdout, '/docs/backup-sources.md');
+    assert.equal(commandLog(true).filter((line: string) => line.includes('HEAD:commands/backup_snapshots.ts')).length, 2);
+    assert.isBelow(result.stdout.indexOf('Ballin updated.'), result.stdout.indexOf('Backup source definitions'));
+  });
+
+  ['FAKE_SOURCE_PRE_STATUS', 'FAKE_SOURCE_POST_STATUS'].forEach((setting) => {
+    it(`keeps a successful update successful when the ${setting} comparison is unavailable`, () => {
+      const result = runSelfUpdate({ [setting]: '1' });
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, 'Ballin updated.');
+      assert.include(result.stdout, 'Backup source definitions may have changed.');
+      assert.equal(result.stderr, '');
+    });
+  });
+
+  it('does not disclose possible source changes when refresh failed', () => {
+    const result = runSelfUpdate({ FAKE_SOURCE_CHANGED: '1', FAKE_SETUP_STATUS: '7' });
+    assert.equal(result.status, 7);
+    assert.notInclude(result.stdout, 'Backup source definitions');
+    assert.equal(commandLog(true).filter((line: string) => line.includes('HEAD:commands/backup_snapshots.ts')).length, 1);
   });
 
   it('fetches, merges, then runs the setup from the installed repository', () => {

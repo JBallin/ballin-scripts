@@ -114,6 +114,123 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(statusFile(), priorSuccess, { mode: 0o600 });
   };
   const statusClock = (time: number) => `Date.now = () => ${time};`;
+
+  it('aborts before collection or remote effects when Codex cwd restoration fails', () => {
+    const codex = fs.realpathSync(home) + '/.codex';
+    fs.mkdirSync(path.join(codex, 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'skills', 'SKILL.md'), 'synthetic');
+    seedCache('zshrc.sh', 'prior cache');
+    const effects = path.join(root, 'unexpected-effects');
+    const result = run([], '', {}, `
+      const fs = require('fs'), path = require('path'), cp = require('child_process');
+      const previous = process.cwd(), chdir = process.chdir, lstat = fs.lstatSync;
+      process.chdir = (directory) => {
+        if (directory === previous) throw new Error('synthetic restore failure');
+        return chdir(directory);
+      };
+      fs.lstatSync = (file, ...args) => {
+        if (path.resolve(file) === ${JSON.stringify(path.join(codex, 'rules'))}) fs.appendFileSync(${JSON.stringify(effects)}, 'continued discovery');
+        return lstat(file, ...args);
+      };
+      cp.spawnSync = () => { fs.appendFileSync(${JSON.stringify(effects)}, 'child workflow'); throw new Error('No child workflows'); };
+    `);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.isFalse(fs.existsSync(effects), 'fatal restoration must prevent later discovery and collection');
+    assert.deepEqual(state().requests, []);
+    assert.equal(cached('zshrc.sh'), 'prior cache');
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+
+  ['skills', 'rules', 'agents', 'profiles', 'user_skills'].forEach((tree) => {
+    it(`aborts ordinary backup without cache promotion when a selected Codex ${tree} leaf is unreadable`, () => {
+      const codex = path.join(fs.realpathSync(home), '.codex');
+      const leaf = tree === 'user_skills' ? path.join(fs.realpathSync(home), '.agents', 'skills', 'entry')
+        : tree === 'profiles' ? path.join(codex, 'personal.config.toml') : path.join(codex, tree, 'entry');
+      fs.mkdirSync(path.dirname(leaf), { recursive: true });
+      fs.writeFileSync(leaf, 'synthetic');
+      source('local shell\n');
+      const snapshot = `codex_${tree}.json`;
+      seedCache(snapshot, 'prior Codex cache\n');
+      seedCache('zshrc.sh', 'prior shell cache\n');
+      seedSuccess();
+      const before = state();
+      before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
+      saveState(before);
+      const attempts = path.join(root, 'unreadable-attempts');
+      const result = run([], '', { NODE_OPTIONS: `--require=${JSON.stringify(path.join(root, 'preload.cjs'))}` }, `
+        const fs = require('fs'), path = require('path'), open = fs.openSync;
+        fs.openSync = (file, ...args) => {
+          if (typeof file === 'string' && path.resolve(file) === ${JSON.stringify(leaf)}) {
+            fs.appendFileSync(${JSON.stringify(attempts)}, process.argv[1] + '\\n');
+            const error = new Error('synthetic denied leaf'); error.code = 'EACCES'; throw error;
+          }
+          return open(file, ...args);
+        };
+      `);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, `failed to snapshot ${snapshot}`);
+      assert.deepEqual(state().requests, [], 'capture must fail before remote reads or publication');
+      assert.equal(cached(snapshot), 'prior Codex cache\n');
+      assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess, 'failed Codex capture must not refresh success time');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh', '.last-success'].sort());
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+      assert.isTrue(fs.readFileSync(attempts, 'utf8').trim().split('\n').every((entry: string) => entry.endsWith('recursive_snapshot.ts')),
+        'denied leaf opens belong to capture, not discovery');
+    });
+  });
+
+  [
+    { tree: 'skills', operation: 'opendirSync' },
+    { tree: 'rules', operation: 'readSync' },
+    { tree: 'agents', operation: 'lstatSync' },
+    { tree: 'profiles', operation: 'opendirSync' },
+    { tree: 'user_skills', operation: 'opendirSync' },
+  ].forEach(({ tree, operation }) => {
+    it(`aborts before staging when selected Codex ${tree} directory discovery fails at ${operation}`, () => {
+      const codex = path.join(fs.realpathSync(home), '.codex');
+      const directory = tree === 'user_skills' ? path.join(fs.realpathSync(home), '.agents', 'skills', 'nested')
+        : tree === 'profiles' ? codex : path.join(codex, tree, 'nested');
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(path.join(directory, tree === 'profiles' ? 'personal.config.toml' : 'entry'), 'synthetic');
+      source('local shell\n');
+      const snapshot = `codex_${tree}.json`;
+      seedCache(snapshot, 'prior Codex cache\n');
+      seedCache('zshrc.sh', 'prior shell cache\n');
+      seedSuccess();
+      const before = state();
+      before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
+      saveState(before);
+      const result = run([], '', {}, `
+        const fs = require('fs');
+        const denied = () => { const error = new Error('synthetic directory denial'); error.code = 'EACCES'; throw error; };
+        const original = fs[${JSON.stringify(operation)}];
+        if (${JSON.stringify(operation)} === 'readSync') {
+          const open = fs.opendirSync;
+          fs.opendirSync = (...args) => {
+            const dir = open(...args);
+            if (process.cwd() === ${JSON.stringify(directory)}) dir.readSync = denied;
+            return dir;
+          };
+        } else {
+          fs[${JSON.stringify(operation)}] = (...args) => {
+            if (process.cwd() === ${JSON.stringify(directory)}) denied();
+            return original(...args);
+          };
+        }
+      `);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, snapshot);
+      assert.include(result.stderr, 'No snapshots were published');
+      assert.deepEqual(state().requests, [], 'discovery failure must precede all remote reads');
+      assert.equal(cached(snapshot), 'prior Codex cache\n');
+      assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess, 'failed Codex capture must not refresh success time');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh', '.last-success'].sort());
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    });
+  });
+
   it('records changed and genuine no-op completion locally without another publication', () => {
     source(); seedSuccess();
     const firstTime = Date.parse('2026-01-01T00:00:00.000Z');
@@ -318,6 +435,141 @@ describe('repository backup lifecycle', function() {
         ok(run()); assert.equal(publications().length, 1);
       }
       assert.equal(rulesetRequests().length, 0);
+    });
+  });
+  [false, true].forEach((included) => {
+    it(`publishes synthetic Codex sources with the existing sensitive preference: ${included}`, () => {
+      const value = config();
+      value.backup.includeSensitive = String(included);
+      saveConfig(value);
+      const codex = path.join(home, 'active-codex');
+      fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
+      const wholeConfig = '[projects."/synthetic"]\ntrust_level = "trusted"\n';
+      fs.writeFileSync(path.join(codex, 'config.toml'), wholeConfig);
+      fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill\n');
+      ok(run([], '', { CODEX_HOME: codex }));
+      if (included) {
+        assert.equal(remote('codex_config.toml'), wholeConfig);
+        const archive = JSON.parse(remote('codex_skills.json')!);
+        assert.equal(archive.format, 'ballin-directory');
+        assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['synthetic/SKILL.md']);
+        assert.equal(Buffer.from(archive.entries[0].content, 'base64').toString(), 'synthetic skill\n');
+        assert.equal(cached('codex_config.toml'), wholeConfig);
+        assert.equal(cached('codex_skills.json'), remote('codex_skills.json'));
+      } else {
+        assert.isUndefined(remote('codex_config.toml'));
+        assert.isUndefined(remote('codex_skills.json'));
+      }
+      assert.notProperty(JSON.parse(remote('ballin_config')!), 'backup');
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.lengthOf(publications(), 1);
+    });
+  });
+  describe('local Codex snapshot budgets', function() {
+    this.timeout(30000);
+    const mib = 1024 * 1024;
+    const sparse = (file: string, size: number): void => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const fd = fs.openSync(file, 'w');
+      try { fs.ftruncateSync(fd, size); } finally { fs.closeSync(fd); }
+    };
+    const active = (): string => path.join(home, 'budget-codex');
+
+    it('rejects combined raw and recursive staging above 16 MiB before remote reads', () => {
+      const codex = active();
+      sparse(path.join(codex, 'config.toml'), 9 * mib);
+      sparse(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 6 * mib);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: codex });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('shares the aggregate capture budget across legacy and current personal skills', () => {
+      sparse(path.join(active(), 'skills', 'legacy', 'SKILL.md'), 7 * mib);
+      sparse(path.join(home, '.agents', 'skills', 'current', 'SKILL.md'), 7 * mib);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: active() });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('counts both skill archive identities when CODEX_HOME overlaps the fixed user root', () => {
+      const shared = path.join(home, '.agents');
+      sparse(path.join(shared, 'skills', 'demo', 'SKILL.md'), 7 * mib);
+      const result = run([], '', { CODEX_HOME: shared });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('rejects excessive recursive entries before any remote read', () => {
+      const skills = path.join(active(), 'skills');
+      fs.mkdirSync(skills, { recursive: true });
+      for (let index = 0; index < 8193; index += 1) fs.writeFileSync(path.join(skills, `synthetic-${index}`), '');
+      const result = run([], '', { CODEX_HOME: active() });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'recursive source exceeds the supported snapshot limits');
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('rejects an oversized compared Codex cache without publication or promotion', () => {
+      const codex = active();
+      fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic local\n');
+      saveState(fixtureState({ 'codex_config.toml': 'synthetic remote\n' }));
+      sparse(path.join(cache, 'codex_config.toml'), 16 * mib + 1);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: codex });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(mutations(), 0);
+      assert.equal(fs.statSync(path.join(cache, 'codex_config.toml')).size, 16 * mib + 1);
+      assert.isFalse(fs.existsSync(path.join(cache, 'ballin_config')));
+    });
+
+    [false, true].forEach((included) => {
+      it(`ignores oversized unselected or absent Codex cache: sensitive ${included}`, () => {
+        const value = config(); value.backup.includeSensitive = String(included); saveConfig(value);
+        sparse(path.join(cache, 'codex_config.toml'), 16 * mib + 1);
+        ok(run([], '', { CODEX_HOME: active() }));
+        assert.equal(fs.statSync(path.join(cache, 'codex_config.toml')).size, 16 * mib + 1);
+        assert.isUndefined(remote('codex_config.toml'));
+      });
+    });
+
+    it('publishes encoded content above 16 MiB when normalized local bytes fit', () => {
+      const codex = active(); fs.mkdirSync(codex);
+      const content = 'x'.repeat(13 * mib - 1) + '\n';
+      fs.writeFileSync(path.join(codex, 'config.toml'), content);
+      ok(run([], '', { CODEX_HOME: codex }));
+      const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string; contents: string }[] } };
+      const addition = input.fileChanges.additions.find((entry) => entry.path === 'codex_config.toml');
+      assert.exists(addition);
+      assert.isAbove(addition!.contents.length, 16 * mib);
+      assert.equal(remote('codex_config.toml'), content);
+      assert.equal(cached('codex_config.toml'), content);
+    });
+
+    it('retains old absent Codex data without imposing a remote aggregate quota', () => {
+      const retained = 'r'.repeat(12 * mib - 1) + '\n';
+      const content = 'n'.repeat(12 * mib - 1) + '\n';
+      saveState(fixtureState({ 'codex_AGENTS.md': retained }));
+      const codex = active(); fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'config.toml'), content);
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.equal(remote('codex_AGENTS.md'), retained);
+      assert.equal(remote('codex_config.toml'), content);
+      const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.equal(remote('codex_AGENTS.md'), retained);
+      assert.equal(remote('codex_config.toml'), content);
+      assert.lengthOf(publications(), 1);
     });
   });
   it('sorts final snapshot status output without changing publication order', () => {
@@ -841,7 +1093,7 @@ describe('repository backup lifecycle', function() {
     it(`confirms the independently reviewed sensitive-source choice once after reconnect saves ${preference}`, () => {
       unconfigured(); const before = config(); before.backup.includeSensitive = preference === 'true' ? 'false' : 'true'; saveConfig(before);
       const result = run(['setup'], `y\nreconnect\n\n${preference === 'true' ? 'y' : 'n'}\ny\nn\n`); ok(result);
-      assert.include(result.stdout, 'Also include sensitive sources (raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata)? [y/N]');
+      assert.include(result.stdout, 'Also include sensitive sources (raw shell/Git/editor/Codex configuration, .nvmrc, and pipx installation metadata)? [y/N]');
       assert.equal(config().backup.includeSensitive, preference);
       assertSavedSensitiveChoice(result, preference);
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
