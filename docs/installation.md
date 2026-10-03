@@ -268,9 +268,23 @@ supported layout, and coherent readability. This is readiness only: it does not
 collect, repair cache permissions, probe writes, or establish backup freshness,
 coverage, or successful publication.
 
-`ballin backup read <file>` prints exact supported snapshot bytes;
-`ballin backup open` opens the validated destination. Both work with read-only
-access and leave caches unchanged. Use only one Mac to back up to a destination.
+Use `ballin backup list` to find supported snapshots saved in the configured
+backup, then `ballin backup read <snapshot>` to print one. Listing reflects saved
+contents even when an application is absent or future capture is disabled. It
+does not collect local sources or establish freshness or verification. Retired
+snapshots and unexpected entries can be inspected with `ballin backup open`;
+listing shows only a count for unexpected entries.
+
+Help is available offline with `ballin backup --help`. Running
+`ballin backup read` without a selector prints usage and, when the backup is
+readable, the same saved options as `ballin backup list`; it still exits with a
+usage error. Listing those options requires remote access. If storage is
+unconfigured or unreadable, usage remains available and Ballin reports the
+limitation instead of inventing saved options. An unmatched selector also shows
+actual saved options from the same inventory, without fuzzy matching or another
+remote lookup.
+`list`, `read`, and `open` work with read-only access and leave configuration and
+comparison caches unchanged. Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.
 A reconnect has no trusted base and cannot overwrite differing remote content;
 inspect and manually reconcile each conflict using the

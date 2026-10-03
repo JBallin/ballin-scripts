@@ -178,12 +178,27 @@ There is no latest-file fallback, automatic read loop, or cache write in a reade
 
 `backup read <snapshot>` uses the same identity, complete inventory, marker and
 final revision validation, but fetches only the requested supported snapshot's
-content. `backup open` fetches only marker content and prints the validated
-destination URL before opening it. Both use immutable blob IDs and the same
-content validation. Unrequested snapshot contents are not validated by these
-commands. Their partial reads remain internal to the transport module; callers
-receive only snapshot bytes or a URL, never a partial comparison/publication
-base. Backup, publication readback, readiness and reconnect keep full reads.
+content. `backup list` and `backup open` fetch only marker content. List presents
+current canonical selectors actually present, distinguishes retired names,
+omits reserved metadata, and counts unexpected entries without disclosing their
+names. Retired and unexpected content require deliberate inspection through
+`backup open`, which prints the validated destination URL before opening it.
+These commands use immutable blob IDs and the same content validation.
+Unrequested snapshot contents are not validated. Inventory-only inspection still
+requires the complete tree, marker and final revision checks; it cannot infer
+absence from a partial result. Callers receive only inventory entries, snapshot
+bytes with their inventory, or a URL, never a partial comparison/publication base.
+Bare `backup read` and unmatched selectors show actual saved options using the
+same list formatter. An unmatched read reuses its complete inspected inventory
+without another remote lookup; failures retain their stage-specific diagnostics.
+Backup, publication readback, readiness and reconnect keep full reads.
+
+Saved discovery does not observe local sources, invoke collectors, change capture
+policy, or promote caches/status. It reports presence, not provenance, freshness,
+content readability or verification. A valid marker-only backup lists no current
+snapshots successfully; missing or invalid identity/marker remains an error.
+Listing adds no inspection-specific analytics; the existing coarse top-level
+command event and opt-outs apply without backup-specific data.
 
 Authorized changes use one
 [`createCommitOnBranch`](https://docs.github.com/en/graphql/reference/commits#createcommitonbranch)

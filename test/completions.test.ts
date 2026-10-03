@@ -110,7 +110,7 @@ describe('shell completions', () => {
           [1, 'u', '', ['uninstall', 'update']], [1, 'missing', '', []],
           [2, '', 'backup', backupCommandNames], [2, 'op', 'backup', ['open']],
           [2, 's', 'backup', ['setup']], [2, 'r', 'backup', ['read']],
-          [2, 'd', 'backup', ['disconnect']],
+          [2, 'd', 'backup', ['disconnect']], [2, 'l', 'backup', ['list']],
           [2, '', 'config', configOperationNames], [2, 'g', 'config', ['get']],
           [2, 's', 'config', ['set']], [2, 'r', 'config', ['reset']],
           [2, 'help', 'config', []], [2, '--', 'config', []],
