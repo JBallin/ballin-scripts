@@ -71,7 +71,8 @@ Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ...
 ✔ vs_settings
 ✔ zprofile
-✔ zshrc
+✎ zshrc
+View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```
 
 ## New Mac setup

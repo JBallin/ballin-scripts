@@ -453,6 +453,7 @@ const runRepositoryBackup = (
   if (!staged) return false;
   const remote = new Map<string, RemoteSnapshot>();
   let completed: EvaluatedSnapshot[] | undefined;
+  let publishedCommitUrl: string | undefined;
   try {
     const read: RepositoryRead = requireRepositoryRead(inspectRepository(destination));
     const unexpected = unexpectedRepositoryEntries(read);
@@ -471,7 +472,8 @@ const runRepositoryBackup = (
     if (evaluation.conflicts.length) { reportConflicts(evaluation.conflicts, 'repository'); return false; }
     const changes = new Map<string, Buffer>(evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload)
       .map(({ snapshot, localFile }) => [snapshot.fileName, fs.readFileSync(localFile)]));
-    publishRepositorySnapshots(read, changes);
+    const published = publishRepositorySnapshots(read, changes);
+    if (changes.size) publishedCommitUrl = published.commitUrl;
     let promoted = false;
     try { promoted = promoteCaches(cacheDir, evaluation.evaluated); } catch {
       writeStderrLine('ballin backup: unable to finish private cache staging cleanup');
@@ -501,6 +503,7 @@ const runRepositoryBackup = (
   if (!recordLastBackupSuccess(cacheRoot, destination)) {
     writeStderrLine('Backup succeeded, but Ballin could not record the local last-success time.');
   }
+  if (publishedCommitUrl) writeStdoutLine(`View changes: ${publishedCommitUrl}`);
   return true;
 };
 

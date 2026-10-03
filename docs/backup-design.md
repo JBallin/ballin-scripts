@@ -206,9 +206,14 @@ transport, unreachable-object cleanup, or implicit replacement destination.
 Only confirmed publication or revalidated unchanged state permits cache
 promotion. Remote success followed by cache failure reports that partial result
 without normal success markers. A fresh invocation reads and reconciles again;
-matching local/remote content can recover without another commit. One active
-writer remains the product model; retire the prior writer before a replacement
-installation publishes. Conditional publication protects the inspected head,
+matching local/remote content can recover without another commit.
+
+After cache promotion and private temporary-file cleanup succeed, a changed
+backup prints the confirmed commit's GitHub URL using the validated repository
+owner and name. No extra remote lookup or persisted revision pointer is needed.
+Unchanged or failed runs print no commit link, and Ballin does not open a browser.
+One active writer remains the product model; retire the prior writer before a
+replacement installation publishes. Conditional publication protects the inspected head,
 including concurrent advancement or rewind, but does not offer multi-writer sync.
 
 ## Repository command latency (#367)
