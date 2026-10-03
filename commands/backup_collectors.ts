@@ -63,18 +63,40 @@ const readQualifiedBrewPrefix = (tool: string, env: NodeJS.ProcessEnv): string |
   } catch { return undefined; }
 };
 
+const writerToolIs = (name: string, expected: string, env: NodeJS.ProcessEnv, cwd = process.cwd()): boolean => {
+  if (env.PATH === undefined) return false;
+  try {
+    const target = fs.realpathSync(expected);
+    for (const directory of env.PATH.split(path.delimiter)) {
+      const candidate = path.resolve(cwd, directory, name);
+      try {
+        if (!fs.statSync(candidate).isFile()) continue;
+        fs.accessSync(candidate, fs.constants.X_OK);
+      } catch { continue; }
+      return fs.realpathSync(candidate) === target;
+    }
+  } catch { return false; }
+  return false;
+};
+const shellOverrides = (env: NodeJS.ProcessEnv): boolean => Object.entries(env).some(([key, value]) =>
+  Boolean(value) && (['BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS'].includes(key) || key.startsWith('BASH_FUNC_') || /^\s*\(\)\s*\{/.test(value as string)));
+
 type CollectorCommand = { command: string; args: string[]; env: NodeJS.ProcessEnv; cwd?: string };
 const qualifiedCollector = (source: AvailableSnapshotObservation): CollectorCommand | undefined => {
   const env = source.collector.env ?? process.env;
   if (process.platform !== 'darwin' || env.NODE_OPTIONS || env.NODE_PATH || Object.keys(env).some((key) => (key.startsWith('DYLD_') || key.startsWith('LD_')) && env[key])) return undefined;
   if (source.definition.name === 'bash_completions' && source.source.kind === 'directory') {
-    return { command: '/bin/ls', args: [source.source.path as string], env: source.collector.env ?? process.env };
+    if (!writerToolIs('ls', '/bin/ls', env, source.collector.cwd)) return undefined;
+    return { command: '/bin/ls', args: [source.source.path as string], env, cwd: source.collector.cwd };
   }
-  if (source.definition.name !== 'npm_global' || process.version !== 'v24.21.0') return undefined;
+  if (source.definition.name !== 'npm_global' || process.version !== 'v24.21.0' || shellOverrides(env)) return undefined;
   // Do not execute shell wrappers; inherited code-loading controls were rejected above.
   try {
     const cli = fs.realpathSync(source.source.path);
     if (path.basename(cli) !== 'npm-cli.js' || path.basename(path.dirname(cli)) !== 'bin') return undefined;
+    if (!writerToolIs('bash', '/bin/bash', env, source.collector.cwd) ||
+        !writerToolIs('npm', cli, env, source.collector.cwd) ||
+        !writerToolIs('node', process.execPath, env, source.collector.cwd)) return undefined;
     const root = path.dirname(path.dirname(cli));
     if (!npmArtifactDigests.has(artifactDigest(root))) return undefined;
     return {
@@ -89,8 +111,9 @@ const captureQualifiedCollector = (source: AvailableSnapshotObservation): Buffer
   const command = qualifiedCollector(source);
   if (!command) return undefined;
   const file = makeTempFile('ballin-verify-collector-');
-  const fd = fs.openSync(file, 'wx', 0o600);
+  let fd: number | undefined;
   try {
+    fd = fs.openSync(file, 'wx', 0o600);
     const result = runCommand(command.command, command.args, {
       env: command.env, cwd: command.cwd, stdio: ['ignore', fd, 'pipe'],
     });
@@ -98,7 +121,7 @@ const captureQualifiedCollector = (source: AvailableSnapshotObservation): Buffer
     // Snapshot transport saves raw stdout; stderr never becomes a diagnostic.
     return fs.readFileSync(file);
   } finally {
-    try { fs.closeSync(fd); } finally { removeTempFile(file); }
+    try { if (fd !== undefined) fs.closeSync(fd); } finally { removeTempFile(file); }
   }
 };
 module.exports = { qualifiedCollector, captureQualifiedCollector, artifactDigest, readQualifiedBrewPrefix };

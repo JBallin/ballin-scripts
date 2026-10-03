@@ -22,8 +22,9 @@ describe('qualified backup collector boundaries', () => {
     fs.writeFileSync(path.join(root, 'package/package.json'), '{}');
     fs.mkdirSync(path.join(root, 'bin'));
     fs.symlinkSync(path.join(root, 'package/bin/npm-cli.js'), path.join(root, 'bin/npm'));
+    for (const [name, target] of [['bash', '/bin/bash'], ['ls', '/bin/ls'], ['node', process.execPath]]) fs.symlinkSync(target, path.join(root, 'bin', name));
     const definition = snapshotDefinitions.find((d: { name: string }) => d.name === 'npm_global');
-    source = { definition, ...definition.discover({ homeDir: root, env: { HOME: root, PATH: path.join(root, 'bin'), npm_config_prefix: 'real-prefix', BASH_ENV: 'must-not-execute' } }) };
+    source = { definition, ...definition.discover({ homeDir: root, env: { HOME: root, PATH: path.join(root, 'bin'), npm_config_prefix: 'real-prefix' } }) };
   });
   afterEach(() => {
     Object.defineProperty(process, 'platform', platformDescriptor);
@@ -71,6 +72,37 @@ describe('qualified backup collector boundaries', () => {
     qualifyFixture(); source.collector.env![control] = 'unsafe';
     helpers.runCommand = () => { throw new Error('Unexpected execution'); };
     assert.isUndefined(reload().captureQualifiedCollector(source));
+  });
+  for (const control of ['BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS', 'BASH_FUNC_npm%%', 'legacyFunction']) it(`refuses writer shell override ${control} without reading or executing it`, () => {
+    qualifyFixture(); source.collector.env![control] = control === 'legacyFunction' ? '() { export npm_config_prefix=/other; }' : 'PRIVATE_OVERRIDE';
+    helpers.runCommand = () => { throw new Error('Unexpected execution'); };
+    assert.isUndefined(reload().captureQualifiedCollector(source));
+  });
+  for (const tool of ['bash', 'node', 'ls']) it(`refuses writer PATH override for ${tool}`, () => {
+    qualifyFixture();
+    if (tool === 'ls') { source.definition = { ...source.definition, name: 'bash_completions' }; source.source = { kind: 'directory', name: 'fixture', path: root }; }
+    fs.unlinkSync(path.join(root, 'bin', tool)); fs.writeFileSync(path.join(root, 'bin', tool), '#!/bin/sh\necho PRIVATE_OVERRIDE', { mode: 0o700 });
+    helpers.runCommand = () => { throw new Error('Unexpected execution'); };
+    assert.isUndefined(reload().captureQualifiedCollector(source));
+  });
+  it('does not skip empty PATH entries that can shadow npm in the writer cwd', () => {
+    qualifyFixture(); source.collector.env!.PATH = `:${source.collector.env!.PATH}`;
+    fs.writeFileSync(path.join(root, 'npm'), '#!/bin/sh\necho PRIVATE_OVERRIDE', { mode: 0o700 });
+    assert.isUndefined(reload().qualifiedCollector(source));
+  });
+  it('refuses unknown or missing writer resolution', () => {
+    qualifyFixture(); delete source.collector.env!.PATH; assert.isUndefined(reload().qualifiedCollector(source));
+    source.collector.env!.PATH = path.join(root, 'empty'); assert.isUndefined(reload().qualifiedCollector(source));
+  });
+  it('cleans the private directory if collector output open fails', () => {
+    qualifyFixture(); const originalOpen = fs.openSync; let directory: string | undefined;
+    fs.openSync = (file: string, ...args: unknown[]) => {
+      if (String(file).includes('ballin-verify-collector-')) { directory = path.dirname(file); throw new Error('PRIVATE_OPEN_ERROR'); }
+      return originalOpen(file, ...args);
+    };
+    try { assert.throws(() => reload().captureQualifiedCollector(source), 'PRIVATE_OPEN_ERROR'); }
+    finally { fs.openSync = originalOpen; }
+    assert.isString(directory); assert.isFalse(fs.existsSync(directory));
   });
   it('guards completion startup before native execution', () => {
     source.definition = { ...source.definition, name: 'bash_completions' }; source.source = { kind: 'directory', name: 'fixture', path: root };

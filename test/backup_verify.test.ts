@@ -64,6 +64,7 @@ describe('current backup verification', function() {
     const packageRoot = path.join(root, 'npm-package'); fs.mkdirSync(path.join(packageRoot, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(packageRoot, 'bin/npm-cli.js'), 'fixture', { mode: 0o700 });
     fs.symlinkSync(path.join(packageRoot, 'bin/npm-cli.js'), path.join(bin, 'npm'));
+    fs.symlinkSync('/bin/bash', path.join(bin, 'bash')); fs.symlinkSync(process.execPath, path.join(bin, 'node'));
     setRemote({ npm_global: 'npm-current\n' });
     const reload = () => {
       delete require.cache[require.resolve('../commands/backup_collectors.ts')];
