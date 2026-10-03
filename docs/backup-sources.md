@@ -26,6 +26,10 @@ inspect editor files before enabling backup or sharing snapshots, check
 | VS Code and VS Code Insiders `settings.json`, `keybindings.json` | `vs_settings`, `vs_keybindings`, `vsI_settings`, `vsI_keybindings` | Preserve editor settings and keybindings. | Extension credentials, remote hosts, paths, command arguments, and arbitrary settings. | Sensitive; one local opt-in. |
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Inventory; default included. |
 | `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Supported Ballin preferences. The backup destination, analytics setting and install ID, automatic-backup setting, sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
+| Codex `AGENTS.md`, `AGENTS.override.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_AGENTS.override.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; the same local opt-in. |
+| `~/.agents/skills/` | `codex_user_skills.json` | Preserve current shared personal skills recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
+| Codex `skills/`, `rules/`, and `agents/` | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Preserve legacy Codex-home skills and personal rules/agents recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
+| `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -47,17 +51,20 @@ repository. GitHub and anyone authorized to access the repository can read its
 contents.
 
 The single `backup.includeSensitive` setting controls **sensitive sources**:
-raw shell/Git/editor configuration, `.nvmrc`, and pipx installation metadata.
+raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx installation metadata.
 New and replacement installations start with these sensitive sources off and
 make their own choice; approval is never recovered from a backup. Configured
 setup retains established local consent; fresh reconnect requires its own
-review.
+review. The choice covers current and future supported sensitive sources,
+including Codex for existing opt-ins. Setup discloses this scope; source changes
+are documented in the source guide and release/update guidance.
 
 Review shows logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.
-Review reads no file contents, runs no collectors, and does not recurse. Missing
+Review reads no file contents and runs no collectors. Codex directory discovery
+recursively inspects names and file types to identify nonempty sources. Missing
 and unavailable sources are shown; access or resolution errors prevent
 confirmation. EOF or declining final confirmation cancels without
 saving consent or changing destination, cache, or remote state. Excluded
@@ -75,9 +82,60 @@ credentials.
 Omitting a category from future captures does not delete older remote files,
 history, or cached content.
 
-Any new source or group requires an explicit inclusion and sensitivity review.
-Unknown groups are excluded; existing or restored preferences do not authorize
-them. See [Backup design](backup-design.md#shared-inclusion-policy).
+## Codex configuration
+
+Ballin uses the active `CODEX_HOME` when set, otherwise `~/.codex`. Personal
+skills at `~/.agents/skills/` and marketplace configuration are selected
+separately at fixed home paths, independent of `CODEX_HOME`.
+`codex_skills.json` retains the legacy `CODEX_HOME/skills/` location for
+compatibility; `codex_user_skills.json` captures the current shared personal root.
+Project `.codex/` directories are repository-owned and are not global sources.
+Both global instruction files, `AGENTS.md` and `AGENTS.override.md`, are backed
+up separately when present, regardless of which Codex currently uses.
+
+A discovery failure for a selected Codex source stops the backup before staging;
+Ballin does not publish a partial capture. Absent or policy-excluded sources
+remain skipped.
+
+Whole configuration files preserve instructions, inline hooks, workflow
+preferences, and embedded project trust levels or hook approval hashes. Ballin
+does not filter those values, replay approvals, execute hooks, or automatically
+restore configuration. Review configuration before manually using a backup;
+manual restoration can carry forward saved trust settings. Standalone
+`hooks.json` preserves definitions only; referenced scripts, tools, MCP servers,
+and external files are not collected merely because they are referenced.
+
+Recursive snapshots are versioned JSON archives of regular files, with sorted
+relative paths, base64 bytes, and an executable flag. Hidden files and binary
+assets are included; empty directories, symlinks, special files, `.git` metadata,
+and `.DS_Store` are omitted. Both skill sources omit root `.system`. Codex
+source paths reject descendant symlinks; an explicitly selected Codex root may
+be a symlink. Empty or generated-only directory sources are not published.
+Review opens and closes selected regular files to check readability without
+reading their contents. Capture is not an atomic snapshot of concurrent edits.
+See [directory handling](backup-design.md#shared-inclusion-policy).
+
+Codex capture supports up to **16 MiB combined** per backup after normalization,
+including archive metadata and base64 content, and **8,192 visited entries** per
+recursive source. Both skill archives count toward the combined limit, even
+when their roots overlap. Exceeding a limit stops the whole backup before
+publication or cache promotion. Ballin does not truncate files or selectively omit content to fit. Reduce the supported authoring-tree
+size or turn off sensitive sources before retrying. Existing remote snapshots
+remain retained; these limits do not bound repository size or total memory
+used to inspect historical remote content.
+
+Ballin does not select authentication files, sessions/history, caches, logs,
+worktrees, databases, memory/runtime state, or separate trust stores. The entire
+`plugins/` tree remains excluded because its authoring payloads and generated
+installation/cache state are not one reliably bounded source; the personal
+marketplace manifest preserves references, not plugin content. These exclusions
+are source boundaries, not a scan for secrets within approved authoring files.
+Desktop-only settings without independently identified durable storage remain
+outside capture. Deprecated `CODEX_HOME/prompts/` is excluded.
+
+New supported sources undergo repository inclusion and sensitivity review;
+unknown groups remain excluded. See
+[Backup design](backup-design.md#shared-inclusion-policy).
 
 ## Last successful backup
 

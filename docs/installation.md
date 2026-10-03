@@ -197,16 +197,16 @@ Ballin creates later. If authentication is missing, run
 `gh auth login --hostname github.com`. If Ballin shows an unexpected account,
 check whether an environment token is overriding your saved `gh` login.
 
-Fresh create or reconnect setup asks whether to include **sensitive sources**:
-raw shell/Git/editor configuration, `.nvmrc`, and pipx installation metadata.
-This single choice is saved as `backup.includeSensitive` and defaults off.
-Reconnect fully inspects the existing backup before asking. Declining performs
-no sensitive-source discovery. Selecting it reviews logical paths, resolved
-regular-file targets (including symlinks outside `HOME`), and missing or
-unavailable sources. pipx is described separately. Review
-reads no raw contents and runs no collectors; access or resolution errors stop
-setup. See
-[Source review](backup-sources.md#repository-inclusion).
+Fresh create or reconnect setup offers one default-off `backup.includeSensitive`
+choice for raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx metadata.
+Opting in covers current and future supported sensitive sources; existing opt-ins
+include added sources. Review the [source list](backup-sources.md) when support
+changes.
+
+Reconnect inspects the existing backup before asking. Declining skips
+sensitive-source discovery. Selecting it reviews paths, resolved targets, and
+availability without reading file contents or running collectors. Access or
+resolution errors stop setup. See [source review](backup-sources.md#repository-inclusion).
 
 Final confirmation covers the destination and source selection. If you decline,
 Ballin makes no backup-specific changes. If you approve, it revalidates the
@@ -218,6 +218,12 @@ or warning about unconfirmed protection is nonfatal and does not mean backup
 setup failed. After updating GitHub access, rerun `ballin backup setup` to make a
 bounded protection attempt on the configured repository without changing local
 backup choices.
+
+For an already-configured backup, setup shows the validated destination,
+whether sensitive sources are included, and whether automatic backup during
+update is enabled. It preserves these choices and shows the
+[local last-success record](backup-sources.md#last-successful-backup) separately.
+This summary does not compare current sources with saved snapshots.
 
 After saving the sensitive-source choice, setup confirms the config key and
 value using the same format as `ballin config set`, for example:

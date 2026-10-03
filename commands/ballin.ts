@@ -84,7 +84,7 @@ const backupHelp = `Usage:
 Back up Ballin-managed environment state to the configured backup.
 \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
 \`read\` prints a backed-up file; \`disconnect\` stops local backups and clears comparison state.
-Repository backups exclude sensitive sources unless \`backup.includeSensitive\` is true.
+Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`.
 `;
 
 const doctorHelp = `Usage:

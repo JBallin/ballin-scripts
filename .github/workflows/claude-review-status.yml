@@ -1,0 +1,20 @@
+name: Refresh Claude Review status
+
+on:
+  pull_request:
+    types: [synchronize, edited]
+
+permissions: {}
+
+jobs:
+  status:
+    if: >-
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action == 'synchronize' ||
+      (github.event.action == 'edited' && github.event.changes.base.ref.from != ''))
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    uses: JBallin/claude-review-runtime/.github/workflows/claude-review-status.yml@d63506dda127e0509346c19457c1d992292a9c29

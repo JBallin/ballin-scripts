@@ -1,6 +1,7 @@
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
 const { lastBackupSuccessLine } = require('./backup_status.ts');
+const { validatedBackupSummary } = require('./backup_summary.ts');
 const { saveBackupConfig, offerAutomaticUpdateBackup, selectSensitiveSources } = require('./backup_preferences.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
 const { configuredBackupDestination, isConfigObject, validRepositoryName } = require('./backup_config.ts');
@@ -81,7 +82,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (!saveBackupConfig(configPath, candidate)) return false;
       }
       reportManagedBranchProtection(ensureManagedBranchRuleset(read));
-      writeStdoutLine('Validated the configured private backup; local consent and automatic-backup choices were preserved.');
+      writeStdoutLine(validatedBackupSummary(repositoryUrl(read.destination, account), candidate));
       writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
       return true;
     }
