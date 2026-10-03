@@ -38,6 +38,7 @@ and removal steps in [Installation and removal](docs/installation.md).
 
 `ballin update` output depends on installed tools and enabled integrations. This
 example shows a fully configured run with automatic backups enabled.
+The previous backup time below is illustrative.
 
 ```shell
 $ ballin update
@@ -63,6 +64,7 @@ $ ballin update
 ==> Checking Ballin readiness
 
 ==> Backing up development environment
+Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✔ ballin_config
 ✔ bash_completions
 ✔ Brewfile
