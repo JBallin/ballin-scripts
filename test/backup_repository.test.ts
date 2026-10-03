@@ -42,6 +42,55 @@ describe('private repository transport', () => {
     assert.equal(inspectRepository(fixtureDestination, options).problem, 'unavailable');
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
   });
+  for (const [label, response, problem] of [
+    ['DNS', { status: 1, stderr: 'dial tcp: lookup api.github.com: no such host' }, 'connection'],
+    ['connection', { status: 1, stderr: 'dial tcp: connection refused' }, 'connection'],
+    ['timeout', { status: 1, stderr: 'net/http: TLS handshake timeout' }, 'timeout'],
+    ['HTTP authentication', { status: 1, stderr: 'gh: Bad credentials (HTTP 401)\n' }, 'authentication'],
+    ['authentication exit code', { status: 4 }, 'authentication'],
+    ['access', { status: 1, stdout: '{"status":403}' }, 'request'],
+    ['not-found ambiguity', { status: 1, stdout: '{"status":"404"}' }, 'request'],
+    ['ambiguous failure', { status: 1, stderr: 'DUMMY_PRIVATE_ERROR' }, 'request'],
+    ['cancellation', { status: null, signal: 'SIGTERM' }, 'request'],
+    ['spawn timeout', { status: null, error: Object.assign(new Error('DUMMY_PRIVATE_ERROR'), { code: 'ETIMEDOUT' }) }, 'timeout'],
+    ['spawn DNS', { status: null, error: Object.assign(new Error('DUMMY_PRIVATE_ERROR'), { code: 'EAI_AGAIN' }) }, 'connection'],
+  ] as const) {
+    it(`classifies ${label} account evidence without revealing private output or inferring backup state`, () => {
+      options.runCommand = () => ({ stdout: '', ...response, stderr: `${'stderr' in response ? response.stderr : ''}\nDUMMY_PRIVATE_ERROR` });
+      const inspection = inspectRepository(fixtureDestination, options);
+      assert.equal(inspection.status, 'incomplete'); assert.equal(inspection.problem, problem);
+      try { requireRepositoryRead(inspection); assert.fail('expected failure'); } catch (error) {
+        assert.instanceOf(error, RepositoryError); assert.notInclude(String(error), 'DUMMY_PRIVATE_ERROR');
+      }
+      assert.throws(() => readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options), RepositoryError);
+      assert.equal(publications().length, 0);
+    });
+  }
+  for (const target of ['BallinRepository', '/git/trees/', '/git/blobs/']) {
+    for (const [stderr, problem] of [
+      ['dial tcp: lookup api.github.com: no such host', 'connection'],
+      ['context deadline exceeded', 'timeout'],
+      ['gh: Bad credentials (HTTP 401)\n', 'authentication'],
+    ]) {
+      it(`preserves ${problem} classification through ${target} inspection`, () => {
+        state.faults.transport = { target, response: { status: 1, stdout: '', stderr, signal: null } };
+        const inspection = inspectRepository(fixtureDestination, options);
+        assert.equal(inspection.status, 'incomplete'); assert.equal(inspection.problem, problem);
+        assert.throws(() => requireRepositoryRead(inspection), RepositoryError);
+        assert.equal(publications().length, 0);
+      });
+    }
+  }
+  it('preserves candidate access ambiguity and does not turn connection failure into absence', () => {
+    const account = readRepositoryAccount(options);
+    state.faults.transport = { target: 'repos/', response: { status: 1, stdout: '', stderr: 'connection refused', signal: null } };
+    assert.throws(() => candidateRepository(state.name, account, options), RepositoryError, 'Unable to connect');
+    state.faults.transport = { target: 'repos/', response: { status: 1, stdout: '{"status":"404"}', stderr: 'connection refused', signal: null } };
+    assert.throws(() => candidateRepository(state.name, account, options), RepositoryError, 'Unable to connect');
+    state.faults.transport = { target: 'repos/', response: { status: 1, stdout: '{"status":403}', signal: null } };
+    assert.throws(() => candidateRepository(state.name, account, options), RepositoryError, 'missing or inaccessible');
+    assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
+  });
   it('retains same-owner redirected identity for the caller to classify', () => {
     state.faults.candidate = 'redirect';
     assert.deepEqual(candidateRepository(state.name, readRepositoryAccount(options), options), {
@@ -594,6 +643,22 @@ describe('private repository transport', () => {
     assert.notEqual(after.revision.head, before.revision.head);
     assert.equal(publications().length, 1);
   });
+  for (const applied of [false, true]) {
+    it(`requires publication readback after a lost connection with remote effect ${applied}`, () => {
+      const before = read();
+      options.runCommand = (_command, args, opts) => {
+        if (String(opts.input).includes('BallinPublish')) {
+          if (applied) requestFixture(state, args, opts);
+          else state.requests.push({ endpoint: 'graphql', method: 'POST', payload: JSON.parse(String(opts.input)) });
+          return { status: 1, stdout: '', stderr: 'connection reset by peer DUMMY_PRIVATE_ERROR', signal: null };
+        }
+        return requestFixture(state, args, opts);
+      };
+      if (applied) assert.equal(publishRepositorySnapshots(before, changes(), options).snapshots.get('zshrc.sh').toString(), 'updated\n');
+      else assert.throws(() => publishRepositorySnapshots(before, changes(), options), RepositoryError, 'publication is unconfirmed');
+      assert.equal(publications().length, 1);
+    });
+  }
   ['advance', 'rewind', 'reject', 'denied'].forEach((mode) => {
     it(`refuses ${mode} publication without forcing or retrying`, () => {
       if (mode === 'rewind') commitFixture(state, { ...state.commits[state.head].files, gitconfig: Buffer.from('before\n').toString('base64') });
@@ -719,7 +784,7 @@ describe('private repository transport', () => {
     options.runCommand = () => ({ status: 0, stdout: 'dummy-sensitive-text' });
     assert.throws(() => readRepositoryAccount(options), RepositoryError, 'invalid');
     options.runCommand = () => ({ status: 1, error: new Error('dummy-secret') });
-    assert.throws(() => readRepositoryAccount(options), RepositoryError, 'authentication');
+    assert.throws(() => readRepositoryAccount(options), RepositoryError, 'cause is unconfirmed');
     const original = fs.openSync;
     try {
       fs.openSync = () => { throw new Error('local secret'); };

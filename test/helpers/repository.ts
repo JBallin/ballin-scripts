@@ -12,7 +12,7 @@ type FixtureState = {
   commits: Record<string, FixtureCommit>; requests: Request[]; rulesets: FixtureRuleset[]; nextRulesetId: number;
   faults: Record<string, unknown>;
 };
-type Response = { status: number; stdout: string; signal: null };
+type Response = { status: number; stdout: string; stderr?: string; signal: null };
 const hash = (text: string): string => crypto.createHash('sha1').update(text).digest('hex');
 const blobHash = (base64: string): string => {
   const bytes = Buffer.from(base64, 'base64');
@@ -60,7 +60,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     state.requests.push({ endpoint: 'open', method: 'GET', payload: { args } });
     const expected = ['browse', '--repo', `https://github.com/${state.login}/${state.name}`];
     if (JSON.stringify(args) !== JSON.stringify(expected)) return reply({}, 1);
-    return reply({}, state.faults.open ? 7 : 0);
+    return { ...reply({}, state.faults.open ? 7 : 0), stderr: state.faults.open ? 'DUMMY_PRIVATE_BROWSER_ERROR' : '' };
   }
   const methodIndex = args.indexOf('--method');
   const method = methodIndex >= 0 ? args[methodIndex + 1] : 'GET';
@@ -68,6 +68,8 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
   const payload = options.input ? JSON.parse(String(options.input)) : undefined;
   state.requests.push({ endpoint, method, payload, debug: options.env?.GH_DEBUG });
   const fault = state.faults;
+  const transport = fault.transport as { target: string; response: Response } | undefined;
+  if (transport && (endpoint.includes(transport.target) || payload?.query?.includes(transport.target))) return transport.response;
   if (endpoint === 'user') {
     if (fault.auth) return reply({ message: 'dummy-secret-error', status: '401' }, 1);
     return reply(fault.user ?? { node_id: state.ownerId, login: state.login, type: 'User' });
@@ -208,6 +210,7 @@ const runFixtureCli = (statePath: string): void => {
   const response = requestFixture(state, args, { input: args.includes('--input') ? fs.readFileSync(0, 'utf8') : undefined, env: process.env });
   fs.writeFileSync(statePath, JSON.stringify(state));
   process.stdout.write(response.stdout);
+  if (response.stderr) process.stderr.write(response.stderr);
   process.exitCode = response.status;
 };
 module.exports = {

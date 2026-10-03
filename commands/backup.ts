@@ -645,6 +645,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       writeStdoutLine(`Opening ${url} in your browser.`);
       const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
       process.exitCode = result.error ? 1 : spawnResultStatus(result);
+      if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
     } else {
       /* c8 ignore next 3 -- The catalog predicate and handled cases enforce the supported command union. */
       const unhandledCommand: never = command;

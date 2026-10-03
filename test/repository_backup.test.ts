@@ -489,6 +489,48 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 1); assert.include(result.stdout, '`ballin backup setup` to revalidate');
     assert.notInclude(result.stdout, 'Gist'); assert.equal(mutations().length, 0); assert.equal(rulesetRequests().length, 0);
   });
+  for (const [label, response, message] of [
+    ['DNS', { status: 1, stdout: '', stderr: 'dial tcp: lookup api.github.com: no such host' }, 'Unable to connect'],
+    ['timeout', { status: 1, stdout: '', stderr: 'dial tcp: i/o timeout' }, 'request timed out'],
+    ['authentication', { status: 1, stdout: '{"status":"401","message":"DUMMY_PRIVATE_CONTENT"}', stderr: '' }, 'authentication is required'],
+    ['unconfirmed cause', { status: 1, stdout: '', stderr: 'DUMMY_PRIVATE_CONTENT' }, 'cause is unconfirmed'],
+  ] as const) {
+    it(`shares sanitized ${label} diagnostics across backup, setup, read, open and configured doctor`, () => {
+      seedSuccess(); source(); const originalConfig = fs.readFileSync(configPath, 'utf8');
+      const value = state(); value.faults.transport = { target: 'user', response: { ...response, signal: null } }; saveState(value);
+      for (const args of [[], ['setup'], ['read', 'zshrc.sh'], ['open']]) {
+        const result = run(args, args[0] === 'setup' ? 'y\n' : '');
+        assert.equal(result.status, 1); assert.include(result.stdout + result.stderr, message);
+        assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_CONTENT');
+        assert.notInclude(result.stdout, 'No supported snapshot found');
+        assert.notInclude(result.stdout, 'Options:');
+        if (args[0] === 'read' || args[0] === 'open') assert.equal(result.stdout, '');
+      }
+      const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'doctor'], {
+        encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: path.join(root, 'tmp'), BALLIN_TEST_CONFIG_PATH: configPath }),
+      });
+      assert.equal(result.status, 1); assert.include(result.stdout, message);
+      assert.include(result.stdout, 'Resolve the reported error, then rerun `ballin doctor`');
+      assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_CONTENT');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), originalConfig);
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.isUndefined(cached()); assert.equal(mutations().length, 0);
+    });
+  }
+  for (const [target, response, message] of [
+    ['BallinRepository', { status: 1, stdout: '{"status":"404"}', stderr: 'DUMMY_PRIVATE_CONTENT' }, 'missing or inaccessible'],
+    ['/git/trees/', { status: 1, stdout: '', stderr: 'DUMMY_PRIVATE_CONTENT' }, 'could not be read completely'],
+    ['/git/blobs/', { status: 1, stdout: '', stderr: 'DUMMY_PRIVATE_CONTENT' }, 'could not be read completely'],
+  ] as const) {
+    it(`does not expose bytes or infer missing snapshots after incomplete ${target} evidence`, () => {
+      saveState(fixtureState({ 'zshrc.sh': 'DUMMY_PRIVATE_SNAPSHOT' }));
+      const value = state(); value.faults.transport = { target, response: { ...response, signal: null } }; saveState(value);
+      const result = run(['read', 'zshrc.sh']);
+      assert.equal(result.status, 1); assert.equal(result.stdout, ''); assert.include(result.stderr, message);
+      assert.notInclude(result.stderr, 'DUMMY_PRIVATE_CONTENT'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE_SNAPSHOT');
+      assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
+    });
+  }
   it('keeps read and open request counts independent of unrelated supported snapshots', () => {
     saveState(fixtureState({ 'zshrc.sh': 'shell\n', gitconfig: 'git\n', mas: 'apps\n' }));
     assert.equal(run(['read', 'mas']).stdout, 'apps\n');
@@ -515,10 +557,30 @@ describe('repository backup lifecycle', function() {
     const result = run(['open']);
     assert.equal(result.status, 7);
     assert.equal(result.stdout, 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n');
+    assert.equal(result.stderr, 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n');
     assert.equal(state().requests.at(-1)?.endpoint, 'open');
     assert.equal(mutations().length, 0);
     assert.isFalse(fs.existsSync(cacheRoot));
   });
+  for (const failure of ['spawn', 'signal']) {
+    it(`reports browser ${failure} failure without exposing child diagnostics`, () => {
+      const result = run(['open'], '', {}, `
+        const child = require('child_process'); const spawn = child.spawnSync;
+        child.spawnSync = function(command, args, options) {
+          if (command === 'gh' && args[0] === 'browse') return {
+            status: null, signal: ${failure === 'signal' ? "'SIGTERM'" : 'null'},
+            error: ${failure === 'spawn' ? "new Error('DUMMY_PRIVATE_BROWSER_ERROR')" : 'undefined'},
+            stdout: '', stderr: 'DUMMY_PRIVATE_BROWSER_ERROR'
+          };
+          return spawn.call(this, command, args, options);
+        };
+      `);
+      assert.equal(result.status, failure === 'spawn' ? 1 : 143);
+      assert.include(result.stderr, 'unable to open your browser'); assert.include(result.stderr, 'manually');
+      assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_BROWSER_ERROR');
+      assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
+    });
+  }
 
   const progressPreload = (): string => `
     for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });

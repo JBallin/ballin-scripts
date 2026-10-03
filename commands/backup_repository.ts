@@ -12,10 +12,13 @@ import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
-type RepositoryProblem = 'authentication' | 'unavailable' | 'identity' | 'unsupported'
+type RepositoryProblem = 'authentication' | 'connection' | 'timeout' | 'request' | 'unavailable' | 'identity' | 'unsupported'
   | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
   authentication: 'GitHub.com authentication is required; check the effective gh account and environment token.',
+  connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
+  timeout: 'The GitHub.com request timed out. Check the network connection and GitHub service availability, then rerun.',
+  request: 'The GitHub.com request could not be completed. Check gh, service availability, and account access; the cause is unconfirmed.',
   unavailable: 'The backup repository is missing or inaccessible. Check access; this does not prove it was deleted.',
   identity: 'The repository or personal owner does not match the selected backup. Revalidate with ballin backup setup.',
   unsupported: 'The repository is not a supported private Ballin destination. Inspect it deliberately in GitHub.',
@@ -39,7 +42,7 @@ class RepositoryError extends Error {
 type RepositoryOptions = {
   env?: NodeJS.ProcessEnv;
   runCommand?: (command: string, args: string[], options: SpawnSyncOptions) => {
-    status: number | null; signal?: string | null; error?: Error; stdout?: string;
+    status: number | null; signal?: string | null; error?: NodeJS.ErrnoException; stdout?: string; stderr?: string;
   };
 };
 type Account = { id: string; login: string };
@@ -63,7 +66,20 @@ type RepositoryInspection =
   | { status: 'complete'; read: RepositoryRead }
   | { status: 'incomplete'; problem: RepositoryProblem; inspected?: RepositoryRead };
 type RepositoryInfo = { destination: RepositoryDestination; login: string; revision: Revision };
-type ApiResult = { ok: boolean; body: Record<string, unknown>; items?: unknown[]; cleanupFailed?: boolean };
+type ApiResult = { ok: boolean; body: Record<string, unknown>; items?: unknown[]; problem?: RepositoryProblem; cleanupFailed?: boolean };
+// Reduce private provider output to a fixed classification; never retain or display raw stderr.
+const transportProblem = (
+  result: ReturnType<NonNullable<RepositoryOptions['runCommand']>>, body: Record<string, unknown>,
+): RepositoryProblem | undefined => {
+  const stderr = result.stderr ?? '';
+  if (result.error?.code === 'ETIMEDOUT'
+    || /(?:i\/o|TLS handshake|connection|request) (?:timeout|timed out)|context deadline exceeded|Client\.Timeout exceeded/iu.test(stderr)) return 'timeout';
+  if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH'].includes(result.error?.code ?? '')
+    || /dial (?:tcp|udp).*lookup .*: (?:no such host|temporary failure in name resolution)|connection (?:refused|reset by peer)|network is unreachable|no route to host|could not resolve host/iu.test(stderr)) return 'connection';
+  if (String(body.status) === '401' || /\(HTTP 401\)(?:\r?\n|$)/u.test(stderr)
+    || (result.status === 4 && !result.error && !result.signal)) return 'authentication';
+  return undefined;
+};
 const requireCleanTransport = (result: ApiResult): void => {
   if (result.cleanupFailed) throw new RepositoryError('cleanup');
 };
@@ -116,7 +132,8 @@ const api = (endpoint: string, payload: unknown, options: RepositoryOptions, all
     } catch {
       if (result.status === 0 && !result.error && !result.signal) throw new RepositoryError('invalid-data');
     }
-    response = { ok: result.status === 0 && !result.error && !result.signal, body, items };
+    const ok = result.status === 0 && !result.error && !result.signal;
+    response = { ok, body, items, problem: ok ? undefined : transportProblem(result, body) };
   } catch (error) {
     failure = error instanceof RepositoryError ? error : new RepositoryError('local-io');
   } finally {
@@ -134,13 +151,13 @@ const api = (endpoint: string, payload: unknown, options: RepositoryOptions, all
 };
 const query = (document: string, variables: Record<string, unknown>, options: RepositoryOptions): Record<string, unknown> => {
   const result = api('graphql', { query: document, variables }, options);
-  if (!result.ok || result.body.errors) throw new RepositoryError('unavailable');
+  if (!result.ok || result.body.errors) throw new RepositoryError(result.problem ?? 'unavailable');
   requireCleanTransport(result);
   return object(result.body.data);
 };
 const readRepositoryAccount = (options: RepositoryOptions = {}): Account => {
   const result = api('user', undefined, options);
-  if (!result.ok) throw new RepositoryError('authentication');
+  if (!result.ok) throw new RepositoryError(result.problem ?? 'request');
   if (result.body.type !== 'User') throw new RepositoryError('identity');
   const login = identifier(result.body.login);
   if (!/^[A-Za-z0-9-]+$/u.test(login)) throw new RepositoryError('invalid-data');
@@ -188,11 +205,11 @@ const candidateRepository = (name: string, account: Account, options: Repository
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   const result = api(`repos/${account.login}/${name}`, undefined, options);
   if (!result.ok) {
-    if (String(result.body.status) === '404') {
+    if (!result.problem && String(result.body.status) === '404') {
       requireCleanTransport(result);
       return null; // Absence is ambiguous; only explicit creation may follow.
     }
-    throw new RepositoryError('unavailable');
+    throw new RepositoryError(result.problem ?? 'unavailable');
   }
   const owner = object(result.body.owner);
   if (owner.node_id !== account.id || owner.type !== 'User') throw new RepositoryError('identity');
@@ -224,7 +241,7 @@ const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')
   .update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[] => {
   const result = api(`repos/${info.login}/${info.destination.name}/git/trees/${info.revision.tree}?recursive=1`, undefined, options);
-  if (!result.ok) throw new RepositoryError('incomplete');
+  if (!result.ok) throw new RepositoryError(result.problem ?? 'incomplete');
   requireCleanTransport(result);
   const data = result.body;
   if (data.truncated !== false) throw new RepositoryError('incomplete');
@@ -245,7 +262,7 @@ const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[
 };
 const readBlob = (info: RepositoryInfo, entry: Entry, options: RepositoryOptions): Buffer => {
   const result = api(`repos/${info.login}/${info.destination.name}/git/blobs/${entry.sha}`, undefined, options);
-  if (!result.ok) throw new RepositoryError('incomplete');
+  if (!result.ok) throw new RepositoryError(result.problem ?? 'incomplete');
   requireCleanTransport(result);
   const data = result.body;
   if (data.sha !== entry.sha || data.size !== entry.size || data.encoding !== 'base64'
