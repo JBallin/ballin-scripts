@@ -37,7 +37,8 @@ and removal steps in [Installation and removal](docs/installation.md).
 ## Example output
 
 `ballin update` output depends on installed tools and enabled integrations. This
-example shows a fully configured run with automatic backups enabled.
+example shows a fully configured run with automatic backups enabled. The commit
+URL is illustrative.
 
 ```shell
 $ ballin update
@@ -70,7 +71,8 @@ $ ballin update
 ...
 ✔ vs_settings
 ✔ zprofile
-✔ zshrc
+✎ zshrc
+View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```
 
 ## New Mac setup
@@ -87,9 +89,6 @@ take precedence. See
 [preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences)
 for details. Stop using the previous Mac for backups before publishing from a
 replacement Mac.
-
-After a successful backup publishes changes, Ballin prints a link to that exact
-GitHub commit so you can review its changes. Unchanged backups print no link.
 
 Use snapshots as a rebuild reference. Ballin does not automatically restore
 saved dotfiles or reinstall saved packages; it is not a full disk backup or
