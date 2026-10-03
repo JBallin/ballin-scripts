@@ -150,7 +150,7 @@ describe('repository backup lifecycle', function() {
     source(); const value = state(); value.login = 'renamed-user'; value.name = 'renamed-backups'; saveState(value);
     const result = run(); ok(result);
     assert.include(result.stdout, `View changes: https://github.com/renamed-user/renamed-backups/commit/${state().head}\n`);
-    assert.isFalse(state().requests.some((request) => request.endpoint === 'browse'));
+    assert.isFalse(state().requests.some((request) => request.endpoint === 'open'));
     const unchanged = run(); ok(unchanged);
     assert.notInclude(unchanged.stdout, 'View changes:'); assert.lengthOf(publications(), 1);
   });
