@@ -78,6 +78,7 @@ type SnapshotDiscoveryContext = {
   homeDir: string;
   env: NodeJS.ProcessEnv;
   allowToolExecution?: boolean;
+  readBrewPrefix?: (tool: string, env: NodeJS.ProcessEnv) => string | undefined;
 };
 
 type SnapshotDefinition = {
@@ -442,7 +443,7 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
   category: 'bash-completions',
   inclusionGroup: 'inventory',
   prerequisites: [{ kind: 'directory', name: 'active Homebrew bash completion directory' }],
-  discover: ({ env, allowToolExecution }) => {
+  discover: ({ env, allowToolExecution, readBrewPrefix }) => {
     const override = env.BALLIN_BACKUP_BASH_COMPLETION_DIR ?? '';
     let completionDirectory = override;
     let toolPath: string | undefined;
@@ -463,10 +464,11 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
       }
 
       toolPath = toolResult.path;
-      if (allowToolExecution === false) {
+      const qualifiedPrefix = readBrewPrefix?.(toolPath, env);
+      if (allowToolExecution === false && !qualifiedPrefix) {
         return { status: 'discovery-failed', source, reason: 'unsafe-collector' };
       }
-      const prefixResult = runCommand(toolPath, ['--prefix'], {
+      const prefixResult = qualifiedPrefix ? { status: 0, stdout: qualifiedPrefix, error: undefined, signal: null } : runCommand(toolPath, ['--prefix'], {
         env: brewEnvironment(env),
       });
       const prefix = prefixResult.status === 0 && !prefixResult.error && !prefixResult.signal

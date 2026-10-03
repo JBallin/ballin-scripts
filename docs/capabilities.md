@@ -167,10 +167,11 @@ has not changed before finishing.
 
 Selected regular files and filtered Ballin preferences are compared after normal
 local newline/empty-output normalization. Saved bytes are compared exactly.
-Command-derived inventories are currently unchecked when their tools are
-available: collector startup safety has not been established for verification.
-Ballin does not run those tools or substitute a different HOME or tool profile.
-An unchecked selected source makes the result incomplete.
+Qualified npm inventory and Homebrew prefix/completion paths are supported within
+the artifact/runtime boundaries documented in [collector qualification](backup-collector-qualification.md).
+Other available command-derived inventories remain unchecked until safe startup
+is established. Ballin preserves the actual HOME and tool profiles. An unchecked
+selected source makes the result incomplete.
 
 Missing or unavailable sources can be expected skips. If a saved counterpart
 exists, Ballin retains it and reports that it is currently unverified. Policy

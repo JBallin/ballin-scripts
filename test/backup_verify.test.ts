@@ -56,6 +56,36 @@ describe('current backup verification', function() {
     const result = run(); assert.equal(result.status, 0); assert.equal(result.output, 'Backup matches the current sources checked.\n');
     assert.isFalse(fs.existsSync(cacheRoot));
   });
+  for (const failed of [false, true]) it(`handles a qualified inventory ${failed ? 'failure' : 'match'} through verification`, () => {
+    const crypto = require('crypto'); const helpers = require('../commands/commandHelpers.ts');
+    const originalHash = crypto.createHash; const originalRun = helpers.runCommand;
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    const version = Object.getOwnPropertyDescriptor(process, 'version')!;
+    const packageRoot = path.join(root, 'npm-package'); fs.mkdirSync(path.join(packageRoot, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(packageRoot, 'bin/npm-cli.js'), 'fixture', { mode: 0o700 });
+    fs.symlinkSync(path.join(packageRoot, 'bin/npm-cli.js'), path.join(bin, 'npm'));
+    setRemote({ npm_global: 'npm-current\n' });
+    const reload = () => {
+      delete require.cache[require.resolve('../commands/backup_collectors.ts')];
+      delete require.cache[require.resolve('../commands/backup_verify.ts')];
+      return require('../commands/backup_verify.ts').runBackupVerify;
+    };
+    try {
+      Object.defineProperty(process, 'platform', { value: 'darwin' }); Object.defineProperty(process, 'version', { value: 'v24.21.0' });
+      crypto.createHash = (algorithm: string) => algorithm !== 'sha256' ? originalHash(algorithm) : ({ update() { return this; }, digest() { return '5b18b54d55d52474a913ee469f117a2010452e42adaefa62c0078d5c2609a5d8'; } });
+      helpers.runCommand = (command: string, args: string[], opts: { env: NodeJS.ProcessEnv; stdio: (string | number)[] }) => {
+        if (command !== process.execPath) return originalRun(command, args, opts);
+        assert.equal(command, process.execPath); assert.include(args, '--update-notifier=false'); assert.equal(opts.env.HOME, home);
+        fs.writeSync(opts.stdio[1], Buffer.from('npm-current'));
+        return { status: failed ? 1 : 0, signal: null, stdout: 'npm-current', stderr: 'PRIVATE_ERROR' };
+      };
+      const result = run(['--verbose'], reload()); assert.equal(result.status, failed ? 1 : 0);
+      assert.include(result.output, `npm_global: ${failed ? 'unchecked' : 'match'}`);
+    } finally {
+      crypto.createHash = originalHash; helpers.runCommand = originalRun;
+      Object.defineProperty(process, 'platform', platform); Object.defineProperty(process, 'version', version); reload();
+    }
+  });
   it('shows every canonical outcome in verbose without exposing excluded sources', () => {
     fs.writeFileSync(path.join(home, '.zshrc'), 'PRIVATE_SECRET');
     const original = fs.statSync;

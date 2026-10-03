@@ -4,6 +4,7 @@ const { configuredBackupDestination, sensitiveSourceConsent } = require('./backu
 const { observeSnapshotSources, classifySnapshotFileName, normalizeSnapshotInput, snapshotDefinitions, isSnapshotSelected } = require('./backup_snapshots.ts');
 const { inspectRepository, assertRepositoryCurrent, repositoryCacheDirectory, repositoryMessages } = require('./backup_repository.ts');
 const { compareSnapshotState } = require('./backup_comparison.ts');
+const { captureQualifiedCollector, readQualifiedBrewPrefix } = require('./backup_collectors.ts');
 const { projectPortablePreferences } = require('../config/portable.ts');
 const { makeTempFile, removeTempFile, writeStdoutLine } = require('./commandHelpers.ts');
 import type { RepositoryOptions, RepositoryError } from './backup_repository.ts';
@@ -34,8 +35,11 @@ const readComparisonBase = (root: string, directory: string, name: string): Buff
   }
 };
 
-const captureFile = (source: AvailableSnapshotObservation): Buffer => {
-  const bytes = readRegularFile(source.source.path as string);
+const captureCurrent = (source: AvailableSnapshotObservation): Buffer | undefined => {
+  const bytes = source.source.kind === 'file'
+    ? readRegularFile(source.source.path as string)
+    : captureQualifiedCollector(source);
+  if (bytes === undefined) return undefined;
   const input = source.definition.inclusionGroup === 'preferences'
     ? Buffer.from(`${JSON.stringify(projectPortablePreferences(JSON.parse(bytes.toString('utf8'))), null, 2)}\n`)
     : bytes;
@@ -54,9 +58,9 @@ const observeCurrent = (source: SnapshotSourceObservation, remote: Buffer | unde
     return { name, status: remote === undefined ? 'skip' : 'saved-unverified', detail: source.status === 'absent' ? 'source absent' : 'source unavailable' };
   }
   if (source.status === 'discovery-failed') return { name, status: 'unchecked', detail: source.reason === 'unsafe-collector' ? 'collector startup safety is not established' : 'source discovery failed' };
-  if (source.source.kind !== 'file') return { name, status: 'unchecked', detail: 'collector startup safety is not established' };
-  let local: Buffer;
-  try { local = captureFile(source); } catch { return { name, status: 'unchecked', detail: 'source collection or private cleanup failed' }; }
+  let local: Buffer | undefined;
+  try { local = captureCurrent(source); } catch { return { name, status: 'unchecked', detail: 'source collection or private cleanup failed' }; }
+  if (local === undefined) return { name, status: 'unchecked', detail: 'collector startup safety is not established' };
   // Cache failures cannot negate observed local/remote equality.
   if (remote !== undefined && local.equals(remote)) return { name, status: 'match', detail: 'current bytes match' };
   let base: Buffer | undefined;
@@ -104,7 +108,7 @@ const runBackupVerify = (args: string[], options: VerifyOptions): number => {
     if (unexpected) problems.push(`${unexpected} unexpected repository entries require review with \`ballin backup open\`.`);
     const cacheDir = repositoryCacheDirectory(options.cacheRoot, destination.repository);
     try {
-      const sources = observeSnapshotSources({ homeDir: options.homeDir, env: options.env ?? process.env, allowToolExecution: false }, includeSensitive);
+      const sources = observeSnapshotSources({ homeDir: options.homeDir, env: options.env ?? process.env, allowToolExecution: false, readBrewPrefix: readQualifiedBrewPrefix }, includeSensitive);
       for (const source of sources) results.push(observeCurrent(source, read.snapshots.get(source.definition.name), options.cacheRoot, cacheDir));
     } catch {
       problems.push('Current source discovery is incomplete.');
