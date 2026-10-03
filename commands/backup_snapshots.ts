@@ -62,7 +62,7 @@ type UnavailableSnapshotSource = {
 type FailedSnapshotDiscovery = {
   status: 'discovery-failed';
   source: SnapshotSourceReference;
-  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed';
+  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed' | 'unsafe-collector';
   error?: Error;
   exitStatus?: number | null;
   signal?: NodeJS.Signals | null;
@@ -77,6 +77,7 @@ type SnapshotSourceDiscovery =
 type SnapshotDiscoveryContext = {
   homeDir: string;
   env: NodeJS.ProcessEnv;
+  allowToolExecution?: boolean;
 };
 
 type SnapshotDefinition = {
@@ -441,7 +442,7 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
   category: 'bash-completions',
   inclusionGroup: 'inventory',
   prerequisites: [{ kind: 'directory', name: 'active Homebrew bash completion directory' }],
-  discover: ({ env }) => {
+  discover: ({ env, allowToolExecution }) => {
     const override = env.BALLIN_BACKUP_BASH_COMPLETION_DIR ?? '';
     let completionDirectory = override;
     let toolPath: string | undefined;
@@ -462,6 +463,9 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
       }
 
       toolPath = toolResult.path;
+      if (allowToolExecution === false) {
+        return { status: 'discovery-failed', source, reason: 'unsafe-collector' };
+      }
       const prefixResult = runCommand(toolPath, ['--prefix'], {
         env: brewEnvironment(env),
       });

@@ -103,6 +103,7 @@ one-command restore system.
 | `ballin backup open` | Opens the configured backup. |
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
 | `ballin backup read <file>` | Prints a backed-up file from the destination. |
+| `ballin backup verify [--verbose]` | Checks current selected sources against the saved backup and reports anything it cannot check. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
 | `ballin config` | Reads and updates local Ballin settings. |

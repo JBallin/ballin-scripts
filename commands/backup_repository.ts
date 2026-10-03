@@ -261,6 +261,10 @@ const assertCurrent = (read: RepositoryRead, options: RepositoryOptions = {}): v
   if (info.revision.head !== read.revision.head || info.revision.branchId !== read.revision.branchId
     || info.revision.tree !== read.revision.tree) throw new RepositoryError('moved');
 };
+// Verification finishes local observations before rechecking its full read.
+const assertRepositoryCurrent = (read: RepositoryRead, options: RepositoryOptions = {}): void => {
+  assertCurrent(read, options);
+};
 const inspect = (
   destination: RepositoryDestination, account: Account, options: RepositoryOptions, seed: boolean,
   snapshot?: string | null,
@@ -605,7 +609,7 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 };
 
 module.exports = {
-  RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
+  RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository, assertRepositoryCurrent,
   readRepositorySnapshot, repositoryOpenUrl,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,

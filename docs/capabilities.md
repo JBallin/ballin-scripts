@@ -157,4 +157,34 @@ repository policy, or replace account and credential security. Ordinary backup,
 read, open, recovery, and doctor do not depend on policy-management access or
 continuously probe protection state.
 
+### Check the current backup
+
+Run `ballin backup verify` to compare selected current sources with the configured
+private backup. Use `--verbose` for each canonical source's outcome. Verification
+does not save snapshots, change preferences, repair permissions, or update the
+comparison cache. It reads one coherent saved revision and checks that the backup
+has not changed before finishing.
+
+Selected regular files and filtered Ballin preferences are compared after normal
+local newline/empty-output normalization. Saved bytes are compared exactly.
+Command-derived inventories are currently unchecked when their tools are
+available: collector startup safety has not been established for verification.
+Ballin does not run those tools or substitute a different HOME or tool profile.
+An unchecked selected source makes the result incomplete.
+
+Missing or unavailable sources can be expected skips. If a saved counterpart
+exists, Ballin retains it and reports that it is currently unverified. Policy
+exclusion does not inspect sensitive local sources or delete saved files.
+
+Exit `0` means the requested current checks passed, with only expected skips,
+exclusions or known retired files remaining. Differences, conflicts, missing
+coverage, unknown entries or incomplete checks exit `1`; invalid arguments exit
+`2`. Inspect conflicts deliberately with `ballin backup read <file>` or
+`ballin backup open` before reconciling. Verification reports unknown entries by
+count so their names and contents stay out of diagnostics.
+
+This comparison does not establish when the last backup succeeded, whether the
+account can write, or whether saved content is secret-free, safe to execute or
+sufficient to recreate the Mac.
+
 See [Backup design](backup-design.md) for storage details and constraints.

@@ -78,12 +78,14 @@ const backupHelp = `Usage:
     ballin backup setup [repository-name]
     ballin backup open
     ballin backup read <file>
+    ballin backup verify [--verbose]
     ballin backup disconnect
     ballin backup --help
 
 Back up Ballin-managed environment state to the configured backup.
 \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
 \`read\` prints a backed-up file; \`disconnect\` stops local backups and clears comparison state.
+\`verify\` compares selected current sources with the saved backup without changing it.
 Repository backups exclude sensitive sources unless \`backup.includeSensitive\` is true.
 `;
 
@@ -270,12 +272,13 @@ const runBallinCli = (): void => {
     runBallinCommand(args);
     return;
   }
-  if (!isAnalyticsPreferenceWrite(args)) {
+  const verification = args[0] === 'backup' && args[1] === 'verify';
+  if (!isAnalyticsPreferenceWrite(args) && !verification) {
     repairAnalyticsInstallId();
   }
   const analyticsRuntime = isAnalyticsPreferenceWrite(args)
     ? { analyticsConfig: { enabled: 'false' }, installIdPath: analyticsInstallIdPath }
-    : { installIdPath: analyticsInstallIdPath, preserveLocalState: args[0] === 'uninstall' };
+    : { installIdPath: analyticsInstallIdPath, preserveLocalState: args[0] === 'uninstall' || verification };
   void runWithCommandAnalytics(
     analyticsCommandForBallinArgs(args),
     () => runBallinCommand(args),

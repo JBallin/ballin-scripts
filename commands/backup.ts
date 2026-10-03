@@ -4,6 +4,8 @@ const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
 const { terminalEmphasis } = require('./terminalStyle.ts');
+const { compareSnapshotState } = require('./backup_comparison.ts');
+const { runBackupVerify } = require('./backup_verify.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -346,36 +348,13 @@ const evaluateSnapshots = (
     const localMatchesRemote = remote.exists
       && remote.file !== null
       && snapshotFilesMatch(localFile, remote.file);
-    let shouldUpload = false;
-
-    if (!baseExists && !remote.exists) {
-      shouldUpload = true;
-    } else if (!baseExists && remote.exists) {
-      if (!localMatchesRemote) {
-        conflicts.push({
-          fileName: snapshot.fileName,
-          reason: 'remote content differs and this machine has no cached base',
-        });
-        return;
-      }
-    } else if (baseExists && !remote.exists) {
-      conflicts.push({
-        fileName: snapshot.fileName,
-        reason: 'the remote file is missing but this machine has a cached base',
-      });
+    const comparison = compareSnapshotState(baseExists, remote.exists, localMatchesRemote,
+      baseExists && remote.file !== null && snapshotFilesMatch(cacheFile, remote.file));
+    if (comparison.status === 'conflict') {
+      conflicts.push({ fileName: snapshot.fileName, reason: comparison.reason });
       return;
-    } else if (remote.file !== null) {
-      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file);
-      if (baseMatchesRemote && !localMatchesRemote) {
-        shouldUpload = true;
-      } else if (!baseMatchesRemote && !localMatchesRemote) {
-        conflicts.push({
-          fileName: snapshot.fileName,
-          reason: 'remote content diverged from the cached base and staged local content',
-        });
-        return;
-      }
     }
+    const shouldUpload = comparison.status === 'change';
 
     const isEmpty = snapshotIsEmpty(localFile);
     const wasEmpty = remote.exists && remote.file !== null && snapshotIsEmpty(remote.file);
@@ -539,6 +518,11 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   const command = requestedCommand || undefined;
+
+  if (command === 'verify') {
+    process.exitCode = runBackupVerify(args.slice(1), { configPath, homeDir, cacheRoot: backupCacheDir });
+    return;
+  }
 
   if (command === 'open' && args.length !== 1) {
     writeStderrLine('ballin backup open: expected no arguments');
