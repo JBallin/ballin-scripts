@@ -78,12 +78,14 @@ const backupHelp = `Usage:
     ballin backup setup [repository-name]
     ballin backup open
     ballin backup read <file>
+    ballin backup diff <full-commit-sha> [--snapshot <canonical-name>]
     ballin backup disconnect
     ballin backup --help
 
 Back up Ballin-managed environment state to the configured backup.
 \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
 \`read\` prints a backed-up file; \`disconnect\` stops local backups and clears comparison state.
+\`diff\` summarizes a saved revision against its parent; \`--snapshot\` requests text detail.
 Repository backups exclude sensitive sources unless \`backup.includeSensitive\` is true.
 `;
 

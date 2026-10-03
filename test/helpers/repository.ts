@@ -158,6 +158,13 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     };
     return reply({ data: { node } });
   }
+  if (endpoint.includes('/git/commits/')) {
+    const sha = endpoint.split('/git/commits/')[1];
+    const commit = state.commits[sha];
+    if (!commit || fault.commit === 'unreadable') return reply({}, 1);
+    return reply({ sha, tree: { sha: commit.tree }, parents: commit.parents.map((sha) => ({ sha })),
+      ...(typeof fault.commit === 'object' ? fault.commit : {}) });
+  }
   if (endpoint.includes('/git/trees/')) {
     const tree = endpoint.split('/git/trees/')[1].split('?')[0];
     const commit = Object.values(state.commits).find((commit) => commit.tree === tree);

@@ -460,3 +460,31 @@ implementation validation does not perform that experiment.
 [#336](https://github.com/JBallin/ballin-scripts/issues/336) owns verification.
 The concrete repository reader/writer can be reused there without introducing
 another storage model here.
+
+
+## Saved revision inspection
+
+`backup diff <full-commit-sha> [--snapshot <canonical-name>]` compares a selected
+saved revision with its immediate single parent. It reports canonical additions,
+changes and removals from complete immutable tree inventories, with presence
+separate from zero-byte content. Reserved metadata is omitted; retired and
+unexpected paths are counted without displaying arbitrary names. These facts do
+not attribute the revision to a tool or successful invocation.
+
+Historical comparison results have a distinct type and cannot serve as publication
+bases. The repository-owned reader first validates the current destination,
+inventory and marker, follows bounded single-parent ancestry from the pinned head,
+validates target/parent inventories and markers, and finally rechecks account,
+destination and branch identity/head. A marker-valid root uses an empty baseline;
+markerless seed parents and merge ancestry are unsupported.
+
+A single monotonic deadline and aggregate request/response budget cover all remote
+reads and detail rendering. Read-only API output uses bounded pipes and SIGKILL
+termination, leaving writer transport behavior unchanged. Detail size limits do not
+limit metadata summaries. Selected exact blobs require size/hash validation and
+strict UTF-8 qualification; binary, invalid text or excessive detail is refused.
+Git rendering disables external diff/text conversion and ignores inherited Git
+configuration. Terminal and Unicode controls and literal backslashes are escaped
+after comparison, preserving CRLF and missing-final-newline distinctions. Rendered
+output is bounded after escaping, with no silent truncation. Private temporary
+files require cleanup before success. No inspection-specific analytics are added.

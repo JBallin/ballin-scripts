@@ -10,6 +10,8 @@ const {
 } = require('./backup_snapshots.ts');
 import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
+const { diffLimits, DiffError, createDiffBudget, checkDiffDeadline, runDiffCommand } = require('./backup_diff_limits.ts');
+import type { DiffBudget } from './backup_diff_limits.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
 type RepositoryProblem = 'authentication' | 'unavailable' | 'identity' | 'unsupported'
@@ -39,9 +41,17 @@ class RepositoryError extends Error {
 type RepositoryOptions = {
   env?: NodeJS.ProcessEnv;
   runCommand?: (command: string, args: string[], options: SpawnSyncOptions) => {
-    status: number | null; signal?: string | null; error?: Error; stdout?: string;
+    status: number | null; signal?: string | null; error?: Error; stdout?: string; stderr?: string;
   };
 };
+type HistoricalSnapshotChange = { name: string; kind: 'added' | 'changed' | 'removed' };
+// Historical and partial content results can never be passed to publication.
+type HistoricalComparison = {
+  target: string; parent: string | null; changes: HistoricalSnapshotChange[];
+  retired: number; unexpected: number;
+  detail?: { name: string; before?: Buffer; after?: Buffer };
+};
+const historicalBudgets = new WeakMap<RepositoryOptions, DiffBudget>();
 type Account = { id: string; login: string };
 type Entry = { path: string; sha: string; size: number; classification: SnapshotNameClassification };
 // A revision is a storage-local handle. Callers pass it back without interpreting Git objects.
@@ -87,6 +97,22 @@ const oid = (value: unknown): string => {
   return value;
 };
 const api = (endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false): ApiResult => {
+  const budget = historicalBudgets.get(options);
+  if (budget) {
+    if (payload !== undefined && (endpoint !== 'graphql' || !String(object(payload).query).startsWith('query '))) {
+      throw new RepositoryError('unsupported');
+    }
+    const result = runDiffCommand(budget, 'gh', [
+      'api', '--hostname', 'github.com', '--method', payload === undefined ? 'GET' : 'POST',
+      endpoint, ...(payload === undefined ? [] : ['--input', '-']),
+    ], {
+      env: { ...(options.env ?? process.env), GH_HOST: 'github.com', GH_DEBUG: '', DEBUG: '' },
+      input: payload === undefined ? undefined : JSON.stringify(payload),
+    }, options.runCommand);
+    let body: Record<string, unknown>;
+    try { body = object(JSON.parse(result.stdout ?? '')); } catch { throw new RepositoryError('invalid-data'); }
+    return { ok: result.status === 0, body };
+  }
   let output: string | undefined;
   let response: ApiResult = { ok: false, body: {} };
   let failure: RepositoryError | undefined;
@@ -228,6 +254,7 @@ const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[
   const data = result.body;
   if (data.truncated !== false) throw new RepositoryError('incomplete');
   if (data.sha !== info.revision.tree || !Array.isArray(data.tree)) throw new RepositoryError('invalid-data');
+  if (historicalBudgets.has(options) && data.tree.length > diffLimits.entries) throw new DiffError('Inspection exceeded its inventory limit.');
   const names = new Set<string>();
   return data.tree.map((value) => {
     const entry = object(value);
@@ -306,6 +333,80 @@ const readRepositorySnapshot = (
 ): Buffer | undefined => {
   const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
   return classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined;
+};
+const readHistoricalCommit = (info: RepositoryInfo, head: string, options: RepositoryOptions): RepositoryInfo => {
+  const result = api(`repos/${info.login}/${info.destination.name}/git/commits/${head}`, undefined, options);
+  if (!result.ok) throw new RepositoryError('incomplete');
+  const data = result.body;
+  if (data.sha !== head || !Array.isArray(data.parents)) throw new RepositoryError('invalid-data');
+  if (data.parents.length > 1) throw new DiffError('Merge revisions cannot be inspected by this command.');
+  return { ...info, revision: { ...info.revision, head, tree: oid(object(data.tree).sha),
+    parents: data.parents.map((parent) => oid(object(parent).sha)), entries: [] } };
+};
+const readHistoricalInventory = (info: RepositoryInfo, options: RepositoryOptions): void => {
+  info.revision.entries = readInventory(info, options);
+  const marker = info.revision.entries.find((entry) => entry.path === repositoryMarkerFileName);
+  if (!marker || marker.size > diffLimits.blobBytes || !readBlob(info, marker, options).equals(markerBytes(info.destination))) {
+    throw new RepositoryError('unsupported');
+  }
+};
+const compareRepositoryRevision = (
+  destination: RepositoryDestination, target: string, snapshot?: string,
+  options: RepositoryOptions = {}, budget: DiffBudget = createDiffBudget(),
+): HistoricalComparison => {
+  if (!/^[a-f0-9]{40}$/u.test(target) || (snapshot !== undefined && classifySnapshotFileName(snapshot) !== 'current')) {
+    throw new RepositoryError('unsupported');
+  }
+  const bounded = { ...options };
+  historicalBudgets.set(bounded, budget);
+  const current = readInfo(destination, readRepositoryAccount(bounded), bounded);
+  readHistoricalInventory(current, bounded);
+  let selected = current;
+  let hops = 0;
+  const visited = new Set<string>();
+  while (selected.revision.head !== target) {
+    if (selected.revision.parents.length > 1) throw new DiffError('Merge ancestry cannot be inspected by this command.');
+    if (selected.revision.parents.length === 0) throw new DiffError('The selected revision is outside the pinned backup ancestry.');
+    if (++hops > diffLimits.hops) throw new DiffError('Inspection exceeded its ancestry limit. Choose a more recent revision.');
+    visited.add(selected.revision.head);
+    const head = selected.revision.parents[0];
+    if (visited.has(head)) throw new RepositoryError('invalid-data');
+    selected = readHistoricalCommit(current, head, bounded);
+  }
+  if (selected.revision.parents.length > 1) throw new DiffError('Merge revisions cannot be inspected by this command.');
+  if (selected !== current) readHistoricalInventory(selected, bounded);
+  if (selected.revision.parents.some((head) => head === selected.revision.head || visited.has(head))) {
+    throw new RepositoryError('invalid-data');
+  }
+  const parent = selected.revision.parents.length ? readHistoricalCommit(current, selected.revision.parents[0], bounded) : undefined;
+  if (parent) readHistoricalInventory(parent, bounded);
+  const before = new Map<string, Entry>((parent?.revision.entries ?? []).filter((entry) => entry.classification === 'current').map((entry) => [entry.path, entry]));
+  const after = new Map<string, Entry>(selected.revision.entries.filter((entry) => entry.classification === 'current').map((entry) => [entry.path, entry]));
+  const changes: HistoricalSnapshotChange[] = [...new Set([...before.keys(), ...after.keys()])].sort().flatMap((name) => {
+    const left = before.get(name); const right = after.get(name);
+    if (left?.sha === right?.sha) return [];
+    return [{ name, kind: !left ? 'added' : !right ? 'removed' : 'changed' }];
+  });
+  const result: HistoricalComparison = {
+    target, parent: parent?.revision.head ?? null, changes,
+    retired: new Set([...(parent?.revision.entries ?? []), ...selected.revision.entries].filter((entry) => entry.classification === 'retired').map((entry) => entry.path)).size,
+    unexpected: new Set([...(parent?.revision.entries ?? []), ...selected.revision.entries].filter((entry) => entry.classification === 'unexpected').map((entry) => entry.path)).size,
+  };
+  if (snapshot !== undefined) {
+    const left = before.get(snapshot); const right = after.get(snapshot);
+    if (!left && !right) throw new DiffError('The selected snapshot is absent from both saved revisions.');
+    if ((left?.size ?? 0) > diffLimits.blobBytes || (right?.size ?? 0) > diffLimits.blobBytes) {
+      throw new DiffError('Snapshot detail exceeds its size limit; rerun without --snapshot for a summary.');
+    }
+    result.detail = { name: snapshot,
+      before: left ? readBlob(parent!, left, bounded) : undefined,
+      after: right ? readBlob(selected, right, bounded) : undefined };
+  }
+  const final = readInfo(current.destination, readRepositoryAccount(bounded), bounded);
+  if (final.revision.head !== current.revision.head || final.revision.tree !== current.revision.tree
+    || final.revision.branchId !== current.revision.branchId) throw new RepositoryError('moved');
+  checkDiffDeadline(budget);
+  return result;
 };
 const sameRepositoryRevision = (left: RepositoryRead, right: RepositoryRead): boolean => (
   left.destination.id === right.destination.id && left.revision.branchId === right.revision.branchId
@@ -606,12 +707,12 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 
 module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
-  readRepositorySnapshot, repositoryOpenUrl,
+  readRepositorySnapshot, repositoryOpenUrl, compareRepositoryRevision,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
 };
 export type {
-  RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
+  HistoricalComparison, HistoricalSnapshotChange, RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
   ManagedBranchRulesetOutcome,
 };

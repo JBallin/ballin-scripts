@@ -3,6 +3,7 @@ import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
+const { parseDiffArguments, runBackupDiff } = require('./backup_diff.ts');
 const { terminalEmphasis } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
@@ -539,6 +540,18 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   const command = requestedCommand || undefined;
+
+  if (command === 'diff') {
+    const parsed = parseDiffArguments(args.slice(1));
+    if (!parsed) {
+      writeStderrLine('Usage: ballin backup diff <full-commit-sha> [--snapshot <canonical-name>]');
+      process.exitCode = 2;
+      return;
+    }
+    const { config, exitStatus } = backupConfig();
+    process.exitCode = config ? runBackupDiff(config.repository, parsed) : exitStatus;
+    return;
+  }
 
   if (command === 'open' && args.length !== 1) {
     writeStderrLine('ballin backup open: expected no arguments');
