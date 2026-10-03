@@ -88,6 +88,9 @@ take precedence. See
 for details. Stop using the previous Mac for backups before publishing from a
 replacement Mac.
 
+After a successful backup publishes changes, Ballin prints a link to that exact
+GitHub commit so you can review its changes. Unchanged backups print no link.
+
 Use snapshots as a rebuild reference. Ballin does not automatically restore
 saved dotfiles or reinstall saved packages; it is not a full disk backup or
 one-command restore system.
