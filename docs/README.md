@@ -4,6 +4,8 @@ For the project overview, see the [main README](../README.md).
 
 ## User guides
 
+- [Choosing Ballin](choosing-ballin.md): when Ballin fits an existing Mac setup,
+  when another approach is better, and how to use them together.
 - [Installation and removal](installation.md): exact local effects, contacted
   services, optional backup setup, failure recovery, and removal.
 - [Backup sources and sensitivity](backup-sources.md): source-by-source audit of
