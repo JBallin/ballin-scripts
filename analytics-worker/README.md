@@ -208,12 +208,14 @@ wrangler d1 migrations apply ballin-scripts-analytics --remote
 
 ### Behavioral Analytics Rollout
 
-Backend and client changes land separately because installed clients update
-directly from `main`. Follow the
-[backend-first rollout](../docs/analytics-backend.md#behavioral-analytics-rollout):
-land compatible ingestion, apply the additive migration with production
-authorization, manually deploy from `main`, and verify schema and ingestion
-readiness before landing client sends.
+Installed clients update directly from `main`. The recorded
+[backend-first rollout](../docs/analytics-backend.md#behavioral-analytics-rollout)
+requires separate backend and client releases: land compatible ingestion, apply
+the additive migration with production authorization, manually deploy from
+`main`, and verify schema and ingestion readiness before landing client sends.
+
+This records the release sequence; code on `main` does not establish production
+migration or deployment readiness.
 
 The new migration preserves existing data. Do not reset or backfill aggregates
 for behavioral analytics. Deployment binding checks alone cannot establish that
@@ -224,7 +226,8 @@ the migration is applied or that all serving Worker versions accept v2.
 This earlier destructive cutover does not apply to the behavioral migration.
 
 The migration that removes OS family recreates `version_events_daily` without
-copying its historical rows. After that change lands on `main`:
+copying its historical rows. If completing this historical cutover after the
+change is on `main`:
 
 1. Apply pending remote D1 migrations with the command above.
 2. Rerun the `Deploy Analytics Worker` workflow.
