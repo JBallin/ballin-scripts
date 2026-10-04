@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { writeInteractiveStatusLine } = require('./temporaryStatus.ts');
 const {
   runCommand,
   runVisibleCommand,
@@ -27,6 +28,7 @@ const sourceDefinitionOid = (repoDir: string): string | undefined => {
 };
 
 function runSelfUpdateCommand(): void {
+  writeInteractiveStatusLine('Updating...');
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
   const previousSources = sourceDefinitionOid(repoDir);
 

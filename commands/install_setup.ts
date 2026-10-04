@@ -40,6 +40,7 @@ type ConfigureBackupOptions = {
   originalConfig?: Record<string, unknown>;
   onCancelled?: () => void;
   showValidationSummary?: boolean;
+  maintenanceOnly?: boolean;
 };
 
 const isConfigObject = (value: unknown): value is ConfigObject => (
@@ -154,6 +155,7 @@ const configureBackup = (
   return configureRepositoryBackup({
     configPath, originalConfig, repositoryName: options.repositoryName, onCancelled: options.onCancelled,
     showValidationSummary: options.showValidationSummary,
+    maintenanceOnly: options.maintenanceOnly,
     backupCacheDir: options.backupCacheDir ?? path.join(repoDir, '.backup-cache'),
   });
 };
@@ -257,6 +259,7 @@ const setup = (
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
       originalConfig, onCancelled: () => { backupSetupCancelled = true; },
       showValidationSummary: mode !== 'self-update',
+      maintenanceOnly: mode === 'self-update',
     });
     if (!backupSetupSucceeded) {
       if (!backupSetupCancelled) writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
