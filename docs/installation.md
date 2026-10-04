@@ -56,9 +56,10 @@ file and exact activation line before asking for confirmation (default: no).
 Refreshes and `ballin self-update` do not enable completion or ask again.
 
 Completion covers supported top-level commands and the operations under
-`ballin backup` and `ballin config`. Unique prefixes work too, such as
+`ballin backup` and `ballin config`, plus the `--list` and `--file` options after
+a snapshot name in `ballin backup read`. Unique prefixes work too, such as
 `ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
-Completion does not cover options, values, or file paths.
+Other options, values, and file paths are not completed.
 
 ### Startup files and manual activation
 
