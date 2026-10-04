@@ -16,8 +16,8 @@ updates.
 - `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
   Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
 
-See [Choosing Ballin](docs/choosing-ballin.md) for when it fits, alternatives,
-and complementary workflows.
+See [Choosing Ballin](docs/choosing-ballin.md) for when it fits and how it compares
+with other tools.
 
 ## Installation
 
