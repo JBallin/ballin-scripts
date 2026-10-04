@@ -132,8 +132,9 @@ including future supported additions. It accepts native booleans or exact
 recovered from backups. Changing consent affects future captures, not saved
 files or history. Run `ballin setup` to review sources or change the choice.
 
-After self-update, Ballin links to the source guide when definitions changed or
-the comparison was unavailable; the advisory does not change consent.
+When self-update starts with the current updater, a successful update links to
+the source guide if definitions changed or could not be compared. The advisory
+does not change consent.
 
 To toggle sensitive sources in future backups:
 

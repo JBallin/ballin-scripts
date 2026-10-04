@@ -359,10 +359,11 @@ locations, and opened-file checks enforce the same rule during capture. Skills
 remain excluded pending a separate operational eligibility/supporting-file
 policy; path placement alone does not establish authorship.
 
-Successful self-update compares the Git blob identities of the source-definition
-file before/after update. Changed or unavailable comparison emits a stateless
-source-guide advisory. It never executes definitions or discovers personal
-sources; advisory failure does not turn a successful update into failure.
+The current updater compares the Git blob identities of the source-definition
+file before and after a successful update. Changed or unavailable comparison
+emits a stateless source-guide advisory. It never executes definitions or
+discovers personal sources; advisory failure does not turn a successful update
+into failure.
 Setup and the source guide disclose the catalog independently of that advisory.
 
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
