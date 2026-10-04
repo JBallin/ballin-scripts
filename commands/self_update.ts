@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { writeInteractiveStatusLine } = require('./temporaryStatus.ts');
+const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   runCommand,
   runVisibleCommand,
@@ -27,8 +27,7 @@ const sourceDefinitionOid = (repoDir: string): string | undefined => {
   } catch { return undefined; }
 };
 
-function runSelfUpdateCommand(): void {
-  writeInteractiveStatusLine('Updating...');
+const refreshInstalledBallin = (): void => {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
   const previousSources = sourceDefinitionOid(repoDir);
 
@@ -55,6 +54,10 @@ function runSelfUpdateCommand(): void {
       writeStdoutLine(`Backup source definitions may have changed. Sensitive-source opt-in covers current and future supported sources. Review: ${sourcesUrl}`);
     }
   }
+};
+
+function runSelfUpdateCommand(): void {
+  withTemporaryStatus('Updating...', refreshInstalledBallin);
 }
 
 module.exports = {

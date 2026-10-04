@@ -255,16 +255,16 @@ describe('repository backup lifecycle', function() {
       const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
       const observe = snapshots.observeSnapshotSources;
       snapshots.observeSnapshotSources = (...args) => {
-        if (output !== 'Previous successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\\n') throw new Error('prior context missing before collection');
+        if (output !== 'Last successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\\n') throw new Error('prior context missing before collection');
         return observe(...args);
       };
     `;
     const first = run([], '', { TZ: 'America/Los_Angeles' }, statusClock(firstTime) + beforeCollection); ok(first);
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), `${new Date(firstTime).toISOString()}\n`);
-    assert.equal(first.stdout, `Previous successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\n✚ ballin_config\n✚ zshrc\nView changes: https://github.com/fixture-user/ballin-backups/commit/${state().head}\n`);
+    assert.equal(first.stdout, `Last successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\n✚ ballin_config\n✚ zshrc\nView changes: https://github.com/fixture-user/ballin-backups/commit/${state().head}\n`);
     assert.equal(cached(), 'local\n'); assert.equal(publications().length, 1);
     const head = state().head; const second = run([], '', { TZ: 'America/Los_Angeles' }, statusClock(firstTime + 1)); ok(second);
-    assert.equal(second.stdout, 'Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00\n✔ ballin_config\n✔ zshrc\n');
+    assert.equal(second.stdout, 'Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00\n✔ ballin_config\n✔ zshrc\n');
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), `${new Date(firstTime + 1).toISOString()}\n`);
     assert.equal(state().head, head); assert.equal(publications().length, 1);
     assert.notProperty(state().commits[head].files, '.last-success');
@@ -273,7 +273,7 @@ describe('repository backup lifecycle', function() {
     it(`preserves prior local success after ${fault} publication failure`, () => {
       source(); seedSuccess(); const value = state(); value.faults.publish = fault; saveState(value);
       const result = run([], '', { TZ: 'America/Los_Angeles' }); assert.equal(result.status, 1);
-      assert.equal(result.stdout, 'Previous successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\n');
+      assert.equal(result.stdout, 'Last successful backup: Dec 31, 2019, 4:00:00 PM GMT-08:00\n');
       assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
       assert.notInclude(result.stdout, 'View changes:');
     });
@@ -318,7 +318,7 @@ describe('repository backup lifecycle', function() {
     source(); seedSuccess(); fs.unlinkSync(statusFile());
     const target = path.join(root, 'external-status'); fs.writeFileSync(target, priorSuccess); fs.symlinkSync(target, statusFile());
     for (let attempt = 0; attempt < 2; attempt++) {
-      const result = run(); ok(result); assert.notInclude(result.stdout, 'Previous successful backup:');
+      const result = run(); ok(result); assert.notInclude(result.stdout, 'Last successful backup:');
       assert.notInclude(result.stdout, 'unavailable');
       assert.include(result.stderr, 'could not record'); assert.equal(fs.readFileSync(target, 'utf8'), priorSuccess);
       assert.isTrue(fs.lstatSync(statusFile()).isSymbolicLink());
@@ -1170,8 +1170,8 @@ describe('repository backup lifecycle', function() {
       if (outcome === 'failed') { const value = state(); value.faults.query = 'errors'; saveState(value); }
       const result = run([], '', { ...ttyEnv, TZ: 'America/Los_Angeles' }, progressPreload());
       assert.equal(result.status, outcome === 'failed' ? 1 : 0, result.stderr);
-      assert.match(result.stdout, /^Previous successful backup: .+ GMT-0[78]:00\n/);
-      assert.lengthOf(result.stdout.match(/Previous successful backup:/g), 1);
+      assert.match(result.stdout, /^Last successful backup: .+ GMT-0[78]:00\n/);
+      assert.lengthOf(result.stdout.match(/Last successful backup:/g), 1);
       assert.notInclude(result.stdout, 'Last recorded successful backup');
       if (outcome === 'changed') assert.include(result.stdout, `/commit/${state().head}\n`);
       else assert.notInclude(result.stdout, 'View changes:');
