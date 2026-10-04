@@ -90,23 +90,15 @@ fs.readFileSync = (file, ...args) => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it('lists sensitive source labels alphabetically with their existing paths and statuses', () => {
+  it('groups available sensitive sources above absent and unavailable sources without redundant paths', () => {
     fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
     const result = run('y\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    const labels = result.stdout.split('Selected: inventory and filtered preferences')[0].split('\n')
-      .map((line: string) => /([\w.]+): (?:absent|unavailable|available|"|unsupported)/u.exec(line)?.[1])
-      .filter(Boolean);
-    assert.deepEqual(labels, [
-      'bash_profile.sh', 'bashrc.sh', 'claude_agents', 'claude_commands', 'claude_instructions', 'claude_rules',
-      'codex_agents.json', 'codex_AGENTS.md', 'codex_AGENTS.override.md',
-      'codex_config.toml', 'codex_hooks.json', 'codex_marketplace.json',
-      'codex_profiles.json', 'codex_rules.json', 'codex_skills.json', 'codex_user_skills.json',
-      'gitconfig', 'gitignore_global', 'nanorc',
-      'nvmrc', 'pipx', 'profile.sh', 'vimrc', 'vs_keybindings', 'vs_settings',
-      'vsI_keybindings', 'vsI_settings', 'zprofile.sh', 'zshrc.sh',
-    ]);
-    assert.include(result.stdout, `zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))} ->`);
+    assert.include(result.stdout, `Sensitive sources available now:\n  pipx: installation metadata\n  zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))}\n`);
+    assert.notInclude(result.stdout, ' -> ');
+    assert.include(result.stdout, 'Not found now: bash_profile.sh, bashrc.sh, claude_agents, claude_commands, claude_instructions, claude_rules, codex_agents.json, codex_AGENTS.md, codex_AGENTS.override.md, codex_config.toml, codex_hooks.json, codex_marketplace.json, codex_profiles.json, codex_rules.json, codex_skills.json, codex_user_skills.json, gitconfig, gitignore_global, nanorc, nvmrc, profile.sh, vimrc, zprofile.sh\n');
+    assert.include(result.stdout, 'Unavailable now: vs_keybindings, vs_settings, vsI_keybindings, vsI_settings\n');
+    assert.include(result.stdout, 'pipx installation metadata may contain original URLs, credentials, and backend arguments.');
     assert.notInclude(result.stdout, 'fixture private content');
   });
 
@@ -129,7 +121,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(fs.existsSync(probes), included);
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
-      if (included) assert.include(result.stdout, `codex_AGENTS.override.md: ${JSON.stringify(override)} -> ${JSON.stringify(override)}`);
+      if (included) assert.include(result.stdout, `codex_AGENTS.override.md: ${JSON.stringify(override)}\n`);
       else assert.notInclude(result.stdout, 'codex_AGENTS.override.md:');
       assert.include(result.stdout, 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
       assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
@@ -157,8 +149,9 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
       if (included) {
-        assert.include(result.stdout, `codex_user_skills.json: ${JSON.stringify(skills)} -> ${JSON.stringify(skills)}`);
-        assert.include(result.stdout, 'codex_skills.json: absent');
+        assert.include(result.stdout, `codex_user_skills.json: ${JSON.stringify(skills)}\n`);
+        assert.include(result.stdout, 'Not found now:');
+        assert.include(result.stdout, 'codex_skills.json,');
       } else assert.notInclude(result.stdout, 'codex_user_skills.json:');
     });
   });
@@ -170,14 +163,14 @@ fs.readFileSync = (file, ...args) => {
       fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
       const result = run('\ny\n\n\n');
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, `metadata)? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `update? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `Also include sensitive sources? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.deepEqual(readConfig(), initial);
       assert.include(result.stdout, 'preference review complete');
       if (enabled) {
-        assert.include(result.stdout, 'pipx: available');
+        assert.include(result.stdout, 'pipx: installation metadata');
         assert.include(result.stdout, JSON.stringify(path.join(root, '.zshrc')));
       } else assert.notInclude(result.stdout, 'pipx:');
     });
@@ -252,7 +245,7 @@ fs.readFileSync = (file, ...args) => {
         input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}` }),
       });
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+      assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
       assert.equal(readConfig().update.backup, ['y\n', 'Y\n', 'y'].includes(input) ? 'true' : 'false');
     });
   });

@@ -432,8 +432,8 @@ const reportConflicts = (conflicts: { fileName: string; reason: string }[], dest
     writeStderrLine(`ballin backup: conflict for ${fileName}: ${reason}`);
   });
   writeStderrLine(`ballin backup: conflicts detected; Ballin changed neither the ${destination} nor the backup cache contents`);
-  writeStderrLine(`ballin backup: inspect each remote snapshot with 'ballin backup read <file>' or the ${destination} UI`);
-  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun ballin backup');
+  writeStderrLine(`ballin backup: inspect each remote snapshot with \`ballin backup read <file>\` or the ${destination} UI`);
+  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun `ballin backup`');
 };
 
 const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolean => {
@@ -578,7 +578,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
   }
 
   if (config.includeSensitive === null) {
-    writeStderrLine('ballin backup: invalid backup.includeSensitive; expected true or false');
+    writeStderrLine('ballin backup: invalid `backup.includeSensitive`; expected true or false');
     return 1;
   }
   if (!secureExistingBackupCache(backupCacheDir)) return 1;
@@ -608,7 +608,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   if (requestedCommand !== undefined && requestedCommand !== '' && !isBackupCommandName(requestedCommand)) {
-    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'`);
+    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'\nTry: \`ballin backup --help\``);
     process.exitCode = 1;
     return;
   }
@@ -641,14 +641,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
     if (!configExisted) writeStdoutLine();
+    let cancelled = false;
     const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
       configPath,
       originalConfig,
       repositoryName: args[1],
+      onCancelled: () => { cancelled = true; },
     });
-    if (!configured) {
-      writeStderrLine("ballin backup setup: setup did not complete; resolve the error and retry with 'ballin backup setup'");
+    if (!configured && !cancelled) {
+      writeStderrLine('ballin backup setup: setup did not complete; check the message above and retry with `ballin backup setup`.');
     }
     process.exitCode = configured ? 0 : 1;
     return;

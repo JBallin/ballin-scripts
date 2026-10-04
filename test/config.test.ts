@@ -383,8 +383,7 @@ describe('config', () => {
     const result = runConfigCli(['reset']);
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Config has been reset...\nFROM:');
-    assert.include(result.stdout, changedConfig);
+    assert.equal(result.stdout, `Config reset to defaults.\n\nPrevious config:\n${changedConfig}\n\nCurrent config:\n${fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8')}\n`);
     assert.isNull(getConfig('backup.repository'));
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
   });
@@ -395,7 +394,7 @@ describe('config', () => {
     const result = runConfigCli(['reset']);
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Config has been reset...\nFROM:');
+    assert.include(result.stdout, 'Config reset to defaults.\n\nPrevious config:');
     assert.include(result.stdout, 'Unable to read previous config.');
     assert.notInclude(result.stdout, configPath);
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
@@ -408,7 +407,7 @@ describe('config', () => {
     const result = runConfigCli(['reset']);
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Config has been reset...\nFROM:\n{not json\nTO:\n');
+    assert.include(result.stdout, 'Config reset to defaults.\n\nPrevious config:\n{not json\n\nCurrent config:\n');
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
     assert.equal(result.stderr, '');
   });
@@ -424,7 +423,7 @@ describe('config', () => {
       const result = runConfigCli(['reset']);
 
       assert.equal(result.status, 0);
-      assert.include(result.stdout, `Config has been reset...\nFROM:\n${configContents}TO:\n`);
+      assert.include(result.stdout, `Config reset to defaults.\n\nPrevious config:\n${configContents}\nCurrent config:\n`);
       assert.deepEqual(fetchConfig().configObj, defaultConfig);
       assert.equal(result.stderr, '');
     });
@@ -511,7 +510,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
           const result = runConfigCli(args);
           assert.equal(result.status, 1);
           assert.equal(result.stdout, '');
-          assert.equal(result.stderr, `ballin config: ${reason} Run ballin config reset to restore defaults.\n`);
+          assert.equal(result.stderr, `ballin config: ${reason} Run \`ballin config reset\` to restore defaults.\n`);
           assert.equal(fs.readFileSync(configPath, 'utf8'), contents);
         }
       });
@@ -521,7 +520,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       ...[['get'], ['set', 'backup.repository', 'value']].flatMap((args) => [
         {
           args, missing: true,
-          message: 'ballin config: Unable to read config. Run ballin config reset to restore defaults.\n',
+          message: 'ballin config: Unable to read config. Run `ballin config reset` to restore defaults.\n',
         },
         {
           args, missing: false,
@@ -699,7 +698,7 @@ process.stdout.write = ((chunk, encoding, callback) => {
     });
     it('("reset") should reset config', () => {
       setTest('backup.repository', '123', setConfigAction);
-      assert.include(configAction(['reset']), 'Config has been reset...\nFROM:');
+      assert.include(configAction(['reset']), 'Config reset to defaults.\n\nPrevious config:');
       assert.isNull(getConfig('backup.repository'));
     });
   });
