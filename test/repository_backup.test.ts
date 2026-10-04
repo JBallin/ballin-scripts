@@ -330,8 +330,11 @@ describe('repository backup lifecycle', function() {
     assert.equal(setup.stdout, 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: unavailable\n');
     assert.include(setup.stdout, 'on this installation: unavailable'); assert.isFalse(fs.existsSync(statusFile()));
     assert.deepEqual(config(), before);
-    source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
-    ok(run(['setup'])); ok(run(['read', 'zshrc.sh'])); ok(run(['open']));
+    saveState(fixtureState({ 'zshrc.sh': 'local\n' })); seedSuccess();
+    const recorded = fs.readFileSync(statusFile(), 'utf8');
+    const validated = run(['setup']); ok(validated);
+    assert.include(validated.stdout, `on this installation: ${recorded.trim()}`);
+    ok(run(['read', 'zshrc.sh'])); ok(run(['open']));
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
     ok(run(['disconnect'])); assert.isFalse(fs.existsSync(cacheRoot));
   });
