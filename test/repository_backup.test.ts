@@ -465,6 +465,112 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1);
     });
   });
+  [false, true].forEach((included) => {
+    it(`captures selected Claude Markdown with existing sensitive consent: ${included}`, () => {
+      const value = config(); value.backup.includeSensitive = String(included); saveConfig(value);
+      const claude = path.join(home, 'active-claude');
+      fs.mkdirSync(path.join(claude, 'rules', 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(claude, 'CLAUDE.md'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
+      fs.writeFileSync(path.join(claude, 'rules', 'nested', 'fixture.md'), 'synthetic rule\n');
+      fs.writeFileSync(path.join(claude, 'rules', 'ignored.json'), 'DUMMY_EXCLUDED_SECRET');
+      fs.writeFileSync(path.join(claude, 'settings.json'), 'DUMMY_SETTINGS_SECRET');
+      fs.mkdirSync(path.join(claude, 'skills'));
+      fs.writeFileSync(path.join(claude, 'skills', 'SKILL.md'), 'DUMMY_SKILL_SECRET');
+      ok(run([], '', { CLAUDE_CONFIG_DIR: claude }));
+      if (included) {
+        assert.equal(remote('claude_instructions'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
+        const archive = JSON.parse(remote('claude_rules')!);
+        assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['nested/fixture.md']);
+        assert.equal(cached('claude_rules'), remote('claude_rules'));
+      } else {
+        assert.isUndefined(remote('claude_instructions'));
+        assert.isUndefined(remote('claude_rules'));
+      }
+      const files = state().commits[state().head].files;
+      assert.notProperty(files, 'claude_settings.json');
+      assert.notProperty(files, 'claude_skills');
+      const repeated = run([], '', { CLAUDE_CONFIG_DIR: claude }); ok(repeated);
+      assert.notInclude(repeated.stdout, 'View changes:');
+      assert.lengthOf(publications(), 1);
+    });
+  });
+  it('reviews selected Claude paths and Markdown readability without collecting contents', () => {
+    unconfigured();
+    const claude = path.join(fs.realpathSync(home), '.claude');
+    fs.mkdirSync(path.join(claude, 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'DUMMY_INSTRUCTIONS_SECRET');
+    fs.writeFileSync(path.join(claude, 'agents', 'review.md'), 'DUMMY_AGENT_SECRET');
+    fs.writeFileSync(path.join(claude, 'agents', 'ignored.json'), 'DUMMY_EXCLUDED_SECRET');
+    const result = run(['setup'], 'y\nreconnect\n\ny\nn\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Claude Code includes personal CLAUDE.md');
+    assert.include(result.stdout, `claude_agents: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
+    assert.include(result.stdout, 'future additions to this maintained catalog');
+    assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
+    assert.lengthOf(mutations(), 0);
+  });
+  it('fails selected Claude discovery before remote inspection and skips it with consent off', () => {
+    const claude = path.join(fs.realpathSync(home), '.claude');
+    fs.mkdirSync(path.join(claude, 'rules'), { recursive: true });
+    fs.writeFileSync(path.join(claude, 'rules', 'fixture.md'), 'synthetic');
+    const preload = `const fs=require('fs'); const opendir=fs.opendirSync;
+      fs.opendirSync=function(file,...args) {
+        if(file==='.' && process.cwd()===${JSON.stringify(path.join(claude, 'rules'))}) throw new Error('DUMMY_DISCOVERY_SECRET');
+        return opendir.call(this,file,...args);
+      };`;
+    const failed = run([], '', {}, preload);
+    assert.equal(failed.status, 1);
+    assert.include(failed.stderr, 'selected Claude Code source could not be discovered completely');
+    assert.notInclude(failed.stderr, 'DUMMY_DISCOVERY_SECRET');
+    assert.lengthOf(state().requests, 0);
+    assert.isFalse(fs.existsSync(cache));
+    const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+    ok(run([], '', {}, preload));
+    assert.isUndefined(remote('claude_rules'));
+  });
+  describe('local Claude snapshot budgets', function() {
+    this.timeout(30000);
+    const mib = 1024 * 1024;
+    const sparse = (file: string, size: number): void => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const fd = fs.openSync(file, 'w');
+      try { fs.ftruncateSync(fd, size); } finally { fs.closeSync(fd); }
+    };
+    it('rejects combined raw and archived Claude captures before remote reads', () => {
+      sparse(path.join(home, '.claude', 'CLAUDE.md'), 9 * mib);
+      sparse(path.join(home, '.claude', 'agents', 'fixture.md'), 6 * mib);
+      const result = run();
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+    it('preserves the Codex allowance alongside an independent Claude allowance', () => {
+      const codexContent = 'c'.repeat(9 * mib - 1) + '\n';
+      const claudeContent = 'a'.repeat(9 * mib - 1) + '\n';
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(path.join(home, '.codex', 'config.toml'), codexContent);
+      fs.mkdirSync(path.join(home, '.claude'));
+      fs.writeFileSync(path.join(home, '.claude', 'CLAUDE.md'), claudeContent);
+      ok(run());
+      assert.equal(remote('codex_config.toml'), codexContent);
+      assert.equal(remote('claude_instructions'), claudeContent);
+      assert.lengthOf(publications(), 1);
+    });
+    it('bounds selected Claude cache comparisons but ignores unused oversized cache entries', () => {
+      fs.mkdirSync(path.join(home, '.claude'));
+      fs.writeFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'synthetic local\n');
+      saveState(fixtureState({ claude_instructions: 'synthetic remote\n' }));
+      sparse(path.join(cache, 'claude_instructions'), 16 * mib + 1);
+      const failed = run();
+      assert.equal(failed.status, 1);
+      assert.lengthOf(mutations(), 0);
+      assert.isFalse(fs.existsSync(path.join(cache, 'ballin_config')));
+      const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+      ok(run());
+      assert.equal(fs.statSync(path.join(cache, 'claude_instructions')).size, 16 * mib + 1);
+      assert.equal(remote('claude_instructions'), 'synthetic remote\n');
+    });
+  });
   describe('local Codex snapshot budgets', function() {
     this.timeout(30000);
     const mib = 1024 * 1024;
