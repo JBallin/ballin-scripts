@@ -49,12 +49,17 @@ type Account = { id: string; login: string };
 type Entry = { path: string; sha: string; size: number; classification: SnapshotNameClassification };
 // A revision is a storage-local handle. Callers pass it back without interpreting Git objects.
 type Revision = { head: string; tree: string; branchId: string; parents: string[]; entries: Entry[] };
+// Inventory-only results cannot be used as a full comparison/publication base.
+type RepositoryInventory = { entries: readonly Entry[] };
+type RepositorySnapshotRead = { bytes: Buffer | undefined; inventory: RepositoryInventory };
 type RepositoryRead = {
   destination: RepositoryDestination;
   revision: Revision;
   snapshots: Map<string, Buffer>;
   commitUrl: string;
 };
+// Maintenance validates inventory and marker, but supplies no snapshot bytes for publication.
+type RepositoryMaintenance = Pick<RepositoryRead, 'destination' | 'revision'>;
 type ManagedBranchRulesetOutcome =
   | { status: 'present' }
   | { status: 'enabled' }
@@ -321,13 +326,31 @@ const requireRepositoryRead = (inspection: RepositoryInspection): RepositoryRead
   if (inspection.status !== 'complete') throw new RepositoryError(inspection.problem);
   return inspection.read;
 };
+const inspectRepositoryMaintenance = (
+  destination: RepositoryDestination, options: RepositoryOptions = {},
+): RepositoryMaintenance => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  return { destination: read.destination, revision: read.revision };
+};
 // Partial content reads stay private: reconciliation/publication must only receive full reads.
 // Both commands still validate the complete inventory, marker and final revision.
+const readRepositorySnapshotWithInventory = (
+  destination: RepositoryDestination, name: string, options: RepositoryOptions = {},
+): RepositorySnapshotRead => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
+  return {
+    bytes: classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined,
+    inventory: { entries: read.revision.entries },
+  };
+};
 const readRepositorySnapshot = (
   destination: RepositoryDestination, name: string, options: RepositoryOptions = {},
-): Buffer | undefined => {
-  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
-  return classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined;
+): Buffer | undefined => readRepositorySnapshotWithInventory(destination, name, options).bytes;
+const readRepositoryInventory = (
+  destination: RepositoryDestination, options: RepositoryOptions = {},
+): RepositoryInventory => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  return { entries: read.revision.entries };
 };
 const sameRepositoryRevision = (left: RepositoryRead, right: RepositoryRead): boolean => (
   left.destination.id === right.destination.id && left.revision.branchId === right.revision.branchId
@@ -388,7 +411,7 @@ const harmlessRepresentation = (value: unknown): boolean => (
   || (isConfigObject(value) && Object.values(value).every(harmlessRepresentation))
 );
 const managedBranchRulesetMatch = (
-  value: unknown, id: number, read: RepositoryRead, account: Account,
+  value: unknown, id: number, read: RepositoryMaintenance, account: Account,
 ): 'match' | 'permission-denied' | 'mismatch' => {
   try {
     const ruleset = object(value);
@@ -420,7 +443,7 @@ const managedBranchRulesetMatch = (
   } catch { return 'mismatch'; }
 };
 const readManagedBranchRuleset = (
-  base: string, id: number, read: RepositoryRead, account: Account, options: RepositoryOptions,
+  base: string, id: number, read: RepositoryMaintenance, account: Account, options: RepositoryOptions,
 ): 'match' | 'permission-denied' | 'mismatch' | ProtectionApiOutcome => {
   let detail: ApiResult;
   try { detail = api(`${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
@@ -436,7 +459,7 @@ const readManagedBranchRuleset = (
   return managedBranchRulesetMatch(detail.body, id, read, account);
 };
 const findManagedBranchRuleset = (
-  read: RepositoryRead, account: Account, options: RepositoryOptions,
+  read: RepositoryMaintenance, account: Account, options: RepositoryOptions,
 ): { status: 'missing' } | { status: 'found'; result: ReturnType<typeof readManagedBranchRuleset> }
   | { status: ProtectionApiOutcome } | { status: 'duplicate' } => {
   const base = `repos/${account.login}/${read.destination.name}/rulesets`;
@@ -479,7 +502,7 @@ const rulesetLookupOutcome = (
   return { status: lookup.result } as ManagedBranchRulesetOutcome;
 };
 const ensureManagedBranchRuleset = (
-  read: RepositoryRead, options: RepositoryOptions = {},
+  read: RepositoryMaintenance, options: RepositoryOptions = {},
 ): ManagedBranchRulesetOutcome => {
   const account = readRepositoryAccount(options);
   if (account.id !== read.destination.ownerId) throw new RepositoryError('identity');
@@ -628,12 +651,13 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 
 module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
-  readRepositorySnapshot, repositoryOpenUrl,
+  readRepositorySnapshot, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
+  inspectRepositoryMaintenance,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
 };
 export type {
-  RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
-  ManagedBranchRulesetOutcome,
+  RepositoryRead, RepositoryInventory, RepositorySnapshotRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
+  ManagedBranchRulesetOutcome, RepositoryMaintenance,
 };

@@ -172,7 +172,7 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
   if (endpoint.includes('/git/blobs/')) {
     const sha = endpoint.split('/git/blobs/')[1];
     const content = Object.values(state.commits).flatMap((commit) => Object.values(commit.files)).find((content) => blobHash(content) === sha);
-    if (content === undefined || fault.blob === 'unreadable') return reply({}, 1);
+    if (content === undefined || fault.blob === 'unreadable' || fault.unreadableBlob === sha) return reply({}, 1);
     return reply({ sha, size: Buffer.from(content, 'base64').length, content, encoding: 'base64',
       ...(typeof fault.blob === 'object' ? fault.blob : {}),
     });

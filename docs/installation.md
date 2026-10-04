@@ -1,6 +1,6 @@
 # Installation and removal
 
-**Audience:** Users
+*User guide to installing, configuring, troubleshooting, and removing Ballin.*
 
 Ballin can be installed for maintenance without configuring backups. Git and a
 supported Node.js version are the only prerequisites for the installer. Backups
@@ -38,9 +38,15 @@ with `ballin backup setup`. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
-Self-updates report “Ballin updated.” after a successful refresh. During
-`ballin update`, a readiness check follows. Fresh installs keep one completion
-message after setup.
+Self-updates report “Ballin updated.” after a successful refresh. They check the
+configured backup destination without reading saved snapshot contents.
+Warnings and errors remain visible without repeating the setup summary.
+
+Standalone self-update can succeed despite an unreadable saved snapshot.
+Run `ballin doctor` to check saved snapshot readability, or `ballin backup setup`
+for full validation and the settings summary. During `ballin update`, a full
+readiness check follows self-update and reports snapshot-read failures. Fresh
+installs show one completion message after setup.
 
 ## Shell completion
 
@@ -48,6 +54,13 @@ Ballin includes command completion for zsh and Bash. A fresh interactive
 install offers to enable it after the command is installed, showing the startup
 file and exact activation line before asking for confirmation (default: no).
 Refreshes and `ballin self-update` do not enable completion or ask again.
+
+Completion covers supported top-level commands and the operations under
+`ballin backup` and `ballin config`. Unique prefixes work too, such as
+`ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
+Completion does not cover options, values, or file paths.
+
+### Startup files and manual activation
 
 For the usual zsh setup, choose `home` during installation to use `~/.zshrc`.
 To enable completion later, add this line near the end of that file:
@@ -84,6 +97,8 @@ read it. Keep that startup chain and add this Bash-only activation line instead:
 [ -n "${BASH_VERSION:-}" ] && [ -r "$HOME/.ballin-scripts/completions/ballin.bash" ] && . "$HOME/.ballin-scripts/completions/ballin.bash"
 ```
 
+### If automatic activation is skipped or fails
+
 Automatic setup appends one guarded line, preserving existing contents and
 permissions; a missing standard file is created privately. Symlinked startup
 files, uncertain or unsupported shell settings, noninteractive installs,
@@ -93,11 +108,6 @@ to restore the original bytes; if restoration fails or conflicting changes are
 detected, inspect the file Ballin identifies before reloading it. If Ballin
 reports an existing activation with a trailing carriage return, replace only
 that line manually with the displayed command using LF line endings.
-
-Completion covers supported top-level commands and the operations under
-`ballin backup` and `ballin config`. Unique prefixes work too, such as
-`ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
-Completion does not cover options, values, or file paths.
 
 ## Local effects
 
@@ -117,7 +127,8 @@ The installer can create or change:
 - Your selected shell startup file, only when you confirm optional completion
   activation.
 - `~/.ballin-scripts/.backup-cache` during confirmed-state cache promotion. It is
-  derived comparison state, not the backup destination or an enablement flag.
+  home to comparison state and the local last-success record, not the backup
+  destination or an enablement flag.
 
 Before creating the command link, setup removes an existing non-directory
 target at `<bin>/ballin`. It refuses to replace a directory.
@@ -164,12 +175,6 @@ ballin backup setup my-backup-name
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
 to access the repository can read its contents.
 
-GitHub Free is supported. When the repository and current GitHub permissions
-support it, setup automatically adds optional branch protection against force
-pushes and branch deletion. Backup setup and normal use remain supported when
-that extra protection is unavailable. See [Supported capabilities](capabilities.md#github-side-history-protection)
-for the exact safety boundary and current GitHub eligibility.
-
 New setup offers distinct **create** and **reconnect** choices and defaults to
 `ballin-backups`. The optional argument is a repository name, not a URL or owner.
 Backups belong to the authenticated personal GitHub.com account. Setup shows
@@ -177,28 +182,9 @@ that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision requires an explicit different name or reconnect choice.
 
-If a name redirects to a renamed repository, **create** can reclaim it after
-setup warns you and you confirm. This ends the old redirect, so links and clones
-using that URL no longer reach the renamed repository. Its contents and
-visibility are unchanged. To reconnect, use the repository's current name.
-
-Ballin uses your existing `gh` authentication. It does not log in, switch
-accounts, or expand permissions on your behalf. Normal browser-based
-[`gh` authentication](https://cli.github.com/manual/gh_auth_login) works when
-the active personal account owns the destination. Routine backup publication
-requires contents write access. Optional policy hardening can require additional
-repository authority, but read, open, recovery, and normal publication do not.
-
-If you use a fine-grained token, choose the same personal account as its resource
-owner and ensure it can access the selected repository and write backup contents.
-A token limited to selected existing repositories may reconnect when it can
-access the destination, but it cannot be assumed to access a repository that
-Ballin creates later. If authentication is missing, run
-`gh auth login --hostname github.com`. If Ballin shows an unexpected account,
-check whether an environment token is overriding your saved `gh` login.
-
 Fresh create or reconnect setup offers one default-off `backup.includeSensitive`
-choice for raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx metadata.
+choice for raw shell/Git/editor configuration, Codex and Claude Code configuration,
+`.nvmrc`, and pipx metadata.
 Opting in covers current and future supported sensitive sources; existing opt-ins
 include added sources. Review the [source list](backup-sources.md) when support
 changes.
@@ -219,31 +205,8 @@ setup failed. After updating GitHub access, rerun `ballin backup setup` to make 
 bounded protection attempt on the configured repository without changing local
 backup choices.
 
-For an already-configured backup, setup shows the validated destination,
-whether sensitive sources are included, and whether automatic backup during
-update is enabled. It preserves these choices and shows the
-[local last-success record](backup-sources.md#last-successful-backup) separately.
-This summary does not compare current sources with saved snapshots.
-
-After saving the sensitive-source choice, setup confirms the config key and
-value using the same format as `ballin config set`, for example:
-
-```text
-"backup.includeSensitive" set to: "false"
-```
-
-This confirmation appears before the automatic-backup question. See
-[backup settings](optional-capabilities.md#private-repository-backups) to change
-the choice later.
-
-Renaming the repository on GitHub does not break the connection: Ballin continues
-to recognize the same backup. To switch to a different repository, disconnect
-first and run `ballin backup setup` again. Ballin backup repositories must be
-private, belong to the personal GitHub.com account used for setup, and meet
-Ballin's other support requirements.
-
 Reconnect restores only
-[supported portable preferences](backup-design.md#portable-preferences), and
+[supported Ballin preferences](optional-capabilities.md#recovering-ballin-preferences), and
 existing local choices take precedence. It does not restore saved dotfiles or
 reinstall saved packages.
 
@@ -252,6 +215,48 @@ should run backups automatically (default: no). The choice is stored in
 `update.backup`; change it later with `ballin config set update.backup true` or
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.
+
+### GitHub authentication and protection
+
+Ballin uses your existing `gh` authentication. It does not log in, switch
+accounts, or expand permissions on your behalf. Normal browser-based
+[`gh` authentication](https://cli.github.com/manual/gh_auth_login) works when
+the active personal account owns the destination. Routine backup publication
+requires contents write access. Optional policy hardening can require additional
+repository authority, but read, open, recovery, and normal publication do not.
+
+If you use a fine-grained token, choose the same personal account as its resource
+owner and ensure it can access the selected repository and write backup contents.
+A token limited to selected existing repositories may reconnect when it can
+access the destination, but it cannot be assumed to access a repository that
+Ballin creates later. If authentication is missing, run
+`gh auth login --hostname github.com`. If Ballin shows an unexpected account,
+check whether an environment token is overriding your saved `gh` login.
+
+GitHub Free is supported. When the repository and current GitHub permissions
+support it, setup automatically adds optional branch protection against force
+pushes and branch deletion. Backup setup and normal use remain supported when
+that extra protection is unavailable. See [Supported capabilities](capabilities.md#github-side-history-protection)
+for the exact safety boundary and current GitHub eligibility.
+
+### Already-configured backups and destination changes
+
+For an already-configured backup, `ballin backup setup` shows the validated
+destination, whether sensitive sources are included, and whether automatic
+backup during update is enabled. It preserves these choices and shows the
+[local last-success record](backup-sources.md#last-successful-backup) separately.
+This summary does not compare current sources with saved snapshots.
+
+Renaming the repository on GitHub does not break the connection: Ballin continues
+to recognize the same backup. To switch to a different repository, disconnect
+first and run `ballin backup setup` again. Ballin backup repositories must be
+private, belong to the personal GitHub.com account used for setup, and meet
+Ballin's other support requirements.
+
+If a name redirects to a renamed repository, **create** can reclaim it after
+setup warns you and you confirm. This ends the old redirect, so links and clones
+using that URL no longer reach the renamed repository. Its contents and
+visibility are unchanged. To reconnect, use the repository's current name.
 
 ## Disconnect
 
@@ -274,9 +279,13 @@ supported layout, and coherent readability. This is readiness only: it does not
 collect, repair cache permissions, probe writes, or establish backup freshness,
 coverage, or successful publication.
 
-`ballin backup read <file>` prints exact supported snapshot bytes;
-`ballin backup open` opens the validated destination. Both work with read-only
-access and leave caches unchanged. Use only one Mac to back up to a destination.
+Use `ballin backup list` to find supported snapshots saved in the configured
+backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
+to inspect the backup in your browser, including retired snapshots and unexpected
+entries. These commands require remote access and work with read-only
+permissions. For offline help, run `ballin backup --help`.
+
+Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.
 A reconnect has no trusted base and cannot overwrite differing remote content;
 inspect and manually reconcile each conflict using the

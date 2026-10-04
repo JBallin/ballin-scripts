@@ -1,9 +1,8 @@
 # Backup design
 
-**Audience:** Maintainers
+*Maintainer guide to backup safety, GitHub storage constraints, and conflict handling.*
 
-This guide records the safety model behind `ballin backup`. User behavior and
-conflict recovery are documented in
+User behavior and conflict recovery are documented in
 [Supported capabilities](capabilities.md#backup-consistency-and-conflicts).
 
 ## Architecture and destination identity
@@ -140,12 +139,28 @@ branch deletion and non-fast-forward history rewrite; it does not block ordinary
 external fast-forward updates or a sufficiently authorized administrator from
 altering policy or deleting the repository.
 
+## Self-update maintenance
+
+Self-update validates the configured destination's account and ownership, private
+repository requirements, selected branch, complete inventory and format marker,
+then rechecks the effective account and revision. It updates the saved destination
+if the repository was renamed. It performs the same managed-protection
+reconciliation described above. Invalid settings and maintenance failures remain
+visible.
+
+This inspection returns destination and revision metadata without snapshot bytes;
+it cannot supply a full comparison or publication read. Snapshot-content read or
+integrity failures alone do not fail standalone self-update. Installer refresh,
+explicit backup setup, doctor, backup, publication readback and the readiness
+check following embedded self-update use full reads. That readiness check can
+fail after self-update succeeds. Doctor is read-only and makes no policy calls.
+
 ## Consistency model
 
 All selected available captures are staged before remote inspection. Collector
 or projection failures abort without publication or cache promotion. Discovery
-failure for a selected Codex source aborts before staging; other discovery
-failures skip that source. Exclusion gates discovery itself. Only fresh local
+failure for a selected Codex or Claude Code source aborts before staging; other
+discovery failures skip that source. Exclusion gates discovery itself. Only fresh local
 captures receive established empty-file/final-newline normalization. Remote and
 cache bytes, including legacy `empty\n`, remain observable unchanged.
 
@@ -187,12 +202,27 @@ There is no latest-file fallback, automatic read loop, or cache write in a reade
 
 `backup read <snapshot>` uses the same identity, complete inventory, marker and
 final revision validation, but fetches only the requested supported snapshot's
-content. `backup open` fetches only marker content and prints the validated
-destination URL before opening it. Both use immutable blob IDs and the same
-content validation. Unrequested snapshot contents are not validated by these
-commands. Their partial reads remain internal to the transport module; callers
-receive only snapshot bytes or a URL, never a partial comparison/publication
-base. Backup, publication readback, readiness and reconnect keep full reads.
+content. `backup list` and `backup open` fetch only marker content. List presents
+current canonical selectors actually present, distinguishes retired names,
+omits reserved metadata, and counts unexpected entries without disclosing their
+names. Retired and unexpected content require deliberate inspection through
+`backup open`, which prints the validated destination URL before opening it.
+These commands use immutable blob IDs and the same content validation.
+Unrequested snapshot contents are not validated. Inventory-only inspection still
+requires the complete tree, marker and final revision checks; it cannot infer
+absence from a partial result. Callers receive only inventory entries, snapshot
+bytes with their inventory, or a URL, never a partial comparison/publication base.
+Bare `backup read` and unmatched selectors show actual saved options using the
+same list formatter. An unmatched read reuses its complete inspected inventory
+without another remote lookup; failures retain their stage-specific diagnostics.
+Backup, publication readback, readiness and reconnect keep full reads.
+
+Saved discovery does not observe local sources, invoke collectors, change capture
+policy, or promote caches/status. It reports presence, not provenance, freshness,
+content readability or verification. A valid marker-only backup lists no current
+snapshots successfully; missing or invalid identity/marker remains an error.
+Listing adds no inspection-specific analytics; the existing coarse top-level
+command event and opt-outs apply without backup-specific data.
 
 Authorized changes use one
 [`createCommitOnBranch`](https://docs.github.com/en/graphql/reference/commits#createcommitonbranch)
@@ -225,7 +255,216 @@ One active writer remains the product model; retire the prior writer before a
 replacement installation publishes. Conditional publication protects the inspected head,
 including concurrent advancement or rewind, but does not offer multi-writer sync.
 
-## Repository command latency (#367)
+## Local last-success time
+
+Normal repository backup records one canonical UTC time after publication or
+no-op confirmation, required comparison-cache work and temporary cleanup complete.
+Timestamp eligibility follows normal writer success, including runs that skip
+sources after discovery failure.
+
+Store the owner-only local file in the existing cache namespace keyed by stable
+owner/repository identity and selected branch, excluding mutable name and current
+revision. Rename and later remote changes preserve the record; disconnect/new
+linkage invalidates it through existing cache-root lifecycle handling.
+
+Replacement is atomic and advisory: failure preserves the prior valid time and
+does not fail, roll back or republish completed data work. Status is excluded from
+required snapshot-cache permission repair. Reads never repair or create state and
+reject missing, malformed, insecure or future times. The record is never exported
+through `ballin_config`, written to GitHub or sent in analytics; it is not a receipt, current-state
+verification or freshness policy. See [Last successful backup](backup-sources.md#last-successful-backup)
+for display behavior.
+
+## Portable preferences
+
+Export and restoration use separate explicit allowlists, independent of bundled
+defaults. The table below records the current contract:
+
+| Setting or state | Export | Restore |
+| --- | --- | --- |
+| `update.cleanup` | Saved if present | Recovered only if absent before setup |
+| `update.selfUpdate` | Saved if present | Recovered only if absent before setup |
+| `update.softwareupdate` | Saved if present | Recovered only if absent before setup |
+| `update.npm` | Saved if present | Recovered only if absent before setup |
+| `update.nvm` | Saved if present | Recovered only if absent before setup |
+| `analytics.enabled` | No | No; local analytics choice |
+| `update.backup` | No | No; local automatic-backup choice |
+| Backup destination | No | No; independently selected during setup |
+| `backup.includeSensitive` | No | No; local sensitive-source choice |
+| Analytics install ID | No | No; local installation identity |
+| Unknown/custom/future settings | No | No; existing local values remain intact |
+
+For the five admitted update leaves, accept native JSON booleans and exact
+`"true"`/`"false"` strings; export and restore canonical strings. Omit absent
+export leaves without filling defaults. Invalid admitted local values or a
+malformed local `update` section fail the whole projection with a key-only
+diagnostic. No partial `ballin_config` is emitted, and staged successes are
+discarded before remote snapshot inspection. Excluded leaves are not validated
+by projection: invalid `update.backup` or an excluded `backup` section does not
+block an otherwise valid export.
+
+`analytics.enabled` is not exported or restored as a portable preference.
+Remote backup data cannot change the local analytics setting or restore the
+analytics install ID.
+
+Setup captures local configuration before creating or refreshing defaults.
+An admitted leaf already present is authoritative, even if default-valued or
+invalid; remote data does not replace or repair it. Defaults created during
+that setup invocation can be replaced by admitted remote preferences. With
+neither an existing choice nor an admitted remote value, retain defaults.
+Restoration changes later preferences only; it does not execute updates,
+install tools, or alter integration ordering and failure handling.
+
+The setup preflight rejects malformed local JSON, a non-object root, or present
+non-object `update`, `analytics`, or `backup` sections before refresh. Missing
+sections are allowed.
+Malformed JSON or a non-object remote snapshot aborts reconnect; malformed remote
+sections and invalid, absent, or excluded leaves are ignored independently.
+An absent snapshot preserves local settings and defaults. Diagnostics do not
+print rejected values or arbitrary remote content.
+
+`update.backup` remains local-only, including when reading older snapshots.
+Its maintenance-only default is `"false"`. New linkage prompts for the choice;
+configured-destination revalidation preserves it. See
+[Installation](installation.md#optional-backup-setup-and-reconnect) for setup and
+post-destination save-failure handling.
+A replacement installation establishes its own automatic-backup choice during
+setup.
+
+## Shared inclusion policy
+
+Repository capture selects sources from the canonical definitions described
+below.
+
+The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
+inclusion groups, separate from tool-oriented categories: 12 inventory sources,
+29 sensitive sources, and one projected preferences snapshot.
+`backup.includeSensitive` is the only local sensitive-source preference. Opting
+in covers the maintained sensitive catalog, including future supported sources;
+existing opt-ins therefore include Codex and Claude Code. Setup discloses this
+scope before acceptance and reviews the currently available source paths. Consent is never
+projected or recovered. Configured destination revalidation preserves the
+existing choice. Adding supported sources requires user-facing disclosure and
+an inclusion/sensitivity review, without another approval record.
+
+Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
+sources: both are captured when present, regardless of instruction precedence.
+Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.json`,
+independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
+`codex_skills.json`. Both omit root `.system` and retain distinct snapshot
+identities, even when `CODEX_HOME=HOME/.agents` selects the same directory. Both staged archives count
+toward the combined byte budget, with separate per-source entry limits.
+
+Codex file capture is intact, including embedded trust settings in main/profile
+TOML, with existing final-newline/empty-file normalization. It does not execute
+or restore configuration. Recursive authoring directories use the shared
+`ballin-directory` JSON format, version 1: sorted relative regular-file entries
+with base64 `content` and an `executable` boolean. No timestamps, absolute paths,
+or empty directories are stored. Source-specific generated exclusions and
+symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
+
+New Codex and Claude Code captures are each bounded to 16 MiB total normalized
+staged bytes per application (raw files and all archives, including unchanged
+captures) and 8,192 visited entries per
+recursive source. Incremental iterative metadata traversal and opened-file
+bounded reads reject overflow without truncation. Capture-limit failures abort
+staging before remote inspection; cache comparison and writer checks also fail
+before publication or cache promotion. Actual changed buffers are rechecked before
+outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
+not a second 16 MiB cap. Only Codex and Claude Code cache files actually compared
+are bounded, individually, to 16 MiB. The independent capture allowances permit up to 32 MiB
+of combined staged assistant configuration; adding Claude Code does not reduce
+the existing Codex allowance. Other sources retain their existing behavior.
+
+There is no retained-remote quota or partial-reader contract. Existing full
+remote inspection, retained snapshots, and mixed-source payloads can exceed
+the local capture envelope; this is not a global request or process-memory
+guarantee. New canonical names may recognize previously unexpected large remote
+blobs. Remote-reader resource bounds remain separate follow-up work.
+
+Codex and Claude Code traversal and reads use a private synchronous cwd-pinning
+helper. Each directory identity is captured from its pinned parent and verified after entry;
+callbacks use only the pinned directory or immediate names. Leaf opens reject
+symlinks; review opens and closes regular files to check readability without
+reading contents. Caller cwd identity is verified after restoration. Restoration
+failure is fatal and bypasses optional-source handling. These checks pin selected
+directory objects; they do not provide an atomic snapshot of concurrent edits.
+
+Claude Code definitions select `CLAUDE.md` and only regular `.md` files in
+personal rules, agents, and legacy commands. The catalog supplies the Markdown
+selection to discovery, review, and capture. Visited-entry accounting precedes
+filename filtering. Selected hard links fail without searching for other inode
+locations, and opened-file checks enforce the same rule during capture. Skills
+remain excluded pending a separate operational eligibility/supporting-file
+policy; path placement alone does not establish authorship.
+
+The current updater compares the Git blob identities of the source-definition
+file before and after a successful update. Changed or unavailable comparison
+emits a stateless source-guide advisory. It never executes definitions or
+discovers personal sources; advisory failure does not turn a successful update
+into failure.
+Setup and the source guide disclose the catalog independently of that advisory.
+
+`SnapshotDefinition.name` remains the durable identity and stored/read name.
+The observation entrypoint accepts a native boolean, `includeSensitive`,
+default false; non-boolean supplied input fails before discovery.
+Inventory and preferences form the fixed baseline; unknown groups are excluded.
+
+Policy-aware observation gates discovery itself. `excluded-by-policy` carries
+the definition and reason, without a source or collector; collection records
+a skipped result. It remains distinct from absent, unavailable, failed
+discovery, and failed collection. Consumers must not stat, resolve, read, or
+probe excluded sensitive sources just to verify them, including pipx executable
+discovery. Exclusion does not delete existing remote/cache data or make retained
+content a current capture.
+
+`backup.includeSensitive` defaults off and accepts native booleans or exact
+`"true"`/`"false"` strings. Invalid capture consent fails before discovery. Setup
+uses one review/confirmation for sensitive sources. Setup default refresh defers new
+destination/consent leaves until the confirmed configuration transaction.
+See [source review](backup-sources.md#repository-inclusion).
+
+## Local cache permissions
+
+Before authentication or collection, a configured backup restricts existing
+cache directories to `0700` and regular files to `0600`, including inactive
+snapshots and leftover staging directories. Permission changes remain in place
+if the run later fails; unchanged cache contents do not imply unchanged modes.
+Symbolic links and unsupported entry types are rejected without following them.
+An error securing the cache stops the run before any remote request.
+
+A missing cache is created only during promotion, with mode `0700` explicitly
+enforced. Copies are restricted to `0600` inside the private staging directory
+before any rename replaces a final entry. Copy or chmod failure prevents
+promotion and removes that staging directory. Source permissions and the
+process umask are unchanged.
+
+These are POSIX mode protections for Ballin-owned files on macOS and Linux.
+They do not manage ACLs, isolate hardlink aliases, or protect against concurrent
+path replacement through writable ancestors.
+
+## Validation and downstream boundaries
+
+`test/backup_repository.test.ts` exercises protocol and publication semantics;
+`test/repository_backup.test.ts` uses a stateful fake GitHub service for public
+CLI lifecycle, consent, ruleset reconciliation and failure recovery. Installer
+walkthroughs, doctor fixtures, and the required `npm test` use temporary roots and complete
+child environments. Never manually smoke-test real user backup state.
+
+Automated tests prove the exact policy request and Ballin's surrounding behavior;
+they do not prove GitHub's live enforcement. Separately authorized disposable
+real-GitHub validation must still confirm `createCommitOnBranch` fast-forward
+publication and rejection of a forced ref update and branch deletion. Normal
+implementation validation does not perform that experiment.
+
+Identity, coherent-read, and publication checks do not certify that saved
+snapshots match current sources after subsequent changes.
+
+## Historical repository latency measurements
+
+These measurements record specific historical revisions, not current runtime
+guarantees. They explain the read/open optimization while the safety contracts
+above remain authoritative.
 
 ### macOS real-GitHub measurements
 
@@ -263,16 +502,14 @@ and publishing warm-ups are outside the measured interval.
 
 Read improves by 0.920 seconds (24.9%) at the median; open improves by
 1.548 seconds (32.6%). The unchanged backup and reconnect paths have overlapping
-ranges; their median differences do not establish a PR speedup.
-The issue's earlier 7–10 second observations used different uncontrolled inputs
-and are not the baseline for these comparisons.
+ranges; their median differences do not establish an optimization speedup.
 
 Read returned the exact dummy `mas` bytes. Open printed and dispatched the
 validated fixture URL. Every no-op, read, open and reconnect run left the remote
 head unchanged. Each measured publishing run started from a warmed comparison
 base, changed one dummy snapshot, and produced exactly one commit whose sole
 parent was the inspected head; Ballin completed its independent full readback.
-The fixture is retained for review and requires separate authorization to delete.
+The dummy repository remains retained; deleting it requires separate authorization.
 
 ### Costs and retained checks
 
@@ -331,8 +568,9 @@ These timings combine process, credential and GitHub transport costs.
 Create selection therefore shares account resolution and the candidate lookup,
 but does not perform reconnect's full metadata/tree/blob inspection before
 confirmation. Reconnect's measured pause contains ten API calls; create's
-contains one. Setup is unchanged by this PR, so these observations characterize
-the two paths without attributing a setup speedup to the PR. Actual
+contains one. Setup was unchanged by the measured optimization, so these
+observations characterize the two paths without attributing a setup speedup to
+that change. Actual
 post-confirmation repository creation/initialization, later setup validation,
 configuration persistence and optional protection work remain outside the
 measured pauses. No further production optimization is justified by this
@@ -353,197 +591,3 @@ lookup. Five alternating dispatch-only pairs confirmed the identical URL and
 median 0.505 → 0.055 seconds. This removes redundant dispatch work after Ballin's
 validation. Full no-op (11 API calls),
 publishing (21) and reconnect selection/first validation (11) are unchanged.
-
-## Local last-success time
-
-Normal repository backup records one canonical UTC time after publication or
-no-op confirmation, required comparison-cache work and temporary cleanup complete.
-Timestamp eligibility follows normal writer success, including runs that skip
-sources after discovery failure.
-
-Store the owner-only local file in the existing cache namespace keyed by stable
-owner/repository identity and selected branch, excluding mutable name and current
-revision. Rename and later remote changes preserve the record; disconnect/new
-linkage invalidates it through existing cache-root lifecycle handling.
-
-Replacement is atomic and advisory: failure preserves the prior valid time and
-does not fail, roll back or republish completed data work. Status is excluded from
-required snapshot-cache permission repair. Reads never repair or create state and
-reject missing, malformed, insecure or future times. The record is never exported
-through `ballin_config`, written to GitHub or sent in analytics; it is not a receipt, current-state
-verification or freshness policy. See [Last successful backup](backup-sources.md#last-successful-backup)
-for display behavior.
-
-## Portable preferences
-
-Export and restoration use separate explicit allowlists, independent of bundled
-defaults. The table below records the current contract:
-
-| Leaf | Export | Restore |
-| --- | --- | --- |
-| `update.cleanup` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.selfUpdate` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.softwareupdate` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.npm` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.nvm` | Boolean, as described below | Boolean, subject to local precedence |
-| `analytics.enabled` | No | No; local setting |
-| `update.backup` | No | No; local setup choice under #344 |
-| `backup.repository`, `backup.id`, `backup.host` | No | No; independently selected destination wins |
-| Sensitive-source consent | No | No; local `backup.includeSensitive` choice |
-| Analytics install ID | No | No |
-| Unknown/custom/future settings | No | No; existing local values remain intact |
-
-For the five admitted update leaves, accept native JSON booleans and exact
-`"true"`/`"false"` strings; export and restore canonical strings. Omit absent
-export leaves without filling defaults. Invalid admitted local values or a
-malformed local `update` section fail the whole projection with a key-only
-diagnostic. No partial `ballin_config` is emitted, and staged successes are
-discarded before remote snapshot inspection. Excluded leaves are not validated
-by projection: invalid `update.backup` or an excluded `backup` section does not
-block an otherwise valid export.
-
-`analytics.enabled` is not exported or restored as a portable preference.
-Remote backup data cannot change the local analytics setting or restore the
-analytics install ID.
-
-Setup captures local configuration before creating or refreshing defaults.
-An admitted leaf already present is authoritative, even if default-valued or
-invalid; remote data does not replace or repair it. Defaults created during
-that setup invocation can be replaced by admitted remote preferences. With
-neither an existing choice nor an admitted remote value, retain defaults.
-Restoration changes later preferences only; it does not execute updates,
-install tools, or alter integration ordering and failure handling.
-
-The setup preflight rejects malformed local JSON, a non-object root, or present
-non-object `update`, `analytics`, or `backup` sections before refresh. Missing
-sections are allowed.
-Malformed JSON or a non-object remote snapshot aborts reconnect; malformed remote
-sections and invalid, absent, or excluded leaves are ignored independently.
-An absent snapshot preserves local settings and defaults. Diagnostics do not
-print rejected values or arbitrary remote content.
-
-`update.backup` remains local-only, including when reading older snapshots.
-Its maintenance-only default is `"false"`. Preserve #344's newly configured
-backup prompt, existing-local-choice behavior, and post-destination save-failure
-handling described in [Installation](installation.md#optional-backup-setup-and-reconnect).
-A replacement installation establishes its own automatic-backup choice during
-setup.
-
-## Shared inclusion policy
-
-Repository capture selects sources from the canonical definitions described
-below.
-
-The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
-inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-25 sensitive sources, and one projected preferences snapshot.
-`backup.includeSensitive` is the only local sensitive-source preference. Opting
-in covers the maintained sensitive catalog, including future supported sources;
-existing opt-ins therefore include Codex. Setup discloses this scope before
-acceptance and reviews the currently available source paths. Consent is never
-projected or recovered. Configured destination revalidation preserves the
-existing choice. Adding supported sources requires user-facing disclosure and
-an inclusion/sensitivity review, without another approval record.
-
-Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
-sources: both are captured when present, regardless of instruction precedence.
-Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.json`,
-independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
-`codex_skills.json`. Both omit root `.system` and retain distinct snapshot
-identities, even when `CODEX_HOME=HOME/.agents` selects the same directory. Both staged archives count
-toward the combined byte budget, with separate per-source entry limits.
-
-Codex file capture is intact, including embedded trust settings in main/profile
-TOML, with existing final-newline/empty-file normalization. It does not execute
-or restore configuration. Recursive authoring directories use the shared
-`ballin-directory` JSON format, version 1: sorted relative regular-file entries
-with base64 `content` and an `executable` boolean. No timestamps, absolute paths,
-or empty directories are stored. Source-specific generated exclusions and
-symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
-
-New Codex capture is bounded to 16 MiB total normalized staged bytes (raw files
-and all archives, including unchanged captures) and 8,192 visited entries per
-recursive source. Incremental iterative metadata traversal and opened-file
-bounded reads reject overflow without truncation. Capture-limit failures abort
-staging before remote inspection; cache comparison and writer checks also fail
-before publication or cache promotion. Actual changed buffers are rechecked before
-outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
-not a second 16 MiB cap. Only Codex cache files actually compared are bounded,
-individually, to 16 MiB. Other sources retain their existing behavior.
-
-There is no retained-remote quota or partial-reader contract. Existing full
-remote inspection, retained snapshots, and mixed-source payloads can exceed
-the local capture envelope; this is not a global request or process-memory
-guarantee. New canonical names may recognize previously unexpected large remote
-blobs. Remote-reader resource bounds remain separate follow-up work.
-
-Codex traversal and reads use a private synchronous cwd-pinning helper. Each
-directory identity is captured from its pinned parent and verified after entry;
-callbacks use only the pinned directory or immediate names. Leaf opens reject
-symlinks; review opens and closes regular files to check readability without
-reading contents. Caller cwd identity is verified after restoration. Restoration
-failure is fatal and bypasses optional-source handling. These checks pin selected
-directory objects; they do not provide an atomic snapshot of concurrent edits.
-
-Successful self-update compares the Git blob identities of the source-definition
-file before/after update. Changed or unavailable comparison emits a stateless
-source-guide advisory. It never executes definitions or discovers personal
-sources; advisory failure does not turn a successful update into failure.
-The first upgrade installing this updater still runs the earlier loaded code;
-the comparison applies to subsequent updates. Setup and the source guide
-disclose the expanded catalog independently of that advisory.
-
-`SnapshotDefinition.name` remains the durable identity and stored/read name.
-The observation entrypoint accepts a native boolean, `includeSensitive`,
-default false; non-boolean supplied input fails before discovery.
-Inventory and preferences form the fixed baseline; unknown groups are excluded.
-
-Policy-aware observation gates discovery itself. `excluded-by-policy` carries
-the definition and reason, without a source or collector; collection records
-a skipped result. It remains distinct from absent, unavailable, failed
-discovery, and failed collection. Consumers must not stat, resolve, read, or
-probe excluded sensitive sources just to verify them, including pipx executable
-discovery. Exclusion does not delete existing remote/cache data or make retained
-content a current capture.
-
-`backup.includeSensitive` defaults off and accepts native booleans or exact
-`"true"`/`"false"` strings. Invalid capture consent fails before discovery. Setup
-uses one review/confirmation for sensitive sources. Setup default refresh defers new
-destination/consent leaves until the confirmed configuration transaction.
-See [source review](backup-sources.md#repository-inclusion).
-
-## Local cache permissions
-
-Before authentication or collection, a configured backup restricts existing
-cache directories to `0700` and regular files to `0600`, including inactive
-snapshots and leftover staging directories. Permission changes remain in place
-if the run later fails; unchanged cache contents do not imply unchanged modes.
-Symbolic links and unsupported entry types are rejected without following them.
-An error securing the cache stops the run before any remote request.
-
-A missing cache is created only during promotion, with mode `0700` explicitly
-enforced. Copies are restricted to `0600` inside the private staging directory
-before any rename replaces a final entry. Copy or chmod failure prevents
-promotion and removes that staging directory. Source permissions and the
-process umask are unchanged.
-
-These are POSIX mode protections for Ballin-owned files on macOS and Linux.
-They do not manage ACLs, isolate hardlink aliases, or protect against concurrent
-path replacement through writable ancestors.
-
-## Validation and downstream boundaries
-
-`test/backup_repository.test.ts` exercises protocol and publication semantics;
-`test/repository_backup.test.ts` uses a stateful fake GitHub service for public
-CLI lifecycle, consent, ruleset reconciliation and failure recovery. Installer
-walkthroughs, doctor fixtures, and the required `npm test` use temporary roots and complete
-child environments. Never manually smoke-test real user backup state.
-
-Automated tests prove the exact policy request and Ballin's surrounding behavior;
-they do not prove GitHub's live enforcement. Separately authorized disposable
-real-GitHub validation must still confirm `createCommitOnBranch` fast-forward
-publication and rejection of a forced ref update and branch deletion. Normal
-implementation validation does not perform that experiment.
-
-Identity, coherent-read, and publication checks do not certify that saved
-snapshots match current sources after subsequent changes.
