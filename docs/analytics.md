@@ -1,6 +1,6 @@
 # Analytics
 
-**Audience:** Users
+*User guide to what Ballin sends, how to opt in or out, and how long data is kept.*
 
 Analytics help show which top-level Ballin commands are used, how real backups
 finish, and whether automatic backup and Ballin self-update steps succeed

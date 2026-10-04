@@ -1,6 +1,6 @@
 # Ballin design system
 
-**Audience:** Maintainers
+*Maintainer guide to Ballin voice, brand identity, visual style, and copy principles.*
 
 This document is the durable source of truth for Ballin identity, product
 messaging, visual direction, and brand asset guidance. It is meant to guide

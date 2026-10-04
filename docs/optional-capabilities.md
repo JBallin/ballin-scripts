@@ -1,10 +1,9 @@
 # Optional capabilities
 
-**Audience:** Users
+*User guide to choosing Node.js environments, optional tools, and update automation settings.*
 
-This guide covers choices for the required Node.js setup, plus optional tools
-and settings that extend Ballin. The defaults keep updates predictable
-while letting you opt in to broader automation.
+Node.js is required; the other tools and integrations are optional. The defaults
+keep updates predictable while letting you opt in to broader automation.
 
 ## Guided preference review
 
