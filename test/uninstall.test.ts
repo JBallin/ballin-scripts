@@ -146,7 +146,7 @@ fs[operation] = (currentPath, ...args) => {
     const result = runUninstall();
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
+    assert.equal(result.stdout, "\nIt's been real...\nRemoved Ballin command links and the local checkout.\n\n");
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isTrue(fs.statSync(path.join(userBin, 'unrelated-file')).isFile());
     assert.isTrue(fs.lstatSync(path.join(userBin, 'unrelated-link')).isSymbolicLink());
@@ -179,7 +179,7 @@ fs[operation] = (currentPath, ...args) => {
     const result = runUninstall({ commandPath: symlinkPath });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
+    assert.equal(result.stdout, "\nIt's been real...\nRemoved Ballin command links and the local checkout.\n\n");
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isFalse(fs.existsSync(repoDir));
   });
@@ -206,8 +206,8 @@ fs[operation] = (currentPath, ...args) => {
     assert.include(result.stderr, `  ${linkPath}\n`);
     assert.include(
       result.stderr,
-      'Remove the listed links with rm. If removal fails because of permissions, '
-        + 'rerun rm with elevated permissions (for example, sudo rm).',
+      'Remove the listed links with `rm`. If removal fails because of permissions, '
+        + 'rerun `rm` with elevated permissions (for example, `sudo rm`).',
     );
     assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
     assert.throws(() => fs.lstatSync(otherLinkPath), /ENOENT/);
@@ -235,7 +235,7 @@ fs[operation] = (currentPath, ...args) => {
       result.stderr,
       'Resolve the reported filesystem errors, then inspect these paths before removing anything.',
     );
-    assert.notInclude(result.stderr, 'Remove the listed links with rm.');
+    assert.notInclude(result.stderr, 'Remove the listed links with `rm`.');
     assert.isTrue(fs.lstatSync(linkPath).isSymbolicLink());
     assert.isFalse(fs.existsSync(repoDir));
   });
@@ -251,7 +251,7 @@ fs[operation] = (currentPath, ...args) => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    assert.equal(result.stdout, "\nIt's been real...\nDeleted symlinked binaries\nPEACE! You still ballin tho...\n\n");
+    assert.equal(result.stdout, "\nIt's been real...\nRemoved Ballin command links and the local checkout.\n\n");
     assert.isFalse(fs.existsSync(linkPath));
     assert.isFalse(fs.existsSync(repoDir));
   });

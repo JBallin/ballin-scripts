@@ -397,7 +397,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
 
     assert.equal(result.status, 2);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'Unknown Ballin command: upd\nTry: ballin --help\n');
+    assert.equal(result.stderr, 'Unknown Ballin command: upd\nTry: `ballin --help`\n');
   });
 
   it('routes update through the update workflow and preserves its exit status', () => {

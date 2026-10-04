@@ -1344,7 +1344,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Updating Node.js LTS');
     assert.include(result.stderr, 'unable to load nvm');
-    assert.include(result.stderr, 'Set NVM_DIR');
+    assert.include(result.stderr, 'Set `NVM_DIR` to your nvm installation or disable this update with: `ballin config set update.nvm false`');
     assert.include(result.stderr, 'ballin config set update.nvm false');
     assert.isFalse(fs.existsSync(logPath));
   });
