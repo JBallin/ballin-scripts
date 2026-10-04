@@ -61,7 +61,7 @@ const formatDefaultDoctorReport = (report: DoctorReport): string => {
 
   const visibleStatuses = report.status === 'fail' ? ['fail', 'warn'] : ['warn'];
   const visibleChecks = report.checks.filter(({ status }) => visibleStatuses.includes(status));
-  return `${visibleChecks.map((check) => formatDoctorCheck(check, 'Next: ')).join('\n')}\n`;
+  return `${visibleChecks.map((check) => formatDoctorCheck(check, 'Next: ')).join('\n\n')}\n`;
 };
 
 module.exports = {

@@ -87,7 +87,7 @@ Back up Ballin-managed environment state to the configured backup.
 \`list\` finds saved snapshots; \`read\` prints one supported snapshot.
 Without a snapshot selector, \`read\` shows usage and lists saved options when readable.
 \`disconnect\` stops local backups and clears comparison state.
-Repository backups exclude sensitive sources unless \`backup.includeSensitive\` is true.
+Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`.
 `;
 
 const doctorHelp = `Usage:
@@ -191,7 +191,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
   }
 
   if (!isTopLevelCommandName(command)) {
-    writeStderr(`Unknown Ballin command: ${command}\nTry: ballin --help\n`);
+    writeStderr(`Unknown Ballin command: ${command}\nTry: \`ballin --help\`\n`);
     process.exitCode = 2;
     return;
   }

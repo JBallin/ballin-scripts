@@ -136,7 +136,8 @@ altering policy or deleting the repository.
 
 All selected available captures are staged before remote inspection. Collector
 or projection failures abort without publication or cache promotion. Discovery
-failure skips that source; exclusion gates discovery itself. Only fresh local
+failure for a selected Codex source aborts before staging; other discovery
+failures skip that source. Exclusion gates discovery itself. Only fresh local
 captures receive established empty-file/final-newline normalization. Remote and
 cache bytes, including legacy `empty\n`, remain observable unchanged.
 
@@ -442,13 +443,67 @@ below.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-15 sensitive sources, and one projected preferences snapshot.
+25 sensitive sources, and one projected preferences snapshot.
+`backup.includeSensitive` is the only local sensitive-source preference. Opting
+in covers the maintained sensitive catalog, including future supported sources;
+existing opt-ins therefore include Codex. Setup discloses this scope before
+acceptance and reviews the currently available source paths. Consent is never
+projected or recovered. Configured destination revalidation preserves the
+existing choice. Adding supported sources requires user-facing disclosure and
+an inclusion/sensitivity review, without another approval record.
+
+Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
+sources: both are captured when present, regardless of instruction precedence.
+Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.json`,
+independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
+`codex_skills.json`. Both omit root `.system` and retain distinct snapshot
+identities, even when `CODEX_HOME=HOME/.agents` selects the same directory. Both staged archives count
+toward the combined byte budget, with separate per-source entry limits.
+
+Codex file capture is intact, including embedded trust settings in main/profile
+TOML, with existing final-newline/empty-file normalization. It does not execute
+or restore configuration. Recursive authoring directories use the shared
+`ballin-directory` JSON format, version 1: sorted relative regular-file entries
+with base64 `content` and an `executable` boolean. No timestamps, absolute paths,
+or empty directories are stored. Source-specific generated exclusions and
+symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
+
+New Codex capture is bounded to 16 MiB total normalized staged bytes (raw files
+and all archives, including unchanged captures) and 8,192 visited entries per
+recursive source. Incremental iterative metadata traversal and opened-file
+bounded reads reject overflow without truncation. Capture-limit failures abort
+staging before remote inspection; cache comparison and writer checks also fail
+before publication or cache promotion. Actual changed buffers are rechecked before
+outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
+not a second 16 MiB cap. Only Codex cache files actually compared are bounded,
+individually, to 16 MiB. Other sources retain their existing behavior.
+
+There is no retained-remote quota or partial-reader contract. Existing full
+remote inspection, retained snapshots, and mixed-source payloads can exceed
+the local capture envelope; this is not a global request or process-memory
+guarantee. New canonical names may recognize previously unexpected large remote
+blobs. Remote-reader resource bounds remain separate follow-up work.
+
+Codex traversal and reads use a private synchronous cwd-pinning helper. Each
+directory identity is captured from its pinned parent and verified after entry;
+callbacks use only the pinned directory or immediate names. Leaf opens reject
+symlinks; review opens and closes regular files to check readability without
+reading contents. Caller cwd identity is verified after restoration. Restoration
+failure is fatal and bypasses optional-source handling. These checks pin selected
+directory objects; they do not provide an atomic snapshot of concurrent edits.
+
+Successful self-update compares the Git blob identities of the source-definition
+file before/after update. Changed or unavailable comparison emits a stateless
+source-guide advisory. It never executes definitions or discovers personal
+sources; advisory failure does not turn a successful update into failure.
+The first upgrade installing this updater still runs the earlier loaded code;
+the comparison applies to subsequent updates. Setup and the source guide
+disclose the expanded catalog independently of that advisory.
+
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
-The observation entrypoint accepts one native boolean, `includeSensitive`,
-default false; non-boolean supplied input fails before discovery. It is an
-internal argument parsed from the single local `backup.includeSensitive` setting.
-Inventory and preferences form the fixed baseline. Unknown groups are excluded;
-future sources/groups require an explicit inclusion and sensitivity review.
+The observation entrypoint accepts a native boolean, `includeSensitive`,
+default false; non-boolean supplied input fails before discovery.
+Inventory and preferences form the fixed baseline; unknown groups are excluded.
 
 Policy-aware observation gates discovery itself. `excluded-by-policy` carries
 the definition and reason, without a source or collector; collection records
@@ -460,8 +515,7 @@ content a current capture.
 
 `backup.includeSensitive` defaults off and accepts native booleans or exact
 `"true"`/`"false"` strings. Invalid capture consent fails before discovery. Setup
-uses one review/confirmation, covering raw files and pipx, and never restores
-consent. Configured revalidation preserves it. Setup default refresh defers new
+uses one review/confirmation for sensitive sources. Setup default refresh defers new
 destination/consent leaves until the confirmed configuration transaction.
 See [source review](backup-sources.md#repository-inclusion).
 

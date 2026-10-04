@@ -75,6 +75,16 @@ const expectedDefinitions = [
   ],
   ['vimrc', 'editor', [{ kind: 'file', name: '.vimrc' }]],
   ['nanorc', 'editor', [{ kind: 'file', name: '.nanorc' }]],
+  ['codex_AGENTS.md', 'codex', [{ kind: 'file', name: 'AGENTS.md' }]],
+  ['codex_AGENTS.override.md', 'codex', [{ kind: 'file', name: 'AGENTS.override.md' }]],
+  ['codex_config.toml', 'codex', [{ kind: 'file', name: 'config.toml' }]],
+  ['codex_profiles.json', 'codex', [{ kind: 'directory', name: '.' }]],
+  ['codex_hooks.json', 'codex', [{ kind: 'file', name: 'hooks.json' }]],
+  ['codex_skills.json', 'codex', [{ kind: 'directory', name: 'skills' }]],
+  ['codex_user_skills.json', 'codex', [{ kind: 'directory', name: '.agents/skills' }]],
+  ['codex_rules.json', 'codex', [{ kind: 'directory', name: 'rules' }]],
+  ['codex_agents.json', 'codex', [{ kind: 'directory', name: 'agents' }]],
+  ['codex_marketplace.json', 'codex', [{ kind: 'file', name: '.agents/plugins/marketplace.json' }]],
   [
     'ballin_config',
     'ballin',
@@ -114,7 +124,7 @@ describe('backup snapshot definitions', () => {
       )),
       expectedDefinitions,
     );
-    assert.equal(new Set(snapshotDefinitions.map(({ name }: SnapshotDefinition) => name)).size, 28);
+    assert.equal(new Set(snapshotDefinitions.map(({ name }: SnapshotDefinition) => name)).size, 38);
 
     assert.equal(configSnapshotFileName, 'ballin_config');
     assert.equal(repositoryReadmeFileName, 'README.md');
@@ -151,6 +161,8 @@ describe('backup snapshot definitions', () => {
       sensitive: [
         'bash_profile.sh', 'bashrc.sh', 'profile.sh', 'zprofile.sh', 'zshrc.sh', 'gitignore_global', 'gitconfig',
         'pipx', 'nvmrc', 'vs_settings', 'vs_keybindings', 'vsI_settings', 'vsI_keybindings', 'vimrc', 'nanorc',
+        'codex_AGENTS.md', 'codex_AGENTS.override.md', 'codex_config.toml', 'codex_profiles.json', 'codex_hooks.json',
+        'codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'codex_agents.json', 'codex_marketplace.json',
       ],
       preferences: ['ballin_config'],
     };
@@ -174,9 +186,9 @@ describe('backup snapshot definitions', () => {
         definition.discover = () => { throw new Error('Excluded sources must never be inspected'); };
       });
       const result = observeSnapshotSources({ homeDir, env: { PATH: '' } }) as SnapshotSourceObservation[];
-      assert.lengthOf(result, 28);
+      assert.lengthOf(result, 38);
       const excluded = result.filter(({ status }) => status === 'excluded-by-policy');
-      assert.lengthOf(excluded, 15);
+      assert.lengthOf(excluded, 25);
       excluded.forEach((entry) => {
         assert.equal('reason' in entry && entry.reason, 'excluded-by-policy');
         assert.notProperty(entry, 'source');
@@ -212,7 +224,7 @@ describe('backup snapshot definitions', () => {
       ));
     });
     const selected = observations();
-    assert.lengthOf(selected, 28);
+    assert.lengthOf(selected, 38);
     assert.isFalse(selected.some(({ status }) => status === 'excluded-by-policy'));
   });
 
@@ -248,7 +260,7 @@ describe('backup snapshot definitions', () => {
         return originalAccess(candidate, mode);
       };
       const result: SnapshotSourceObservation[] = observeSnapshotSources({ homeDir, env: { PATH: binDir } });
-      assert.lengthOf(result.filter(({ status }) => status === 'excluded-by-policy'), 15);
+      assert.lengthOf(result.filter(({ status }) => status === 'excluded-by-policy'), 25);
       [...rawPaths, path.join(binDir, 'pipx')].forEach((excludedPath) => {
         assert.notInclude(statted, excludedPath);
         assert.notInclude(accessed, excludedPath);
@@ -319,7 +331,7 @@ describe('backup snapshot definitions', () => {
   it('returns one ordered observation even when every local source is absent or unavailable', () => {
     const result = observations();
 
-    assert.lengthOf(result, 28);
+    assert.lengthOf(result, 38);
     assert.deepEqual(result.map(({ definition }) => definition.name), expectedDefinitions.map(([name]) => name));
     assert.equal(observation('zshrc.sh').status, 'absent');
     assert.equal(observation('brew_list').status, 'unavailable');

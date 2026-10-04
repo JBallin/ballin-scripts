@@ -1,6 +1,7 @@
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
 const { lastBackupSuccessLine } = require('./backup_status.ts');
+const { validatedBackupSummary } = require('./backup_summary.ts');
 const { saveBackupConfig, offerAutomaticUpdateBackup, selectSensitiveSources } = require('./backup_preferences.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
 const { configuredBackupDestination, isConfigObject, validRepositoryName } = require('./backup_config.ts');
@@ -18,10 +19,6 @@ const invalidateBackupCache = (cacheDir: string): boolean => {
     writeStdoutLine('Unable to invalidate local backup comparison state. Check cache access and retry.');
     return false;
   }
-};
-const cancelled = (): false => {
-  writeStdoutLine('Backup setup cancelled; no destination, consent, cache, or remote changes were made.');
-  return false;
 };
 const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome): void => {
   if (outcome.status === 'present' || outcome.status === 'unsupported') return;
@@ -41,9 +38,15 @@ const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome): vo
 };
 type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig: Record<string, unknown>; repositoryName?: string;
+  onCancelled?: () => void;
 };
 const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => {
   const { configPath, backupCacheDir, originalConfig, repositoryName } = options;
+  const cancelled = (): false => {
+    writeStdoutLine('Backup setup cancelled; no destination, consent, cache, or remote changes were made.');
+    options.onCancelled?.();
+    return false;
+  };
   let recoveryUrl: string | undefined;
   let remoteMayExist = false;
   let remoteInitialized = false;
@@ -59,7 +62,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return false;
     }
     if (configured.kind === 'unconfigured') {
-      writeStdoutLine('Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
+      writeStdoutLine('Ballin backup is optional. Backups are stored in a private GitHub repository.');
+      writeStdoutLine('GitHub and anyone authorized to access the repository can read its contents.');
       const start = readPromptLine('Set up optional private backups now? [y/N] ');
       if (start.eof || !/^[yY]$/u.test(start.text)) {
         writeStdoutLine('Backup setup skipped. Run `ballin backup setup` when you are ready.');
@@ -81,10 +85,11 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (!saveBackupConfig(configPath, candidate)) return false;
       }
       reportManagedBranchProtection(ensureManagedBranchRuleset(read));
-      writeStdoutLine('Validated the configured private backup; local consent and automatic-backup choices were preserved.');
+      writeStdoutLine(validatedBackupSummary(repositoryUrl(read.destination, account), candidate));
       writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
       return true;
     }
+    writeStdoutLine();
     const choice = readPromptLine('Reconnect to an existing backup or create a new one? [reconnect/create] ');
     if (choice.eof || !['reconnect', 'create'].includes(choice.text)) return cancelled();
     const nameLine = repositoryName === undefined ? readPromptLine('Repository name [ballin-backups]: ') : { text: repositoryName, eof: false };
@@ -92,13 +97,14 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const name = nameLine.text || 'ballin-backups';
     if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
     recoveryUrl = `https://github.com/${account.login}/${name}`;
-    writeStdoutLine(`Selected GitHub.com account: ${account.login}\nCandidate backup: ${recoveryUrl}`);
+    writeStdoutLine(`\nSelected GitHub.com account: ${account.login}\nCandidate backup: ${recoveryUrl}`);
     const found = candidateRepository(name, account);
     let previous: RepositoryRead | undefined;
     if (choice.text === 'reconnect') {
       if (!found || found.redirected) { writeStdoutLine(repositoryMessages.unavailable); return false; }
       const existing: RepositoryRead = requireRepositoryRead(inspectRepository(found));
-      writeStdoutLine(`Unexpected retained entries: ${unexpectedRepositoryEntries(existing)}`);
+      const unexpected = unexpectedRepositoryEntries(existing);
+      if (unexpected) writeStdoutLine(`Unrecognized backup entries: ${unexpected}. Ballin will leave them unchanged.`);
       previous = existing;
       const bytes = existing.snapshots.get(configSnapshotFileName);
       if (bytes !== undefined) {
@@ -108,7 +114,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         }
         candidate = restorePortablePreferences(candidate, originalConfig, remote);
       }
-      writeStdoutLine('Retire the previous writer before this installation publishes. Recovery does not establish a comparison base or authorize overwriting different saved data.');
+      writeStdoutLine('Stop backups from other installations before running `ballin backup` here.');
+      writeStdoutLine('Reconnecting does not mark local files as matching the backup or allow overwriting different saved data.');
     } else if (found && !found.redirected) {
       writeStdoutLine('That repository name is already in use. Reconnect to a valid backup, or explicitly choose another name.');
       return false;
@@ -137,7 +144,6 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(repositoryMessages.moved); return false;
     }
     recoveryUrl = repositoryUrl(read.destination, account);
-    writeStdoutLine(`Private backup confirmed: ${recoveryUrl}`);
     if (!invalidateBackupCache(backupCacheDir)) {
       writeStdoutLine(`The remote backup remains available at ${recoveryUrl}; local linkage was not saved.`);
       return false;
@@ -147,8 +153,11 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(`Reconnect to the existing backup at ${recoveryUrl}; do not create a duplicate.`);
       return false;
     }
+    writeStdoutLine(`Private backup ${previous ? 'reconnected' : 'created'}: ${recoveryUrl}`);
     writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(includeSensitive))}`);
-    return offerAutomaticUpdateBackup(configPath);
+    if (!offerAutomaticUpdateBackup(configPath)) return false;
+    writeStdoutLine('Backup setup complete.');
+    return true;
   } catch (error) {
     writeStdoutLine(error instanceof PortableConfigError ? (error as Error).message
       : repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to prepare backup configuration.');
@@ -172,7 +181,7 @@ const disconnectBackup = (configPath: string, cacheDir: string): boolean => {
       writeStdoutLine('Backup disconnected; writes are disabled, but local cache cleanup is incomplete. Rerun `ballin backup disconnect`.');
       return false;
     }
-    writeStdoutLine('Backup disconnected. Remote history and shared `gh` authentication are unchanged.');
+    writeStdoutLine('Backup disconnected. Your remote backup and GitHub authentication are unchanged.');
     return true;
   } catch {
     writeStdoutLine('Unable to read local backup configuration; disconnect did not complete.');

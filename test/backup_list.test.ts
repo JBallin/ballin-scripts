@@ -82,6 +82,31 @@ describe('saved backup discovery', function() {
     assert.lengthOf(after.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
     preserved();
   });
+  it('discovers and reads saved Codex snapshots with future sensitive capture disabled', () => {
+    const bytes = 'synthetic = true\r\n\n';
+    save(fixtureState({ 'codex_config.toml': bytes, 'codex_skills.json': '{"synthetic":true}\n' }));
+    const options = 'Saved snapshots:\n  codex_config.toml\n  codex_skills.json\nRead a snapshot with `ballin backup read <snapshot>`.\n';
+    for (const args of [['list'], ['read'], ['read', 'codex_rules.json']]) {
+      const before = state(); before.requests = []; save(before);
+      const result = run(args);
+      assert.equal(result.status, args[0] === 'list' ? 0 : 1, result.stderr);
+      assert.equal(result.stdout, options);
+      const after = state();
+      assert.deepEqual({ ...after, requests: [] }, { ...before, requests: [] });
+      assert.lengthOf(after.requests, 6);
+      assert.lengthOf(after.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+      assert.isFalse(fs.existsSync(path.join(home, '.codex')));
+      preserved();
+    }
+    const before = state(); before.requests = []; save(before);
+    const result = run(['read', 'codex_config.toml']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, bytes);
+    assert.equal(result.stderr, '');
+    assert.lengthOf(state().requests, 7);
+    assert.lengthOf(state().requests.filter((request) => request.endpoint.includes('/git/blobs/')), 2);
+    preserved();
+  });
   for (const readme of [true, false]) {
     it(`reports a valid marker-only inventory with README ${readme ? 'present' : 'absent'}`, () => {
       const value = state(); if (!readme) delete value.commits[value.head].files['README.md']; save(value);

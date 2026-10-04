@@ -51,7 +51,7 @@ describe('repository backup lifecycle', function() {
   };
   const assertSavedSensitiveChoice = (result: { stdout: string }, value: 'true' | 'false'): void => {
     const confirmation = `"backup.includeSensitive" set to: "${value}"`;
-    const automaticPrompt = 'Automatically run ballin backup after ballin update?';
+    const automaticPrompt = 'Automatically run `ballin backup` as part of `ballin update`?';
     assert.deepEqual(result.stdout.split('\n').filter((line: string) => line.startsWith('"backup.includeSensitive" set to:')), [confirmation]);
     assert.include(result.stdout, automaticPrompt);
     assert.isBelow(result.stdout.indexOf(confirmation), result.stdout.indexOf(automaticPrompt));
@@ -114,6 +114,123 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(statusFile(), priorSuccess, { mode: 0o600 });
   };
   const statusClock = (time: number) => `Date.now = () => ${time};`;
+
+  it('aborts before collection or remote effects when Codex cwd restoration fails', () => {
+    const codex = fs.realpathSync(home) + '/.codex';
+    fs.mkdirSync(path.join(codex, 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'skills', 'SKILL.md'), 'synthetic');
+    seedCache('zshrc.sh', 'prior cache');
+    const effects = path.join(root, 'unexpected-effects');
+    const result = run([], '', {}, `
+      const fs = require('fs'), path = require('path'), cp = require('child_process');
+      const previous = process.cwd(), chdir = process.chdir, lstat = fs.lstatSync;
+      process.chdir = (directory) => {
+        if (directory === previous) throw new Error('synthetic restore failure');
+        return chdir(directory);
+      };
+      fs.lstatSync = (file, ...args) => {
+        if (path.resolve(file) === ${JSON.stringify(path.join(codex, 'rules'))}) fs.appendFileSync(${JSON.stringify(effects)}, 'continued discovery');
+        return lstat(file, ...args);
+      };
+      cp.spawnSync = () => { fs.appendFileSync(${JSON.stringify(effects)}, 'child workflow'); throw new Error('No child workflows'); };
+    `);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.isFalse(fs.existsSync(effects), 'fatal restoration must prevent later discovery and collection');
+    assert.deepEqual(state().requests, []);
+    assert.equal(cached('zshrc.sh'), 'prior cache');
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+
+  ['skills', 'rules', 'agents', 'profiles', 'user_skills'].forEach((tree) => {
+    it(`aborts ordinary backup without cache promotion when a selected Codex ${tree} leaf is unreadable`, () => {
+      const codex = path.join(fs.realpathSync(home), '.codex');
+      const leaf = tree === 'user_skills' ? path.join(fs.realpathSync(home), '.agents', 'skills', 'entry')
+        : tree === 'profiles' ? path.join(codex, 'personal.config.toml') : path.join(codex, tree, 'entry');
+      fs.mkdirSync(path.dirname(leaf), { recursive: true });
+      fs.writeFileSync(leaf, 'synthetic');
+      source('local shell\n');
+      const snapshot = `codex_${tree}.json`;
+      seedCache(snapshot, 'prior Codex cache\n');
+      seedCache('zshrc.sh', 'prior shell cache\n');
+      seedSuccess();
+      const before = state();
+      before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
+      saveState(before);
+      const attempts = path.join(root, 'unreadable-attempts');
+      const result = run([], '', { NODE_OPTIONS: `--require=${JSON.stringify(path.join(root, 'preload.cjs'))}` }, `
+        const fs = require('fs'), path = require('path'), open = fs.openSync;
+        fs.openSync = (file, ...args) => {
+          if (typeof file === 'string' && path.resolve(file) === ${JSON.stringify(leaf)}) {
+            fs.appendFileSync(${JSON.stringify(attempts)}, process.argv[1] + '\\n');
+            const error = new Error('synthetic denied leaf'); error.code = 'EACCES'; throw error;
+          }
+          return open(file, ...args);
+        };
+      `);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, `failed to snapshot ${snapshot}`);
+      assert.deepEqual(state().requests, [], 'capture must fail before remote reads or publication');
+      assert.equal(cached(snapshot), 'prior Codex cache\n');
+      assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess, 'failed Codex capture must not refresh success time');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh', '.last-success'].sort());
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+      assert.isTrue(fs.readFileSync(attempts, 'utf8').trim().split('\n').every((entry: string) => entry.endsWith('recursive_snapshot.ts')),
+        'denied leaf opens belong to capture, not discovery');
+    });
+  });
+
+  [
+    { tree: 'skills', operation: 'opendirSync' },
+    { tree: 'rules', operation: 'readSync' },
+    { tree: 'agents', operation: 'lstatSync' },
+    { tree: 'profiles', operation: 'opendirSync' },
+    { tree: 'user_skills', operation: 'opendirSync' },
+  ].forEach(({ tree, operation }) => {
+    it(`aborts before staging when selected Codex ${tree} directory discovery fails at ${operation}`, () => {
+      const codex = path.join(fs.realpathSync(home), '.codex');
+      const directory = tree === 'user_skills' ? path.join(fs.realpathSync(home), '.agents', 'skills', 'nested')
+        : tree === 'profiles' ? codex : path.join(codex, tree, 'nested');
+      fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(path.join(directory, tree === 'profiles' ? 'personal.config.toml' : 'entry'), 'synthetic');
+      source('local shell\n');
+      const snapshot = `codex_${tree}.json`;
+      seedCache(snapshot, 'prior Codex cache\n');
+      seedCache('zshrc.sh', 'prior shell cache\n');
+      seedSuccess();
+      const before = state();
+      before.commits[before.head].files['zshrc.sh'] = Buffer.from('prior shell cache\n').toString('base64');
+      saveState(before);
+      const result = run([], '', {}, `
+        const fs = require('fs');
+        const denied = () => { const error = new Error('synthetic directory denial'); error.code = 'EACCES'; throw error; };
+        const original = fs[${JSON.stringify(operation)}];
+        if (${JSON.stringify(operation)} === 'readSync') {
+          const open = fs.opendirSync;
+          fs.opendirSync = (...args) => {
+            const dir = open(...args);
+            if (process.cwd() === ${JSON.stringify(directory)}) dir.readSync = denied;
+            return dir;
+          };
+        } else {
+          fs[${JSON.stringify(operation)}] = (...args) => {
+            if (process.cwd() === ${JSON.stringify(directory)}) denied();
+            return original(...args);
+          };
+        }
+      `);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, snapshot);
+      assert.include(result.stderr, 'No snapshots were published');
+      assert.deepEqual(state().requests, [], 'discovery failure must precede all remote reads');
+      assert.equal(cached(snapshot), 'prior Codex cache\n');
+      assert.equal(cached('zshrc.sh'), 'prior shell cache\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess, 'failed Codex capture must not refresh success time');
+      assert.deepEqual(fs.readdirSync(cache).sort(), [snapshot, 'zshrc.sh', '.last-success'].sort());
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    });
+  });
+
   it('records changed and genuine no-op completion locally without another publication', () => {
     source(); seedSuccess();
     const firstTime = Date.parse('2026-01-01T00:00:00.000Z');
@@ -195,6 +312,7 @@ describe('repository backup lifecycle', function() {
   });
   it('reports unavailable during validated setup without creating status; reads never advance it', () => {
     const before = config(); const setup = run(['setup']); ok(setup);
+    assert.equal(setup.stdout, 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: unavailable\n');
     assert.include(setup.stdout, 'on this installation: unavailable'); assert.isFalse(fs.existsSync(statusFile()));
     assert.deepEqual(config(), before);
     source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
@@ -202,6 +320,82 @@ describe('repository backup lifecycle', function() {
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
     ok(run(['disconnect'])); assert.isFalse(fs.existsSync(cacheRoot));
   });
+  for (const representation of ['boolean', 'string']) {
+    for (const sensitive of [false, true]) {
+      for (const automatic of [false, true]) {
+        it(`summarizes existing setup with ${representation} sensitive=${sensitive} automatic=${automatic} without changing state`, () => {
+          const before = config();
+          before.backup.includeSensitive = representation === 'string' ? String(sensitive) : sensitive;
+          before.update.backup = representation === 'string' ? String(automatic) : automatic;
+          saveConfig(before); seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess(); source('different local bytes\n');
+          const configBytes = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+          const noPromptsOrDiscovery = `
+            const helpers = require(${JSON.stringify(path.join(repoRoot, 'commands', 'commandHelpers.ts'))});
+            helpers.readPromptLine = () => { throw new Error('Unexpected setup prompt'); };
+            const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
+            snapshots.observeSnapshotSources = () => { throw new Error('Unexpected snapshot discovery'); };
+            snapshots.snapshotDefinitions.forEach((definition) => {
+              definition.discover = () => { throw new Error('Unexpected source review'); };
+            });
+          `;
+          const result = run(['setup'], '', {}, noPromptsOrDiscovery); ok(result);
+          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${priorSuccess}`);
+          assert.equal(fs.readFileSync(configPath, 'utf8'), configBytes);
+          assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+          assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+          assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
+        });
+      }
+    }
+  }
+  it('summarizes absent sensitive consent as excluded without saving consent', () => {
+    const before = config(); delete before.backup.includeSensitive; saveConfig(before);
+    const result = run(['setup']); ok(result);
+    assert.include(result.stdout, 'Sensitive sources: excluded\n'); assert.deepEqual(config(), before);
+    assert.lengthOf(mutations(), 0);
+  });
+  it('summarizes the automatic-backup default supplied by existing setup configuration', () => {
+    const before = config(); delete before.update.backup; saveConfig(before);
+    const result = run(['setup']); ok(result);
+    assert.include(result.stdout, 'Automatic backup during update: disabled\n');
+    assert.deepEqual(config(), { ...before, update: { ...before.update, backup: 'false' } });
+    assert.lengthOf(mutations(), 0);
+  });
+  for (const preference of ['sensitive', 'automatic']) {
+    for (const invalid of [null, 'TRUE', {}]) {
+      it(`summarizes invalid ${preference} preference ${JSON.stringify(invalid)} explicitly without repairing it`, () => {
+        const before = config();
+        const sensitive = preference === 'sensitive';
+        if (sensitive) before.backup.includeSensitive = invalid;
+        else before.update.backup = invalid;
+        saveConfig(before); seedSuccess();
+        const result = run(['setup']); ok(result);
+        assert.include(result.stdout, sensitive
+          ? 'Sensitive sources: invalid `backup.includeSensitive` (expected true or false)\n'
+          : 'Automatic backup during update: invalid `update.backup` (expected true or false)\n');
+        assert.deepEqual(config(), before); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.lengthOf(mutations(), 0);
+      });
+    }
+  }
+  for (const failure of ['invalid configuration', 'unavailable repository', 'public repository', 'unreadable tree', 'unavailable account']) {
+    it(`omits the settings summary when existing setup has ${failure}`, () => {
+      const before = config(); const value = state();
+      if (failure === 'invalid configuration') before.backup.repository = {};
+      if (failure === 'unavailable repository') value.exists = false;
+      if (failure === 'public repository') value.faults.node = { isPrivate: false };
+      if (failure === 'unreadable tree') value.faults.tree = 'unreadable';
+      if (failure === 'unavailable account') value.faults.auth = true;
+      saveConfig(before); saveState(value); seedCache('zshrc.sh', 'unchanged\n'); seedSuccess();
+      const result = run(['setup']); assert.equal(result.status, 1);
+      assert.notInclude(result.stdout, 'Validated private backup:');
+      assert.notInclude(result.stdout, 'Sensitive sources:');
+      assert.notInclude(result.stdout, 'Automatic backup during update:');
+      assert.notInclude(result.stdout, 'Last recorded successful backup');
+      assert.deepEqual(config(), before); assert.equal(cached(), 'unchanged\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(mutations(), 0);
+    });
+  }
   it('retains historical local success through same-identity rename and later remote change', () => {
     source(); ok(run()); const recorded = fs.readFileSync(statusFile(), 'utf8');
     const value = state(); value.name = 'renamed';
@@ -241,6 +435,141 @@ describe('repository backup lifecycle', function() {
         ok(run()); assert.equal(publications().length, 1);
       }
       assert.equal(rulesetRequests().length, 0);
+    });
+  });
+  [false, true].forEach((included) => {
+    it(`publishes synthetic Codex sources with the existing sensitive preference: ${included}`, () => {
+      const value = config();
+      value.backup.includeSensitive = String(included);
+      saveConfig(value);
+      const codex = path.join(home, 'active-codex');
+      fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
+      const wholeConfig = '[projects."/synthetic"]\ntrust_level = "trusted"\n';
+      fs.writeFileSync(path.join(codex, 'config.toml'), wholeConfig);
+      fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill\n');
+      ok(run([], '', { CODEX_HOME: codex }));
+      if (included) {
+        assert.equal(remote('codex_config.toml'), wholeConfig);
+        const archive = JSON.parse(remote('codex_skills.json')!);
+        assert.equal(archive.format, 'ballin-directory');
+        assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['synthetic/SKILL.md']);
+        assert.equal(Buffer.from(archive.entries[0].content, 'base64').toString(), 'synthetic skill\n');
+        assert.equal(cached('codex_config.toml'), wholeConfig);
+        assert.equal(cached('codex_skills.json'), remote('codex_skills.json'));
+      } else {
+        assert.isUndefined(remote('codex_config.toml'));
+        assert.isUndefined(remote('codex_skills.json'));
+      }
+      assert.notProperty(JSON.parse(remote('ballin_config')!), 'backup');
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.lengthOf(publications(), 1);
+    });
+  });
+  describe('local Codex snapshot budgets', function() {
+    this.timeout(30000);
+    const mib = 1024 * 1024;
+    const sparse = (file: string, size: number): void => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const fd = fs.openSync(file, 'w');
+      try { fs.ftruncateSync(fd, size); } finally { fs.closeSync(fd); }
+    };
+    const active = (): string => path.join(home, 'budget-codex');
+
+    it('rejects combined raw and recursive staging above 16 MiB before remote reads', () => {
+      const codex = active();
+      sparse(path.join(codex, 'config.toml'), 9 * mib);
+      sparse(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 6 * mib);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: codex });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('shares the aggregate capture budget across legacy and current personal skills', () => {
+      sparse(path.join(active(), 'skills', 'legacy', 'SKILL.md'), 7 * mib);
+      sparse(path.join(home, '.agents', 'skills', 'current', 'SKILL.md'), 7 * mib);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: active() });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('counts both skill archive identities when CODEX_HOME overlaps the fixed user root', () => {
+      const shared = path.join(home, '.agents');
+      sparse(path.join(shared, 'skills', 'demo', 'SKILL.md'), 7 * mib);
+      const result = run([], '', { CODEX_HOME: shared });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('rejects excessive recursive entries before any remote read', () => {
+      const skills = path.join(active(), 'skills');
+      fs.mkdirSync(skills, { recursive: true });
+      for (let index = 0; index < 8193; index += 1) fs.writeFileSync(path.join(skills, `synthetic-${index}`), '');
+      const result = run([], '', { CODEX_HOME: active() });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'recursive source exceeds the supported snapshot limits');
+      assert.lengthOf(state().requests, 0);
+      assert.isFalse(fs.existsSync(cache));
+    });
+
+    it('rejects an oversized compared Codex cache without publication or promotion', () => {
+      const codex = active();
+      fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic local\n');
+      saveState(fixtureState({ 'codex_config.toml': 'synthetic remote\n' }));
+      sparse(path.join(cache, 'codex_config.toml'), 16 * mib + 1);
+      const before = state().head;
+      const result = run([], '', { CODEX_HOME: codex });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(state().head, before);
+      assert.lengthOf(mutations(), 0);
+      assert.equal(fs.statSync(path.join(cache, 'codex_config.toml')).size, 16 * mib + 1);
+      assert.isFalse(fs.existsSync(path.join(cache, 'ballin_config')));
+    });
+
+    [false, true].forEach((included) => {
+      it(`ignores oversized unselected or absent Codex cache: sensitive ${included}`, () => {
+        const value = config(); value.backup.includeSensitive = String(included); saveConfig(value);
+        sparse(path.join(cache, 'codex_config.toml'), 16 * mib + 1);
+        ok(run([], '', { CODEX_HOME: active() }));
+        assert.equal(fs.statSync(path.join(cache, 'codex_config.toml')).size, 16 * mib + 1);
+        assert.isUndefined(remote('codex_config.toml'));
+      });
+    });
+
+    it('publishes encoded content above 16 MiB when normalized local bytes fit', () => {
+      const codex = active(); fs.mkdirSync(codex);
+      const content = 'x'.repeat(13 * mib - 1) + '\n';
+      fs.writeFileSync(path.join(codex, 'config.toml'), content);
+      ok(run([], '', { CODEX_HOME: codex }));
+      const input = publications()[0].payload?.variables?.input as { fileChanges: { additions: { path: string; contents: string }[] } };
+      const addition = input.fileChanges.additions.find((entry) => entry.path === 'codex_config.toml');
+      assert.exists(addition);
+      assert.isAbove(addition!.contents.length, 16 * mib);
+      assert.equal(remote('codex_config.toml'), content);
+      assert.equal(cached('codex_config.toml'), content);
+    });
+
+    it('retains old absent Codex data without imposing a remote aggregate quota', () => {
+      const retained = 'r'.repeat(12 * mib - 1) + '\n';
+      const content = 'n'.repeat(12 * mib - 1) + '\n';
+      saveState(fixtureState({ 'codex_AGENTS.md': retained }));
+      const codex = active(); fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'config.toml'), content);
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.equal(remote('codex_AGENTS.md'), retained);
+      assert.equal(remote('codex_config.toml'), content);
+      const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+      ok(run([], '', { CODEX_HOME: codex }));
+      assert.equal(remote('codex_AGENTS.md'), retained);
+      assert.equal(remote('codex_config.toml'), content);
+      assert.lengthOf(publications(), 1);
     });
   });
   it('sorts final snapshot status output without changing publication order', () => {
@@ -314,7 +643,7 @@ describe('repository backup lifecycle', function() {
     it(`rejects invalid consent before discovery: ${JSON.stringify(consent)}`, () => {
       const value = config(); value.backup.includeSensitive = consent; saveConfig(value);
       fs.symlinkSync(path.join(home, '.zshrc'), path.join(home, '.zshrc'));
-      assert.include(run().stderr, 'invalid backup.includeSensitive'); assert.equal(state().requests.length, 0);
+      assert.include(run().stderr, 'invalid `backup.includeSensitive`'); assert.equal(state().requests.length, 0);
     });
   });
   ['ambiguous', 'malformed'].forEach((mode) => {
@@ -538,7 +867,7 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], 'y\ncreate\n\nn\ny\nn\n', ttyEnv, progressPreload()); ok(result);
     assert.include(result.stderr, 'Creating and initializing private backup...\r\x1b[2K');
     assert.equal(progressRequests().find((r) => r.args.includes('user/repos'))?.status, 'Creating and initializing private backup...');
-    assert.notInclude(result.stdout, 'Creating and initializing'); assert.include(result.stdout, 'Private backup confirmed:');
+    assert.notInclude(result.stdout, 'Creating and initializing'); assert.include(result.stdout, 'Private backup created:');
   });
   it('clears failed creation status before existing recovery guidance', () => {
     unconfigured(); const value = state(); value.exists = false; value.faults.create = 'reject'; saveState(value);
@@ -546,7 +875,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /^Creating and initializing private backup\.\.\.\r\x1b\[2Kballin backup setup:/);
     assert.include(result.stdout, 'Remote creation or initialization may already have occurred');
-    assert.notInclude(result.stdout, 'Private backup confirmed:');
+    assert.notInclude(result.stdout, 'Private backup created:');
   });
   it('shows reconnect status during revalidation and leaves cancellation quiet', () => {
     unconfigured();
@@ -592,7 +921,10 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n\n'); ok(result);
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
     assert.equal(config().update.backup, 'false');
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+    assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
+    assert.include(result.stdout, '\nSelected GitHub.com account: fixture-user\nCandidate backup: https://github.com/fixture-user/ballin-backups\n\nTool inventories');
+    assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups\n');
+    assert.include(result.stdout, '"update.backup" set to: "false"\nBackup setup complete.\n');
     assertSavedSensitiveChoice(result, 'false');
     assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 3);
@@ -672,6 +1004,8 @@ describe('repository backup lifecycle', function() {
       unconfigured(); const value = state(); value.exists = false; saveState(value); seedCache('zshrc.sh', 'untrusted\n');
       const before = fs.readFileSync(configPath, 'utf8'); const result = run(['setup'], input);
       assert.equal(result.status, 1); assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.include(result.stdout, 'Backup setup cancelled;');
+      assert.equal(result.stderr, '');
       assert.notInclude(result.stdout, '"backup.includeSensitive" set to:');
       assert.equal(mutations().length, 0); assert.equal(cached(), 'untrusted\n');
     });
@@ -691,7 +1025,8 @@ describe('repository backup lifecycle', function() {
           throw new Error('Raw contents must not be read during review');
         return original.call(this,file,...args); }; }`;
     const result = run(['setup'], 'y\nreconnect\n\ny\nn\n', {}, preload); assert.equal(result.status, 1);
-    assert.include(result.stdout, JSON.stringify(fs.realpathSync(external))); assert.include(result.stdout, 'pipx: unavailable');
+    assert.include(result.stdout, `${JSON.stringify(path.join(home, '.zshrc'))} -> ${JSON.stringify(fs.realpathSync(external))}`);
+    assert.include(result.stdout, 'Unavailable now: pipx,');
     assert.notInclude(result.stdout, 'private-review-secret'); assert.equal(mutations().length, 0);
     assert.notInclude(result.stdout, '"backup.includeSensitive" set to:');
     assert.include(result.stdout, 'Confirm this destination');
@@ -760,13 +1095,27 @@ describe('repository backup lifecycle', function() {
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 0);
     assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
   });
+  it('reports retained unrecognized entries during reconnect without changing them', () => {
+    unconfigured(); saveState(fixtureState({ 'unrecognized-file': 'saved data\n' }));
+    const result = run(['setup'], 'y\nreconnect\n\nn\nn\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Unrecognized backup entries: 1. Ballin will leave them unchanged.');
+    assert.equal(remote('unrecognized-file'), 'saved data\n');
+    assert.equal(mutations().length, 0);
+    assert.equal(result.stderr, '');
+  });
   (['true', 'false'] as const).forEach((preference) => {
     it(`confirms the independently reviewed sensitive-source choice once after reconnect saves ${preference}`, () => {
       unconfigured(); const before = config(); before.backup.includeSensitive = preference === 'true' ? 'false' : 'true'; saveConfig(before);
       const result = run(['setup'], `y\nreconnect\n\n${preference === 'true' ? 'y' : 'n'}\ny\nn\n`); ok(result);
-      assert.include(result.stdout, 'Also include sensitive sources (raw shell/Git/editor configuration, .nvmrc, and pipx installation metadata)? [y/N]');
+      assert.include(result.stdout, 'Also include sensitive sources? [y/N]');
       assert.equal(config().backup.includeSensitive, preference);
       assertSavedSensitiveChoice(result, preference);
+      assert.include(result.stdout, 'Private backup reconnected: https://github.com/fixture-user/ballin-backups\n');
+      assert.notInclude(result.stdout, 'Unrecognized backup entries:');
+      assert.include(result.stdout, 'Stop backups from other installations before running `ballin backup` here.');
+      assert.include(result.stdout, 'Reconnecting does not mark local files as matching the backup or allow overwriting different saved data.');
+      assert.include(result.stdout, 'Backup setup complete.');
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
     });
   });
@@ -790,6 +1139,7 @@ describe('repository backup lifecycle', function() {
       } return original.call(this,file,...args); };`;
     const result = run(['setup'], 'y\nreconnect\n\nn\ny\ny\n', {}, preload);
     assert.equal(result.status, 1); assert.include(result.stdout, 'preference was not saved');
+    assert.notInclude(result.stdout, 'Backup setup complete.');
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().update.backup, 'false');
     assert.equal(config().backup.includeSensitive, 'false');
     assertSavedSensitiveChoice(result, 'false');
@@ -797,9 +1147,12 @@ describe('repository backup lifecycle', function() {
     assert.notInclude(result.stdout, '"update.backup" set to:');
   });
   it('revalidates by stable identity after a rename and preserves local choices without prompting', () => {
-    const value = state(); value.name = 'renamed'; value.rulesets = [fixtureRuleset({ source: 'fixture-user/renamed' })];
+    const value = state(); value.name = 'renamed'; value.login = 'renamed-user';
+    value.rulesets = [fixtureRuleset({ source: 'renamed-user/renamed' })];
     saveState(value); seedCache('zshrc.sh', 'base\n');
     const result = run(['setup', 'renamed']); ok(result); assert.equal(config().backup.repository.name, 'renamed');
+    assert.include(result.stdout, 'Validated private backup: https://github.com/renamed-user/renamed\nSensitive sources: included\nAutomatic backup during update: disabled\n');
+    assert.notInclude(result.stdout, 'https://github.com/fixture-user/ballin-backups');
     assert.notInclude(result.stdout, '"backup.includeSensitive" set to:');
     assert.notInclude(result.stdout, 'Also include sensitive sources');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'false');
@@ -905,7 +1258,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().backup.host, before.backup.host);
     assert.equal(run().status, 1);
     const disconnected = run(['disconnect']); ok(disconnected);
-    assert.equal(disconnected.stdout, 'Backup disconnected. Remote history and shared `gh` authentication are unchanged.\n');
+    assert.equal(disconnected.stdout, 'Backup disconnected. Your remote backup and GitHub authentication are unchanged.\n');
     assert.isFalse(fs.existsSync(cacheRoot));
     assert.equal(state().requests.length, 0);
   });

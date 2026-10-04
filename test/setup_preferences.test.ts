@@ -42,7 +42,7 @@ describe('guided preference setup', () => {
   const assertNoCalls = () => assert.isFalse(fs.existsSync(callsPath), 'no child workflows or raw source reads');
 
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-preferences-'));
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-preferences-')));
     configPath = path.join(root, 'ballin.config.json');
     callsPath = path.join(root, 'calls');
     guardPath = path.join(root, 'guard.cjs');
@@ -51,9 +51,31 @@ describe('guided preference setup', () => {
 const fs = require('fs');
 const cp = require('child_process');
 cp.spawnSync = (...args) => { fs.appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n'); throw new Error('No child workflows allowed'); };
+const path = require('path');
+const sourceFds = new Set();
+const sourcePath = (file) => typeof file === 'string' && (path.resolve(file) === ${JSON.stringify(path.join(root, '.zshrc'))} || [${JSON.stringify(path.join(root, '.codex') + path.sep)}, ${JSON.stringify(path.join(root, '.agents', 'skills') + path.sep)}].some((prefix) => path.resolve(file).startsWith(prefix)));
+const open = fs.openSync;
+fs.openSync = (file, flags, ...args) => {
+  const source = sourcePath(file);
+  if (source && flags !== (fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK)) {
+    fs.appendFileSync(${JSON.stringify(callsPath)}, 'unexpected source open\\n'); throw new Error('Only metadata source opens allowed');
+  }
+  const fd = open(file, flags, ...args);
+  if (source) sourceFds.add(fd);
+  return fd;
+};
+const close = fs.closeSync;
+fs.closeSync = (fd) => { const result = close(fd); sourceFds.delete(fd); return result; };
+const descriptorRead = fs.readSync;
+fs.readSync = (fd, ...args) => {
+  if (sourceFds.has(fd)) {
+    fs.appendFileSync(${JSON.stringify(callsPath)}, 'source descriptor read\\n'); throw new Error('No source descriptor reads allowed');
+  }
+  return descriptorRead(fd, ...args);
+};
 const read = fs.readFileSync;
 fs.readFileSync = (file, ...args) => {
-  if (file === ${JSON.stringify(path.join(root, '.zshrc'))}) {
+  if (sourceFds.has(file) || sourcePath(file)) {
     fs.appendFileSync(${JSON.stringify(callsPath)}, 'raw source read\\n'); throw new Error('No source content reads allowed');
   }
   return read(file, ...args);
@@ -68,20 +90,70 @@ fs.readFileSync = (file, ...args) => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it('lists sensitive source labels alphabetically with their existing paths and statuses', () => {
+  it('groups available sensitive sources above absent and unavailable sources without redundant paths', () => {
     fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
     const result = run('y\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    const labels = result.stdout.split('Selected: inventory and filtered preferences')[0].split('\n')
-      .map((line: string) => /([\w.]+): (?:absent|unavailable|available|"|unsupported)/u.exec(line)?.[1])
-      .filter(Boolean);
-    assert.deepEqual(labels, [
-      'bash_profile.sh', 'bashrc.sh', 'gitconfig', 'gitignore_global', 'nanorc',
-      'nvmrc', 'pipx', 'profile.sh', 'vimrc', 'vs_keybindings', 'vs_settings',
-      'vsI_keybindings', 'vsI_settings', 'zprofile.sh', 'zshrc.sh',
-    ]);
-    assert.include(result.stdout, `zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))} ->`);
+    assert.include(result.stdout, `Sensitive sources available now:\n  pipx: installation metadata\n  zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))}\n`);
+    assert.notInclude(result.stdout, ' -> ');
+    assert.include(result.stdout, 'Not found now: bash_profile.sh, bashrc.sh, codex_agents.json, codex_AGENTS.md, codex_AGENTS.override.md, codex_config.toml, codex_hooks.json, codex_marketplace.json, codex_profiles.json, codex_rules.json, codex_skills.json, codex_user_skills.json, gitconfig, gitignore_global, nanorc, nvmrc, profile.sh, vimrc, zprofile.sh\n');
+    assert.include(result.stdout, 'Unavailable now: vs_keybindings, vs_settings, vsI_keybindings, vsI_settings\n');
+    assert.include(result.stdout, 'pipx installation metadata may contain original URLs, credentials, and backend arguments.');
     assert.notInclude(result.stdout, 'fixture private content');
+  });
+
+  [false, true].forEach((included) => {
+    it(`reviews the override instruction source only after sensitive opt-in: ${included}`, () => {
+      const codex = path.join(root, '.codex'); fs.mkdirSync(codex);
+      const override = path.join(codex, 'AGENTS.override.md');
+      fs.writeFileSync(override, 'SYNTHETIC_OVERRIDE_CONTENT');
+      const probes = path.join(root, 'override-probes');
+      fs.appendFileSync(guardPath, `const definitions = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'backup_snapshots.ts'))}).snapshotDefinitions;
+        const overrideDefinition = definitions.find((definition) => definition.name === 'codex_AGENTS.override.md');
+        if (!overrideDefinition) throw new Error('Missing override source definition');
+        const discoverOverride = overrideDefinition.discover;
+        overrideDefinition.discover = (context) => {
+          fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
+          return discoverOverride(context);
+        };\n`);
+      const result = run(`${included ? 'y' : 'n'}\ny\nn\nn\n`);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.existsSync(probes), included);
+      assert.equal(readConfig().backup.includeSensitive, String(included));
+      assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
+      if (included) assert.include(result.stdout, `codex_AGENTS.override.md: ${JSON.stringify(override)}\n`);
+      else assert.notInclude(result.stdout, 'codex_AGENTS.override.md:');
+      assert.include(result.stdout, 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
+      assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
+    });
+  });
+
+  [false, true].forEach((included) => {
+    it(`reviews fixed HOME user skills independently of CODEX_HOME only after opt-in: ${included}`, () => {
+      const skills = path.join(root, '.agents', 'skills');
+      fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
+      fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_USER_SKILL_CONTENT');
+      const active = path.join(root, '.codex', 'active'); fs.mkdirSync(active, { recursive: true });
+      const probes = path.join(root, 'user-skills-probes');
+      fs.appendFileSync(guardPath, `const userSkillsDefinitions = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'backup_snapshots.ts'))}).snapshotDefinitions;
+        const userSkillsDefinition = userSkillsDefinitions.find((definition) => definition.name === 'codex_user_skills.json');
+        if (!userSkillsDefinition) throw new Error('Missing user skills source definition');
+        const discoverUserSkills = userSkillsDefinition.discover;
+        userSkillsDefinition.discover = (context) => {
+          fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
+          return discoverUserSkills(context);
+        };\n`);
+      const result = run(`${included ? 'y' : 'n'}\ny\nn\nn\n`, ['setup'], { CODEX_HOME: active });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.existsSync(probes), included);
+      assert.equal(readConfig().backup.includeSensitive, String(included));
+      assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
+      if (included) {
+        assert.include(result.stdout, `codex_user_skills.json: ${JSON.stringify(skills)}\n`);
+        assert.include(result.stdout, 'Not found now:');
+        assert.include(result.stdout, 'codex_skills.json,');
+      } else assert.notInclude(result.stdout, 'codex_user_skills.json:');
+    });
   });
 
   [false, true].forEach((enabled) => {
@@ -91,14 +163,14 @@ fs.readFileSync = (file, ...args) => {
       fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
       const result = run('\ny\n\n\n');
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, `metadata)? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `update? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `Also include sensitive sources? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.deepEqual(readConfig(), initial);
       assert.include(result.stdout, 'preference review complete');
       if (enabled) {
-        assert.include(result.stdout, 'pipx: available');
+        assert.include(result.stdout, 'pipx: installation metadata');
         assert.include(result.stdout, JSON.stringify(path.join(root, '.zshrc')));
       } else assert.notInclude(result.stdout, 'pipx:');
     });
@@ -173,7 +245,7 @@ fs.readFileSync = (file, ...args) => {
         input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}` }),
       });
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'Automatically run ballin backup after ballin update? [y/N]');
+      assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
       assert.equal(readConfig().update.backup, ['y\n', 'Y\n', 'y'].includes(input) ? 'true' : 'false');
     });
   });
@@ -225,6 +297,18 @@ fs.readFileSync = (file, ...args) => {
     assert.equal(readConfig().analytics.enabled, 'true');
   });
 
+  it('discloses current and future sensitive sources before acceptance without adding consent state', () => {
+    const initial = configFor('repository', false);
+    writeConfig(initial);
+    const result = run('n\ny\nn\nn\n');
+    assert.equal(result.status, 0, result.stderr);
+    const disclosure = 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.';
+    assert.isAtLeast(result.stdout.indexOf(disclosure), 0);
+    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Also include sensitive sources'));
+    assert.deepEqual(Object.keys(readConfig().backup).sort(), Object.keys(initial.backup).sort());
+    assert.equal(readConfig().backup.includeSensitive, 'false');
+  });
+
   it('stops on sensitive inspection failure without saving', () => {
     fs.writeFileSync(path.join(root, '.zshrc'), 'fixture content');
     fs.appendFileSync(guardPath, `const realpath = fs.realpathSync; fs.realpathSync = (file, ...args) => {
@@ -237,6 +321,139 @@ fs.readFileSync = (file, ...args) => {
     assert.include(result.stdout, 'Unable to review');
     assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     assert.notInclude(result.stdout, 'Automatically run');
+  });
+
+  const denyReadAccess = (file: string): string => {
+    const attempts = path.join(root, 'access-attempts');
+    fs.appendFileSync(guardPath, `const metadataOpen = fs.openSync; fs.openSync = (entry, ...args) => {
+      if (typeof entry === 'string' && path.resolve(entry) === ${JSON.stringify(file)}) {
+        fs.appendFileSync(${JSON.stringify(attempts)}, 'denied\\n');
+        const error = new Error('synthetic unreadable leaf'); error.code = 'EACCES'; throw error;
+      }
+      return metadataOpen(entry, ...args);
+    };\n`);
+    return attempts;
+  };
+
+  ['skills', 'rules', 'agents'].forEach((tree) => {
+    it(`refuses opt-in when a selected recursive ${tree} leaf is unreadable`, () => {
+      const leaf = path.join(root, '.codex', tree, 'synthetic', 'instructions.md');
+      fs.mkdirSync(path.dirname(leaf), { recursive: true });
+      fs.writeFileSync(leaf, 'SYNTHETIC_PRIVATE_CONTENT');
+      const attempts = denyReadAccess(leaf);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run('y\ny\ny\ny\n');
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, `Unable to review codex_${tree}.json`);
+      assert.isTrue(fs.existsSync(attempts), 'selected leaf must receive a metadata access check');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.notInclude(result.stdout, 'Automatically run');
+      assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
+    });
+  });
+
+  [false, true].forEach((selected) => {
+    it(`checks read access only for selected named TOML profiles: selected ${selected}`, () => {
+      const codex = path.join(root, '.codex'); fs.mkdirSync(codex);
+      fs.writeFileSync(path.join(codex, 'synthetic.config.toml'), 'synthetic profile');
+      const denied = path.join(codex, selected ? 'synthetic.config.toml' : 'history.jsonl');
+      if (!selected) fs.writeFileSync(denied, 'synthetic runtime');
+      const attempts = denyReadAccess(denied);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run('y\ny\nn\nn\n');
+      assert.equal(result.status, selected ? 1 : 0, result.stdout + result.stderr);
+      assert.equal(fs.existsSync(attempts), selected);
+      if (selected) {
+        assert.include(result.stdout, 'Unable to review codex_profiles.json');
+        assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      } else assert.equal(readConfig().backup.includeSensitive, 'true');
+    });
+  });
+
+  it('aborts opt-in after fatal snapshot working-directory restoration without later discovery', () => {
+    const codex = path.join(root, '.codex');
+    fs.mkdirSync(path.join(codex, 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'agents', 'synthetic.md'), 'synthetic agent');
+    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic later source');
+    const restored = path.join(root, 'restore-attempt');
+    const later = path.join(root, 'later-discovery');
+    fs.appendFileSync(guardPath, `const originalCwd = process.cwd(); const chdir = process.chdir;
+      process.chdir = (directory) => {
+        if (directory === originalCwd) {
+          fs.writeFileSync(${JSON.stringify(restored)}, 'failed'); throw new Error('synthetic restore failure');
+        }
+        return chdir(directory);
+      };
+      const lstat = fs.lstatSync;
+      fs.lstatSync = (entry, ...args) => {
+        if (typeof entry === 'string' && path.resolve(entry) === ${JSON.stringify(path.join(codex, 'config.toml'))}) fs.writeFileSync(${JSON.stringify(later)}, 'continued');
+        return lstat(entry, ...args);
+      };\n`);
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run('y\ny\ny\ny\n');
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.isTrue(fs.existsSync(restored));
+    assert.isFalse(fs.existsSync(later), 'fatal restoration must stop later source discovery');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.notInclude(result.stdout, 'Automatically run');
+  });
+
+  it('displays configured Codex aliases and canonical paths for raw and recursive sources', () => {
+    const codex = path.join(root, '.codex');
+    fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic config');
+    fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill');
+    const alias = path.join(root, 'codex-alias'); fs.symlinkSync(codex, alias);
+    const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
+    assert.include(result.stdout, `codex_skills.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.equal(readConfig().backup.includeSensitive, 'true');
+  });
+
+  it('reviews Codex source metadata without following absolute descendant paths', () => {
+    const codex = path.join(root, '.codex');
+    fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
+    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic config');
+    fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill');
+    const alias = path.join(root, 'metadata-alias'); fs.symlinkSync(codex, alias);
+    fs.appendFileSync(guardPath, `const selectedDescendant = (entry) => typeof entry === 'string' && path.isAbsolute(entry)
+      && [${JSON.stringify(codex + path.sep)}, ${JSON.stringify(alias + path.sep)}].some((prefix) => entry.startsWith(prefix));
+      for (const method of ['realpathSync', 'statSync', 'accessSync']) {
+        const original = fs[method];
+        fs[method] = (entry, ...args) => {
+          if (selectedDescendant(entry)) {
+            fs.appendFileSync(${JSON.stringify(callsPath)}, method + ' followed absolute source\\n');
+            throw new Error('Synthetic forbidden absolute source lookup');
+          }
+          return original(entry, ...args);
+        };
+      }\n`);
+    const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
+    assert.include(result.stdout, `codex_skills.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.equal(readConfig().backup.includeSensitive, 'true');
+  });
+
+  it('reviews recursive Codex directories with metadata without collecting their contents', () => {
+    const skills = path.join(root, '.codex', 'skills');
+    fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
+    fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_PRIVATE_CONTENT');
+    const result = run('y\ny\nn\nn\n');
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'codex_skills.json:');
+    assert.include(result.stdout, JSON.stringify(skills));
+    assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
+  });
+
+  it('preserves the existing sensitive choice when final confirmation is cancelled', () => {
+    const initial = configFor('repository', true);
+    writeConfig(initial);
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run('y\nn\n');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
   });
 
   it('reports prompt input failure without changing pending choices', () => {
