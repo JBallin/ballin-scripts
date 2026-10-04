@@ -101,6 +101,25 @@ describe('ballin', () => {
     }),
   });
 
+  const interactiveEnv = (nonTTY?: 'stdin' | 'stdout' | 'stderr', columns = 80): NodeJS.ProcessEnv => {
+    const preload = path.join(tempDir, 'interactive.cjs');
+    fs.writeFileSync(preload, `
+      const fs = require('fs');
+      const write = fs.writeSync;
+      const writes = [];
+      fs.writeSync = (...args) => { writes.push(args[1]); return write(...args); };
+      for (const name of ['stdin', 'stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
+      Object.defineProperty(process.stderr, 'columns', { value: ${columns} });
+      const readiness = require(${JSON.stringify(require.resolve('../commands/setup_readiness.ts'))});
+      const collect = readiness.collectSetupReadiness;
+      readiness.collectSetupReadiness = (options) => {
+        if (${JSON.stringify(!nonTTY && columns > 'Checking readiness...'.length)} && !process.env.NO_COLOR && process.env.TERM !== 'dumb' && writes[0] !== 'Checking readiness...') throw Error('progress did not precede readiness');
+        return collect(options);
+      };
+    `);
+    return { NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '' };
+  };
+
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-doctor-'));
     binDir = path.join(tempDir, 'bin');
@@ -275,8 +294,10 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         if (command === 'setup') assert.include(result.stdout, 'Use `ballin config get/set/reset` for direct configuration.\n');
         if (command === 'backup') {
           assert.include(result.stdout, '`setup` creates or reconnects to an optional backup; `open` opens it in a browser.\n');
-          assert.include(result.stdout, '`read` prints a backed-up file; `disconnect` stops local backups and clears comparison state.\n');
-          ['setup [repository-name]', 'open', 'read <file>', 'disconnect'].forEach((usage) => {
+          assert.include(result.stdout, '`list` finds saved snapshots; `read` prints one supported snapshot.\n');
+          assert.include(result.stdout, 'Without a snapshot selector, `read` shows usage and lists saved options when readable.\n');
+          assert.include(result.stdout, '`disconnect` stops local backups and clears comparison state.\n');
+          ['setup [repository-name]', 'open', 'list', 'read <snapshot>', 'disconnect'].forEach((usage) => {
             assert.include(result.stdout, `ballin backup ${usage}`);
           });
           assert.include(result.stdout, 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');
@@ -577,6 +598,40 @@ require('https').request = () => {
     assert.equal(selfUpdate.stderr, 'Usage: ballin self-update\n');
     assert.equal(uninstall.status, 2);
     assert.equal(uninstall.stderr, 'Usage: ballin uninstall\n');
+  });
+
+  for (const args of [['doctor'], ['doctor', '--verbose']]) {
+    for (const healthy of [true, false]) {
+      it(`clears interactive ${args.join(' ')} feedback before a ${healthy ? 'healthy' : 'failed'} report`, () => {
+        if (!healthy) fs.rmSync(path.join(binDir, 'ballin'));
+        const ordinary = runBallin(args);
+        const interactive = runBallin(args, interactiveEnv());
+        assert.equal(interactive.status, healthy ? 0 : 1);
+        assert.equal(interactive.stdout, ordinary.stdout);
+        assert.equal(interactive.stderr, 'Checking readiness...\r\x1b[2K');
+      });
+    }
+  }
+  for (const mode of ['stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
+    it(`keeps doctor output unchanged in ${mode} mode`, () => {
+      const ordinary = runBallin(['doctor']);
+      const env = interactiveEnv(['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined, mode === 'narrow' ? 10 : 80);
+      if (mode === 'dumb') env.TERM = 'dumb';
+      if (mode === 'NO_COLOR') env.NO_COLOR = '1';
+      const result = runBallin(['doctor'], env);
+      assert.equal(result.status, ordinary.status);
+      assert.equal(result.stdout, ordinary.stdout);
+      assert.equal(result.stderr, ordinary.stderr);
+    });
+  }
+  it('shows no readiness feedback for help or invalid doctor usage', () => {
+    for (const args of [['doctor', '--help'], ['doctor', 'extra']]) {
+      const ordinary = runBallin(args);
+      const result = runBallin(args, interactiveEnv());
+      assert.equal(result.status, ordinary.status);
+      assert.equal(result.stdout, ordinary.stdout);
+      assert.equal(result.stderr, ordinary.stderr);
+    }
   });
 
   it('reports a concise healthy doctor result by default', () => {

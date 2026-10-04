@@ -125,7 +125,8 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     env: NodeJS.ProcessEnv = {},
     commandPath = ballinPath,
     spawnOptions: SpawnSelfUpdateOverrides = {},
-  ) => spawnSync(commandPath, ['self-update'], {
+    args: string[] = ['self-update'],
+  ) => spawnSync(commandPath, args, {
     ...spawnOptions,
     encoding: 'utf8',
     env: {
@@ -177,6 +178,74 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
 
   afterEach(() => {
     fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  const interactiveEnv = (nonTTY?: 'stdin' | 'stdout' | 'stderr', columns = 80): NodeJS.ProcessEnv => {
+    const preload = path.join(testDir, 'interactive.cjs');
+    fs.writeFileSync(preload, `
+      for (const name of ['stdin', 'stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
+      Object.defineProperty(process.stderr, 'columns', { value: ${columns} });
+    `);
+    return { NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '' };
+  };
+
+  for (const mode of ['stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
+    it(`leaves self-update output unchanged in ${mode} mode`, () => {
+      const env = interactiveEnv(['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined, mode === 'narrow' ? 10 : 80);
+      if (mode === 'dumb') env.TERM = 'dumb';
+      if (mode === 'NO_COLOR') env.NO_COLOR = '1';
+      const result = runSelfUpdate(env);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, 'Ballin updated.\n');
+      assert.equal(result.stderr, '');
+    });
+  }
+  it('clears progress when the installed repository is missing before child work', () => {
+    const env = interactiveEnv();
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    const result = runSelfUpdate(env);
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, 'Updating...\r\x1b[2K');
+    assert.equal(result.stdout, `install directory not found: ${repoDir}\n`);
+    assert.deepEqual(commandLog(), []);
+  });
+
+  it('clears interactive progress before inherited credential and setup output', () => {
+    const result = runSelfUpdate({
+      ...interactiveEnv(), FAKE_GIT_FETCH_READ_STDIN: '1', FAKE_SETUP_STDERR: 'setup warning without newline',
+    }, ballinPath, { input: 'fixture-credential\n' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, 'Updating...\r\x1b[2Kcredential prompt\nsetup warning without newline');
+    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.include(commandLog(), 'fetch-stdin:fixture-credential');
+  });
+  for (const [setting, value, status] of [
+    ['FAKE_GIT_FETCH_STATUS', '17', 1],
+    ['FAKE_SETUP_STATUS', '27', 27],
+    ['FAKE_SETUP_SIGNAL', 'SIGTERM', 143],
+  ] as const) {
+    it(`clears progress and preserves ${setting} failure status`, () => {
+      const result = runSelfUpdate({ ...interactiveEnv(), [setting]: value });
+      assert.equal(result.status, status);
+      assert.equal(result.stderr, 'Updating...\r\x1b[2K');
+      assert.notInclude(result.stdout, 'Ballin updated.');
+    });
+  }
+  it('clears progress once in an embedded update and retains its readiness check', () => {
+    const configPath = path.join(testDir, 'config.json');
+    const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8'));
+    config.update = Object.fromEntries(Object.keys(config.update).map((key) => [key, key === 'selfUpdate' ? 'true' : 'false']));
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    fs.symlinkSync(ballinPath, path.join(toolDir, 'ballin'));
+    const result = runSelfUpdate({
+      ...interactiveEnv(), BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_TEST_BALLIN_PATH: ballinPath,
+    }, ballinPath, {}, ['update']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stderr, 'Updating...\r\x1b[2K');
+    assert.include(result.stdout, '==> Updating Ballin');
+    assert.include(result.stdout, 'Ballin updated.');
+    assert.include(result.stdout, '==> Checking Ballin readiness');
+    assert.notInclude(result.stdout, 'Updating...');
   });
 
   it('discloses changed backup definitions after successful refresh without executing them', () => {

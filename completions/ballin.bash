@@ -5,7 +5,7 @@ _ballin_completion() {
     1) candidates='backup config doctor self-update setup uninstall update' ;;
     2)
       case "${COMP_WORDS[1]}" in
-        backup) candidates='open read setup disconnect' ;;
+        backup) candidates='open read list setup disconnect' ;;
         config) candidates='get set reset' ;;
         *) return 0 ;;
       esac

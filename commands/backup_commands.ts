@@ -1,5 +1,5 @@
 // Public operations shared by dispatch and completion generation; no runtime imports.
-const backupCommandNames = ['open', 'read', 'setup', 'disconnect'] as const;
+const backupCommandNames = ['open', 'read', 'list', 'setup', 'disconnect'] as const;
 
 export type BackupCommandName = typeof backupCommandNames[number];
 

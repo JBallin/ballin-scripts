@@ -1,4 +1,5 @@
 const { terminalEmphasis } = require('./terminalStyle.ts');
+const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   ensureAnalyticsInstallId,
   installIdPathForRepo,
@@ -77,13 +78,16 @@ const backupHelp = `Usage:
     ballin backup
     ballin backup setup [repository-name]
     ballin backup open
-    ballin backup read <file>
+    ballin backup list
+    ballin backup read <snapshot>
     ballin backup disconnect
     ballin backup --help
 
 Back up Ballin-managed environment state to the configured backup.
 \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
-\`read\` prints a backed-up file; \`disconnect\` stops local backups and clears comparison state.
+\`list\` finds saved snapshots; \`read\` prints one supported snapshot.
+Without a snapshot selector, \`read\` shows usage and lists saved options when readable.
+\`disconnect\` stops local backups and clears comparison state.
 Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`.
 `;
 
@@ -166,11 +170,11 @@ const runDoctorCommand = (args: string[]): void => {
   }
 
   const repoDir = path.join(__dirname, '..');
-  const report = collectSetupReadiness({
+  const report = withTemporaryStatus('Checking readiness...', () => collectSetupReadiness({
     repoDir,
     configPath: process.env.BALLIN_TEST_CONFIG_PATH || undefined,
     env: process.env,
-  }) as DoctorReport;
+  }) as DoctorReport);
 
   writeStdout(verbose ? formatVerboseDoctorReport(report) : formatDefaultDoctorReport(report));
   process.exitCode = report.status === 'fail' ? 1 : 0;

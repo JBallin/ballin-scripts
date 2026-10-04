@@ -16,6 +16,9 @@ updates.
 - `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
   Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
 
+See [Choosing Ballin](docs/choosing-ballin.md) for when it fits and how it compares
+with other tools.
+
 ## Installation
 
 The installer checks Git and Node.js, shows its plan, and asks before making a
@@ -63,7 +66,7 @@ $ ballin update
 ==> Checking Ballin readiness
 ...
 ==> Backing up development environment
-Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
+Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✔ ballin_config
 ✔ bash_completions
 ✔ Brewfile
@@ -102,7 +105,8 @@ one-command restore system.
 | `ballin backup` | Updates snapshots in the configured backup. |
 | `ballin backup open` | Opens the configured backup. |
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
-| `ballin backup read <file>` | Prints a backed-up file from the destination. |
+| `ballin backup list` | Lists supported snapshots saved in the configured backup. |
+| `ballin backup read <snapshot>` | Prints one supported snapshot from the destination. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
 | `ballin config` | Reads and updates local Ballin settings. |

@@ -6,6 +6,7 @@ For the project overview, see the [main README](../README.md).
 
 | Guide | Purpose |
 | --- | --- |
+| [Choosing Ballin](choosing-ballin.md) | When Ballin fits an existing Mac setup, when another approach is better, and how to use them together. |
 | [Installation and removal](installation.md) | Exact local effects, contacted services, optional backup setup, failure recovery, and removal. |
 | [Backup sources and sensitivity](backup-sources.md) | Source-by-source audit of current snapshots and their plausible sensitive content. |
 | [Optional capabilities](optional-capabilities.md) | Local settings, Node.js setup, optional tools, analytics choices, and configurable `ballin update` settings. |
