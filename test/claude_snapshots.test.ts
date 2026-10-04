@@ -37,7 +37,7 @@ describe('Claude Code selected configuration', () => {
 
   it('uses four canonical sensitive definitions and no implicit additional source', () => {
     const definitions = (snapshotDefinitions as SnapshotDefinition[]).filter(({ category }) => category === 'claude');
-    assert.deepEqual(definitions.map(({ name }) => name), ['claude_instructions', 'claude_rules', 'claude_agents', 'claude_commands']);
+    assert.deepEqual(definitions.map(({ name }) => name), ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json']);
     assert.deepEqual([...configurationSnapshotGroups].filter(([, category]) => category === 'claude').map(([name]) => name), definitions.map(({ name }) => name));
     definitions.forEach(({ inclusionGroup }) => assert.equal(inclusionGroup, 'sensitive'));
   });
@@ -82,7 +82,7 @@ describe('Claude Code selected configuration', () => {
     fs.symlinkSync(active, alias);
     [active, alias].forEach((CLAUDE_CONFIG_DIR) => {
       assert.equal(capture('claude_instructions', { CLAUDE_CONFIG_DIR }).stdout, 'active');
-      const observation = discover('claude_rules', { CLAUDE_CONFIG_DIR });
+      const observation = discover('claude_rules.bundle.json', { CLAUDE_CONFIG_DIR });
       assert.equal(observation.status, 'available');
       if (observation.status !== 'available') throw new Error('Expected available alias');
       assert.equal(observation.source.path, path.join(CLAUDE_CONFIG_DIR, 'rules'));
@@ -123,7 +123,7 @@ describe('Claude Code selected configuration', () => {
   it('preserves agent frontmatter, hooks and inline MCP text without invoking them', () => {
     const agent = '---\nname: fixture\npermissionMode: bypassPermissions\nhooks:\n  Stop: [{command: "touch /synthetic/never-execute"}]\nmcpServers: [{fixture: {url: "https://synthetic.invalid", headers: {Authorization: "DUMMY_SECRET"}}}]\n---\nSynthetic agent';
     write('agents/review.md', agent);
-    const archive = JSON.parse(capture('claude_agents').stdout);
+    const archive = JSON.parse(capture('claude_agents.bundle.json').stdout);
     assert.equal(archive.entries[0].encoding, 'utf8');
     assert.equal(archive.entries[0].content.join(''), agent);
   });
@@ -134,21 +134,21 @@ describe('Claude Code selected configuration', () => {
     write('.claude.json', 'DUMMY_HOME_SECRET', homeDir);
     write('project/CLAUDE.md', 'project instructions', homeDir);
     write('project/.claude/rules/project.md', 'project rules', homeDir);
-    ['claude_instructions', 'claude_rules', 'claude_agents', 'claude_commands'].forEach((name) => {
+    ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json'].forEach((name) => {
       assert.equal(discover(name).status, 'absent');
     });
   });
 
   it('reports empty, non-Markdown-only, missing and wrong-type sources distinctly', () => {
-    assert.equal(discover('claude_rules').status, 'absent');
+    assert.equal(discover('claude_rules.bundle.json').status, 'absent');
     write('rules/ignored.json');
-    assert.equal(discover('claude_rules').status, 'absent');
+    assert.equal(discover('claude_rules.bundle.json').status, 'absent');
     fs.mkdirSync(path.join(root, 'CLAUDE.md'));
     assert.equal(discover('claude_instructions').status, 'unavailable');
     write('agents');
-    assert.equal(discover('claude_agents').status, 'unavailable');
+    assert.equal(discover('claude_agents.bundle.json').status, 'unavailable');
     fs.symlinkSync(path.join(root, 'rules'), path.join(root, 'commands'));
-    assert.equal(discover('claude_commands').status, 'unavailable');
+    assert.equal(discover('claude_commands.bundle.json').status, 'unavailable');
   });
 
   it('rejects selected hard links without searching their other locations', () => {
@@ -157,7 +157,7 @@ describe('Claude Code selected configuration', () => {
     assert.equal(discover('claude_instructions').status, 'discovery-failed');
     fs.mkdirSync(path.join(root, 'rules'));
     fs.linkSync(outside, path.join(root, 'rules', 'linked.md'));
-    assert.equal(discover('claude_rules').status, 'discovery-failed');
+    assert.equal(discover('claude_rules.bundle.json').status, 'discovery-failed');
     assert.throws(() => fileEntry(root, 'CLAUDE.md', undefined, true), /Hard-linked/);
     // The existing Codex policy remains unchanged.
     assert.equal(fileEntry(root, 'CLAUDE.md').content, Buffer.from('DUMMY_EXTERNAL_SECRET').toString('base64'));
@@ -172,7 +172,7 @@ describe('Claude Code selected configuration', () => {
     const maxBytes = Buffer.byteLength(snapshot);
     assert.equal(recursiveSnapshot(directory, false, false, { maxBytes }, selection), snapshot);
     assert.throws(() => recursiveSnapshot(directory, false, false, { maxBytes: maxBytes - 1 }, selection), SnapshotLimitError);
-    const failed = capture('claude_rules', {}, ['--max-bytes', String(maxBytes - 1)]);
+    const failed = capture('claude_rules.bundle.json', {}, ['--max-bytes', String(maxBytes - 1)]);
     assert.equal(failed.status, 1);
     assert.equal(failed.stdout, '');
     assert.include(failed.stderr, 'Snapshot bytes limit exceeded');
@@ -194,7 +194,7 @@ describe('Claude Code selected configuration', () => {
         return originalOpen(file, ...args);
       };
       fs.readSync = (...args: unknown[]) => { reads++; return originalRead(...args); };
-      assert.equal(discover('claude_rules').status, 'available');
+      assert.equal(discover('claude_rules.bundle.json').status, 'available');
       assert.equal(opens, 0);
       assert.throws(() => reviewRecursiveFiles(path.join(root, 'rules'), false, false, {}, selection), /synthetic access denial/);
       assert.throws(() => recursiveSnapshot(path.join(root, 'rules'), false, false, {}, selection), /synthetic access denial/);

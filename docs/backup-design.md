@@ -344,9 +344,9 @@ an inclusion/sensitivity review, without another approval record.
 
 Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
 sources: both are captured when present, regardless of instruction precedence.
-Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.json`,
+Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.bundle.json`,
 independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
-`codex_skills.json`. Both omit root `.system` and retain distinct snapshot
+`codex_skills.bundle.json`. Both omit root `.system` and retain distinct snapshot
 identities, even when `CODEX_HOME=HOME/.agents` selects the same directory. Both staged archives count
 toward the combined byte budget, with separate per-source entry limits.
 
@@ -392,7 +392,7 @@ never executed.
 
 ### Directory format migration
 
-The next ordinary capture writes version 2 under the same snapshot names. It can
+The next ordinary capture writes version 2 under the `.bundle.json` names. It can
 produce a one-time format diff even when source bytes are unchanged; existing
 history is retained. Only sources selected for capture are converted.
 
@@ -405,11 +405,28 @@ an identical-content conversion after reconnect without a cached base. Failed
 proofs follow the existing conflict rules; cached bases are never semantically
 normalized. Expected-head publication and exact readback remain required.
 
-The flat repository layout and marker version remain unchanged. Older clients
-can print version-2 blobs as raw snapshots, but older writers can replace them
-with version 1 or encounter ordinary conflicts. Update the active backup-writing
-installation before conversion and avoid downgrading it. There is no bulk or
-history migration, extraction, automatic restore or content execution.
+The flat repository layout and marker version remain unchanged. The five known
+Codex directory snapshots replace their `.json` suffix with `.bundle.json`;
+the three Claude directories add `.bundle.json`. Plain snapshots retain their
+names. Old directory names are retired without read aliases. Inventory alone
+supplies a bundle-listing hint; raw and member-list reads add staged hints only
+when stdin, stdout and stderr are terminals. Raw hints require a known bundle
+name and a validated archive, without changing raw-read failure behavior.
+
+The [manual rename helper](../scripts/migrate-backup-bundles.sh) clones a supplied
+repository's default branch into a new local folder, checks the canonical backup
+marker, flat regular-file layout, clean worktree and all target collisions, then
+creates one local rename commit without changing payloads,
+pushing or deleting the clone. Stop the old writer, inspect and push the rename
+commit, update the sole writer, then resume capture. The new writer rejects any
+inventory containing old directory names before reconciliation or publication,
+including excluded or locally absent sources. This prevents silent duplication.
+Old-name caches never establish a base for a new name. Exact local/remote bytes
+hydrate a fresh cache; the canonical version-1 proof above admits a format-only
+conversion, while genuinely changed content or metadata still conflicts. An old
+writer must not resume: it can recreate old names and cannot read the new names
+as supported snapshots. History remains intact; there is no extraction, automatic
+restore or content execution.
 
 ### Capture bounds and traversal
 

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { directoryBundleRenames } = require('./backup_bundles.ts');
 const {
   runCommand,
 } = require('./commandHelpers.ts');
@@ -141,6 +142,7 @@ const repositoryMarkerFileName = '.ballin-backup.json';
 const repositoryReadmeFileName = 'README.md';
 
 const retiredSnapshotFileNames = new Set([
+  ...directoryBundleRenames.keys(),
   'brackets_disabled_extensions',
   'brackets_extensions',
   'brackets_keymap.json',
@@ -639,17 +641,17 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   configurationSnapshot('codex', 'codex_AGENTS.md', 'AGENTS.md'),
   configurationSnapshot('codex', 'codex_AGENTS.override.md', 'AGENTS.override.md'),
   configurationSnapshot('codex', 'codex_config.toml', 'config.toml'),
-  configurationSnapshot('codex', 'codex_profiles.json', '.', true, true),
+  configurationSnapshot('codex', 'codex_profiles.bundle.json', '.', true, true),
   configurationSnapshot('codex', 'codex_hooks.json', 'hooks.json'),
-  configurationSnapshot('codex', 'codex_skills.json', 'skills', true),
-  configurationSnapshot('codex', 'codex_user_skills.json', '.agents/skills', true, false, true, true),
-  configurationSnapshot('codex', 'codex_rules.json', 'rules', true),
-  configurationSnapshot('codex', 'codex_agents.json', 'agents', true),
+  configurationSnapshot('codex', 'codex_skills.bundle.json', 'skills', true),
+  configurationSnapshot('codex', 'codex_user_skills.bundle.json', '.agents/skills', true, false, true, true),
+  configurationSnapshot('codex', 'codex_rules.bundle.json', 'rules', true),
+  configurationSnapshot('codex', 'codex_agents.bundle.json', 'agents', true),
   configurationSnapshot('codex', 'codex_marketplace.json', '.agents/plugins/marketplace.json', false, false, true),
   configurationSnapshot('claude', 'claude_instructions', 'CLAUDE.md'),
-  configurationSnapshot('claude', 'claude_rules', 'rules', true, false, false, false),
-  configurationSnapshot('claude', 'claude_agents', 'agents', true, false, false, false),
-  configurationSnapshot('claude', 'claude_commands', 'commands', true, false, false, false),
+  configurationSnapshot('claude', 'claude_rules.bundle.json', 'rules', true, false, false, false),
+  configurationSnapshot('claude', 'claude_agents.bundle.json', 'agents', true, false, false, false),
+  configurationSnapshot('claude', 'claude_commands.bundle.json', 'commands', true, false, false, false),
   portableConfigSnapshot(),
   shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
 ];

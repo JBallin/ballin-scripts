@@ -4,6 +4,7 @@ const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
 const { terminalEmphasis } = require('./terminalStyle.ts');
+const { directoryBundleRenames } = require('./backup_bundles.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -84,6 +85,11 @@ type BackupConfigResult = {
 
 const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 
+const interactiveReadHint = (): boolean => Boolean(process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY);
+const writeDirectoryReadHint = (option: string): void => {
+  if (interactiveReadHint()) writeStderrLine(`${option === '--list' ? 'List' : 'Read'} saved files with \`ballin backup read <bundle> ${option}\`.`);
+};
+
 const backupFileSortKey = (fileName: string): string => (
   fileName === 'Brewfile' ? 'brew' : fileName.toLowerCase()
 );
@@ -103,6 +109,9 @@ const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
   if (current.length > 0) {
     writeStdoutLine(`Saved snapshots:\n${current.map((name) => `  ${name}`).join('\n')}`);
     writeStdoutLine('Read a snapshot with `ballin backup read <snapshot>`.');
+    if (current.some((name) => directorySnapshotFileNames.has(name))) {
+      writeStdoutLine('List files in a bundle with `ballin backup read <bundle> --list`.');
+    }
   } else {
     writeStdoutLine('No current snapshots are saved in this backup.');
   }
@@ -240,7 +249,7 @@ const writeSnapshotStatus = (
   snapshot: SnapshotCommand,
   resultState: SnapshotResultState,
 ): void => {
-  const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
+  const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '').replace(/\.bundle$/, '');
   if (resultState === 'unchanged') {
     writeStdoutLine(`✔ ${fileWithoutExtension}`);
   } else if (resultState === 'created') {
@@ -509,6 +518,10 @@ const runRepositoryBackup = (
   let publishedCommitUrl: string | undefined;
   try {
     const read: RepositoryRead = requireRepositoryRead(inspectRepository(destination));
+    if (read.revision.entries.some((entry) => directoryBundleRenames.has(entry.path))) {
+      writeStderrLine('ballin backup: rename the old directory snapshots with scripts/migrate-backup-bundles.sh and push the reviewed commit before backing up. No snapshots were published.');
+      return false;
+    }
     const unexpected = unexpectedRepositoryEntries(read);
     if (unexpected) writeStderrLine(`ballin backup: retaining ${unexpected} unexpected repository entries`);
     for (const { snapshot } of staged) {
@@ -730,7 +743,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
         if (directoryList || directoryFile) {
           const { entries } = readDirectorySnapshot(bytes);
           process.stdout.write(directoryList ? listDirectoryMembers(entries) : readDirectoryMember(entries, args[3]));
-        } else process.stdout.write(bytes);
+          if (directoryList) writeDirectoryReadHint('--file <path>');
+        } else {
+          process.stdout.write(bytes);
+          if (directorySnapshotFileNames.has(args[1]) && interactiveReadHint()) {
+            // Malformed archives still retain the existing exact raw-read behavior.
+            let directory = false;
+            try { readDirectorySnapshot(bytes); directory = true; } catch { /* No hint for ordinary or invalid content. */ }
+            if (directory) writeDirectoryReadHint('--list');
+          }
+        }
       } else {
         writeStderrLine('ballin backup read: no supported snapshot found.');
         writeSavedSnapshots(inventory);
