@@ -164,7 +164,7 @@ describe('repository backup lifecycle', function() {
       fs.mkdirSync(path.dirname(leaf), { recursive: true });
       fs.writeFileSync(leaf, 'synthetic');
       source('local shell\n');
-      const snapshot = `codex_${tree}.json`;
+      const snapshot = `codex_${tree}.bundle.json`;
       seedCache(snapshot, 'prior Codex cache\n');
       seedCache('zshrc.sh', 'prior shell cache\n');
       seedSuccess();
@@ -209,7 +209,7 @@ describe('repository backup lifecycle', function() {
       fs.mkdirSync(directory, { recursive: true });
       fs.writeFileSync(path.join(directory, tree === 'profiles' ? 'personal.config.toml' : 'entry'), 'synthetic');
       source('local shell\n');
-      const snapshot = `codex_${tree}.json`;
+      const snapshot = `codex_${tree}.bundle.json`;
       seedCache(snapshot, 'prior Codex cache\n');
       seedCache('zshrc.sh', 'prior shell cache\n');
       seedSuccess();

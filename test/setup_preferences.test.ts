@@ -344,7 +344,7 @@ fs.readFileSync = (file, ...args) => {
       const before = fs.readFileSync(configPath, 'utf8');
       const result = run('y\ny\ny\ny\n');
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stdout, `Unable to review codex_${tree}.json`);
+      assert.include(result.stdout, `Unable to review codex_${tree}.bundle.json`);
       assert.isTrue(fs.existsSync(attempts), 'selected leaf must receive a metadata access check');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.notInclude(result.stdout, 'Automatically run');

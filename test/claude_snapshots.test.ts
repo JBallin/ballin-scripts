@@ -107,7 +107,7 @@ describe('Claude Code selected configuration', () => {
       fs.symlinkSync(external, path.join(root, directory, 'link.md'));
       fs.symlinkSync(homeDir, path.join(root, directory, 'linked-directory'));
       fs.mkdirSync(path.join(root, directory, 'empty'));
-      const result = capture(`claude_${directory}`);
+      const result = capture(`claude_${directory}.bundle.json`);
       assert.equal(result.status, 0, result.stderr);
       const archive = JSON.parse(result.stdout);
       assert.equal(archive.format, 'ballin-directory');
@@ -115,7 +115,7 @@ describe('Claude Code selected configuration', () => {
       assert.deepEqual(archive.entries.map(({ path }: { path: string }) => path), ['.hidden.md', 'nested/a.md', 'z.md']);
       assert.deepEqual(Buffer.from(archive.entries[1].content, 'base64'), Buffer.from([0, 255, 128]));
       assert.isTrue(archive.entries[1].executable);
-      assert.equal(capture(`claude_${directory}`).stdout, result.stdout);
+      assert.equal(capture(`claude_${directory}.bundle.json`).stdout, result.stdout);
       assert.notInclude(JSON.stringify(archive), homeDir);
     });
   });

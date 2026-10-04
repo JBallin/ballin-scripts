@@ -155,7 +155,7 @@ describe('Codex durable snapshots', () => {
     assert.deepEqual(Buffer.from(archive.entries[0].content, 'base64'), Buffer.from([0, 255, 128, 10]));
     ['rules', 'agents'].forEach((directory) => {
       write(`${directory}/nested/.system/user`, 'retained');
-      assert.equal(capture(`codex_${directory}.json`).status, 0);
+      assert.equal(capture(`codex_${directory}.bundle.json`).status, 0);
     });
   });
 
