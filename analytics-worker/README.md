@@ -171,10 +171,11 @@ globally, use `npx wrangler` in place of `wrangler`.
 ## Automatic Deploys
 
 Pull-request CI owns full repository validation. The deploy workflow runs
-automatically after pushes to `main` that change anything under
-`analytics-worker/`, the deploy workflow itself, or `.nvmrc`. The Worker
-directory is intentionally a conservative ownership boundary so new
-Worker-local deployment inputs are not missed.
+automatically after pushes to `main` that change the deploy workflow, `.nvmrc`,
+or anything under `analytics-worker/` except its `README.md`. README-only edits
+do not deploy; edits that also change a deployment input still do. The Worker
+directory remains a conservative ownership boundary so new Worker-local
+deployment inputs are not missed.
 
 Before an automatic deployment, the workflow stops if migrations must be
 applied manually. It then creates an ignored runner-local `wrangler.toml` from

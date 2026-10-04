@@ -143,12 +143,21 @@ const yamlListAfter = (source: string, heading: string, indentation: number): st
   return items;
 };
 
+const matchesDeployPaths = (files: string[], patterns: string[]): boolean => files.some((file) => (
+  patterns.reduce((included, pattern) => {
+    const excluded = pattern.startsWith('!');
+    const glob = excluded ? pattern.slice(1) : pattern;
+    return path.matchesGlob(file, glob) ? !excluded : included;
+  }, false)
+));
+
 describe('analytics Worker deployment', () => {
   it('keeps automatic deploy triggers and setup scoped to deployment inputs', () => {
     const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
 
     assert.deepEqual(yamlListAfter(workflow, '    paths:', 6), [
       'analytics-worker/**',
+      '!analytics-worker/README.md',
       '.github/workflows/deploy-analytics-worker.yml',
       '.nvmrc',
     ]);
@@ -158,6 +167,30 @@ describe('analytics Worker deployment', () => {
     );
     assert.notMatch(workflow, /^\s+cache:\s*npm\s*$/mu);
     assert.notMatch(workflow, /^\s+(?:run:\s*)?npm (?:ci|test)(?:\s|$)/mu);
+  });
+
+  const triggerCases: Array<{ name: string; files: string[]; expected: boolean }> = [
+    { name: 'Worker README only', files: ['analytics-worker/README.md'], expected: false },
+    { name: 'Worker README and other docs', files: ['analytics-worker/README.md', 'docs/analytics.md'], expected: false },
+    { name: 'Worker README and code', files: ['analytics-worker/README.md', 'analytics-worker/src/index.ts'], expected: true },
+    { name: 'Worker code', files: ['analytics-worker/src/index.ts'], expected: true },
+    { name: 'Worker config', files: ['analytics-worker/wrangler.toml.example'], expected: true },
+    { name: 'Worker migration', files: ['analytics-worker/migrations/0004_behavior_events_daily.sql'], expected: true },
+    { name: 'future Worker input', files: ['analytics-worker/new-deployment-input.json'], expected: true },
+    { name: 'deploy workflow', files: ['.github/workflows/deploy-analytics-worker.yml'], expected: true },
+    { name: 'Node runtime', files: ['.nvmrc'], expected: true },
+  ];
+  triggerCases.forEach(({ name, files, expected }) => {
+    it(`${expected ? 'includes' : 'excludes'} ${name} in automatic deploy triggers`, () => {
+      const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
+      assert.equal(matchesDeployPaths(files, yamlListAfter(workflow, '    paths:', 6)), expected);
+    });
+  });
+
+  it('preserves main-only push and manual deployment triggers', () => {
+    const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
+    assert.deepEqual(yamlListAfter(workflow, '    branches:', 6), ['main']);
+    assert.match(workflow, /^  workflow_dispatch:\s*$/mu);
   });
 
   it('uses a compatible Wrangler version for the production rate-limit binding', () => {
