@@ -198,7 +198,8 @@ Ballin creates later. If authentication is missing, run
 check whether an environment token is overriding your saved `gh` login.
 
 Fresh create or reconnect setup offers one default-off `backup.includeSensitive`
-choice for raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx metadata.
+choice for raw shell/Git/editor configuration, Codex and Claude Code configuration,
+`.nvmrc`, and pipx metadata.
 Opting in covers current and future supported sensitive sources; existing opt-ins
 include added sources. Review the [source list](backup-sources.md) when support
 changes.

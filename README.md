@@ -80,8 +80,8 @@ View changes: https://github.com/example-user/ballin-backups/commit/0123456789ab
 On a new Mac, the installer offers optional backup setup after installing Ballin.
 You can create a new private backup repository or reconnect to an existing one;
 if you skip setup during installation, run `ballin backup setup` later.
-Setup offers one default-off choice for sensitive sources: raw shell/Git/editor/Codex
-configuration, `.nvmrc`, and pipx installation metadata. The choice is saved as
+Setup offers one default-off choice for sensitive sources: raw shell/Git/editor
+configuration, Codex and Claude Code configuration, `.nvmrc`, and pipx installation metadata. The choice is saved as
 `backup.includeSensitive` and covers current and future supported sensitive
 sources. See [source review](docs/backup-sources.md#repository-inclusion).
 
