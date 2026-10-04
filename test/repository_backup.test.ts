@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture, commitFixture } = require('./helpers/repository.ts');
+const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixture, commitFixture, blobHash } = require('./helpers/repository.ts');
 const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('../commands/backup_config.ts');
 const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
@@ -399,6 +399,37 @@ describe('repository backup lifecycle', function() {
     const result = runSetup(); ok(result); assert.equal(result.stdout, '');
     assert.deepEqual(config(), before); assert.lengthOf(state().requests, 0);
     assert.isFalse(fs.existsSync(cacheRoot));
+  });
+  it('defers unreadable snapshot bytes only during self-update while preserving local and remote state', () => {
+    const value = fixtureState({ 'zshrc.sh': 'stored fixture bytes\n' });
+    value.faults.unreadableBlob = blobHash(value.commits[value.head].files['zshrc.sh']);
+    saveState(value); seedCache('zshrc.sh', 'cached fixture bytes\n'); seedSuccess(); source();
+    const before = fs.readFileSync(configPath, 'utf8');
+    ok(runSetup());
+    assert.lengthOf(state().requests, 10);
+    assert.lengthOf(state().requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+    assert.equal(runSetup('refresh').status, 1);
+    assert.equal(run(['setup']).status, 1);
+    assert.equal(run().status, 1);
+    const doctor = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'doctor'], {
+      encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: `${bin}${path.delimiter}${path.join(home, '.local', 'bin')}`,
+        TMPDIR: path.join(root, 'tmp'), BALLIN_TEST_CONFIG_PATH: configPath }),
+    });
+    assert.equal(doctor.status, 1); assert.include(doctor.stdout, 'could not be read completely');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.equal(cached(), 'cached fixture bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    assert.equal(state().head, value.head); assert.lengthOf(mutations(), 0);
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('still persists a renamed destination and creates managed protection during self-update', () => {
+    const value = state(); value.name = 'renamed'; value.rulesets = []; saveState(value);
+    seedCache('zshrc.sh', 'unchanged\n'); seedSuccess();
+    const result = runSetup(); ok(result);
+    assert.equal(config().backup.repository.name, 'renamed');
+    assert.include(result.stdout, 'GitHub branch protection enabled.');
+    assert.lengthOf(rulesetWrites(), 1); assert.lengthOf(publications(), 0);
+    assert.equal(state().head, value.head); assert.equal(cached(), 'unchanged\n');
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
   });
   it('summarizes absent sensitive consent as excluded without saving consent', () => {
     const before = config(); delete before.backup.includeSensitive; saveConfig(before);

@@ -131,6 +131,22 @@ branch deletion and non-fast-forward history rewrite; it does not block ordinary
 external fast-forward updates or a sufficiently authorized administrator from
 altering policy or deleting the repository.
 
+## Self-update maintenance
+
+Self-update validates the configured destination's account and ownership, private
+repository requirements, selected branch, complete inventory and format marker,
+then rechecks the effective account and revision. It updates the saved destination
+if the repository was renamed. It performs the same managed-protection
+reconciliation described above. Invalid settings and maintenance failures remain
+visible.
+
+This inspection returns destination and revision metadata without snapshot bytes;
+it cannot supply a full comparison or publication read. Snapshot-content read or
+integrity failures alone do not fail standalone self-update. Installer refresh,
+explicit backup setup, doctor, backup, publication readback and the readiness
+check following embedded self-update use full reads. That readiness check can
+fail after self-update succeeds. Doctor is read-only and makes no policy calls.
+
 ## Consistency model
 
 All selected available captures are staged before remote inspection. Collector

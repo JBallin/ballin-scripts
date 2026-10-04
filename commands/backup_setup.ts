@@ -8,11 +8,11 @@ const { configuredBackupDestination, isConfigObject, validRepositoryName } = req
 const { configSnapshotFileName } = require('./backup_snapshots.ts');
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 const {
-  readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
+  readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead, inspectRepositoryMaintenance,
   createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, repositoryMessages,
   sameRepositoryRevision, unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
-import type { RepositoryRead, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
+import type { RepositoryRead, RepositoryMaintenance, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
 
 const invalidateBackupCache = (cacheDir: string): boolean => {
   try { fs.rmSync(cacheDir, { recursive: true, force: true }); return true; } catch {
@@ -40,6 +40,7 @@ type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig: Record<string, unknown>; repositoryName?: string;
   onCancelled?: () => void;
   showValidationSummary?: boolean;
+  maintenanceOnly?: boolean;
 };
 const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => {
   const { configPath, backupCacheDir, originalConfig, repositoryName } = options;
@@ -80,7 +81,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
           return false;
         }
       }
-      const read: RepositoryRead = requireRepositoryRead(inspectRepository(configured.repository));
+      const read: RepositoryRead | RepositoryMaintenance = options.maintenanceOnly
+        ? inspectRepositoryMaintenance(configured.repository)
+        : requireRepositoryRead(inspectRepository(configured.repository));
       if (read.destination.name !== configured.repository.name) {
         candidate.backup = { ...candidate.backup, repository: read.destination };
         if (!saveBackupConfig(configPath, candidate)) return false;

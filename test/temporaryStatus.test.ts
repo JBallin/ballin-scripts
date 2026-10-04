@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { withTemporaryStatus, clearTemporaryStatus } = require('../commands/temporaryStatus.ts');
+const { withTemporaryStatus, clearTemporaryStatus, writeInteractiveStatusLine } = require('../commands/temporaryStatus.ts');
 const { writeStdoutLine, writeStderrLine, runCommand } = require('../commands/commandHelpers.ts');
 
 describe('temporary terminal status', () => {
@@ -30,6 +30,13 @@ describe('temporary terminal status', () => {
     };
   });
   afterEach(() => restore());
+  it('writes a completed interactive line without an exit listener or erasable status', () => {
+    const listeners = process.listenerCount('exit');
+    writeInteractiveStatusLine('Updating...');
+    clearTemporaryStatus();
+    assert.equal(output, 'Updating...\n');
+    assert.equal(process.listenerCount('exit'), listeners);
+  });
   it('renders before synchronous work and clears on completion without listener leaks', async () => {
     const listeners = process.listenerCount('SIGINT');
     assert.equal(withTemporaryStatus('Working...', () => { assert.equal(output, 'Working...'); return 42; }), 42);
@@ -74,6 +81,7 @@ describe('temporary terminal status', () => {
       else if (mode === 'NO_COLOR') process.env.NO_COLOR = '1';
       else Object.defineProperty({ stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }[mode], 'isTTY', { configurable: true, value: false });
       assert.equal(withTemporaryStatus('Working...', () => 7), 7); assert.equal(output, '');
+      writeInteractiveStatusLine('Updating...'); assert.equal(output, '');
     });
   }
   for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -115,9 +123,11 @@ describe('temporary terminal status', () => {
   it('skips narrow terminals and ignores optional display failures', () => {
     Object.defineProperty(process.stderr, 'columns', { configurable: true, value: 5 });
     assert.equal(withTemporaryStatus('Working...', () => 1), 1); assert.equal(output, '');
+    writeInteractiveStatusLine('Updating...'); assert.equal(output, '');
     Object.defineProperty(process.stderr, 'columns', { configurable: true, value: 80 });
     fs.writeSync = () => { throw new Error('closed terminal'); };
     assert.equal(withTemporaryStatus('Working...', () => 2), 2);
+    assert.doesNotThrow(() => writeInteractiveStatusLine('Updating...'));
   });
   it('clears on explicit process exit', () => {
     const result = spawnSync(process.execPath, ['-e', `
