@@ -39,6 +39,7 @@ const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome): vo
 type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig: Record<string, unknown>; repositoryName?: string;
   onCancelled?: () => void;
+  showValidationSummary?: boolean;
 };
 const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => {
   const { configPath, backupCacheDir, originalConfig, repositoryName } = options;
@@ -85,8 +86,10 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (!saveBackupConfig(configPath, candidate)) return false;
       }
       reportManagedBranchProtection(ensureManagedBranchRuleset(read));
-      writeStdoutLine(validatedBackupSummary(repositoryUrl(read.destination, account), candidate));
-      writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
+      const showSummary = options.showValidationSummary !== false;
+      const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
+      if (summary) writeStdoutLine(summary);
+      if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
       return true;
     }
     writeStdoutLine();

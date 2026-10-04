@@ -33,7 +33,7 @@ const {
 } = require('./commandHelpers.ts');
 const {
   collectSnapshotObservations,
-  codexSnapshotFileNames,
+  configurationSnapshotGroups,
   emptySnapshotContent,
   normalizeSnapshotInput,
   observeSnapshotSources,
@@ -315,22 +315,22 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes
 };
 
 const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapshot[] | null => {
-  const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || source.definition.category === 'codex'));
+  const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || configurationSnapshotGroups.has(source.definition.name)));
   if (failure && failure.status === 'discovery-failed') {
     const diagnostic = failure.reason === 'source-limit-exceeded'
       ? `recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'}`
-      : 'selected Codex source could not be discovered completely';
+      : `selected ${failure.definition.category === 'claude' ? 'Claude Code' : 'Codex'} source could not be discovered completely`;
     writeStderrLine(`ballin backup: ${failure.definition.name}: ${diagnostic}. No snapshots were published.`);
     return null;
   }
-  let codexBytes = 0;
+  const capturedBytes = { codex: 0, claude: 0 };
   const collection = collectSnapshotObservations(observations, (source: AvailableSnapshotObservation) => {
-    const codex = source.definition.category === 'codex';
-    const result = captureAvailableSnapshot(source, codex ? snapshotByteLimit - codexBytes : undefined);
-    if (codex && result.status === 'captured') {
+    const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(source.definition.name);
+    const result = captureAvailableSnapshot(source, group ? snapshotByteLimit - capturedBytes[group] : undefined);
+    if (group && result.status === 'captured') {
       try {
-        codexBytes += fs.statSync(result.localFile).size;
-        requireWithinLimit('bytes', codexBytes, snapshotByteLimit);
+        capturedBytes[group] += fs.statSync(result.localFile).size;
+        requireWithinLimit('bytes', capturedBytes[group], snapshotByteLimit);
       } catch {
         try { removeTempFile(result.localFile); } catch { reportTemporaryCleanupFailure(); }
         writeStderrLine(`ballin backup: unable to verify the bounded capture for ${source.definition.name}`);
@@ -381,7 +381,7 @@ const evaluateSnapshots = (
 
     const localMatchesRemote = remote.exists
       && remote.file !== null
-      && snapshotFilesMatch(localFile, remote.file, codexSnapshotFileNames.has(snapshot.fileName));
+      && snapshotFilesMatch(localFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
     let shouldUpload = false;
 
     if (!baseExists && !remote.exists) {
@@ -401,7 +401,7 @@ const evaluateSnapshots = (
       });
       return;
     } else if (remote.file !== null) {
-      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, codexSnapshotFileNames.has(snapshot.fileName));
+      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
       if (baseMatchesRemote && !localMatchesRemote) {
         shouldUpload = true;
       } else if (!baseMatchesRemote && !localMatchesRemote) {
@@ -413,12 +413,12 @@ const evaluateSnapshots = (
       }
     }
 
-    const isEmpty = snapshotIsEmpty(localFile, codexSnapshotFileNames.has(snapshot.fileName));
+    const isEmpty = snapshotIsEmpty(localFile, configurationSnapshotGroups.has(snapshot.fileName));
     const wasEmpty = remote.exists && remote.file !== null && snapshotIsEmpty(remote.file);
     evaluated.push({
       ...stagedSnapshot,
       cacheFile,
-      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile, codexSnapshotFileNames.has(snapshot.fileName)),
+      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile, configurationSnapshotGroups.has(snapshot.fileName)),
       resultState: classifySnapshotResult(!remote.exists, shouldUpload, isEmpty, wasEmpty),
       shouldUpload,
     });
@@ -504,28 +504,31 @@ const runRepositoryBackup = (
     const evaluation = evaluateSnapshots(cacheDir, staged, remote);
     if (evaluation.conflicts.length) { reportConflicts(evaluation.conflicts, 'repository'); return false; }
     const changed = evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload);
-    let stagedCodexBytes = 0;
+    const stagedConfigurationBytes = { codex: 0, claude: 0 };
     for (const { snapshot, localFile } of staged) {
-      if (codexSnapshotFileNames.has(snapshot.fileName)) {
-        stagedCodexBytes += fs.statSync(localFile).size;
-        requireWithinLimit('bytes', stagedCodexBytes, snapshotByteLimit);
+      const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(snapshot.fileName);
+      if (group) {
+        stagedConfigurationBytes[group] += fs.statSync(localFile).size;
+        requireWithinLimit('bytes', stagedConfigurationBytes[group], snapshotByteLimit);
       }
     }
     const changes = new Map<string, Buffer>();
-    let changedCodexBytes = 0;
-    let encodedCodexBytes = 0;
+    const changedBytes = { codex: 0, claude: 0 };
+    const encodedBytes = { codex: 0, claude: 0 };
     for (const { snapshot, localFile } of changed) {
-      const codex = codexSnapshotFileNames.has(snapshot.fileName);
-      const bytes = codex ? readBoundedFile(localFile, snapshotByteLimit - changedCodexBytes).bytes : fs.readFileSync(localFile);
-      if (codex) {
-        changedCodexBytes += bytes.length;
-        encodedCodexBytes += 4 * Math.ceil(bytes.length / 3);
+      const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(snapshot.fileName);
+      const bytes = group ? readBoundedFile(localFile, snapshotByteLimit - changedBytes[group]).bytes : fs.readFileSync(localFile);
+      if (group) {
+        changedBytes[group] += bytes.length;
+        encodedBytes[group] += 4 * Math.ceil(bytes.length / 3);
       }
       changes.set(snapshot.fileName, bytes);
     }
     // The wire allowance is derived from the stored-byte cap, not another 16 MiB cap.
-    requireWithinLimit('bytes', encodedCodexBytes,
-      4 * Math.ceil(snapshotByteLimit / 3) + 4 * (codexSnapshotFileNames.size - 1));
+    for (const group of ['codex', 'claude'] as const) {
+      const count = [...configurationSnapshotGroups.values()].filter((category: string) => category === group).length;
+      requireWithinLimit('bytes', encodedBytes[group], 4 * Math.ceil(snapshotByteLimit / 3) + 4 * (count - 1));
+    }
     const published = publishRepositorySnapshots(read, changes);
     if (changes.size) publishedCommitUrl = published.commitUrl;
     let promoted = false;

@@ -1,6 +1,6 @@
 # Intentional coverage boundaries
 
-**Audience:** Maintainers
+*Maintainer reference to reviewed production gaps, ignore directives, and measured test boundaries.*
 
 This ledger records the production gaps reviewed for [#345](https://github.com/JBallin/ballin-scripts/issues/345).
 Use the file, function and snippet anchors to find each boundary after source

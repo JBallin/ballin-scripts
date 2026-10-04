@@ -1,10 +1,9 @@
 # Supported capabilities
 
-**Audience:** Users
+*User reference for supported system update integrations and backup snapshots.*
 
-This reference lists Ballin's update and backup capabilities. Auto-discovered
-integrations run when available; configured integrations fail when enabled but
-unavailable.
+Auto-discovered integrations run when available; configured integrations fail
+when enabled but unavailable.
 
 ## `ballin update`
 
@@ -64,6 +63,8 @@ choice. Sources are:
 | Shared personal skills | `codex_user_skills.json` | Sensitive-source opt-in; nonempty `~/.agents/skills/`, independent of `CODEX_HOME`. |
 | Codex authoring directories | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Sensitive-source opt-in; nonempty legacy `skills/` and personal `rules/`/`agents/` under `CODEX_HOME`. |
 | Personal plugin marketplace | `codex_marketplace.json` | Sensitive-source opt-in; `~/.agents/plugins/marketplace.json`, excluding referenced payloads. |
+| Claude Code instructions | `claude_instructions` | Sensitive-source opt-in; `CLAUDE.md` under active `CLAUDE_CONFIG_DIR` or `~/.claude`. |
+| Claude Code Markdown directories | `claude_rules`, `claude_agents`, `claude_commands` | Sensitive-source opt-in; nonempty personal `rules/`, `agents/`, and legacy `commands/`; regular `.md` files only. |
 | Ballin preferences | `ballin_config` | Local `ballin.config.json`; only supported preferences are saved. See [preference recovery](optional-capabilities.md#recovering-ballin-preferences). |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
 
@@ -107,8 +108,8 @@ do not print partial success markers.
 ### Backup consistency and conflicts
 
 `ballin backup` stages every selected available snapshot before remote inspection.
-Collector failure aborts the run. Discovery failure for a selected Codex source
-also aborts before staging. Excluded, absent, unavailable, and other failed-discovery
+Collector failure aborts the run. Discovery failure for a selected Codex or
+Claude Code source also aborts before staging. Excluded, absent, unavailable, and other failed-discovery
 sources are skipped and retain any saved content. For repositories, complete
 revision-bound reads are required before interpreting a missing remote file or
 comparing bytes.

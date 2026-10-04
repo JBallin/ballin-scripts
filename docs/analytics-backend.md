@@ -1,6 +1,6 @@
 # Analytics Backend
 
-**Audience:** Maintainers
+*Maintainer guide to Cloudflare Worker deployment, D1 schema, and analytics data policy.*
 
 Ballin uses a small Cloudflare Worker backed by D1 for usage
 analytics. The backend records only the minimal signals needed for active
@@ -203,8 +203,10 @@ state, resource reachability, or runtime rate-limit behavior.
 ## Behavioral Analytics Rollout
 
 The additive behavioral migration and compatible ingestion must reach production
-before client sends are released. Installation and self-update consume `main`,
-so backend and client changes must land separately:
+before client sends are released. The sequence below records that backend-first
+release requirement; code on `main` does not establish production migration or
+deployment readiness. Installation and self-update consume `main`, so the
+release sequence is:
 
 1. Land the backend change containing the new table and v1/v2 ingestion. Its
    automatic deployment should stop at the existing manual-migration guard.
@@ -226,8 +228,8 @@ This procedure applies only to the earlier OS-family migration, not the additive
 behavioral migration above.
 
 The migration that removes the redundant OS-family dimension intentionally
-recreates `version_events_daily` without preserving its historical rows. After
-the change lands on `main`, perform the cutover in this order:
+recreates `version_events_daily` without preserving its historical rows. If
+completing this historical cutover, use this order after the change is on `main`:
 
 1. Apply pending D1 migrations with `wrangler d1 migrations apply
    ballin-scripts-analytics --remote`.
