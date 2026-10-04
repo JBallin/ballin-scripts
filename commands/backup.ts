@@ -37,17 +37,16 @@ const {
   emptySnapshotContent,
   normalizeSnapshotInput,
   observeSnapshotSources,
-  snapshotDefinitions,
 } = require('./backup_snapshots.ts');
 const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
-  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshot, repositoryOpenUrl,
+  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryDestination } from './backup_config.ts';
 const { lastSuccessFileName, recordLastBackupSuccess, previousBackupSuccessLine } = require('./backup_status.ts');
-import type { RepositoryError, RepositoryRead } from './backup_repository.ts';
+import type { RepositoryError, RepositoryRead, RepositoryInventory } from './backup_repository.ts';
 
 import type {
   AvailableSnapshotObservation,
@@ -96,11 +95,26 @@ const compareBackupFileNames = (left: string, right: string): number => {
   return leftKey < rightKey ? -1 : 1;
 };
 
-const suggestionFileNames = snapshotDefinitions
-  .map(({ name }: { name: string }) => name)
-  .toSorted(compareBackupFileNames);
-
-const fileSuggestions = `\n${suggestionFileNames.map((name: string) => `  ${name}`).join('\n')}`;
+const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
+  const current = entries.filter((entry) => entry.classification === 'current')
+    .map((entry) => entry.path).toSorted(compareBackupFileNames);
+  if (current.length > 0) {
+    writeStdoutLine(`Saved snapshots:\n${current.map((name) => `  ${name}`).join('\n')}`);
+    writeStdoutLine('Read a snapshot with `ballin backup read <snapshot>`.');
+  } else {
+    writeStdoutLine('No current snapshots are saved in this backup.');
+  }
+  const retired = entries.filter((entry) => entry.classification === 'retired')
+    .map((entry) => entry.path).toSorted(compareBackupFileNames);
+  if (retired.length > 0) {
+    writeStdoutLine(`\nRetired snapshots:\n${retired.map((name) => `  ${name}`).join('\n')}`);
+    writeStdoutLine('Inspect retired snapshots with `ballin backup open`.');
+  }
+  const unexpected = entries.filter((entry) => entry.classification === 'unexpected').length;
+  if (unexpected > 0) {
+    writeStdoutLine(`\nUnexpected entries: ${unexpected}. Inspect them with \`ballin backup open\`.`);
+  }
+};
 
 const backupConfig = (): BackupConfigResult => {
   let configObj: Record<string, unknown>;
@@ -615,8 +629,8 @@ function runBackupCommand(args = process.argv.slice(2)): void {
 
   const command = requestedCommand || undefined;
 
-  if (command === 'open' && args.length !== 1) {
-    writeStderrLine('ballin backup open: expected no arguments');
+  if ((command === 'open' || command === 'list') && args.length !== 1) {
+    writeStderrLine(`ballin backup ${command}: expected no arguments`);
     process.exitCode = 1;
     return;
   }
@@ -664,16 +678,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if (command === 'read' && !args[1]) {
-    process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
+  if (command === 'read' && args.length > 2) {
+    writeStderrLine('ballin backup read: expected exactly one snapshot');
     process.exitCode = 1;
     return;
   }
 
-  if (command === 'read' && args.length !== 2) {
-    writeStderrLine('ballin backup read: expected exactly one filename');
+  const missingReadArgument = command === 'read' && !args[1];
+  if (missingReadArgument) {
+    writeStderrLine('ballin backup read: expected one snapshot; use `ballin backup read <snapshot>`.');
     process.exitCode = 1;
-    return;
   }
 
   if (!command) {
@@ -699,10 +713,18 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   try {
-    if (command === 'read') {
-      const bytes = readRepositorySnapshot(config.repository, args[1]);
-      if (suggestionFileNames.includes(args[1]) && bytes !== undefined) process.stdout.write(bytes);
-      else { writeStdoutLine(`No supported snapshot found.\nOptions: ${fileSuggestions}`); process.exitCode = 1; }
+    if (missingReadArgument) {
+      writeSavedSnapshots(readRepositoryInventory(config.repository));
+    } else if (command === 'read') {
+      const { bytes, inventory } = readRepositorySnapshotWithInventory(config.repository, args[1]);
+      if (bytes !== undefined) process.stdout.write(bytes);
+      else {
+        writeStderrLine('ballin backup read: no supported snapshot found.');
+        writeSavedSnapshots(inventory);
+        process.exitCode = 1;
+      }
+    } else if (command === 'list') {
+      writeSavedSnapshots(readRepositoryInventory(config.repository));
     } else if (command === 'open') {
       const url = repositoryOpenUrl(config.repository);
       writeStdoutLine(`Opening ${url} in your browser.`);

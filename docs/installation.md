@@ -275,9 +275,13 @@ supported layout, and coherent readability. This is readiness only: it does not
 collect, repair cache permissions, probe writes, or establish backup freshness,
 coverage, or successful publication.
 
-`ballin backup read <file>` prints exact supported snapshot bytes;
-`ballin backup open` opens the validated destination. Both work with read-only
-access and leave caches unchanged. Use only one Mac to back up to a destination.
+Use `ballin backup list` to find supported snapshots saved in the configured
+backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
+to inspect the backup in your browser, including retired snapshots and unexpected
+entries. These commands require remote access and work with read-only
+permissions. For offline help, run `ballin backup --help`.
+
+Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.
 A reconnect has no trusted base and cannot overwrite differing remote content;
 inspect and manually reconcile each conflict using the
