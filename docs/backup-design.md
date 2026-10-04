@@ -216,135 +216,6 @@ One active writer remains the product model; retire the prior writer before a
 replacement installation publishes. Conditional publication protects the inspected head,
 including concurrent advancement or rewind, but does not offer multi-writer sync.
 
-## Repository command latency (#367)
-
-### macOS real-GitHub measurements
-
-Measured on 2026-10-01 on an Apple M5 (arm64), macOS 27.0.1, Node 24.21.0
-and GitHub CLI 2.102.0. The baseline is main commit
-`91fdfc989c8325f387bc898752d0920c79b58e4d`, including the deterministic
-uninstall coverage fix. Candidate read, backup and reconnect measurements used
-`454e929f8664d46f76be178b2c64f6f03daa3091`; final open measurements used
-`0a016c4f5d07761ffcab42c2437a700713bf21f2`. The latter changes only open
-dispatch, leaving the other measured production paths identical.
-
-Both arms ran the real `bin/ballin` CLI against the approved private dummy
-repository `JBallin/ballin-perf-367-macos-20261001`, with the same credential,
-network, marker, README and three small supported snapshots (`ballin_config`,
-`mas`, `npm_global`). Each arm had its own temporary HOME, configuration,
-cache and source files. Analytics was disabled. Collectors used dummy command
-outputs, and `GH_BROWSER` recorded the dispatched URL instead of opening a
-browser. Only `gh` subprocesses used the normal credential-storage context;
-Ballin's local state stayed isolated. No user backup data was read or published.
-
-Each comparison scenario has ten runs per arm, paired with alternating arm
-order and an equal number of baseline-first and candidate-first pairs. Read, no-op,
-publishing and reconnect were measured in two passes of five pairs. Open was
-remeasured in ten pairs after its browser-dispatch optimization. The table
-shows whole-CLI medians and observed ranges in seconds; external head checks
-and publishing warm-ups are outside the measured interval.
-
-| Command/scenario | Baseline median (range) | Candidate median (range) |
-| --- | ---: | ---: |
-| `backup read mas` | 3.690 (3.285–4.150) | 2.770 (2.712–3.038) |
-| `backup open` | 4.751 (4.444–5.589) | 3.203 (2.692–4.217) |
-| Repeated true no-op `backup` | 4.694 (4.429–5.674) | 4.648 (4.554–5.024) |
-| Changed/publishing `backup` | 9.921 (9.025–10.464) | 9.545 (8.796–10.968) |
-| Reconnect through first candidate validation | 4.590 (4.302–5.175) | 4.896 (4.219–5.863) |
-
-Read improves by 0.920 seconds (24.9%) at the median; open improves by
-1.548 seconds (32.6%). The unchanged backup and reconnect paths have overlapping
-ranges; their median differences do not establish a PR speedup.
-The issue's earlier 7–10 second observations used different uncontrolled inputs
-and are not the baseline for these comparisons.
-
-Read returned the exact dummy `mas` bytes. Open printed and dispatched the
-validated fixture URL. Every no-op, read, open and reconnect run left the remote
-head unchanged. Each measured publishing run started from a warmed comparison
-base, changed one dummy snapshot, and produced exactly one commit whose sole
-parent was the inspected head; Ballin completed its independent full readback.
-The fixture is retained for review and requires separate authorization to delete.
-
-### Costs and retained checks
-
-Timing each synchronous subprocess attributes about 96–98% of read, backup
-and reconnect wall time to `gh`. This combines CLI startup, credential access
-and GitHub transport; it does not isolate network time. Seven standalone
-`gh --version` samples averaged 0.033 seconds, while local residual time in
-the measured commands was roughly 0.10–0.13 seconds. Dummy collector
-subprocesses took about 0.06 seconds per backup; real tool inventories and
-browser UI startup are outside this fixture's results.
-
-Candidate cumulative subprocess medians, in seconds:
-
-| Scenario | Account | Repository/branch metadata | Tree | Blobs | Other remote work |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Read | 0.613 | 1.057 | 0.339 | 0.661 | — |
-| Open | 1.037 | 1.195 | 0.401 | 0.373 | Browser dispatch 0.050 |
-| No-op | 0.901 | 1.778 | 0.350 | 1.397 | — |
-| Publishing | 1.583 | 2.959 | 0.728 | 2.724 | Mutation 1.251 |
-| Reconnect | 0.961 | 1.305 | 0.368 | 1.487 | Candidate lookup 0.421 |
-
-Category medians need not sum to whole-command medians. Metadata and serial
-blob requests dominate the shared inspection. Publishing subprocess phases
-had medians of 4.455 seconds before mutation, 1.251 for mutation and 3.460
-for independent readback. A no-op still fully reads and reconciles its current
-state, then validates the account and head before promoting the cache; it
-creates no blobs, trees, commits or ref updates. Publishing retains the
-expected-head mutation and independent full readback. These measured costs
-do not justify removing required evidence or introducing a broader transport
-or caching redesign.
-
-The reconnect pause after `Candidate backup:` measured 4.174 seconds at the
-baseline median (3.858–4.691) and 4.434 in the candidate (3.765–5.387). It
-contains the candidate lookup and the same full inspection primitives. Runs
-cancelled before destination confirmation, excluding human waiting, the second
-full inspection, configuration persistence and optional protection work.
-
-The create-side pause was measured separately on production commit
-`8a4df04dbdd93cc4c6c83d800661c55d67007235`, with the same macOS/Node/gh
-versions. Ten real `backup setup` runs selected `create` with dummy name
-`ballin-perf-367-create-absent-20261001-8a4df04`. Authenticated GitHub GETs
-returned 404 before and after every run. Each run used a fresh temporary HOME,
-configuration and cache location, with analytics disabled. Input ended at the
-sensitive-source prompt, before destination confirmation; configuration bytes
-remained unchanged, no cache was created and no remote resource was created.
-A measurement guard allowed only account and candidate GETs.
-
-From `Candidate backup:` to the following inventory/sensitivity explanation,
-the create-side pause had a median of 0.290 seconds (0.239–0.341). Its only
-subprocess was the candidate repository GET returning 404: median 0.289 seconds,
-about 99.5% of the pause. Effective-account resolution ran before the candidate
-line and took 0.291 seconds (0.251–0.309). Whole CLI time through cancellation
-was 0.706 seconds (0.647–0.747), including a 0.042-second config subprocess.
-These timings combine process, credential and GitHub transport costs.
-
-Create selection therefore shares account resolution and the candidate lookup,
-but does not perform reconnect's full metadata/tree/blob inspection before
-confirmation. Reconnect's measured pause contains ten API calls; create's
-contains one. Setup is unchanged by this PR, so these observations characterize
-the two paths without attributing a setup speedup to the PR. Actual
-post-confirmation repository creation/initialization, later setup validation,
-configuration persistence and optional protection work remain outside the
-measured pauses. No further production optimization is justified by this
-single required existence lookup.
-
-With three snapshots, read drops from 9 to 7 API calls, retrieving only the
-marker and requested supported snapshot. Open drops from 11 to 8 `gh` calls,
-retrieving only the marker. Both still validate the complete tree inventory,
-stable repository/owner identity, immutable requested blobs, marker and final
-revision. Partial reads stay private to the transport module and cannot become
-reconciliation or publication bases. Fresh effective-account checks through
-`gh api user` remain, including final validation and URL generation; compatibility
-does not depend on `gh auth status --active` or aggregate saved-account status.
-
-Open dispatches its validated URL with `gh browse --repo`, using GitHub CLI's
-browser facility without `gh repo view --web`'s extra repository metadata
-lookup. Five alternating dispatch-only pairs confirmed the identical URL and
-median 0.505 → 0.055 seconds. This removes redundant dispatch work after Ballin's
-validation. Full no-op (11 API calls),
-publishing (21) and reconnect selection/first validation (11) are unchanged.
-
 ## Local last-success time
 
 Normal repository backup records one canonical UTC time after publication or
@@ -370,18 +241,18 @@ for display behavior.
 Export and restoration use separate explicit allowlists, independent of bundled
 defaults. The table below records the current contract:
 
-| Leaf | Export | Restore |
+| Setting or state | Export | Restore |
 | --- | --- | --- |
-| `update.cleanup` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.selfUpdate` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.softwareupdate` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.npm` | Boolean, as described below | Boolean, subject to local precedence |
-| `update.nvm` | Boolean, as described below | Boolean, subject to local precedence |
-| `analytics.enabled` | No | No; local setting |
-| `update.backup` | No | No; local setup choice under #344 |
-| `backup.repository`, `backup.id`, `backup.host` | No | No; independently selected destination wins |
-| Sensitive-source consent | No | No; local `backup.includeSensitive` choice |
-| Analytics install ID | No | No |
+| `update.cleanup` | Saved if present | Recovered only if absent before setup |
+| `update.selfUpdate` | Saved if present | Recovered only if absent before setup |
+| `update.softwareupdate` | Saved if present | Recovered only if absent before setup |
+| `update.npm` | Saved if present | Recovered only if absent before setup |
+| `update.nvm` | Saved if present | Recovered only if absent before setup |
+| `analytics.enabled` | No | No; local analytics choice |
+| `update.backup` | No | No; local automatic-backup choice |
+| Backup destination | No | No; independently selected during setup |
+| `backup.includeSensitive` | No | No; local sensitive-source choice |
+| Analytics install ID | No | No; local installation identity |
 | Unknown/custom/future settings | No | No; existing local values remain intact |
 
 For the five admitted update leaves, accept native JSON booleans and exact
@@ -414,9 +285,10 @@ An absent snapshot preserves local settings and defaults. Diagnostics do not
 print rejected values or arbitrary remote content.
 
 `update.backup` remains local-only, including when reading older snapshots.
-Its maintenance-only default is `"false"`. Preserve #344's newly configured
-backup prompt, existing-local-choice behavior, and post-destination save-failure
-handling described in [Installation](installation.md#optional-backup-setup-and-reconnect).
+Its maintenance-only default is `"false"`. New linkage prompts for the choice;
+configured-destination revalidation preserves it. See
+[Installation](installation.md#optional-backup-setup-and-reconnect) for setup and
+post-destination save-failure handling.
 A replacement installation establishes its own automatic-backup choice during
 setup.
 
@@ -487,13 +359,12 @@ locations, and opened-file checks enforce the same rule during capture. Skills
 remain excluded pending a separate operational eligibility/supporting-file
 policy; path placement alone does not establish authorship.
 
-Successful self-update compares the Git blob identities of the source-definition
-file before/after update. Changed or unavailable comparison emits a stateless
-source-guide advisory. It never executes definitions or discovers personal
-sources; advisory failure does not turn a successful update into failure.
-The first upgrade installing this updater still runs the earlier loaded code;
-the comparison applies to subsequent updates. Setup and the source guide
-disclose the expanded catalog independently of that advisory.
+The current updater compares the Git blob identities of the source-definition
+file before and after a successful update. Changed or unavailable comparison
+emits a stateless source-guide advisory. It never executes definitions or
+discovers personal sources; advisory failure does not turn a successful update
+into failure.
+Setup and the source guide disclose the catalog independently of that advisory.
 
 `SnapshotDefinition.name` remains the durable identity and stored/read name.
 The observation entrypoint accepts a native boolean, `includeSensitive`,
@@ -549,3 +420,135 @@ implementation validation does not perform that experiment.
 
 Identity, coherent-read, and publication checks do not certify that saved
 snapshots match current sources after subsequent changes.
+
+## Historical repository latency measurements
+
+These measurements record specific historical revisions, not current runtime
+guarantees. They explain the read/open optimization while the safety contracts
+above remain authoritative.
+
+### macOS real-GitHub measurements
+
+Measured on 2026-10-01 on an Apple M5 (arm64), macOS 27.0.1, Node 24.21.0
+and GitHub CLI 2.102.0. The baseline is main commit
+`91fdfc989c8325f387bc898752d0920c79b58e4d`, including the deterministic
+uninstall coverage fix. Candidate read, backup and reconnect measurements used
+`454e929f8664d46f76be178b2c64f6f03daa3091`; final open measurements used
+`0a016c4f5d07761ffcab42c2437a700713bf21f2`. The latter changes only open
+dispatch, leaving the other measured production paths identical.
+
+Both arms ran the real `bin/ballin` CLI against the approved private dummy
+repository `JBallin/ballin-perf-367-macos-20261001`, with the same credential,
+network, marker, README and three small supported snapshots (`ballin_config`,
+`mas`, `npm_global`). Each arm had its own temporary HOME, configuration,
+cache and source files. Analytics was disabled. Collectors used dummy command
+outputs, and `GH_BROWSER` recorded the dispatched URL instead of opening a
+browser. Only `gh` subprocesses used the normal credential-storage context;
+Ballin's local state stayed isolated. No user backup data was read or published.
+
+Each comparison scenario has ten runs per arm, paired with alternating arm
+order and an equal number of baseline-first and candidate-first pairs. Read, no-op,
+publishing and reconnect were measured in two passes of five pairs. Open was
+remeasured in ten pairs after its browser-dispatch optimization. The table
+shows whole-CLI medians and observed ranges in seconds; external head checks
+and publishing warm-ups are outside the measured interval.
+
+| Command/scenario | Baseline median (range) | Candidate median (range) |
+| --- | ---: | ---: |
+| `backup read mas` | 3.690 (3.285–4.150) | 2.770 (2.712–3.038) |
+| `backup open` | 4.751 (4.444–5.589) | 3.203 (2.692–4.217) |
+| Repeated true no-op `backup` | 4.694 (4.429–5.674) | 4.648 (4.554–5.024) |
+| Changed/publishing `backup` | 9.921 (9.025–10.464) | 9.545 (8.796–10.968) |
+| Reconnect through first candidate validation | 4.590 (4.302–5.175) | 4.896 (4.219–5.863) |
+
+Read improves by 0.920 seconds (24.9%) at the median; open improves by
+1.548 seconds (32.6%). The unchanged backup and reconnect paths have overlapping
+ranges; their median differences do not establish an optimization speedup.
+
+Read returned the exact dummy `mas` bytes. Open printed and dispatched the
+validated fixture URL. Every no-op, read, open and reconnect run left the remote
+head unchanged. Each measured publishing run started from a warmed comparison
+base, changed one dummy snapshot, and produced exactly one commit whose sole
+parent was the inspected head; Ballin completed its independent full readback.
+The dummy repository remains retained; deleting it requires separate authorization.
+
+### Costs and retained checks
+
+Timing each synchronous subprocess attributes about 96–98% of read, backup
+and reconnect wall time to `gh`. This combines CLI startup, credential access
+and GitHub transport; it does not isolate network time. Seven standalone
+`gh --version` samples averaged 0.033 seconds, while local residual time in
+the measured commands was roughly 0.10–0.13 seconds. Dummy collector
+subprocesses took about 0.06 seconds per backup; real tool inventories and
+browser UI startup are outside this fixture's results.
+
+Candidate cumulative subprocess medians, in seconds:
+
+| Scenario | Account | Repository/branch metadata | Tree | Blobs | Other remote work |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Read | 0.613 | 1.057 | 0.339 | 0.661 | — |
+| Open | 1.037 | 1.195 | 0.401 | 0.373 | Browser dispatch 0.050 |
+| No-op | 0.901 | 1.778 | 0.350 | 1.397 | — |
+| Publishing | 1.583 | 2.959 | 0.728 | 2.724 | Mutation 1.251 |
+| Reconnect | 0.961 | 1.305 | 0.368 | 1.487 | Candidate lookup 0.421 |
+
+Category medians need not sum to whole-command medians. Metadata and serial
+blob requests dominate the shared inspection. Publishing subprocess phases
+had medians of 4.455 seconds before mutation, 1.251 for mutation and 3.460
+for independent readback. A no-op still fully reads and reconciles its current
+state, then validates the account and head before promoting the cache; it
+creates no blobs, trees, commits or ref updates. Publishing retains the
+expected-head mutation and independent full readback. These measured costs
+do not justify removing required evidence or introducing a broader transport
+or caching redesign.
+
+The reconnect pause after `Candidate backup:` measured 4.174 seconds at the
+baseline median (3.858–4.691) and 4.434 in the candidate (3.765–5.387). It
+contains the candidate lookup and the same full inspection primitives. Runs
+cancelled before destination confirmation, excluding human waiting, the second
+full inspection, configuration persistence and optional protection work.
+
+The create-side pause was measured separately on production commit
+`8a4df04dbdd93cc4c6c83d800661c55d67007235`, with the same macOS/Node/gh
+versions. Ten real `backup setup` runs selected `create` with dummy name
+`ballin-perf-367-create-absent-20261001-8a4df04`. Authenticated GitHub GETs
+returned 404 before and after every run. Each run used a fresh temporary HOME,
+configuration and cache location, with analytics disabled. Input ended at the
+sensitive-source prompt, before destination confirmation; configuration bytes
+remained unchanged, no cache was created and no remote resource was created.
+A measurement guard allowed only account and candidate GETs.
+
+From `Candidate backup:` to the following inventory/sensitivity explanation,
+the create-side pause had a median of 0.290 seconds (0.239–0.341). Its only
+subprocess was the candidate repository GET returning 404: median 0.289 seconds,
+about 99.5% of the pause. Effective-account resolution ran before the candidate
+line and took 0.291 seconds (0.251–0.309). Whole CLI time through cancellation
+was 0.706 seconds (0.647–0.747), including a 0.042-second config subprocess.
+These timings combine process, credential and GitHub transport costs.
+
+Create selection therefore shares account resolution and the candidate lookup,
+but does not perform reconnect's full metadata/tree/blob inspection before
+confirmation. Reconnect's measured pause contains ten API calls; create's
+contains one. Setup was unchanged by the measured optimization, so these
+observations characterize the two paths without attributing a setup speedup to
+that change. Actual
+post-confirmation repository creation/initialization, later setup validation,
+configuration persistence and optional protection work remain outside the
+measured pauses. No further production optimization is justified by this
+single required existence lookup.
+
+With three snapshots, read drops from 9 to 7 API calls, retrieving only the
+marker and requested supported snapshot. Open drops from 11 to 8 `gh` calls,
+retrieving only the marker. Both still validate the complete tree inventory,
+stable repository/owner identity, immutable requested blobs, marker and final
+revision. Partial reads stay private to the transport module and cannot become
+reconciliation or publication bases. Fresh effective-account checks through
+`gh api user` remain, including final validation and URL generation; compatibility
+does not depend on `gh auth status --active` or aggregate saved-account status.
+
+Open dispatches its validated URL with `gh browse --repo`, using GitHub CLI's
+browser facility without `gh repo view --web`'s extra repository metadata
+lookup. Five alternating dispatch-only pairs confirmed the identical URL and
+median 0.505 → 0.055 seconds. This removes redundant dispatch work after Ballin's
+validation. Full no-op (11 API calls),
+publishing (21) and reconnect selection/first validation (11) are unchanged.
