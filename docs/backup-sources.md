@@ -1,11 +1,11 @@
 # Backup sources and sensitivity
 
-**Audience:** Users
+*User guide to Ballin snapshot sources, captured files, and data sensitivity considerations.*
 
 `ballin backup` uses an explicit source allowlist. The allowlist limits which
 files and command outputs Ballin selects, but it does not make their contents
 safe: files and command outputs can contain credentials, private URLs,
-usernames, paths, commands, and other sensitive data. This audit records source
+usernames, paths, commands, and other sensitive data. This guide explains source
 sensitivity and repository policy; Ballin does not scan or redact
 these snapshots.
 
@@ -69,7 +69,7 @@ running its collector or presenting its executable as a raw configuration file.
 Review reads no file contents and runs no collectors. Codex and Claude Code
 directory discovery recursively inspects names and file types to identify nonempty sources. Missing
 and unavailable sources are shown; access or resolution errors prevent
-confirmation. EOF or declining final confirmation cancels without
+confirmation. Closing input or declining final confirmation cancels without
 saving consent or changing destination, cache, or remote state. Excluded
 sensitive sources are not inspected just to verify them.
 
@@ -196,8 +196,8 @@ project `AGENTS.md` support depends on its version and instruction settings; see
 Before collecting sources, Ballin shows `Previous successful backup:` with the
 last recorded successful run's local date, time and UTC offset for this
 installation, destination and branch. With no usable record, the line is omitted.
-`ballin backup setup` also shows the record or unavailable status; setup and
-recovery do not invent a previous time.
+For an already-configured destination, `ballin backup setup` also shows the
+record or unavailable status. Setup and recovery do not invent a previous time.
 
 Changed and unchanged successful runs update the local record; failed attempts
 do not. An unchanged run creates no repository commit just to record activity.

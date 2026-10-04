@@ -46,6 +46,21 @@ describe('repository backup lifecycle', function() {
       }),
     });
   };
+  const runSetup = (mode = 'self-update') => {
+    const installedBin = path.join(home, '.local', 'bin');
+    fs.mkdirSync(installedBin, { recursive: true });
+    fs.mkdirSync(path.join(checkout, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(checkout, 'bin', 'ballin'), 'synthetic installed shim');
+    return spawnSync(process.execPath, [
+      path.join(repoRoot, 'commands', 'install_setup.ts'), 'setup', checkout,
+      'https://example.test/docs', '', mode,
+    ], {
+      encoding: 'utf8', input: '', cwd: checkout, env: testChildEnvironment({
+        HOME: home, PATH: `${bin}${path.delimiter}${installedBin}`, TMPDIR: path.join(root, 'tmp'),
+        BALLIN_TEST_CONFIG_PATH: configPath,
+      }),
+    });
+  };
   const ok = (result: { status: number; stdout: string; stderr: string }): void => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
@@ -344,10 +359,44 @@ describe('repository backup lifecycle', function() {
           assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
           assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
           assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
+          const embedded = runSetup(); ok(embedded); assert.equal(embedded.stdout, '');
+          assert.equal(fs.readFileSync(configPath, 'utf8'), configBytes);
+          assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+          assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
         });
       }
     }
   }
+  for (const mode of ['refresh', 'self-update']) {
+    it(`preserves validation and state during ${mode} setup with caller-specific output`, () => {
+      seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess(); source('different local bytes\n');
+      const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+      const result = runSetup(mode); ok(result);
+      assert.equal(result.stdout, mode === 'refresh'
+        ? `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: ${priorSuccess}`
+        : '');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
+      assert.equal(fs.readlinkSync(path.join(home, '.local', 'bin', 'ballin')), path.join(checkout, 'bin', 'ballin'));
+    });
+  }
+  it('keeps optional branch-protection warnings during self-update validation', () => {
+    const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
+    const before = config(); seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess();
+    const result = runSetup(); ok(result);
+    assert.include(result.stdout, 'Optional GitHub branch protection was not enabled with the current permissions');
+    assert.notInclude(result.stdout, 'Validated private backup:');
+    assert.deepEqual(config(), before); assert.equal(cached(), 'cached bytes\n');
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(publications(), 0);
+  });
+  it('continues to skip unconfigured backup during self-update setup without prompts', () => {
+    unconfigured(); const before = config();
+    const result = runSetup(); ok(result); assert.equal(result.stdout, '');
+    assert.deepEqual(config(), before); assert.lengthOf(state().requests, 0);
+    assert.isFalse(fs.existsSync(cacheRoot));
+  });
   it('summarizes absent sensitive consent as excluded without saving consent', () => {
     const before = config(); delete before.backup.includeSensitive; saveConfig(before);
     const result = run(['setup']); ok(result);
@@ -375,6 +424,12 @@ describe('repository backup lifecycle', function() {
           : 'Automatic backup during update: invalid `update.backup` (expected true or false)\n');
         assert.deepEqual(config(), before); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
         assert.lengthOf(mutations(), 0);
+        const embedded = runSetup(); ok(embedded);
+        assert.equal(embedded.stdout, sensitive
+          ? 'Sensitive sources: invalid `backup.includeSensitive` (expected true or false)\n'
+          : 'Automatic backup during update: invalid `update.backup` (expected true or false)\n');
+        assert.deepEqual(config(), before); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.lengthOf(mutations(), 0);
       });
     }
   }
@@ -392,6 +447,13 @@ describe('repository backup lifecycle', function() {
       assert.notInclude(result.stdout, 'Sensitive sources:');
       assert.notInclude(result.stdout, 'Automatic backup during update:');
       assert.notInclude(result.stdout, 'Last recorded successful backup');
+      assert.deepEqual(config(), before); assert.equal(cached(), 'unchanged\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(mutations(), 0);
+      const embedded = runSetup(); assert.equal(embedded.status, 1);
+      assert.include(embedded.stdout, 'Unable to configure backup');
+      assert.include(embedded.stdout, 'Retry with: `ballin backup setup`');
+      assert.notInclude(embedded.stdout, 'Validated private backup:');
+      assert.include(embedded.stdout, result.stdout.trim());
       assert.deepEqual(config(), before); assert.equal(cached(), 'unchanged\n');
       assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(mutations(), 0);
     });

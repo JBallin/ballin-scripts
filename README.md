@@ -39,38 +39,35 @@ and removal steps in [Installation and removal](docs/installation.md).
 `ballin update` output depends on installed tools and enabled integrations. This
 example shows a fully configured run with automatic backups enabled.
 
-```shell
+```text
 $ ballin update
 
 ==> Updating Homebrew
-
+...
 ==> Updating Homebrew packages
-
+...
 ==> Cleaning up Homebrew packages
-
+...
 ==> Checking Homebrew installation
-
+...
 ==> Updating Node.js LTS
-
+...
 ==> Updating global npm packages
-
+...
 ==> Updating App Store apps
-
+...
 ==> Installing macOS updates
-
+...
 ==> Updating Ballin
-
+...
 ==> Checking Ballin readiness
-
+...
 ==> Backing up development environment
 Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✔ ballin_config
 ✔ bash_completions
 ✔ Brewfile
-✔ brew_cask
 ...
-✔ vs_settings
-✔ zprofile
 ✎ zshrc
 View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```

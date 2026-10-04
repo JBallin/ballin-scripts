@@ -1,10 +1,9 @@
 # Optional capabilities
 
-**Audience:** Users
+*User guide to choosing Node.js environments, optional tools, and update automation settings.*
 
-This guide covers choices for the required Node.js setup, plus optional tools
-and settings that extend Ballin. The defaults keep updates predictable
-while letting you opt in to broader automation.
+Node.js is required; the other tools and integrations are optional. The defaults
+keep updates predictable while letting you opt in to broader automation.
 
 ## Guided preference review
 
@@ -133,10 +132,9 @@ including future supported additions. It accepts native booleans or exact
 recovered from backups. Changing consent affects future captures, not saved
 files or history. Run `ballin setup` to review sources or change the choice.
 
-After self-update, Ballin links to the source guide when definitions changed or
-the comparison was unavailable; the advisory does not change consent. The first
-upgrade installing this advisory still runs the earlier updater and cannot show
-it, so review the guide when adopting that release.
+When self-update starts with the current updater, a successful update links to
+the source guide if definitions changed or could not be compared. The advisory
+does not change consent.
 
 To toggle sensitive sources in future backups:
 
@@ -188,9 +186,13 @@ ballin doctor
 Reconnect can recover supported portable Ballin preferences, and existing local
 choices take precedence. Preference recovery changes later Ballin behavior; it
 does not run maintenance, restore dotfiles, or reinstall packages. Other local
-state is not recovered from the backup. See
-[Backup design](backup-design.md#portable-preferences) for the exact current
-allowlists and restoration rules.
+state is not recovered from the backup. The recoverable settings are
+`update.cleanup`, `update.selfUpdate`, `update.softwareupdate`, `update.npm`, and
+`update.nvm`. Your destination, sensitive-source choice, automatic-backup choice,
+and analytics choice stay local.
+
+Maintainers can find the export format and validation rules in
+[Backup design](backup-design.md#portable-preferences).
 
 ## Analytics
 
