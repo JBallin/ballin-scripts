@@ -193,7 +193,7 @@ project `AGENTS.md` support depends on its version and instruction settings; see
 
 ## Last successful backup
 
-Before collecting sources, Ballin shows `Previous successful backup:` with the
+Before collecting sources, Ballin shows `Last successful backup:` with the
 last recorded successful run's local date, time and UTC offset for this
 installation, destination and branch. With no usable record, the line is omitted.
 For an already-configured destination, `ballin backup setup` also shows the
