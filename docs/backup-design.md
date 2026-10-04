@@ -136,8 +136,8 @@ altering policy or deleting the repository.
 
 All selected available captures are staged before remote inspection. Collector
 or projection failures abort without publication or cache promotion. Discovery
-failure for a selected Codex source aborts before staging; other discovery
-failures skip that source. Exclusion gates discovery itself. Only fresh local
+failure for a selected Codex or Claude Code source aborts before staging; other
+discovery failures skip that source. Exclusion gates discovery itself. Only fresh local
 captures receive established empty-file/final-newline normalization. Remote and
 cache bytes, including legacy `empty\n`, remain observable unchanged.
 
@@ -443,11 +443,11 @@ below.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-25 sensitive sources, and one projected preferences snapshot.
+29 sensitive sources, and one projected preferences snapshot.
 `backup.includeSensitive` is the only local sensitive-source preference. Opting
 in covers the maintained sensitive catalog, including future supported sources;
-existing opt-ins therefore include Codex. Setup discloses this scope before
-acceptance and reviews the currently available source paths. Consent is never
+existing opt-ins therefore include Codex and Claude Code. Setup discloses this
+scope before acceptance and reviews the currently available source paths. Consent is never
 projected or recovered. Configured destination revalidation preserves the
 existing choice. Adding supported sources requires user-facing disclosure and
 an inclusion/sensitivity review, without another approval record.
@@ -468,15 +468,18 @@ with base64 `content` and an `executable` boolean. No timestamps, absolute paths
 or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
 
-New Codex capture is bounded to 16 MiB total normalized staged bytes (raw files
-and all archives, including unchanged captures) and 8,192 visited entries per
+New Codex and Claude Code captures are each bounded to 16 MiB total normalized
+staged bytes per application (raw files and all archives, including unchanged
+captures) and 8,192 visited entries per
 recursive source. Incremental iterative metadata traversal and opened-file
 bounded reads reject overflow without truncation. Capture-limit failures abort
 staging before remote inspection; cache comparison and writer checks also fail
 before publication or cache promotion. Actual changed buffers are rechecked before
 outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
-not a second 16 MiB cap. Only Codex cache files actually compared are bounded,
-individually, to 16 MiB. Other sources retain their existing behavior.
+not a second 16 MiB cap. Only Codex and Claude Code cache files actually compared
+are bounded, individually, to 16 MiB. The independent capture allowances permit up to 32 MiB
+of combined staged assistant configuration; adding Claude Code does not reduce
+the existing Codex allowance. Other sources retain their existing behavior.
 
 There is no retained-remote quota or partial-reader contract. Existing full
 remote inspection, retained snapshots, and mixed-source payloads can exceed
@@ -484,13 +487,21 @@ the local capture envelope; this is not a global request or process-memory
 guarantee. New canonical names may recognize previously unexpected large remote
 blobs. Remote-reader resource bounds remain separate follow-up work.
 
-Codex traversal and reads use a private synchronous cwd-pinning helper. Each
-directory identity is captured from its pinned parent and verified after entry;
+Codex and Claude Code traversal and reads use a private synchronous cwd-pinning
+helper. Each directory identity is captured from its pinned parent and verified after entry;
 callbacks use only the pinned directory or immediate names. Leaf opens reject
 symlinks; review opens and closes regular files to check readability without
 reading contents. Caller cwd identity is verified after restoration. Restoration
 failure is fatal and bypasses optional-source handling. These checks pin selected
 directory objects; they do not provide an atomic snapshot of concurrent edits.
+
+Claude Code definitions select `CLAUDE.md` and only regular `.md` files in
+personal rules, agents, and legacy commands. The catalog supplies the Markdown
+selection to discovery, review, and capture. Visited-entry accounting precedes
+filename filtering. Selected hard links fail without searching for other inode
+locations, and opened-file checks enforce the same rule during capture. Skills
+remain excluded pending a separate operational eligibility/supporting-file
+policy; path placement alone does not establish authorship.
 
 Successful self-update compares the Git blob identities of the source-definition
 file before/after update. Changed or unavailable comparison emits a stateless
