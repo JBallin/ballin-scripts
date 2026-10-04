@@ -318,14 +318,14 @@ git clone https://github.com/example-user/ballin-backups.git
 ### Rename existing directory bundles
 
 Stop backups from the old writer, including automatic backups during updates.
-Run the [rename helper](../scripts/migrate-backup-bundles.sh) with your repository
+Save the optional standalone rename helper from [PR #487](https://github.com/JBallin/ballin-scripts/pull/487) and run it with your repository
 URL and a local folder that does not exist. **Confirm that the repository's
 default branch is your configured backup branch before running it.** The helper
 operates on that default branch and does not read your Ballin configuration or
 select another branch. It requires Git and Node.js.
 
 ```shell
-bash /path/to/ballin-scripts/scripts/migrate-backup-bundles.sh \
+bash /path/to/migrate-backup-bundles.sh \
   https://github.com/example-user/ballin-backups.git /path/to/new-backup-clone
 ```
 

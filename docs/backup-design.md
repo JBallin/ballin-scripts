@@ -413,7 +413,7 @@ supplies a bundle-listing hint; raw and member-list reads add staged hints only
 when stdin, stdout and stderr are terminals. Raw hints require a known bundle
 name and a validated archive, without changing raw-read failure behavior.
 
-The [manual rename helper](../scripts/migrate-backup-bundles.sh) clones a supplied
+The optional standalone rename helper supplied in [PR #487](https://github.com/JBallin/ballin-scripts/pull/487) clones a supplied
 repository's default branch into a new local folder, checks the canonical backup
 marker, flat regular-file layout, clean worktree and all target collisions, then
 creates one local rename commit without changing payloads,
