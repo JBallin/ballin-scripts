@@ -4,43 +4,50 @@
 
 ![Ballin README hero showing the Ballin identity and the line Back up dotfiles. Keep your tools current.](docs/assets/brand/readme-hero.png)
 
-Ballin helps developers maintain repeatable, inspectable macOS
-development environments. It snapshots shell and Git configuration, Homebrew
-state, editor settings, and local tool inventories while automating routine
-updates.
+Ballin backs up selected development-environment state and automates routine
+updates for macOS developer tools. Use it to keep the Mac you already work on
+current and save a record of its tools and configuration for a later rebuild.
 
-## What it does
+`ballin update` runs maintenance tasks for installed tools and enabled
+integrations. Optional backups save tool inventories and supported Ballin
+preferences in a private GitHub repository; a separate opt-in adds supported
+shell, Git, editor, Codex, and Claude Code configuration. You can use maintenance
+alone without configuring backups.
 
-- `ballin backup` stores snapshots of local development-environment state in a
-  private GitHub repository.
-- `ballin update` runs configured maintenance tasks such as Homebrew upgrades,
-  Node.js/npm updates, macOS and App Store updates, self-updates, and backups.
-
-See [Choosing Ballin](docs/choosing-ballin.md) for when it fits and how it compares
-with other tools.
+See [Choosing Ballin](docs/choosing-ballin.md) for when it fits and how to use it
+alongside other tools.
 
 ## Installation
 
-The installer checks Git and Node.js, shows its plan, and asks before making a
-fresh installation. It asks whether to enable
-[usage analytics](docs/analytics.md), disabled by default. After core setup, it offers
-optional shell completion and backup setup; a maintenance-only installation does
-not require Homebrew or GitHub CLI. When configured, backups can run automatically
-with `ballin update`.
+Start with Git and Node.js 24.12 or newer on your `PATH`. Homebrew is optional;
+backups also require [GitHub CLI](https://cli.github.com/) authenticated to your
+personal GitHub.com account. See [Node.js setup](docs/optional-capabilities.md#nodejs)
+if you need a supported runtime.
 
-Run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
+Review the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh),
+then run:
 
 ```shell
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-Review the exact local effects, network interactions, partial-failure behavior,
-and removal steps in [Installation and removal](docs/installation.md).
+The installer shows its plan and asks before a fresh installation. It offers
+optional usage analytics (disabled by default), shell completion, and backup
+setup. You can skip backups or configure them later with `ballin backup setup`.
+Installation does not run updates or capture snapshots. For a new backup
+destination, run `ballin backup` for your first capture; for an existing backup,
+see [using saved state on another Mac](#using-saved-state-on-another-mac).
+
+Review [Installation and removal](docs/installation.md) for local effects,
+network interactions, backup authentication, troubleshooting, and removal.
 
 ## Example output
 
-`ballin update` output depends on installed tools and enabled integrations. This
-example shows a fully configured run with automatic backups enabled.
+Use `ballin update` for everyday maintenance. It runs stages for installed tools
+and enabled integrations, checks readiness after a successful Ballin self-update,
+and backs up selected state at the end when automatic backups are enabled.
+
+This example shows a fully configured run.
 
 ```text
 $ ballin update
@@ -75,25 +82,10 @@ Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```
 
-## New Mac setup
+## Using saved state on another Mac
 
-On a new Mac, the installer offers optional backup setup after installing Ballin.
-You can create a new private backup repository or reconnect to an existing one;
-if you skip setup during installation, run `ballin backup setup` later.
-Setup offers one default-off choice for sensitive sources: raw shell/Git/editor
-configuration, Codex and Claude Code configuration, `.nvmrc`, and pipx installation metadata. The choice is saved as
-`backup.includeSensitive` and covers current and future supported sensitive
-sources. See [source review](docs/backup-sources.md#repository-inclusion).
-
-Reconnecting can recover supported Ballin preferences; existing local choices
-take precedence. See
-[preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences)
-for details. Stop using the previous Mac for backups before publishing from a
-replacement Mac.
-
-Use snapshots as a rebuild reference. Ballin does not automatically restore
-saved dotfiles or reinstall saved packages; it is not a full disk backup or
-one-command restore system.
+Saved snapshots of your tools and configuration give you a reference when
+[setting up another Mac](docs/new-mac.md).
 
 Directory snapshots store readable text lines for GitHub diffs, with Base64 for
 binary content. See [reading saved files](docs/installation.md#health-and-recovery).
@@ -123,14 +115,19 @@ binary content. See [reading saved files](docs/installation.md#health-and-recove
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
 to access the repository can read its contents.
 
-Repository backups include fixed inventories and filtered Ballin preferences.
-Raw configuration and pipx metadata are excluded by default and can be included
-with one local opt-in. Even the baseline can contain private tools, identities,
-paths, or URLs. Ballin does not scan or redact credentials. Review the
-[sources and sensitivity](docs/backup-sources.md) before opting in. GitHub
-controls commit author and committer attribution.
+Inventories and filtered Ballin preferences are included by default. Sensitive
+sources, including raw configuration and pipx metadata, require one local opt-in
+covering current and future supported sources. Even default-included inventories
+can contain private tools, identities, paths, or URLs. Ballin does not scan or
+redact secrets. Review [Backup sources and sensitivity](docs/backup-sources.md)
+before choosing what to include. Changing that choice does not remove saved
+files or repository history.
 
-## Documentation
+[Usage analytics](docs/analytics.md) are a separate local choice, disabled by
+default and never saved or recovered through backups.
 
-See the [documentation](docs/README.md) for installation, backup sensitivity,
-Node.js setup, update settings, optional integrations, and managed capabilities.
+## Further reading
+
+See the [documentation index](docs/README.md) for user and maintainer guides,
+including [supported capabilities](docs/capabilities.md) and
+[optional tools and settings](docs/optional-capabilities.md).
