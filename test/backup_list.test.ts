@@ -183,7 +183,7 @@ describe('saved backup discovery', function() {
       assert.equal(result.stdout, content); assert.equal(result.stderr, '');
     }
     const invalid = run(['read', 'codex_rules.bundle.json', '--list'], {}, tty);
-    expectFailure(invalid, 'not a supported directory snapshot'); assert.notInclude(invalid.stderr, 'Read saved files');
+    expectFailure(invalid, 'not a supported bundle snapshot'); assert.notInclude(invalid.stderr, 'Read saved files');
     preserved();
   });
   it('lists actual bundle selectors without blob reads, aliases, filters or member payloads', () => {
@@ -222,14 +222,14 @@ describe('saved backup discovery', function() {
       save(fixtureState({ 'codex_skills.bundle.json': archive }));
       for (const option of [['--list'], ['--file', 'valid']]) {
         const result = run(['read', 'codex_skills.bundle.json', ...option]);
-        expectFailure(result, 'not a supported directory snapshot'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
+        expectFailure(result, 'not a supported bundle snapshot'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
       }
     }
   });
   it('reports missing members without exposing private selectors or emitting content', () => {
     save(fixtureState({ 'claude_rules.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 1, entries: [{ path: 'rule.md', executable: false, content: '' }] }) }));
     const result = run(['read', 'claude_rules.bundle.json', '--file', 'DUMMY_PRIVATE_PATH']);
-    expectFailure(result, 'no matching directory member'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
+    expectFailure(result, 'no matching file found in the bundle'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
   });
   it('rejects invalid directory option combinations offline before reading configuration', () => {
     fs.writeFileSync(configPath, '{broken');

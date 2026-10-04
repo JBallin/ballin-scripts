@@ -167,8 +167,8 @@ cache bytes, including legacy `empty\n`, remain observable unchanged.
 | Differs from remote | Present | Equals remote | Advance cache |
 | Differs from remote | Present | Differs | Conflict |
 
-Directory format conversion has one narrowly defined
-[version-1 migration exception](#directory-format-migration).
+Bundle format conversion has one narrowly defined
+[version-1 migration exception](#bundle-format-migration).
 
 If any snapshot conflicts, Ballin publishes nothing from that run. Snapshot
 filenames are stable identities across backups. Changing which sources are
@@ -362,13 +362,13 @@ UTF-8 and content with non-text controls use Base64 string content. No timestamp
 absolute paths or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
 
-### Directory inspection
+### Bundle inspection
 
 `backup read <snapshot> --list` returns member metadata as JSON, with control and
 directional formatting characters escaped for display. `--file <path>` emits the
 exact decoded bytes of one member to stdout without framing or newline changes.
 Both use the existing saved-snapshot reader, including destination, inventory,
-marker, account and revision validation. The entire directory archive is checked
+marker, account and revision validation. The entire bundle archive is checked
 before any member output: version-1 or version-2 schema, relative paths, unique
 names, boolean executable flags, valid text lines or canonical Base64 regular-file
 content. Unsupported versions, link records and malformed entries fail without disclosing payloads in
@@ -390,7 +390,7 @@ Inspection supplies reference material without an automatic restore or replay
 contract. Member paths never reach filesystem operations, and decoded content is
 never executed.
 
-### Directory format migration
+### Bundle format migration
 
 The next ordinary capture writes version 2 under the `.bundle.json` names. It can
 produce a one-time format diff even when source bytes are unchanged; existing
@@ -406,27 +406,18 @@ proofs follow the existing conflict rules; cached bases are never semantically
 normalized. Expected-head publication and exact readback remain required.
 
 The flat repository layout and marker version remain unchanged. The five known
-Codex directory snapshots replace their `.json` suffix with `.bundle.json`;
+Codex bundle snapshots replace their `.json` suffix with `.bundle.json`;
 the three Claude directories add `.bundle.json`. Plain snapshots retain their
-names. Old directory names are retired without read aliases. Inventory alone
+names. Old bundle names are retired without read aliases. Inventory alone
 supplies a bundle-listing hint; raw and member-list reads add staged hints only
 when stdin, stdout and stderr are terminals. Raw hints require a known bundle
 name and a validated archive, without changing raw-read failure behavior.
 
-The optional standalone rename helper supplied in [PR #487](https://github.com/JBallin/ballin-scripts/pull/487) clones a supplied
-repository's default branch into a new local folder, checks the canonical backup
-marker, flat regular-file layout, clean worktree and all target collisions, then
-creates one local rename commit without changing payloads,
-pushing or deleting the clone. Stop the old writer, inspect and push the rename
-commit, update the sole writer, then resume capture. The new writer rejects any
-inventory containing old directory names before reconciliation or publication,
-including excluded or locally absent sources. This prevents silent duplication.
 Old-name caches never establish a base for a new name. Exact local/remote bytes
 hydrate a fresh cache; the canonical version-1 proof above admits a format-only
-conversion, while genuinely changed content or metadata still conflicts. An old
-writer must not resume: it can recreate old names and cannot read the new names
-as supported snapshots. History remains intact; there is no extraction, automatic
-restore or content execution.
+conversion, while changed content or metadata still conflicts. Retired old
+filenames are retained and can coexist with new bundle filenames. History
+remains intact; there is no extraction, automatic restore or content execution.
 
 ### Capture bounds and traversal
 

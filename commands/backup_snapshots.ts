@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const { directoryBundleRenames } = require('./backup_bundles.ts');
 const {
   runCommand,
 } = require('./commandHelpers.ts');
@@ -142,7 +141,8 @@ const repositoryMarkerFileName = '.ballin-backup.json';
 const repositoryReadmeFileName = 'README.md';
 
 const retiredSnapshotFileNames = new Set([
-  ...directoryBundleRenames.keys(),
+  'codex_profiles.json', 'codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'codex_agents.json',
+  'claude_rules', 'claude_agents', 'claude_commands',
   'brackets_disabled_extensions',
   'brackets_extensions',
   'brackets_keymap.json',

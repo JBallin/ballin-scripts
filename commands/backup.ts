@@ -4,7 +4,6 @@ const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
 const { terminalEmphasis } = require('./terminalStyle.ts');
-const { directoryBundleRenames } = require('./backup_bundles.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -518,10 +517,6 @@ const runRepositoryBackup = (
   let publishedCommitUrl: string | undefined;
   try {
     const read: RepositoryRead = requireRepositoryRead(inspectRepository(destination));
-    if (read.revision.entries.some((entry) => directoryBundleRenames.has(entry.path))) {
-      writeStderrLine('ballin backup: rename the old directory snapshots with the standalone migrate-backup-bundles.sh helper in https://github.com/JBallin/ballin-scripts/pull/487 and push the reviewed commit before backing up. No snapshots were published.');
-      return false;
-    }
     const unexpected = unexpectedRepositoryEntries(read);
     if (unexpected) writeStderrLine(`ballin backup: retaining ${unexpected} unexpected repository entries`);
     for (const { snapshot } of staged) {

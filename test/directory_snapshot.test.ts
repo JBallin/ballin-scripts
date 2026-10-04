@@ -84,7 +84,7 @@ describe('directory snapshot inspection', () => {
     assert.deepEqual(readDirectoryMember(members, entry.path), bytes);
   });
   it('reports a missing exact member without disclosing the requested path', () => {
-    assert.throws(() => readDirectoryMember(readDirectorySnapshot(archive()).entries, 'PRIVATE_NAME'), DirectorySnapshotError, 'no matching directory member');
+    assert.throws(() => readDirectoryMember(readDirectorySnapshot(archive()).entries, 'PRIVATE_NAME'), DirectorySnapshotError, 'no matching file found in the bundle');
   });
   for (const content of ['text', [1], [''], ['a', 'b'], ['a\nb\n'], ['nul\0'], ['\ud800']]) {
     it('rejects malformed UTF-8 line arrays', () => reject(archive([{ ...entry, encoding: 'utf8', content }], { version: 2 })));

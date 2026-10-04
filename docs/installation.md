@@ -286,65 +286,22 @@ to inspect the backup in your browser, including retired snapshots and unexpecte
 entries. These commands require remote access and work with read-only
 permissions. For offline help, run `ballin backup --help`.
 
-Directory snapshots use `.bundle.json` filenames, including Codex skills and
-Codex/Claude rules. They store text as readable lines inside JSON archives so
-GitHub diffs show text changes. Binary files use Base64, a reversible encoding
-rather than hashing or encryption.
-List the saved member paths before reading a file:
+Bundle snapshots use `.bundle.json` filenames. List their files, then read one
+using its exact listed path:
 
 ```shell
 ballin backup read codex_skills.bundle.json --list
 ballin backup read codex_skills.bundle.json --file 'example/SKILL.md'
 ```
 
-`--list` prints JSON with each relative path, executable flag, and decoded byte
-size. Use the exact listed path with `--file`; it prints only the original bytes,
-including binary content and original line endings. These options inspect saved
-archives even when future sensitive capture is disabled. They do not write files,
-set permissions, or execute backed-up content. Without either option, `read`
-continues to print the stored snapshot unchanged. Both old Base64 archives and
-new readable archives can be inspected.
+`--file` prints the original bytes, including binary content and line endings.
+These commands inspect saved content without restoring files or executing them.
 
-`backup list` points to `read <bundle> --list`. In an interactive terminal, reading a
-raw bundle also hints at `--list`, and listing its members hints at `--file <path>`.
-Redirected output has no hints. Ordinary snapshots keep their existing names.
-
-For local history inspection, clone your backup repository with ordinary Git:
+For local history inspection, clone your backup repository with Git:
 
 ```shell
 git clone https://github.com/example-user/ballin-backups.git
 ```
-
-### Rename existing directory bundles
-
-Stop backups from the old writer, including automatic backups during updates.
-Save the optional standalone rename helper from [PR #487](https://github.com/JBallin/ballin-scripts/pull/487) and run it with your repository
-URL and a local folder that does not exist. **Confirm that the repository's
-default branch is your configured backup branch before running it.** The helper
-operates on that default branch and does not read your Ballin configuration or
-select another branch. It requires Git and Node.js.
-
-```shell
-bash /path/to/migrate-backup-bundles.sh \
-  https://github.com/example-user/ballin-backups.git /path/to/new-backup-clone
-```
-
-It renames the five `codex_{profiles,skills,user_skills,rules,agents}.json` files
-to `.bundle.json`, and `claude_{rules,agents,commands}` to `.bundle.json`,
-when present. It clones the repository, checks its backup marker and flat layout,
-the worktree, index and target collisions, then
-creates one local commit without changing file contents or pushing. Inspect that
-commit using its printed commands, push it yourself, and update the sole backup
-writer before
-resuming backups. It leaves the clone for review and prints an optional cleanup
-command. The new writer stops if any old directory filename remains.
-
-Old-name caches are not carried across the rename. Matching saved content can
-establish a fresh comparison base; changed file bytes or metadata still conflict.
-Do not resume an old writer afterward: it can recreate the old filenames.
-
-The next capture after renaming can produce a one-time format diff while
-retaining exact file bytes and metadata.
 
 Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.

@@ -572,15 +572,17 @@ describe('repository backup lifecycle', function() {
       fs.mkdirSync(path.join(home, '.codex', 'rules', 'nested'), { recursive: true });
       fs.writeFileSync(path.join(home, '.codex', 'rules', 'nested', 'fixture.md'), bytes, { mode: 0o600 });
     };
-    for (const oldName of ['codex_profiles.json', 'codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'codex_agents.json', 'claude_rules', 'claude_agents', 'claude_commands']) {
-      it(`blocks the writer until old storage name ${oldName} is manually renamed`, () => {
-        localDirectory(); saveState(fixtureState({ [oldName]: legacy() })); seedCache(oldName, legacy());
-        const before = state(); const result = run();
-        assert.equal(result.status, 1); assert.include(result.stderr, 'migrate-backup-bundles.sh');
-        assert.equal(state().head, before.head); assert.lengthOf(publications(), 0);
-        assert.equal(cached(oldName), legacy()); assert.isUndefined(cached('codex_rules.bundle.json'));
-      });
-    }
+    it('retains retired directory files without blocking normal bundle publication', () => {
+      const oldNames = ['codex_profiles.json', 'codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'codex_agents.json', 'claude_rules', 'claude_agents', 'claude_commands'];
+      localDirectory(); saveState(fixtureState(Object.fromEntries(oldNames.map((name) => [name, legacy()]))));
+      seedCache('codex_rules.json', 'untrusted old cache');
+      ok(run());
+      for (const name of oldNames) assert.equal(remote(name), legacy());
+      assert.equal(JSON.parse(remote('codex_rules.bundle.json')!).version, 2);
+      assert.equal(cached('codex_rules.json'), 'untrusted old cache');
+      assert.equal(cached('codex_rules.bundle.json'), remote('codex_rules.bundle.json'));
+      assert.lengthOf(publications(), 1);
+    });
     it('hydrates a fresh bundle cache after manual rename without trusting the old-name cache', () => {
       localDirectory(); seedCache('codex_rules.json', 'untrusted old cache');
       saveState(fixtureState({ 'codex_rules.bundle.json': legacy() }));

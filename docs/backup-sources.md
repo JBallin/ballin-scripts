@@ -153,7 +153,7 @@ or secret-free contents. [Claude skills](https://code.claude.com/docs/en/skills)
 are the preferred surface for new custom capabilities; `commands/` preserves
 existing compatibility files.
 
-Directory snapshots use the same versioned JSON archive as Codex, preserving
+Bundle snapshots use the same versioned JSON archive as Codex, preserving
 relative paths, exact file bytes, and executable flags. Non-Markdown files,
 symlinks, special files, empty directories, `.git`, and `.DS_Store` are omitted.
 Selected hard links stop capture; Ballin does not search for their other paths.

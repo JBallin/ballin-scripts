@@ -127,8 +127,8 @@ that matches neither base nor local capture is a conflict. Every conflict is
 reported before any publication or content promotion. Matching local and remote
 bytes can hydrate or advance the cache without a commit.
 
-An exactly matching version-1 directory archive can receive a format-only
-conversion to readable JSON. See [directory format migration](backup-design.md#directory-format-migration).
+An exactly matching version-1 bundle archive can receive a format-only
+conversion to readable JSON. See [bundle format migration](backup-design.md#bundle-format-migration).
 
 For repository backups, safe changes publish through one conditional commit
 based on the inspected head. A true no-op makes no remote mutation. Rejected,

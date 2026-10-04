@@ -87,9 +87,6 @@ View changes: https://github.com/example-user/ballin-backups/commit/0123456789ab
 Saved snapshots of your tools and configuration give you a reference when
 [setting up another Mac](docs/new-mac.md).
 
-Directory snapshots store readable text lines for GitHub diffs, with Base64 for
-binary content. See [reading saved files](docs/installation.md#health-and-recovery).
-
 ## Commands
 
 | Command | Purpose |
@@ -102,8 +99,8 @@ binary content. See [reading saved files](docs/installation.md#health-and-recove
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
 | `ballin backup list` | Lists supported snapshots saved in the configured backup. |
 | `ballin backup read <snapshot>` | Prints one supported snapshot from the destination. |
-| `ballin backup read <snapshot> --list` | Lists files in a saved directory snapshot. |
-| `ballin backup read <snapshot> --file <path>` | Prints one directory member's decoded bytes. |
+| `ballin backup read <snapshot> --list` | Lists files in a saved bundle snapshot. |
+| `ballin backup read <snapshot> --file <path>` | Prints one file's contents from a bundle snapshot. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
 | `ballin config` | Reads and updates local Ballin settings. |
