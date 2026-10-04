@@ -1,6 +1,6 @@
 # Backup sources and sensitivity
 
-**Audience:** Users
+*User guide to Ballin snapshot sources, captured files, and data sensitivity considerations.*
 
 `ballin backup` uses an explicit source allowlist. The allowlist limits which
 files and command outputs Ballin selects, but it does not make their contents

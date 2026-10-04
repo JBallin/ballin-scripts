@@ -1,6 +1,6 @@
 # Installation and removal
 
-**Audience:** Users
+*User guide to installing, configuring, troubleshooting, and removing Ballin.*
 
 Ballin can be installed for maintenance without configuring backups. Git and a
 supported Node.js version are the only prerequisites for the installer. Backups
