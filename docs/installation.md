@@ -281,9 +281,31 @@ to inspect the backup in your browser, including retired snapshots and unexpecte
 entries. These commands require remote access and work with read-only
 permissions. For offline help, run `ballin backup --help`.
 
+Directory snapshots, including Codex skills and Codex/Claude rules, store text as
+readable lines inside JSON archives so GitHub diffs show text changes. Binary
+files use Base64, a reversible encoding rather than hashing or encryption.
+List the saved member paths before reading a file:
+
+```shell
+ballin backup read codex_skills.json --list
+ballin backup read codex_skills.json --file 'example/SKILL.md'
+```
+
+`--list` prints JSON with each relative path, executable flag, and decoded byte
+size. Use the exact listed path with `--file`; it prints only the original bytes,
+including binary content and original line endings. These options inspect saved
+archives even when future sensitive capture is disabled. They do not write files,
+set permissions, or execute backed-up content. Without either option, `read`
+continues to print the stored snapshot unchanged. Both old Base64 archives and
+new readable archives can be inspected.
+
+The next capture can produce a one-time format diff while retaining exact file
+bytes and metadata. Update the active backup-writing installation before that
+capture; older writers can replace readable archives with the old encoding.
+
 Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.
-A reconnect has no trusted base and cannot overwrite differing remote content;
+A reconnect has no trusted base and cannot overwrite differing file bytes or metadata;
 inspect and manually reconcile each conflict using the
 [conflict guidance](capabilities.md#backup-consistency-and-conflicts).
 

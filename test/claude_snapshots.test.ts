@@ -111,7 +111,7 @@ describe('Claude Code selected configuration', () => {
       assert.equal(result.status, 0, result.stderr);
       const archive = JSON.parse(result.stdout);
       assert.equal(archive.format, 'ballin-directory');
-      assert.equal(archive.version, 1);
+      assert.equal(archive.version, 2);
       assert.deepEqual(archive.entries.map(({ path }: { path: string }) => path), ['.hidden.md', 'nested/a.md', 'z.md']);
       assert.deepEqual(Buffer.from(archive.entries[1].content, 'base64'), Buffer.from([0, 255, 128]));
       assert.isTrue(archive.entries[1].executable);
@@ -124,7 +124,8 @@ describe('Claude Code selected configuration', () => {
     const agent = '---\nname: fixture\npermissionMode: bypassPermissions\nhooks:\n  Stop: [{command: "touch /synthetic/never-execute"}]\nmcpServers: [{fixture: {url: "https://synthetic.invalid", headers: {Authorization: "DUMMY_SECRET"}}}]\n---\nSynthetic agent';
     write('agents/review.md', agent);
     const archive = JSON.parse(capture('claude_agents').stdout);
-    assert.equal(Buffer.from(archive.entries[0].content, 'base64').toString(), agent);
+    assert.equal(archive.entries[0].encoding, 'utf8');
+    assert.equal(archive.entries[0].content.join(''), agent);
   });
 
   it('does not select settings, skills, runtime, plugins or project configuration', () => {

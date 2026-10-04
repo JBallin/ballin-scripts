@@ -518,7 +518,8 @@ describe('repository backup lifecycle', function() {
         const archive = JSON.parse(remote('codex_skills.json')!);
         assert.equal(archive.format, 'ballin-directory');
         assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['synthetic/SKILL.md']);
-        assert.equal(Buffer.from(archive.entries[0].content, 'base64').toString(), 'synthetic skill\n');
+        assert.equal(archive.version, 2);
+        assert.deepEqual(archive.entries[0].content, ['synthetic skill\n']);
         assert.equal(cached('codex_config.toml'), wholeConfig);
         assert.equal(cached('codex_skills.json'), remote('codex_skills.json'));
       } else {
@@ -528,6 +529,70 @@ describe('repository backup lifecycle', function() {
       assert.notProperty(JSON.parse(remote('ballin_config')!), 'backup');
       ok(run([], '', { CODEX_HOME: codex }));
       assert.lengthOf(publications(), 1);
+    });
+  });
+  describe('directory archive migration', () => {
+    const bytes = Buffer.from('\ufeffsynthetic\r\nlast');
+    const legacyEntry = { path: 'nested/fixture.md', executable: false, content: bytes.toString('base64') };
+    const legacy = (entry = legacyEntry, extra = {}): string => `${JSON.stringify({
+      format: 'ballin-directory', version: 1, entries: [entry], ...extra,
+    }, null, 2)}\n`;
+    const localDirectory = (): void => {
+      fs.mkdirSync(path.join(home, '.codex', 'rules', 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(home, '.codex', 'rules', 'nested', 'fixture.md'), bytes, { mode: 0o600 });
+    };
+    for (const base of [undefined, legacy(), 'different cached base\n']) {
+      it(`migrates an exactly reconstructed v1 snapshot with ${base === undefined ? 'no' : base === legacy() ? 'matching' : 'diverged'} cached base`, () => {
+        localDirectory(); saveState(fixtureState({ 'codex_rules.json': legacy() }));
+        if (base !== undefined) seedCache('codex_rules.json', base);
+        const first = run(); ok(first);
+        const stored = JSON.parse(remote('codex_rules.json')!);
+        assert.equal(stored.version, 2); assert.equal(stored.entries[0].encoding, 'utf8');
+        assert.deepEqual(Buffer.from(stored.entries[0].content.join('')), bytes);
+        assert.equal(cached('codex_rules.json'), remote('codex_rules.json'));
+        assert.lengthOf(publications(), 1);
+        const head = state().head; ok(run()); assert.equal(state().head, head); assert.lengthOf(publications(), 1);
+      });
+    }
+    for (const contents of [
+      legacy({ ...legacyEntry, executable: true }), legacy({ ...legacyEntry, path: 'changed.md' }),
+      legacy({ ...legacyEntry, content: Buffer.from('different').toString('base64') }), legacy(legacyEntry, { unknown: 'DUMMY_PRIVATE_EXTRA' }),
+      legacy(legacyEntry, { version: 3 }), JSON.stringify(JSON.parse(legacy())),
+    ]) {
+      it('keeps no-base conflicts for changed metadata, payload, unknown fields or noncanonical serialization', () => {
+        localDirectory(); saveState(fixtureState({ 'codex_rules.json': contents }));
+        const head = state().head; const result = run();
+        assert.equal(result.status, 1, result.stdout + result.stderr); assert.include(result.stderr, 'conflict for codex_rules.json');
+        assert.equal(state().head, head); assert.lengthOf(publications(), 0); assert.isUndefined(cached('codex_rules.json'));
+        assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE');
+      });
+    }
+    it('retains raw v2 comparison for different serialization even with identical decoded files', () => {
+      localDirectory(); ok(run());
+      const value = state(); const changed = JSON.stringify(JSON.parse(remote('codex_rules.json')!));
+      commitFixture(value, { ...value.commits[value.head].files, 'codex_rules.json': Buffer.from(changed).toString('base64') });
+      saveState(value); const result = run();
+      assert.equal(result.status, 1); assert.include(result.stderr, 'conflict for codex_rules.json');
+      assert.lengthOf(publications(), 1); assert.equal(remote('codex_rules.json'), changed);
+    });
+    it('rejects concurrent head movement during migration without promoting a cache', () => {
+      localDirectory(); const value = fixtureState({ 'codex_rules.json': legacy() });
+      value.faults.publish = 'advance'; saveState(value);
+      const result = run(); assert.equal(result.status, 1); assert.include(result.stderr, 'GitHub rejected');
+      assert.equal(remote('codex_rules.json'), legacy()); assert.isUndefined(cached('codex_rules.json')); assert.lengthOf(publications(), 1);
+    });
+    it('never applies directory migration to a raw snapshot that happens to contain an archive', () => {
+      const v2 = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+        { path: legacyEntry.path, executable: false, encoding: 'utf8', content: ['\ufeffsynthetic\r\n', 'last'] },
+      ] }, null, 2)}\n`;
+      source(v2); saveState(fixtureState({ 'zshrc.sh': legacy() }));
+      const result = run(); assert.equal(result.status, 1); assert.include(result.stderr, 'conflict for zshrc.sh');
+      assert.lengthOf(publications(), 0);
+    });
+    it('rejects dense newline overflow before remote inspection or cache effects', () => {
+      localDirectory(); fs.writeFileSync(path.join(home, '.codex', 'rules', 'nested', 'fixture.md'), Buffer.alloc(2 * 1024 * 1024, 10));
+      const result = run(); assert.equal(result.status, 1); assert.include(result.stderr, 'Snapshot bytes limit exceeded');
+      assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
     });
   });
   [false, true].forEach((included) => {

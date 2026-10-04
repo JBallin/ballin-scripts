@@ -109,7 +109,8 @@ manual restoration can carry forward saved trust settings. Standalone
 and external files are not collected merely because they are referenced.
 
 Recursive snapshots are versioned JSON archives of regular files, with sorted
-relative paths, base64 bytes, and an executable flag. Hidden files and binary
+relative paths, readable UTF-8 lines or Base64 bytes, and an executable flag.
+Hidden files and binary
 assets are included; empty directories, symlinks, special files, `.git` metadata,
 and `.DS_Store` are omitted. Both skill sources omit root `.system`. Codex
 source paths reject descendant symlinks; an explicitly selected Codex root may
@@ -119,7 +120,8 @@ reading their contents. Capture is not an atomic snapshot of concurrent edits.
 See [directory handling](backup-design.md#shared-inclusion-policy).
 
 Codex capture supports up to **16 MiB combined** per backup after normalization,
-including archive metadata and base64 content, and **8,192 visited entries** per
+including archive metadata and text/Base64 encoding overhead, and **8,192 visited
+entries** per
 recursive source. Both skill archives count toward the combined limit, even
 when their roots overlap. Exceeding a limit stops the whole backup before
 publication or cache promotion. Ballin does not truncate files or selectively omit content to fit. Reduce the supported authoring-tree
@@ -160,7 +162,7 @@ reading contents. Discovery or collection failure stops the backup before
 publication. Capture is not atomic across concurrent edits.
 
 Claude Code has its own **16 MiB combined** normalized capture allowance,
-including unchanged snapshots and archive/base64 overhead, plus **8,192 visited
+including unchanged snapshots and archive/encoding overhead, plus **8,192 visited
 entries** per directory source, counted before filtering. This preserves the
 existing Codex allowance, permitting up to 32 MiB combined staged assistant
 configuration. Limits stop the whole backup without truncation or partial

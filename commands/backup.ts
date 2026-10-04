@@ -34,11 +34,13 @@ const {
 const {
   collectSnapshotObservations,
   configurationSnapshotGroups,
+  directorySnapshotFileNames,
   emptySnapshotContent,
   normalizeSnapshotInput,
   observeSnapshotSources,
 } = require('./backup_snapshots.ts');
 const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
+const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember, isDirectorySnapshotMigration } = require('./directory_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
@@ -396,12 +398,16 @@ const evaluateSnapshots = (
     const localMatchesRemote = remote.exists
       && remote.file !== null
       && snapshotFilesMatch(localFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
-    let shouldUpload = false;
+    const formatMigration = !localMatchesRemote && remote.exists && remote.file !== null
+      && directorySnapshotFileNames.has(snapshot.fileName)
+      && fs.statSync(remote.file).size <= snapshotByteLimit
+      && isDirectorySnapshotMigration(readBoundedFile(localFile).bytes, readBoundedFile(remote.file).bytes);
+    let shouldUpload = formatMigration;
 
     if (!baseExists && !remote.exists) {
       shouldUpload = true;
     } else if (!baseExists && remote.exists) {
-      if (!localMatchesRemote) {
+      if (!localMatchesRemote && !formatMigration) {
         conflicts.push({
           fileName: snapshot.fileName,
           reason: 'remote content differs and this machine has no cached base',
@@ -418,7 +424,7 @@ const evaluateSnapshots = (
       const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
       if (baseMatchesRemote && !localMatchesRemote) {
         shouldUpload = true;
-      } else if (!baseMatchesRemote && !localMatchesRemote) {
+      } else if (!baseMatchesRemote && !localMatchesRemote && !formatMigration) {
         conflicts.push({
           fileName: snapshot.fileName,
           reason: 'remote content diverged from the cached base and staged local content',
@@ -678,8 +684,11 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if (command === 'read' && args.length > 2) {
-    writeStderrLine('ballin backup read: expected exactly one snapshot');
+  const directoryList = command === 'read' && args.length === 3 && args[2] === '--list';
+  const directoryFile = command === 'read' && args.length === 4 && args[2] === '--file' && Boolean(args[3]);
+  if (command === 'read' && ((args.length > 2 && ((!directoryList && !directoryFile) || !args[1]))
+    || args[1] === '--list' || args[1] === '--file')) {
+    writeStderrLine('ballin backup read: expected exactly one snapshot, optionally followed by `--list` or `--file <path>`');
     process.exitCode = 1;
     return;
   }
@@ -717,8 +726,12 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       writeSavedSnapshots(readRepositoryInventory(config.repository));
     } else if (command === 'read') {
       const { bytes, inventory } = readRepositorySnapshotWithInventory(config.repository, args[1]);
-      if (bytes !== undefined) process.stdout.write(bytes);
-      else {
+      if (bytes !== undefined) {
+        if (directoryList || directoryFile) {
+          const { entries } = readDirectorySnapshot(bytes);
+          process.stdout.write(directoryList ? listDirectoryMembers(entries) : readDirectoryMember(entries, args[3]));
+        } else process.stdout.write(bytes);
+      } else {
         writeStderrLine('ballin backup read: no supported snapshot found.');
         writeSavedSnapshots(inventory);
         process.exitCode = 1;
@@ -736,7 +749,9 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       throw new Error(`Unhandled backup command: ${String(unhandledCommand)}`);
     }
   } catch (error) {
-    writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
+    writeStderrLine(error instanceof DirectorySnapshotError
+      ? `ballin backup read: ${(error as Error).message}`
+      : `ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
     process.exitCode = 1;
   }
 }

@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+const { isUtf8 } = require('node:buffer');
 
 type RecursiveEntry = { path: string; executable: boolean; content: string };
+type ReadableRecursiveEntry = { path: string; executable: boolean } & (
+  { encoding: 'utf8'; content: string[] } | { encoding: 'base64'; content: string }
+);
 type SnapshotLimits = { maxBytes?: number; maxEntries?: number };
 type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean };
 const snapshotByteLimit = 16 * 1024 * 1024;
@@ -159,28 +163,77 @@ const reviewRecursiveFiles = (root: string, profilesOnly = false, skills = false
   walkFiles(root, profilesOnly, skills, limits, true, selection)
 );
 
+const isReadableText = (bytes: Buffer): boolean => isUtf8(bytes) && !bytes.some((byte, index) => (
+  (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) || byte === 127
+  || (byte === 194 && bytes[index + 1] >= 128 && bytes[index + 1] <= 159)
+));
+const entrySize = (entry: ReadableRecursiveEntry): number => {
+  const serialized = JSON.stringify(entry, null, 2);
+  // Entries are indented four spaces inside the archive.
+  return Buffer.byteLength(serialized) + 4 * serialized.split('\n').length;
+};
+const encodeDirectoryEntry = (relative: string, executable: boolean, bytes: Buffer, maxBytes: number): {
+  entry: ReadableRecursiveEntry; size: number;
+} => {
+  const name = relative.split(path.sep).join('/');
+  if (!isReadableText(bytes)) {
+    const entry: ReadableRecursiveEntry = { path: name, executable, encoding: 'base64', content: '' };
+    const size = entrySize(entry) + 4 * Math.ceil(bytes.length / 3);
+    requireWithinLimit('bytes', size, maxBytes);
+    entry.content = bytes.toString('base64');
+    return { entry, size };
+  }
+  const content: string[] = [];
+  const entry: ReadableRecursiveEntry = { path: name, executable, encoding: 'utf8', content };
+  let size = entrySize(entry);
+  requireWithinLimit('bytes', size, maxBytes);
+  let lines = 0;
+  let lineSize = 2; // JSON string quotes.
+  for (let index = 0; index < bytes.length; index++) {
+    const byte = bytes[index];
+    lineSize += byte === 9 || byte === 10 || byte === 13 || byte === 34 || byte === 92 ? 2 : 1;
+    if (byte === 10 || index === bytes.length - 1) {
+      // Preflight all escaped lines before allocating the content array.
+      size += lineSize + (lines++ === 0 ? 16 : 10);
+      requireWithinLimit('bytes', size, maxBytes);
+      lineSize = 2;
+    }
+  }
+  for (let start = 0; start < bytes.length;) {
+    const newline = bytes.indexOf(10, start);
+    const end = newline === -1 ? bytes.length : newline + 1;
+    content.push(bytes.subarray(start, end).toString('utf8'));
+    start = end;
+  }
+  return { entry, size };
+};
+
 const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}, selection: RecursiveSelection = {}): string => {
   const files = recursiveFiles(root, profilesOnly, skills, limits, selection);
   if (files.length === 0) throw new Error('Snapshot source has no regular files');
   const maxBytes = limits.maxBytes ?? snapshotByteLimit;
   const stats = files.map((relative) => fileStat(root, relative, selection.rejectHardlinks));
-  const entries = files.map((relative, index) => ({ path: relative.split(path.sep).join('/'), executable: (stats[index].mode & 0o111) !== 0, content: '' }));
-  const serialize = (): string => `${JSON.stringify({ format: 'ballin-directory', version: 1, entries }, null, 2)}\n`;
-  let metadataBytes = Buffer.byteLength('{\n  "format": "ballin-directory",\n  "version": 1,\n  "entries": [\n\n  ]\n}\n');
-  entries.forEach((entry, index) => {
-    // Each entry has five lines, indented four more spaces by the archive.
-    metadataBytes += Buffer.byteLength(JSON.stringify(entry, null, 2)) + 20 + (index ? 2 : 0);
-    requireWithinLimit('bytes', metadataBytes, maxBytes);
-  });
-  let predicted = metadataBytes;
+  const entries: ReadableRecursiveEntry[] = files.map((relative, index) => ({
+    path: relative.split(path.sep).join('/'), executable: (stats[index].mode & 0o111) !== 0, encoding: 'utf8', content: [],
+  }));
+  const serialize = (): string => `${JSON.stringify({ format: 'ballin-directory', version: 2, entries }, null, 2)}\n`;
+  let usedBytes = Buffer.byteLength(serialize());
+  requireWithinLimit('bytes', usedBytes, maxBytes);
+  let predicted = usedBytes;
   for (const stat of stats) {
-    predicted += 4 * Math.ceil(stat.size / 3);
+    // Every representation is at least as large as its raw file bytes.
+    predicted += stat.size;
     requireWithinLimit('bytes', predicted, maxBytes);
   }
-  let remaining = maxBytes - metadataBytes;
   files.forEach((relative, index) => {
-    entries[index] = fileEntry(root, relative, 3 * Math.floor(remaining / 4), selection.rejectHardlinks);
-    remaining -= entries[index].content.length;
+    const placeholderBytes = entrySize(entries[index]);
+    const available = maxBytes - usedBytes + placeholderBytes;
+    const { bytes, executable } = inDirectory(root, path.dirname(relative), () => (
+      readBoundedFile(path.basename(relative), available, selection.rejectHardlinks)
+    ));
+    const captured = encodeDirectoryEntry(relative, executable, bytes, available);
+    entries[index] = captured.entry;
+    usedBytes += captured.size - placeholderBytes;
   });
   const snapshot = serialize();
   requireWithinLimit('bytes', Buffer.byteLength(snapshot), maxBytes);
@@ -188,8 +241,8 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
 };
 
 module.exports = { checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
-  snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, requireWithinLimit };
-export type { RecursiveEntry, SnapshotLimits, RecursiveSelection };
+  snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, requireWithinLimit, isReadableText, encodeDirectoryEntry };
+export type { RecursiveEntry, ReadableRecursiveEntry, SnapshotLimits, RecursiveSelection };
 
 if (require.main === module) {
   try {

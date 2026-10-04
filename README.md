@@ -95,6 +95,9 @@ Use snapshots as a rebuild reference. Ballin does not automatically restore
 saved dotfiles or reinstall saved packages; it is not a full disk backup or
 one-command restore system.
 
+Directory snapshots store readable text lines for GitHub diffs, with Base64 for
+binary content. See [reading saved files](docs/installation.md#health-and-recovery).
+
 ## Commands
 
 | Command | Purpose |
@@ -107,6 +110,8 @@ one-command restore system.
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
 | `ballin backup list` | Lists supported snapshots saved in the configured backup. |
 | `ballin backup read <snapshot>` | Prints one supported snapshot from the destination. |
+| `ballin backup read <snapshot> --list` | Lists files in a saved directory snapshot. |
+| `ballin backup read <snapshot> --file <path>` | Prints one directory member's decoded bytes. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
 | `ballin config` | Reads and updates local Ballin settings. |

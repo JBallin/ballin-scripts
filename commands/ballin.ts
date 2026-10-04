@@ -79,12 +79,15 @@ const backupHelp = `Usage:
     ballin backup open
     ballin backup list
     ballin backup read <snapshot>
+    ballin backup read <snapshot> --list
+    ballin backup read <snapshot> --file <path>
     ballin backup disconnect
     ballin backup --help
 
 Back up Ballin-managed environment state to the configured backup.
 \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
 \`list\` finds saved snapshots; \`read\` prints one supported snapshot.
+For directory snapshots, append \`--list\` to list members or \`--file <path>\` to print decoded file bytes.
 Without a snapshot selector, \`read\` shows usage and lists saved options when readable.
 \`disconnect\` stops local backups and clears comparison state.
 Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`.

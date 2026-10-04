@@ -278,7 +278,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
           assert.include(result.stdout, '`list` finds saved snapshots; `read` prints one supported snapshot.\n');
           assert.include(result.stdout, 'Without a snapshot selector, `read` shows usage and lists saved options when readable.\n');
           assert.include(result.stdout, '`disconnect` stops local backups and clears comparison state.\n');
-          ['setup [repository-name]', 'open', 'list', 'read <snapshot>', 'disconnect'].forEach((usage) => {
+          ['setup [repository-name]', 'open', 'list', 'read <snapshot>', 'read <snapshot> --list', 'read <snapshot> --file <path>', 'disconnect'].forEach((usage) => {
             assert.include(result.stdout, `ballin backup ${usage}`);
           });
           assert.include(result.stdout, 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');

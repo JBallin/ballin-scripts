@@ -120,6 +120,79 @@ describe('saved backup discovery', function() {
       assert.equal(result.stdout, 'No current snapshots are saved in this backup.\n'); preserved();
     });
   }
+  for (const snapshot of ['codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'claude_rules', 'claude_agents', 'claude_commands']) {
+    it(`lists and decodes saved ${snapshot} members without capture or writes`, () => {
+      const content = '# Synthetic example\r\nlast';
+      const member = { path: 'example/SKILL.md', executable: true, content: Buffer.from(content).toString('base64') };
+      const archive = `${JSON.stringify({ format: 'ballin-directory', version: 1, entries: [member] }, null, 2)}\n`;
+      save(fixtureState({ [snapshot]: archive })); const before = state();
+      const listed = run(['read', snapshot, '--list']);
+      assert.equal(listed.status, 0, listed.stderr); assert.equal(listed.stderr, '');
+      assert.deepEqual(JSON.parse(listed.stdout), [{ path: member.path, executable: true, bytes: Buffer.byteLength(content) }]);
+      assert.notInclude(listed.stdout, 'Synthetic example');
+      const read = run(['read', snapshot, '--file', member.path]);
+      assert.equal(read.status, 0, read.stderr); assert.equal(read.stderr, ''); assert.equal(read.stdout, content);
+      assert.equal(run(['read', snapshot]).stdout, archive);
+      assert.deepEqual({ ...state(), requests: [] }, { ...before, requests: [] }); preserved();
+    });
+  }
+  it('writes exact binary and empty member bytes to stdout with no framing', () => {
+    for (const bytes of [Buffer.from([0, 255, 128, 13, 10]), Buffer.alloc(0)]) {
+      save(fixtureState({ 'codex_skills.json': JSON.stringify({ format: 'ballin-directory', version: 1, entries: [
+        { path: 'binary', executable: false, content: bytes.toString('base64') },
+      ] }) }));
+      const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'backup', 'read', 'codex_skills.json', '--file', 'binary'], {
+        cwd: checkout, env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: tmp, BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_TEST_REPO_DIR: checkout }),
+      });
+      assert.equal(result.status, 0, result.stderr.toString()); assert.deepEqual(result.stdout, bytes); preserved();
+    }
+  });
+  it('lists and reads readable version-2 members without altering stored archive bytes', () => {
+    const content = '\ufeff# Synthetic\r\nlast';
+    const archive = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+      { path: 'rule.md', executable: false, encoding: 'utf8', content: ['\ufeff# Synthetic\r\n', 'last'] },
+      { path: 'empty.md', executable: false, encoding: 'base64', content: '' },
+    ] }, null, 2)}\n`;
+    save(fixtureState({ claude_rules: archive }));
+    const listed = run(['read', 'claude_rules', '--list']); assert.equal(listed.status, 0, listed.stderr);
+    assert.deepEqual(JSON.parse(listed.stdout), [
+      { path: 'rule.md', executable: false, bytes: Buffer.byteLength(content) }, { path: 'empty.md', executable: false, bytes: 0 },
+    ]);
+    const read = run(['read', 'claude_rules', '--file', 'rule.md']); assert.equal(read.status, 0, read.stderr); assert.equal(read.stdout, content);
+    const empty = run(['read', 'claude_rules', '--file', 'empty.md']); assert.equal(empty.status, 0, empty.stderr); assert.equal(empty.stdout, '');
+    assert.equal(run(['read', 'claude_rules']).stdout, archive); preserved();
+  });
+  it('rejects malformed or unsupported directory contents before any member output', () => {
+    for (const archive of ['DUMMY_PRIVATE_DATA', JSON.stringify({ format: 'ballin-directory', version: 2, entries: [] }), JSON.stringify({
+      format: 'ballin-directory', version: 1, entries: [
+        { path: 'valid', executable: false, content: Buffer.from('DUMMY_PRIVATE_CONTENT').toString('base64') },
+        { path: '../DUMMY_PRIVATE_PATH', executable: false, content: '' },
+      ],
+    })]) {
+      save(fixtureState({ 'codex_skills.json': archive }));
+      for (const option of [['--list'], ['--file', 'valid']]) {
+        const result = run(['read', 'codex_skills.json', ...option]);
+        expectFailure(result, 'not a supported directory snapshot'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
+      }
+    }
+  });
+  it('reports missing members without exposing private selectors or emitting content', () => {
+    save(fixtureState({ claude_rules: JSON.stringify({ format: 'ballin-directory', version: 1, entries: [{ path: 'rule.md', executable: false, content: '' }] }) }));
+    const result = run(['read', 'claude_rules', '--file', 'DUMMY_PRIVATE_PATH']);
+    expectFailure(result, 'no matching directory member'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
+  });
+  it('rejects invalid directory option combinations offline before reading configuration', () => {
+    fs.writeFileSync(configPath, '{broken');
+    for (const args of [
+      ['read', 'codex_skills.json', '--file'], ['read', 'codex_skills.json', '--file', ''],
+      ['read', 'codex_skills.json', '--list', 'extra'], ['read', 'codex_skills.json', '--list', '--file', 'x'],
+      ['read', '', '--list'], ['read', '--list', 'codex_skills.json'],
+      ['read', '--list'], ['read', '--file'],
+    ]) {
+      const result = run(args); assert.equal(result.status, 1); assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'expected exactly one snapshot'); assert.deepEqual(state().requests, []);
+    }
+  });
   it('distinguishes retired entries, hides reserved entries, and counts unexpected names without disclosure', () => {
     const unknown = 'DUMMY_PRIVATE_NAME $(touch forbidden)';
     save(fixtureState({ gitconfig: 'private git\n', brackets_extensions: 'old\n', [unknown]: 'secret\n', '.MyConfig.md': 'old gist\n', 'zshrc.sh.bak': 'near match\n' }));

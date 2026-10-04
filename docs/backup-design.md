@@ -151,6 +151,9 @@ cache bytes, including legacy `empty\n`, remain observable unchanged.
 | Differs from remote | Present | Equals remote | Advance cache |
 | Differs from remote | Present | Differs | Conflict |
 
+Directory format conversion has one narrowly defined
+[version-1 migration exception](#directory-format-migration).
+
 If any snapshot conflicts, Ballin publishes nothing from that run. Snapshot
 filenames are stable identities across backups. Changing which sources are
 included affects future captures but does not delete existing remote snapshots
@@ -334,18 +337,76 @@ toward the combined byte budget, with separate per-source entry limits.
 Codex file capture is intact, including embedded trust settings in main/profile
 TOML, with existing final-newline/empty-file normalization. It does not execute
 or restore configuration. Recursive authoring directories use the shared
-`ballin-directory` JSON format, version 1: sorted relative regular-file entries
-with base64 `content` and an `executable` boolean. No timestamps, absolute paths,
-or empty directories are stored. Source-specific generated exclusions and
+`ballin-directory` JSON format, version 2: sorted relative regular-file entries
+with an `executable` boolean and explicit `encoding`. UTF-8 text uses a `content`
+array containing one physical line per element, including its original LF/CRLF
+terminator. Empty text uses an empty array; a final unterminated line remains
+unterminated. BOMs and Unicode bytes are preserved without normalization. Invalid
+UTF-8 and content with non-text controls use Base64 string content. No timestamps,
+absolute paths or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
+
+### Directory inspection
+
+`backup read <snapshot> --list` returns member metadata as JSON, with control and
+directional formatting characters escaped for display. `--file <path>` emits the
+exact decoded bytes of one member to stdout without framing or newline changes.
+Both use the existing saved-snapshot reader, including destination, inventory,
+marker, account and revision validation. The entire directory archive is checked
+before any member output: version-1 or version-2 schema, relative paths, unique
+names, boolean executable flags, valid text lines or canonical Base64 regular-file
+content. Unsupported versions, link records and malformed entries fail without disclosing payloads in
+diagnostics. Inspection accepts at most 16 MiB of stored archive bytes and 8,192
+members. These checks occur after transport and do not bound remote downloads.
+
+Readable line arrays make text changes visible in GitHub diffs while preserving
+binary support, paths and executable metadata. Base64 stores recoverable bytes;
+it is neither hashing nor encryption. Raw reads still return stored bytes
+unchanged, and member inspection supports already-saved version-1 archives.
+
+| Approach | Reading and diffs | Recovery and compatibility |
+| --- | --- | --- |
+| Readable JSON plus member inspection (selected) | Text changes appear on separate JSON lines in GitHub; quotes, tabs and terminators remain escaped. | Exact bytes and metadata, binary fallback, version-1 and version-2 reads; no filesystem restoration. |
+| Decoded inspection alone | Readable text on demand; stored GitHub payload diffs stay encoded. | Avoids a format migration but leaves repository browsing difficult. |
+| Native file tree | Individual files and ordinary text diffs, including rendered Markdown. | Requires a repository-layout migration, broader readers/writers and a metadata contract. |
+
+Inspection supplies reference material without an automatic restore or replay
+contract. Member paths never reach filesystem operations, and decoded content is
+never executed.
+
+### Directory format migration
+
+The next ordinary capture writes version 2 under the same snapshot names. It can
+produce a one-time format diff even when source bytes are unchanged; existing
+history is retained. Only sources selected for capture are converted.
+
+General three-way reconciliation remains byte-based. A narrow version-1 to
+version-2 exception permits a format-only update when reconstructing the old
+canonical serialization from the captured entries matches the remote bytes
+exactly. This proof preserves every path, executable flag and file byte; extra
+fields, alternative formatting and unknown versions cannot pass. It also permits
+an identical-content conversion after reconnect without a cached base. Failed
+proofs follow the existing conflict rules; cached bases are never semantically
+normalized. Expected-head publication and exact readback remain required.
+
+The flat repository layout and marker version remain unchanged. Older clients
+can print version-2 blobs as raw snapshots, but older writers can replace them
+with version 1 or encounter ordinary conflicts. Update the active backup-writing
+installation before conversion and avoid downgrading it. There is no bulk or
+history migration, extraction, automatic restore or content execution.
+
+### Capture bounds and traversal
 
 New Codex and Claude Code captures are each bounded to 16 MiB total normalized
 staged bytes per application (raw files and all archives, including unchanged
 captures) and 8,192 visited entries per
 recursive source. Incremental iterative metadata traversal and opened-file
-bounded reads reject overflow without truncation. Capture-limit failures abort
-staging before remote inspection; cache comparison and writer checks also fail
-before publication or cache promotion. Actual changed buffers are rechecked before
+bounded reads reject overflow without truncation. Text capture incrementally
+preflights escaped line sizes and JSON indentation before allocating content lines; binary capture
+checks Base64 size before encoding. The serialized-byte budget includes line-array
+and escape overhead, so some near-limit sources can fail earlier than in version 1.
+Capture-limit failures abort staging before remote inspection; cache comparison
+and writer checks also fail before publication or cache promotion. Actual changed buffers are rechecked before
 outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
 not a second 16 MiB cap. Only Codex and Claude Code cache files actually compared
 are bounded, individually, to 16 MiB. The independent capture allowances permit up to 32 MiB

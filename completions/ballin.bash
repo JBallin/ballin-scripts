@@ -10,6 +10,10 @@ _ballin_completion() {
         *) return 0 ;;
       esac
       ;;
+    4)
+      [[ "${COMP_WORDS[1]}" == backup && "${COMP_WORDS[2]}" == read ]] || return 0
+      candidates='--list --file'
+      ;;
     *) return 0 ;;
   esac
 

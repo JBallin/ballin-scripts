@@ -145,10 +145,13 @@ describe('Codex durable snapshots', () => {
     assert.equal(recursiveSnapshot(skillRoot, false, true), first);
     const archive = JSON.parse(first);
     assert.equal(archive.format, 'ballin-directory');
-    assert.equal(archive.version, 1);
+    assert.equal(archive.version, 2);
     assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['a/.hidden', 'a/.system/user-owned', 'z folder/run.sh']);
     assert.equal(archive.entries[2].executable, true);
     assert.equal(archive.entries[0].executable, false);
+    assert.equal(archive.entries[0].encoding, 'base64');
+    assert.equal(archive.entries[2].encoding, 'utf8');
+    assert.deepEqual(archive.entries[2].content, ['#!/bin/sh\n']);
     assert.deepEqual(Buffer.from(archive.entries[0].content, 'base64'), Buffer.from([0, 255, 128, 10]));
     ['rules', 'agents'].forEach((directory) => {
       write(`${directory}/nested/.system/user`, 'retained');

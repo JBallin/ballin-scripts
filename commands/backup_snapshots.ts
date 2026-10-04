@@ -83,6 +83,7 @@ type SnapshotDiscoveryContext = {
 
 type SnapshotDefinition = {
   name: string;
+  directory?: boolean;
   category: SnapshotCategory;
   inclusionGroup: SnapshotInclusionGroup;
   prerequisites: readonly SnapshotPrerequisite[];
@@ -534,6 +535,7 @@ const codexRoot = ({ homeDir, env }: SnapshotDiscoveryContext): string => (
 // Every source is sensitive; policy selection precedes discovery.
 const configurationSnapshot = (category: 'codex' | 'claude', name: string, relative: string, recursive = false, profiles = false, homeRoot = false, skills = relative === 'skills'): SnapshotDefinition => ({
   name,
+  directory: recursive,
   category,
   inclusionGroup: 'sensitive',
   prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
@@ -653,6 +655,7 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
 ];
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
+const directorySnapshotFileNames = new Set(snapshotDefinitions.filter(({ directory }) => directory).map(({ name }) => name));
 const configurationSnapshotGroups = new Map<string, 'codex' | 'claude'>(snapshotDefinitions.flatMap(({ name, category }) => (
   category === 'codex' || category === 'claude' ? [[name, category] as const] : []
 )));
@@ -729,6 +732,7 @@ module.exports = {
   repositoryReadmeFileName,
   classifySnapshotFileName,
   configurationSnapshotGroups,
+  directorySnapshotFileNames,
   collectSnapshotObservations,
   configSnapshotFileName,
   emptySnapshotContent,
