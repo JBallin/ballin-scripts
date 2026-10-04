@@ -70,7 +70,7 @@ const previousBackupSuccessLine = (root: string, destination: RepositoryDestinat
     year: 'numeric', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'longOffset',
   }).format(new Date(previous));
-  return `Previous successful backup: ${time}`;
+  return `Last successful backup: ${time}`;
 };
 
 module.exports = { lastSuccessFileName, readLastBackupSuccess, recordLastBackupSuccess, lastBackupSuccessLine, previousBackupSuccessLine };
