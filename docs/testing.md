@@ -8,9 +8,9 @@ command once.
 
 ## Pull request review
 
-The Claude review callers use the public [review runtime](https://github.com/JBallin/claude-review-runtime) at immutable revision `d63506dda127e0509346c19457c1d992292a9c29`. Opened or newly ready same-repository PRs receive one automatic review; drafts, forks, and Dependabot-triggered runs are excluded. Pushes and base retargets only refresh existing review presentation, without running a model.
+The Claude review callers use the public [review runtime](https://github.com/JBallin/claude-review-runtime) at immutable revision `7843e53765a98f6900a302a3618ddad568abd2a4`. Opened or newly ready same-repository PRs receive one automatic review; drafts, forks, and Dependabot-triggered runs are excluded. Pushes and base retargets only refresh existing review presentation, without running a model.
 
-For a fresh review, a human owner, member, or collaborator can post `/claude-review` as the entire top-level or inline PR comment. A read-only lookup requires an open, non-draft, same-repository PR before submission to the runtime's queue. Closing it or converting it to a draft later does not cancel an accepted request. Each accepted automatic or manual review can consume the existing Claude subscription and exposes the captured checkout, PR metadata, and diff to Claude. The existing `CLAUDE_CODE_OAUTH_TOKEN` secret and Claude GitHub App access are required; see the [runtime setup and review guide](https://github.com/JBallin/claude-review-runtime/blob/d63506dda127e0509346c19457c1d992292a9c29/docs/consumer-workflows.md).
+For a fresh review, a human owner, member, or collaborator can post `/claude-review` as the entire top-level or inline PR comment. A read-only lookup requires an open, non-draft, same-repository PR before submission to the runtime's queue. Closing it or converting it to a draft later does not cancel an accepted request. Each accepted automatic or manual review can consume the existing Claude subscription and exposes the captured checkout, PR metadata, and diff to Claude. The existing `CLAUDE_CODE_OAUTH_TOKEN` secret and Claude GitHub App access are required; see the [runtime setup and review guide](https://github.com/JBallin/claude-review-runtime/blob/7843e53765a98f6900a302a3618ddad568abd2a4/docs/consumer-workflows.md).
 
 ## Interactive onboarding QA
 
