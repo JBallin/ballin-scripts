@@ -41,33 +41,13 @@ see [using saved state on another Mac](#using-saved-state-on-another-mac).
 Review [Installation and removal](docs/installation.md) for local effects,
 network interactions, backup authentication, troubleshooting, and removal.
 
-## Everyday use
-
-Review your update settings, check readiness, then run maintenance when you want
-to update your environment:
-
-```shell
-ballin config get update
-ballin doctor
-ballin update
-```
-
-Homebrew and App Store stages run when their tools are installed. macOS updates
-and Ballin self-updates are enabled by default; Node.js LTS and global npm updates
-are opt-in. See [update settings](docs/optional-capabilities.md#ballin-update-settings)
-to choose which configured stages run.
-
-With backups configured, run `ballin backup` whenever you want to capture the
-selected state. Setup also offers automatic backup at the end of `ballin update`,
-disabled by default. Run `ballin setup` to revisit your onboarding choices or
-`ballin backup open` to inspect saved snapshots and their GitHub history.
-
-`ballin doctor` checks readiness.
-
 ## Example output
 
-`ballin update` output depends on installed tools and enabled integrations. This
-example shows a fully configured run with automatic backups enabled.
+Use `ballin update` for everyday maintenance. It runs stages for installed tools
+and enabled integrations, checks readiness after a successful Ballin self-update,
+and backs up selected state at the end when automatic backups are enabled.
+
+This example shows a fully configured run.
 
 ```text
 $ ballin update
@@ -104,14 +84,8 @@ View changes: https://github.com/example-user/ballin-backups/commit/0123456789ab
 
 ## Using saved state on another Mac
 
-Browse your existing backup on GitHub to choose packages from its Brewfile,
-identify editor extensions to reinstall, and review dotfiles before adapting
-them to the new Mac. Ballin does not automatically restore dotfiles or reinstall
-packages, and it does not synchronize Macs.
-
-Use only one Mac to publish to each backup destination. See
-[Using saved state on another Mac](docs/new-mac.md) for a short rebuild workflow
-and the choice between reusing your existing backup and creating a new one.
+Saved snapshots of your tools and configuration give you a reference when
+[setting up another Mac](docs/new-mac.md).
 
 ## Commands
 
