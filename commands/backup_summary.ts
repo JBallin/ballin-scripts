@@ -8,14 +8,22 @@ const preferenceState = (value: unknown, key: string, enabled: string, disabled:
 };
 
 // The caller validates the destination; presentation performs no inspection or writes.
-const validatedBackupSummary = (destinationUrl: string, config: ConfigObject): string => {
+const validatedBackupSummary = (destinationUrl: string, config: ConfigObject, showSummary = true): string => {
   const automatic = isConfigObject(config.update) ? (config.update as ConfigObject).backup : undefined;
   // CLI help imports this module, so load bundled defaults only when rendering.
   const effectiveAutomatic = automatic === undefined ? require('../config/.defaultConfig.json').update.backup : automatic;
+  const sensitive = sensitiveSourceConsent(config);
+  const preferences = [
+    { value: sensitive, line: `Sensitive sources: ${preferenceState(sensitive, 'backup.includeSensitive', 'included', 'excluded')}` },
+    { value: effectiveAutomatic, line: `Automatic backup during update: ${preferenceState(effectiveAutomatic, 'update.backup', 'enabled', 'disabled')}` },
+  ];
+  // Embedded validation still reports malformed settings that need attention.
+  const visiblePreferences = showSummary ? preferences : preferences.filter(({ value }) => (
+    value !== true && value !== false && value !== 'true' && value !== 'false'
+  ));
   return [
-    `Validated private backup: ${destinationUrl}`,
-    `Sensitive sources: ${preferenceState(sensitiveSourceConsent(config), 'backup.includeSensitive', 'included', 'excluded')}`,
-    `Automatic backup during update: ${preferenceState(effectiveAutomatic, 'update.backup', 'enabled', 'disabled')}`,
+    ...(showSummary ? [`Validated private backup: ${destinationUrl}`] : []),
+    ...visiblePreferences.map(({ line }) => line),
   ].join('\n');
 };
 

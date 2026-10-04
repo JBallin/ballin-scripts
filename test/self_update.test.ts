@@ -155,7 +155,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       : []
   );
 
-  const setupLog = () => `${fs.realpathSync(repoDir)}|install_setup:setup ${repoDir} ${docsUrl} ${analyticsDocsUrl} refresh`;
+  const setupLog = () => `${fs.realpathSync(repoDir)}|install_setup:setup ${repoDir} ${docsUrl} ${analyticsDocsUrl} self-update`;
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-update-'));

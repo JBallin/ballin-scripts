@@ -38,7 +38,9 @@ with `ballin backup setup`. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
-Self-updates report “Ballin updated.” after a successful refresh. During
+Self-updates report “Ballin updated.” after a successful refresh. They validate
+configured backups without repeating the setup summary; warnings and errors
+remain visible. Run `ballin backup setup` for the full summary. During
 `ballin update`, a readiness check follows. Fresh installs keep one completion
 message after setup.
 
@@ -235,9 +237,9 @@ for the exact safety boundary and current GitHub eligibility.
 
 ### Already-configured backups and destination changes
 
-For an already-configured backup, setup shows the validated destination,
-whether sensitive sources are included, and whether automatic backup during
-update is enabled. It preserves these choices and shows the
+For an already-configured backup, `ballin backup setup` shows the validated
+destination, whether sensitive sources are included, and whether automatic
+backup during update is enabled. It preserves these choices and shows the
 [local last-success record](backup-sources.md#last-successful-backup) separately.
 This summary does not compare current sources with saved snapshots.
 
