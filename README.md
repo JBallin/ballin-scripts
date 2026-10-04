@@ -40,7 +40,7 @@ and removal steps in [Installation and removal](docs/installation.md).
 example shows a successful run with update integrations and automatic backups
 enabled. Third-party output and the snapshot listing are abbreviated.
 
-```shell
+```text
 $ ballin update
 
 ==> Updating Homebrew
