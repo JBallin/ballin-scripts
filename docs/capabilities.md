@@ -1,10 +1,9 @@
 # Supported capabilities
 
-*User reference to supported system update integrations and backup snapshots.*
+*User reference for supported system update integrations and backup snapshots.*
 
-This reference lists Ballin's update and backup capabilities. Auto-discovered
-integrations run when available; configured integrations fail when enabled but
-unavailable.
+Auto-discovered integrations run when available; configured integrations fail
+when enabled but unavailable.
 
 ## `ballin update`
 

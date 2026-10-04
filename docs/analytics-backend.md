@@ -1,6 +1,6 @@
 # Analytics Backend
 
-*Maintainer guide to Cloudflare Worker deployment, D1 schema, and privacy-preserving metrics.*
+*Maintainer guide to Cloudflare Worker deployment, D1 schema, and analytics data policy.*
 
 Ballin uses a small Cloudflare Worker backed by D1 for usage
 analytics. The backend records only the minimal signals needed for active

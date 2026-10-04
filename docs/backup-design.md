@@ -1,9 +1,8 @@
 # Backup design
 
-*Maintainer guide to backup architecture, GitHub transport constraints, and conflict guarantees.*
+*Maintainer guide to backup safety, GitHub storage constraints, and conflict handling.*
 
-This guide records the safety model behind `ballin backup`. User behavior and
-conflict recovery are documented in
+User behavior and conflict recovery are documented in
 [Supported capabilities](capabilities.md#backup-consistency-and-conflicts).
 
 ## Architecture and destination identity

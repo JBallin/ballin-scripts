@@ -1,7 +1,5 @@
 # Documentation
 
-*Durable guides covering Ballin installation, system maintenance, backup architecture, and development workflows.*
-
 For the project overview, see the [main README](../README.md).
 
 ## User guides
