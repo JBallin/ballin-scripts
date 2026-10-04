@@ -46,6 +46,9 @@ type Account = { id: string; login: string };
 type Entry = { path: string; sha: string; size: number; classification: SnapshotNameClassification };
 // A revision is a storage-local handle. Callers pass it back without interpreting Git objects.
 type Revision = { head: string; tree: string; branchId: string; parents: string[]; entries: Entry[] };
+// Inventory-only results cannot be used as a full comparison/publication base.
+type RepositoryInventory = { entries: readonly Entry[] };
+type RepositorySnapshotRead = { bytes: Buffer | undefined; inventory: RepositoryInventory };
 type RepositoryRead = {
   destination: RepositoryDestination;
   revision: Revision;
@@ -313,11 +316,23 @@ const inspectRepositoryMaintenance = (
 };
 // Partial content reads stay private: reconciliation/publication must only receive full reads.
 // Both commands still validate the complete inventory, marker and final revision.
+const readRepositorySnapshotWithInventory = (
+  destination: RepositoryDestination, name: string, options: RepositoryOptions = {},
+): RepositorySnapshotRead => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
+  return {
+    bytes: classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined,
+    inventory: { entries: read.revision.entries },
+  };
+};
 const readRepositorySnapshot = (
   destination: RepositoryDestination, name: string, options: RepositoryOptions = {},
-): Buffer | undefined => {
-  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
-  return classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined;
+): Buffer | undefined => readRepositorySnapshotWithInventory(destination, name, options).bytes;
+const readRepositoryInventory = (
+  destination: RepositoryDestination, options: RepositoryOptions = {},
+): RepositoryInventory => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  return { entries: read.revision.entries };
 };
 const sameRepositoryRevision = (left: RepositoryRead, right: RepositoryRead): boolean => (
   left.destination.id === right.destination.id && left.revision.branchId === right.revision.branchId
@@ -618,12 +633,13 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 
 module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
-  readRepositorySnapshot, repositoryOpenUrl, inspectRepositoryMaintenance,
+  readRepositorySnapshot, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
+  inspectRepositoryMaintenance,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
 };
 export type {
-  RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
+  RepositoryRead, RepositoryInventory, RepositorySnapshotRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
   ManagedBranchRulesetOutcome, RepositoryMaintenance,
 };

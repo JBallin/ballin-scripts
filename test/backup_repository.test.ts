@@ -3,12 +3,12 @@ const {
   RepositoryError, readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
-  readRepositorySnapshot, repositoryOpenUrl, inspectRepositoryMaintenance,
+  readRepositorySnapshot, readRepositoryInventory, repositoryOpenUrl, inspectRepositoryMaintenance,
 } = require('../commands/backup_repository.ts');
 const { fixtureDestination, fixtureRuleset, fixtureState, commitFixture, requestFixture } = require('./helpers/repository.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 import type { FixtureState } from './helpers/repository.ts';
-import type { RepositoryRead, RepositoryMaintenance, RepositoryOptions } from '../commands/backup_repository.ts';
+import type { RepositoryRead, RepositoryInventory, RepositoryMaintenance, RepositoryOptions } from '../commands/backup_repository.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
 describe('private repository transport', () => {
@@ -74,6 +74,19 @@ describe('private repository transport', () => {
       assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
     }
   });
+  it('returns complete inventory entries without snapshot bytes or a partial publication base', () => {
+    state = fixtureState({ 'zshrc.sh': 'original\n', gitconfig: 'other\n', brackets_extensions: 'retired\n', private_note: 'unrelated\n' });
+    const inventory: RepositoryInventory = readRepositoryInventory(fixtureDestination, options);
+    assert.deepEqual(Object.keys(inventory), ['entries']);
+    assert.deepEqual(inventory.entries.map(({ path, classification }) => [path, classification]), [
+      ['.ballin-backup.json', 'reserved'], ['README.md', 'reserved'],
+      ['zshrc.sh', 'current'], ['gitconfig', 'current'],
+      ['brackets_extensions', 'retired'], ['private_note', 'unexpected'],
+    ]);
+    assert.lengthOf(state.requests, 6);
+    assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+    assert.equal(publications().length, 0);
+  });
   it('opens the validated renamed destination with only marker content and fresh effective-account checks', () => {
     state = fixtureState({ 'zshrc.sh': 'original\n', gitconfig: 'other\n' });
     state.name = 'renamed'; state.login = 'renamed-user';
@@ -109,10 +122,11 @@ describe('private repository transport', () => {
       assert.lengthOf(publications(), 0); assert.lengthOf(rulesetWrites(), 0);
     });
   }
-  for (const command of ['read', 'open', 'maintenance']) {
+  for (const command of ['read', 'open', 'list', 'maintenance']) {
     const invoke = () => command === 'read'
       ? readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options)
       : command === 'open' ? repositoryOpenUrl(fixtureDestination, options)
+      : command === 'list' ? readRepositoryInventory(fixtureDestination, options)
       : inspectRepositoryMaintenance(fixtureDestination, options);
     it(`rejects invalid active authentication before dependent ${command} operations`, () => {
       state.faults.auth = true;

@@ -62,8 +62,7 @@ $ ballin update
 ==> Installing macOS updates
 ...
 ==> Updating Ballin
-Updating...
-Ballin updated.
+...
 ==> Checking Ballin readiness
 ...
 ==> Backing up development environment
@@ -106,7 +105,8 @@ one-command restore system.
 | `ballin backup` | Updates snapshots in the configured backup. |
 | `ballin backup open` | Opens the configured backup. |
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
-| `ballin backup read <file>` | Prints a backed-up file from the destination. |
+| `ballin backup list` | Lists supported snapshots saved in the configured backup. |
+| `ballin backup read <snapshot>` | Prints one supported snapshot from the destination. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
 | `ballin config` | Reads and updates local Ballin settings. |

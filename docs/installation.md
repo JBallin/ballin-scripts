@@ -39,16 +39,15 @@ inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
 Self-updates show “Updating...” in supported interactive terminals and report
-“Ballin updated.” after a successful refresh. They still check the configured
-private backup's destination and format, repair its saved name if renamed, and
-maintain optional branch protection. They skip saved snapshot-content checks.
+“Ballin updated.” after a successful refresh. They check the configured backup
+destination without reading saved snapshot contents.
 Warnings and errors remain visible without repeating the setup summary.
 
+Standalone self-update can succeed despite an unreadable saved snapshot.
 Run `ballin doctor` to check saved snapshot readability, or `ballin backup setup`
-for full revalidation and the settings summary. An unreadable saved snapshot can
-therefore leave standalone self-update successful. During `ballin update`, a full
-readiness check follows and reports that failure. Fresh installs keep one
-completion message after setup.
+for full validation and the settings summary. During `ballin update`, a full
+readiness check follows self-update and reports snapshot-read failures. Fresh
+installs show one completion message after setup.
 
 ## Shell completion
 
@@ -281,9 +280,13 @@ supported layout, and coherent readability. This is readiness only: it does not
 collect, repair cache permissions, probe writes, or establish backup freshness,
 coverage, or successful publication.
 
-`ballin backup read <file>` prints exact supported snapshot bytes;
-`ballin backup open` opens the validated destination. Both work with read-only
-access and leave caches unchanged. Use only one Mac to back up to a destination.
+Use `ballin backup list` to find supported snapshots saved in the configured
+backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
+to inspect the backup in your browser, including retired snapshots and unexpected
+entries. These commands require remote access and work with read-only
+permissions. For offline help, run `ballin backup --help`.
+
+Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.
 A reconnect has no trusted base and cannot overwrite differing remote content;
 inspect and manually reconcile each conflict using the
