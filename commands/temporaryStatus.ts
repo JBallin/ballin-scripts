@@ -7,11 +7,14 @@ const write = (text: string): void => {
 
 // A static line remains visible while synchronous work blocks the event loop.
 const clearTemporaryStatus = (): void => { active?.finish(); };
+const canShowStatus = (text: string): boolean => Boolean(
+  process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY
+  && process.env.TERM !== 'dumb' && !process.env.NO_COLOR
+  && !(process.stderr.columns > 0 && process.stderr.columns <= text.length),
+);
 const withTemporaryStatus = <T>(text: string, action: () => T): T => {
   clearTemporaryStatus();
-  if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY
-    || process.env.TERM === 'dumb' || Boolean(process.env.NO_COLOR)
-    || (process.stderr.columns > 0 && process.stderr.columns <= text.length)) return action();
+  if (!canShowStatus(text)) return action();
   const finish = (): void => {
     if (active?.finish !== finish) return;
     const visible = active.visible;

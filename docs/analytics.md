@@ -1,6 +1,6 @@
 # Analytics
 
-**Audience:** Users
+*User guide to what Ballin sends, how to opt in or out, and how long data is kept.*
 
 Analytics help show which top-level Ballin commands are used, how real backups
 finish, and whether automatic backup and Ballin self-update steps succeed
@@ -144,10 +144,12 @@ combined into exact backup or adoption statistics. See the maintainer guide's
 
 ## Storage
 
-The random install ID lives locally under `.analytics/`. Ballin's hosted
-analytics service uses it to limit incoming requests. For command events, the
-service retains server-hashed install/day activity and separate command and
-runtime counts.
+Ballin stores a random installation ID locally under `.analytics/` and sends
+that same ID with command and behavioral events over HTTPS to its
+Cloudflare-hosted analytics service. The service hashes it on the server for
+request limits. For command events, it also retains the hashed ID with UTC dates
+to measure install activity. Command and runtime counts are stored separately
+without installation IDs.
 
 Behavioral storage contains only UTC date, event name, terminal status, and
 count. Neither raw nor hashed installation identity is retained with these

@@ -1,11 +1,11 @@
 # Backup sources and sensitivity
 
-**Audience:** Users
+*User guide to Ballin snapshot sources, captured files, and data sensitivity considerations.*
 
 `ballin backup` uses an explicit source allowlist. The allowlist limits which
 files and command outputs Ballin selects, but it does not make their contents
 safe: files and command outputs can contain credentials, private URLs,
-usernames, paths, commands, and other sensitive data. This audit records source
+usernames, paths, commands, and other sensitive data. This guide explains source
 sensitivity and repository policy; Ballin does not scan or redact
 these snapshots.
 
@@ -30,6 +30,8 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `~/.agents/skills/` | `codex_user_skills.json` | Preserve current shared personal skills recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | Codex `skills/`, `rules/`, and `agents/` | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Preserve legacy Codex-home skills and personal rules/agents recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
+| Claude Code `CLAUDE.md` | `claude_instructions` | Preserve personal instructions from the active configuration root. | Private instructions, credentials, paths, and imported-file references. | Sensitive; the same local opt-in; imports are not collected. |
+| Claude Code `rules/`, `agents/`, and legacy `commands/` | `claude_rules`, `claude_agents`, `claude_commands` | Preserve regular Markdown configuration recursively. | Private instructions, inline MCP values, permission modes, hook definitions, commands, and credentials. | Sensitive; the same local opt-in; referenced resources excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -51,22 +53,23 @@ repository. GitHub and anyone authorized to access the repository can read its
 contents.
 
 The single `backup.includeSensitive` setting controls **sensitive sources**:
-raw shell/Git/editor/Codex configuration, `.nvmrc`, and pipx installation metadata.
+raw shell/Git/editor configuration, Codex and Claude Code configuration, `.nvmrc`,
+and pipx installation metadata.
 New and replacement installations start with these sensitive sources off and
 make their own choice; approval is never recovered from a backup. Configured
 setup retains established local consent; fresh reconnect requires its own
 review. The choice covers current and future supported sensitive sources,
-including Codex for existing opt-ins. Setup discloses this scope; source changes
-are documented in the source guide and release/update guidance.
+including Codex and Claude Code for existing opt-ins. Setup discloses this scope;
+source changes are documented in the source guide and release/update guidance.
 
 Review shows logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.
-Review reads no file contents and runs no collectors. Codex directory discovery
-recursively inspects names and file types to identify nonempty sources. Missing
+Review reads no file contents and runs no collectors. Codex and Claude Code
+directory discovery recursively inspects names and file types to identify nonempty sources. Missing
 and unavailable sources are shown; access or resolution errors prevent
-confirmation. EOF or declining final confirmation cancels without
+confirmation. Closing input or declining final confirmation cancels without
 saving consent or changing destination, cache, or remote state. Excluded
 sensitive sources are not inspected just to verify them.
 
@@ -137,13 +140,64 @@ New supported sources undergo repository inclusion and sensitivity review;
 unknown groups remain excluded. See
 [Backup design](backup-design.md#shared-inclusion-policy).
 
+## Claude Code configuration
+
+Ballin uses `CLAUDE_CONFIG_DIR` when nonempty, otherwise `~/.claude`. Relative
+root overrides resolve from the command's working directory; an explicitly
+selected root may be an alias. It selects only `CLAUDE.md` and regular `.md`
+files beneath personal `rules/`, `agents/`, and legacy `commands/` directories.
+The path identifies a supported configuration location, not proof of authorship
+or secret-free contents. [Claude skills](https://code.claude.com/docs/en/skills)
+are the preferred surface for new custom capabilities; `commands/` preserves
+existing compatibility files.
+
+Directory snapshots use the same versioned JSON archive as Codex, preserving
+relative paths, exact file bytes, and executable flags. Non-Markdown files,
+symlinks, special files, empty directories, `.git`, and `.DS_Store` are omitted.
+Selected hard links stop capture; Ballin does not search for their other paths.
+Discovery and review inspect metadata; review checks readability without
+reading contents. Discovery or collection failure stops the backup before
+publication. Capture is not atomic across concurrent edits.
+
+Claude Code has its own **16 MiB combined** normalized capture allowance,
+including unchanged snapshots and archive/base64 overhead, plus **8,192 visited
+entries** per directory source, counted before filtering. This preserves the
+existing Codex allowance, permitting up to 32 MiB combined staged assistant
+configuration. Limits stop the whole backup without truncation or partial
+publication; they do not bound historical remote reads or total process memory.
+
+Raw user settings and `.claude.json` are excluded. Settings mix preferences with
+environment values, credential helpers, permissions, sandbox exceptions, hooks,
+and plugin configuration; `.claude.json` mixes MCP definitions with sign-in and
+project trust state. Claude documents that `.claude.json` moves inside
+`CLAUDE_CONFIG_DIR` when set; neither location is selected. See
+[settings](https://code.claude.com/docs/en/settings) and
+[MCP locations](https://code.claude.com/docs/en/mcp-quickstart#find-your-configuration-on-disk).
+Plugin and marketplace intent needs a separate settings decision; fetched
+`plugins/` content is excluded. Hooks in excluded settings are not captured,
+while hooks embedded in selected agent Markdown remain intact. Ballin never
+executes definitions, follows external references, or restores approvals.
+
+Skills remain excluded: `skills/` can mix local definitions, downloaded account
+skills, trash, plugin-shaped folders, scripts, and supporting assets. A separate
+review must define eligible directories and supporting files without claiming
+that a path proves their origin. Credential stores, private environment files,
+generated memory, sessions, histories, caches, logs, and runtime state are also
+excluded from direct selection. Selected Markdown can still contain secrets;
+these boundaries are not content scanning or redaction.
+
+Project `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` configuration, and
+`.mcp.json` remain project-owned; Ballin does not crawl repositories. Claude's
+project `AGENTS.md` support depends on its version and instruction settings; see
+[project instructions](https://code.claude.com/docs/en/memory).
+
 ## Last successful backup
 
-Before collecting sources, Ballin shows `Previous successful backup:` with the
+Before collecting sources, Ballin shows `Last successful backup:` with the
 last recorded successful run's local date, time and UTC offset for this
 installation, destination and branch. With no usable record, the line is omitted.
-`ballin backup setup` also shows the record or unavailable status; setup and
-recovery do not invent a previous time.
+For an already-configured destination, `ballin backup setup` also shows the
+record or unavailable status. Setup and recovery do not invent a previous time.
 
 Changed and unchanged successful runs update the local record; failed attempts
 do not. An unchanged run creates no repository commit just to record activity.

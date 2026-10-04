@@ -1566,7 +1566,7 @@ require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))}).runW
       assertOutcome('success', 'failure');
     });
 
-    for (const args of [['setup'], ['read', 'zshrc.sh'], ['open'], ['disconnect'], ['help'], ['verify'], ['invalid'], ['read'], ['open', 'extra']]) {
+    for (const args of [['setup'], ['read', 'zshrc.sh'], ['open'], ['list'], ['disconnect'], ['help'], ['verify'], ['invalid'], ['read'], ['open', 'extra']]) {
       it(`does not emit a real-backup event for ${args.join(' ')}`, () => {
         seedRemote('read-only fixture\n');
         observedRun({ args, input: 'n\n' });
