@@ -30,6 +30,9 @@ invalid known setting values fail before any integration runs.
 
 ## `ballin doctor`
 
+In a supported interactive terminal, a temporary readiness message appears
+while checks run. Redirected output is unchanged.
+
 Maintenance-only Ballin is healthy: verbose doctor output shows one optional
 backup `INFO` check and executes no `gh`. Configured repositories require the
 effective personal GitHub.com account, expected private destination identity,
