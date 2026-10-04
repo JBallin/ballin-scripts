@@ -519,7 +519,7 @@ const runRepositoryBackup = (
   try {
     const read: RepositoryRead = requireRepositoryRead(inspectRepository(destination));
     if (read.revision.entries.some((entry) => directoryBundleRenames.has(entry.path))) {
-      writeStderrLine('ballin backup: rename the old directory snapshots with scripts/migrate-backup-bundles.sh and push the reviewed commit before backing up. No snapshots were published.');
+      writeStderrLine('ballin backup: rename the old directory snapshots with the standalone migrate-backup-bundles.sh helper in https://github.com/JBallin/ballin-scripts/pull/487 and push the reviewed commit before backing up. No snapshots were published.');
       return false;
     }
     const unexpected = unexpectedRepositoryEntries(read);
