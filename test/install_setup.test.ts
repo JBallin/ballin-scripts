@@ -974,13 +974,13 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
     assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#shell-completion`));
-    assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository. GitHub and anyone authorized to access the repository can read its contents.');
+    assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository.\nGitHub and anyone authorized to access the repository can read its contents.');
     assert.include(result.stdout, `${docsUrl}#shell-completion`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.equal(result.stdout.match(/😎 ballin!/gu)?.length, 1);
     assert.notInclude(result.stdout, 'symlinked binaries');
-    assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
+    assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.equal(readRepoConfig().analytics.enabled, 'false');
@@ -1029,7 +1029,7 @@ require('https').request = () => {
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'GitHub.com authentication is required');
     assert.include(result.stdout, '\nBallin maintenance is installed. Retry with: `ballin backup setup`\n');
-    assert.notInclude(result.stdout, 'Automatically run ballin backup after ballin update?');
+    assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.notExists(readRepoConfig().backup.repository);
@@ -1050,9 +1050,9 @@ require('https').request = () => {
 
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'current permissions');
     assert.include(result.stdout, 'backup setup can continue normally');
-    assert.include(result.stdout, 'Automatically run ballin backup after ballin update?');
+    assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
     assert.include(result.stdout, '"backup.includeSensitive" set to: "false"\n');
-    assert.isBelow(result.stdout.indexOf('"backup.includeSensitive" set to: "false"'), result.stdout.indexOf('Automatically run ballin backup after ballin update?'));
+    assert.isBelow(result.stdout.indexOf('"backup.includeSensitive" set to: "false"'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
     assert.notInclude(result.stdout, 'Retry with: `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1060,6 +1060,25 @@ require('https').request = () => {
     assert.equal(readRepoConfig().backup.includeSensitive, 'false');
     const saved = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
     assert.deepEqual(Object.keys(saved.commits[saved.head].files).sort(), ['.ballin-backup.json', 'README.md']);
+  });
+
+  it('reports cancelled backup setup without treating the choice as an installation error', () => {
+    installConfigSources();
+    const { fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+    const remote = fixtureState(); remote.exists = false;
+    const remotePath = path.join(testDir, 'cancelled-repository.json');
+    fs.writeFileSync(remotePath, JSON.stringify(remote)); installRepositoryFixture(binDir, remotePath);
+    const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
+      encoding: 'utf8', input: 'n\ny\ncreate\n\nn\nn\n', env: childEnvironment(),
+    });
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'Backup setup cancelled;');
+    assert.include(result.stdout, 'Ballin maintenance is installed. Retry with: `ballin backup setup`');
+    assert.notInclude(result.stdout + result.stderr, 'ERROR:');
+    assert.notInclude(result.stdout, 'Backup setup complete.');
+    assert.isNull(readRepoConfig().backup.repository ?? null);
+    assert.isFalse(JSON.parse(fs.readFileSync(remotePath, 'utf8')).exists);
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
   });
 
   [false, true].forEach((value) => {

@@ -3,6 +3,7 @@ const path = require('path');
 
 type RecursiveEntry = { path: string; executable: boolean; content: string };
 type SnapshotLimits = { maxBytes?: number; maxEntries?: number };
+type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean };
 const snapshotByteLimit = 16 * 1024 * 1024;
 const recursiveEntryLimit = 8192;
 class SnapshotLimitError extends Error {
@@ -57,17 +58,21 @@ const inDirectory = <T>(root: string, relative: string, operation: () => T): T =
   }
 };
 
-const readableFileStat = (name: string): import('fs').Stats => {
+const requireSingleLink = (stat: import('fs').Stats, rejectHardlinks: boolean): void => {
+  if (rejectHardlinks && stat.nlink !== 1) throw new Error('Hard-linked snapshot source');
+};
+const readableFileStat = (name: string, rejectHardlinks = false): import('fs').Stats => {
   const fd = fs.openSync(name, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) throw new Error('Snapshot source is not a regular file');
+    requireSingleLink(stat, rejectHardlinks);
     return stat;
   } finally { fs.closeSync(fd); }
 };
-const fileStat = (root: string, relative: string): import('fs').Stats => {
+const fileStat = (root: string, relative: string, rejectHardlinks = false): import('fs').Stats => {
   validatePath(root, relative);
-  return inDirectory(root, path.dirname(relative), () => readableFileStat(path.basename(relative)));
+  return inDirectory(root, path.dirname(relative), () => readableFileStat(path.basename(relative), rejectHardlinks));
 };
 const sourceStat = (root: string, relative: string): import('fs').Stats => {
   validatePath(root, relative);
@@ -84,11 +89,12 @@ const checkedPath = (root: string, relative: string): string => {
   return path.join(root, relative);
 };
 
-const readBoundedFile = (file: string, maxBytes = snapshotByteLimit): { bytes: Buffer; executable: boolean } => {
+const readBoundedFile = (file: string, maxBytes = snapshotByteLimit, rejectHardlinks = false): { bytes: Buffer; executable: boolean } => {
   const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) throw new Error('Snapshot source is not a regular file');
+    requireSingleLink(stat, rejectHardlinks);
     requireWithinLimit('bytes', stat.size, maxBytes);
     const bytes = Buffer.alloc(stat.size);
     let offset = 0;
@@ -104,14 +110,14 @@ const readBoundedFile = (file: string, maxBytes = snapshotByteLimit): { bytes: B
     fs.closeSync(fd);
   }
 };
-const fileEntry = (root: string, relative: string, maxBytes = snapshotByteLimit): RecursiveEntry => {
+const fileEntry = (root: string, relative: string, maxBytes = snapshotByteLimit, rejectHardlinks = false): RecursiveEntry => {
   // Validate the entire relative path before separating its parent and leaf.
   validatePath(root, relative);
-  const { bytes, executable } = inDirectory(root, path.dirname(relative), () => readBoundedFile(path.basename(relative), maxBytes));
+  const { bytes, executable } = inDirectory(root, path.dirname(relative), () => readBoundedFile(path.basename(relative), maxBytes, rejectHardlinks));
   return { path: relative.split(path.sep).join('/'), executable, content: bytes.toString('base64') };
 };
 
-const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits: SnapshotLimits, reviewReadability: boolean): string[] => {
+const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits: SnapshotLimits, reviewReadability: boolean, selection: RecursiveSelection): string[] => {
   if (!sourceStat(path.dirname(root), path.basename(root)).isDirectory()) return [];
   const files: string[] = [];
   const pending = [''];
@@ -134,7 +140,9 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
           const stat = fs.lstatSync(name);
           if (stat.isDirectory() && !profilesOnly) pending.push(entry);
           else if (stat.isFile()) {
-            if (reviewReadability) readableFileStat(name);
+            if (selection.markdownOnly && !name.endsWith('.md')) continue;
+            requireSingleLink(stat, selection.rejectHardlinks ?? false);
+            if (reviewReadability) readableFileStat(name, selection.rejectHardlinks);
             files.push(entry);
           }
         }
@@ -144,18 +152,18 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
   return files.sort();
 };
 // Discovery must not turn a capture-time read failure into an optional skip.
-const recursiveFiles = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}): string[] => (
-  walkFiles(root, profilesOnly, skills, limits, false)
+const recursiveFiles = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}, selection: RecursiveSelection = {}): string[] => (
+  walkFiles(root, profilesOnly, skills, limits, false, selection)
 );
-const reviewRecursiveFiles = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}): string[] => (
-  walkFiles(root, profilesOnly, skills, limits, true)
+const reviewRecursiveFiles = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}, selection: RecursiveSelection = {}): string[] => (
+  walkFiles(root, profilesOnly, skills, limits, true, selection)
 );
 
-const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}): string => {
-  const files = recursiveFiles(root, profilesOnly, skills, limits);
+const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}, selection: RecursiveSelection = {}): string => {
+  const files = recursiveFiles(root, profilesOnly, skills, limits, selection);
   if (files.length === 0) throw new Error('Snapshot source has no regular files');
   const maxBytes = limits.maxBytes ?? snapshotByteLimit;
-  const stats = files.map((relative) => fileStat(root, relative));
+  const stats = files.map((relative) => fileStat(root, relative, selection.rejectHardlinks));
   const entries = files.map((relative, index) => ({ path: relative.split(path.sep).join('/'), executable: (stats[index].mode & 0o111) !== 0, content: '' }));
   const serialize = (): string => `${JSON.stringify({ format: 'ballin-directory', version: 1, entries }, null, 2)}\n`;
   let metadataBytes = Buffer.byteLength('{\n  "format": "ballin-directory",\n  "version": 1,\n  "entries": [\n\n  ]\n}\n');
@@ -171,7 +179,7 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
   }
   let remaining = maxBytes - metadataBytes;
   files.forEach((relative, index) => {
-    entries[index] = fileEntry(root, relative, 3 * Math.floor(remaining / 4));
+    entries[index] = fileEntry(root, relative, 3 * Math.floor(remaining / 4), selection.rejectHardlinks);
     remaining -= entries[index].content.length;
   });
   const snapshot = serialize();
@@ -181,19 +189,22 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
 
 module.exports = { checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
   snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, requireWithinLimit };
-export type { RecursiveEntry, SnapshotLimits };
+export type { RecursiveEntry, SnapshotLimits, RecursiveSelection };
 
 if (require.main === module) {
   try {
     const limitIndex = process.argv.indexOf('--max-bytes', 4);
     const maxBytes = limitIndex < 0 ? snapshotByteLimit : Number(process.argv[limitIndex + 1]);
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > snapshotByteLimit) throw new Error('Invalid snapshot limit');
+    const rejectHardlinks = process.argv.includes('--reject-hardlinks');
     if (process.argv[3] === 'file') {
       validatePath(process.argv[2], process.argv[4]);
-      const bytes = inDirectory(process.argv[2], path.dirname(process.argv[4]), () => readBoundedFile(path.basename(process.argv[4]), maxBytes).bytes);
+      const bytes = inDirectory(process.argv[2], path.dirname(process.argv[4]), () => readBoundedFile(path.basename(process.argv[4]), maxBytes, rejectHardlinks).bytes);
       process.stdout.write(bytes);
     } else {
-      process.stdout.write(recursiveSnapshot(process.argv[2], process.argv[3] === 'profiles', process.argv[3] === 'skills', { maxBytes }));
+      process.stdout.write(recursiveSnapshot(process.argv[2], process.argv[3] === 'profiles', process.argv[3] === 'skills', { maxBytes }, {
+        markdownOnly: process.argv[3] === 'markdown', rejectHardlinks,
+      }));
     }
   } catch (error) {
     process.stderr.write(error instanceof SnapshotLimitError ? `${error.message}\n` : 'Unable to capture recursive snapshot.\n');

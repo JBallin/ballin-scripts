@@ -32,16 +32,16 @@ const hasOwn = (obj: ConfigObject, key: string) => Object.prototype.hasOwnProper
 
 const configMessages = {
   actionErr: 'Unknown config action.',
-  getKeysDneErr: (keys: string) => `"${keys}" doesn't exist in config. Use ballin config get to inspect available keys.`,
+  getKeysDneErr: (keys: string) => `"${keys}" doesn't exist in config. Use \`ballin config get\` to inspect available keys.`,
   reset: (prevConfig: ConfigValue, defaultConfig: string) => (
-    `Config has been reset...\nFROM:\n${prevConfig}TO:\n${defaultConfig}`
+    `Config reset to defaults.\n\nPrevious config:\n${prevConfig}${String(prevConfig).endsWith('\n') ? '' : '\n'}\nCurrent config:\n${defaultConfig}`
   ),
   set: (keys: string, newConfig: ConfigValue) => `"${keys}" set to: ${JSON.stringify(newConfig)}`,
   setArgsErr: 'set requires an existing key and exactly one value.',
   getArgsErr: 'get accepts at most one key.',
   resetArgsErr: 'reset accepts no arguments.',
-  setDneErr: (keys: string) => `"${keys}" doesn't exist in config. Use ballin config get to inspect available keys.`,
-  setObjErr: (keys: string) => `"${keys}" is not a bottom-level value. Choose an existing leaf key.`,
+  setDneErr: (keys: string) => `"${keys}" doesn't exist in config. Use \`ballin config get\` to inspect available keys.`,
+  setObjErr: (keys: string) => `"${keys}" contains nested settings. Choose a setting inside it.`,
 };
 
 const isFileSystemError = (error: unknown): error is NodeJS.ErrnoException => (
@@ -53,7 +53,7 @@ const isFileSystemError = (error: unknown): error is NodeJS.ErrnoException => (
 const recoveryGuidance = (bundled: boolean): string => (
   bundled
     ? 'Check the Ballin installation\'s bundled default config.'
-    : 'Run ballin config reset to restore defaults.'
+    : 'Run `ballin config reset` to restore defaults.'
 );
 
 const readConfigFile = (filePath: string, bundled = false) => {

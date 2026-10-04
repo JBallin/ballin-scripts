@@ -33,21 +33,20 @@ const {
 } = require('./commandHelpers.ts');
 const {
   collectSnapshotObservations,
-  codexSnapshotFileNames,
+  configurationSnapshotGroups,
   emptySnapshotContent,
   normalizeSnapshotInput,
   observeSnapshotSources,
-  snapshotDefinitions,
 } = require('./backup_snapshots.ts');
 const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
-  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshot, repositoryOpenUrl,
+  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryDestination } from './backup_config.ts';
 const { lastSuccessFileName, recordLastBackupSuccess, previousBackupSuccessLine } = require('./backup_status.ts');
-import type { RepositoryError, RepositoryRead } from './backup_repository.ts';
+import type { RepositoryError, RepositoryRead, RepositoryInventory } from './backup_repository.ts';
 
 import type {
   AvailableSnapshotObservation,
@@ -96,11 +95,26 @@ const compareBackupFileNames = (left: string, right: string): number => {
   return leftKey < rightKey ? -1 : 1;
 };
 
-const suggestionFileNames = snapshotDefinitions
-  .map(({ name }: { name: string }) => name)
-  .toSorted(compareBackupFileNames);
-
-const fileSuggestions = `\n${suggestionFileNames.map((name: string) => `  ${name}`).join('\n')}`;
+const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
+  const current = entries.filter((entry) => entry.classification === 'current')
+    .map((entry) => entry.path).toSorted(compareBackupFileNames);
+  if (current.length > 0) {
+    writeStdoutLine(`Saved snapshots:\n${current.map((name) => `  ${name}`).join('\n')}`);
+    writeStdoutLine('Read a snapshot with `ballin backup read <snapshot>`.');
+  } else {
+    writeStdoutLine('No current snapshots are saved in this backup.');
+  }
+  const retired = entries.filter((entry) => entry.classification === 'retired')
+    .map((entry) => entry.path).toSorted(compareBackupFileNames);
+  if (retired.length > 0) {
+    writeStdoutLine(`\nRetired snapshots:\n${retired.map((name) => `  ${name}`).join('\n')}`);
+    writeStdoutLine('Inspect retired snapshots with `ballin backup open`.');
+  }
+  const unexpected = entries.filter((entry) => entry.classification === 'unexpected').length;
+  if (unexpected > 0) {
+    writeStdoutLine(`\nUnexpected entries: ${unexpected}. Inspect them with \`ballin backup open\`.`);
+  }
+};
 
 const backupConfig = (): BackupConfigResult => {
   let configObj: Record<string, unknown>;
@@ -315,22 +329,22 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes
 };
 
 const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapshot[] | null => {
-  const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || source.definition.category === 'codex'));
+  const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || configurationSnapshotGroups.has(source.definition.name)));
   if (failure && failure.status === 'discovery-failed') {
     const diagnostic = failure.reason === 'source-limit-exceeded'
       ? `recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'}`
-      : 'selected Codex source could not be discovered completely';
+      : `selected ${failure.definition.category === 'claude' ? 'Claude Code' : 'Codex'} source could not be discovered completely`;
     writeStderrLine(`ballin backup: ${failure.definition.name}: ${diagnostic}. No snapshots were published.`);
     return null;
   }
-  let codexBytes = 0;
+  const capturedBytes = { codex: 0, claude: 0 };
   const collection = collectSnapshotObservations(observations, (source: AvailableSnapshotObservation) => {
-    const codex = source.definition.category === 'codex';
-    const result = captureAvailableSnapshot(source, codex ? snapshotByteLimit - codexBytes : undefined);
-    if (codex && result.status === 'captured') {
+    const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(source.definition.name);
+    const result = captureAvailableSnapshot(source, group ? snapshotByteLimit - capturedBytes[group] : undefined);
+    if (group && result.status === 'captured') {
       try {
-        codexBytes += fs.statSync(result.localFile).size;
-        requireWithinLimit('bytes', codexBytes, snapshotByteLimit);
+        capturedBytes[group] += fs.statSync(result.localFile).size;
+        requireWithinLimit('bytes', capturedBytes[group], snapshotByteLimit);
       } catch {
         try { removeTempFile(result.localFile); } catch { reportTemporaryCleanupFailure(); }
         writeStderrLine(`ballin backup: unable to verify the bounded capture for ${source.definition.name}`);
@@ -381,7 +395,7 @@ const evaluateSnapshots = (
 
     const localMatchesRemote = remote.exists
       && remote.file !== null
-      && snapshotFilesMatch(localFile, remote.file, codexSnapshotFileNames.has(snapshot.fileName));
+      && snapshotFilesMatch(localFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
     let shouldUpload = false;
 
     if (!baseExists && !remote.exists) {
@@ -401,7 +415,7 @@ const evaluateSnapshots = (
       });
       return;
     } else if (remote.file !== null) {
-      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, codexSnapshotFileNames.has(snapshot.fileName));
+      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
       if (baseMatchesRemote && !localMatchesRemote) {
         shouldUpload = true;
       } else if (!baseMatchesRemote && !localMatchesRemote) {
@@ -413,12 +427,12 @@ const evaluateSnapshots = (
       }
     }
 
-    const isEmpty = snapshotIsEmpty(localFile, codexSnapshotFileNames.has(snapshot.fileName));
+    const isEmpty = snapshotIsEmpty(localFile, configurationSnapshotGroups.has(snapshot.fileName));
     const wasEmpty = remote.exists && remote.file !== null && snapshotIsEmpty(remote.file);
     evaluated.push({
       ...stagedSnapshot,
       cacheFile,
-      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile, codexSnapshotFileNames.has(snapshot.fileName)),
+      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile, configurationSnapshotGroups.has(snapshot.fileName)),
       resultState: classifySnapshotResult(!remote.exists, shouldUpload, isEmpty, wasEmpty),
       shouldUpload,
     });
@@ -432,8 +446,8 @@ const reportConflicts = (conflicts: { fileName: string; reason: string }[], dest
     writeStderrLine(`ballin backup: conflict for ${fileName}: ${reason}`);
   });
   writeStderrLine(`ballin backup: conflicts detected; Ballin changed neither the ${destination} nor the backup cache contents`);
-  writeStderrLine(`ballin backup: inspect each remote snapshot with 'ballin backup read <file>' or the ${destination} UI`);
-  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun ballin backup');
+  writeStderrLine(`ballin backup: inspect each remote snapshot with \`ballin backup read <file>\` or the ${destination} UI`);
+  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun `ballin backup`');
 };
 
 const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolean => {
@@ -504,28 +518,31 @@ const runRepositoryBackup = (
     const evaluation = evaluateSnapshots(cacheDir, staged, remote);
     if (evaluation.conflicts.length) { reportConflicts(evaluation.conflicts, 'repository'); return false; }
     const changed = evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload);
-    let stagedCodexBytes = 0;
+    const stagedConfigurationBytes = { codex: 0, claude: 0 };
     for (const { snapshot, localFile } of staged) {
-      if (codexSnapshotFileNames.has(snapshot.fileName)) {
-        stagedCodexBytes += fs.statSync(localFile).size;
-        requireWithinLimit('bytes', stagedCodexBytes, snapshotByteLimit);
+      const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(snapshot.fileName);
+      if (group) {
+        stagedConfigurationBytes[group] += fs.statSync(localFile).size;
+        requireWithinLimit('bytes', stagedConfigurationBytes[group], snapshotByteLimit);
       }
     }
     const changes = new Map<string, Buffer>();
-    let changedCodexBytes = 0;
-    let encodedCodexBytes = 0;
+    const changedBytes = { codex: 0, claude: 0 };
+    const encodedBytes = { codex: 0, claude: 0 };
     for (const { snapshot, localFile } of changed) {
-      const codex = codexSnapshotFileNames.has(snapshot.fileName);
-      const bytes = codex ? readBoundedFile(localFile, snapshotByteLimit - changedCodexBytes).bytes : fs.readFileSync(localFile);
-      if (codex) {
-        changedCodexBytes += bytes.length;
-        encodedCodexBytes += 4 * Math.ceil(bytes.length / 3);
+      const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(snapshot.fileName);
+      const bytes = group ? readBoundedFile(localFile, snapshotByteLimit - changedBytes[group]).bytes : fs.readFileSync(localFile);
+      if (group) {
+        changedBytes[group] += bytes.length;
+        encodedBytes[group] += 4 * Math.ceil(bytes.length / 3);
       }
       changes.set(snapshot.fileName, bytes);
     }
     // The wire allowance is derived from the stored-byte cap, not another 16 MiB cap.
-    requireWithinLimit('bytes', encodedCodexBytes,
-      4 * Math.ceil(snapshotByteLimit / 3) + 4 * (codexSnapshotFileNames.size - 1));
+    for (const group of ['codex', 'claude'] as const) {
+      const count = [...configurationSnapshotGroups.values()].filter((category: string) => category === group).length;
+      requireWithinLimit('bytes', encodedBytes[group], 4 * Math.ceil(snapshotByteLimit / 3) + 4 * (count - 1));
+    }
     const published = publishRepositorySnapshots(read, changes);
     if (changes.size) publishedCommitUrl = published.commitUrl;
     let promoted = false;
@@ -575,7 +592,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
   }
 
   if (config.includeSensitive === null) {
-    writeStderrLine('ballin backup: invalid backup.includeSensitive; expected true or false');
+    writeStderrLine('ballin backup: invalid `backup.includeSensitive`; expected true or false');
     return 1;
   }
   if (!secureExistingBackupCache(backupCacheDir)) return 1;
@@ -605,15 +622,15 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   if (requestedCommand !== undefined && requestedCommand !== '' && !isBackupCommandName(requestedCommand)) {
-    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'`);
+    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'\nTry: \`ballin backup --help\``);
     process.exitCode = 1;
     return;
   }
 
   const command = requestedCommand || undefined;
 
-  if (command === 'open' && args.length !== 1) {
-    writeStderrLine('ballin backup open: expected no arguments');
+  if ((command === 'open' || command === 'list') && args.length !== 1) {
+    writeStderrLine(`ballin backup ${command}: expected no arguments`);
     process.exitCode = 1;
     return;
   }
@@ -638,14 +655,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
     if (!configExisted) writeStdoutLine();
+    let cancelled = false;
     const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
       configPath,
       originalConfig,
       repositoryName: args[1],
+      onCancelled: () => { cancelled = true; },
     });
-    if (!configured) {
-      writeStderrLine("ballin backup setup: setup did not complete; resolve the error and retry with 'ballin backup setup'");
+    if (!configured && !cancelled) {
+      writeStderrLine('ballin backup setup: setup did not complete; check the message above and retry with `ballin backup setup`.');
     }
     process.exitCode = configured ? 0 : 1;
     return;
@@ -659,16 +678,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if (command === 'read' && !args[1]) {
-    process.stdout.write(`Error: 'read' needs a filename.\n\nOptions: ${fileSuggestions}\n`);
+  if (command === 'read' && args.length > 2) {
+    writeStderrLine('ballin backup read: expected exactly one snapshot');
     process.exitCode = 1;
     return;
   }
 
-  if (command === 'read' && args.length !== 2) {
-    writeStderrLine('ballin backup read: expected exactly one filename');
+  const missingReadArgument = command === 'read' && !args[1];
+  if (missingReadArgument) {
+    writeStderrLine('ballin backup read: expected one snapshot; use `ballin backup read <snapshot>`.');
     process.exitCode = 1;
-    return;
   }
 
   if (!command) {
@@ -694,10 +713,18 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   try {
-    if (command === 'read') {
-      const bytes = readRepositorySnapshot(config.repository, args[1]);
-      if (suggestionFileNames.includes(args[1]) && bytes !== undefined) process.stdout.write(bytes);
-      else { writeStdoutLine(`No supported snapshot found.\nOptions: ${fileSuggestions}`); process.exitCode = 1; }
+    if (missingReadArgument) {
+      writeSavedSnapshots(readRepositoryInventory(config.repository));
+    } else if (command === 'read') {
+      const { bytes, inventory } = readRepositorySnapshotWithInventory(config.repository, args[1]);
+      if (bytes !== undefined) process.stdout.write(bytes);
+      else {
+        writeStderrLine('ballin backup read: no supported snapshot found.');
+        writeSavedSnapshots(inventory);
+        process.exitCode = 1;
+      }
+    } else if (command === 'list') {
+      writeSavedSnapshots(readRepositoryInventory(config.repository));
     } else if (command === 'open') {
       const url = repositoryOpenUrl(config.repository);
       writeStdoutLine(`Opening ${url} in your browser.`);

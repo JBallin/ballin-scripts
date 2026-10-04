@@ -4,26 +4,22 @@ For the project overview, see the [main README](../README.md).
 
 ## User guides
 
-- [Installation and removal](installation.md): exact local effects, contacted
-  services, optional backup setup, failure recovery, and removal.
-- [Backup sources and sensitivity](backup-sources.md): source-by-source audit of
-  current snapshots and their plausible sensitive content.
-- [Optional capabilities](optional-capabilities.md): local settings, Node.js
-  setup, optional tools, analytics choices, and configurable `ballin update`
-  settings.
-- [Analytics](analytics.md): the local analytics choice, command and behavioral
-  events, payloads, controls, and retention.
-- [Supported capabilities](capabilities.md): the current `ballin update`
-  integrations and `ballin backup` snapshots.
+| Guide | Purpose |
+| --- | --- |
+| [Choosing Ballin](choosing-ballin.md) | When Ballin fits an existing Mac setup, when another approach is better, and how to use them together. |
+| [Installation and removal](installation.md) | Exact local effects, contacted services, optional backup setup, failure recovery, and removal. |
+| [Using saved state on another Mac](new-mac.md) | Reviewing snapshots while rebuilding and choosing a backup destination for the new Mac. |
+| [Backup sources and sensitivity](backup-sources.md) | Source-by-source audit of current snapshots and their plausible sensitive content. |
+| [Optional capabilities](optional-capabilities.md) | Local settings, Node.js setup, optional tools, analytics choices, and configurable `ballin update` settings. |
+| [Analytics](analytics.md) | The local analytics choice, command and behavioral events, payloads, controls, and retention. |
+| [Supported capabilities](capabilities.md) | Current `ballin update` integrations and `ballin backup` snapshots. |
 
 ## Maintainer guides
 
-- [Testing and coverage](testing.md): test isolation, coverage comparisons, and
-  runtime and platform limits.
-- [Coverage boundaries](coverage-boundaries.md): reviewed production gaps and
-  their test, ignore, or measured dispositions.
-- [Backup design](backup-design.md): backup safety model and GitHub constraints.
-- [Design system](design-system.md): Ballin identity, product messaging,
-  visual guidance, and brand asset conventions.
-- [Analytics backend](analytics-backend.md): backend deployment and data-policy
-  notes for usage analytics.
+| Guide | Purpose |
+| --- | --- |
+| [Testing and coverage](testing.md) | Test isolation, coverage comparisons, and runtime and platform limits. |
+| [Coverage boundaries](coverage-boundaries.md) | Reviewed production gaps and their test, ignore, or measured dispositions. |
+| [Backup design](backup-design.md) | Backup safety model and GitHub constraints. |
+| [Design system](design-system.md) | Ballin identity, product messaging, visual guidance, and brand asset conventions. |
+| [Analytics backend](analytics-backend.md) | Backend deployment and data-policy notes for usage analytics. |
