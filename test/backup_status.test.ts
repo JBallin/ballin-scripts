@@ -80,13 +80,13 @@ describe('destination-scoped local last-success status', () => {
   it('formats the full local date and distinguishes repeated daylight-saving hours', () => {
     withEnvironment({ TZ: 'America/Los_Angeles' }, () => {
       seed('2025-11-02T08:30:00.000Z\n');
-      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Previous successful backup: Nov 2, 2025, 1:30:00 AM GMT-07:00');
+      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Last successful backup: Nov 2, 2025, 1:30:00 AM GMT-07:00');
       seed('2025-11-02T09:30:00.000Z\n');
-      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Previous successful backup: Nov 2, 2025, 1:30:00 AM GMT-08:00');
+      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Last successful backup: Nov 2, 2025, 1:30:00 AM GMT-08:00');
     });
     withEnvironment({ TZ: 'Asia/Kolkata' }, () => {
       seed('2020-01-01T00:00:00.000Z\n');
-      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Previous successful backup: Jan 1, 2020, 5:30:00 AM GMT+05:30');
+      assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Last successful backup: Jan 1, 2020, 5:30:00 AM GMT+05:30');
     });
   });
   it('omits malformed and future records without rewriting them', () => {
