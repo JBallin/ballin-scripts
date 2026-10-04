@@ -45,34 +45,24 @@ $ ballin update
 
 ==> Updating Homebrew
 ...
-
 ==> Updating Homebrew packages
 ...
-
 ==> Cleaning up Homebrew packages
 ...
-
 ==> Checking Homebrew installation
 ...
-
 ==> Updating Node.js LTS
 ...
-
 ==> Updating global npm packages
 ...
-
 ==> Updating App Store apps
 ...
-
 ==> Installing macOS updates
 ...
-
 ==> Updating Ballin
 ...
-
 ==> Checking Ballin readiness
 ...
-
 ==> Backing up development environment
 Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✔ ballin_config
