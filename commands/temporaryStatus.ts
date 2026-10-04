@@ -12,11 +12,6 @@ const canShowStatus = (text: string): boolean => Boolean(
   && process.env.TERM !== 'dumb' && !process.env.NO_COLOR
   && !(process.stderr.columns > 0 && process.stderr.columns <= text.length),
 );
-// Inherited child output and credential prompts need a completed line, not a cursor to erase.
-const writeInteractiveStatusLine = (text: string): void => {
-  clearTemporaryStatus();
-  if (canShowStatus(text)) write(`${text}\n`);
-};
 const withTemporaryStatus = <T>(text: string, action: () => T): T => {
   clearTemporaryStatus();
   if (!canShowStatus(text)) return action();
@@ -35,4 +30,4 @@ const withTemporaryStatus = <T>(text: string, action: () => T): T => {
   } finally { finish(); }
 };
 
-module.exports = { withTemporaryStatus, clearTemporaryStatus, writeInteractiveStatusLine };
+module.exports = { withTemporaryStatus, clearTemporaryStatus };

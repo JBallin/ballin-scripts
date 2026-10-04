@@ -1,4 +1,5 @@
 const { terminalEmphasis } = require('./terminalStyle.ts');
+const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   ensureAnalyticsInstallId,
   installIdPathForRepo,
@@ -169,11 +170,11 @@ const runDoctorCommand = (args: string[]): void => {
   }
 
   const repoDir = path.join(__dirname, '..');
-  const report = collectSetupReadiness({
+  const report = withTemporaryStatus('Checking readiness...', () => collectSetupReadiness({
     repoDir,
     configPath: process.env.BALLIN_TEST_CONFIG_PATH || undefined,
     env: process.env,
-  }) as DoctorReport;
+  }) as DoctorReport);
 
   writeStdout(verbose ? formatVerboseDoctorReport(report) : formatDefaultDoctorReport(report));
   process.exitCode = report.status === 'fail' ? 1 : 0;
