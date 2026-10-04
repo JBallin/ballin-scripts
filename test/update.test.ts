@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createAnalyticsCapture } = require('./helpers/analytics.ts');
-const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+const { fixtureDestination, fixtureState, installRepositoryFixture, blobHash } = require('./helpers/repository.ts');
 import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 const {
   requiredCommandShims,
@@ -894,6 +894,23 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
     ]);
+  });
+
+  it('still reads snapshot bytes during readiness after a successful self-update', () => {
+    installCommandStub('ballin', { output: 'Ballin updated.' });
+    const statePath = path.join(tempDir, 'readiness-repository.json');
+    const value = fixtureState({ 'zshrc.sh': 'synthetic saved snapshot\n' });
+    value.faults.unreadableBlob = blobHash(value.commits[value.head].files['zshrc.sh']);
+    fs.writeFileSync(statePath, JSON.stringify(value)); installRepositoryFixture(binDir, statePath);
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BALLIN: 'true' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Ballin updated.');
+    assert.include(result.stdout, 'Checking Ballin readiness');
+    assert.include(result.stdout, 'could not be read completely');
+    const inspected = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    assert.isTrue(inspected.requests.some((request: { endpoint: string }) => request.endpoint.endsWith(`/git/blobs/${value.faults.unreadableBlob}`)));
+    assert.isFalse(inspected.requests.some((request: { endpoint: string }) => request.endpoint.includes('/rulesets')));
+    assert.equal(inspected.head, value.head);
   });
 
   it('keeps maintenance-only Ballin healthy after self-update without using gh', () => {

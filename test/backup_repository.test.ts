@@ -3,12 +3,12 @@ const {
   RepositoryError, readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
-  readRepositorySnapshot, repositoryOpenUrl,
+  readRepositorySnapshot, repositoryOpenUrl, inspectRepositoryMaintenance,
 } = require('../commands/backup_repository.ts');
 const { fixtureDestination, fixtureRuleset, fixtureState, commitFixture, requestFixture } = require('./helpers/repository.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 import type { FixtureState } from './helpers/repository.ts';
-import type { RepositoryRead, RepositoryOptions } from '../commands/backup_repository.ts';
+import type { RepositoryRead, RepositoryMaintenance, RepositoryOptions } from '../commands/backup_repository.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
 describe('private repository transport', () => {
@@ -82,10 +82,38 @@ describe('private repository transport', () => {
     assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
     assert.lengthOf(state.requests.filter((request) => request.endpoint === 'user'), 3);
   });
-  for (const command of ['read', 'open']) {
+  it('validates maintenance without supplying a partial publication read or reading snapshot bytes', () => {
+    const result: RepositoryMaintenance = inspectRepositoryMaintenance(fixtureDestination, options);
+    const canPublish: RepositoryMaintenance extends RepositoryRead ? true : false = false;
+    assert.isFalse(canPublish);
+    assert.deepEqual(Object.keys(result).sort(), ['destination', 'revision']);
+    assert.deepEqual(result.destination, fixtureDestination);
+    assert.lengthOf(state.requests, 6);
+    assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+    state.rulesets = [];
+    assert.deepEqual(ensureManagedBranchRuleset(result, options), { status: 'enabled' });
+    assert.lengthOf(rulesetWrites(), 1);
+    assert.lengthOf(publications(), 0);
+  });
+  for (const [label, fault] of [
+    ['foreign owner', { node: { owner: { __typename: 'User', id: 'U_other', login: 'other' } } }],
+    ['public repository', { node: { isPrivate: false } }],
+    ['missing branch', { node: { ref: null } }],
+    ['truncated inventory', { tree: { truncated: true } }],
+    ['unsafe inventory', { tree: { tree: [{ path: '../unsafe', type: 'blob', mode: '100644' }] } }],
+    ['unreadable marker', { blob: 'unreadable' }],
+  ] as const) {
+    it(`rejects ${label} during maintenance without mutation`, () => {
+      state.faults = fault;
+      assert.throws(() => inspectRepositoryMaintenance(fixtureDestination, options), RepositoryError);
+      assert.lengthOf(publications(), 0); assert.lengthOf(rulesetWrites(), 0);
+    });
+  }
+  for (const command of ['read', 'open', 'maintenance']) {
     const invoke = () => command === 'read'
       ? readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options)
-      : repositoryOpenUrl(fixtureDestination, options);
+      : command === 'open' ? repositoryOpenUrl(fixtureDestination, options)
+      : inspectRepositoryMaintenance(fixtureDestination, options);
     it(`rejects invalid active authentication before dependent ${command} operations`, () => {
       state.faults.auth = true;
       assert.throws(invoke, RepositoryError, 'authentication');

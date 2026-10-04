@@ -38,11 +38,17 @@ with `ballin backup setup`. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
-Self-updates report “Ballin updated.” after a successful refresh. They validate
-configured backups without repeating the setup summary; warnings and errors
-remain visible. Run `ballin backup setup` for the full summary. During
-`ballin update`, a readiness check follows. Fresh installs keep one completion
-message after setup.
+Self-updates show “Updating...” in supported interactive terminals and report
+“Ballin updated.” after a successful refresh. They still check the configured
+private backup's destination and format, repair its saved name if renamed, and
+maintain optional branch protection. They skip saved snapshot-content checks.
+Warnings and errors remain visible without repeating the setup summary.
+
+Run `ballin doctor` to check saved snapshot readability, or `ballin backup setup`
+for full revalidation and the settings summary. An unreadable saved snapshot can
+therefore leave standalone self-update successful. During `ballin update`, a full
+readiness check follows and reports that failure. Fresh installs keep one
+completion message after setup.
 
 ## Shell completion
 

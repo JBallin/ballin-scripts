@@ -52,6 +52,8 @@ type RepositoryRead = {
   snapshots: Map<string, Buffer>;
   commitUrl: string;
 };
+// Maintenance validates inventory and marker, but supplies no snapshot bytes for publication.
+type RepositoryMaintenance = Pick<RepositoryRead, 'destination' | 'revision'>;
 type ManagedBranchRulesetOutcome =
   | { status: 'present' }
   | { status: 'enabled' }
@@ -303,6 +305,12 @@ const requireRepositoryRead = (inspection: RepositoryInspection): RepositoryRead
   if (inspection.status !== 'complete') throw new RepositoryError(inspection.problem);
   return inspection.read;
 };
+const inspectRepositoryMaintenance = (
+  destination: RepositoryDestination, options: RepositoryOptions = {},
+): RepositoryMaintenance => {
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  return { destination: read.destination, revision: read.revision };
+};
 // Partial content reads stay private: reconciliation/publication must only receive full reads.
 // Both commands still validate the complete inventory, marker and final revision.
 const readRepositorySnapshot = (
@@ -370,7 +378,7 @@ const harmlessRepresentation = (value: unknown): boolean => (
   || (isConfigObject(value) && Object.values(value).every(harmlessRepresentation))
 );
 const managedBranchRulesetMatch = (
-  value: unknown, id: number, read: RepositoryRead, account: Account,
+  value: unknown, id: number, read: RepositoryMaintenance, account: Account,
 ): 'match' | 'permission-denied' | 'mismatch' => {
   try {
     const ruleset = object(value);
@@ -402,7 +410,7 @@ const managedBranchRulesetMatch = (
   } catch { return 'mismatch'; }
 };
 const readManagedBranchRuleset = (
-  base: string, id: number, read: RepositoryRead, account: Account, options: RepositoryOptions,
+  base: string, id: number, read: RepositoryMaintenance, account: Account, options: RepositoryOptions,
 ): 'match' | 'permission-denied' | 'mismatch' | ProtectionApiOutcome => {
   let detail: ApiResult;
   try { detail = api(`${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
@@ -418,7 +426,7 @@ const readManagedBranchRuleset = (
   return managedBranchRulesetMatch(detail.body, id, read, account);
 };
 const findManagedBranchRuleset = (
-  read: RepositoryRead, account: Account, options: RepositoryOptions,
+  read: RepositoryMaintenance, account: Account, options: RepositoryOptions,
 ): { status: 'missing' } | { status: 'found'; result: ReturnType<typeof readManagedBranchRuleset> }
   | { status: ProtectionApiOutcome } | { status: 'duplicate' } => {
   const base = `repos/${account.login}/${read.destination.name}/rulesets`;
@@ -461,7 +469,7 @@ const rulesetLookupOutcome = (
   return { status: lookup.result } as ManagedBranchRulesetOutcome;
 };
 const ensureManagedBranchRuleset = (
-  read: RepositoryRead, options: RepositoryOptions = {},
+  read: RepositoryMaintenance, options: RepositoryOptions = {},
 ): ManagedBranchRulesetOutcome => {
   const account = readRepositoryAccount(options);
   if (account.id !== read.destination.ownerId) throw new RepositoryError('identity');
@@ -610,12 +618,12 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 
 module.exports = {
   RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
-  readRepositorySnapshot, repositoryOpenUrl,
+  readRepositorySnapshot, repositoryOpenUrl, inspectRepositoryMaintenance,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
 };
 export type {
   RepositoryRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,
-  ManagedBranchRulesetOutcome,
+  ManagedBranchRulesetOutcome, RepositoryMaintenance,
 };
