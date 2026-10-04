@@ -18,7 +18,9 @@ type SnapshotCategory =
   | 'vscode-insiders'
   | 'editor'
   | 'ballin'
-  | 'mas';
+  | 'mas'
+  | 'codex'
+  | 'claude';
 
 type SnapshotCommand = {
   fileName: string;
@@ -62,7 +64,7 @@ type UnavailableSnapshotSource = {
 type FailedSnapshotDiscovery = {
   status: 'discovery-failed';
   source: SnapshotSourceReference;
-  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed';
+  reason: 'prerequisite-command-failed' | 'source-access-failed' | 'tool-discovery-failed' | 'source-limit-exceeded';
   error?: Error;
   exitStatus?: number | null;
   signal?: NodeJS.Signals | null;
@@ -524,6 +526,64 @@ const portableConfigSnapshot = (): SnapshotDefinition => {
   };
 };
 
+const codexRoot = ({ homeDir, env }: SnapshotDiscoveryContext): string => (
+  env.CODEX_HOME ? path.resolve(env.CODEX_HOME) : path.join(homeDir, '.codex')
+);
+
+// Selected assistant configuration can contain executable and private content.
+// Every source is sensitive; policy selection precedes discovery.
+const configurationSnapshot = (category: 'codex' | 'claude', name: string, relative: string, recursive = false, profiles = false, homeRoot = false, skills = relative === 'skills'): SnapshotDefinition => ({
+  name,
+  category,
+  inclusionGroup: 'sensitive',
+  prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
+  discover: (context) => {
+    const claude = category === 'claude';
+    const selection = claude ? { markdownOnly: true, rejectHardlinks: true } : {};
+    const logicalRoot = claude
+      ? context.env.CLAUDE_CONFIG_DIR ? path.resolve(context.env.CLAUDE_CONFIG_DIR) : path.join(context.homeDir, '.claude')
+      : homeRoot ? context.homeDir : codexRoot(context);
+    let root = logicalRoot;
+    let sourcePath = path.join(root, relative);
+    const source = recursive ? directorySource(sourcePath) : fileSource(sourcePath, root);
+    try {
+      root = fs.realpathSync(logicalRoot);
+      sourcePath = require('./recursive_snapshot.ts').checkedPath(root, relative);
+      // Unlike existing dotfiles, assistant sources never follow symlinked entries.
+      const stat = require('./recursive_snapshot.ts').sourceStat(root, relative);
+      if (stat.isSymbolicLink() || (recursive ? !stat.isDirectory() : !stat.isFile())) {
+        return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      }
+      if (claude && stat.isFile() && stat.nlink !== 1) throw new Error('Hard-linked Claude source');
+      if (recursive && require('./recursive_snapshot.ts').recursiveFiles(sourcePath, profiles, skills, {}, selection).length === 0) {
+        return { status: 'absent', source, reason: 'source-not-found' };
+      }
+      return {
+        status: 'available', source,
+        collector: {
+          fileName: name,
+          command: process.execPath,
+          args: recursive
+            ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, claude ? 'markdown' : profiles ? 'profiles' : skills ? 'skills' : 'directory', ...(claude ? ['--reject-hardlinks'] : [])]
+            : [path.join(__dirname, 'recursive_snapshot.ts'), root, 'file', relative, ...(claude ? ['--reject-hardlinks'] : [])],
+          env: context.env,
+        },
+      };
+    } catch (error) {
+      // A failed cwd restoration is fatal; ordinary optional-source handling
+      // must never continue discovery or publication from a different cwd.
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
+      if (error instanceof require('./recursive_snapshot.ts').SnapshotLimitError) {
+        return { status: 'discovery-failed', source, reason: 'source-limit-exceeded', error: error as Error };
+      }
+      if (errorCode(error) === 'ELOOP') return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      return errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
+        ? { status: 'absent', source, reason: 'source-not-found' }
+        : { status: 'discovery-failed', source, reason: 'source-access-failed', error: error as Error };
+    }
+  },
+});
+
 // This is the snapshot source allowlist. Keep additions synchronized with the
 // inclusion and sensitivity review in docs/backup-sources.md.
 const snapshotDefinitions: readonly SnapshotDefinition[] = [
@@ -574,11 +634,28 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   editorExtensionsSnapshot('vscode-insiders', 'vsI_extensions', 'Code - Insiders', 'code-insiders'),
   fileSnapshot('editor', 'sensitive', 'vimrc', '.vimrc'),
   fileSnapshot('editor', 'sensitive', 'nanorc', '.nanorc'),
+  configurationSnapshot('codex', 'codex_AGENTS.md', 'AGENTS.md'),
+  configurationSnapshot('codex', 'codex_AGENTS.override.md', 'AGENTS.override.md'),
+  configurationSnapshot('codex', 'codex_config.toml', 'config.toml'),
+  configurationSnapshot('codex', 'codex_profiles.json', '.', true, true),
+  configurationSnapshot('codex', 'codex_hooks.json', 'hooks.json'),
+  configurationSnapshot('codex', 'codex_skills.json', 'skills', true),
+  configurationSnapshot('codex', 'codex_user_skills.json', '.agents/skills', true, false, true, true),
+  configurationSnapshot('codex', 'codex_rules.json', 'rules', true),
+  configurationSnapshot('codex', 'codex_agents.json', 'agents', true),
+  configurationSnapshot('codex', 'codex_marketplace.json', '.agents/plugins/marketplace.json', false, false, true),
+  configurationSnapshot('claude', 'claude_instructions', 'CLAUDE.md'),
+  configurationSnapshot('claude', 'claude_rules', 'rules', true, false, false, false),
+  configurationSnapshot('claude', 'claude_agents', 'agents', true, false, false, false),
+  configurationSnapshot('claude', 'claude_commands', 'commands', true, false, false, false),
   portableConfigSnapshot(),
   shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
 ];
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
+const configurationSnapshotGroups = new Map<string, 'codex' | 'claude'>(snapshotDefinitions.flatMap(({ name, category }) => (
+  category === 'codex' || category === 'claude' ? [[name, category] as const] : []
+)));
 
 const isSnapshotSelected = (definition: SnapshotDefinition, includeSensitive: boolean): boolean => {
   switch (definition.inclusionGroup) {
@@ -651,6 +728,7 @@ module.exports = {
   repositoryMarkerFileName,
   repositoryReadmeFileName,
   classifySnapshotFileName,
+  configurationSnapshotGroups,
   collectSnapshotObservations,
   configSnapshotFileName,
   emptySnapshotContent,

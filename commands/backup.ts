@@ -33,11 +33,13 @@ const {
 } = require('./commandHelpers.ts');
 const {
   collectSnapshotObservations,
+  configurationSnapshotGroups,
   emptySnapshotContent,
   normalizeSnapshotInput,
   observeSnapshotSources,
   snapshotDefinitions,
 } = require('./backup_snapshots.ts');
+const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryMessages, readRepositorySnapshot, repositoryOpenUrl,
@@ -187,12 +189,17 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
   return result.status === 0 && !result.error;
 };
 
-const snapshotFilesMatch = (leftFile: string, rightFile: string): boolean => (
-  fs.readFileSync(leftFile).equals(fs.readFileSync(rightFile))
-);
+const snapshotFilesMatch = (leftFile: string, rightFile: string, boundLeft = false): boolean => {
+  try {
+    return (boundLeft ? readBoundedFile(leftFile).bytes : fs.readFileSync(leftFile)).equals(fs.readFileSync(rightFile));
+  } catch (error) {
+    if (error instanceof SnapshotLimitError) (error as Error).message = `${path.basename(leftFile)}: ${(error as Error).message}`;
+    throw error;
+  }
+};
 
-const snapshotIsEmpty = (filePath: string): boolean => (
-  fs.readFileSync(filePath, 'utf8') === emptySnapshotContent
+const snapshotIsEmpty = (filePath: string, bound = false): boolean => (
+  (bound ? readBoundedFile(filePath).bytes.toString('utf8') : fs.readFileSync(filePath, 'utf8')) === emptySnapshotContent
 );
 
 const classifySnapshotResult = (
@@ -278,8 +285,10 @@ const removeStagedSnapshots = (stagedSnapshots: StagedSnapshot[]): boolean => {
   return removed;
 };
 
-const captureAvailableSnapshot = (source: AvailableSnapshotObservation): SnapshotCaptureResult => {
-  const snapshot = source.collector;
+const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes?: number): SnapshotCaptureResult => {
+  const snapshot = maxBytes === undefined ? source.collector : {
+    ...source.collector, args: [...(source.collector.args ?? []), '--max-bytes', String(maxBytes)],
+  };
   let inputFile: string | null = null;
   let captured = false;
   try {
@@ -287,6 +296,7 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation): Snapsho
     inputFile = createdInputFile;
     if (captureSnapshotInput(snapshot, createdInputFile)) {
       normalizeSnapshotInput(createdInputFile);
+      if (maxBytes !== undefined) requireWithinLimit('bytes', fs.statSync(createdInputFile).size, maxBytes);
       captured = true;
     }
   } catch (error) {
@@ -305,7 +315,30 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation): Snapsho
 };
 
 const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapshot[] | null => {
-  const collection = collectSnapshotObservations(observations, captureAvailableSnapshot);
+  const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || configurationSnapshotGroups.has(source.definition.name)));
+  if (failure && failure.status === 'discovery-failed') {
+    const diagnostic = failure.reason === 'source-limit-exceeded'
+      ? `recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'}`
+      : `selected ${failure.definition.category === 'claude' ? 'Claude Code' : 'Codex'} source could not be discovered completely`;
+    writeStderrLine(`ballin backup: ${failure.definition.name}: ${diagnostic}. No snapshots were published.`);
+    return null;
+  }
+  const capturedBytes = { codex: 0, claude: 0 };
+  const collection = collectSnapshotObservations(observations, (source: AvailableSnapshotObservation) => {
+    const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(source.definition.name);
+    const result = captureAvailableSnapshot(source, group ? snapshotByteLimit - capturedBytes[group] : undefined);
+    if (group && result.status === 'captured') {
+      try {
+        capturedBytes[group] += fs.statSync(result.localFile).size;
+        requireWithinLimit('bytes', capturedBytes[group], snapshotByteLimit);
+      } catch {
+        try { removeTempFile(result.localFile); } catch { reportTemporaryCleanupFailure(); }
+        writeStderrLine(`ballin backup: unable to verify the bounded capture for ${source.definition.name}`);
+        return { status: 'collector-failed' as const };
+      }
+    }
+    return result;
+  });
   const stagedSnapshots = collection.flatMap((result: SnapshotCollectionObservation) => (
     result.status === 'captured'
       ? [{ snapshot: result.source.collector, localFile: result.localFile }]
@@ -348,7 +381,7 @@ const evaluateSnapshots = (
 
     const localMatchesRemote = remote.exists
       && remote.file !== null
-      && snapshotFilesMatch(localFile, remote.file);
+      && snapshotFilesMatch(localFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
     let shouldUpload = false;
 
     if (!baseExists && !remote.exists) {
@@ -368,7 +401,7 @@ const evaluateSnapshots = (
       });
       return;
     } else if (remote.file !== null) {
-      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file);
+      const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
       if (baseMatchesRemote && !localMatchesRemote) {
         shouldUpload = true;
       } else if (!baseMatchesRemote && !localMatchesRemote) {
@@ -380,12 +413,12 @@ const evaluateSnapshots = (
       }
     }
 
-    const isEmpty = snapshotIsEmpty(localFile);
+    const isEmpty = snapshotIsEmpty(localFile, configurationSnapshotGroups.has(snapshot.fileName));
     const wasEmpty = remote.exists && remote.file !== null && snapshotIsEmpty(remote.file);
     evaluated.push({
       ...stagedSnapshot,
       cacheFile,
-      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile),
+      cacheNeedsPromotion: !baseExists || !snapshotFilesMatch(cacheFile, localFile, configurationSnapshotGroups.has(snapshot.fileName)),
       resultState: classifySnapshotResult(!remote.exists, shouldUpload, isEmpty, wasEmpty),
       shouldUpload,
     });
@@ -399,8 +432,8 @@ const reportConflicts = (conflicts: { fileName: string; reason: string }[], dest
     writeStderrLine(`ballin backup: conflict for ${fileName}: ${reason}`);
   });
   writeStderrLine(`ballin backup: conflicts detected; Ballin changed neither the ${destination} nor the backup cache contents`);
-  writeStderrLine(`ballin backup: inspect each remote snapshot with 'ballin backup read <file>' or the ${destination} UI`);
-  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun ballin backup');
+  writeStderrLine(`ballin backup: inspect each remote snapshot with \`ballin backup read <file>\` or the ${destination} UI`);
+  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun `ballin backup`');
 };
 
 const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolean => {
@@ -470,8 +503,32 @@ const runRepositoryBackup = (
     const cacheDir = repositoryCacheDirectory(cacheRoot, destination);
     const evaluation = evaluateSnapshots(cacheDir, staged, remote);
     if (evaluation.conflicts.length) { reportConflicts(evaluation.conflicts, 'repository'); return false; }
-    const changes = new Map<string, Buffer>(evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload)
-      .map(({ snapshot, localFile }) => [snapshot.fileName, fs.readFileSync(localFile)]));
+    const changed = evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload);
+    const stagedConfigurationBytes = { codex: 0, claude: 0 };
+    for (const { snapshot, localFile } of staged) {
+      const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(snapshot.fileName);
+      if (group) {
+        stagedConfigurationBytes[group] += fs.statSync(localFile).size;
+        requireWithinLimit('bytes', stagedConfigurationBytes[group], snapshotByteLimit);
+      }
+    }
+    const changes = new Map<string, Buffer>();
+    const changedBytes = { codex: 0, claude: 0 };
+    const encodedBytes = { codex: 0, claude: 0 };
+    for (const { snapshot, localFile } of changed) {
+      const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(snapshot.fileName);
+      const bytes = group ? readBoundedFile(localFile, snapshotByteLimit - changedBytes[group]).bytes : fs.readFileSync(localFile);
+      if (group) {
+        changedBytes[group] += bytes.length;
+        encodedBytes[group] += 4 * Math.ceil(bytes.length / 3);
+      }
+      changes.set(snapshot.fileName, bytes);
+    }
+    // The wire allowance is derived from the stored-byte cap, not another 16 MiB cap.
+    for (const group of ['codex', 'claude'] as const) {
+      const count = [...configurationSnapshotGroups.values()].filter((category: string) => category === group).length;
+      requireWithinLimit('bytes', encodedBytes[group], 4 * Math.ceil(snapshotByteLimit / 3) + 4 * (count - 1));
+    }
     const published = publishRepositorySnapshots(read, changes);
     if (changes.size) publishedCommitUrl = published.commitUrl;
     let promoted = false;
@@ -487,6 +544,10 @@ const runRepositoryBackup = (
     }
     completed = evaluation.evaluated;
   } catch (error) {
+    if (error instanceof SnapshotLimitError) {
+      writeStderrLine(`ballin backup: ${(error as Error).message} Repository and cache contents were not changed.`);
+      return false;
+    }
     const problem = (error as RepositoryError).problem;
     writeStderrLine(`ballin backup: ${repositoryMessages[problem] ?? 'Unable to reconcile local backup files.'}`);
     return false;
@@ -517,7 +578,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
   }
 
   if (config.includeSensitive === null) {
-    writeStderrLine('ballin backup: invalid backup.includeSensitive; expected true or false');
+    writeStderrLine('ballin backup: invalid `backup.includeSensitive`; expected true or false');
     return 1;
   }
   if (!secureExistingBackupCache(backupCacheDir)) return 1;
@@ -547,7 +608,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   if (requestedCommand !== undefined && requestedCommand !== '' && !isBackupCommandName(requestedCommand)) {
-    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'`);
+    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'\nTry: \`ballin backup --help\``);
     process.exitCode = 1;
     return;
   }
@@ -580,14 +641,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
     if (!configExisted) writeStdoutLine();
+    let cancelled = false;
     const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
       configPath,
       originalConfig,
       repositoryName: args[1],
+      onCancelled: () => { cancelled = true; },
     });
-    if (!configured) {
-      writeStderrLine("ballin backup setup: setup did not complete; resolve the error and retry with 'ballin backup setup'");
+    if (!configured && !cancelled) {
+      writeStderrLine('ballin backup setup: setup did not complete; check the message above and retry with `ballin backup setup`.');
     }
     process.exitCode = configured ? 0 : 1;
     return;

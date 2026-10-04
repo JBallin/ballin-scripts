@@ -124,16 +124,20 @@ logs in, switches accounts, or expands scopes automatically. Read-only access
 supports reconnect and recovery without granting write permission. See
 [setup and recovery](installation.md#optional-backup-setup-and-reconnect).
 
-`backup.repository` identifies the selected destination. The fixed inventory and
-filtered-preference baseline is always selected; `backup.includeSensitive`
-controls the single **sensitive sources** choice and defaults to `"false"`.
-Enabling it adds raw shell/Git/editor configuration, `.nvmrc`, and pipx
-installation metadata. The setting accepts native booleans or exact
-`"true"`/`"false"` strings. Destination and consent stay local. Changing sensitive
-consent later changes future capture selection, not saved files or history; review
-[source sensitivity](backup-sources.md) first.
+`backup.repository` identifies the selected destination. Inventories and filtered
+preferences form the fixed baseline. The default-off `backup.includeSensitive`
+choice adds sensitive sources from the [maintained catalog](backup-sources.md),
+including future supported additions. It accepts native booleans or exact
+`"true"`/`"false"` strings. Destination and consent stay local and are never
+recovered from backups. Changing consent affects future captures, not saved
+files or history. Run `ballin setup` to review sources or change the choice.
 
-To include or exclude sensitive sources in future backups:
+After self-update, Ballin links to the source guide when definitions changed or
+the comparison was unavailable; the advisory does not change consent. The first
+upgrade installing this advisory still runs the earlier updater and cannot show
+it, so review the guide when adopting that release.
+
+To toggle sensitive sources in future backups:
 
 ```shell
 ballin config set backup.includeSensitive true

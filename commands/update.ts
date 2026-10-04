@@ -306,7 +306,7 @@ function runUpdateCommand(): void {
     } else {
       writeStderrLine();
       writeStderrLine('Unable to update Node.js LTS: unable to load nvm.');
-      writeStderrLine('Set NVM_DIR to your nvm installation or disable this update with: ballin config set update.nvm false');
+      writeStderrLine('Set `NVM_DIR` to your nvm installation or disable this update with: `ballin config set update.nvm false`');
       recordFailure(1);
     }
   }
