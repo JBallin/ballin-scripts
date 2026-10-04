@@ -49,10 +49,13 @@ describe('directory snapshot inspection', () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
   it('escapes control characters in listed paths without altering stored paths', () => {
-    const name = 'nested/\x1b[31m\tline\n\u009b\u202e.md';
+    const directional = '\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069';
+    const separators = '\u2028\u2029';
+    const name = `nested/\x1b[31m\tline\n\u009b${directional}${separators}.md`;
     const listed = listDirectoryMembers(readDirectorySnapshot(archive([{ ...entry, path: name, executable: false }])).entries);
     assert.notInclude(listed, '\x1b'); assert.notInclude(listed, '\t');
-    assert.notInclude(listed, '\u009b'); assert.notInclude(listed, '\u202e');
+    assert.notInclude(listed, '\u009b');
+    for (const character of directional + separators) assert.notInclude(listed, character);
     assert.equal(JSON.parse(listed)[0].path, name);
   });
   for (const value of ['broken', 'null', '[]', '1', '"text"']) it(`rejects invalid archive ${value}`, () => reject(Buffer.from(value)));

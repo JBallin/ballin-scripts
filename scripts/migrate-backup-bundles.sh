@@ -14,6 +14,11 @@ destination=$2
 [[ -n $destination && ! -e $destination && ! -L $destination ]] || fail 'The destination folder must not exist.'
 parent=$(cd -- "$(dirname -- "$destination")" && pwd -P)
 destination=$parent/$(basename -- "$destination")
+if [[ $repository == /* ]]; then
+  source=$(cd -- "$repository" && pwd -P)
+  [[ $destination != "$source" && $destination != "${source%/}/"* ]] \
+    || fail 'The clone destination must be outside the local source repository.'
+fi
 printf '%s\n' 'Cloning into a new local folder...'
 git -c protocol.ext.allow=never clone --quiet -- "$repository" "$destination" \
   || fail 'Clone failed; inspect any remaining destination before retrying.'
