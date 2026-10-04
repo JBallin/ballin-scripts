@@ -1,6 +1,6 @@
 # Choosing Ballin
 
-*Guide for developers choosing maintenance, snapshots, and recovery tools for an existing Mac setup.*
+*For users deciding whether Ballin fits their workflow.*
 
 Ballin saves selected development-environment snapshots in a private GitHub
 repository and runs configurable maintenance tasks. Choose it when you want a

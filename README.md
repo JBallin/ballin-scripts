@@ -62,10 +62,7 @@ selected state. Setup also offers automatic backup at the end of `ballin update`
 disabled by default. Run `ballin setup` to revisit your onboarding choices or
 `ballin backup open` to inspect saved snapshots and their GitHub history.
 
-`ballin doctor` checks readiness, not whether your snapshots match the Mac now.
-The previous-success time shown during backup is a
-[local record of a past successful run](docs/backup-sources.md#last-successful-backup),
-not proof of freshness or complete coverage.
+`ballin doctor` checks readiness.
 
 ## Example output
 
@@ -107,35 +104,14 @@ View changes: https://github.com/example-user/ballin-backups/commit/0123456789ab
 
 ## Using saved state on another Mac
 
-Install Ballin on the new Mac, then choose **reconnect** during backup setup or
-run `ballin backup setup` later. Reconnect to the existing repository using its
-owning GitHub account. Read-only repository access is enough to inspect saved
-state; see [setup and reconnect](docs/installation.md#optional-backup-setup-and-reconnect).
+Browse your existing backup on GitHub to choose packages from its Brewfile,
+identify editor extensions to reinstall, and review dotfiles before adapting
+them to the new Mac. Ballin does not automatically restore dotfiles or reinstall
+packages, and it does not synchronize Macs.
 
-List the saved snapshots, then read one by its listed name. For example, if your
-old Mac captured a Brewfile:
-
-```shell
-ballin backup list
-ballin backup read Brewfile
-```
-
-Review the Brewfile to choose packages for the new Mac, then use Homebrew Bundle
-separately to install them. Use saved editor-extension inventories to identify
-tools to reinstall, and review any saved dotfiles before manually adapting them
-to the new machine. [Choosing Ballin](docs/choosing-ballin.md#keep-useful-tools-together)
-explains how snapshots fit with other setup and recovery tools.
-
-Reconnect can recover supported Ballin preferences while preserving existing
-local choices; see [preference recovery](docs/optional-capabilities.md#recovering-ballin-preferences).
-Ballin does not automatically restore dotfiles, reinstall packages, or reproduce
-the whole Mac. Keep a broader backup for documents, applications, and other data.
-
-Use only one Mac to publish to each backup destination. Stop backups on the old
-Mac before publishing from its replacement. Reconnect does not authorize
-replacing differing saved content; follow the
-[conflict guidance](docs/capabilities.md#backup-consistency-and-conflicts) before
-backing up from the new Mac. Ballin does not synchronize Macs.
+Use only one Mac to publish to each backup destination. See
+[Using saved state on another Mac](docs/new-mac.md) for a short rebuild workflow
+and the choice between reusing your existing backup and creating a new one.
 
 ## Commands
 
@@ -174,6 +150,5 @@ default and never saved or recovered through backups.
 ## Further reading
 
 See the [documentation index](docs/README.md) for user and maintainer guides,
-including [supported capabilities](docs/capabilities.md),
-[optional tools and settings](docs/optional-capabilities.md), and the
-[backup safety model](docs/backup-design.md).
+including [supported capabilities](docs/capabilities.md) and
+[optional tools and settings](docs/optional-capabilities.md).
