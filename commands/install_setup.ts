@@ -33,12 +33,13 @@ const supportedCommands = new Set([
 type ConfigObject = { [key: string]: ConfigValue };
 type ConfigLeaf = string | number | boolean | null;
 type ConfigValue = ConfigLeaf | ConfigObject;
-type SetupMode = 'fresh' | 'refresh';
+type SetupMode = 'fresh' | 'refresh' | 'self-update';
 type ConfigureBackupOptions = {
   backupCacheDir?: string;
   configPath?: string;
   originalConfig?: Record<string, unknown>;
   onCancelled?: () => void;
+  showValidationSummary?: boolean;
 };
 
 const isConfigObject = (value: unknown): value is ConfigObject => (
@@ -152,6 +153,7 @@ const configureBackup = (
   if (!originalConfig) return false;
   return configureRepositoryBackup({
     configPath, originalConfig, repositoryName: options.repositoryName, onCancelled: options.onCancelled,
+    showValidationSummary: options.showValidationSummary,
     backupCacheDir: options.backupCacheDir ?? path.join(repoDir, '.backup-cache'),
   });
 };
@@ -252,7 +254,10 @@ const setup = (
   let backupSetupSucceeded = true;
   if (mode === 'fresh' || backupConfigured || backupInvalid) {
     let backupSetupCancelled = false;
-    backupSetupSucceeded = configureBackup(repoDir, docsUrl, { originalConfig, onCancelled: () => { backupSetupCancelled = true; } });
+    backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
+      originalConfig, onCancelled: () => { backupSetupCancelled = true; },
+      showValidationSummary: mode !== 'self-update',
+    });
     if (!backupSetupSucceeded) {
       if (!backupSetupCancelled) writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
       writeStdoutLine('\nBallin maintenance is installed. Retry with: `ballin backup setup`');
@@ -285,7 +290,8 @@ const runInstallSetupCli = (): void => {
   }
 
   if (command === 'setup' && repoDir && option) {
-    const mode = process.argv[6] === 'fresh' ? 'fresh' : 'refresh';
+    const mode = process.argv[6] === 'fresh' ? 'fresh'
+      : process.argv[6] === 'self-update' ? 'self-update' : 'refresh';
     process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1;
     return;
   }
@@ -301,7 +307,7 @@ const runInstallSetupCli = (): void => {
   }
 
   if (!command || !repoDir || !option) {
-    writeStdoutLine('Usage: install_setup.ts <configure|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [analytics-docs-url] [fresh|refresh]');
+    writeStdoutLine('Usage: install_setup.ts <configure|setup|symlink-binaries|setup-analytics|supports-command> <repo-dir|command> [docs-url|bin-dir] [analytics-docs-url] [fresh|refresh|self-update]');
     process.exitCode = 1;
     return;
   }

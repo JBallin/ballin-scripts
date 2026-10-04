@@ -41,7 +41,7 @@ function runSelfUpdateCommand(): void {
     repoDir,
     docsUrl,
     analyticsDocsUrl,
-    'refresh',
+    'self-update',
   ], {
     cwd: repoDir,
     env: commandEnv(repoDir),
