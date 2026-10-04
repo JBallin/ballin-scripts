@@ -135,9 +135,10 @@ altering policy or deleting the repository.
 
 Self-update validates the configured destination's account and ownership, private
 repository requirements, selected branch, complete inventory and format marker,
-then rechecks the effective account and revision. It can save a renamed
-repository name and perform the same managed-protection reconciliation described
-above. Invalid settings and maintenance failures remain visible.
+then rechecks the effective account and revision. It updates the saved destination
+if the repository was renamed. It performs the same managed-protection
+reconciliation described above. Invalid settings and maintenance failures remain
+visible.
 
 This inspection returns destination and revision metadata without snapshot bytes;
 it cannot supply a full comparison or publication read. Snapshot-content read or
