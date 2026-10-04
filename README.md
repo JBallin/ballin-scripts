@@ -37,7 +37,8 @@ and removal steps in [Installation and removal](docs/installation.md).
 ## Example output
 
 `ballin update` output depends on installed tools and enabled integrations. This
-example shows a fully configured run with automatic backups enabled.
+example shows a successful run with update integrations and automatic backups
+enabled. Third-party output and the snapshot listing are abbreviated.
 
 ```shell
 $ ballin update
@@ -59,18 +60,21 @@ $ ballin update
 ==> Installing macOS updates
 
 ==> Updating Ballin
+Validated private backup: https://github.com/example-user/ballin-backups
+Sensitive sources: included
+Automatic backup during update: enabled
+Last recorded successful backup on this installation: 2026-01-01T00:00:00.000Z
+Ballin updated.
 
 ==> Checking Ballin readiness
+😎 You're ballin.
 
 ==> Backing up development environment
 Previous successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✔ ballin_config
-✔ bash_completions
 ✔ Brewfile
 ✔ brew_cask
 ...
-✔ vs_settings
-✔ zprofile
 ✎ zshrc
 View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```
