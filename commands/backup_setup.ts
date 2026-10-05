@@ -72,29 +72,33 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         return true;
       }
     }
-    const account = readRepositoryAccount();
     if (configured.kind === 'repository') {
-      if (repositoryName !== undefined) {
-        const found = candidateRepository(repositoryName, account);
-        if (!found || found.id !== configured.repository.id || found.ownerId !== configured.repository.ownerId) {
-          writeStdoutLine('That name does not identify the configured backup. Check access; disconnect before choosing a different destination.');
-          return false;
+      const maintain = (): boolean => {
+        const account = readRepositoryAccount();
+        if (repositoryName !== undefined) {
+          const found = candidateRepository(repositoryName, account);
+          if (!found || found.id !== configured.repository.id || found.ownerId !== configured.repository.ownerId) {
+            writeStdoutLine('That name does not identify the configured backup. Check access; disconnect before choosing a different destination.');
+            return false;
+          }
         }
-      }
-      const read: RepositoryRead | RepositoryMaintenance = options.maintenanceOnly
-        ? inspectRepositoryMaintenance(configured.repository)
-        : requireRepositoryRead(inspectRepository(configured.repository));
-      if (read.destination.name !== configured.repository.name) {
-        candidate.backup = { ...candidate.backup, repository: read.destination };
-        if (!saveBackupConfig(configPath, candidate)) return false;
-      }
-      reportManagedBranchProtection(ensureManagedBranchRuleset(read));
-      const showSummary = options.showValidationSummary !== false;
-      const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
-      if (summary) writeStdoutLine(summary);
-      if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
-      return true;
+        const read: RepositoryRead | RepositoryMaintenance = options.maintenanceOnly
+          ? inspectRepositoryMaintenance(configured.repository)
+          : requireRepositoryRead(inspectRepository(configured.repository));
+        if (read.destination.name !== configured.repository.name) {
+          candidate.backup = { ...candidate.backup, repository: read.destination };
+          if (!saveBackupConfig(configPath, candidate)) return false;
+        }
+        reportManagedBranchProtection(ensureManagedBranchRuleset(read));
+        const showSummary = options.showValidationSummary !== false;
+        const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
+        if (summary) writeStdoutLine(summary);
+        if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
+        return true;
+      };
+      return options.maintenanceOnly ? withTemporaryStatus('Updating...', maintain) : maintain();
     }
+    const account = readRepositoryAccount();
     writeStdoutLine();
     const choice = readPromptLine('Reconnect to an existing backup or create a new one? [reconnect/create] ');
     if (choice.eof || !['reconnect', 'create'].includes(choice.text)) return cancelled();

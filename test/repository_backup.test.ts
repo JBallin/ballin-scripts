@@ -46,18 +46,21 @@ describe('repository backup lifecycle', function() {
       }),
     });
   };
-  const runSetup = (mode = 'self-update') => {
+  const runSetup = (mode = 'self-update', env: NodeJS.ProcessEnv = {}, preload = '') => {
     const installedBin = path.join(home, '.local', 'bin');
     fs.mkdirSync(installedBin, { recursive: true });
     fs.mkdirSync(path.join(checkout, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(checkout, 'bin', 'ballin'), 'synthetic installed shim');
+    const preloadPath = path.join(root, 'setup-preload.cjs');
+    if (preload) fs.writeFileSync(preloadPath, preload);
     return spawnSync(process.execPath, [
+      ...(preload ? ['--require', preloadPath] : []),
       path.join(repoRoot, 'commands', 'install_setup.ts'), 'setup', checkout,
       'https://example.test/docs', '', mode,
     ], {
       encoding: 'utf8', input: '', cwd: checkout, env: testChildEnvironment({
         HOME: home, PATH: `${bin}${path.delimiter}${installedBin}`, TMPDIR: path.join(root, 'tmp'),
-        BALLIN_TEST_CONFIG_PATH: configPath,
+        BALLIN_TEST_CONFIG_PATH: configPath, ...env,
       }),
     });
   };
@@ -1191,8 +1194,9 @@ describe('repository backup lifecycle', function() {
     });
   }
 
-  const progressPreload = (): string => `
-    for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+  const progressPreload = (nonTTY?: 'stdin' | 'stdout' | 'stderr', columns = 80): string => `
+    for (const name of ['stdin', 'stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
+    Object.defineProperty(process.stderr, 'columns', { value: ${columns} });
     const fs = require('fs'); const write = fs.writeSync; const child = require('child_process'); const spawn = child.spawnSync;
     let status = '';
     fs.writeSync = function(fd, text, ...rest) { if (fd === 2) status = text === '\\r\\x1b[2K' ? '' : text; return write.call(this, fd, text, ...rest); };
@@ -1204,6 +1208,50 @@ describe('repository backup lifecycle', function() {
   const progressRequests = (): { args: string[]; status: string }[] => fs.readFileSync(path.join(root, 'progress.log'), 'utf8')
     .trim().split('\n').map((line: string) => JSON.parse(line));
   const ttyEnv = { TERM: 'xterm', NO_COLOR: '' };
+  for (const mode of ['tty', 'stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
+    it(`limits self-update feedback to configured backup maintenance in ${mode} mode`, () => {
+      seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess();
+      const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+      const env = { ...ttyEnv };
+      if (mode === 'dumb') env.TERM = 'dumb';
+      if (mode === 'NO_COLOR') env.NO_COLOR = '1';
+      const nonTTY = ['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined;
+      const result = runSetup('self-update', env, progressPreload(nonTTY, mode === 'narrow' ? 10 : 80)); ok(result);
+      assert.equal(result.stdout, '');
+      assert.equal(result.stderr, mode === 'tty' ? 'Updating...\r\x1b[2K' : '');
+      const requests = progressRequests();
+      const github = requests.filter((request) => request.args[0] === 'api');
+      assert.isAbove(github.length, 0);
+      assert.isTrue(github.every((request) => request.status === (mode === 'tty' ? 'Updating...' : '')));
+      assert.isTrue(requests.filter((request) => request.args[0] !== 'api').every((request) => request.status === ''));
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  it('clears self-update maintenance feedback before failure guidance', () => {
+    const value = state(); value.faults.query = 'errors'; saveState(value);
+    const result = runSetup('self-update', ttyEnv, progressPreload());
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, 'Updating...\r\x1b[2K');
+    assert.include(result.stdout, 'Unable to configure backup');
+    assert.notInclude(result.stdout, 'Updating...');
+    assert.lengthOf(publications(), 0);
+  });
+  it('clears self-update maintenance feedback before optional protection warnings', () => {
+    const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
+    const result = runSetup('self-update', ttyEnv, progressPreload()); ok(result);
+    assert.equal(result.stderr, 'Updating...\r\x1b[2K');
+    assert.include(result.stdout, 'Optional GitHub branch protection was not enabled with the current permissions');
+    assert.notInclude(result.stdout, 'Updating...');
+    assert.lengthOf(publications(), 0);
+  });
+  it('leaves self-update feedback absent without a configured backup', () => {
+    unconfigured();
+    const result = runSetup('self-update', ttyEnv, progressPreload()); ok(result);
+    assert.equal(result.stdout, ''); assert.equal(result.stderr, '');
+    assert.lengthOf(state().requests, 0);
+  });
   it('shows create status before creation and clears before setup results', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\nn\n', ttyEnv, progressPreload()); ok(result);

@@ -209,38 +209,38 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       assert.equal(result.stderr, '');
     });
   }
-  it('clears progress when the installed repository is missing before child work', () => {
+  it('reports a missing installed repository without progress or child work', () => {
     const env = interactiveEnv();
     fs.rmSync(repoDir, { recursive: true, force: true });
     const result = runSelfUpdate(env);
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'Updating...\r\x1b[2K');
+    assert.equal(result.stderr, '');
     assert.equal(result.stdout, `install directory not found: ${repoDir}\n`);
     assert.deepEqual(commandLog(), []);
   });
 
-  it('retains interactive progress before a silent fetch begins', () => {
+  it('leaves a silent fetch free of parent progress and preserves inherited streams', () => {
     const result = runSelfUpdate(interactiveEnv());
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stderr, 'Updating...\n');
+    assert.equal(result.stderr, '');
     assert.equal(result.stdout, 'Ballin updated.\n');
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(testDir, 'fetch-feedback.json'), 'utf8')), {
-      feedback: 'Updating...\n', stdio: ['inherit', 'ignore', 'inherit'],
+      feedback: '', stdio: ['inherit', 'ignore', 'inherit'],
     });
   });
-  it('retains interactive progress before inherited credential and setup output', () => {
+  it('preserves inherited credential and setup output without parent progress', () => {
     const result = runSelfUpdate({
       ...interactiveEnv(), FAKE_GIT_FETCH_READ_STDIN: '1', FAKE_SETUP_STDERR: 'setup warning without newline',
     }, ballinPath, { input: 'fixture-credential\n' });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stderr, 'Updating...\ncredential prompt\nsetup warning without newline');
+    assert.equal(result.stderr, 'credential prompt\nsetup warning without newline');
     assert.equal(result.stdout, 'Ballin updated.\n');
     assert.include(commandLog(), 'fetch-stdin:fixture-credential');
   });
   it('preserves fetch diagnostics without a trailing newline and does not erase them on failure', () => {
     const result = runSelfUpdate({ ...interactiveEnv(), FAKE_GIT_FETCH_STDERR: 'fetch diagnostic', FAKE_GIT_FETCH_STATUS: '17' });
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'Updating...\nfetch diagnostic');
+    assert.equal(result.stderr, 'fetch diagnostic');
     assert.equal(result.stdout, 'git fetch origin main failed\n');
   });
   for (const [setting, value, status] of [
@@ -248,14 +248,14 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     ['FAKE_SETUP_STATUS', '27', 27],
     ['FAKE_SETUP_SIGNAL', 'SIGTERM', 143],
   ] as const) {
-    it(`retains progress and preserves ${setting} failure status`, () => {
+    it(`preserves ${setting} failure status without parent progress`, () => {
       const result = runSelfUpdate({ ...interactiveEnv(), [setting]: value });
       assert.equal(result.status, status);
-      assert.equal(result.stderr, 'Updating...\n');
+      assert.equal(result.stderr, '');
       assert.notInclude(result.stdout, 'Ballin updated.');
     });
   }
-  it('retains progress once in an embedded update and retains its readiness check', () => {
+  it('keeps the embedded update heading and readiness check without parent progress', () => {
     const configPath = path.join(testDir, 'config.json');
     const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8'));
     config.update = Object.fromEntries(Object.keys(config.update).map((key) => [key, key === 'selfUpdate' ? 'true' : 'false']));
@@ -265,7 +265,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       ...interactiveEnv(), BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_TEST_BALLIN_PATH: ballinPath,
     }, ballinPath, {}, ['update']);
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(result.stderr, 'Updating...\n');
+    assert.equal(result.stderr, '');
     assert.include(result.stdout, '==> Updating Ballin');
     assert.include(result.stdout, 'Ballin updated.');
     assert.include(result.stdout, '==> Checking Ballin readiness');

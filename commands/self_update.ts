@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs');
-const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   runCommand,
   runVisibleCommand,
@@ -58,7 +57,7 @@ const refreshInstalledBallin = (): void => {
 };
 
 function runSelfUpdateCommand(): void {
-  withTemporaryStatus('Updating...', refreshInstalledBallin, { retainBeforeInheritedOutput: true });
+  refreshInstalledBallin();
 }
 
 module.exports = {
