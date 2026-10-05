@@ -418,7 +418,7 @@ probe excluded sensitive sources just to verify them, including pipx executable
 discovery. Exclusion does not delete existing remote/cache data or make retained
 content a current capture.
 
-`backup.includeSensitive` defaults to `"false"` and accepts native booleans or exact
+`backup.includeSensitive` (default: `"false"`) accepts native booleans or exact
 `"true"`/`"false"` strings. Invalid capture consent fails before discovery. Setup
 uses one review/confirmation for sensitive sources. Setup default refresh defers new
 destination/consent leaves until the confirmed configuration transaction.
