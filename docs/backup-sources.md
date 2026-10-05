@@ -10,8 +10,8 @@ sensitivity and repository policy; Ballin does not scan or redact
 these snapshots.
 
 Repository capture includes the fixed inventory/preferences baseline and uses
-one default-off local `backup.includeSensitive` choice for all sensitive sources.
-`ballin_config` saves only supported preferences.
+one local `backup.includeSensitive` choice (default: `false`) for all sensitive
+sources. `ballin_config` saves only supported preferences.
 
 Listed filenames may live under an application's configuration directory. To
 inspect editor files before enabling backup or sharing snapshots, check

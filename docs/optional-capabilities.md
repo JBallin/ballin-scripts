@@ -125,11 +125,10 @@ supports reconnect and recovery without granting write permission. See
 [setup and recovery](installation.md#optional-backup-setup-and-reconnect).
 
 `backup.repository` identifies the selected destination. Inventories and filtered
-preferences form the fixed baseline. The default-off `backup.includeSensitive`
-choice adds sensitive sources from the [maintained catalog](backup-sources.md),
-including future supported additions. It accepts native booleans or exact
-`"true"`/`"false"` strings. Destination and consent stay local and are never
-recovered from backups. Changing consent affects future captures, not saved
+preferences form the fixed baseline. The `backup.includeSensitive` choice
+(default: `false`) adds sensitive sources from the [maintained catalog](backup-sources.md),
+including future supported additions. Destination and consent stay local and are
+never recovered from backups. Changing consent affects future captures, not saved
 files or history. Run `ballin setup` to review sources or change the choice.
 
 When self-update starts with the current updater, a successful update links to
