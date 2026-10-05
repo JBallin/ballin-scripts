@@ -52,18 +52,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Typecheck analytics worker
-        run: npm run typecheck:analytics-worker
-
-      - name: Run unit tests with coverage
+      - name: Run complete test gate
         id: coverage
-        run: npm run test:coverage
+        run: npm test
 
       - name: Capture coverage comparison evidence
         id: coverage_diagnostics

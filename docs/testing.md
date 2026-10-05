@@ -3,8 +3,9 @@
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
 Run commands from the repository root. Use `npm test` for the complete local
-gate, or `npm run test:coverage` for coverage alone. CI runs the same coverage
-command once.
+and CI gate, or `npm run test:coverage` for coverage alone. Both use the shared
+two-worker Mocha command in `test:unit`; lint, typechecks and coverage checks
+remain part of `npm test`.
 
 ## Pull request review
 
@@ -105,6 +106,11 @@ Neither command needs an analytics opt-out or `CI=true` in your shell.
 `BALLIN_NO_ANALYTICS=1`, and clears inherited `CI`, command-only analytics
 suppression, Ballin overrides, and test fixture selectors before production
 imports. Production commands still suppress analytics in CI.
+
+Each parallel worker owns a separate config and retains it until process exit,
+so reused workers and cached config modules see the same path. Normal process
+exit removes the config. Tests must restore their own temporary environment
+and module overrides.
 
 Analytics-enabled tests use explicit environments, temporary install IDs, and
 injected senders or mocked HTTPS requests. Installer, config, and public CLI
@@ -251,12 +257,24 @@ That merged tree includes other changes, so these runs are not a controlled
 before/after estimate of the optimization. Use exact run provenance before
 attributing differences to a patch or resource contention.
 
-Retain serial execution and the single complete gate. Mocha's parallel workers
-load required setup once per worker and can run multiple files, while the current
-root `afterAll` removes its config and restores the environment after a file.
-Worker reuse would need a compatible fixture lifecycle before enabling parallel
-mode. Splitting suites adds maintenance cost without a demonstrated additional
-benefit; use focused selection for feedback and retain complete final validation.
+The October 5, 2026 [Linux comparison](https://github.com/JBallin/ballin-scripts/actions/runs/37362898477)
+ran six complete gates on one four-CPU Ubuntu runner at frozen commit `c587fa6`,
+with Node 24.21.0, Mocha 11.7.6 and c8 12.0.0. Adjacent pairs alternated order:
+
+| Pair | Serial | Two workers | Reduction |
+| --- | --- | --- | --- |
+| 1 | 727.46s | 597.46s | 17.87% |
+| 2 | 713.72s | 590.49s | 17.27% |
+| 3 | 716.61s | 582.39s | 18.73% |
+
+All six passed 1,694 tests with no timeout, interruption or fixture leak. The
+median paired reduction was 17.87%; CPU time increased 5.52–5.85%. Queue and
+evidence capture time are excluded. Statement/function outcomes and effective
+V8 covered/uncovered intervals matched across all 36 production files; branch
+map geometry differed in two files. Coverage thresholds and Mocha timeouts are
+unchanged. These repeated results support the two-worker default. Runtime varies
+with machine load and later source changes. Use focused selection for feedback
+and retain the single complete final gate.
 
 ## Runtime and platform limits
 

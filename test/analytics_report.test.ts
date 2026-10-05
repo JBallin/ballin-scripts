@@ -23,6 +23,14 @@ type SpawnCall = {
 };
 
 describe('analytics D1 report', () => {
+  const temporaryRoots: string[] = [];
+
+  afterEach(() => {
+    for (const rootDir of temporaryRoots.splice(0)) {
+      fs.rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it('defaults to the last 30 UTC days ending today', () => {
     const range = dateRangeFromArgs({
       database: defaultDatabase,
@@ -311,6 +319,7 @@ describe('analytics D1 report', () => {
   it('surfaces Wrangler failures without running real commands in tests', () => {
     const calls: SpawnCall[] = [];
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    temporaryRoots.push(rootDir);
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
 
@@ -340,6 +349,7 @@ describe('analytics D1 report', () => {
 
   it('surfaces spawn errors and stdout/default Wrangler failure messages', () => {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    temporaryRoots.push(rootDir);
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
     const options = { database: defaultDatabase, from: '2026-06-01', rootDir, to: '2026-06-30' };
@@ -370,6 +380,7 @@ describe('analytics D1 report', () => {
   it('falls back to npx --yes wrangler when wrangler is unavailable', () => {
     const calls: SpawnCall[] = [];
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    temporaryRoots.push(rootDir);
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
     const options = {
