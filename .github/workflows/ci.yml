@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   test:
+    if: github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/experiment/319-ci-comparison'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -115,3 +116,176 @@ jobs:
           name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
           path: coverage/tmp/
           retention-days: 7
+
+
+  benchmark-319:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/experiment/319-ci-comparison' &&
+      github.actor == 'JBallin'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: experiment-319-ci-comparison
+      cancel-in-progress: false
+    steps:
+      - name: Set owned experiment paths
+        run: |
+          printf 'CI_319_ARTIFACTS=%s/ballin-319-ci-evidence\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'CI_319_FIXTURES=%s/ballin-319-ci-fixtures\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up fixed Node runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          check-latest: false
+          cache: npm
+
+      - name: Install existing shell prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck zsh
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check workflow and experiment syntax
+        run: |
+          docker run --rm -v "${PWD}:/repo:ro" --workdir /repo rhysd/actionlint:1.7.12 -color .github/workflows/*.yml
+          node --check .github/experiments/319/coverage.cjs
+          node --check .github/experiments/319/reuse-observer.cjs
+          python3 -c "import ast,pathlib; ast.parse(pathlib.Path('.github/experiments/319/measure.py').read_text())"
+          git diff --check "$(git hash-object -t tree /dev/null)" HEAD
+
+      - name: Verify frozen source, runtime, resource and dispatch cap
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/experiments/319/measure.py preflight
+
+      - name: Verify worker reuse and fixture cleanup
+        id: probe
+        run: python3 .github/experiments/319/measure.py probe
+
+      - name: Preserve preflight and probe evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-preflight-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ballin-319-ci-evidence/preflight.json
+            ${{ runner.temp }}/ballin-319-ci-evidence/probe/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Measure 01 serial
+        id: sample1
+        run: python3 .github/experiments/319/measure.py sample 1
+
+      - name: Preserve measurement 01
+        if: ${{ always() && (steps.sample1.outcome == 'success' || steps.sample1.outcome == 'failure' || steps.sample1.outcome == 'cancelled') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-01-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/ballin-319-ci-evidence/01-serial/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Measure 02 parallel2
+        id: sample2
+        run: python3 .github/experiments/319/measure.py sample 2
+
+      - name: Preserve measurement 02
+        if: ${{ always() && (steps.sample2.outcome == 'success' || steps.sample2.outcome == 'failure' || steps.sample2.outcome == 'cancelled') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-02-parallel2-${{ github.run_id }}
+          path: ${{ runner.temp }}/ballin-319-ci-evidence/02-parallel2/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Measure 03 parallel2
+        id: sample3
+        run: python3 .github/experiments/319/measure.py sample 3
+
+      - name: Preserve measurement 03
+        if: ${{ always() && (steps.sample3.outcome == 'success' || steps.sample3.outcome == 'failure' || steps.sample3.outcome == 'cancelled') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-03-parallel2-${{ github.run_id }}
+          path: ${{ runner.temp }}/ballin-319-ci-evidence/03-parallel2/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Measure 04 serial
+        id: sample4
+        run: python3 .github/experiments/319/measure.py sample 4
+
+      - name: Preserve measurement 04
+        if: ${{ always() && (steps.sample4.outcome == 'success' || steps.sample4.outcome == 'failure' || steps.sample4.outcome == 'cancelled') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-04-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/ballin-319-ci-evidence/04-serial/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Measure 05 serial
+        id: sample5
+        run: python3 .github/experiments/319/measure.py sample 5
+
+      - name: Preserve measurement 05
+        if: ${{ always() && (steps.sample5.outcome == 'success' || steps.sample5.outcome == 'failure' || steps.sample5.outcome == 'cancelled') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-05-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/ballin-319-ci-evidence/05-serial/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Measure 06 parallel2
+        id: sample6
+        run: python3 .github/experiments/319/measure.py sample 6
+
+      - name: Preserve measurement 06
+        if: ${{ always() && (steps.sample6.outcome == 'success' || steps.sample6.outcome == 'failure' || steps.sample6.outcome == 'cancelled') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-06-parallel2-${{ github.run_id }}
+          path: ${{ runner.temp }}/ballin-319-ci-evidence/06-parallel2/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Summarize all six verified measurements
+        run: python3 .github/experiments/319/measure.py summary
+
+      - name: Preserve the paired summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: 319-summary-${{ github.run_id }}
+          path: ${{ runner.temp }}/ballin-319-ci-evidence/summary.json
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Remove only experiment fixture scratch
+        if: always()
+        run: |
+          python3 - <<'PYTHON'
+          import os, pathlib, shutil
+          root = pathlib.Path(os.environ['CI_319_FIXTURES']).resolve()
+          assert root.parent == pathlib.Path(os.environ['RUNNER_TEMP']).resolve()
+          assert root.name == 'ballin-319-ci-fixtures'
+          if root.exists():
+              shutil.rmtree(root)
+          assert not root.exists()
+          PYTHON
