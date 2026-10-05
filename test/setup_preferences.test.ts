@@ -96,7 +96,7 @@ fs.readFileSync = (file, ...args) => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, `Sensitive sources available now:\n  pipx: installation metadata\n  zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))}\n`);
     assert.notInclude(result.stdout, ' -> ');
-    assert.include(result.stdout, 'Not found now: bash_profile.sh, bashrc.sh, claude_agents, claude_commands, claude_instructions, claude_rules, codex_agents.json, codex_AGENTS.md, codex_AGENTS.override.md, codex_config.toml, codex_hooks.json, codex_marketplace.json, codex_profiles.json, codex_rules.json, codex_skills.json, codex_user_skills.json, gitconfig, gitignore_global, nanorc, nvmrc, profile.sh, vimrc, zprofile.sh\n');
+    assert.include(result.stdout, 'Not found now: bash_profile.sh, bashrc.sh, claude_agents.bundle.json, claude_commands.bundle.json, claude_instructions, claude_rules.bundle.json, codex_agents.bundle.json, codex_AGENTS.md, codex_AGENTS.override.md, codex_config.toml, codex_hooks.json, codex_marketplace.json, codex_profiles.bundle.json, codex_rules.bundle.json, codex_skills.bundle.json, codex_user_skills.bundle.json, gitconfig, gitignore_global, nanorc, nvmrc, profile.sh, vimrc, zprofile.sh\n');
     assert.include(result.stdout, 'Unavailable now: vs_keybindings, vs_settings, vsI_keybindings, vsI_settings\n');
     assert.include(result.stdout, 'pipx installation metadata may contain original URLs, credentials, and backend arguments.');
     assert.notInclude(result.stdout, 'fixture private content');
@@ -136,7 +136,7 @@ fs.readFileSync = (file, ...args) => {
       const active = path.join(root, '.codex', 'active'); fs.mkdirSync(active, { recursive: true });
       const probes = path.join(root, 'user-skills-probes');
       fs.appendFileSync(guardPath, `const userSkillsDefinitions = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'backup_snapshots.ts'))}).snapshotDefinitions;
-        const userSkillsDefinition = userSkillsDefinitions.find((definition) => definition.name === 'codex_user_skills.json');
+        const userSkillsDefinition = userSkillsDefinitions.find((definition) => definition.name === 'codex_user_skills.bundle.json');
         if (!userSkillsDefinition) throw new Error('Missing user skills source definition');
         const discoverUserSkills = userSkillsDefinition.discover;
         userSkillsDefinition.discover = (context) => {
@@ -149,10 +149,10 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
       if (included) {
-        assert.include(result.stdout, `codex_user_skills.json: ${JSON.stringify(skills)}\n`);
+        assert.include(result.stdout, `codex_user_skills.bundle.json: ${JSON.stringify(skills)}\n`);
         assert.include(result.stdout, 'Not found now:');
-        assert.include(result.stdout, 'codex_skills.json,');
-      } else assert.notInclude(result.stdout, 'codex_user_skills.json:');
+        assert.include(result.stdout, 'codex_skills.bundle.json,');
+      } else assert.notInclude(result.stdout, 'codex_user_skills.bundle.json:');
     });
   });
 
@@ -344,7 +344,7 @@ fs.readFileSync = (file, ...args) => {
       const before = fs.readFileSync(configPath, 'utf8');
       const result = run('y\ny\ny\ny\n');
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stdout, `Unable to review codex_${tree}.json`);
+      assert.include(result.stdout, `Unable to review codex_${tree}.bundle.json`);
       assert.isTrue(fs.existsSync(attempts), 'selected leaf must receive a metadata access check');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.notInclude(result.stdout, 'Automatically run');
@@ -364,7 +364,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(result.status, selected ? 1 : 0, result.stdout + result.stderr);
       assert.equal(fs.existsSync(attempts), selected);
       if (selected) {
-        assert.include(result.stdout, 'Unable to review codex_profiles.json');
+        assert.include(result.stdout, 'Unable to review codex_profiles.bundle.json');
         assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       } else assert.equal(readConfig().backup.includeSensitive, 'true');
     });
@@ -407,7 +407,7 @@ fs.readFileSync = (file, ...args) => {
     const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
-    assert.include(result.stdout, `codex_skills.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.include(result.stdout, `codex_skills.bundle.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
     assert.equal(readConfig().backup.includeSensitive, 'true');
   });
 
@@ -432,7 +432,7 @@ fs.readFileSync = (file, ...args) => {
     const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
-    assert.include(result.stdout, `codex_skills.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.include(result.stdout, `codex_skills.bundle.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
     assert.equal(readConfig().backup.includeSensitive, 'true');
   });
 
@@ -442,7 +442,7 @@ fs.readFileSync = (file, ...args) => {
     fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_PRIVATE_CONTENT');
     const result = run('y\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'codex_skills.json:');
+    assert.include(result.stdout, 'codex_skills.bundle.json:');
     assert.include(result.stdout, JSON.stringify(skills));
     assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
   });

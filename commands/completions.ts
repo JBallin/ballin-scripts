@@ -7,8 +7,9 @@ const {
   topLevelCommandNames,
 } = require('./top_level_commands.ts');
 
-const { backupCommandNames } = require('./backup_commands.ts') as {
+const { backupCommandNames, backupReadOptionNames } = require('./backup_commands.ts') as {
   backupCommandNames: readonly BackupCommandName[];
+  backupReadOptionNames: readonly string[];
 };
 const { configOperationNames } = require('../config/commands.ts') as {
   configOperationNames: readonly ConfigOperationName[];
@@ -39,6 +40,9 @@ const renderZshCompletion = (): string => [
   )),
   '      esac',
   '      ;;',
+  '    5)',
+  `      if [[ "\${words[2]}" == backup && "\${words[3]}" == read ]]; then compadd -- ${backupReadOptionNames.join(' ')}; fi`,
+  '      ;;',
   '  esac',
   '}',
   '',
@@ -59,6 +63,10 @@ const renderBashCompletion = (): string => [
   )),
   '        *) return 0 ;;',
   '      esac',
+  '      ;;',
+  '    4)',
+  '      [[ "${COMP_WORDS[1]}" == backup && "${COMP_WORDS[2]}" == read ]] || return 0',
+  `      candidates='${backupReadOptionNames.join(' ')}'`,
   '      ;;',
   '    *) return 0 ;;',
   '  esac',

@@ -349,27 +349,64 @@ an inclusion/sensitivity review, without another approval record.
 
 Global Codex `AGENTS.md` and `AGENTS.override.md` are independent durable
 sources: both are captured when present, regardless of instruction precedence.
-Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.json`,
+Shared personal skills at fixed `HOME/.agents/skills` use `codex_user_skills.bundle.json`,
 independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
-`codex_skills.json`. Both omit root `.system` and retain distinct snapshot
+`codex_skills.bundle.json`. Both omit root `.system` and retain distinct snapshot
 identities, even when `CODEX_HOME=HOME/.agents` selects the same directory. Both staged archives count
 toward the combined byte budget, with separate per-source entry limits.
 
 Codex file capture is intact, including embedded trust settings in main/profile
 TOML, with existing final-newline/empty-file normalization. It does not execute
 or restore configuration. Recursive authoring directories use the shared
-`ballin-directory` JSON format, version 1: sorted relative regular-file entries
-with base64 `content` and an `executable` boolean. No timestamps, absolute paths,
-or empty directories are stored. Source-specific generated exclusions and
+`ballin-directory` JSON format, version 2: sorted relative regular-file entries
+with an `executable` boolean and explicit `encoding`. UTF-8 text uses a `content`
+array containing one physical line per element, including its original LF/CRLF
+terminator. Empty text uses an empty array; a final unterminated line remains
+unterminated. BOMs and Unicode bytes are preserved without normalization. Invalid
+UTF-8 and content with non-text controls use Base64 string content. No timestamps,
+absolute paths or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
+
+### Bundle inspection
+
+`backup read <snapshot> --list` returns member metadata as JSON, with control and
+directional formatting characters escaped for display. `--file <path>` emits the
+exact decoded bytes of one member to stdout without framing or newline changes.
+Both use the existing saved-snapshot reader, including destination, inventory,
+marker, account and revision validation. The entire bundle archive is checked
+before any member output: version-2 schema, relative paths, unique
+names, boolean executable flags, valid text lines or canonical Base64 regular-file
+content. Unsupported versions, link records and malformed entries fail without disclosing payloads in
+diagnostics. Inspection accepts at most 16 MiB of stored archive bytes and 8,192
+members. These checks occur after transport and do not bound remote downloads.
+
+Raw reads return stored bytes unchanged. Inspection accepts version 2 only;
+older versions require manual decoding outside Ballin. Member paths never reach
+filesystem operations, and decoded content is never executed or restored.
+
+Bundle snapshots use `.bundle.json` names. Plain snapshots retain their existing
+names. Old bundle names are retired without read aliases and are retained if
+present; they can coexist with new bundle filenames. The flat repository layout
+and backup marker version remain unchanged. Bundle listings supply an inspection
+hint; raw and file-list hints appear only when stdin, stdout and stderr are
+terminals. Raw hints require a known bundle name and a validated archive.
+
+Reconciliation uses exact stored bytes and the ordinary conflict rules. No
+format-conversion exception or semantic JSON normalization applies. Old-name
+caches cannot establish a comparison base for new filenames.
+
+### Capture bounds and traversal
 
 New Codex and Claude Code captures are each bounded to 16 MiB total normalized
 staged bytes per application (raw files and all archives, including unchanged
 captures) and 8,192 visited entries per
 recursive source. Incremental iterative metadata traversal and opened-file
-bounded reads reject overflow without truncation. Capture-limit failures abort
-staging before remote inspection; cache comparison and writer checks also fail
-before publication or cache promotion. Actual changed buffers are rechecked before
+bounded reads reject overflow without truncation. Text capture incrementally
+preflights escaped line sizes and JSON indentation before allocating content lines; binary capture
+checks Base64 size before encoding. The serialized-byte budget includes line-array
+and escape overhead, so raw source bytes alone do not determine whether a capture fits.
+Capture-limit failures abort staging before remote inspection; cache comparison
+and writer checks also fail before publication or cache promotion. Actual changed buffers are rechecked before
 outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
 not a second 16 MiB cap. Only Codex and Claude Code cache files actually compared
 are bounded, individually, to 16 MiB. The independent capture allowances permit up to 32 MiB
