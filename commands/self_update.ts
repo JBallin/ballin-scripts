@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs');
-const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   runCommand,
   runVisibleCommand,
@@ -51,13 +50,14 @@ const refreshInstalledBallin = (): void => {
     writeStdoutLine('Ballin updated.');
     const currentSources = sourceDefinitionOid(repoDir);
     if (!previousSources || !currentSources || previousSources !== currentSources) {
-      writeStdoutLine(`Backup source definitions may have changed. Sensitive-source opt-in covers current and future supported sources. Review: ${sourcesUrl}`);
+      writeStdoutLine('Backup source definitions may have changed. Sensitive-source opt-in covers current and future supported sources.');
+      writeStdoutLine(`Review: ${sourcesUrl}`);
     }
   }
 };
 
 function runSelfUpdateCommand(): void {
-  withTemporaryStatus('Updating...', refreshInstalledBallin);
+  refreshInstalledBallin();
 }
 
 module.exports = {

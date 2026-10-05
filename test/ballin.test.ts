@@ -688,22 +688,27 @@ require('https').request = () => {
     assert.include(verboseResult.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
   });
 
-  it('reports configured private repository readiness through doctor without publication', () => {
-    const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
-    const statePath = path.join(tempDir, 'repository.json');
-    fs.writeFileSync(statePath, JSON.stringify(fixtureState()));
-    installRepositoryFixture(binDir, statePath);
-    writeConfig({ update: {}, backup: { repository: fixtureDestination, includeSensitive: 'false' }, analytics: {} });
-    const result = runBallin(['doctor', '--verbose']);
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'OK    Private backup readiness:');
-    assert.include(result.stdout, 'Write permission and current source coverage were not checked.');
-    const requests = JSON.parse(fs.readFileSync(statePath, 'utf8')).requests;
-    assert.isAbove(requests.length, 0);
-    assert.isFalse(requests.some((request: { method: string; payload?: { query?: string } }) => (
-      request.method !== 'GET' && !request.payload?.query?.trim().startsWith('query')
-    )));
-  });
+  for (const interactive of [false, true]) {
+    it(`reports configured private repository readiness through ${interactive ? 'interactive' : 'redirected'} doctor without publication`, () => {
+      const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
+      const statePath = path.join(tempDir, 'repository.json');
+      fs.writeFileSync(statePath, JSON.stringify(fixtureState()));
+      installRepositoryFixture(binDir, statePath);
+      writeConfig({ update: {}, backup: { repository: fixtureDestination, includeSensitive: 'false' }, analytics: {} });
+      const beforeConfig = fs.readFileSync(configPath, 'utf8');
+      const result = runBallin(['doctor', '--verbose'], interactive ? interactiveEnv() : {});
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, 'OK    Private backup readiness:');
+      assert.include(result.stdout, 'Write permission and current source coverage were not checked.');
+      assert.equal(result.stderr, interactive ? 'Checking readiness...\r\x1b[2K' : '');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
+      const requests = JSON.parse(fs.readFileSync(statePath, 'utf8')).requests;
+      assert.isAbove(requests.length, 0);
+      assert.isFalse(requests.some((request: { method: string; payload?: { query?: string } }) => (
+        request.method !== 'GET' && !request.payload?.query?.trim().startsWith('query')
+      )));
+    });
+  }
 
   it('rejects stale Gist and malformed destinations without contacting GitHub', () => {
     for (const backup of [

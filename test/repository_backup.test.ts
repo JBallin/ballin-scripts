@@ -46,18 +46,21 @@ describe('repository backup lifecycle', function() {
       }),
     });
   };
-  const runSetup = (mode = 'self-update') => {
+  const runSetup = (mode = 'self-update', env: NodeJS.ProcessEnv = {}, preload = '') => {
     const installedBin = path.join(home, '.local', 'bin');
     fs.mkdirSync(installedBin, { recursive: true });
     fs.mkdirSync(path.join(checkout, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(checkout, 'bin', 'ballin'), 'synthetic installed shim');
+    const preloadPath = path.join(root, 'setup-preload.cjs');
+    if (preload) fs.writeFileSync(preloadPath, preload);
     return spawnSync(process.execPath, [
+      ...(preload ? ['--require', preloadPath] : []),
       path.join(repoRoot, 'commands', 'install_setup.ts'), 'setup', checkout,
       'https://example.test/docs', '', mode,
     ], {
       encoding: 'utf8', input: '', cwd: checkout, env: testChildEnvironment({
         HOME: home, PATH: `${bin}${path.delimiter}${installedBin}`, TMPDIR: path.join(root, 'tmp'),
-        BALLIN_TEST_CONFIG_PATH: configPath,
+        BALLIN_TEST_CONFIG_PATH: configPath, ...env,
       }),
     });
   };
@@ -1197,16 +1200,31 @@ describe('repository backup lifecycle', function() {
     assert.equal(rulesetRequests().length, 0);
   });
 
-  it('propagates browser dispatch failure after validating and displaying the repository URL', () => {
-    const value = state(); value.faults.open = true; saveState(value);
-    const result = run(['open']);
-    assert.equal(result.status, 7);
-    assert.equal(result.stdout, 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n');
-    assert.equal(result.stderr, 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n');
-    assert.equal(state().requests.at(-1)?.endpoint, 'open');
-    assert.equal(mutations().length, 0);
-    assert.isFalse(fs.existsSync(cacheRoot));
-  });
+  const browserOrderingPreload = (): string => `
+    const fs = require('fs'); const write = process.stdout.write; let output = '';
+    process.stdout.write = function(text, ...rest) { output += text; return write.call(this, text, ...rest); };
+    const child = require('child_process'); const spawn = child.spawnSync;
+    child.spawnSync = function(command, args, options) {
+      if (command === 'gh' && args[0] === 'browse') fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, args, stdio: options.stdio, host: options.env.GH_HOST }));
+      return spawn.call(this, command, args, options);
+    };
+  `;
+  for (const failed of [false, true]) {
+    it(`displays the validated URL before ${failed ? 'failed' : 'successful'} browser dispatch`, () => {
+      const value = state(); value.faults.open = failed; saveState(value);
+      const result = run(['open'], '', {}, browserOrderingPreload());
+      assert.equal(result.status, failed ? 7 : 0);
+      const notice = 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n';
+      assert.equal(result.stdout, notice);
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')), {
+        output: notice, args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
+      });
+      assert.equal(result.stderr, failed ? 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n' : '');
+      assert.equal(state().requests.at(-1)?.endpoint, 'open');
+      assert.equal(mutations().length, 0);
+      assert.isFalse(fs.existsSync(cacheRoot));
+    });
+  }
   for (const failure of ['spawn', 'signal']) {
     it(`reports browser ${failure} failure without exposing child diagnostics`, () => {
       const result = run(['open'], '', {}, `
@@ -1227,11 +1245,12 @@ describe('repository backup lifecycle', function() {
     });
   }
 
-  const progressPreload = (): string => `
-    for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+  const progressPreload = (nonTTY?: 'stdin' | 'stdout' | 'stderr', columns = 80): string => `
+    for (const name of ['stdin', 'stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
+    Object.defineProperty(process.stderr, 'columns', { value: ${columns} });
     const fs = require('fs'); const write = fs.writeSync; const child = require('child_process'); const spawn = child.spawnSync;
     let status = '';
-    fs.writeSync = function(fd, text, ...rest) { if (fd === 2) status = text === '\\r\\x1b[2K' ? '' : text; return write.call(this, fd, text, ...rest); };
+    fs.writeSync = function(fd, text, ...rest) { if (fd === 2) status = text === '\\r\\x1b[2K' ? '' : (text.startsWith('\\r\\n') ? text.slice(2) : text); return write.call(this, fd, text, ...rest); };
     child.spawnSync = function(command, args, ...rest) {
       fs.appendFileSync(${JSON.stringify(path.join(root, 'progress.log'))}, JSON.stringify({ args, status }) + '\\n');
       return spawn.call(this, command, args, ...rest);
@@ -1240,6 +1259,81 @@ describe('repository backup lifecycle', function() {
   const progressRequests = (): { args: string[]; status: string }[] => fs.readFileSync(path.join(root, 'progress.log'), 'utf8')
     .trim().split('\n').map((line: string) => JSON.parse(line));
   const ttyEnv = { TERM: 'xterm', NO_COLOR: '' };
+  for (const { name, diagnostic, nonTTY } of [
+    { name: 'without a newline', diagnostic: 'successful fetch diagnostic' },
+    { name: 'near the terminal margin without a newline', diagnostic: 'x'.repeat(79) },
+    { name: 'with a newline', diagnostic: 'successful fetch diagnostic\n' },
+    { name: 'without a newline on redirected stderr', diagnostic: 'successful fetch diagnostic', nonTTY: 'stderr' as const },
+  ]) {
+    it(`preserves a successful fetch diagnostic ${name} before setup-child feedback`, () => {
+      fs.cpSync(path.join(repoRoot, 'commands'), path.join(checkout, 'commands'), { recursive: true });
+      fs.mkdirSync(path.join(checkout, 'bin'));
+      fs.copyFileSync(path.join(repoRoot, 'bin', 'ballin'), path.join(checkout, 'bin', 'ballin'));
+      fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}
+        const args = process.argv.slice(2); const exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);
+        if (exact(['rev-parse', '--verify', 'HEAD:commands/backup_snapshots.ts'])) process.stdout.write('a'.repeat(40) + '\\n');
+        else if (exact(['fetch', 'origin', '+main:refs/remotes/origin/main'])) process.stderr.write(${JSON.stringify(diagnostic)});
+        else if (!exact(['checkout', 'main']) && !exact(['merge', 'origin/main'])) process.exitCode = 2;
+      `, { mode: 0o755 });
+      const preload = path.join(root, 'successful-fetch-preload.cjs');
+      fs.writeFileSync(preload, progressPreload(nonTTY));
+      const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'self-update'], {
+        encoding: 'utf8', env: testChildEnvironment({
+          HOME: home, PATH: `${bin}${path.delimiter}${path.join(home, '.local', 'bin')}`,
+          TMPDIR: path.join(root, 'tmp'), BALLIN_TEST_CONFIG_PATH: configPath,
+          NODE_OPTIONS: `--require=${JSON.stringify(preload)}`, ...ttyEnv,
+        }),
+      });
+      ok(result);
+      assert.equal(result.stderr, diagnostic + (nonTTY ? '' : '\r\nUpdating...\r\x1b[2K'));
+      assert.equal(result.stdout, 'Ballin updated.\n');
+      assert.lengthOf(publications(), 0);
+    });
+  }
+  for (const mode of ['tty', 'stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
+    it(`limits self-update feedback to configured backup maintenance in ${mode} mode`, () => {
+      seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess();
+      const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+      const env = { ...ttyEnv };
+      if (mode === 'dumb') env.TERM = 'dumb';
+      if (mode === 'NO_COLOR') env.NO_COLOR = '1';
+      const nonTTY = ['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined;
+      const result = runSetup('self-update', env, progressPreload(nonTTY, mode === 'narrow' ? 10 : 80)); ok(result);
+      assert.equal(result.stdout, '');
+      assert.equal(result.stderr, mode === 'tty' ? '\r\nUpdating...\r\x1b[2K' : '');
+      const requests = progressRequests();
+      const github = requests.filter((request) => request.args[0] === 'api');
+      assert.isAbove(github.length, 0);
+      assert.isTrue(github.every((request) => request.status === (mode === 'tty' ? 'Updating...' : '')));
+      assert.isTrue(requests.filter((request) => request.args[0] !== 'api').every((request) => request.status === ''));
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    });
+  }
+  it('clears self-update maintenance feedback before failure guidance', () => {
+    const value = state(); value.faults.query = 'errors'; saveState(value);
+    const result = runSetup('self-update', ttyEnv, progressPreload());
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '\r\nUpdating...\r\x1b[2K');
+    assert.include(result.stdout, 'Unable to configure backup');
+    assert.notInclude(result.stdout, 'Updating...');
+    assert.lengthOf(publications(), 0);
+  });
+  it('clears self-update maintenance feedback before optional protection warnings', () => {
+    const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
+    const result = runSetup('self-update', ttyEnv, progressPreload()); ok(result);
+    assert.equal(result.stderr, '\r\nUpdating...\r\x1b[2K');
+    assert.include(result.stdout, 'Optional GitHub branch protection was not enabled with the current permissions');
+    assert.notInclude(result.stdout, 'Updating...');
+    assert.lengthOf(publications(), 0);
+  });
+  it('leaves self-update feedback absent without a configured backup', () => {
+    unconfigured();
+    const result = runSetup('self-update', ttyEnv, progressPreload()); ok(result);
+    assert.equal(result.stdout, ''); assert.equal(result.stderr, '');
+    assert.lengthOf(state().requests, 0);
+  });
   it('shows create status before creation and clears before setup results', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\nn\n', ttyEnv, progressPreload()); ok(result);
