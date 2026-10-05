@@ -8,9 +8,22 @@ command once.
 
 ## Pull request review
 
-The [automatic](../.github/workflows/claude-review.yml), [manual](../.github/workflows/claude.yml), and [status](../.github/workflows/claude-review-status.yml) callers pin the public [review runtime](https://github.com/JBallin/claude-review-runtime) to an immutable revision. Their `uses` entries are the source of truth for the installed SHA. Opened or newly ready same-repository PRs receive one automatic review; drafts, forks, and Dependabot-triggered runs are excluded. Pushes and base retargets only refresh existing review presentation, without running a model.
+The [automatic](../.github/workflows/claude-review.yml),
+[manual](../.github/workflows/claude.yml), and
+[status](../.github/workflows/claude-review-status.yml) callers are the source of
+truth for Ballin's installed immutable [Claude Review Runtime](https://github.com/JBallin/claude-review-runtime)
+revision. See the [runtime setup and review guide](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md)
+for shared setup, behavior, and review verification.
 
-For a fresh review, a human owner, member, or collaborator can post `/claude-review` as the entire top-level or inline PR comment. A read-only lookup requires an open, non-draft, same-repository PR before submission to the runtime's queue. Closing it or converting it to a draft later does not cancel an accepted request. Each accepted automatic or manual review can consume the existing Claude subscription and exposes the captured checkout, PR metadata, and diff to Claude. The existing `CLAUDE_CODE_OAUTH_TOKEN` secret and Claude GitHub App access are required; see the [runtime setup and review guide](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md).
+Opened or newly ready same-repository PRs receive one automatic review; drafts,
+forks, and Dependabot-triggered runs are excluded. Pushes and base retargets
+refresh existing presentation without running Claude. For a fresh review of an
+open, non-draft, same-repository PR, a human owner, member, or collaborator can
+post `/claude-review` as the entire top-level or inline PR comment.
+
+Each accepted automatic or manual review can consume the existing Claude
+subscription and shares the captured checkout, PR metadata, and diff with Claude.
+Closing the PR or converting it to a draft does not cancel an accepted request.
 
 ## Interactive onboarding QA
 
