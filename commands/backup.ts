@@ -34,11 +34,13 @@ const {
 const {
   collectSnapshotObservations,
   configurationSnapshotGroups,
+  directorySnapshotFileNames,
   emptySnapshotContent,
   normalizeSnapshotInput,
   observeSnapshotSources,
 } = require('./backup_snapshots.ts');
 const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
+const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember } = require('./directory_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
@@ -82,6 +84,11 @@ type BackupConfigResult = {
 
 const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 
+const interactiveReadHint = (): boolean => Boolean(process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY);
+const writeDirectoryReadHint = (option: string): void => {
+  if (interactiveReadHint()) writeStderrLine(`${option === '--list' ? 'List' : 'Read'} saved files with \`ballin backup read <bundle> ${option}\`.`);
+};
+
 const backupFileSortKey = (fileName: string): string => (
   fileName === 'Brewfile' ? 'brew' : fileName.toLowerCase()
 );
@@ -101,6 +108,9 @@ const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
   if (current.length > 0) {
     writeStdoutLine(`Saved snapshots:\n${current.map((name) => `  ${name}`).join('\n')}`);
     writeStdoutLine('Read a snapshot with `ballin backup read <snapshot>`.');
+    if (current.some((name) => directorySnapshotFileNames.has(name))) {
+      writeStdoutLine('List files in a bundle with `ballin backup read <bundle> --list`.');
+    }
   } else {
     writeStdoutLine('No current snapshots are saved in this backup.');
   }
@@ -238,7 +248,7 @@ const writeSnapshotStatus = (
   snapshot: SnapshotCommand,
   resultState: SnapshotResultState,
 ): void => {
-  const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '');
+  const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '').replace(/\.bundle$/, '');
   if (resultState === 'unchanged') {
     writeStdoutLine(`✔ ${fileWithoutExtension}`);
   } else if (resultState === 'created') {
@@ -678,8 +688,11 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     return;
   }
 
-  if (command === 'read' && args.length > 2) {
-    writeStderrLine('ballin backup read: expected exactly one snapshot');
+  const directoryList = command === 'read' && args.length === 3 && args[2] === '--list';
+  const directoryFile = command === 'read' && args.length === 4 && args[2] === '--file' && Boolean(args[3]);
+  if (command === 'read' && ((args.length > 2 && ((!directoryList && !directoryFile) || !args[1]))
+    || args[1] === '--list' || args[1] === '--file')) {
+    writeStderrLine('ballin backup read: expected exactly one snapshot, optionally followed by `--list` or `--file <path>`');
     process.exitCode = 1;
     return;
   }
@@ -717,8 +730,21 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       writeSavedSnapshots(readRepositoryInventory(config.repository));
     } else if (command === 'read') {
       const { bytes, inventory } = readRepositorySnapshotWithInventory(config.repository, args[1]);
-      if (bytes !== undefined) process.stdout.write(bytes);
-      else {
+      if (bytes !== undefined) {
+        if (directoryList || directoryFile) {
+          const { entries } = readDirectorySnapshot(bytes);
+          process.stdout.write(directoryList ? listDirectoryMembers(entries) : readDirectoryMember(entries, args[3]));
+          if (directoryList) writeDirectoryReadHint('--file <path>');
+        } else {
+          process.stdout.write(bytes);
+          if (directorySnapshotFileNames.has(args[1]) && interactiveReadHint()) {
+            // Malformed archives still retain the existing exact raw-read behavior.
+            let directory = false;
+            try { readDirectorySnapshot(bytes); directory = true; } catch { /* No hint for ordinary or invalid content. */ }
+            if (directory) writeDirectoryReadHint('--list');
+          }
+        }
+      } else {
         writeStderrLine('ballin backup read: no supported snapshot found.');
         writeSavedSnapshots(inventory);
         process.exitCode = 1;
@@ -737,7 +763,9 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       throw new Error(`Unhandled backup command: ${String(unhandledCommand)}`);
     }
   } catch (error) {
-    writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
+    writeStderrLine(error instanceof DirectorySnapshotError
+      ? `ballin backup read: ${(error as Error).message}`
+      : `ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
     process.exitCode = 1;
   }
 }

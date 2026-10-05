@@ -84,10 +84,12 @@ describe('shell completions', () => {
         ] : []),
         'source "$1"',
         ...(shell === 'zsh' ? [
-          'CURRENT="$2"', 'PREFIX="$3"', 'words=(ballin "$4" "$3" extra)', '_ballin',
+          'CURRENT="$2"', 'PREFIX="$3"', 'words=(ballin "$4" "$3" extra)',
+          'if [[ "$CURRENT" -eq 5 ]]; then words=(ballin "$4" read snapshot "$3"); fi', '_ballin',
         ] : [
           'COMP_CWORD="$2"', 'COMP_WORDS=(ballin "$4" "$3" extra)',
           'if [[ "$COMP_CWORD" -eq 1 ]]; then COMP_WORDS=(ballin "$3"); fi',
+          'if [[ "$COMP_CWORD" -eq 4 ]]; then COMP_WORDS=(ballin "$4" read snapshot "$3"); fi',
           'COMPREPLY=(stale)', '_ballin_completion',
           'printf "%s\\n" "${COMPREPLY[@]}"',
         ]),
@@ -117,6 +119,7 @@ describe('shell completions', () => {
           [2, 'help', 'backup', []], [2, '--', 'backup', []],
           [2, 'missing', 'backup', []], [2, '', 'unknown', []],
           [3, '', 'backup', []], [3, '', 'config', []], [4, '', 'config', []],
+          [4, '', 'backup', ['--list', '--file']], [4, '--f', 'backup', ['--file']],
         ];
         for (const family of topLevelCommandNames.filter((name: string) => !['backup', 'config'].includes(name))) {
           cases.push([2, '', family, []]);
@@ -145,6 +148,7 @@ describe('shell completions', () => {
         ['ballin backup missing\t', 'ballin backup missing'],
         ['ballin config help\t', 'ballin config help'],
         ['ballin backup read missing\t', 'ballin backup read missing'],
+        ['ballin backup read snapshot --f\t', 'ballin backup read snapshot --file'],
       ]) {
         const result = runNativeCompletion(shell, assetPath, input);
         assert.equal(result.status, 0, `${result.error ?? ''} ${result.stderr} ${result.stdout}`);

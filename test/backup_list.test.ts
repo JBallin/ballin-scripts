@@ -83,13 +83,13 @@ describe('saved backup discovery', function() {
     preserved();
   });
   for (const { provider, primary, secondary, missing } of [
-    { provider: 'Codex', primary: 'codex_config.toml', secondary: 'codex_skills.json', missing: 'codex_rules.json' },
-    { provider: 'Claude Code', primary: 'claude_agents', secondary: 'claude_instructions', missing: 'claude_commands' },
+    { provider: 'Codex', primary: 'codex_config.toml', secondary: 'codex_skills.bundle.json', missing: 'codex_rules.bundle.json' },
+    { provider: 'Claude Code', primary: 'claude_agents.bundle.json', secondary: 'claude_instructions', missing: 'claude_commands.bundle.json' },
   ]) {
     it(`discovers and reads saved ${provider} snapshots with future sensitive capture disabled`, () => {
       const bytes = 'synthetic = true\r\n\n';
       save(fixtureState({ [primary]: bytes, [secondary]: '{"synthetic":true}\n' }));
-      const options = `Saved snapshots:\n  ${primary}\n  ${secondary}\nRead a snapshot with \`ballin backup read <snapshot>\`.\n`;
+      const options = `Saved snapshots:\n  ${primary}\n  ${secondary}\nRead a snapshot with \`ballin backup read <snapshot>\`.\nList files in a bundle with \`ballin backup read <bundle> --list\`.\n`;
       for (const args of [['list'], ['read'], ['read', missing]]) {
         const before = state(); before.requests = []; save(before);
         const result = run(args);
@@ -120,6 +120,129 @@ describe('saved backup discovery', function() {
       assert.equal(result.stdout, 'No current snapshots are saved in this backup.\n'); preserved();
     });
   }
+  for (const snapshot of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json', 'codex_rules.bundle.json', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json']) {
+    it(`lists and decodes saved ${snapshot} members without capture or writes`, () => {
+      const content = '# Synthetic example\r\nlast';
+      const member = { path: 'example/SKILL.md', executable: true, encoding: 'base64', content: Buffer.from(content).toString('base64') };
+      const archive = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [member] }, null, 2)}\n`;
+      save(fixtureState({ [snapshot]: archive })); const before = state();
+      const listed = run(['read', snapshot, '--list']);
+      assert.equal(listed.status, 0, listed.stderr); assert.equal(listed.stderr, '');
+      assert.deepEqual(JSON.parse(listed.stdout), [{ path: member.path, executable: true, bytes: Buffer.byteLength(content) }]);
+      assert.notInclude(listed.stdout, 'Synthetic example');
+      const read = run(['read', snapshot, '--file', member.path]);
+      assert.equal(read.status, 0, read.stderr); assert.equal(read.stderr, ''); assert.equal(read.stdout, content);
+      assert.equal(run(['read', snapshot]).stdout, archive);
+      assert.deepEqual({ ...state(), requests: [] }, { ...before, requests: [] }); preserved();
+    });
+  }
+  it('writes exact binary and empty member bytes to stdout with no framing', () => {
+    for (const bytes of [Buffer.from([0, 255, 128, 13, 10]), Buffer.alloc(0)]) {
+      save(fixtureState({ 'codex_skills.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+        { path: 'binary', executable: false, encoding: 'base64', content: bytes.toString('base64') },
+      ] }) }));
+      const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'backup', 'read', 'codex_skills.bundle.json', '--file', 'binary'], {
+        cwd: checkout, env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: tmp, BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_TEST_REPO_DIR: checkout }),
+      });
+      assert.equal(result.status, 0, result.stderr.toString()); assert.deepEqual(result.stdout, bytes); preserved();
+    }
+  });
+  it('stages interactive bundle hints while preserving exact raw, JSON and member stdout', () => {
+    const archive = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+      { path: 'rule.md', executable: false, encoding: 'utf8', content: ['synthetic\r\n', 'last'] },
+    ] });
+    save(fixtureState({ 'codex_rules.bundle.json': archive }));
+    const tty = "for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', {value:true});";
+    const raw = run(['read', 'codex_rules.bundle.json'], {}, tty);
+    assert.equal(raw.status, 0, raw.stderr); assert.equal(raw.stdout, archive);
+    assert.include(raw.stderr, 'backup read <bundle> --list'); assert.notInclude(raw.stderr, '--file');
+    const listed = run(['read', 'codex_rules.bundle.json', '--list'], {}, tty);
+    assert.equal(listed.status, 0, listed.stderr);
+    assert.deepEqual(JSON.parse(listed.stdout), [{ path: 'rule.md', executable: false, bytes: 15 }]);
+    assert.include(listed.stderr, 'backup read <bundle> --file <path>');
+    const member = run(['read', 'codex_rules.bundle.json', '--file', 'rule.md'], {}, tty);
+    assert.equal(member.status, 0, member.stderr); assert.equal(member.stdout, 'synthetic\r\nlast'); assert.equal(member.stderr, '');
+    preserved();
+  });
+  it('keeps redirected streams, ordinary snapshots, malformed raw archives and errors free of hints', () => {
+    const archive = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+      { path: 'rule.md', executable: false, encoding: 'base64', content: 'YQ==' },
+    ] });
+    for (const redirected of ['stdin', 'stdout', 'stderr']) {
+      const tty = `for (const stream of ['stdin','stdout','stderr']) Object.defineProperty(process[stream], 'isTTY', {value:stream!==${JSON.stringify(redirected)}});`;
+      save(fixtureState({ 'codex_rules.bundle.json': archive }));
+      for (const options of [[], ['--list']]) {
+        const result = run(['read', 'codex_rules.bundle.json', ...options], {}, tty);
+        assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, '');
+      }
+    }
+    const tty = "for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', {value:true});";
+    for (const [name, content] of [['gitconfig', archive], ['codex_rules.bundle.json', 'malformed raw archive']]) {
+      save(fixtureState({ [name]: content }));
+      const result = run(['read', name], {}, tty); assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, content); assert.equal(result.stderr, '');
+    }
+    const invalid = run(['read', 'codex_rules.bundle.json', '--list'], {}, tty);
+    expectFailure(invalid, 'not a supported bundle snapshot'); assert.notInclude(invalid.stderr, 'Read saved files');
+    preserved();
+  });
+  it('lists actual bundle selectors without blob reads, aliases, filters or member payloads', () => {
+    save(fixtureState({ 'codex_rules.bundle.json': 'unreadable as an archive', 'codex_rules.json': 'old bytes', gitconfig: 'plain' }));
+    const result = run(); assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, '  codex_rules.bundle.json\n'); assert.include(result.stdout, '  gitconfig\n');
+    assert.include(result.stdout, 'Retired snapshots:\n  codex_rules.json\n');
+    assert.include(result.stdout, 'backup read <bundle> --list'); assert.notInclude(result.stdout, '--file');
+    assert.lengthOf(state().requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
+    const old = run(['read', 'codex_rules.json']); assert.equal(old.status, 1);
+    assert.include(old.stderr, 'no supported snapshot found'); assert.notInclude(old.stdout, 'old bytes');
+    preserved();
+  });
+  it('lists and reads readable version-2 members without altering stored archive bytes', () => {
+    const content = '\ufeff# Synthetic\r\nlast';
+    const archive = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+      { path: 'rule.md', executable: false, encoding: 'utf8', content: ['\ufeff# Synthetic\r\n', 'last'] },
+      { path: 'empty.md', executable: false, encoding: 'base64', content: '' },
+    ] }, null, 2)}\n`;
+    save(fixtureState({ 'claude_rules.bundle.json': archive }));
+    const listed = run(['read', 'claude_rules.bundle.json', '--list']); assert.equal(listed.status, 0, listed.stderr);
+    assert.deepEqual(JSON.parse(listed.stdout), [
+      { path: 'rule.md', executable: false, bytes: Buffer.byteLength(content) }, { path: 'empty.md', executable: false, bytes: 0 },
+    ]);
+    const read = run(['read', 'claude_rules.bundle.json', '--file', 'rule.md']); assert.equal(read.status, 0, read.stderr); assert.equal(read.stdout, content);
+    const empty = run(['read', 'claude_rules.bundle.json', '--file', 'empty.md']); assert.equal(empty.status, 0, empty.stderr); assert.equal(empty.stdout, '');
+    assert.equal(run(['read', 'claude_rules.bundle.json']).stdout, archive); preserved();
+  });
+  it('rejects malformed or unsupported directory contents before any member output', () => {
+    for (const archive of ['DUMMY_PRIVATE_DATA', JSON.stringify({ format: 'ballin-directory', version: 2, entries: [] }), JSON.stringify({
+      format: 'ballin-directory', version: 2, entries: [
+        { path: 'valid', executable: false, encoding: 'base64', content: Buffer.from('DUMMY_PRIVATE_CONTENT').toString('base64') },
+        { path: '../DUMMY_PRIVATE_PATH', executable: false, encoding: 'base64', content: '' },
+      ],
+    })]) {
+      save(fixtureState({ 'codex_skills.bundle.json': archive }));
+      for (const option of [['--list'], ['--file', 'valid']]) {
+        const result = run(['read', 'codex_skills.bundle.json', ...option]);
+        expectFailure(result, 'not a supported bundle snapshot'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
+      }
+    }
+  });
+  it('reports missing members without exposing private selectors or emitting content', () => {
+    save(fixtureState({ 'claude_rules.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 2, entries: [{ path: 'rule.md', executable: false, encoding: 'base64', content: '' }] }) }));
+    const result = run(['read', 'claude_rules.bundle.json', '--file', 'DUMMY_PRIVATE_PATH']);
+    expectFailure(result, 'no matching file found in the bundle'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
+  });
+  it('rejects invalid directory option combinations offline before reading configuration', () => {
+    fs.writeFileSync(configPath, '{broken');
+    for (const args of [
+      ['read', 'codex_skills.bundle.json', '--file'], ['read', 'codex_skills.bundle.json', '--file', ''],
+      ['read', 'codex_skills.bundle.json', '--list', 'extra'], ['read', 'codex_skills.bundle.json', '--list', '--file', 'x'],
+      ['read', '', '--list'], ['read', '--list', 'codex_skills.bundle.json'],
+      ['read', '--list'], ['read', '--file'],
+    ]) {
+      const result = run(args); assert.equal(result.status, 1); assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'expected exactly one snapshot'); assert.deepEqual(state().requests, []);
+    }
+  });
   it('distinguishes retired entries, hides reserved entries, and counts unexpected names without disclosure', () => {
     const unknown = 'DUMMY_PRIVATE_NAME $(touch forbidden)';
     save(fixtureState({ gitconfig: 'private git\n', brackets_extensions: 'old\n', [unknown]: 'secret\n', '.MyConfig.md': 'old gist\n', 'zshrc.sh.bak': 'near match\n' }));
