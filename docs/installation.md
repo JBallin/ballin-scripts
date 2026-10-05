@@ -182,9 +182,9 @@ that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision requires an explicit different name or reconnect choice.
 
-Fresh create or reconnect setup offers one default-off `backup.includeSensitive`
+Fresh create or reconnect setup offers one `backup.includeSensitive`
 choice for raw shell/Git/editor configuration, Codex and Claude Code configuration,
-`.nvmrc`, and pipx metadata.
+`.nvmrc`, and pipx metadata. The setting defaults to `false`.
 Opting in covers current and future supported sensitive sources; existing opt-ins
 include added sources. Review the [source list](backup-sources.md) when support
 changes.
