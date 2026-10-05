@@ -14,6 +14,9 @@ _ballin() {
         config) compadd -- get set reset ;;
       esac
       ;;
+    5)
+      if [[ "${words[2]}" == backup && "${words[3]}" == read ]]; then compadd -- --list --file; fi
+      ;;
   esac
 }
 

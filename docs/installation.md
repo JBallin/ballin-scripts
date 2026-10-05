@@ -56,9 +56,10 @@ file and exact activation line before asking for confirmation (default: no).
 Refreshes and `ballin self-update` do not enable completion or ask again.
 
 Completion covers supported top-level commands and the operations under
-`ballin backup` and `ballin config`. Unique prefixes work too, such as
+`ballin backup` and `ballin config`, plus the `--list` and `--file` options after
+a snapshot name in `ballin backup read`. Unique prefixes work too, such as
 `ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
-Completion does not cover options, values, or file paths.
+Other options, values, and file paths are not completed.
 
 ### Startup files and manual activation
 
@@ -303,10 +304,28 @@ to inspect the backup in your browser, including retired snapshots and unexpecte
 entries. These commands require remote access and work with read-only
 permissions. For offline help, run `ballin backup --help`.
 
+Bundle snapshots use `.bundle.json` filenames. List their files, then read one
+using its exact listed path:
+
+```shell
+ballin backup read codex_skills.bundle.json --list
+ballin backup read codex_skills.bundle.json --file 'example/SKILL.md'
+```
+
+`--file` prints the original bytes, including binary content and line endings.
+These commands inspect saved content without restoring files or executing them.
+
+For local history inspection, clone your backup repository with Git:
+
+```shell
+git clone https://github.com/example-user/ballin-backups.git
+```
+
 Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.
-A reconnect has no trusted base and cannot overwrite differing remote content;
-inspect and manually reconcile each conflict using the
+After reconnect, Ballin has no saved comparison baseline. If newly captured
+content or metadata differs from the saved backup, Ballin reports a conflict
+instead of overwriting it. Inspect and manually reconcile conflicts using the
 [conflict guidance](capabilities.md#backup-consistency-and-conflicts).
 
 If installation fails before setup completes, fix the reported problem and

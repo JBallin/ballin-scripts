@@ -83,6 +83,7 @@ type SnapshotDiscoveryContext = {
 
 type SnapshotDefinition = {
   name: string;
+  directory?: boolean;
   category: SnapshotCategory;
   inclusionGroup: SnapshotInclusionGroup;
   prerequisites: readonly SnapshotPrerequisite[];
@@ -140,6 +141,8 @@ const repositoryMarkerFileName = '.ballin-backup.json';
 const repositoryReadmeFileName = 'README.md';
 
 const retiredSnapshotFileNames = new Set([
+  'codex_profiles.json', 'codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'codex_agents.json',
+  'claude_rules', 'claude_agents', 'claude_commands',
   'brackets_disabled_extensions',
   'brackets_extensions',
   'brackets_keymap.json',
@@ -534,6 +537,7 @@ const codexRoot = ({ homeDir, env }: SnapshotDiscoveryContext): string => (
 // Every source is sensitive; policy selection precedes discovery.
 const configurationSnapshot = (category: 'codex' | 'claude', name: string, relative: string, recursive = false, profiles = false, homeRoot = false, skills = relative === 'skills'): SnapshotDefinition => ({
   name,
+  directory: recursive,
   category,
   inclusionGroup: 'sensitive',
   prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
@@ -637,22 +641,23 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   configurationSnapshot('codex', 'codex_AGENTS.md', 'AGENTS.md'),
   configurationSnapshot('codex', 'codex_AGENTS.override.md', 'AGENTS.override.md'),
   configurationSnapshot('codex', 'codex_config.toml', 'config.toml'),
-  configurationSnapshot('codex', 'codex_profiles.json', '.', true, true),
+  configurationSnapshot('codex', 'codex_profiles.bundle.json', '.', true, true),
   configurationSnapshot('codex', 'codex_hooks.json', 'hooks.json'),
-  configurationSnapshot('codex', 'codex_skills.json', 'skills', true),
-  configurationSnapshot('codex', 'codex_user_skills.json', '.agents/skills', true, false, true, true),
-  configurationSnapshot('codex', 'codex_rules.json', 'rules', true),
-  configurationSnapshot('codex', 'codex_agents.json', 'agents', true),
+  configurationSnapshot('codex', 'codex_skills.bundle.json', 'skills', true),
+  configurationSnapshot('codex', 'codex_user_skills.bundle.json', '.agents/skills', true, false, true, true),
+  configurationSnapshot('codex', 'codex_rules.bundle.json', 'rules', true),
+  configurationSnapshot('codex', 'codex_agents.bundle.json', 'agents', true),
   configurationSnapshot('codex', 'codex_marketplace.json', '.agents/plugins/marketplace.json', false, false, true),
   configurationSnapshot('claude', 'claude_instructions', 'CLAUDE.md'),
-  configurationSnapshot('claude', 'claude_rules', 'rules', true, false, false, false),
-  configurationSnapshot('claude', 'claude_agents', 'agents', true, false, false, false),
-  configurationSnapshot('claude', 'claude_commands', 'commands', true, false, false, false),
+  configurationSnapshot('claude', 'claude_rules.bundle.json', 'rules', true, false, false, false),
+  configurationSnapshot('claude', 'claude_agents.bundle.json', 'agents', true, false, false, false),
+  configurationSnapshot('claude', 'claude_commands.bundle.json', 'commands', true, false, false, false),
   portableConfigSnapshot(),
   shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
 ];
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
+const directorySnapshotFileNames = new Set(snapshotDefinitions.filter(({ directory }) => directory).map(({ name }) => name));
 const configurationSnapshotGroups = new Map<string, 'codex' | 'claude'>(snapshotDefinitions.flatMap(({ name, category }) => (
   category === 'codex' || category === 'claude' ? [[name, category] as const] : []
 )));
@@ -729,6 +734,7 @@ module.exports = {
   repositoryReadmeFileName,
   classifySnapshotFileName,
   configurationSnapshotGroups,
+  directorySnapshotFileNames,
   collectSnapshotObservations,
   configSnapshotFileName,
   emptySnapshotContent,

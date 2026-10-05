@@ -26,12 +26,12 @@ inspect editor files before enabling backup or sharing snapshots, check
 | VS Code and VS Code Insiders `settings.json`, `keybindings.json` | `vs_settings`, `vs_keybindings`, `vsI_settings`, `vsI_keybindings` | Preserve editor settings and keybindings. | Extension credentials, remote hosts, paths, command arguments, and arbitrary settings. | Sensitive; one local opt-in. |
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Inventory; default included. |
 | `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Supported Ballin preferences. The backup destination, analytics setting and install ID, automatic-backup setting, sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
-| Codex `AGENTS.md`, `AGENTS.override.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_AGENTS.override.md`, `codex_config.toml`, `codex_profiles.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; the same local opt-in. |
-| `~/.agents/skills/` | `codex_user_skills.json` | Preserve current shared personal skills recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
-| Codex `skills/`, `rules/`, and `agents/` | `codex_skills.json`, `codex_rules.json`, `codex_agents.json` | Preserve legacy Codex-home skills and personal rules/agents recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
+| Codex `AGENTS.md`, `AGENTS.override.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_AGENTS.override.md`, `codex_config.toml`, `codex_profiles.bundle.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; the same local opt-in. |
+| `~/.agents/skills/` | `codex_user_skills.bundle.json` | Preserve current shared personal skills recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
+| Codex `skills/`, `rules/`, and `agents/` | `codex_skills.bundle.json`, `codex_rules.bundle.json`, `codex_agents.bundle.json` | Preserve legacy Codex-home skills and personal rules/agents recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Claude Code `CLAUDE.md` | `claude_instructions` | Preserve personal instructions from the active configuration root. | Private instructions, credentials, paths, and imported-file references. | Sensitive; the same local opt-in; imports are not collected. |
-| Claude Code `rules/`, `agents/`, and legacy `commands/` | `claude_rules`, `claude_agents`, `claude_commands` | Preserve regular Markdown configuration recursively. | Private instructions, inline MCP values, permission modes, hook definitions, commands, and credentials. | Sensitive; the same local opt-in; referenced resources excluded. |
+| Claude Code `rules/`, `agents/`, and legacy `commands/` | `claude_rules.bundle.json`, `claude_agents.bundle.json`, `claude_commands.bundle.json` | Preserve regular Markdown configuration recursively. | Private instructions, inline MCP values, permission modes, hook definitions, commands, and credentials. | Sensitive; the same local opt-in; referenced resources excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -90,8 +90,8 @@ history, or cached content.
 Ballin uses the active `CODEX_HOME` when set, otherwise `~/.codex`. Personal
 skills at `~/.agents/skills/` and marketplace configuration are selected
 separately at fixed home paths, independent of `CODEX_HOME`.
-`codex_skills.json` retains the legacy `CODEX_HOME/skills/` location for
-compatibility; `codex_user_skills.json` captures the current shared personal root.
+`codex_skills.bundle.json` retains the legacy `CODEX_HOME/skills/` location for
+compatibility; `codex_user_skills.bundle.json` captures the current shared personal root.
 Project `.codex/` directories are repository-owned and are not global sources.
 Both global instruction files, `AGENTS.md` and `AGENTS.override.md`, are backed
 up separately when present, regardless of which Codex currently uses.
@@ -109,7 +109,8 @@ manual restoration can carry forward saved trust settings. Standalone
 and external files are not collected merely because they are referenced.
 
 Recursive snapshots are versioned JSON archives of regular files, with sorted
-relative paths, base64 bytes, and an executable flag. Hidden files and binary
+relative paths, readable UTF-8 lines or Base64 bytes, and an executable flag.
+Hidden files and binary
 assets are included; empty directories, symlinks, special files, `.git` metadata,
 and `.DS_Store` are omitted. Both skill sources omit root `.system`. Codex
 source paths reject descendant symlinks; an explicitly selected Codex root may
@@ -119,7 +120,8 @@ reading their contents. Capture is not an atomic snapshot of concurrent edits.
 See [directory handling](backup-design.md#shared-inclusion-policy).
 
 Codex capture supports up to **16 MiB combined** per backup after normalization,
-including archive metadata and base64 content, and **8,192 visited entries** per
+including archive metadata and text/Base64 encoding overhead, and **8,192 visited
+entries** per
 recursive source. Both skill archives count toward the combined limit, even
 when their roots overlap. Exceeding a limit stops the whole backup before
 publication or cache promotion. Ballin does not truncate files or selectively omit content to fit. Reduce the supported authoring-tree
@@ -151,7 +153,7 @@ or secret-free contents. [Claude skills](https://code.claude.com/docs/en/skills)
 are the preferred surface for new custom capabilities; `commands/` preserves
 existing compatibility files.
 
-Directory snapshots use the same versioned JSON archive as Codex, preserving
+Bundle snapshots use the same versioned JSON archive as Codex, preserving
 relative paths, exact file bytes, and executable flags. Non-Markdown files,
 symlinks, special files, empty directories, `.git`, and `.DS_Store` are omitted.
 Selected hard links stop capture; Ballin does not search for their other paths.
@@ -160,7 +162,7 @@ reading contents. Discovery or collection failure stops the backup before
 publication. Capture is not atomic across concurrent edits.
 
 Claude Code has its own **16 MiB combined** normalized capture allowance,
-including unchanged snapshots and archive/base64 overhead, plus **8,192 visited
+including unchanged snapshots and archive/encoding overhead, plus **8,192 visited
 entries** per directory source, counted before filtering. This preserves the
 existing Codex allowance, permitting up to 32 MiB combined staged assistant
 configuration. Limits stop the whole backup without truncation or partial

@@ -164,7 +164,7 @@ describe('repository backup lifecycle', function() {
       fs.mkdirSync(path.dirname(leaf), { recursive: true });
       fs.writeFileSync(leaf, 'synthetic');
       source('local shell\n');
-      const snapshot = `codex_${tree}.json`;
+      const snapshot = `codex_${tree}.bundle.json`;
       seedCache(snapshot, 'prior Codex cache\n');
       seedCache('zshrc.sh', 'prior shell cache\n');
       seedSuccess();
@@ -209,7 +209,7 @@ describe('repository backup lifecycle', function() {
       fs.mkdirSync(directory, { recursive: true });
       fs.writeFileSync(path.join(directory, tree === 'profiles' ? 'personal.config.toml' : 'entry'), 'synthetic');
       source('local shell\n');
-      const snapshot = `codex_${tree}.json`;
+      const snapshot = `codex_${tree}.bundle.json`;
       seedCache(snapshot, 'prior Codex cache\n');
       seedCache('zshrc.sh', 'prior shell cache\n');
       seedSuccess();
@@ -546,19 +546,76 @@ describe('repository backup lifecycle', function() {
       ok(run([], '', { CODEX_HOME: codex }));
       if (included) {
         assert.equal(remote('codex_config.toml'), wholeConfig);
-        const archive = JSON.parse(remote('codex_skills.json')!);
+        const archive = JSON.parse(remote('codex_skills.bundle.json')!);
         assert.equal(archive.format, 'ballin-directory');
         assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['synthetic/SKILL.md']);
-        assert.equal(Buffer.from(archive.entries[0].content, 'base64').toString(), 'synthetic skill\n');
+        assert.equal(archive.version, 2);
+        assert.deepEqual(archive.entries[0].content, ['synthetic skill\n']);
         assert.equal(cached('codex_config.toml'), wholeConfig);
-        assert.equal(cached('codex_skills.json'), remote('codex_skills.json'));
+        assert.equal(cached('codex_skills.bundle.json'), remote('codex_skills.bundle.json'));
       } else {
         assert.isUndefined(remote('codex_config.toml'));
-        assert.isUndefined(remote('codex_skills.json'));
+        assert.isUndefined(remote('codex_skills.bundle.json'));
       }
       assert.notProperty(JSON.parse(remote('ballin_config')!), 'backup');
       ok(run([], '', { CODEX_HOME: codex }));
       assert.lengthOf(publications(), 1);
+    });
+  });
+  describe('bundle reset and conflicts', () => {
+    const bytes = Buffer.from('\ufeffsynthetic\r\nlast');
+    const legacyEntry = { path: 'nested/fixture.md', executable: false, content: bytes.toString('base64') };
+    const legacy = (entry = legacyEntry, extra = {}): string => `${JSON.stringify({
+      format: 'ballin-directory', version: 1, entries: [entry], ...extra,
+    }, null, 2)}\n`;
+    const localDirectory = (): void => {
+      fs.mkdirSync(path.join(home, '.codex', 'rules', 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(home, '.codex', 'rules', 'nested', 'fixture.md'), bytes, { mode: 0o600 });
+    };
+    it('retains retired directory files without blocking normal bundle publication', () => {
+      const oldNames = ['codex_profiles.json', 'codex_skills.json', 'codex_user_skills.json', 'codex_rules.json', 'codex_agents.json', 'claude_rules', 'claude_agents', 'claude_commands'];
+      localDirectory(); saveState(fixtureState(Object.fromEntries(oldNames.map((name) => [name, legacy()]))));
+      seedCache('codex_rules.json', 'untrusted old cache');
+      ok(run());
+      for (const name of oldNames) assert.equal(remote(name), legacy());
+      assert.equal(JSON.parse(remote('codex_rules.bundle.json')!).version, 2);
+      assert.equal(cached('codex_rules.json'), 'untrusted old cache');
+      assert.equal(cached('codex_rules.bundle.json'), remote('codex_rules.bundle.json'));
+      assert.lengthOf(publications(), 1);
+    });
+    it('creates a fresh bundle after reset without trusting an old-name cache', () => {
+      localDirectory(); seedCache('codex_rules.json', 'untrusted old cache');
+      ok(run());
+      assert.equal(JSON.parse(remote('codex_rules.bundle.json')!).version, 2);
+      assert.equal(cached('codex_rules.json'), 'untrusted old cache');
+      assert.equal(cached('codex_rules.bundle.json'), remote('codex_rules.bundle.json'));
+      const head = state().head; ok(run()); assert.equal(state().head, head);
+    });
+    for (const contents of [
+      legacy({ ...legacyEntry, executable: true }), legacy({ ...legacyEntry, path: 'changed.md' }),
+      legacy({ ...legacyEntry, content: Buffer.from('different').toString('base64') }), legacy(legacyEntry, { unknown: 'DUMMY_PRIVATE_EXTRA' }),
+      legacy(legacyEntry, { version: 3 }), JSON.stringify(JSON.parse(legacy())),
+    ]) {
+      it('keeps no-base conflicts for changed metadata, payload, unknown fields or noncanonical serialization', () => {
+        localDirectory(); saveState(fixtureState({ 'codex_rules.bundle.json': contents }));
+        const head = state().head; const result = run();
+        assert.equal(result.status, 1, result.stdout + result.stderr); assert.include(result.stderr, 'conflict for codex_rules.bundle.json');
+        assert.equal(state().head, head); assert.lengthOf(publications(), 0); assert.isUndefined(cached('codex_rules.bundle.json'));
+        assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE');
+      });
+    }
+    it('retains raw v2 comparison for different serialization even with identical decoded files', () => {
+      localDirectory(); ok(run());
+      const value = state(); const changed = JSON.stringify(JSON.parse(remote('codex_rules.bundle.json')!));
+      commitFixture(value, { ...value.commits[value.head].files, 'codex_rules.bundle.json': Buffer.from(changed).toString('base64') });
+      saveState(value); const result = run();
+      assert.equal(result.status, 1); assert.include(result.stderr, 'conflict for codex_rules.bundle.json');
+      assert.lengthOf(publications(), 1); assert.equal(remote('codex_rules.bundle.json'), changed);
+    });
+    it('rejects dense newline overflow before remote inspection or cache effects', () => {
+      localDirectory(); fs.writeFileSync(path.join(home, '.codex', 'rules', 'nested', 'fixture.md'), Buffer.alloc(2 * 1024 * 1024, 10));
+      const result = run(); assert.equal(result.status, 1); assert.include(result.stderr, 'Snapshot bytes limit exceeded');
+      assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
     });
   });
   [false, true].forEach((included) => {
@@ -575,12 +632,12 @@ describe('repository backup lifecycle', function() {
       ok(run([], '', { CLAUDE_CONFIG_DIR: claude }));
       if (included) {
         assert.equal(remote('claude_instructions'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
-        const archive = JSON.parse(remote('claude_rules')!);
+        const archive = JSON.parse(remote('claude_rules.bundle.json')!);
         assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['nested/fixture.md']);
-        assert.equal(cached('claude_rules'), remote('claude_rules'));
+        assert.equal(cached('claude_rules.bundle.json'), remote('claude_rules.bundle.json'));
       } else {
         assert.isUndefined(remote('claude_instructions'));
-        assert.isUndefined(remote('claude_rules'));
+        assert.isUndefined(remote('claude_rules.bundle.json'));
       }
       const files = state().commits[state().head].files;
       assert.notProperty(files, 'claude_settings.json');
@@ -600,7 +657,7 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], 'y\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Claude Code includes personal CLAUDE.md');
-    assert.include(result.stdout, `claude_agents: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
+    assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
     assert.include(result.stdout, 'future additions to this maintained catalog');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
     assert.lengthOf(mutations(), 0);
@@ -622,7 +679,7 @@ describe('repository backup lifecycle', function() {
     assert.isFalse(fs.existsSync(cache));
     const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
     ok(run([], '', {}, preload));
-    assert.isUndefined(remote('claude_rules'));
+    assert.isUndefined(remote('claude_rules.bundle.json'));
   });
   describe('local Claude snapshot budgets', function() {
     this.timeout(30000);
