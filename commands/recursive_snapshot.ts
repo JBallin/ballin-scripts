@@ -11,6 +11,7 @@ type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean; c
 const snapshotByteLimit = 16 * 1024 * 1024;
 const recursiveEntryLimit = 8192;
 const claudeSyncBookkeeping = new Set(['manifest.json', '.staging', '.last-complete-round', '.trash']);
+const claudeManifestByteLimit = 1024 * 1024;
 class SnapshotLimitError extends Error {
   constructor(kind: 'bytes' | 'entries', actual: number, limit: number) {
     super(`Snapshot ${kind} limit exceeded (${actual} > ${limit}).`);
@@ -123,12 +124,38 @@ const fileEntry = (root: string, relative: string, maxBytes = snapshotByteLimit,
   return { path: relative.split(path.sep).join('/'), executable, content: bytes.toString('base64') };
 };
 
+// Called only inside the pinned collection directory. Manifest names are lookup
+// keys, never paths to follow; only the exact recorded plugin origin qualifies.
+const syncedPluginNames = (maxBytes: number, maxRecords: number): { names: Set<string>; bytes: number; records: number } => {
+  try {
+    const { bytes } = readBoundedFile('manifest.json', maxBytes, true);
+    if (!isUtf8(bytes)) throw new Error('Invalid manifest text');
+    const manifest = JSON.parse(bytes.toString('utf8'));
+    if (!manifest || !Array.isArray(manifest.skills) || manifest.skills.length > maxRecords) throw new Error('Invalid manifest records');
+    const seen = new Set<string>();
+    const names = new Set<string>();
+    for (const record of manifest.skills) {
+      if (!record || typeof record.name !== 'string' || !record.name || /[\\/]/u.test(record.name)
+        || record.name === '.' || record.name === '..' || seen.has(record.name)) throw new Error('Ambiguous manifest name');
+      seen.add(record.name);
+      if (record.source === 'plugin') names.add(record.name);
+    }
+    return { names, bytes: bytes.length, records: manifest.skills.length };
+  } catch {
+    // An ambiguous selection must retain the last saved bundle, not replace it
+    // with a partial capture of the remaining personal or synced packages.
+    throw new SnapshotSourceTypeError('Claude synced skills manifest');
+  }
+};
+
 const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits: SnapshotLimits, reviewReadability: boolean, selection: RecursiveSelection): string[] => {
   if (!sourceStat(path.dirname(root), path.basename(root)).isDirectory()) return [];
   const files: string[] = [];
   const pending = [''];
   let visited = 0;
   let pathBytes = 0;
+  let manifestBytes = 0;
+  let manifestRecords = 0;
   while (pending.length) {
     const relative = pending.pop()!;
     inDirectory(root, relative, () => {
@@ -136,6 +163,13 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
       const parts = relative.split(path.sep);
       const synced = selection.claudeSkills && parts[0].toLowerCase() === 'synced';
       const syncContainer = synced && parts.length < 3;
+      let plugins: Set<string> | undefined;
+      if (synced && parts.length === 2) {
+        const manifest = syncedPluginNames(claudeManifestByteLimit - manifestBytes, recursiveEntryLimit - manifestRecords);
+        manifestBytes += manifest.bytes;
+        manifestRecords += manifest.records;
+        plugins = manifest.names;
+      }
       const skillFolder = selection.claudeSkills && (synced
         ? parts.length === 3 : relative !== '' && parts.length === 1);
       const candidates: string[] = [];
@@ -169,6 +203,7 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
           // Sync containers hold collections and packages, not authoring files.
           // Keep their lifecycle state outside capture without reading manifests.
           if (syncContainer && claudeSyncBookkeeping.has(name.toLowerCase())) continue;
+          if (plugins && !plugins.has(name)) continue;
           if (profilesOnly && !/^.+\.config\.toml$/u.test(name)) continue;
           if (name === '.git' || name === '.DS_Store' || (skills && !relative && name === '.system')) continue;
           if (skillFolder) candidates.push(name);

@@ -433,9 +433,13 @@ packages.
 The same source-specific selection governs discovery, review, and capture.
 Skills require an exact-case regular `SKILL.md` in an immediate nonhidden personal
 folder or a `synced/<collection>/<skill>/` package. Collection names are generic
-namespaces; sync manifests and origin labels do not decide eligibility. All
-validated synced packages are included, including defaults, downloaded and
-organization-provided material, and plugin-origin skills. Container manifests,
+namespaces. Synced packages require a unique manifest name matching the folder
+and exact source `plugin`; all other origins and unlisted packages are omitted.
+The same pinned traversal reads regular single-link collection manifests with
+an aggregate 1 MiB / 8,192-record metadata budget. Invalid or ambiguous manifests
+make the entire skills source unavailable, retaining its saved bundle. Discovery
+and review read only selection metadata and file attributes, not skill bodies.
+Container manifests,
 staging/completion/discarded state, reserved personal names, hidden root folders,
 plugin-shaped folders, and legacy
 manifest-managed roots are excluded as specified in the
@@ -454,7 +458,8 @@ with no scanning or redaction claim. Synced package paths retain their collectio
 namespace; equal skill names in different collections remain distinct. The
 same v2 writer, serialized-byte cap, and visited-entry cap govern both locations.
 Origin labels cannot establish ownership or that downloaded defaults remain
-unedited, so there is no default-name or origin filter.
+unedited. This explicit plugin-origin policy excludes edited defaults too;
+there is no default-name heuristic or edit-detection mechanism.
 
 The current updater compares the Git blob identities of the source-definition
 file before and after a successful update. Changed or unavailable comparison

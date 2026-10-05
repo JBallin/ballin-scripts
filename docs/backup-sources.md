@@ -32,7 +32,7 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Claude Code `CLAUDE.md` | `claude_instructions` | Preserve personal instructions from the active configuration root. | Private instructions, credentials, paths, and imported-file references. | Sensitive; the same local opt-in; imports are not collected. |
 | Claude Code `rules/`, `agents/`, and legacy `commands/` | `claude_rules.bundle.json`, `claude_agents.bundle.json`, `claude_commands.bundle.json` | Preserve regular Markdown configuration recursively. | Private instructions, inline MCP values, permission modes, hook definitions, commands, and credentials. | Sensitive; the same local opt-in; referenced resources excluded. |
-| Claude Code `skills/` | `claude_skills.bundle.json` | Preserve complete eligible personal and synced packages, including downloaded defaults, hidden support, scripts, and binary assets. | Arbitrary instructions, credentials, executable files, private project information, and collection identifiers. | Sensitive; the same local opt-in; sync bookkeeping, plugin installations, and external references excluded. |
+| Claude Code `skills/` | `claude_skills.bundle.json` | Preserve complete eligible personal folders and plugin-origin synced packages, including hidden support, scripts, and binary assets. | Arbitrary instructions, credentials, executable files, private project information, and collection identifiers. | Sensitive; the same local opt-in; other synced origins, sync bookkeeping, plugin installations, and external references excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -192,9 +192,11 @@ regard to case, as are hidden root folders such as `.trash` and `.system`.
 
 Synced packages are also selected at `skills/synced/<collection>/<skill>/` when
 they contain an exact-case regular `SKILL.md`. Collection names are not restricted
-to UUIDs, and all collections present on disk are considered. Every validated
-package is included regardless of its name or recorded origin, including
-downloaded defaults, organization-provided skills, and plugin-origin synced skills.
+to UUIDs, and all collections present on disk are considered. A synced package
+also requires a unique matching name in its collection's `manifest.json` with
+exact `source: "plugin"`. Other source values, including `anthropic`,
+`anthropic-example`, unknown values, and unlisted packages, are omitted.
+There is no skill-name allowlist or guessed mapping between names and origins.
 Their complete regular-file contents follow the same rules as personal skills;
 hidden package/support names are preserved. Relative paths retain `synced/` and
 the collection namespace to prevent collisions. Collection names may identify
@@ -202,10 +204,21 @@ accounts or organizations and are part of the sensitive snapshot.
 
 Loose files in sync containers are omitted. `manifest.json`, `.staging`,
 `.last-complete-round`, and `.trash` entries at the synced root or collection
-level are excluded without regard to case or type; their contents are not read.
-Ballin does not use sync manifests or origin labels as ownership/default filters.
-Those labels cannot prove that downloaded files remain unedited. Sync can
-overwrite local edits, so resynchronization is not a promise of exact recovery.
+level are excluded from capture without regard to case or type. Collection
+manifests are read only to select packages, using the observed on-disk metadata
+shape; the Claude skills documentation does not define this shape as a public
+API. Names must be unambiguous single folder names and are never followed as
+paths. Across the skills source, manifest reads are bounded to 1 MiB and 8,192
+records, separate from the existing capture limits. Missing, unreadable,
+malformed, oversized, symlinked, hard-linked, or ambiguously named manifests make
+the whole skills source unavailable, retaining its previous saved bundle rather
+than publishing a partial capture. Discovery and review read this metadata but
+do not read skill contents or traverse omitted payloads.
+
+The plugin origin does not prove personal authorship: third-party or
+organization-provided plugin-origin packages can qualify. Other origins are
+excluded even when locally edited; Ballin does not detect edited defaults.
+Sync can overwrite local edits, so resynchronization is not a promise of exact recovery.
 See [Claude's sync behavior](https://code.claude.com/docs/en/skills#where-synced-skills-load).
 
 An immediate `.claude-plugin` entry excludes the whole skill folder, regardless
@@ -214,8 +227,8 @@ or capitalization, makes the skills source unavailable; Ballin does not read it
 to distinguish legacy downloads from personal folders. Unavailable sources retain
 any existing saved snapshot. See [Claude skills](https://code.claude.com/docs/en/skills).
 
-These rules identify eligible packages, not proven authorship. Downloaded
-and copied third-party material is included, and selected visible or hidden files
+These rules identify eligible packages, not proven authorship. Eligible folders
+can contain downloaded or copied third-party material, and selected visible or hidden files
 can contain credentials or private environment values. Ballin does not scan or
 redact them. Dedicated credential stores, generated memory, sessions, histories,
 caches, logs, and runtime state outside the selected packages remain

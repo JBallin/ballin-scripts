@@ -536,6 +536,30 @@ describe('repository backup lifecycle', function() {
       assert.equal(rulesetRequests().length, 0);
     });
   });
+  it('retains the complete saved skills bundle when sync metadata is unavailable while other Claude sources advance', () => {
+    const claude = path.join(home, '.claude');
+    const collection = path.join(claude, 'skills', 'synced', 'collection');
+    fs.mkdirSync(path.join(collection, 'custom'), { recursive: true });
+    fs.mkdirSync(path.join(claude, 'skills', 'personal'));
+    fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'old instructions\n');
+    fs.writeFileSync(path.join(claude, 'skills', 'personal', 'SKILL.md'), 'old personal skill');
+    fs.writeFileSync(path.join(collection, 'custom', 'SKILL.md'), 'synced plugin skill');
+    const manifest = path.join(collection, 'manifest.json');
+    fs.writeFileSync(manifest, '{"skills":[{"name":"custom","source":"plugin"}]}');
+    ok(run());
+    const prior = remote('claude_skills.bundle.json');
+    fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'new instructions\n');
+    fs.writeFileSync(path.join(claude, 'skills', 'personal', 'SKILL.md'), 'new personal skill');
+    fs.writeFileSync(manifest, '{DUMMY_INVALID_METADATA');
+    const malformed = run(); ok(malformed);
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.equal(cached('claude_skills.bundle.json'), prior);
+    assert.equal(remote('claude_instructions'), 'new instructions\n');
+    assert.notInclude(malformed.stdout + malformed.stderr, 'DUMMY_INVALID_METADATA');
+    fs.rmSync(manifest); ok(run());
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.lengthOf(publications(), 2);
+  });
   [false, true].forEach((included) => {
     it(`publishes synthetic Codex sources with the existing sensitive preference: ${included}`, () => {
       const value = config();
@@ -638,9 +662,11 @@ describe('repository backup lifecycle', function() {
       const collection = '1ee7e3ab-14cd-4d49-9fce-a2f5fa33d125_e29e4a19-d6c5-4efd-a06e-1dbd9ea691a8';
       const synced = path.join(claude, 'skills', 'synced', collection);
       fs.mkdirSync(path.join(synced, 'pdf'), { recursive: true });
-      fs.writeFileSync(path.join(synced, 'pdf', 'SKILL.md'), 'locally edited downloaded default');
+      fs.writeFileSync(path.join(synced, 'pdf', 'SKILL.md'), 'plugin package with a default-looking name');
       fs.writeFileSync(path.join(synced, 'pdf', '.support'), 'DUMMY_SELECTED_SYNCED_SECRET');
-      fs.writeFileSync(path.join(synced, 'manifest.json'), '{"skills":[{"name":"pdf","source":"anthropic"}],"private":"DUMMY_EXCLUDED_SECRET"}');
+      fs.writeFileSync(path.join(synced, 'manifest.json'), '{"skills":[{"name":"pdf","source":"plugin"},{"name":"default","source":"anthropic"}],"private":"DUMMY_EXCLUDED_SECRET"}');
+      fs.mkdirSync(path.join(synced, 'default'));
+      fs.writeFileSync(path.join(synced, 'default', 'SKILL.md'), 'DUMMY_EXCLUDED_SECRET');
       fs.mkdirSync(path.join(synced, '.staging', 'partial'), { recursive: true });
       fs.writeFileSync(path.join(synced, '.staging', 'partial', 'SKILL.md'), 'DUMMY_EXCLUDED_SECRET');
       const skillPaths = ['demo/.support', 'demo/SKILL.md', 'demo/run.sh', `synced/${collection}/pdf/.support`, `synced/${collection}/pdf/SKILL.md`];
@@ -689,7 +715,7 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
     assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
     assert.include(result.stdout, 'Skill folders include hidden files, executable scripts, and binary supporting assets.');
-    assert.include(result.stdout, 'Claude skills include downloaded defaults, organization-provided and plugin-origin synced packages.');
+    assert.include(result.stdout, 'Synced Claude skills require manifest source "plugin"; other origins, including defaults, are excluded.');
     assert.include(result.stdout, 'sync bookkeeping, and plugin installations are excluded');
     assert.include(result.stdout, 'future additions to this maintained catalog');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
@@ -768,6 +794,7 @@ describe('repository backup lifecycle', function() {
     it('counts synced package serialization toward the shared Claude allowance before remote reads', () => {
       sparse(path.join(home, '.claude', 'CLAUDE.md'), 9 * mib);
       sparse(path.join(home, '.claude', 'skills', 'synced', 'collection', 'pdf', 'SKILL.md'), 6 * mib);
+      fs.writeFileSync(path.join(home, '.claude', 'skills', 'synced', 'collection', 'manifest.json'), '{"skills":[{"name":"pdf","source":"plugin"}]}');
       const result = run();
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));

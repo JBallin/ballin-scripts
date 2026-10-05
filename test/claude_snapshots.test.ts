@@ -21,6 +21,9 @@ describe('Claude Code selected configuration', () => {
     const definition = (snapshotDefinitions as SnapshotDefinition[]).find((entry) => entry.name === name)!;
     return definition.discover({ homeDir, env: { HOME: homeDir, PATH: '', ...env } });
   };
+  const manifest = (collection: string, records: unknown[] = [{ name: 'package', source: 'plugin' }]) => (
+    write(`skills/synced/${collection}/manifest.json`, JSON.stringify({ skills: records }))
+  );
   const capture = (name: string, env: NodeJS.ProcessEnv = {}, extra: string[] = []) => {
     const observation = discover(name, env);
     assert.equal(observation.status, 'available');
@@ -255,7 +258,7 @@ describe('Claude Code selected configuration', () => {
     assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['valid/SKILL.md']);
   });
 
-  it('captures mixed-origin synced packages with generic collection namespaces and deterministic v2 bytes', () => {
+  it('captures only exact plugin-origin synced packages with deterministic v2 bytes', () => {
     const collection = '1ee7e3ab-14cd-4d49-9fce-a2f5fa33d125_e29e4a19-d6c5-4efd-a06e-1dbd9ea691a8';
     const base = `synced/${collection}`;
     const fixtures: Record<string, string | Buffer> = {
@@ -264,7 +267,7 @@ describe('Claude Code selected configuration', () => {
       [`${base}/custom-review/.support/reference.txt`]: 'DUMMY_SELECTED_PRIVATE_SUPPORT',
       [`${base}/custom-review/scripts/run.sh`]: '#!/bin/sh\n',
       [`${base}/custom-review/assets/image.bin`]: Buffer.from([0, 255, 128]),
-      [`${base}/pdf/SKILL.md`]: 'DUMMY_SELECTED_DEFAULT_EDIT\r\n"quoted" \\ text\n',
+      [`${base}/pdf/SKILL.md`]: 'plugin with a default-looking name\r\n"quoted" \\ text\n',
       'synced/org-team/pdf/SKILL.md': 'organization copy',
       'synced/org-team/pdf/assets/雪.txt': 'Unicode support\n',
       'synced/org-team/anthropic-skills:fixture/SKILL.md': 'no reserved-name filter inside collections',
@@ -273,9 +276,16 @@ describe('Claude Code selected configuration', () => {
     Object.entries(fixtures).reverse().forEach(([relative, bytes]) => write(`skills/${relative}`, bytes));
     fs.chmodSync(path.join(root, `skills/${base}/custom-review/scripts/run.sh`), 0o755);
     write(`skills/${base}/manifest.json`, JSON.stringify({ skills: [
-      { name: 'pdf', source: 'anthropic' }, { name: 'custom-review', source: 'plugin' },
-      { name: 'unlisted', source: 'anthropic-example' },
+      { name: 'pdf', source: 'plugin' }, { name: 'custom-review', source: 'plugin' },
+      { name: 'default-edit', source: 'anthropic' }, { name: 'example', source: 'anthropic-example' },
+      { name: 'future', source: 'future-default' }, { name: 'wrong-case', source: 'Plugin' },
+      { name: 'missing-source' }, { name: 'wrong-type', source: { plugin: true } },
     ], privateMetadata: 'DUMMY_EXCLUDED_SECRET' }));
+    manifest('org-team', [{ name: 'pdf', source: 'plugin' }, { name: 'anthropic-skills:fixture', source: 'plugin' }, { name: 'plugin-shaped', source: 'plugin' }]);
+    manifest('.private-collection', [{ name: '.private-skill', source: 'plugin' }]);
+    ['default-edit', 'example', 'future', 'wrong-case', 'missing-source', 'wrong-type', 'unlisted'].forEach((name) => {
+      write(`skills/${base}/${name}/SKILL.md`, 'DUMMY_EXCLUDED_SECRET');
+    });
     ['manifest.json', '.last-complete-round', 'loose.txt', 'SKILL.md'].forEach((name) => write(`skills/synced/${name}`, 'DUMMY_EXCLUDED_SECRET'));
     ['.staging', '.trash'].forEach((name) => {
       write(`skills/synced/${name}/collection/package/SKILL.md`, 'DUMMY_EXCLUDED_SECRET');
@@ -299,7 +309,9 @@ describe('Claude Code selected configuration', () => {
       assert.deepEqual(bytes, Buffer.from(fixtures[entry.path]));
       assert.equal(entry.executable, entry.path.endsWith('/scripts/run.sh'));
     });
-    write(`skills/${base}/manifest.json`, '{"skills":[],"changed":"DUMMY_EXCLUDED_SECRET"}');
+    const metadata = JSON.parse(fs.readFileSync(path.join(root, `skills/${base}/manifest.json`), 'utf8'));
+    metadata.skills.reverse(); metadata.changed = 'DUMMY_EXCLUDED_SECRET';
+    write(`skills/${base}/manifest.json`, JSON.stringify(metadata));
     assert.equal(capture('claude_skills.bundle.json').stdout, result.stdout);
     assert.notInclude(result.stdout, 'DUMMY_EXCLUDED_SECRET');
     assert.notInclude(result.stdout, homeDir);
@@ -310,19 +322,24 @@ describe('Claude Code selected configuration', () => {
     assert.include(failed.stderr, 'Snapshot bytes limit exceeded');
   });
 
-  it('discovers a synced-only root and reviews readability without reading origin metadata or staging', () => {
+  it('reads only bounded manifest metadata during discovery/review and never opens omitted payloads', () => {
     write('skills/synced/arbitrary-collection/package/SKILL.md');
     write('skills/synced/arbitrary-collection/package/.support');
-    write('skills/synced/arbitrary-collection/manifest.json', 'DUMMY_EXCLUDED_SECRET');
+    const manifestFile = manifest('arbitrary-collection', [{ name: 'package', source: 'plugin' }, { name: 'default', source: 'anthropic' }]);
+    write('skills/synced/arbitrary-collection/default/SKILL.md', 'DUMMY_EXCLUDED_SECRET');
+    const manifestInode = fs.statSync(manifestFile).ino;
     write('skills/synced/arbitrary-collection/.last-complete-round', 'DUMMY_EXCLUDED_SECRET');
     write('skills/synced/arbitrary-collection/.staging/package/SKILL.md', 'DUMMY_EXCLUDED_SECRET');
     const originalRead = fs.readSync;
     const originalStat = fs.lstatSync;
     const originalOpendir = fs.opendirSync;
     try {
-      fs.readSync = () => { throw new Error('Metadata review must not read contents'); };
+      fs.readSync = (fd: number, ...args: unknown[]) => {
+        if (fs.fstatSync(fd).ino !== manifestInode) throw new Error('Review must not read skill contents');
+        return originalRead(fd, ...args);
+      };
       fs.lstatSync = (file: string, ...args: unknown[]) => {
-        if (['manifest.json', '.last-complete-round', '.staging'].includes(file)) throw new Error('Sync bookkeeping must not be inspected');
+        if (['default', '.last-complete-round', '.staging'].includes(file)) throw new Error('Omitted payload must not be inspected');
         return originalStat(file, ...args);
       };
       fs.opendirSync = (file: string, ...args: unknown[]) => {
@@ -340,6 +357,7 @@ describe('Claude Code selected configuration', () => {
     const outside = path.join(homeDir, 'outside');
     write('package/SKILL.md', 'DUMMY_EXTERNAL_SECRET', outside);
     write('skills/synced/collection/valid/SKILL.md');
+    manifest('collection', ['valid', 'linked-package', 'linked-marker'].map(name => ({ name, source: 'plugin' })));
     fs.symlinkSync(outside, path.join(root, 'skills/synced/linked-collection'));
     fs.symlinkSync(path.join(outside, 'package'), path.join(root, 'skills/synced/collection/linked-package'));
     write('skills/synced/collection/linked-marker/.support', 'DUMMY_EXCLUDED_SECRET');
@@ -354,13 +372,62 @@ describe('Claude Code selected configuration', () => {
 
   it('rejects selected synced hard links and counts filtered container entries before traversal', () => {
     const file = write('skills/synced/collection/package/SKILL.md');
+    manifest('collection');
     fs.linkSync(file, path.join(root, 'skills/synced/collection/package/.support'));
     assert.equal(discover('claude_skills.bundle.json').status, 'discovery-failed');
     fs.rmSync(path.join(root, 'skills/synced/collection/package/.support'));
     write('skills/synced/collection/.staging/ignored/SKILL.md');
     const directory = path.join(root, 'skills');
-    assert.throws(() => recursiveFiles(directory, false, false, { maxEntries: 4 }, skillSelection), SnapshotLimitError);
-    assert.deepEqual(recursiveFiles(directory, false, false, { maxEntries: 5 }, skillSelection), ['synced/collection/package/SKILL.md']);
+    assert.throws(() => recursiveFiles(directory, false, false, { maxEntries: 5 }, skillSelection), SnapshotLimitError);
+    assert.deepEqual(recursiveFiles(directory, false, false, { maxEntries: 6 }, skillSelection), ['synced/collection/package/SKILL.md']);
+  });
+
+  [null, {}, { skills: {} }, { skills: [null] }, { skills: [{ name: '' }] },
+    ...['.', '..', '../outside', 'path/name', 'path\\name'].map(name => ({ skills: [{ name, source: 'plugin' }] })),
+    { skills: [{ name: 'package', source: 'plugin' }, { name: 'package', source: 'anthropic' }] },
+  ].forEach((value, index) => {
+    it(`retains unavailable selection for malformed or ambiguous manifest ${index}`, () => {
+      write('skills/personal/SKILL.md'); write('skills/synced/collection/package/SKILL.md');
+      write('skills/synced/collection/manifest.json', JSON.stringify(value));
+      assert.equal(discover('claude_skills.bundle.json').status, 'unavailable');
+    });
+  });
+
+  ['missing', 'json', 'utf8', 'directory', 'symlink', 'hardlink', 'oversized', 'records'].forEach((kind) => {
+    it(`makes the whole skills source unavailable for a ${kind} manifest`, () => {
+      write('skills/personal/SKILL.md'); write('skills/synced/collection/package/SKILL.md');
+      const file = path.join(root, 'skills/synced/collection/manifest.json');
+      if (kind === 'json') write('skills/synced/collection/manifest.json', '{DUMMY_EXCLUDED_SECRET');
+      else if (kind === 'utf8') write('skills/synced/collection/manifest.json', Buffer.from([255]));
+      else if (kind === 'directory') fs.mkdirSync(file);
+      else if (kind === 'symlink') fs.symlinkSync(write('outside.json', 'DUMMY_EXTERNAL_SECRET', homeDir), file);
+      else if (kind === 'hardlink') fs.linkSync(manifest('collection'), path.join(root, 'other-manifest'));
+      else if (kind === 'oversized') write('skills/synced/collection/manifest.json', ' '.repeat(1024 * 1024 + 1));
+      else if (kind === 'records') manifest('collection', Array.from({ length: 8193 }, (_, i) => ({ name: `future-${i}`, source: 'future' })));
+      assert.equal(discover('claude_skills.bundle.json').status, 'unavailable');
+    });
+  });
+
+  it('bounds manifest bytes and record counts across collections', () => {
+    ['a', 'b'].forEach(collection => {
+      write(`skills/synced/${collection}/manifest.json`, JSON.stringify({ skills: [], extra: 'x'.repeat(600000) }));
+    });
+    assert.equal(discover('claude_skills.bundle.json').status, 'unavailable');
+    ['a', 'b'].forEach(collection => manifest(collection, Array.from({ length: 5000 }, (_, i) => ({ name: `future-${i}`, source: 'future' }))));
+    assert.equal(discover('claude_skills.bundle.json').status, 'unavailable');
+  });
+
+  it('rechecks origin metadata at capture time and fails without partial output', () => {
+    write('skills/personal/SKILL.md'); write('skills/synced/collection/package/SKILL.md'); manifest('collection');
+    const observation = discover('claude_skills.bundle.json');
+    if (observation.status !== 'available') throw new Error('Expected available fixture');
+    manifest('collection', [{ name: 'package', source: 'anthropic' }]);
+    const omitted = spawnSync(observation.collector.command, observation.collector.args!, { env: observation.collector.env, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(omitted.stdout).entries.map((e: { path: string }) => e.path), ['personal/SKILL.md']);
+    write('skills/synced/collection/manifest.json', '{');
+    const failed = spawnSync(observation.collector.command, observation.collector.args!, { env: observation.collector.env, encoding: 'utf8' });
+    assert.equal(failed.status, 1); assert.equal(failed.stdout, '');
+    assert.notInclude(failed.stderr, 'DUMMY_');
   });
 
   ['directory', 'file', 'symlink'].forEach((kind) => {
