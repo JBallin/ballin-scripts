@@ -25,29 +25,42 @@ describe('terminal emphasis', () => {
     });
   }
 
-  it('preserves help, stage and config bytes across simulated terminal modes', () => {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-emphasis-'));
-    const preload = path.join(directory, 'tty.cjs');
-    const config = path.join(directory, 'ballin.config.json');
-    fs.writeFileSync(preload, 'Object.defineProperty(process.stdout, "isTTY", { value: true });');
-    fs.writeFileSync(config, JSON.stringify({ backup: { repository: null }, analytics: { enabled: 'false' } }));
+  describe('simulated terminal modes', () => {
+    let directory: string;
+    let preload: string;
+    let config: string;
     const run = (args: string[], env: NodeJS.ProcessEnv = {}, stage = false) => spawnSync(process.execPath,
       stage ? ['-e', `require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'commandHelpers.ts'))}).progress('Updating Homebrew')`]
         : [path.join(__dirname, '..', 'bin', 'ballin'), ...args], {
         encoding: 'utf8',
         env: testChildEnvironment({ HOME: directory, BALLIN_TEST_CONFIG_PATH: config, ...env }),
       });
-    try {
-      const plainHelp = run(['--help']);
+    let plainHelp: ReturnType<typeof run>;
+
+    before(() => {
+      directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-emphasis-'));
+      preload = path.join(directory, 'tty.cjs');
+      config = path.join(directory, 'ballin.config.json');
+      fs.writeFileSync(preload, 'Object.defineProperty(process.stdout, "isTTY", { value: true });');
+      fs.writeFileSync(config, JSON.stringify({ backup: { repository: null }, analytics: { enabled: 'false' } }));
+      plainHelp = run(['--help']);
       assert.equal(plainHelp.status, 0, plainHelp.stderr);
       assert.equal(stripAnsi(plainHelp.stdout), plainHelp.stdout);
       assert.include(plainHelp.stdout, 'Run `ballin <command> --help` for command-specific help.');
-      for (const env of [
-        { NODE_OPTIONS: `--require ${preload}`, TERM: 'xterm' },
-        { NODE_OPTIONS: `--require ${preload}`, TERM: 'dumb' },
-        { NODE_OPTIONS: `--require ${preload}`, NO_COLOR: '1', FORCE_COLOR: '1' },
-        { FORCE_COLOR: '1' },
-      ]) {
+    });
+
+    after(() => {
+      if (directory) fs.rmSync(directory, { recursive: true, force: true });
+    });
+
+    for (const mode of [
+      { name: 'a supported TTY', tty: true, env: { TERM: 'xterm' } },
+      { name: 'a dumb terminal', tty: true, env: { TERM: 'dumb' } },
+      { name: 'NO_COLOR with FORCE_COLOR', tty: true, env: { NO_COLOR: '1', FORCE_COLOR: '1' } },
+      { name: 'redirected output with FORCE_COLOR', tty: false, env: { FORCE_COLOR: '1' } },
+    ]) {
+      it(`preserves help, stage and config bytes for ${mode.name}`, () => {
+        const env = { ...(mode.tty ? { NODE_OPTIONS: `--require ${preload}` } : {}), ...mode.env };
         const help = run(['--help'], env);
         assert.equal(help.status, 0, help.stderr);
         assert.equal(stripAnsi(help.stdout), plainHelp.stdout);
@@ -60,9 +73,7 @@ describe('terminal emphasis', () => {
         const value = run(['config', 'get', 'backup.repository'], env);
         assert.equal(value.status, 0, value.stderr);
         assert.equal(value.stdout, 'null\n');
-      }
-    } finally {
-      fs.rmSync(directory, { recursive: true, force: true });
+      });
     }
   });
 });
