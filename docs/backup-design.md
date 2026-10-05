@@ -23,6 +23,14 @@ cannot switch destinations. An explicit setup name must resolve to the same
 identity when configured. Invalid or unsupported local destination configuration
 fails without fallback or remote operations.
 
+Backup transport reduces GitHub CLI stderr and spawn errors to fixed connection,
+timeout, or authentication classifications. Authentication requires HTTP 401 or
+the CLI's authentication-required exit status; a failed account lookup without
+reliable evidence has an unconfirmed cause. Access/not-found ambiguity and
+incomplete inventory/content reads retain their fail-closed diagnostics. Raw
+provider output is never included in backup errors. Publication still requires
+independent confirmation, even when a connection failure follows a mutation.
+
 Repository contents use a flat layout. Current snapshots use the exact filenames
 defined by Ballin. `.ballin-backup.json` is the repository marker, and newly
 created repositories initially include an explanatory root `README.md`. The
