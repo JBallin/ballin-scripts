@@ -129,8 +129,9 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
   writeStdoutLine('hook definitions, recursive skills/rules/agents, and the personal marketplace manifest.');
   writeStdoutLine('Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
   writeStdoutLine('Claude Code includes personal CLAUDE.md, Markdown rules/agents/commands, and eligible skills.');
+  writeStdoutLine('Claude skills include downloaded defaults, organization-provided and plugin-origin synced packages.');
   writeStdoutLine('Skill folders include hidden files, executable scripts, and binary supporting assets.');
-  writeStdoutLine('Settings, credential stores, runtime state, synced skills, and plugin payloads are excluded.');
+  writeStdoutLine('Settings, credential stores, runtime state, sync bookkeeping, and plugin installations are excluded.');
   writeStdoutLine('Selected content may contain secrets; Ballin does not scan or redact it.');
   writeStdoutLine('Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
   writeStdoutLine('Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md');

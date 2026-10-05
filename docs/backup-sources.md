@@ -32,7 +32,7 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Claude Code `CLAUDE.md` | `claude_instructions` | Preserve personal instructions from the active configuration root. | Private instructions, credentials, paths, and imported-file references. | Sensitive; the same local opt-in; imports are not collected. |
 | Claude Code `rules/`, `agents/`, and legacy `commands/` | `claude_rules.bundle.json`, `claude_agents.bundle.json`, `claude_commands.bundle.json` | Preserve regular Markdown configuration recursively. | Private instructions, inline MCP values, permission modes, hook definitions, commands, and credentials. | Sensitive; the same local opt-in; referenced resources excluded. |
-| Claude Code `skills/` | `claude_skills.bundle.json` | Preserve complete eligible personal skill folders, including hidden support, scripts, and binary assets. | Arbitrary instructions, credentials, executable files, and private project information. | Sensitive; the same local opt-in; managed/plugin trees and external references excluded. |
+| Claude Code `skills/` | `claude_skills.bundle.json` | Preserve complete eligible personal and synced packages, including downloaded defaults, hidden support, scripts, and binary assets. | Arbitrary instructions, credentials, executable files, private project information, and collection identifiers. | Sensitive; the same local opt-in; sync bookkeeping, plugin installations, and external references excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -149,9 +149,9 @@ Ballin uses `CLAUDE_CONFIG_DIR` when nonempty, otherwise `~/.claude`. Relative
 root overrides resolve from the command's working directory; an explicitly
 selected root may be an alias. It selects `CLAUDE.md` and regular `.md`
 files beneath personal `rules/`, `agents/`, and legacy `commands/` directories.
-Personal skills are selected separately as described below. The path identifies
-a supported configuration location, not proof of authorship or secret-free
-contents. [Claude skills](https://code.claude.com/docs/en/skills)
+Personal and synced skills are selected separately as described below. A selected
+path identifies a supported configuration location, not proof of authorship or
+secret-free contents. [Claude skills](https://code.claude.com/docs/en/skills)
 are the preferred surface for new custom capabilities; `commands/` preserves
 existing compatibility files.
 
@@ -187,20 +187,39 @@ Personal skills capture immediate nonhidden folders in `skills/` that contain
 an exact-case regular `SKILL.md`. Their complete regular-file contents are
 preserved recursively, including hidden files, executable scripts, and binary
 assets. Loose root files and folders without that marker are omitted. Root
-`synced`, `anthropic-skills`, and `anthropic-skills:*` names are excluded without
+`anthropic-skills` and `anthropic-skills:*` names are excluded without
 regard to case, as are hidden root folders such as `.trash` and `.system`.
+
+Synced packages are also selected at `skills/synced/<collection>/<skill>/` when
+they contain an exact-case regular `SKILL.md`. Collection names are not restricted
+to UUIDs, and all collections present on disk are considered. Every validated
+package is included regardless of its name or recorded origin, including
+downloaded defaults, organization-provided skills, and plugin-origin synced skills.
+Their complete regular-file contents follow the same rules as personal skills;
+hidden package/support names are preserved. Relative paths retain `synced/` and
+the collection namespace to prevent collisions. Collection names may identify
+accounts or organizations and are part of the sensitive snapshot.
+
+Loose files in sync containers are omitted. `manifest.json`, `.staging`,
+`.last-complete-round`, and `.trash` entries at the synced root or collection
+level are excluded without regard to case or type; their contents are not read.
+Ballin does not use sync manifests or origin labels as ownership/default filters.
+Those labels cannot prove that downloaded files remain unedited. Sync can
+overwrite local edits, so resynchronization is not a promise of exact recovery.
+See [Claude's sync behavior](https://code.claude.com/docs/en/skills#where-synced-skills-load).
+
 An immediate `.claude-plugin` entry excludes the whole skill folder, regardless
 of its type or capitalization. A root `manifest.json` entry, regardless of type
 or capitalization, makes the skills source unavailable; Ballin does not read it
 to distinguish legacy downloads from personal folders. Unavailable sources retain
 any existing saved snapshot. See [Claude skills](https://code.claude.com/docs/en/skills).
 
-These rules identify eligible local folders, not proven authorship. Copied
-third-party material can qualify, and selected visible or hidden files can
-contain credentials or private environment values. Ballin does not scan or
+These rules identify eligible packages, not proven authorship. Downloaded
+and copied third-party material is included, and selected visible or hidden files
+can contain credentials or private environment values. Ballin does not scan or
 redact them. Dedicated credential stores, generated memory, sessions, histories,
-caches, logs, and runtime state outside the selected authoring trees remain
-unselected. Excluding managed skill locations does not delete previously saved
+caches, logs, and runtime state outside the selected packages remain
+unselected. Excluding sources does not delete previously saved
 files or history.
 
 Project `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` configuration, and
