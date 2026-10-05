@@ -33,6 +33,14 @@ const d1Success = (rows: D1Row[] = []) => ({
 });
 
 describe('analytics D1 reset', () => {
+  const temporaryRoots: string[] = [];
+
+  afterEach(() => {
+    for (const rootDir of temporaryRoots.splice(0)) {
+      fs.rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it('parses dry-run, confirmation, and custom database options', () => {
     assert.deepEqual(parseArgs(['--dry-run']), {
       database: defaultDatabase,
@@ -210,6 +218,7 @@ describe('analytics D1 reset', () => {
   it('falls back to npx --yes wrangler when wrangler is unavailable', () => {
     const calls: SpawnCall[] = [];
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-reset-'));
+    temporaryRoots.push(rootDir);
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
     const options = {
@@ -251,6 +260,7 @@ describe('analytics D1 reset', () => {
 
   it('surfaces reset spawn errors and stderr/stdout/default failure messages', () => {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-reset-'));
+    temporaryRoots.push(rootDir);
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
     const options = { database: defaultDatabase, dryRun: true, help: false, rootDir };

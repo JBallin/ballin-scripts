@@ -14,6 +14,9 @@ import time
 import urllib.request
 
 BASE = "a4f151a7c9216e2c6c02398fe68bc62ae3507b54"
+PREVIOUS_HEAD = "a9a0e5d9276fca742f062b594860b1ecfeb9305e"
+PREVIOUS_RUN = 37354767512
+FIXTURE_PATCH_SHA256 = "ac8d35bb6832797a770a1916df28436161d2f84da3d60bbaa443943995ffd6db"
 LOCK = "3abd4922490a95cf538c52e16e16fccc739b9c277d4217e21d0064efe9acd797"
 ORDER = ("serial", "parallel2", "parallel2", "serial", "serial", "parallel2")
 ROOT = Path.cwd().resolve()
@@ -149,8 +152,8 @@ def preflight():
     assert os.environ["GITHUB_REF"] == "refs/heads/experiment/319-ci-comparison"
     assert os.environ["GITHUB_RUN_ATTEMPT"] == "1", "Reruns are outside the experiment cap"
     assert git("rev-parse", "HEAD") == os.environ["GITHUB_SHA"]
-    # Only the first manual CI dispatch on this dedicated branch may measure.
-    # A duplicate dispatch or rerun must not spend a second six-sample budget.
+    # The first dispatch stopped on fixture leaks. Permit exactly one approved
+    # revised dispatch; duplicates or reruns must not spend another budget.
     endpoint = os.environ["GITHUB_API_URL"] + "/repos/JBallin/ballin-scripts/actions/runs?branch=experiment%2F319-ci-comparison&event=workflow_dispatch&per_page=100"
     request = urllib.request.Request(endpoint, headers={"Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
                                      "Accept": "application/vnd.github+json"})
@@ -158,16 +161,24 @@ def preflight():
         run_history = json.load(response)
     assert run_history["total_count"] <= 100, "Ambiguous branch run history"
     runs = [run for run in run_history["workflow_runs"] if run["path"].split("@")[0] == ".github/workflows/ci.yml"]
-    assert runs and min(runs, key=lambda run: run["run_number"])["id"] == int(os.environ["GITHUB_RUN_ID"])
+    current_run = int(os.environ["GITHUB_RUN_ID"])
+    assert current_run != PREVIOUS_RUN
+    assert len(runs) == 2 and {run["id"] for run in runs} == {PREVIOUS_RUN, current_run}
+    previous = next(run for run in runs if run["id"] == PREVIOUS_RUN)
+    assert previous["head_sha"] == PREVIOUS_HEAD and previous["conclusion"] == "failure"
     assert not git("status", "--porcelain"), "Checkout must start clean"
     assert sha(ROOT / "package-lock.json") == LOCK
     allowed = {".github/workflows/ci.yml", "test/setup.ts",
                ".github/experiments/319/measure.py", ".github/experiments/319/coverage.cjs",
-               ".github/experiments/319/reuse-observer.cjs"}
+               ".github/experiments/319/reuse-observer.cjs",
+               "test/analytics_report.test.ts", "test/analytics_reset.test.ts"}
     changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
     assert changed <= allowed and "test/setup.ts" in changed
     setup_patch = subprocess.check_output(["git", "diff", BASE, "HEAD", "--", "test/setup.ts"], cwd=ROOT)
     assert hashlib.sha256(setup_patch).hexdigest() == "2a831f6163dfc69a08e409e2e9c11db590e3d37778c6be4f27a9c6faa949085e"
+    fixture_patch = subprocess.check_output(["git", "diff", BASE, "HEAD", "--",
+        "test/analytics_report.test.ts", "test/analytics_reset.test.ts"], cwd=ROOT)
+    assert hashlib.sha256(fixture_patch).hexdigest() == FIXTURE_PATCH_SHA256
     for key in ["NODE_OPTIONS", "NODE_V8_COVERAGE", "MOCHA_OPTIONS", "MOCHA_WORKER_ID",
                 "NODE_COMPILE_CACHE", "NODE_DISABLE_COMPILE_CACHE"]:
         assert not os.environ.get(key), f"Unexpected inherited {key}"
@@ -186,12 +197,14 @@ def preflight():
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     assert not (ARTIFACTS / "preflight.json").exists(), "Do not overwrite an experiment"
     FIXTURES.mkdir(parents=True, exist_ok=True)
-    write(ARTIFACTS / "preflight.json", {"base": BASE, "commit": git("rev-parse", "HEAD"),
+    write(ARTIFACTS / "preflight.json", {"historicalBase": BASE, "commit": git("rev-parse", "HEAD"),
+          "comparisonRevision": 2, "previousExperimentCommit": PREVIOUS_HEAD,
+          "previousExperimentRun": PREVIOUS_RUN, "fixtureCleanupPatchSha256": FIXTURE_PATCH_SHA256,
           "tree": git("rev-parse", "HEAD^{tree}"), "lockSha256": LOCK, "runtime": runtime,
           "umask": umask, "cpuQuota": quota, "memory": Path("/proc/meminfo").read_text(),
           "runnerImage": {key: os.environ.get(key) for key in ["ImageOS", "ImageVersion", "RUNNER_OS", "RUNNER_ARCH"]},
           "order": ORDER, "measurementCap": 6, "commandBudgetSeconds": 900,
-          "firstAndOnlyAuthorizedRun": os.environ["GITHUB_RUN_ID"],
+          "onlyAuthorizedRevisionRun": os.environ["GITHUB_RUN_ID"],
           "toolSha256": {filename.name: sha(filename) for filename in TOOLS.iterdir() if filename.is_file()}})
 
 
