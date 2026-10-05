@@ -67,7 +67,8 @@ Review shows logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.
-Review reads no file contents and runs no collectors. Codex and Claude Code
+Review may read bounded Claude skill selection metadata; it reads no skill bodies
+or other source contents and runs no collectors. Codex and Claude Code
 directory discovery recursively inspects names and file types to identify nonempty sources. Missing
 and unavailable sources are shown; access or resolution errors prevent
 confirmation. Closing input or declining final confirmation cancels without
@@ -160,8 +161,9 @@ relative paths, exact file bytes, and executable flags. The Markdown sources
 omit non-Markdown files. All Claude sources omit symlinks, special files, empty
 directories, `.git`, and `.DS_Store`.
 Selected hard links stop capture; Ballin does not search for their other paths.
-Discovery and review inspect metadata; review checks readability without
-reading contents. Discovery or collection failure stops the backup before
+Discovery and review inspect file attributes and bounded skill selection
+metadata; review checks readability without reading skill bodies or other
+source contents. Discovery or collection failure stops the backup before
 publication. Capture is not atomic across concurrent edits.
 
 Claude Code has its own **16 MiB combined** normalized capture allowance,
@@ -207,7 +209,9 @@ Loose files in sync containers are omitted. `manifest.json`, `.staging`,
 level are excluded from capture without regard to case or type. Collection
 manifests are read only to select packages, using the observed on-disk metadata
 shape; the Claude skills documentation does not define this shape as a public
-API. Names must be unambiguous single folder names and are never followed as
+API. Selection fields (`skills`, `name`, and `source`) must not repeat within
+their objects, including escaped spellings of those keys. Names must be
+unambiguous single folder names and are never followed as
 paths. Across the skills source, manifest reads are bounded to 1 MiB and 8,192
 records, separate from the existing capture limits. Missing, unreadable,
 malformed, oversized, symlinked, hard-linked, or ambiguously named manifests make

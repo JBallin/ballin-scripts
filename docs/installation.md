@@ -192,7 +192,8 @@ changes.
 
 Reconnect inspects the existing backup before asking. Declining skips
 sensitive-source discovery. Selecting it reviews paths, resolved targets, and
-availability without reading file contents or running collectors. Access or
+availability. Review may read bounded Claude skill selection metadata; it reads
+no skill bodies or other source contents and runs no collectors. Access or
 resolution errors stop setup. See [source review](backup-sources.md#repository-inclusion).
 
 Final confirmation covers the destination and source selection. If you decline,

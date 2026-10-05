@@ -115,10 +115,11 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   if (absent.length) writeStdoutLine(`Not found now: ${absent.join(', ')}`);
   if (unavailable.length) writeStdoutLine(`Unavailable now: ${unavailable.join(', ')}`);
   writeStdoutLine('pipx installation metadata may contain original URLs, credentials, and backend arguments.');
-  writeStdoutLine('This review checks paths and availability; it reads no file contents and runs no collectors.');
+  writeStdoutLine('This review checks paths and availability and may read bounded Claude skill selection metadata.');
+  writeStdoutLine('It reads no skill bodies or other source contents and runs no collectors.');
   return true;
 };
-// Selection and non-content inspection are shared; destination confirmation belongs to its caller.
+// Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('\nTool inventories and filtered preferences can include private tools, identities, paths, or URLs.');
   writeStdoutLine('Even without sensitive sources, backups may contain secrets.');

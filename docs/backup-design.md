@@ -422,8 +422,9 @@ blobs. Remote-reader resource bounds remain separate follow-up work.
 Codex and Claude Code traversal and reads use a private synchronous cwd-pinning
 helper. Each directory identity is captured from its pinned parent and verified after entry;
 callbacks use only the pinned directory or immediate names. Leaf opens reject
-symlinks; review opens and closes regular files to check readability without
-reading contents. Caller cwd identity is verified after restoration. Restoration
+symlinks; review opens and closes regular payload files to check readability
+without reading their contents. Synced skill selection also reads bounded
+manifest metadata. Caller cwd identity is verified after restoration. Restoration
 failure is fatal and bypasses optional-source handling. These checks pin selected
 directory objects; they do not provide an atomic snapshot of concurrent edits.
 

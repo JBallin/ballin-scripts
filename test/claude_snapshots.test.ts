@@ -393,6 +393,41 @@ describe('Claude Code selected configuration', () => {
     });
   });
 
+  [
+    '{"skills":[{"name":"package","source":"anthropic","source":"plugin"}]}',
+    '{"skills":[{"name":"package","source":"plugin","source":"anthropic"}]}',
+    '{"skills":[{"name":"default","name":"package","source":"plugin"}]}',
+    '{"skills":[],"skills":[{"name":"package","source":"plugin"}]}',
+    '{"skills":[{"name":"package","source":"plugin"}],"skills":[]}',
+    '{"skills":[{"name":"package","source":"plugin","source":"plugin"}]}',
+    '{"skills":[{"name":"package","source":"anthropic","\\u0073ource":"plugin"}]}',
+    '{"skills":[{"name":"default","\\u006eame":"package","source":"plugin"}]}',
+    '{"skills":[],"\\u0073kills":[{"name":"package","source":"plugin"}]}',
+  ].forEach((text, index) => {
+    it(`makes the whole skills source unavailable for duplicate selection keys ${index}`, () => {
+      write('skills/personal/SKILL.md'); write('skills/synced/collection/package/SKILL.md'); manifest('collection');
+      const observation = discover('claude_skills.bundle.json');
+      if (observation.status !== 'available') throw new Error('Expected available fixture');
+      write('skills/synced/collection/manifest.json', text);
+      assert.equal(discover('claude_skills.bundle.json').status, 'unavailable');
+      assert.throws(() => reviewRecursiveFiles(path.join(root, 'skills'), false, false, {}, skillSelection), 'Claude synced skills manifest');
+      const failed = spawnSync(observation.collector.command, observation.collector.args!, { env: observation.collector.env, encoding: 'utf8' });
+      assert.equal(failed.status, 1); assert.equal(failed.stdout, '');
+    });
+  });
+
+  it('ignores repeated non-selection metadata and delimiters in string values', () => {
+    write('skills/synced/collection/package/SKILL.md');
+    const description = JSON.stringify('"source":"plugin", {"skills":[]} and \\ \\u0073ource');
+    write('skills/synced/collection/manifest.json', `{"source":"anthropic","source":"plugin","skills":[{
+      "extra":{"skills":[],"skills":[],"name":"a","name":"b","source":"a","source":"b"},
+      "description":${description},"description":"ignored","source":"\\u0070lugin","name":"package"
+    }],"extra":[{"source":"anthropic","source":"plugin"}]}`);
+    assert.deepEqual(JSON.parse(capture('claude_skills.bundle.json').stdout).entries.map((entry: { path: string }) => entry.path), [
+      'synced/collection/package/SKILL.md',
+    ]);
+  });
+
   ['missing', 'json', 'utf8', 'directory', 'symlink', 'hardlink', 'oversized', 'records'].forEach((kind) => {
     it(`makes the whole skills source unavailable for a ${kind} manifest`, () => {
       write('skills/personal/SKILL.md'); write('skills/synced/collection/package/SKILL.md');

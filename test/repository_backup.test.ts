@@ -556,6 +556,14 @@ describe('repository backup lifecycle', function() {
     assert.equal(cached('claude_skills.bundle.json'), prior);
     assert.equal(remote('claude_instructions'), 'new instructions\n');
     assert.notInclude(malformed.stdout + malformed.stderr, 'DUMMY_INVALID_METADATA');
+    fs.writeFileSync(manifest, '{"skills":[{"name":"custom","source":"anthropic","source":"plugin"}]}');
+    ok(run());
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.equal(cached('claude_skills.bundle.json'), prior);
+    fs.writeFileSync(manifest, '{"skills":[],"skills":[{"name":"custom","source":"plugin"}]}');
+    ok(run());
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.equal(cached('claude_skills.bundle.json'), prior);
     fs.rmSync(manifest); ok(run());
     assert.equal(remote('claude_skills.bundle.json'), prior);
     assert.lengthOf(publications(), 2);

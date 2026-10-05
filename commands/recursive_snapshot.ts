@@ -89,8 +89,8 @@ const requireWithinLimit = (kind: 'bytes' | 'entries', actual: number, limit: nu
   if (actual > limit) throw new SnapshotLimitError(kind, actual, limit);
 };
 
-// Enumerate regular files without following symlinks. Metadata-only discovery
-// uses this same traversal, so empty or generated-only sources stay absent.
+// Enumerate regular files without following symlinks. Discovery uses this same
+// traversal and bounded selection metadata, so empty sources stay absent.
 const checkedPath = (root: string, relative: string): string => {
   if (sourceStat(root, relative).isSymbolicLink()) throw symlinkError();
   return path.join(root, relative);
@@ -124,13 +124,41 @@ const fileEntry = (root: string, relative: string, maxBytes = snapshotByteLimit,
   return { path: relative.split(path.sep).join('/'), executable, content: bytes.toString('base64') };
 };
 
+// Check only selection keys in the raw JSON, before JSON.parse can discard
+// duplicate fields. String tokens keep braces and commas inside values inert.
+const requireUniqueManifestSelection = (text: string): void => {
+  const contexts: { array: boolean; key: boolean; field?: string; seen: Set<string> }[] = [];
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\],]/gu)) {
+    if (token === '{' || token === '[') {
+      contexts.push({ array: token === '[', key: token === '{', seen: new Set() });
+    } else if (token === '}' || token === ']') contexts.pop();
+    else {
+      const context = contexts.at(-1);
+      if (!context || context.array) continue;
+      if (token === ',') context.key = true;
+      else if (context.key) {
+        const key = JSON.parse(token);
+        const selection = contexts.length === 1 ? key === 'skills'
+          : contexts.length === 3 && contexts[0].field === 'skills' && contexts[1].array
+            && (key === 'name' || key === 'source');
+        if (selection && context.seen.has(key)) throw new Error('Duplicate manifest selection key');
+        if (selection) context.seen.add(key);
+        context.field = key;
+        context.key = false;
+      }
+    }
+  }
+};
+
 // Called only inside the pinned collection directory. Manifest names are lookup
 // keys, never paths to follow; only the exact recorded plugin origin qualifies.
 const syncedPluginNames = (maxBytes: number, maxRecords: number): { names: Set<string>; bytes: number; records: number } => {
   try {
     const { bytes } = readBoundedFile('manifest.json', maxBytes, true);
     if (!isUtf8(bytes)) throw new Error('Invalid manifest text');
-    const manifest = JSON.parse(bytes.toString('utf8'));
+    const text = bytes.toString('utf8');
+    requireUniqueManifestSelection(text);
+    const manifest = JSON.parse(text);
     if (!manifest || !Array.isArray(manifest.skills) || manifest.skills.length > maxRecords) throw new Error('Invalid manifest records');
     const seen = new Set<string>();
     const names = new Set<string>();
@@ -201,7 +229,7 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
             if (name.startsWith('.') || reserved === 'anthropic-skills' || reserved.startsWith('anthropic-skills:')) continue;
           }
           // Sync containers hold collections and packages, not authoring files.
-          // Keep their lifecycle state outside capture without reading manifests.
+          // Keep their lifecycle state outside capture.
           if (syncContainer && claudeSyncBookkeeping.has(name.toLowerCase())) continue;
           if (plugins && !plugins.has(name)) continue;
           if (profilesOnly && !/^.+\.config\.toml$/u.test(name)) continue;
