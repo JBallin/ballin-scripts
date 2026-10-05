@@ -64,6 +64,34 @@ describe('temporary terminal status', () => {
     `], { encoding: 'utf8', env: testChildEnvironment({ TERM: 'xterm' }) });
     assert.equal(result.status, 0); assert.equal(result.stderr, 'Working...\r\x1b[2Kfixture diagnostic');
   });
+  for (const stdio of ['inherit', ['ignore', 'pipe', 2], ['ignore', 1, 'ignore']]) {
+    it(`can retain progress before inherited output with ${JSON.stringify(stdio)}`, () => {
+      const exitListeners = process.listenerCount('exit');
+      withTemporaryStatus('Working...', () => {
+        runCommand(process.execPath, ['-e', ''], { stdio });
+        assert.equal(output, 'Working...\n');
+        clearTemporaryStatus();
+      }, { retainBeforeInheritedOutput: true });
+      assert.equal(output, 'Working...\n');
+      assert.equal(process.listenerCount('exit'), exitListeners);
+    });
+  }
+  it('keeps retained progress temporary until a child inherits output', () => {
+    withTemporaryStatus('Working...', () => {
+      runCommand(process.execPath, ['-e', ''], { stdio: ['inherit', 'ignore', 'ignore'] });
+      assert.equal(output, 'Working...');
+    }, { retainBeforeInheritedOutput: true });
+    assert.equal(output, 'Working...\r\x1b[2K');
+  });
+  it('retains progress without masking an inherited child launch error', () => {
+    withTemporaryStatus('Working...', () => {
+      const result = runCommand(`${process.execPath}/missing`, [], { stdio: 'inherit' });
+      assert.exists(result.error);
+      assert.isNull(result.status);
+      assert.equal(output, 'Working...\n');
+    }, { retainBeforeInheritedOutput: true });
+    assert.equal(output, 'Working...\n');
+  });
   it('handles nested status boundaries without clearing the newer line twice', () => {
     withTemporaryStatus('Outer...', () => withTemporaryStatus('Inner...', () => clearTemporaryStatus()));
     assert.equal(output, 'Outer...\r\x1b[2KInner...\r\x1b[2K');
@@ -122,7 +150,7 @@ describe('temporary terminal status', () => {
   it('clears on explicit process exit', () => {
     const result = spawnSync(process.execPath, ['-e', `
       for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
-      require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))}).withTemporaryStatus('Working...', () => process.exit(3));
+      require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))}).withTemporaryStatus('Working...', () => process.exit(3), { retainBeforeInheritedOutput: true });
     `], { encoding: 'utf8', env: testChildEnvironment({ TERM: 'xterm' }) });
     assert.equal(result.status, 3); assert.equal(result.stderr, 'Working...\r\x1b[2K');
   });

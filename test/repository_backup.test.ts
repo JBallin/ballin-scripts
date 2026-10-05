@@ -1146,16 +1146,31 @@ describe('repository backup lifecycle', function() {
     assert.equal(rulesetRequests().length, 0);
   });
 
-  it('propagates browser dispatch failure after validating and displaying the repository URL', () => {
-    const value = state(); value.faults.open = true; saveState(value);
-    const result = run(['open']);
-    assert.equal(result.status, 7);
-    assert.equal(result.stdout, 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n');
-    assert.equal(result.stderr, 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n');
-    assert.equal(state().requests.at(-1)?.endpoint, 'open');
-    assert.equal(mutations().length, 0);
-    assert.isFalse(fs.existsSync(cacheRoot));
-  });
+  const browserOrderingPreload = (): string => `
+    const fs = require('fs'); const write = process.stdout.write; let output = '';
+    process.stdout.write = function(text, ...rest) { output += text; return write.call(this, text, ...rest); };
+    const child = require('child_process'); const spawn = child.spawnSync;
+    child.spawnSync = function(command, args, options) {
+      if (command === 'gh' && args[0] === 'browse') fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, args, stdio: options.stdio, host: options.env.GH_HOST }));
+      return spawn.call(this, command, args, options);
+    };
+  `;
+  for (const failed of [false, true]) {
+    it(`displays the validated URL before ${failed ? 'failed' : 'successful'} browser dispatch`, () => {
+      const value = state(); value.faults.open = failed; saveState(value);
+      const result = run(['open'], '', {}, browserOrderingPreload());
+      assert.equal(result.status, failed ? 7 : 0);
+      const notice = 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n';
+      assert.equal(result.stdout, notice);
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')), {
+        output: notice, args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
+      });
+      assert.equal(result.stderr, failed ? 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n' : '');
+      assert.equal(state().requests.at(-1)?.endpoint, 'open');
+      assert.equal(mutations().length, 0);
+      assert.isFalse(fs.existsSync(cacheRoot));
+    });
+  }
   for (const failure of ['spawn', 'signal']) {
     it(`reports browser ${failure} failure without exposing child diagnostics`, () => {
       const result = run(['open'], '', {}, `

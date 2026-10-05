@@ -2,7 +2,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { clearTemporaryStatus } = require('./temporaryStatus.ts');
+const { clearTemporaryStatus, prepareForInheritedOutput } = require('./temporaryStatus.ts');
 const { terminalEmphasis } = require('./terminalStyle.ts');
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
@@ -33,7 +33,7 @@ const runCommand = (
   });
   const stdio = options.stdio;
   if (stdio === 'inherit' || (Array.isArray(stdio) && stdio.slice(1).some((entry) => entry === 'inherit' || entry === 1 || entry === 2))) {
-    clearTemporaryStatus();
+    prepareForInheritedOutput();
   }
   return spawn();
 };
