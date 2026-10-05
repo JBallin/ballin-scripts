@@ -157,8 +157,9 @@ Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
 
-When the coverage gate fails, CI attempts to retain exact reports and runtime,
-commit, tree, and lockfile metadata in a compact artifact for seven days. A
+When the complete gate fails after producing raw V8 coverage, CI attempts to
+retain exact reports and runtime, commit, tree, and lockfile metadata in a compact
+artifact for seven days. Failures before coverage starts skip these diagnostics. A
 separate failure-only artifact upload retains the raw V8 data when available,
 even if compact report generation fails. An intentional successful
 `workflow_dispatch` run retains only the compact evidence. Ordinary successful

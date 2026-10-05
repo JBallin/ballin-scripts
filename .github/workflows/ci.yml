@@ -60,6 +60,7 @@ jobs:
         id: coverage_diagnostics
         if: >-
           ${{ !cancelled() &&
+            hashFiles('coverage/tmp/coverage-*.json') != '' &&
             (steps.coverage.outcome == 'failure' ||
               (github.event_name == 'workflow_dispatch' &&
                 steps.coverage.outcome == 'success')) }}
@@ -100,7 +101,10 @@ jobs:
           retention-days: 7
 
       - name: Upload raw V8 coverage evidence
-        if: ${{ !cancelled() && steps.coverage.outcome == 'failure' }}
+        if: >-
+          ${{ !cancelled() &&
+            hashFiles('coverage/tmp/coverage-*.json') != '' &&
+            steps.coverage.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
         with:
           name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
