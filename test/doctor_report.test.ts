@@ -3,7 +3,7 @@ const { formatDefaultDoctorReport, formatVerboseDoctorReport } = require('../com
 describe('doctor literal recovery guidance', () => {
   const cases = {
     'config.read': 'Run `ballin config reset` to recreate the config.',
-    'backup.read': 'Check access to the selected backup, then run `ballin backup setup` to revalidate it.',
+    'backup.read': 'Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.',
     'backup.config': 'Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.',
     'backup.consent': 'Set `backup.includeSensitive` to true or false; read-only recovery remains available.',
   };
@@ -19,6 +19,6 @@ describe('doctor literal recovery guidance', () => {
       { id: 'config.read', label: 'Config', status: 'fail', summary: 'Unreadable.' },
       { id: 'backup.read', label: 'Backup', status: 'warn', summary: 'Unavailable.' },
     ] };
-    assert.equal(formatDefaultDoctorReport(report), 'ERROR Config: Unreadable.\nNext: Run `ballin config reset` to recreate the config.\n\nWARN  Backup: Unavailable.\nNext: Check access to the selected backup, then run `ballin backup setup` to revalidate it.\n');
+    assert.equal(formatDefaultDoctorReport(report), 'ERROR Config: Unreadable.\nNext: Run `ballin config reset` to recreate the config.\n\nWARN  Backup: Unavailable.\nNext: Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.\n');
   });
 });

@@ -245,13 +245,30 @@ For an already-configured backup, `ballin backup setup` shows the validated
 destination, whether sensitive sources are included, and whether automatic
 backup during update is enabled. It preserves these choices and shows the
 [local last-success record](backup-sources.md#last-successful-backup) separately.
-This summary does not compare current sources with saved snapshots.
+
+To change sensitive-source inclusion or automatic backup during update while
+keeping your destination, run `ballin setup` for
+[guided preference review](optional-capabilities.md#guided-preference-review)
+or use the
+[backup settings commands](optional-capabilities.md#private-repository-backups).
 
 Renaming the repository on GitHub does not break the connection: Ballin continues
 to recognize the same backup. To switch to a different repository, disconnect
-first and run `ballin backup setup` again. Ballin backup repositories must be
-private, belong to the personal GitHub.com account used for setup, and meet
-Ballin's other support requirements.
+first:
+
+```shell
+ballin backup disconnect
+ballin backup setup new-repository-name
+```
+
+Disconnect clears local backup linkage and `.backup-cache`, and disables
+automatic backup during updates. Remote history and shared `gh` authentication
+remain unchanged. Setup offers create or reconnect and asks for sensitive-source
+and automatic-backup choices again. See [Disconnect](#disconnect) for preserved
+preferences and failure handling.
+
+Ballin backup repositories must be private, belong to the personal GitHub.com
+account used for setup, and meet Ballin's other support requirements.
 
 If a name redirects to a renamed repository, **create** can reclaim it after
 setup warns you and you confirm. This ends the old redirect, so links and clones
@@ -267,9 +284,10 @@ ballin backup disconnect
 Disconnect atomically clears local backup associations and
 sets `update.backup="false"`, then removes `.backup-cache`. It preserves sensitive
 consent and unrelated preferences. It requires no authentication
-or network operation and leaves remote history intact. A failed config save
-retains the prior selection. If cleanup fails after saving, writes stay disabled;
-repeat disconnect to retry cleanup even when already unconfigured.
+or network operation and leaves remote history and shared `gh` authentication
+unchanged. A failed config save retains the prior selection. If cleanup fails
+after saving, writes stay disabled; repeat disconnect to retry cleanup even when
+already unconfigured.
 
 ## Health and recovery
 
