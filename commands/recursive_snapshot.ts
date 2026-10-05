@@ -7,7 +7,7 @@ type ReadableRecursiveEntry = { path: string; executable: boolean } & (
   { encoding: 'utf8'; content: string[] } | { encoding: 'base64'; content: string }
 );
 type SnapshotLimits = { maxBytes?: number; maxEntries?: number };
-type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean };
+type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean; claudeSkills?: boolean };
 const snapshotByteLimit = 16 * 1024 * 1024;
 const recursiveEntryLimit = 8192;
 class SnapshotLimitError extends Error {
@@ -16,6 +16,7 @@ class SnapshotLimitError extends Error {
   }
 }
 class SnapshotCwdError extends Error {}
+class SnapshotSourceTypeError extends Error {}
 let directoryPinned = false;
 const sameDirectory = (left: import('fs').Stats, right: import('fs').Stats): boolean => (
   left.dev === right.dev && left.ino === right.ino && right.isDirectory()
@@ -130,27 +131,48 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
   while (pending.length) {
     const relative = pending.pop()!;
     inDirectory(root, relative, () => {
+      const skillFolder = selection.claudeSkills && relative !== '' && !relative.includes(path.sep);
+      const candidates: string[] = [];
+      const visitEntry = (name: string): void => {
+        const entry = path.join(relative, name);
+        pathBytes += Buffer.byteLength(JSON.stringify(entry));
+        requireWithinLimit('bytes', pathBytes, limits.maxBytes ?? snapshotByteLimit);
+        const stat = fs.lstatSync(name);
+        if (stat.isDirectory() && !profilesOnly) pending.push(entry);
+        else if (stat.isFile()) {
+          if (selection.claudeSkills && !relative) return;
+          if (selection.markdownOnly && !name.endsWith('.md')) return;
+          requireSingleLink(stat, selection.rejectHardlinks ?? false);
+          if (reviewReadability) readableFileStat(name, selection.rejectHardlinks);
+          files.push(entry);
+        }
+      };
       const directory = fs.opendirSync('.');
       try {
         let next;
         while ((next = directory.readSync()) !== null) {
           requireWithinLimit('entries', ++visited, limits.maxEntries ?? recursiveEntryLimit);
           const name = next.name;
+          if (selection.claudeSkills && !relative) {
+            const reserved = name.toLowerCase();
+            // Legacy downloads shared the personal root; do not infer ownership
+            // or read their manifest to decide which folders to capture.
+            if (reserved === 'manifest.json') throw new SnapshotSourceTypeError('Legacy Claude skills manifest');
+            if (name.startsWith('.') || reserved === 'synced' || reserved === 'anthropic-skills' || reserved.startsWith('anthropic-skills:')) continue;
+          }
           if (profilesOnly && !/^.+\.config\.toml$/u.test(name)) continue;
           if (name === '.git' || name === '.DS_Store' || (skills && !relative && name === '.system')) continue;
-          const entry = path.join(relative, name);
-          pathBytes += Buffer.byteLength(JSON.stringify(entry));
-          requireWithinLimit('bytes', pathBytes, limits.maxBytes ?? snapshotByteLimit);
-          const stat = fs.lstatSync(name);
-          if (stat.isDirectory() && !profilesOnly) pending.push(entry);
-          else if (stat.isFile()) {
-            if (selection.markdownOnly && !name.endsWith('.md')) continue;
-            requireSingleLink(stat, selection.rejectHardlinks ?? false);
-            if (reviewReadability) readableFileStat(name, selection.rejectHardlinks);
-            files.push(entry);
-          }
+          if (skillFolder) candidates.push(name);
+          else visitEntry(name);
         }
       } finally { directory.closeSync(); }
+      if (skillFolder) {
+        // Enumerated spelling enforces exact SKILL.md even on case-insensitive
+        // filesystems. Plugin markers exclude the complete candidate payload.
+        if (candidates.some((name) => name.toLowerCase() === '.claude-plugin')
+          || !candidates.includes('SKILL.md') || !fs.lstatSync('SKILL.md').isFile()) return;
+        candidates.forEach(visitEntry);
+      }
     });
   }
   return files.sort();
@@ -241,7 +263,7 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
 };
 
 module.exports = { checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
-  snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, requireWithinLimit, isReadableText, encodeDirectoryEntry };
+  snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, SnapshotSourceTypeError, requireWithinLimit, isReadableText, encodeDirectoryEntry };
 export type { RecursiveEntry, ReadableRecursiveEntry, SnapshotLimits, RecursiveSelection };
 
 if (require.main === module) {
@@ -256,7 +278,7 @@ if (require.main === module) {
       process.stdout.write(bytes);
     } else {
       process.stdout.write(recursiveSnapshot(process.argv[2], process.argv[3] === 'profiles', process.argv[3] === 'skills', { maxBytes }, {
-        markdownOnly: process.argv[3] === 'markdown', rejectHardlinks,
+        markdownOnly: process.argv[3] === 'markdown', claudeSkills: process.argv[3] === 'claude-skills', rejectHardlinks,
       }));
     }
   } catch (error) {

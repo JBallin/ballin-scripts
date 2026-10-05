@@ -32,6 +32,7 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
 | Claude Code `CLAUDE.md` | `claude_instructions` | Preserve personal instructions from the active configuration root. | Private instructions, credentials, paths, and imported-file references. | Sensitive; the same local opt-in; imports are not collected. |
 | Claude Code `rules/`, `agents/`, and legacy `commands/` | `claude_rules.bundle.json`, `claude_agents.bundle.json`, `claude_commands.bundle.json` | Preserve regular Markdown configuration recursively. | Private instructions, inline MCP values, permission modes, hook definitions, commands, and credentials. | Sensitive; the same local opt-in; referenced resources excluded. |
+| Claude Code `skills/` | `claude_skills.bundle.json` | Preserve complete eligible personal skill folders, including hidden support, scripts, and binary assets. | Arbitrary instructions, credentials, executable files, and private project information. | Sensitive; the same local opt-in; managed/plugin trees and external references excluded. |
 | Active Homebrew completion directory listing | `bash_completions` | Record installed completion names. | Installed-tool names. | Inventory; default included. |
 | `brew list --formula`, `brew leaves`, `brew list --cask` | `brew_list`, `brew_leaves`, `brew_cask` | Record Homebrew inventory. | Installed tools and applications, including organizational preferences. | Inventory; default included. |
 | `brew services list` | `brew_services` | Record managed service state. | Services, status, usernames, and launch paths. | Inventory; default included. |
@@ -146,16 +147,18 @@ unknown groups remain excluded. See
 
 Ballin uses `CLAUDE_CONFIG_DIR` when nonempty, otherwise `~/.claude`. Relative
 root overrides resolve from the command's working directory; an explicitly
-selected root may be an alias. It selects only `CLAUDE.md` and regular `.md`
+selected root may be an alias. It selects `CLAUDE.md` and regular `.md`
 files beneath personal `rules/`, `agents/`, and legacy `commands/` directories.
-The path identifies a supported configuration location, not proof of authorship
-or secret-free contents. [Claude skills](https://code.claude.com/docs/en/skills)
+Personal skills are selected separately as described below. The path identifies
+a supported configuration location, not proof of authorship or secret-free
+contents. [Claude skills](https://code.claude.com/docs/en/skills)
 are the preferred surface for new custom capabilities; `commands/` preserves
 existing compatibility files.
 
 Bundle snapshots use the same versioned JSON archive as Codex, preserving
-relative paths, exact file bytes, and executable flags. Non-Markdown files,
-symlinks, special files, empty directories, `.git`, and `.DS_Store` are omitted.
+relative paths, exact file bytes, and executable flags. The Markdown sources
+omit non-Markdown files. All Claude sources omit symlinks, special files, empty
+directories, `.git`, and `.DS_Store`.
 Selected hard links stop capture; Ballin does not search for their other paths.
 Discovery and review inspect metadata; review checks readability without
 reading contents. Discovery or collection failure stops the backup before
@@ -180,13 +183,25 @@ Plugin and marketplace intent needs a separate settings decision; fetched
 while hooks embedded in selected agent Markdown remain intact. Ballin never
 executes definitions, follows external references, or restores approvals.
 
-Skills remain excluded: `skills/` can mix local definitions, downloaded account
-skills, trash, plugin-shaped folders, scripts, and supporting assets. A separate
-review must define eligible directories and supporting files without claiming
-that a path proves their origin. Credential stores, private environment files,
-generated memory, sessions, histories, caches, logs, and runtime state are also
-excluded from direct selection. Selected Markdown can still contain secrets;
-these boundaries are not content scanning or redaction.
+Personal skills capture immediate nonhidden folders in `skills/` that contain
+an exact-case regular `SKILL.md`. Their complete regular-file contents are
+preserved recursively, including hidden files, executable scripts, and binary
+assets. Loose root files and folders without that marker are omitted. Root
+`synced`, `anthropic-skills`, and `anthropic-skills:*` names are excluded without
+regard to case, as are hidden root folders such as `.trash` and `.system`.
+An immediate `.claude-plugin` entry excludes the whole skill folder, regardless
+of its type or capitalization. A root `manifest.json` entry, regardless of type
+or capitalization, makes the skills source unavailable; Ballin does not read it
+to distinguish legacy downloads from personal folders. Unavailable sources retain
+any existing saved snapshot. See [Claude skills](https://code.claude.com/docs/en/skills).
+
+These rules identify eligible local folders, not proven authorship. Copied
+third-party material can qualify, and selected visible or hidden files can
+contain credentials or private environment values. Ballin does not scan or
+redact them. Dedicated credential stores, generated memory, sessions, histories,
+caches, logs, and runtime state outside the selected authoring trees remain
+unselected. Excluding managed skill locations does not delete previously saved
+files or history.
 
 Project `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` configuration, and
 `.mcp.json` remain project-owned; Ballin does not crawl repositories. Claude's

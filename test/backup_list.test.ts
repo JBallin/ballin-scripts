@@ -120,7 +120,7 @@ describe('saved backup discovery', function() {
       assert.equal(result.stdout, 'No current snapshots are saved in this backup.\n'); preserved();
     });
   }
-  for (const snapshot of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json', 'codex_rules.bundle.json', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json']) {
+  for (const snapshot of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json', 'codex_rules.bundle.json', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json']) {
     it(`lists and decodes saved ${snapshot} members without capture or writes`, () => {
       const content = '# Synthetic example\r\nlast';
       const member = { path: 'example/SKILL.md', executable: true, encoding: 'base64', content: Buffer.from(content).toString('base64') };

@@ -65,6 +65,7 @@ choice. Sources are:
 | Personal plugin marketplace | `codex_marketplace.json` | Sensitive-source opt-in; `~/.agents/plugins/marketplace.json`, excluding referenced payloads. |
 | Claude Code instructions | `claude_instructions` | Sensitive-source opt-in; `CLAUDE.md` under active `CLAUDE_CONFIG_DIR` or `~/.claude`. |
 | Claude Code Markdown directories | `claude_rules.bundle.json`, `claude_agents.bundle.json`, `claude_commands.bundle.json` | Sensitive-source opt-in; nonempty personal `rules/`, `agents/`, and legacy `commands/`; regular `.md` files only. |
+| Claude Code personal skills | `claude_skills.bundle.json` | Sensitive-source opt-in; eligible personal `skills/` folders with regular `SKILL.md`, including hidden support, scripts, and binary assets. See [selection boundaries](backup-sources.md#claude-code-configuration). |
 | Ballin preferences | `ballin_config` | Local `ballin.config.json`; only supported preferences are saved. See [preference recovery](optional-capabilities.md#recovering-ballin-preferences). |
 | Mac App Store apps | `mas` | `mas` on `PATH`. |
 

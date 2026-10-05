@@ -91,7 +91,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
         if (observation.source.kind === 'directory') {
           if (!sourceStat(path.dirname(resolved), path.basename(resolved)).isDirectory()) throw new Error('Unsupported source type');
           reviewRecursiveFiles(resolved, args[2] === 'profiles', args[2] === 'skills', {}, {
-            markdownOnly: args[2] === 'markdown', rejectHardlinks: definition.category === 'claude',
+            markdownOnly: args[2] === 'markdown', claudeSkills: args[2] === 'claude-skills', rejectHardlinks: definition.category === 'claude',
           });
         } else {
           fileStat(args[1], args[3], definition.category === 'claude');
@@ -128,9 +128,10 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
   writeStdoutLine('Codex includes whole configuration files (including embedded trust settings),');
   writeStdoutLine('hook definitions, recursive skills/rules/agents, and the personal marketplace manifest.');
   writeStdoutLine('Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
-  writeStdoutLine('Claude Code includes personal CLAUDE.md and Markdown rules, agents, and legacy commands.');
-  writeStdoutLine('Settings, skills, credential stores, runtime state, and installed plugins are excluded.');
-  writeStdoutLine('Selected Markdown may contain secrets.');
+  writeStdoutLine('Claude Code includes personal CLAUDE.md, Markdown rules/agents/commands, and eligible skills.');
+  writeStdoutLine('Skill folders include hidden files, executable scripts, and binary supporting assets.');
+  writeStdoutLine('Settings, credential stores, runtime state, synced skills, and plugin payloads are excluded.');
+  writeStdoutLine('Selected content may contain secrets; Ballin does not scan or redact it.');
   writeStdoutLine('Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
   writeStdoutLine('Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md');
   const sensitive = readPromptLine(`Also include sensitive sources? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
