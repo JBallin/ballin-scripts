@@ -10,6 +10,7 @@ type SnapshotLimits = { maxBytes?: number; maxEntries?: number };
 type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean; claudeSkills?: boolean };
 const snapshotByteLimit = 16 * 1024 * 1024;
 const recursiveEntryLimit = 8192;
+const claudeSyncBookkeeping = new Set(['manifest.json', '.staging', '.last-complete-round', '.trash']);
 class SnapshotLimitError extends Error {
   constructor(kind: 'bytes' | 'entries', actual: number, limit: number) {
     super(`Snapshot ${kind} limit exceeded (${actual} > ${limit}).`);
@@ -131,7 +132,12 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
   while (pending.length) {
     const relative = pending.pop()!;
     inDirectory(root, relative, () => {
-      const skillFolder = selection.claudeSkills && relative !== '' && !relative.includes(path.sep);
+      // Synced roots are synced/<collection>/<skill>; collection names are opaque.
+      const parts = relative.split(path.sep);
+      const synced = selection.claudeSkills && parts[0].toLowerCase() === 'synced';
+      const syncContainer = synced && parts.length < 3;
+      const skillFolder = selection.claudeSkills && (synced
+        ? parts.length === 3 : relative !== '' && parts.length === 1);
       const candidates: string[] = [];
       const visitEntry = (name: string): void => {
         const entry = path.join(relative, name);
@@ -140,7 +146,7 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
         const stat = fs.lstatSync(name);
         if (stat.isDirectory() && !profilesOnly) pending.push(entry);
         else if (stat.isFile()) {
-          if (selection.claudeSkills && !relative) return;
+          if (selection.claudeSkills && (!relative || syncContainer)) return;
           if (selection.markdownOnly && !name.endsWith('.md')) return;
           requireSingleLink(stat, selection.rejectHardlinks ?? false);
           if (reviewReadability) readableFileStat(name, selection.rejectHardlinks);
@@ -158,8 +164,11 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
             // Legacy downloads shared the personal root; do not infer ownership
             // or read their manifest to decide which folders to capture.
             if (reserved === 'manifest.json') throw new SnapshotSourceTypeError('Legacy Claude skills manifest');
-            if (name.startsWith('.') || reserved === 'synced' || reserved === 'anthropic-skills' || reserved.startsWith('anthropic-skills:')) continue;
+            if (name.startsWith('.') || reserved === 'anthropic-skills' || reserved.startsWith('anthropic-skills:')) continue;
           }
+          // Sync containers hold collections and packages, not authoring files.
+          // Keep their lifecycle state outside capture without reading manifests.
+          if (syncContainer && claudeSyncBookkeeping.has(name.toLowerCase())) continue;
           if (profilesOnly && !/^.+\.config\.toml$/u.test(name)) continue;
           if (name === '.git' || name === '.DS_Store' || (skills && !relative && name === '.system')) continue;
           if (skillFolder) candidates.push(name);

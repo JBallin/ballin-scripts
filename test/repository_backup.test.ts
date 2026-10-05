@@ -635,6 +635,15 @@ describe('repository backup lifecycle', function() {
       fs.writeFileSync(path.join(claude, 'skills', 'demo', 'SKILL.md'), 'personal skill');
       fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SELECTED_SKILL_SECRET');
       fs.writeFileSync(path.join(claude, 'skills', 'demo', 'run.sh'), '#!/bin/sh\n', { mode: 0o755 });
+      const collection = '1ee7e3ab-14cd-4d49-9fce-a2f5fa33d125_e29e4a19-d6c5-4efd-a06e-1dbd9ea691a8';
+      const synced = path.join(claude, 'skills', 'synced', collection);
+      fs.mkdirSync(path.join(synced, 'pdf'), { recursive: true });
+      fs.writeFileSync(path.join(synced, 'pdf', 'SKILL.md'), 'locally edited downloaded default');
+      fs.writeFileSync(path.join(synced, 'pdf', '.support'), 'DUMMY_SELECTED_SYNCED_SECRET');
+      fs.writeFileSync(path.join(synced, 'manifest.json'), '{"skills":[{"name":"pdf","source":"anthropic"}],"private":"DUMMY_EXCLUDED_SECRET"}');
+      fs.mkdirSync(path.join(synced, '.staging', 'partial'), { recursive: true });
+      fs.writeFileSync(path.join(synced, '.staging', 'partial', 'SKILL.md'), 'DUMMY_EXCLUDED_SECRET');
+      const skillPaths = ['demo/.support', 'demo/SKILL.md', 'demo/run.sh', `synced/${collection}/pdf/.support`, `synced/${collection}/pdf/SKILL.md`];
       ok(run([], '', { CLAUDE_CONFIG_DIR: claude }));
       if (included) {
         assert.equal(remote('claude_instructions'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
@@ -642,12 +651,15 @@ describe('repository backup lifecycle', function() {
         assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['nested/fixture.md']);
         assert.equal(cached('claude_rules.bundle.json'), remote('claude_rules.bundle.json'));
         const skills = JSON.parse(remote('claude_skills.bundle.json')!);
-        assert.deepEqual(skills.entries.map((entry: { path: string }) => entry.path), ['demo/.support', 'demo/SKILL.md', 'demo/run.sh']);
+        assert.deepEqual(skills.entries.map((entry: { path: string }) => entry.path), skillPaths);
+        assert.notInclude(remote('claude_skills.bundle.json'), 'DUMMY_EXCLUDED_SECRET');
         assert.equal(cached('claude_skills.bundle.json'), remote('claude_skills.bundle.json'));
         const listed = run(['read', 'claude_skills.bundle.json', '--list']); ok(listed);
-        assert.deepEqual(JSON.parse(listed.stdout).map((entry: { path: string }) => entry.path), ['demo/.support', 'demo/SKILL.md', 'demo/run.sh']);
+        assert.deepEqual(JSON.parse(listed.stdout).map((entry: { path: string }) => entry.path), skillPaths);
         const member = run(['read', 'claude_skills.bundle.json', '--file', 'demo/.support']); ok(member);
         assert.equal(member.stdout, 'DUMMY_SELECTED_SKILL_SECRET');
+        const syncedMember = run(['read', 'claude_skills.bundle.json', '--file', `synced/${collection}/pdf/.support`]); ok(syncedMember);
+        assert.equal(syncedMember.stdout, 'DUMMY_SELECTED_SYNCED_SECRET');
       } else {
         assert.isUndefined(remote('claude_instructions'));
         assert.isUndefined(remote('claude_rules.bundle.json'));
@@ -677,6 +689,8 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
     assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
     assert.include(result.stdout, 'Skill folders include hidden files, executable scripts, and binary supporting assets.');
+    assert.include(result.stdout, 'Claude skills include downloaded defaults, organization-provided and plugin-origin synced packages.');
+    assert.include(result.stdout, 'sync bookkeeping, and plugin installations are excluded');
     assert.include(result.stdout, 'future additions to this maintained catalog');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
     assert.lengthOf(mutations(), 0);
@@ -747,6 +761,13 @@ describe('repository backup lifecycle', function() {
     it('counts the complete skills bundle toward the existing combined Claude allowance', () => {
       sparse(path.join(home, '.claude', 'CLAUDE.md'), 9 * mib);
       sparse(path.join(home, '.claude', 'skills', 'demo', 'SKILL.md'), 6 * mib);
+      const result = run();
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
+    });
+    it('counts synced package serialization toward the shared Claude allowance before remote reads', () => {
+      sparse(path.join(home, '.claude', 'CLAUDE.md'), 9 * mib);
+      sparse(path.join(home, '.claude', 'skills', 'synced', 'collection', 'pdf', 'SKILL.md'), 6 * mib);
       const result = run();
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));

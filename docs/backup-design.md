@@ -428,23 +428,33 @@ failure is fatal and bypasses optional-source handling. These checks pin selecte
 directory objects; they do not provide an atomic snapshot of concurrent edits.
 
 Claude Code definitions select `CLAUDE.md`, regular `.md` files in personal
-rules/agents/legacy commands, and complete eligible personal skill folders.
+rules/agents/legacy commands, and complete eligible personal and synced skill
+packages.
 The same source-specific selection governs discovery, review, and capture.
-Skills require an exact-case regular `SKILL.md` in an immediate nonhidden folder;
-synced/reserved names, hidden root folders, plugin-shaped folders, and legacy
+Skills require an exact-case regular `SKILL.md` in an immediate nonhidden personal
+folder or a `synced/<collection>/<skill>/` package. Collection names are generic
+namespaces; sync manifests and origin labels do not decide eligibility. All
+validated synced packages are included, including defaults, downloaded and
+organization-provided material, and plugin-origin skills. Container manifests,
+staging/completion/discarded state, reserved personal names, hidden root folders,
+plugin-shaped folders, and legacy
 manifest-managed roots are excluded as specified in the
 [source guide](backup-sources.md#claude-code-configuration). Eligibility is
 operational, not proof of authorship. Visited-entry accounting precedes filtering.
 Selected hard links fail without searching for other inode locations, and
 opened-file checks enforce the same rule during capture.
 
-Eligible personal skill folders preserve hidden regular supporting files as
-well as visible files. A dot prefix does not reliably distinguish useful
+Eligible personal and synced skill packages preserve hidden regular supporting
+files as well as visible files. A dot prefix does not reliably distinguish useful
 supporting dependencies from sensitive content; visible files can contain
 credentials too. Provider-specific managed, plugin, legacy, Git, and link
 boundaries define exclusions instead of guessed secret filenames. Skill content
 uses the existing sensitive-source consent and private-repository access boundary,
-with no scanning or redaction claim.
+with no scanning or redaction claim. Synced package paths retain their collection
+namespace; equal skill names in different collections remain distinct. The
+same v2 writer, serialized-byte cap, and visited-entry cap govern both locations.
+Origin labels cannot establish ownership or that downloaded defaults remain
+unedited, so there is no default-name or origin filter.
 
 The current updater compares the Git blob identities of the source-definition
 file before and after a successful update. Changed or unavailable comparison

@@ -238,7 +238,7 @@ describe('Claude Code selected configuration', () => {
     assert.notInclude(result.stdout, homeDir);
   });
 
-  it('selects only immediate nonhidden skill folders with an exact regular SKILL.md', () => {
+  it('selects only immediate nonhidden personal skill folders with an exact regular SKILL.md', () => {
     ['synced', 'SyNcEd', 'anthropic-skills', 'ANTHROPIC-SKILLS:demo', '.trash', '.system', '.hidden'].forEach((name) => {
       write(`skills/${name}/SKILL.md`, 'DUMMY_EXCLUDED_SECRET');
     });
@@ -253,6 +253,114 @@ describe('Claude Code selected configuration', () => {
     write('skills/valid/SKILL.md', '');
     const archive = JSON.parse(capture('claude_skills.bundle.json').stdout);
     assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['valid/SKILL.md']);
+  });
+
+  it('captures mixed-origin synced packages with generic collection namespaces and deterministic v2 bytes', () => {
+    const collection = '1ee7e3ab-14cd-4d49-9fce-a2f5fa33d125_e29e4a19-d6c5-4efd-a06e-1dbd9ea691a8';
+    const base = `synced/${collection}`;
+    const fixtures: Record<string, string | Buffer> = {
+      'personal/SKILL.md': 'personal',
+      [`${base}/custom-review/SKILL.md`]: '---\nname: fixture\n---\n@../../outside.md',
+      [`${base}/custom-review/.support/reference.txt`]: 'DUMMY_SELECTED_PRIVATE_SUPPORT',
+      [`${base}/custom-review/scripts/run.sh`]: '#!/bin/sh\n',
+      [`${base}/custom-review/assets/image.bin`]: Buffer.from([0, 255, 128]),
+      [`${base}/pdf/SKILL.md`]: 'DUMMY_SELECTED_DEFAULT_EDIT\r\n"quoted" \\ text\n',
+      'synced/org-team/pdf/SKILL.md': 'organization copy',
+      'synced/org-team/pdf/assets/雪.txt': 'Unicode support\n',
+      'synced/org-team/anthropic-skills:fixture/SKILL.md': 'no reserved-name filter inside collections',
+      'synced/.private-collection/.private-skill/SKILL.md': 'hidden validated package',
+    };
+    Object.entries(fixtures).reverse().forEach(([relative, bytes]) => write(`skills/${relative}`, bytes));
+    fs.chmodSync(path.join(root, `skills/${base}/custom-review/scripts/run.sh`), 0o755);
+    write(`skills/${base}/manifest.json`, JSON.stringify({ skills: [
+      { name: 'pdf', source: 'anthropic' }, { name: 'custom-review', source: 'plugin' },
+      { name: 'unlisted', source: 'anthropic-example' },
+    ], privateMetadata: 'DUMMY_EXCLUDED_SECRET' }));
+    ['manifest.json', '.last-complete-round', 'loose.txt', 'SKILL.md'].forEach((name) => write(`skills/synced/${name}`, 'DUMMY_EXCLUDED_SECRET'));
+    ['.staging', '.trash'].forEach((name) => {
+      write(`skills/synced/${name}/collection/package/SKILL.md`, 'DUMMY_EXCLUDED_SECRET');
+      write(`skills/${base}/${name}/package/SKILL.md`, 'DUMMY_EXCLUDED_SECRET');
+    });
+    write(`skills/${base}/.last-complete-round`, 'DUMMY_EXCLUDED_SECRET');
+    write(`skills/${base}/loose.txt`, 'DUMMY_EXCLUDED_SECRET');
+    write(`skills/${base}/pdf/.git/config`, 'DUMMY_EXCLUDED_SECRET');
+    write(`skills/${base}/pdf/.DS_Store`, 'DUMMY_EXCLUDED_SECRET');
+    write(`skills/${base}/without-marker/nested/SKILL.md`, 'DUMMY_EXCLUDED_SECRET');
+    write(`skills/${base}/wrong-case/skill.md`, 'DUMMY_EXCLUDED_SECRET');
+    write('skills/synced/org-team/plugin-shaped/SKILL.md', 'DUMMY_EXCLUDED_SECRET');
+    write('skills/synced/org-team/plugin-shaped/.CLAUDE-PLUGIN/plugin.json', 'DUMMY_EXCLUDED_SECRET');
+    const result = capture('claude_skills.bundle.json');
+    assert.equal(result.status, 0, result.stderr);
+    const archive = JSON.parse(result.stdout);
+    assert.equal(archive.version, 2);
+    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), Object.keys(fixtures).sort());
+    archive.entries.forEach((entry: { path: string; encoding: string; content: string | string[]; executable: boolean }) => {
+      const bytes = entry.encoding === 'utf8' ? Buffer.from((entry.content as string[]).join('')) : Buffer.from(entry.content as string, 'base64');
+      assert.deepEqual(bytes, Buffer.from(fixtures[entry.path]));
+      assert.equal(entry.executable, entry.path.endsWith('/scripts/run.sh'));
+    });
+    write(`skills/${base}/manifest.json`, '{"skills":[],"changed":"DUMMY_EXCLUDED_SECRET"}');
+    assert.equal(capture('claude_skills.bundle.json').stdout, result.stdout);
+    assert.notInclude(result.stdout, 'DUMMY_EXCLUDED_SECRET');
+    assert.notInclude(result.stdout, homeDir);
+    const maxBytes = Buffer.byteLength(result.stdout);
+    assert.equal(capture('claude_skills.bundle.json', {}, ['--max-bytes', String(maxBytes)]).stdout, result.stdout);
+    const failed = capture('claude_skills.bundle.json', {}, ['--max-bytes', String(maxBytes - 1)]);
+    assert.equal(failed.status, 1); assert.equal(failed.stdout, '');
+    assert.include(failed.stderr, 'Snapshot bytes limit exceeded');
+  });
+
+  it('discovers a synced-only root and reviews readability without reading origin metadata or staging', () => {
+    write('skills/synced/arbitrary-collection/package/SKILL.md');
+    write('skills/synced/arbitrary-collection/package/.support');
+    write('skills/synced/arbitrary-collection/manifest.json', 'DUMMY_EXCLUDED_SECRET');
+    write('skills/synced/arbitrary-collection/.last-complete-round', 'DUMMY_EXCLUDED_SECRET');
+    write('skills/synced/arbitrary-collection/.staging/package/SKILL.md', 'DUMMY_EXCLUDED_SECRET');
+    const originalRead = fs.readSync;
+    const originalStat = fs.lstatSync;
+    const originalOpendir = fs.opendirSync;
+    try {
+      fs.readSync = () => { throw new Error('Metadata review must not read contents'); };
+      fs.lstatSync = (file: string, ...args: unknown[]) => {
+        if (['manifest.json', '.last-complete-round', '.staging'].includes(file)) throw new Error('Sync bookkeeping must not be inspected');
+        return originalStat(file, ...args);
+      };
+      fs.opendirSync = (file: string, ...args: unknown[]) => {
+        if (process.cwd().endsWith(`${path.sep}.staging`)) throw new Error('Staging must not be traversed');
+        return originalOpendir(file, ...args);
+      };
+      assert.equal(discover('claude_skills.bundle.json').status, 'available');
+      assert.deepEqual(reviewRecursiveFiles(path.join(root, 'skills'), false, false, {}, skillSelection), [
+        'synced/arbitrary-collection/package/.support', 'synced/arbitrary-collection/package/SKILL.md',
+      ]);
+    } finally { fs.readSync = originalRead; fs.lstatSync = originalStat; fs.opendirSync = originalOpendir; }
+  });
+
+  it('omits linked sync containers, packages, markers and support without following their targets', () => {
+    const outside = path.join(homeDir, 'outside');
+    write('package/SKILL.md', 'DUMMY_EXTERNAL_SECRET', outside);
+    write('skills/synced/collection/valid/SKILL.md');
+    fs.symlinkSync(outside, path.join(root, 'skills/synced/linked-collection'));
+    fs.symlinkSync(path.join(outside, 'package'), path.join(root, 'skills/synced/collection/linked-package'));
+    write('skills/synced/collection/linked-marker/.support', 'DUMMY_EXCLUDED_SECRET');
+    fs.symlinkSync(path.join(outside, 'package/SKILL.md'), path.join(root, 'skills/synced/collection/linked-marker/SKILL.md'));
+    fs.symlinkSync(outside, path.join(root, 'skills/synced/collection/valid/linked-support'));
+    const archive = JSON.parse(capture('claude_skills.bundle.json').stdout);
+    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['synced/collection/valid/SKILL.md']);
+    fs.rmSync(path.join(root, 'skills/synced'), { recursive: true });
+    fs.symlinkSync(outside, path.join(root, 'skills/synced'));
+    assert.equal(discover('claude_skills.bundle.json').status, 'absent');
+  });
+
+  it('rejects selected synced hard links and counts filtered container entries before traversal', () => {
+    const file = write('skills/synced/collection/package/SKILL.md');
+    fs.linkSync(file, path.join(root, 'skills/synced/collection/package/.support'));
+    assert.equal(discover('claude_skills.bundle.json').status, 'discovery-failed');
+    fs.rmSync(path.join(root, 'skills/synced/collection/package/.support'));
+    write('skills/synced/collection/.staging/ignored/SKILL.md');
+    const directory = path.join(root, 'skills');
+    assert.throws(() => recursiveFiles(directory, false, false, { maxEntries: 4 }, skillSelection), SnapshotLimitError);
+    assert.deepEqual(recursiveFiles(directory, false, false, { maxEntries: 5 }, skillSelection), ['synced/collection/package/SKILL.md']);
   });
 
   ['directory', 'file', 'symlink'].forEach((kind) => {
@@ -325,7 +433,7 @@ describe('Claude Code selected configuration', () => {
 
   it('reviews selected skill readability without reading support or inspecting excluded trees', () => {
     write('skills/demo/SKILL.md'); write('skills/demo/.support');
-    write('skills/synced/demo/SKILL.md');
+    write('skills/synced/.staging/demo/SKILL.md');
     const originalOpen = fs.openSync;
     const originalRead = fs.readSync;
     const originalOpendir = fs.opendirSync;
@@ -333,7 +441,7 @@ describe('Claude Code selected configuration', () => {
     try {
       fs.readSync = () => { throw new Error('Review must not read contents'); };
       fs.opendirSync = (file: string, ...args: unknown[]) => {
-        if (process.cwd().includes(`${path.sep}synced`)) throw new Error('Excluded synced tree must not be inspected');
+        if (process.cwd().endsWith(`${path.sep}.staging`)) throw new Error('Excluded staging tree must not be inspected');
         return originalOpendir(file, ...args);
       };
       fs.openSync = (file: string, ...args: unknown[]) => {
@@ -348,7 +456,7 @@ describe('Claude Code selected configuration', () => {
   });
 
   it('counts filtered skill entries and rejects serialized-byte overflow without partial output', () => {
-    write('skills/synced/demo/SKILL.md');
+    write('skills/anthropic-skills/demo/SKILL.md');
     const directory = path.join(root, 'skills');
     assert.throws(() => recursiveFiles(directory, false, false, { maxEntries: 0 }, skillSelection), SnapshotLimitError);
     assert.deepEqual(recursiveFiles(directory, false, false, { maxEntries: 1 }, skillSelection), []);
