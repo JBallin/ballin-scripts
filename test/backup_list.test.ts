@@ -123,8 +123,8 @@ describe('saved backup discovery', function() {
   for (const snapshot of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json', 'codex_rules.bundle.json', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json']) {
     it(`lists and decodes saved ${snapshot} members without capture or writes`, () => {
       const content = '# Synthetic example\r\nlast';
-      const member = { path: 'example/SKILL.md', executable: true, content: Buffer.from(content).toString('base64') };
-      const archive = `${JSON.stringify({ format: 'ballin-directory', version: 1, entries: [member] }, null, 2)}\n`;
+      const member = { path: 'example/SKILL.md', executable: true, encoding: 'base64', content: Buffer.from(content).toString('base64') };
+      const archive = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [member] }, null, 2)}\n`;
       save(fixtureState({ [snapshot]: archive })); const before = state();
       const listed = run(['read', snapshot, '--list']);
       assert.equal(listed.status, 0, listed.stderr); assert.equal(listed.stderr, '');
@@ -138,8 +138,8 @@ describe('saved backup discovery', function() {
   }
   it('writes exact binary and empty member bytes to stdout with no framing', () => {
     for (const bytes of [Buffer.from([0, 255, 128, 13, 10]), Buffer.alloc(0)]) {
-      save(fixtureState({ 'codex_skills.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 1, entries: [
-        { path: 'binary', executable: false, content: bytes.toString('base64') },
+      save(fixtureState({ 'codex_skills.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+        { path: 'binary', executable: false, encoding: 'base64', content: bytes.toString('base64') },
       ] }) }));
       const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'backup', 'read', 'codex_skills.bundle.json', '--file', 'binary'], {
         cwd: checkout, env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: tmp, BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_TEST_REPO_DIR: checkout }),
@@ -165,8 +165,8 @@ describe('saved backup discovery', function() {
     preserved();
   });
   it('keeps redirected streams, ordinary snapshots, malformed raw archives and errors free of hints', () => {
-    const archive = JSON.stringify({ format: 'ballin-directory', version: 1, entries: [
-      { path: 'rule.md', executable: false, content: 'YQ==' },
+    const archive = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+      { path: 'rule.md', executable: false, encoding: 'base64', content: 'YQ==' },
     ] });
     for (const redirected of ['stdin', 'stdout', 'stderr']) {
       const tty = `for (const stream of ['stdin','stdout','stderr']) Object.defineProperty(process[stream], 'isTTY', {value:stream!==${JSON.stringify(redirected)}});`;
@@ -214,9 +214,9 @@ describe('saved backup discovery', function() {
   });
   it('rejects malformed or unsupported directory contents before any member output', () => {
     for (const archive of ['DUMMY_PRIVATE_DATA', JSON.stringify({ format: 'ballin-directory', version: 2, entries: [] }), JSON.stringify({
-      format: 'ballin-directory', version: 1, entries: [
-        { path: 'valid', executable: false, content: Buffer.from('DUMMY_PRIVATE_CONTENT').toString('base64') },
-        { path: '../DUMMY_PRIVATE_PATH', executable: false, content: '' },
+      format: 'ballin-directory', version: 2, entries: [
+        { path: 'valid', executable: false, encoding: 'base64', content: Buffer.from('DUMMY_PRIVATE_CONTENT').toString('base64') },
+        { path: '../DUMMY_PRIVATE_PATH', executable: false, encoding: 'base64', content: '' },
       ],
     })]) {
       save(fixtureState({ 'codex_skills.bundle.json': archive }));
@@ -227,7 +227,7 @@ describe('saved backup discovery', function() {
     }
   });
   it('reports missing members without exposing private selectors or emitting content', () => {
-    save(fixtureState({ 'claude_rules.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 1, entries: [{ path: 'rule.md', executable: false, content: '' }] }) }));
+    save(fixtureState({ 'claude_rules.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 2, entries: [{ path: 'rule.md', executable: false, encoding: 'base64', content: '' }] }) }));
     const result = run(['read', 'claude_rules.bundle.json', '--file', 'DUMMY_PRIVATE_PATH']);
     expectFailure(result, 'no matching file found in the bundle'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
   });

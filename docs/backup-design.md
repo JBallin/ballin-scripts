@@ -167,9 +167,6 @@ cache bytes, including legacy `empty\n`, remain observable unchanged.
 | Differs from remote | Present | Equals remote | Advance cache |
 | Differs from remote | Present | Differs | Conflict |
 
-Bundle format conversion has one narrowly defined
-[version-1 migration exception](#bundle-format-migration).
-
 If any snapshot conflicts, Ballin publishes nothing from that run. Snapshot
 filenames are stable identities across backups. Changing which sources are
 included affects future captures but does not delete existing remote snapshots
@@ -369,55 +366,26 @@ directional formatting characters escaped for display. `--file <path>` emits the
 exact decoded bytes of one member to stdout without framing or newline changes.
 Both use the existing saved-snapshot reader, including destination, inventory,
 marker, account and revision validation. The entire bundle archive is checked
-before any member output: version-1 or version-2 schema, relative paths, unique
+before any member output: version-2 schema, relative paths, unique
 names, boolean executable flags, valid text lines or canonical Base64 regular-file
 content. Unsupported versions, link records and malformed entries fail without disclosing payloads in
 diagnostics. Inspection accepts at most 16 MiB of stored archive bytes and 8,192
 members. These checks occur after transport and do not bound remote downloads.
 
-Readable line arrays make text changes visible in GitHub diffs while preserving
-binary support, paths and executable metadata. Base64 stores recoverable bytes;
-it is neither hashing nor encryption. Raw reads still return stored bytes
-unchanged, and member inspection supports already-saved version-1 archives.
+Raw reads return stored bytes unchanged. Inspection accepts version 2 only;
+older versions require manual decoding outside Ballin. Member paths never reach
+filesystem operations, and decoded content is never executed or restored.
 
-| Approach | Reading and diffs | Recovery and compatibility |
-| --- | --- | --- |
-| Readable JSON plus member inspection (selected) | Text changes appear on separate JSON lines in GitHub; quotes, tabs and terminators remain escaped. | Exact bytes and metadata, binary fallback, version-1 and version-2 reads; no filesystem restoration. |
-| Decoded inspection alone | Readable text on demand; stored GitHub payload diffs stay encoded. | Avoids a format migration but leaves repository browsing difficult. |
-| Native file tree | Individual files and ordinary text diffs, including rendered Markdown. | Requires a repository-layout migration, broader readers/writers and a metadata contract. |
+Bundle snapshots use `.bundle.json` names. Plain snapshots retain their existing
+names. Old bundle names are retired without read aliases and are retained if
+present; they can coexist with new bundle filenames. The flat repository layout
+and backup marker version remain unchanged. Bundle listings supply an inspection
+hint; raw and file-list hints appear only when stdin, stdout and stderr are
+terminals. Raw hints require a known bundle name and a validated archive.
 
-Inspection supplies reference material without an automatic restore or replay
-contract. Member paths never reach filesystem operations, and decoded content is
-never executed.
-
-### Bundle format migration
-
-The next ordinary capture writes version 2 under the `.bundle.json` names. It can
-produce a one-time format diff even when source bytes are unchanged; existing
-history is retained. Only sources selected for capture are converted.
-
-General three-way reconciliation remains byte-based. A narrow version-1 to
-version-2 exception permits a format-only update when reconstructing the old
-canonical serialization from the captured entries matches the remote bytes
-exactly. This proof preserves every path, executable flag and file byte; extra
-fields, alternative formatting and unknown versions cannot pass. It also permits
-an identical-content conversion after reconnect without a cached base. Failed
-proofs follow the existing conflict rules; cached bases are never semantically
-normalized. Expected-head publication and exact readback remain required.
-
-The flat repository layout and marker version remain unchanged. The five known
-Codex bundle snapshots replace their `.json` suffix with `.bundle.json`;
-the three Claude directories add `.bundle.json`. Plain snapshots retain their
-names. Old bundle names are retired without read aliases. Inventory alone
-supplies a bundle-listing hint; raw and member-list reads add staged hints only
-when stdin, stdout and stderr are terminals. Raw hints require a known bundle
-name and a validated archive, without changing raw-read failure behavior.
-
-Old-name caches never establish a base for a new name. Exact local/remote bytes
-hydrate a fresh cache; the canonical version-1 proof above admits a format-only
-conversion, while changed content or metadata still conflicts. Retired old
-filenames are retained and can coexist with new bundle filenames. History
-remains intact; there is no extraction, automatic restore or content execution.
+Reconciliation uses exact stored bytes and the ordinary conflict rules. No
+format-conversion exception or semantic JSON normalization applies. Old-name
+caches cannot establish a comparison base for new filenames.
 
 ### Capture bounds and traversal
 
@@ -428,7 +396,7 @@ recursive source. Incremental iterative metadata traversal and opened-file
 bounded reads reject overflow without truncation. Text capture incrementally
 preflights escaped line sizes and JSON indentation before allocating content lines; binary capture
 checks Base64 size before encoding. The serialized-byte budget includes line-array
-and escape overhead, so some near-limit sources can fail earlier than in version 1.
+and escape overhead, so raw source bytes alone do not determine whether a capture fits.
 Capture-limit failures abort staging before remote inspection; cache comparison
 and writer checks also fail before publication or cache promotion. Actual changed buffers are rechecked before
 outer base64 allocation. Its wire allowance is derived from the stored-byte cap,

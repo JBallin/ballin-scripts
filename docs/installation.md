@@ -305,8 +305,9 @@ git clone https://github.com/example-user/ballin-backups.git
 
 Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.
-A reconnect has no trusted base and cannot overwrite differing file bytes or metadata;
-inspect and manually reconcile each conflict using the
+After reconnect, Ballin has no saved comparison baseline. If newly captured
+content or metadata differs from the saved backup, Ballin reports a conflict
+instead of overwriting it. Inspect and manually reconcile conflicts using the
 [conflict guidance](capabilities.md#backup-consistency-and-conflicts).
 
 If installation fails before setup completes, fix the reported problem and

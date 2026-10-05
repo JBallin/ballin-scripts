@@ -562,7 +562,7 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1);
     });
   });
-  describe('directory archive migration', () => {
+  describe('bundle reset and conflicts', () => {
     const bytes = Buffer.from('\ufeffsynthetic\r\nlast');
     const legacyEntry = { path: 'nested/fixture.md', executable: false, content: bytes.toString('base64') };
     const legacy = (entry = legacyEntry, extra = {}): string => `${JSON.stringify({
@@ -583,29 +583,14 @@ describe('repository backup lifecycle', function() {
       assert.equal(cached('codex_rules.bundle.json'), remote('codex_rules.bundle.json'));
       assert.lengthOf(publications(), 1);
     });
-    it('hydrates a fresh bundle cache after manual rename without trusting the old-name cache', () => {
+    it('creates a fresh bundle after reset without trusting an old-name cache', () => {
       localDirectory(); seedCache('codex_rules.json', 'untrusted old cache');
-      saveState(fixtureState({ 'codex_rules.bundle.json': legacy() }));
-      const result = run(); ok(result);
-      assert.include(result.stdout, '✎ codex_rules\n'); assert.notInclude(result.stdout, 'codex_rules.bundle');
+      ok(run());
+      assert.equal(JSON.parse(remote('codex_rules.bundle.json')!).version, 2);
       assert.equal(cached('codex_rules.json'), 'untrusted old cache');
       assert.equal(cached('codex_rules.bundle.json'), remote('codex_rules.bundle.json'));
-      const head = state().head; const second = run(); ok(second);
-      assert.include(second.stdout, '✔ codex_rules\n'); assert.equal(state().head, head);
+      const head = state().head; ok(run()); assert.equal(state().head, head);
     });
-    for (const base of [undefined, legacy(), 'different cached base\n']) {
-      it(`migrates an exactly reconstructed v1 snapshot with ${base === undefined ? 'no' : base === legacy() ? 'matching' : 'diverged'} cached base`, () => {
-        localDirectory(); saveState(fixtureState({ 'codex_rules.bundle.json': legacy() }));
-        if (base !== undefined) seedCache('codex_rules.bundle.json', base);
-        const first = run(); ok(first);
-        const stored = JSON.parse(remote('codex_rules.bundle.json')!);
-        assert.equal(stored.version, 2); assert.equal(stored.entries[0].encoding, 'utf8');
-        assert.deepEqual(Buffer.from(stored.entries[0].content.join('')), bytes);
-        assert.equal(cached('codex_rules.bundle.json'), remote('codex_rules.bundle.json'));
-        assert.lengthOf(publications(), 1);
-        const head = state().head; ok(run()); assert.equal(state().head, head); assert.lengthOf(publications(), 1);
-      });
-    }
     for (const contents of [
       legacy({ ...legacyEntry, executable: true }), legacy({ ...legacyEntry, path: 'changed.md' }),
       legacy({ ...legacyEntry, content: Buffer.from('different').toString('base64') }), legacy(legacyEntry, { unknown: 'DUMMY_PRIVATE_EXTRA' }),
@@ -626,20 +611,6 @@ describe('repository backup lifecycle', function() {
       saveState(value); const result = run();
       assert.equal(result.status, 1); assert.include(result.stderr, 'conflict for codex_rules.bundle.json');
       assert.lengthOf(publications(), 1); assert.equal(remote('codex_rules.bundle.json'), changed);
-    });
-    it('rejects concurrent head movement during migration without promoting a cache', () => {
-      localDirectory(); const value = fixtureState({ 'codex_rules.bundle.json': legacy() });
-      value.faults.publish = 'advance'; saveState(value);
-      const result = run(); assert.equal(result.status, 1); assert.include(result.stderr, 'GitHub rejected');
-      assert.equal(remote('codex_rules.bundle.json'), legacy()); assert.isUndefined(cached('codex_rules.bundle.json')); assert.lengthOf(publications(), 1);
-    });
-    it('never applies directory migration to a raw snapshot that happens to contain an archive', () => {
-      const v2 = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
-        { path: legacyEntry.path, executable: false, encoding: 'utf8', content: ['\ufeffsynthetic\r\n', 'last'] },
-      ] }, null, 2)}\n`;
-      source(v2); saveState(fixtureState({ 'zshrc.sh': legacy() }));
-      const result = run(); assert.equal(result.status, 1); assert.include(result.stderr, 'conflict for zshrc.sh');
-      assert.lengthOf(publications(), 0);
     });
     it('rejects dense newline overflow before remote inspection or cache effects', () => {
       localDirectory(); fs.writeFileSync(path.join(home, '.codex', 'rules', 'nested', 'fixture.md'), Buffer.alloc(2 * 1024 * 1024, 10));

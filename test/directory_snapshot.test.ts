@@ -1,17 +1,17 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember, isDirectorySnapshotMigration } = require('../commands/directory_snapshot.ts');
+const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember } = require('../commands/directory_snapshot.ts');
 const { recursiveSnapshot, snapshotByteLimit, recursiveEntryLimit, encodeDirectoryEntry, SnapshotLimitError } = require('../commands/recursive_snapshot.ts');
 
 describe('directory snapshot inspection', () => {
-  const entry = { path: 'example/SKILL.md', executable: true, content: Buffer.from('# Example\r\n').toString('base64') };
-  const archive = (entries: unknown[] = [entry], extra = {}): Buffer => Buffer.from(JSON.stringify({ format: 'ballin-directory', version: 1, entries, ...extra }));
+  const entry = { path: 'example/SKILL.md', executable: true, encoding: 'base64', content: Buffer.from('# Example\r\n').toString('base64') };
+  const archive = (entries: unknown[] = [entry], extra = {}): Buffer => Buffer.from(JSON.stringify({ format: 'ballin-directory', version: 2, entries, ...extra }));
   const reject = (bytes: Buffer): void => { assert.throws(() => readDirectorySnapshot(bytes), DirectorySnapshotError); };
 
-  it('reads existing version-1 archives and retains their metadata', () => {
+  it('reads version-2 binary archives and retains their metadata', () => {
     const { version, entries: members } = readDirectorySnapshot(archive());
-    assert.equal(version, 1);
+    assert.equal(version, 2);
     assert.deepEqual(members, [{ path: entry.path, executable: true, bytes: Buffer.from('# Example\r\n') }]);
     assert.deepEqual(JSON.parse(listDirectoryMembers(members)), [{ path: entry.path, executable: true, bytes: 11 }]);
     assert.deepEqual(readDirectoryMember(members, entry.path), Buffer.from('# Example\r\n'));
@@ -60,7 +60,7 @@ describe('directory snapshot inspection', () => {
   });
   for (const value of ['broken', 'null', '[]', '1', '"text"']) it(`rejects invalid archive ${value}`, () => reject(Buffer.from(value)));
   it('rejects invalid UTF-8 without replacing path bytes', () => reject(Buffer.from([0xff])));
-  for (const extra of [{ format: 'other' }, { version: 3 }, { version: 2 }, { entries: null }, { link: 'unsafe' }]) {
+  for (const extra of [{ format: 'other' }, { version: 3 }, { version: 1 }, { entries: null }, { link: 'unsafe' }]) {
     it('rejects unsupported schema/version without partial output', () => reject(archive([entry], extra)));
   }
   it('rejects empty archives and duplicate paths', () => { reject(archive([])); reject(archive([entry, entry])); });
@@ -113,29 +113,5 @@ describe('directory snapshot inspection', () => {
       const stored = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [captured.entry] }, null, 2)}\n`;
       assert.deepEqual(readDirectorySnapshot(Buffer.from(stored)).entries[0].bytes, bytes);
     }
-  });
-  it('proves only exact canonical version-1 migration without weakening metadata', () => {
-    const captured = archive([{ ...entry, encoding: 'utf8', content: ['# Example\r\n'] }], { version: 2 });
-    const canonical = Buffer.from(`${JSON.stringify({ format: 'ballin-directory', version: 1, entries: [entry] }, null, 2)}\n`);
-    assert.isTrue(isDirectorySnapshotMigration(captured, canonical));
-    for (const remote of [archive(), Buffer.alloc(snapshotByteLimit + 1), Buffer.from(canonical.toString().replace('true', 'false')),
-      Buffer.from(canonical.toString().replace(entry.content, Buffer.from('Different').toString('base64'))), Buffer.from(canonical.toString().replace('version', 'versioN')),
-      Buffer.from(canonical.toString().replace('executable', 'executablE')), Buffer.from(canonical.toString().replace('example/', 'changed/'))]) {
-      assert.isFalse(isDirectorySnapshotMigration(captured, remote));
-    }
-    assert.isFalse(isDirectorySnapshotMigration(canonical, canonical));
-    assert.isFalse(isDirectorySnapshotMigration(Buffer.from('invalid'), canonical));
-    assert.isFalse(isDirectorySnapshotMigration(archive([
-      { ...entry, path: 'z', encoding: 'base64' }, { ...entry, path: 'a', encoding: 'base64' },
-    ], { version: 2 }), canonical));
-  });
-  it('proves migration of multiple empty/binary members including executable metadata', () => {
-    const entries = [
-      { path: 'a', executable: false, content: '' }, { path: 'b', executable: true, content: Buffer.from([0, 255, 128]).toString('base64') },
-    ];
-    const captured = archive(entries.map((member) => ({ ...member, encoding: 'base64' })), { version: 2 });
-    const canonical = Buffer.from(`${JSON.stringify({ format: 'ballin-directory', version: 1, entries }, null, 2)}\n`);
-    assert.isTrue(isDirectorySnapshotMigration(captured, canonical));
-    assert.isFalse(isDirectorySnapshotMigration(archive([entries[0]], { version: 2 }), canonical));
   });
 });

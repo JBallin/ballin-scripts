@@ -40,7 +40,7 @@ const {
   observeSnapshotSources,
 } = require('./backup_snapshots.ts');
 const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
-const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember, isDirectorySnapshotMigration } = require('./directory_snapshot.ts');
+const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember } = require('./directory_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
@@ -406,16 +406,12 @@ const evaluateSnapshots = (
     const localMatchesRemote = remote.exists
       && remote.file !== null
       && snapshotFilesMatch(localFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
-    const formatMigration = !localMatchesRemote && remote.exists && remote.file !== null
-      && directorySnapshotFileNames.has(snapshot.fileName)
-      && fs.statSync(remote.file).size <= snapshotByteLimit
-      && isDirectorySnapshotMigration(readBoundedFile(localFile).bytes, readBoundedFile(remote.file).bytes);
-    let shouldUpload = formatMigration;
+    let shouldUpload = false;
 
     if (!baseExists && !remote.exists) {
       shouldUpload = true;
     } else if (!baseExists && remote.exists) {
-      if (!localMatchesRemote && !formatMigration) {
+      if (!localMatchesRemote) {
         conflicts.push({
           fileName: snapshot.fileName,
           reason: 'remote content differs and this machine has no cached base',
@@ -432,7 +428,7 @@ const evaluateSnapshots = (
       const baseMatchesRemote = snapshotFilesMatch(cacheFile, remote.file, configurationSnapshotGroups.has(snapshot.fileName));
       if (baseMatchesRemote && !localMatchesRemote) {
         shouldUpload = true;
-      } else if (!baseMatchesRemote && !localMatchesRemote && !formatMigration) {
+      } else if (!baseMatchesRemote && !localMatchesRemote) {
         conflicts.push({
           fileName: snapshot.fileName,
           reason: 'remote content diverged from the cached base and staged local content',

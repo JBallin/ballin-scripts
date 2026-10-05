@@ -2,7 +2,7 @@ const { isUtf8 } = require('node:buffer');
 const { snapshotByteLimit, recursiveEntryLimit, isReadableText } = require('./recursive_snapshot.ts');
 
 type DirectoryEntry = { path: string; executable: boolean; bytes: Buffer };
-type DirectorySnapshot = { version: 1 | 2; entries: DirectoryEntry[] };
+type DirectorySnapshot = { version: 2; entries: DirectoryEntry[] };
 
 class DirectorySnapshotError extends Error {}
 const invalid = (): never => { throw new DirectorySnapshotError('not a supported bundle snapshot.'); };
@@ -37,15 +37,15 @@ const readDirectorySnapshot = (bytes: Buffer): DirectorySnapshot => {
   if (!isUtf8(bytes)) return invalid();
   let archive: unknown;
   try { archive = JSON.parse(bytes.toString('utf8')); } catch { return invalid(); }
-  if (!object(archive) || archive.format !== 'ballin-directory' || (archive.version !== 1 && archive.version !== 2)
+  if (!object(archive) || archive.format !== 'ballin-directory' || archive.version !== 2
     || Object.keys(archive).length !== 3 || !Array.isArray(archive.entries) || archive.entries.length === 0) return invalid();
   if (archive.entries.length > recursiveEntryLimit) throw new DirectorySnapshotError('bundle snapshot exceeds inspection limits.');
   const paths = new Set<string>();
   const version = archive.version;
   const entries = archive.entries.map((entry: unknown): DirectoryEntry => {
-    if (!object(entry) || Object.keys(entry).length !== (version === 1 ? 3 : 4) || !memberPath(entry.path)
+    if (!object(entry) || Object.keys(entry).length !== 4 || !memberPath(entry.path)
       || typeof entry.executable !== 'boolean' || paths.has(entry.path)) return invalid();
-    const bytes = version === 1 || entry.encoding === 'base64' ? base64Bytes(entry.content)
+    const bytes = entry.encoding === 'base64' ? base64Bytes(entry.content)
       : entry.encoding === 'utf8' ? textBytes(entry.content) : invalid();
     paths.add(entry.path);
     return { path: entry.path, executable: entry.executable, bytes };
@@ -63,22 +63,5 @@ const readDirectoryMember = (entries: DirectoryEntry[], selected: string): Buffe
   return entry.bytes;
 };
 
-// The only migration exception is exact equality to the old canonical serialization.
-// No semantic comparison of remote JSON, ignored fields or general three-way equality.
-const isDirectorySnapshotMigration = (captured: Buffer, remote: Buffer): boolean => {
-  if (remote.length > snapshotByteLimit) return false;
-  try {
-    const archive = readDirectorySnapshot(captured);
-    if (archive.version !== 2) return false;
-    if (archive.entries.some((entry, index) => index > 0 && archive.entries[index - 1].path >= entry.path)) return false;
-    const entries = archive.entries.map(({ path, executable }) => ({ path, executable, content: '' }));
-    const serialize = (): string => `${JSON.stringify({ format: 'ballin-directory', version: 1, entries }, null, 2)}\n`;
-    const expectedBytes = Buffer.byteLength(serialize()) + archive.entries.reduce((total, entry) => total + 4 * Math.ceil(entry.bytes.length / 3), 0);
-    if (expectedBytes !== remote.length) return false;
-    entries.forEach((entry, index) => { entry.content = archive.entries[index].bytes.toString('base64'); });
-    return Buffer.from(serialize()).equals(remote);
-  } catch { return false; }
-};
-
-module.exports = { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember, isDirectorySnapshotMigration };
+module.exports = { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember };
 export type { DirectoryEntry, DirectorySnapshot };
