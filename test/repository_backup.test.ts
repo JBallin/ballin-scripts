@@ -619,7 +619,7 @@ describe('repository backup lifecycle', function() {
     });
   });
   [false, true].forEach((included) => {
-    it(`captures selected Claude Markdown with existing sensitive consent: ${included}`, () => {
+    it(`captures selected Claude Markdown and complete skills with existing sensitive consent: ${included}`, () => {
       const value = config(); value.backup.includeSensitive = String(included); saveConfig(value);
       const claude = path.join(home, 'active-claude');
       fs.mkdirSync(path.join(claude, 'rules', 'nested'), { recursive: true });
@@ -627,17 +627,28 @@ describe('repository backup lifecycle', function() {
       fs.writeFileSync(path.join(claude, 'rules', 'nested', 'fixture.md'), 'synthetic rule\n');
       fs.writeFileSync(path.join(claude, 'rules', 'ignored.json'), 'DUMMY_EXCLUDED_SECRET');
       fs.writeFileSync(path.join(claude, 'settings.json'), 'DUMMY_SETTINGS_SECRET');
-      fs.mkdirSync(path.join(claude, 'skills'));
+      fs.mkdirSync(path.join(claude, 'skills', 'demo'), { recursive: true });
       fs.writeFileSync(path.join(claude, 'skills', 'SKILL.md'), 'DUMMY_SKILL_SECRET');
+      fs.writeFileSync(path.join(claude, 'skills', 'demo', 'SKILL.md'), 'personal skill');
+      fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SELECTED_SKILL_SECRET');
+      fs.writeFileSync(path.join(claude, 'skills', 'demo', 'run.sh'), '#!/bin/sh\n', { mode: 0o755 });
       ok(run([], '', { CLAUDE_CONFIG_DIR: claude }));
       if (included) {
         assert.equal(remote('claude_instructions'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
         const archive = JSON.parse(remote('claude_rules.bundle.json')!);
         assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['nested/fixture.md']);
         assert.equal(cached('claude_rules.bundle.json'), remote('claude_rules.bundle.json'));
+        const skills = JSON.parse(remote('claude_skills.bundle.json')!);
+        assert.deepEqual(skills.entries.map((entry: { path: string }) => entry.path), ['demo/.support', 'demo/SKILL.md', 'demo/run.sh']);
+        assert.equal(cached('claude_skills.bundle.json'), remote('claude_skills.bundle.json'));
+        const listed = run(['read', 'claude_skills.bundle.json', '--list']); ok(listed);
+        assert.deepEqual(JSON.parse(listed.stdout).map((entry: { path: string }) => entry.path), ['demo/.support', 'demo/SKILL.md', 'demo/run.sh']);
+        const member = run(['read', 'claude_skills.bundle.json', '--file', 'demo/.support']); ok(member);
+        assert.equal(member.stdout, 'DUMMY_SELECTED_SKILL_SECRET');
       } else {
         assert.isUndefined(remote('claude_instructions'));
         assert.isUndefined(remote('claude_rules.bundle.json'));
+        assert.isUndefined(remote('claude_skills.bundle.json'));
       }
       const files = state().commits[state().head].files;
       assert.notProperty(files, 'claude_settings.json');
@@ -654,10 +665,15 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'DUMMY_INSTRUCTIONS_SECRET');
     fs.writeFileSync(path.join(claude, 'agents', 'review.md'), 'DUMMY_AGENT_SECRET');
     fs.writeFileSync(path.join(claude, 'agents', 'ignored.json'), 'DUMMY_EXCLUDED_SECRET');
+    fs.mkdirSync(path.join(claude, 'skills', 'demo'), { recursive: true });
+    fs.writeFileSync(path.join(claude, 'skills', 'demo', 'SKILL.md'), 'DUMMY_SKILL_SECRET');
+    fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SUPPORT_SECRET');
     const result = run(['setup'], 'y\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Claude Code includes personal CLAUDE.md');
     assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
+    assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
+    assert.include(result.stdout, 'Skill folders include hidden files, executable scripts, and binary supporting assets.');
     assert.include(result.stdout, 'future additions to this maintained catalog');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
     assert.lengthOf(mutations(), 0);
@@ -681,6 +697,34 @@ describe('repository backup lifecycle', function() {
     ok(run([], '', {}, preload));
     assert.isUndefined(remote('claude_rules.bundle.json'));
   });
+  it('aborts unreadable Claude skill support without remote reads and skips discovery with consent off', () => {
+    const skill = path.join(fs.realpathSync(home), '.claude', 'skills', 'demo');
+    fs.mkdirSync(skill, { recursive: true });
+    fs.writeFileSync(path.join(skill, 'SKILL.md'), 'synthetic skill');
+    fs.writeFileSync(path.join(skill, '.support'), 'DUMMY_SUPPORT_SECRET');
+    const preload = `const fs=require('fs'); const open=fs.openSync;
+      fs.openSync=function(file,...args) {
+        if(file==='.support' && process.cwd()===${JSON.stringify(skill)}) throw new Error('DUMMY_CAPTURE_SECRET');
+        return open.call(this,file,...args);
+      };`;
+    const env = { NODE_OPTIONS: `--require=${JSON.stringify(path.join(root, 'preload.cjs'))}` };
+    const failed = run([], '', env, preload);
+    assert.equal(failed.status, 1);
+    assert.notInclude(failed.stderr, 'DUMMY_');
+    assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
+    const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    ok(run([], '', env, preload));
+    assert.isUndefined(remote('claude_skills.bundle.json'));
+  });
+  it('retains a saved Claude skill bundle when a legacy manifest makes the source unavailable', () => {
+    const archived = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [{ path: 'saved/SKILL.md', executable: false, encoding: 'utf8', content: ['saved'] }] }) + '\n';
+    saveState(fixtureState({ 'claude_skills.bundle.json': archived }));
+    const skills = path.join(home, '.claude', 'skills'); fs.mkdirSync(skills, { recursive: true });
+    fs.writeFileSync(path.join(skills, 'manifest.json'), 'DUMMY_LEGACY_SECRET');
+    ok(run());
+    assert.equal(remote('claude_skills.bundle.json'), archived);
+  });
   describe('local Claude snapshot budgets', function() {
     this.timeout(30000);
     const mib = 1024 * 1024;
@@ -696,6 +740,13 @@ describe('repository backup lifecycle', function() {
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.lengthOf(state().requests, 0);
       assert.isFalse(fs.existsSync(cache));
+    });
+    it('counts the complete skills bundle toward the existing combined Claude allowance', () => {
+      sparse(path.join(home, '.claude', 'CLAUDE.md'), 9 * mib);
+      sparse(path.join(home, '.claude', 'skills', 'demo', 'SKILL.md'), 6 * mib);
+      const result = run();
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
     });
     it('preserves the Codex allowance alongside an independent Claude allowance', () => {
       const codexContent = 'c'.repeat(9 * mib - 1) + '\n';

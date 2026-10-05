@@ -338,7 +338,7 @@ below.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-29 sensitive sources, and one projected preferences snapshot.
+30 sensitive sources, and one projected preferences snapshot.
 `backup.includeSensitive` is the only local sensitive-source preference. Opting
 in covers the maintained sensitive catalog, including future supported sources;
 existing opt-ins therefore include Codex and Claude Code. Setup discloses this
@@ -427,13 +427,24 @@ reading contents. Caller cwd identity is verified after restoration. Restoration
 failure is fatal and bypasses optional-source handling. These checks pin selected
 directory objects; they do not provide an atomic snapshot of concurrent edits.
 
-Claude Code definitions select `CLAUDE.md` and only regular `.md` files in
-personal rules, agents, and legacy commands. The catalog supplies the Markdown
-selection to discovery, review, and capture. Visited-entry accounting precedes
-filename filtering. Selected hard links fail without searching for other inode
-locations, and opened-file checks enforce the same rule during capture. Skills
-remain excluded pending a separate operational eligibility/supporting-file
-policy; path placement alone does not establish authorship.
+Claude Code definitions select `CLAUDE.md`, regular `.md` files in personal
+rules/agents/legacy commands, and complete eligible personal skill folders.
+The same source-specific selection governs discovery, review, and capture.
+Skills require an exact-case regular `SKILL.md` in an immediate nonhidden folder;
+synced/reserved names, hidden root folders, plugin-shaped folders, and legacy
+manifest-managed roots are excluded as specified in the
+[source guide](backup-sources.md#claude-code-configuration). Eligibility is
+operational, not proof of authorship. Visited-entry accounting precedes filtering.
+Selected hard links fail without searching for other inode locations, and
+opened-file checks enforce the same rule during capture.
+
+Eligible personal skill folders preserve hidden regular supporting files as
+well as visible files. A dot prefix does not reliably distinguish useful
+supporting dependencies from sensitive content; visible files can contain
+credentials too. Provider-specific managed, plugin, legacy, Git, and link
+boundaries define exclusions instead of guessed secret filenames. Skill content
+uses the existing sensitive-source consent and private-repository access boundary,
+with no scanning or redaction claim.
 
 The current updater compares the Git blob identities of the source-definition
 file before and after a successful update. Changed or unavailable comparison

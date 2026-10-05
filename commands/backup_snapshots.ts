@@ -543,7 +543,8 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
   prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
   discover: (context) => {
     const claude = category === 'claude';
-    const selection = claude ? { markdownOnly: true, rejectHardlinks: true } : {};
+    const selection = claude ? { markdownOnly: !skills, claudeSkills: skills, rejectHardlinks: true } : {};
+    const directoryMode = claude && skills ? 'claude-skills' : claude ? 'markdown' : profiles ? 'profiles' : skills ? 'skills' : 'directory';
     const logicalRoot = claude
       ? context.env.CLAUDE_CONFIG_DIR ? path.resolve(context.env.CLAUDE_CONFIG_DIR) : path.join(context.homeDir, '.claude')
       : homeRoot ? context.homeDir : codexRoot(context);
@@ -568,7 +569,7 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
           fileName: name,
           command: process.execPath,
           args: recursive
-            ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, claude ? 'markdown' : profiles ? 'profiles' : skills ? 'skills' : 'directory', ...(claude ? ['--reject-hardlinks'] : [])]
+            ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, directoryMode, ...(claude ? ['--reject-hardlinks'] : [])]
             : [path.join(__dirname, 'recursive_snapshot.ts'), root, 'file', relative, ...(claude ? ['--reject-hardlinks'] : [])],
           env: context.env,
         },
@@ -580,7 +581,9 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
       if (error instanceof require('./recursive_snapshot.ts').SnapshotLimitError) {
         return { status: 'discovery-failed', source, reason: 'source-limit-exceeded', error: error as Error };
       }
-      if (errorCode(error) === 'ELOOP') return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      if (errorCode(error) === 'ELOOP' || error instanceof require('./recursive_snapshot.ts').SnapshotSourceTypeError) {
+        return { status: 'unavailable', source, reason: 'unsupported-source-type' };
+      }
       return errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR'
         ? { status: 'absent', source, reason: 'source-not-found' }
         : { status: 'discovery-failed', source, reason: 'source-access-failed', error: error as Error };
@@ -652,6 +655,7 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = [
   configurationSnapshot('claude', 'claude_rules.bundle.json', 'rules', true, false, false, false),
   configurationSnapshot('claude', 'claude_agents.bundle.json', 'agents', true, false, false, false),
   configurationSnapshot('claude', 'claude_commands.bundle.json', 'commands', true, false, false, false),
+  configurationSnapshot('claude', 'claude_skills.bundle.json', 'skills', true),
   portableConfigSnapshot(),
   shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
 ];
