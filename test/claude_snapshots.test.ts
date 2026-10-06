@@ -428,6 +428,18 @@ describe('Claude Code selected configuration', () => {
     ]);
   });
 
+  it('fails promptly for malformed escaped strings within the manifest byte budget', () => {
+    write('skills/personal/SKILL.md'); write('skills/synced/collection/package/SKILL.md'); manifest('collection');
+    const observation = discover('claude_skills.bundle.json');
+    if (observation.status !== 'available') throw new Error('Expected available fixture');
+    write('skills/synced/collection/manifest.json', '"' + 'a\\"'.repeat(250000));
+    const failed = spawnSync(observation.collector.command, observation.collector.args!, {
+      env: observation.collector.env, encoding: 'utf8', timeout: 2000, killSignal: 'SIGKILL',
+    });
+    assert.isUndefined(failed.error); assert.equal(failed.status, 1); assert.equal(failed.stdout, '');
+    assert.equal(discover('claude_skills.bundle.json').status, 'unavailable');
+  });
+
   ['missing', 'json', 'utf8', 'directory', 'symlink', 'hardlink', 'oversized', 'records'].forEach((kind) => {
     it(`makes the whole skills source unavailable for a ${kind} manifest`, () => {
       write('skills/personal/SKILL.md'); write('skills/synced/collection/package/SKILL.md');

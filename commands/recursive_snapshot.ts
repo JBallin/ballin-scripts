@@ -124,8 +124,9 @@ const fileEntry = (root: string, relative: string, maxBytes = snapshotByteLimit,
   return { path: relative.split(path.sep).join('/'), executable, content: bytes.toString('base64') };
 };
 
-// Check only selection keys in the raw JSON, before JSON.parse can discard
-// duplicate fields. String tokens keep braces and commas inside values inert.
+// Check selection keys in the original JSON before using its parsed value.
+// Validate syntax first so malformed escaped strings cannot repeatedly restart
+// tokenization. String tokens keep braces and commas inside values inert.
 const requireUniqueManifestSelection = (text: string): void => {
   const contexts: { array: boolean; key: boolean; field?: string; seen: Set<string> }[] = [];
   for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\],]/gu)) {
@@ -157,8 +158,8 @@ const syncedPluginNames = (maxBytes: number, maxRecords: number): { names: Set<s
     const { bytes } = readBoundedFile('manifest.json', maxBytes, true);
     if (!isUtf8(bytes)) throw new Error('Invalid manifest text');
     const text = bytes.toString('utf8');
-    requireUniqueManifestSelection(text);
     const manifest = JSON.parse(text);
+    requireUniqueManifestSelection(text);
     if (!manifest || !Array.isArray(manifest.skills) || manifest.skills.length > maxRecords) throw new Error('Invalid manifest records');
     const seen = new Set<string>();
     const names = new Set<string>();
