@@ -353,6 +353,7 @@ def main():
         # Adaptive samples use the actual default; only serial controls add a boolean flag.
         gate = ["npm", "test"] + (["--", "--", "--", "--no-parallel"] if mode == "four-serial" else [])
         command = docker_command(["/usr/bin/time", "-v", *gate], sample_env) if index == 2 else gate
+        assert DEADLINE - time.time() >= BUDGET + 120, "Preparation left insufficient budget for another gate"
         write(directory / "provenance.json", {"commit": HEAD, "tree": TREE, "lockSha256": LOCK,
               "mode": mode, "command": gate, "environment": sample_env, "affinity": sorted(cpus),
               "comparisonEligible": index >= 3})
