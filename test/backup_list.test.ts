@@ -136,6 +136,22 @@ describe('saved backup discovery', function() {
       assert.deepEqual({ ...state(), requests: [] }, { ...before, requests: [] }); preserved();
     });
   }
+  for (const snapshot of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json']) {
+    it(`reads metadata from existing saved ${snapshot} without applying capture exclusions`, () => {
+      const content = 'interface:\n  display_name: Synthetic\n';
+      const member = { path: 'demo/agents/openai.yaml', executable: false, encoding: 'utf8', content: ['interface:\n', '  display_name: Synthetic\n'] };
+      const archive = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [member] });
+      save(fixtureState({ [snapshot]: archive }));
+      const listed = run(['read', snapshot, '--list']);
+      assert.equal(listed.status, 0, listed.stderr);
+      assert.deepEqual(JSON.parse(listed.stdout), [{ path: member.path, executable: false, bytes: Buffer.byteLength(content) }]);
+      const read = run(['read', snapshot, '--file', member.path]);
+      assert.equal(read.status, 0, read.stderr);
+      assert.equal(read.stdout, content);
+      assert.equal(run(['read', snapshot]).stdout, archive);
+      preserved();
+    });
+  }
   it('writes exact binary and empty member bytes to stdout with no framing', () => {
     for (const bytes of [Buffer.from([0, 255, 128, 13, 10]), Buffer.alloc(0)]) {
       save(fixtureState({ 'codex_skills.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
