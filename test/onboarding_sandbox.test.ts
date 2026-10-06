@@ -270,7 +270,7 @@ describe('onboarding sandbox', function() {
 
 describe('interactive onboarding QA lifecycle', function() {
   this.timeout(sandboxSuiteTimeout);
-  const cli = path.join(__dirname, 'onboarding_qa.ts');
+  const cli = path.join(__dirname, 'qa_sandbox.ts');
   const roots: string[] = [];
   const findRoot = (output: string): string => {
     const root = output.match(/Ballin onboarding sandbox: (.+)/u)?.[1];
@@ -454,7 +454,7 @@ describe('interactive onboarding QA lifecycle', function() {
         assert.match(fs.readFileSync(path.join(root, 'tools', name), 'utf8'), /^#!\/usr\/bin\/env node\n/u);
       }
       const quotedRoot = `'${root.replaceAll("'", "'\"'\"'")}'`;
-      assert.include(result.stdout, `Cleanup: npm run qa:onboarding -- --cleanup ${quotedRoot}`);
+      assert.include(result.stdout, `Cleanup: npm run sandbox -- --cleanup ${quotedRoot}`);
       const cleanup = spawnSync(interpreter, [cli, '--cleanup', root], { env, encoding: 'utf8', timeout: 10000 });
       assert.equal(cleanup.status, 0, cleanup.stderr);
       assert.isFalse(fs.existsSync(root));
