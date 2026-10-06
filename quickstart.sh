@@ -224,8 +224,10 @@ main() {
   quick_root="$HOME/.local/share/ballin-quickstart"
   quick_bin="$quick_root/bin"
   if [[ -e "$quick_root" || -L "$quick_root" ]]; then
-    [[ -d "$quick_root" && ! -L "$quick_root" && -f "$quick_root/.managed" && ! -L "$quick_root/.managed" ]] \
-      && [[ "$(cat "$quick_root/.managed")" == 1 ]] || fail "Refusing to change an unrecognized directory at $quick_root."
+    if ! { [[ -d "$quick_root" && ! -L "$quick_root" && -f "$quick_root/.managed" && ! -L "$quick_root/.managed" ]] \
+      && [[ "$(cat "$quick_root/.managed")" == 1 ]]; }; then
+      fail "Refusing to change an unrecognized directory at $quick_root."
+    fi
     [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $quick_bin."
   fi
   path_node=$(node_on_path)
