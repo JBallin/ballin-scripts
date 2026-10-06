@@ -39,4 +39,4 @@ For deeper user and maintainer documentation, see the
 
 ## Feedback and Discussions
 
-Questions, feedback, and ideas are welcome in [Discussions](https://github.com/JBallin/ballin-scripts/discussions). Report non-security bugs in [Issues](https://github.com/JBallin/ballin-scripts/issues). For security issues, see [SECURITY.md](SECURITY.md).
+Questions, feedback, and ideas are welcome in [Discussions](https://github.com/JBallin/ballin-scripts/discussions). Report bugs in [Issues](https://github.com/JBallin/ballin-scripts/issues). For security issues, see our [security policy](https://github.com/JBallin/ballin-scripts/security/policy).
