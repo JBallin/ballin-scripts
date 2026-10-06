@@ -30,12 +30,12 @@ fi
 
 if [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
-  printf '\nInstall a supported version with nvm or `brew install node`, then run this installer again.\n'
+  printf "\nInstall a supported version with nvm or \`brew install node\`, then run this installer again.\n"
   printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
   exit 1
 elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null)" != 'true' ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
-  printf '\nInstall a supported version with nvm or `brew install node`, then run this installer again.\n'
+  printf "\nInstall a supported version with nvm or \`brew install node\`, then run this installer again.\n"
   printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
   exit 1
 fi
