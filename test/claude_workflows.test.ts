@@ -1,9 +1,6 @@
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const { spawnSync } = require('child_process');
-const { testChildEnvironment } = require('./helpers/environment.ts');
 
 const readWorkflow = (name: string): string => fs.readFileSync(
   path.join(__dirname, '..', '.github', 'workflows', name), 'utf8',
@@ -107,55 +104,52 @@ describe('offline Claude caller contracts', () => {
     assert.isFalse(eligible(source, { github: issueComment }));
   });
 
-  it('runs the actual manual preflight offline and fails closed for ineligible or invalid PR responses', () => {
+  it('protects the manual preflight response guards, eligibility predicate and shell wiring', () => {
     const source = job(manual, 'eligibility');
     assert.match(source, /PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \|\| github\.event\.issue\.number \}\}/u);
     assert.match(source, /REPO: \$\{\{ github\.repository \}\}/u);
     assert.match(source, /eligible: \$\{\{ steps\.eligibility\.outputs\.eligible \}\}/u);
-    const script = source.match(/^        run: \|\n((?:          .*\n|\n)+)/mu)![1]
-      .replace(/^          /gmu, '');
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-claude-caller-'));
-    try {
-      fs.writeFileSync(path.join(root, 'gh'), '#!/bin/sh\nprintf "%s\\n" "$*" > "$REQUEST"\ncat "$RESPONSE"\nexit "$GH_EXIT"\n', { mode: 0o755 });
-      // Avoid relying on GNU timeout on macOS; the outer process bounds this test.
-      fs.writeFileSync(path.join(root, 'timeout'), '#!/bin/sh\nshift\nexec "$@"\n', { mode: 0o755 });
-      const run = (response: unknown, ghExit = 0) => {
-        const output = path.join(root, 'output');
-        fs.writeFileSync(output, '');
-        fs.writeFileSync(path.join(root, 'response'), JSON.stringify(response));
-        const result = spawnSync('/bin/bash', ['-c', script], {
-          env: testChildEnvironment({
-            HOME: root, PATH: `${root}:/usr/bin:/bin`, REPO: 'JBallin/ballin-scripts',
-            PR_NUMBER: '42', GH_TOKEN: 'offline-fixture', GITHUB_OUTPUT: output,
-            RESPONSE: path.join(root, 'response'), REQUEST: path.join(root, 'request'), GH_EXIT: String(ghExit),
-          }), encoding: 'utf8', timeout: 5000,
-        });
-        assert.isUndefined(result.error);
-        assert.equal(fs.readFileSync(path.join(root, 'request'), 'utf8').trim(), 'api repos/JBallin/ballin-scripts/pulls/42');
-        return { code: result.status, output: fs.readFileSync(output, 'utf8') };
-      };
-      assert.deepEqual(run(pr()), { code: 0, output: 'eligible=true\n' });
-      for (const change of [
-        (p: ReturnType<typeof pr>) => { p.state = 'closed'; },
-        (p: ReturnType<typeof pr>) => { p.draft = true; },
-        (p: ReturnType<typeof pr>) => { p.head.repo.full_name = 'contributor/fork'; },
-        (p: ReturnType<typeof pr>) => { p.base.repo.full_name = 'other/repo'; },
-      ]) {
-        const p = pr();
-        change(p);
-        assert.deepEqual(run(p), { code: 0, output: 'eligible=false\n' });
-      }
-      for (const response of [null, [], { ...pr(), number: 43 }, { ...pr(), number: '42' }]) {
-        const result = run(response);
-        assert.notEqual(result.code, 0);
-        assert.equal(result.output, '');
-      }
-      const apiFailure = run(pr(), 1);
-      assert.notEqual(apiFailure.code, 0, 'API failure must abort preflight');
-      assert.equal(apiFailure.output, '');
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+    assert.match(source, /^          set -euo pipefail$/mu);
+    // Bind the fetched response, evaluated filter and emitted result together.
+    // An unrelated filter or an unconditional eligible=true must not substitute.
+    const pipeline = source.match(/^          pr=\$\(timeout 30s gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"\)\n          eligible=\$\(printf '%s' "\$pr" \| jq -er --arg repo "\$REPO" --argjson number "\$PR_NUMBER" '\n([\s\S]*?)'\)\n          printf 'eligible=%s\\n' "\$eligible" >> "\$GITHUB_OUTPUT"\n/mu);
+    assert.exists(pipeline, 'the jq result must be assigned to eligible and immediately emitted');
+    assert.equal([...source.matchAll(/^\s+eligible=/gmu)].length, 1, 'eligibility must not be overwritten');
+    assert.equal([...source.matchAll(/\$GITHUB_OUTPUT/gu)].length, 1, 'only the checked result may be emitted');
+    const filter = pipeline![1].trim();
+    assert.match(filter, /if\s+type\s*!=\s*"object"\s+then\s+error\(/u);
+    assert.match(filter, /elif\s+\(\.number\s*\|\s*type\)\s*!=\s*"number"\s+or\s+\.number\s*!=\s*\$number\s+then\s+error\(/u);
+    assert.match(filter, /end\s*\|\s*tostring$/u);
+
+    // Evaluate the actual predicate's field equalities and conjunctions in Node.
+    // Response/error guards and shell wiring above are structural assertions;
+    // these fixtures do not execute Bash or validate the jq language/runtime.
+    const predicate = filter.match(/\belse\s+([\s\S]*?)\s+end\s*\|\s*tostring/u)![1];
+    assert.match(predicate, /^(?:\s+|\.[a-z_]+(?:\.[a-z_]+)*|==|and\b|\$repo\b|"[^"\\]*"|true\b|false\b)+$/u,
+      'unsupported preflight predicate: extend the fixture coverage deliberately');
+    const expression = predicate.replace(/"[^"\\]*"|\.[a-z_]+(?:\.[a-z_]+)*|\$repo\b|\band\b|==/gu, (token: string) => {
+      if (token.startsWith('.')) return `field(response, ${JSON.stringify(token.slice(1))})`;
+      return ({ $repo: 'repo', and: '&&', '==': '===' } as Record<string, string>)[token] ?? token;
+    });
+    const evaluate = (response: object): boolean => Boolean(vm.runInNewContext(expression, {
+      response, repo: 'JBallin/ballin-scripts',
+      field: (input: unknown, name: string): unknown => name.split('.').reduce<unknown>((value, key) => (
+        value !== null && typeof value === 'object' && Object.hasOwn(value, key)
+          ? (value as Record<string, unknown>)[key] ?? null : null
+      ), input),
+    }, { timeout: 100 }));
+    assert.isTrue(evaluate(pr()));
+    for (const change of [
+      (p: ReturnType<typeof pr>) => { p.state = 'closed'; },
+      (p: ReturnType<typeof pr>) => { p.draft = true; },
+      (p: ReturnType<typeof pr>) => { p.head.repo.full_name = 'contributor/fork'; },
+      (p: ReturnType<typeof pr>) => { p.base.repo.full_name = 'other/repo'; },
+    ]) {
+      const p = pr();
+      change(p);
+      assert.isFalse(evaluate(p), change.toString());
     }
+    assert.isFalse(evaluate({ number: 42 }), 'missing eligibility fields fail closed');
   });
 
   it('requires a successful preflight before invoking the manual runtime', () => {

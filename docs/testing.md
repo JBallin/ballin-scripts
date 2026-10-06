@@ -24,8 +24,11 @@ post `/claude-review` as the entire top-level or inline PR comment.
 Run `npm run test:unit -- test/claude_workflows.test.ts` for offline caller
 regression tests covering eligibility, permissions, credential routing, runtime
 pins, and model-free status refresh. They also run through `npm test`, use fixture
-PR responses, and require no credentials or model calls. Shared runtime behavior
-is tested in the runtime repository.
+PR responses, and require no credentials, model calls, or host `jq` installation.
+The fixtures evaluate the callers' current Actions conditions and jq eligibility
+predicate in Node; response/error guards and shell wiring are checked structurally.
+They do not execute Bash or validate the jq runtime. Shared runtime behavior is
+tested in the runtime repository.
 
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
