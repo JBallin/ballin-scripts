@@ -76,6 +76,19 @@ release_node_links() {
   done
 }
 
+find_git() {
+  local candidate
+  for candidate in "$(command -v git || true)" "$system_git"; do
+    if [[ "$candidate" == "$system_git" ]] && ! xcode-select -p >/dev/null 2>&1; then
+      continue
+    fi
+    if [[ "$candidate" == /* && -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
+      printf '%s' "$candidate"
+      return
+    fi
+  done
+}
+
 find_gh() {
   local candidate
   for candidate in "$(command -v gh || true)" "$quick_bin/gh"; do
@@ -161,10 +174,20 @@ configure_path() {
   fi
   if [[ -f "$profile" ]]; then
     "$node_tool" -e '
-      const contents = require("fs").readFileSync(process.argv[1], "utf8");
+      const fs = require("fs");
+      const contents = fs.readFileSync(process.argv[1], "utf8");
       const trailing = contents.match(/(\\+)(?:\r?\n)?$/u)?.[1];
-      if (trailing && trailing.length % 2 !== 0) process.exit(1);
-    ' "$profile" || fail 'The startup file ends at an unfinished continuation; it was left unchanged.'
+      if (trailing && trailing.length % 2 !== 0) {
+        fs.writeFileSync(process.argv[2], contents.replace(/\r?\n$/u, "") + " )\n");
+      }
+    ' "$profile" "$scratch/profile-continuation-check" \
+      || fail 'The startup file could not be checked; it was left unchanged.'
+    # The shell ignores this unmatched token in a trailing comment. An active
+    # backslash escapes its leading space, leaving the unmatched token visible.
+    if [[ -f "$scratch/profile-continuation-check" ]] \
+      && ! "$profile_shell" -n "$scratch/profile-continuation-check" >/dev/null 2>&1; then
+      fail 'The startup file ends at an unfinished continuation; it was left unchanged.'
+    fi
     "$profile_shell" -n "$profile" || fail 'The startup file has invalid shell syntax; it was left unchanged.'
     # Both supported shells can accept an unfinished heredoc under -n. A
     # deliberate syntax error must remain visible to the parser at EOF.
@@ -195,7 +218,7 @@ configure_path() {
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh fresh repo candidate shell_name path_node
+  local os_version major minor machine git_tool need_git need_node need_gh fresh repo candidate shell_name path_node brew_prefix
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -233,13 +256,9 @@ main() {
   path_node=$(node_on_path)
   node_tool=$(find_node "$path_node")
   gh_tool=$(find_gh)
-  git_tool=$(command -v git || true)
+  git_tool=$(find_git)
   need_git=false; need_node=false; need_gh=false
-  if [[ "$git_tool" == "$system_git" ]] && ! xcode-select -p >/dev/null 2>&1; then
-    need_git=true
-  else
-    [[ -n "$git_tool" ]] && "$git_tool" --version >/dev/null 2>&1 || need_git=true
-  fi
+  [[ -n "$git_tool" ]] || need_git=true
   [[ -n "$node_tool" ]] || need_node=true
   [[ -n "$gh_tool" ]] || need_gh=true
   if "$need_git" || "$need_node" || "$need_gh"; then
@@ -259,8 +278,8 @@ main() {
     xcode-select --install || fail 'Apple could not start Command Line Tools installation. Finish any pending installation, then run this quickstart again.'
     printf 'Finish the macOS installation, then press Return here: '
     IFS= read -r _ || fail 'Git setup did not complete.'
-    git --version >/dev/null 2>&1 || fail 'Git is still unavailable. Finish Command Line Tools installation, then run this quickstart again.'
-    git_tool=$(command -v git)
+    git_tool=$(find_git)
+    [[ -n "$git_tool" ]] || fail 'Git is still unavailable. Finish Command Line Tools installation, then run this quickstart again.'
   fi
   "$need_node" && install_node
   "$need_gh" && install_gh
@@ -274,8 +293,8 @@ main() {
   bind_tool gh "$gh_tool"
   bind_tool git "$git_tool"
   command_bin="$HOME/.local/bin"
-  if command -v brew >/dev/null 2>&1; then
-    command_bin="$(brew --prefix)/bin"
+  if command -v brew >/dev/null 2>&1 && brew_prefix=$(brew --prefix 2>/dev/null); then
+    command_bin="$brew_prefix/bin"
   fi
   [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
   export PATH="$quick_bin:$PATH:$command_bin"

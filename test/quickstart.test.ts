@@ -18,7 +18,7 @@ describe('beginner quickstart bootstrap', function() {
   const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}) => spawnSync('/bin/bash', ['-c', `
 source "$FAKE_SOURCE"
 system_node_bin="$FAKE_SYSTEM_NODE"
-system_git="$FAKE_ROOT/tools/git"
+system_git="\${FAKE_SYSTEM_GIT:-$FAKE_ROOT/tools/git}"
 trap cleanup EXIT
 main
 `], {
@@ -60,8 +60,14 @@ printf '%s:%s\\n' "$name" "$*" >> "$FAKE_COMMAND_LOG"
 case "$name" in
   uname) case "$1" in -s) printf '%s\\n' "\${FAKE_OS:-Darwin}" ;; -m) printf '%s\\n' "\${FAKE_ARCH:-arm64}" ;; *) exit 97 ;; esac ;;
   sw_vers) [[ "$*" == -productVersion ]] || exit 97; printf '%s\\n' "\${FAKE_MACOS:-13.5}" ;;
-  git) [[ "$*" == --version ]] || exit 97; [[ "\${FAKE_GIT:-ready}" == ready || -f "$FAKE_ROOT/git-installed" ]] ;;
-  brew) [[ "$*" == --prefix ]] || exit 97; printf '%s\\n' "$FAKE_BREW_PREFIX" ;;
+  git)
+    [[ "$*" == --version ]] || exit 97
+    if [[ "$0" == "$FAKE_ROOT/tools/git" && "\${FAKE_BROKEN_PATH_GIT:-0}" == 1 ]]; then exit 1; fi
+    [[ "\${FAKE_GIT:-ready}" == ready || -f "$FAKE_ROOT/git-installed" ]] ;;
+  brew)
+    [[ "$*" == --prefix ]] || exit 97
+    [[ "\${FAKE_BREW_FAIL:-0}" != 1 ]] || exit 42
+    printf '%s\\n' "$FAKE_BREW_PREFIX" ;;
   xcode-select)
     if [[ "$*" == -p ]]; then [[ "\${FAKE_GIT:-ready}" == ready || -f "$FAKE_ROOT/git-installed" ]]; exit; fi
     [[ "$*" == --install ]] || exit 97
@@ -152,13 +158,41 @@ esac
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
   it('reuses working tools, preserves native stdin, and opens only after capture', () => {
+    assert.isFalse(fs.existsSync(path.join(tools, 'npm')));
     const result = run();
     assert.equal(result.status, 0, result.stdout + result.stderr + readLog());
     assert.include(result.stdout, 'Native installation prompt:');
+    assert.notInclude(readLog(), 'sudo:');
     assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
     for (const unexpected of ['sudo:', 'xcode-select:--install', 'releases/latest', 'ballin:update']) assert.notInclude(readLog(), unexpected);
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), 'export PATH=');
   });
+  it('keeps the local command directory when optional Homebrew prefix lookup fails', () => {
+    linkFake('brew');
+    const result = run('y\ny\n', { FAKE_BREW_FAIL: '1' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
+    assert.include(readLog(), 'brew:--prefix');
+    assert.include(readLog(), 'install.sh:');
+    assert.include(readLog(), 'ballin:backup open');
+    assert.notInclude(readLog(), 'sudo:');
+  });
+  for (const installed of [true, false]) {
+    it(`uses working system Git past a broken PATH shim${installed ? ' without installation' : ' after installing Command Line Tools'}`, () => {
+      const systemGit = path.join(root, 'system-git');
+      fs.mkdirSync(systemGit);
+      linkFake('git', systemGit);
+      const selectedGit = path.join(systemGit, 'git');
+      const result = run(installed ? 'y\ny\n' : 'y\ny\ny\ny\n', {
+        FAKE_SYSTEM_GIT: selectedGit, FAKE_BROKEN_PATH_GIT: '1', FAKE_GIT: installed ? 'ready' : 'missing',
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin/git')), selectedGit);
+      if (installed) assert.notInclude(readLog(), 'xcode-select:--install');
+      else assert.include(readLog(), 'xcode-select:--install');
+      assert.include(readLog(), 'ballin:backup open');
+    });
+  }
   for (const shell of ['zsh', 'bash']) {
     for (const withBrew of [false, true]) {
       it(`follows a healthy ${shell} version manager's new default${withBrew ? ' with Homebrew available' : ''} while the old version exists`, () => {
@@ -314,15 +348,35 @@ esac
     assert.notInclude(readLog(), 'install.sh:');
   });
   it('preserves startup files ending at an unfinished continuation', () => {
-    for (const suffix of ['\\', '\\\n']) {
-      const contents = `export EXAMPLE=1 ${suffix}`;
-      fs.writeFileSync(path.join(home, '.zshrc'), contents);
-      const result = run();
-      assert.equal(result.status, 1);
-      assert.include(result.stderr, 'unfinished continuation');
-      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), contents);
+    for (const shell of ['/bin/zsh', '/bin/bash']) {
+      const profile = path.join(home, shell.endsWith('zsh') ? '.zshrc' : '.bash_profile');
+      for (const prefix of ['export EXAMPLE=1 ', "printf '%s' '# not a comment' "]) {
+        for (const suffix of ['\\', '\\\n']) {
+          const contents = prefix + suffix;
+          fs.writeFileSync(profile, contents);
+          const result = run('', { SHELL: shell });
+          assert.equal(result.status, 1, result.stdout + result.stderr);
+          assert.include(result.stderr, 'unfinished continuation');
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+        }
+      }
     }
     assert.notInclude(readLog(), 'install.sh:');
+  });
+  it('accepts trailing comment backslashes without changing existing bytes in either shell', () => {
+    for (const shell of ['/bin/zsh', '/bin/bash']) {
+      const profile = path.join(home, shell.endsWith('zsh') ? '.zshrc' : '.bash_profile');
+      for (const prefix of ['# Windows path C:', 'export EXAMPLE=1 # Windows path C:']) {
+        for (const suffix of ['\\', '\\\n']) {
+          const contents = prefix + suffix;
+          fs.writeFileSync(profile, contents);
+          const result = run('y\ny\n', { SHELL: shell });
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assert.isTrue(fs.readFileSync(profile, 'utf8').startsWith(contents + '\nexport PATH='));
+        }
+      }
+    }
+    assert.include(readLog(), 'ballin:backup open');
   });
   it('rejects an incompatible Node package version before requesting admin access', () => {
     fs.writeFileSync(path.join(root, 'node-checksums.txt'), 'a'.repeat(64) + '  node-v24.11.0.pkg\n');
