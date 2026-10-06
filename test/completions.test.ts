@@ -60,6 +60,16 @@ describe('shell completions', () => {
   });
 
   for (const shell of ['zsh', 'bash'] as const) {
+    it(`preserves native ${shell} current-command context after harmless compound prefixes`, function () {
+      this.timeout(10000);
+      const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
+      for (const prefix of ['true && ', 'true; ']) {
+        const result = runNativeCompletion(shell, asset, `${prefix}ballin upd\t`);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.deepEqual(result.calls, ['update']);
+      }
+    });
+
     it(`keeps native ${shell} static candidates independent of cwd directory collisions`, function () {
       this.timeout(20000);
       const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
@@ -80,6 +90,10 @@ describe('shell completions', () => {
       for (const [prefix, member] of [
         ['colon:s', 'colon:skill/SKILL.md'], ['equals=s', 'equals=skill/SKILL.md'],
         ["'colon:s", 'colon:skill/SKILL.md'], ['"equals=s', 'equals=skill/SKILL.md'],
+        ['colon\\:s', 'colon:skill/SKILL.md'], ['equals\\=s', 'equals=skill/SKILL.md'],
+        ["'colon:'s", 'colon:skill/SKILL.md'], ["equals'='s", 'equals=skill/SKILL.md'],
+        ['glob:sk\\[\\?\\]', 'glob:sk[?]ill/SKILL.md'],
+        ['colon:\\*', 'colon:*star/file.md'],
       ]) {
         const result = runNativeCompletion(shell, asset, `ballin backup read codex_skills.bundle.json --file ${prefix}\t`, (fixture: string) => {
           const files = prepareMemberFixture(fixture);
@@ -169,7 +183,7 @@ describe('shell completions', () => {
     it(`preserves spaces and quoting with native ${shell} member completion`, function () {
       this.timeout(30000);
       const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
-      for (const prefix of ['skill', "'skill with", '"skill with', 'skill\\ with', 'quotes', "'quotes"]) {
+      for (const prefix of ['skill', "'skill with", '"skill with', 'skill\\ with', 'skill" with', 'quotes', "'quotes"]) {
         const member = prefix.includes('quotes') ? "quotes'and\"marks/file.md" : 'skill with spaces/SKILL.md';
         const expected = `ballin backup read codex_skills.bundle.json --file ${member}`;
         const result = runNativeCompletion(shell, asset, `ballin backup read codex_skills.bundle.json --file ${prefix}\t`, prepareMemberFixture);

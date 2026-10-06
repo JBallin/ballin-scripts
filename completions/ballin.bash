@@ -51,7 +51,8 @@ _ballin_completion_quote() {
 _ballin_completion() {
   COMPREPLY=()
   local -a candidates=() words=()
-  local candidate current _ballin_word _ballin_quote="" replacement_prefix="" prefix char member=0
+  local candidate current _ballin_word _ballin_quote="" replacement_prefix="" member=0
+  local replacement_word="${2-${COMP_WORDS[$COMP_CWORD]}}"
   local COMP_CWORD="$COMP_CWORD"
   if [[ -n "${COMP_LINE+x}" ]]; then
     _ballin_completion_words
@@ -99,13 +100,10 @@ _ballin_completion() {
       ;;
   esac
   current="${words[$COMP_CWORD]}"
-  if [[ -n "${COMP_LINE+x}" && -z "$_ballin_quote" ]]; then
-    for char in ':' '='; do
-      if [[ "$COMP_WORDBREAKS" == *"$char"* && "$current" == *"$char"* ]]; then
-        prefix="${current%${current##*"$char"}}"
-        (( ${#prefix} > ${#replacement_prefix} )) && replacement_prefix="$prefix"
-      fi
-    done
+  if [[ -n "${COMP_LINE+x}" ]]; then
+    _ballin_completion_unquote "$replacement_word"; replacement_word="$_ballin_word"
+    [[ "$current" == *"$replacement_word" ]] || return 0
+    replacement_prefix="${current:0:${#current}-${#replacement_word}}"
   fi
   for candidate in "${candidates[@]}"; do
     [[ "$candidate" == "$current"* ]] || continue

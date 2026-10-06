@@ -130,7 +130,7 @@ const nativeDriver = [
 
 // Without input this runs only the readiness/exit/cleanup protocol, for isolation review.
 const runNativeCompletion = (shell: 'zsh' | 'bash', asset: string, input?: string, prepareFixture?: (fixture: string) => void) => {
-  if (input !== undefined && !/^ballin [a-zA-Z0-9_.:= /'"\\-]+\t$/.test(input)) {
+  if (input !== undefined && !/^(?:true(?: &&|;) )?ballin [a-zA-Z0-9_.:=?*\[\] /'"\\-]+\t$/.test(input)) {
     throw new Error('Native completion input must be one fixture command ending in Tab');
   }
   const zshPath = findShell('zsh');
