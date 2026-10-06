@@ -28,8 +28,6 @@ jobs:
         with:
           node-version: '24.21.0'
           check-latest: false
-          cache: npm
-          cache-dependency-path: source/package-lock.json
       - name: Install existing shell prerequisites
         run: |
           sudo apt-get update

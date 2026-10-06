@@ -34,6 +34,49 @@ def live_group_members(group):
     return sorted(members)
 
 
+def stop_group(group):
+    # This proves only the wrapper group stopped. Detached descendants can escape
+    # that group, so failed samples must end the isolated hosted job immediately.
+    cleanup = {"group": group, "scope": "wrapper-process-group-only",
+               "remainingLivePids": [], "processGroupVerified": False,
+               "detachedDescendantsVerified": False}
+    try:
+        os.killpg(group, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    deadline = time.monotonic() + 5
+    while live_group_members(group) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    try:
+        os.killpg(group, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    deadline = time.monotonic() + 5
+    while live_group_members(group) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    cleanup["remainingLivePids"] = live_group_members(group)
+    cleanup["processGroupVerified"] = not cleanup["remainingLivePids"]
+    return cleanup
+
+
+def abort_collection(directory, result, log, stderr, reason):
+    result.update({"completedGate": False, "collectionAborted": True,
+                   "abortReason": reason, "runnerTeardownRequired": True,
+                   "runnerTeardownObserved": False, "detachedDescendantsVerified": False})
+    write(directory / "result.json", result)
+    write(ARTIFACTS / "summary.json", {"collectionComplete": False, "allGatesPassed": False,
+          "stoppedAfterSample": directory.name, "pairs": [], "abortReason": reason,
+          "isolationBoundary": "dedicated GitHub-hosted job VM",
+          "runnerTeardownRequired": True, "runnerTeardownObserved": False,
+          "detachedDescendantsVerified": False})
+    print(json.dumps(result, indent=2), flush=True)
+    print("BEGIN_SAMPLE_STDOUT " + directory.name + "\n" + log + "\nEND_SAMPLE_STDOUT", flush=True)
+    print("BEGIN_SAMPLE_STDERR " + directory.name + "\n" + stderr + "\nEND_SAMPLE_STDERR", flush=True)
+    # Only file/log evidence is retained after this point; no source probes,
+    # coverage diagnostics or later samples may run on this VM.
+    raise SystemExit(1)
+
+
 def execute(directory, command, env, budget):
     directory.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -87,28 +130,7 @@ def execute(directory, command, env, budget):
                 if timed_out or interrupted or live_group_members(process.pid):
                     # Never poll/wait (reap) before signaling: a dead leader may still
                     # have live descendants, and its retained PID prevents group reuse.
-                    group_cleanup = {"group": process.pid, "remainingLivePids": [], "verified": False}
-                    try:
-                        try:
-                            os.killpg(process.pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            pass
-                        deadline = time.monotonic() + 5
-                        while live_group_members(process.pid) and time.monotonic() < deadline:
-                            time.sleep(0.05)
-                    except (KeyboardInterrupt, InterruptedError):
-                        interrupted = True
-                    finally:
-                        # KILL is independent of whether the time/command leader exited.
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
-                    deadline = time.monotonic() + 5
-                    while live_group_members(process.pid) and time.monotonic() < deadline:
-                        time.sleep(0.05)
-                    group_cleanup["remainingLivePids"] = live_group_members(process.pid)
-                    group_cleanup["verified"] = not group_cleanup["remainingLivePids"]
+                    group_cleanup = stop_group(process.pid)
                 # A hard-limit survivor must not turn cleanup into an unbounded wait.
                 # No owned-group signal is sent after this final reap.
                 if leader_exited():
@@ -116,6 +138,8 @@ def execute(directory, command, env, budget):
         log = (directory / "stdout.log").read_text()
         result = {"command": command, "processGroup": process.pid, "exitCode": process.returncode, "outerBudgetSeconds": budget,
                   "outerBudgetExceeded": timed_out, "interrupted": interrupted, "ownedGroupCleanup": group_cleanup,
+                  "detachedDescendantsVerified": False, "runnerTeardownObserved": False,
+                  "runnerTeardownRequired": timed_out or interrupted or group_cleanup is not None or process.returncode != 0,
                   "elapsedSeconds": time.monotonic() - started, "samples": samples,
                   "summaries": re.findall(r"^\s*\d+ (?:passing|pending|failing)[^\n]*", log, re.M),
                   "timeoutLines": [line for line in log.splitlines() if "Timeout of" in line]}
@@ -149,6 +173,7 @@ def bundle():
 
 def main():
     assert sys.platform == "linux" and os.getuid() != 0
+    assert os.environ["GITHUB_ACTIONS"] == "true" and os.environ["RUNNER_ENVIRONMENT"] == "github-hosted"
     assert os.environ["GITHUB_REPOSITORY"] == "JBallin/ballin-scripts"
     assert os.environ["GITHUB_REF"] == "refs/heads/experiment/319-two-cpu-evidence"
     assert os.environ["GITHUB_ACTOR"] == "JBallin" and os.environ["GITHUB_RUN_ATTEMPT"] == "1"
@@ -167,7 +192,10 @@ def main():
     info = runtime(env)
     assert info["node"] == "v24.21.0" and info["availableParallelism"] == 2
     assert info["mocha"] == "11.7.6" and info["c8"] == "12.0.0"
-    write(ARTIFACTS / "preflight.json", {"commit": HEAD, "tree": TREE, "lockSha256": LOCK, "runtime": info, "affinity": sorted(cpus), "control": "Two-CPU inherited affinity on the standard public Ubuntu runner; not a reproduction of cgroup cpu.max timing.", "order": ORDER, "sampleBudgetSeconds": BUDGET, "gateCountCap": 4})
+    write(ARTIFACTS / "preflight.json", {"commit": HEAD, "tree": TREE, "lockSha256": LOCK, "runtime": info, "affinity": sorted(cpus), "control": "Two-CPU inherited affinity on the standard public Ubuntu runner; not a reproduction of cgroup cpu.max timing.", "order": ORDER, "sampleBudgetSeconds": BUDGET, "gateCountCap": 4,
+          "isolationBoundary": "dedicated GitHub-hosted job VM",
+          "detachedDescendantsVerified": False,
+          "abortPolicy": "First unsafe or failed gate stops collection; hosted VM teardown is required, not observed by this driver."})
     rows = []
     for index, mode in enumerate(ORDER, 1):
         assert source_unchanged() and runtime(env) == info and os.sched_getaffinity(0) == cpus
@@ -187,17 +215,22 @@ def main():
         result, log = execute(directory, command, sample_env, BUDGET)
         stderr = (directory / "stderr.log").read_text()
         result["mode"] = mode
+        result["completedStages"] = re.findall(r"^> ballin-scripts@\S+ (\S+)\s*$", log, re.M)
+        result["forwardingVerified"] = "mocha --parallel --jobs=2 " + flag in log
+        result["passingCounts"] = [int(value) for value in re.findall(r"^\s*(\d+) passing", log, re.M)]
+        terminal_gate_passed = result["exitCode"] == 0 and result["ownedGroupCleanup"] is None and not result["outerBudgetExceeded"] and not result["interrupted"] and result["passingCounts"] == [1842] and not result["timeoutLines"] and not re.search(r"^\s*[1-9]\d* (pending|failing)", log, re.M) and result["completedStages"] == ["test", "lint", "typecheck", "typecheck:analytics-worker", "test:coverage", "test:unit"] and result["forwardingVerified"]
+        if not terminal_gate_passed:
+            abort_collection(directory, result, log, stderr, "Unsafe, incomplete or failed test gate; discard the hosted job VM.")
         result["runtime"] = runtime(env)
         result["sourceUnchanged"] = source_unchanged()
         result["affinity"] = sorted(os.sched_getaffinity(0))
-        result["completedStages"] = re.findall(r"^> ballin-scripts@\S+ (\S+)\s*$", log, re.M)
         result["temporaryEntries"] = sorted(item.name for item in temporary.iterdir())
         result["fixtureLeaks"] = [name for name in result["temporaryEntries"] if name != "node-compile-cache"]
-        result["forwardingVerified"] = "mocha --parallel --jobs=2 " + flag in log
-        result["passingCounts"] = [int(value) for value in re.findall(r"^\s*(\d+) passing", log, re.M)]
-        result["completedGate"] = result["exitCode"] == 0 and result["ownedGroupCleanup"] is None and not result["outerBudgetExceeded"] and not result["interrupted"] and result["passingCounts"] == [1842] and not result["timeoutLines"] and not re.search(r"^\s*[1-9]\d* (pending|failing)", log, re.M) and result["completedStages"] == ["test", "lint", "typecheck", "typecheck:analytics-worker", "test:coverage", "test:unit"] and result["forwardingVerified"] and not result["fixtureLeaks"] and result["sourceUnchanged"]
+        result["completedGate"] = not result["fixtureLeaks"] and result["sourceUnchanged"] and result["runtime"] == info and result["affinity"] == sorted(cpus)
+        if not result["completedGate"]:
+            abort_collection(directory, result, log, stderr, "Fixture leak or source/runtime/affinity drift; discard the hosted job VM.")
         write(directory / "result.json", result)
-        # A printed gate result and original logs remain useful even when a gate fails.
+        # Completed passing gates retain their original logs and strict coverage outcome.
         print(json.dumps(result, indent=2), flush=True)
         print("BEGIN_SAMPLE_STDOUT " + directory.name + "\n" + log + "\nEND_SAMPLE_STDOUT", flush=True)
         print("BEGIN_SAMPLE_STDERR " + directory.name + "\n" + stderr + "\nEND_SAMPLE_STDERR", flush=True)
@@ -216,17 +249,14 @@ def main():
             if (coverage / name).exists():
                 shutil.copy2(coverage / name, directory / name)
         rows.append(result)
-        # Do not continue after incomplete validation, a source change, or unsafe cleanup.
-        assert result["exitCode"] is not None and not result["outerBudgetExceeded"] and not result["interrupted"]
-        assert result["sourceUnchanged"] and result["forwardingVerified"] and not result["fixtureLeaks"] and result["ownedGroupCleanup"] is None
-        assert not live_group_members(result.get("processGroup", -1))
         shutil.rmtree(temporary)
     pairs = []
     for start in [0, 2]:
         serial = next(row for row in rows[start:start+2] if row["mode"] == "serial")
         parallel = next(row for row in rows[start:start+2] if row["mode"] == "parallel2")
         pairs.append({"serialSeconds": serial["elapsedSeconds"], "parallelSeconds": parallel["elapsedSeconds"], "serialCompletedGate": serial["completedGate"], "parallelCompletedGate": parallel["completedGate"], "reductionPercent": (100 * (serial["elapsedSeconds"] - parallel["elapsedSeconds"]) / serial["elapsedSeconds"]) if serial["completedGate"] and parallel["completedGate"] else None})
-    summary = {"collectionComplete": True, "pairs": pairs, "allGatesPassed": all(row["completedGate"] for row in rows), "interpretation": "Compare outcomes and repeatability; affinity results do not independently refute a different cgroup-quota or Node24.15 environment."}
+    summary = {"collectionComplete": True, "pairs": pairs, "allGatesPassed": all(row["completedGate"] for row in rows), "detachedDescendantsVerified": False, "runnerTeardownObserved": False,
+               "interpretation": "Only fully passing gates can continue. Any failure stops collection and requires hosted VM teardown. Affinity results do not independently refute a different cgroup-quota or Node24.15 environment."}
     write(ARTIFACTS / "summary.json", summary)
     print("BENCHMARK_SUMMARY " + json.dumps(summary), flush=True)
     if not summary["allGatesPassed"]:
