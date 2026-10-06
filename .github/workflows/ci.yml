@@ -1,112 +1,64 @@
 name: CI
-
 on:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
   workflow_dispatch:
-
 permissions:
   contents: read
-
+concurrency:
+  group: experiment-319-adaptive-evidence
+  cancel-in-progress: false
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+  adaptive-evidence:
+    if: github.actor == 'JBallin' && github.ref == 'refs/heads/experiment/319-adaptive-evidence'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 140
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Check whitespace
-        run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD
-
-      - name: Check Bash syntax
+      - name: Start the bounded preparation clock
+        run: printf 'BENCH_319_JOB_STARTED_EPOCH=%s\n' "$(date +%s)" >> "$GITHUB_ENV"
+      - name: Check out measurement driver
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        timeout-minutes: 5
+        with:
+          path: driver
+          persist-credentials: false
+      - name: Check out immutable candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        timeout-minutes: 5
+        with:
+          ref: c14b98be8e27ca8f7f0810c827fc7050b4ed446f
+          path: source
+          persist-credentials: false
+      - name: Set up the older diagnostic runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        timeout-minutes: 5
+        with:
+          node-version: '24.15.0'
+          check-latest: false
+      - name: Record the older runtime root
         run: |
-          git grep -Ilz '^#!.*bash' -- . \
-            | xargs -0 -r -n1 bash -n
-
-      - name: Install shell tools
+          node -e 'process.stdout.write("BENCH_319_NODE2415_ROOT=" + require("node:path").dirname(require("node:path").dirname(process.execPath)) + "\n")' >> "$GITHUB_ENV"
+      - name: Set up the comparison runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        timeout-minutes: 5
+        with:
+          node-version: '24.21.0'
+          check-latest: false
+      - name: Record the comparison runtime root
+        run: |
+          node -e 'process.stdout.write("BENCH_319_NODE24_ROOT=" + require("node:path").dirname(require("node:path").dirname(process.execPath)) + "\n")' >> "$GITHUB_ENV"
+      - name: Install existing shell prerequisites
+        timeout-minutes: 10
         run: |
           sudo apt-get update
-          sudo apt-get install --yes shellcheck zsh
-
-      - name: Run ShellCheck
-        run: |
-          git grep -Ilz '^#!.*bash' -- . \
-            | xargs -0 -r shellcheck
-
-      - name: Run actionlint
-        run: docker run --rm -v "${PWD}:/repo:ro" --workdir /repo rhysd/actionlint:1.7.12 -color .github/workflows/*.yml
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          check-latest: true
-          cache: npm
-
-      - name: Install dependencies
+          sudo apt-get install --yes zsh shellcheck
+      - name: Install locked source dependencies
+        timeout-minutes: 10
+        working-directory: source
         run: npm ci
-
-      - name: Run complete test gate
-        id: coverage
-        run: npm test
-
-      - name: Capture coverage comparison evidence
-        id: coverage_diagnostics
-        if: >-
-          ${{ !cancelled() &&
-            hashFiles('coverage/tmp/coverage-*.json') != '' &&
-            (steps.coverage.outcome == 'failure' ||
-              (github.event_name == 'workflow_dispatch' &&
-                steps.coverage.outcome == 'success')) }}
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const { execFileSync } = require('node:child_process');
-          const { createHash } = require('node:crypto');
-          fs.writeFileSync('coverage/runtime.json', JSON.stringify({
-            commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-            tree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim(),
-            lockSha256: createHash('sha256').update(fs.readFileSync('package-lock.json')).digest('hex'),
-            node: process.version,
-            v8: process.versions.v8,
-            platform: process.platform,
-            arch: process.arch,
-            uid: process.getuid(),
-            c8: require('c8/package.json').version,
-            mocha: require('mocha/package.json').version,
-          }, null, 2) + '\n');
-          NODE
-          node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
-
-      - name: Upload coverage comparison evidence
-        if: >-
-          ${{ !cancelled() &&
-            steps.coverage_diagnostics.outcome == 'success' &&
-            (steps.coverage.outcome == 'failure' ||
-              (github.event_name == 'workflow_dispatch' &&
-                steps.coverage.outcome == 'success')) }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            coverage/runtime.json
-            coverage/coverage-final.json
-            coverage/coverage-summary.json
-          retention-days: 7
-
-      - name: Upload raw V8 coverage evidence
-        if: >-
-          ${{ !cancelled() &&
-            hashFiles('coverage/tmp/coverage-*.json') != '' &&
-            steps.coverage.outcome == 'failure' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
-          path: coverage/tmp/
-          retention-days: 7
+      - name: Prepare the owned quota fixture image
+        timeout-minutes: 10
+        run: >-
+          docker build --platform linux/amd64 --build-arg "BENCH_UID=$(id -u)"
+          --build-arg "BENCH_GID=$(id -g)" --tag ballin-319-quota:reviewed
+          driver/.github/experiments/319-adaptive
+      - name: Run the bounded adaptive comparison
+        run: python3 driver/.github/experiments/319-adaptive/measure.py "$GITHUB_WORKSPACE/source"
