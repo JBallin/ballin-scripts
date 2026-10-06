@@ -61,10 +61,10 @@ const pr = () => ({
   head: { repo: { full_name: 'JBallin/ballin-scripts' } },
   base: { repo: { full_name: 'JBallin/ballin-scripts' } },
 });
-const github = () => ({
-  repository: 'JBallin/ballin-scripts', actor: 'jballin', event_name: 'issue_comment',
+const github = (eventName = 'issue_comment', action = 'created') => ({
+  repository: 'JBallin/ballin-scripts', actor: 'jballin', event_name: eventName,
   event: {
-    action: 'synchronize', pull_request: pr(), changes: { base: { ref: { from: '' } } },
+    action, pull_request: pr(), changes: { base: { ref: { from: '' } } },
     issue: { number: 42, pull_request: { url: 'fixture' } as object | null },
     comment: { body: '/claude-review', user: { type: 'User' }, author_association: 'OWNER' },
     sender: { type: 'User' },
@@ -102,17 +102,19 @@ describe('offline Claude caller contracts', () => {
 
   it('accepts an open same-repository automatic review and excludes drafts, forks and Dependabot', () => {
     const source = job(automatic, 'review');
-    assert.isTrue(eligible(source, { github: github() }));
     const negatives = [
       (g: ReturnType<typeof github>) => { g.event.pull_request.state = 'closed'; },
       (g: ReturnType<typeof github>) => { g.event.pull_request.draft = true; },
       (g: ReturnType<typeof github>) => { g.event.pull_request.head.repo.full_name = 'contributor/fork'; },
       (g: ReturnType<typeof github>) => { g.actor = 'dependabot[bot]'; },
     ];
-    for (const change of negatives) {
-      const g = github();
-      change(g);
-      assert.isFalse(eligible(source, { github: g }), change.toString());
+    for (const action of ['opened', 'ready_for_review']) {
+      assert.isTrue(eligible(source, { github: github('pull_request', action) }));
+      for (const change of negatives) {
+        const g = github('pull_request', action);
+        change(g);
+        assert.isFalse(eligible(source, { github: g }), `${action}: ${change.toString()}`);
+      }
     }
   });
 
@@ -160,33 +162,37 @@ describe('offline Claude caller contracts', () => {
     assert.match(eligibility, /^    outputs:\n      eligible: \$\{\{ steps\.eligibility\.outputs\.eligible \}\}\n(?=    [\w-]+:)/mu);
     assert.equal([...eligibility.matchAll(/^    outputs:/gmu)].length, 1, 'only one canonical outputs map is supported');
     assert.notMatch(eligibility, /^    ['"]outputs['"]:/mu, 'quoted outputs keys are unsupported');
-    const step = eligibility.match(/^      - name: [^\n]+\n        id: eligibility\n([\s\S]*?)(?=^      - |$(?![\s\S]))/mu);
-    assert.exists(step, 'the preflight producer must retain its eligibility step ID');
-    const source = step![1];
-    assert.match(source, /^          GH_TOKEN: \$\{\{ github\.token \}\}$/mu);
-    assert.match(source, /PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \|\| github\.event\.issue\.number \}\}/u);
-    assert.match(source, /REPO: \$\{\{ github\.repository \}\}/u);
-    assert.match(source, /^          set -euo pipefail$/mu);
-    // Bind the fetched response, evaluated filter and emitted result together.
-    // An unrelated filter or an unconditional eligible=true must not substitute.
-    const pipeline = source.match(/^          pr=\$\(timeout 30s gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"\)\n          eligible=\$\(printf '%s' "\$pr" \| jq -er --arg repo "\$REPO" --argjson number "\$PR_NUMBER" '\n([\s\S]*?)'\)\n          printf 'eligible=%s\\n' "\$eligible" >> "\$GITHUB_OUTPUT"\n/mu);
-    assert.exists(pipeline, 'the jq result must be assigned to eligible and immediately emitted');
-    assert.equal([...eligibility.matchAll(/^\s+eligible=/gmu)].length, 1, 'eligibility must not be overwritten');
-    assert.equal([...eligibility.matchAll(/\bGITHUB_OUTPUT\b/gu)].length, 1, 'only the canonical checked result may be emitted');
-    const filter = pipeline![1].trim();
-    assert.notMatch(filter, /#/u, 'comments are unsupported in this bounded preflight filter');
-    assert.deepEqual(filter.split('\n').slice(0, 4).map((line: string) => line.trim()), [
-      'if type != "object" then error("Invalid PR response")',
-      'elif (.number | type) != "number" or .number != $number',
-      'then error("Unexpected PR number")',
-      'else',
-    ], 'the active response guards must precede the eligibility predicate');
-    assert.equal(filter.split('\n').at(-1)?.trim(), 'end | tostring');
-
-    // Evaluate the actual predicate's field equalities and conjunctions in Node.
-    // Response/error guards and shell wiring above are structural assertions;
-    // these fixtures do not execute Bash or validate the jq language/runtime.
-    const predicate = filter.match(/\belse\s+([\s\S]*?)\s+end\s*\|\s*tostring/u)![1];
+    const steps = eligibility.match(/^    steps:\n([\s\S]*)$/mu);
+    assert.exists(steps, 'missing canonical preflight steps');
+    const source = steps![1].trimEnd();
+    const capturedFilter = source.match(/jq -er --arg repo "\$REPO" --argjson number "\$PR_NUMBER" '\n([\s\S]*?)'\)/u);
+    assert.exists(capturedFilter, 'missing preflight filter');
+    const capturedPredicate = capturedFilter![1].match(/^            else\n([\s\S]*?)\n            end \| tostring$/mu);
+    assert.exists(capturedPredicate, 'missing canonical eligibility predicate');
+    const predicate = capturedPredicate![1];
+    const filter = [
+      '            if type != "object" then error("Invalid PR response")',
+      '            elif (.number | type) != "number" or .number != $number',
+      '              then error("Unexpected PR number")',
+      '            else', predicate, '            end | tostring',
+    ].join('\n');
+    // Exact critical-block protection plus representative predicate behavior.
+    // This is not execution of Bash/jq or proof about arbitrary source forms.
+    const expected = [
+      '      - name: Check PR eligibility',
+      '        id: eligibility',
+      '        env:',
+      '          GH_TOKEN: ${{ github.token }}',
+      '          REPO: ${{ github.repository }}',
+      '          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}',
+      '        run: |',
+      '          set -euo pipefail',
+      '          pr=$(timeout 30s gh api "repos/$REPO/pulls/$PR_NUMBER")',
+      "          eligible=$(printf '%s' \"$pr\" | jq -er --arg repo \"$REPO\" --argjson number \"$PR_NUMBER\" '",
+      `${filter}')`,
+      "          printf 'eligible=%s\\n' \"$eligible\" >> \"$GITHUB_OUTPUT\"",
+    ].join('\n');
+    assert.equal(source, expected, 'preflight steps must retain the complete canonical critical block');
     const expression = predicateExpression(predicate);
     const evaluate = (response: object): boolean => Boolean(vm.runInNewContext(expression, {
       response, repo: 'JBallin/ballin-scripts',
@@ -220,9 +226,8 @@ describe('offline Claude caller contracts', () => {
 
   it('refreshes on pushes and base retargets, excluding other edits, forks and closed PRs', () => {
     const source = job(status, 'status');
-    assert.isTrue(eligible(source, { github: github() }));
-    const retarget = github();
-    retarget.event.action = 'edited';
+    assert.isTrue(eligible(source, { github: github('pull_request', 'synchronize') }));
+    const retarget = github('pull_request', 'edited');
     retarget.event.changes.base.ref.from = 'main';
     assert.isTrue(eligible(source, { github: retarget }));
     for (const change of [
@@ -231,7 +236,7 @@ describe('offline Claude caller contracts', () => {
       (g: ReturnType<typeof github>) => { g.event.pull_request.state = 'closed'; },
       (g: ReturnType<typeof github>) => { g.event.pull_request.head.repo.full_name = 'contributor/fork'; },
     ]) {
-      const g = github();
+      const g = github('pull_request', 'synchronize');
       change(g);
       assert.isFalse(eligible(source, { github: g }), change.toString());
     }

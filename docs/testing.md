@@ -37,6 +37,11 @@ its active ordered response guards without comments. Secret access must retain
 the approved dot reference; indexed access is rejected. Alternative valid YAML,
 shell, jq, or Actions spellings intentionally fail closed until their coverage
 is extended and reviewed.
+The manual preflight's single step, authentication environment, shell prologue,
+API capture, filter assignment, and final output form one canonical critical
+block. These checks protect that source form and representative predicate
+behavior; they do not prove arbitrary YAML or shell behavior. Eligibility
+fixtures use each caller's configured event names and actions.
 
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
