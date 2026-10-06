@@ -53,7 +53,21 @@ checkpoint receipts, or configurable layouts.
 
 Repository bootstrap is deliberately strict. Ballin creates a private,
 auto-initialized repository through `/user/repos` (`private:true`,
-`auto_init:true`) and accepts only GitHub's expected seed: a single root commit
+`auto_init:true`, `has_issues:false`, `has_wiki:false`, `has_projects:false`).
+After validating the new repository's identity, it sends one
+`PATCH /repos/{owner}/{repo}` with `has_pull_requests:false`; this field is
+supported by the update endpoint, not repository creation. Setup requires a
+successful response matching the repository node ID, name, private visibility,
+and personal owner, with `has_pull_requests:false`. Missing, malformed,
+mismatched, or unsuccessful responses stop setup without retrying the write.
+The effective credential needs Administration (write) for this update;
+Repository creation (write) alone can allow creation without allowing the update.
+Ballin does not create credentials or expand permissions. Feature settings are
+never changed by reconnect, maintenance, or ordinary backups. A failed settings
+step retains creation evidence and the recovery URL without deleting the partial
+repository or saving local linkage. Transport cleanup failures also stop setup.
+
+Bootstrap accepts only GitHub's expected seed: a single root commit
 containing one regular `README.md`. Against that exact head, one conditional
 commit adds `.ballin-backup.json` and replaces the seed README with Ballin's
 guide. Ballin verifies the resulting tree and marker before saving the repository

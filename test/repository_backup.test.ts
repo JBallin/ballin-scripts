@@ -21,7 +21,7 @@ describe('repository backup lifecycle', function() {
   const saveConfig = (value: unknown): void => fs.writeFileSync(configPath, `${JSON.stringify(value, null, 2)}\n`);
   const rulesetRequests = () => state().requests.filter((r) => r.endpoint.includes('/rulesets'));
   const rulesetWrites = () => rulesetRequests().filter((r) => r.method === 'POST');
-  const mutations = () => state().requests.filter((r) => r.endpoint === 'user/repos'
+  const mutations = () => state().requests.filter((r) => r.method === 'PATCH' || r.endpoint === 'user/repos'
     || r.payload?.query?.includes('BallinPublish') || (r.endpoint.includes('/rulesets') && r.method === 'POST'));
   const publications = () => mutations().filter((r) => r.endpoint === 'graphql');
   const remote = (name: string): string | undefined => {
@@ -86,7 +86,7 @@ describe('repository backup lifecycle', function() {
         const requests = JSON.parse(fs.readFileSync(${JSON.stringify(statePath)}, 'utf8')).requests;
         const request = requests.at(-1);
         const target = ${JSON.stringify(target)};
-        const matches = target === 'all' || (target === 'ruleset-post'
+        const matches = (target === 'feature-patch' && request?.method === 'PATCH') || target === 'all' || (target === 'ruleset-post'
           ? request?.endpoint.endsWith('/rulesets') && request?.method === 'POST' : false) || request?.endpoint === target
           || request?.endpoint.includes(target) || request?.payload?.query?.includes(target);
         if (matches) {
@@ -1179,6 +1179,36 @@ describe('repository backup lifecycle', function() {
     assert.isNull(config().backup.repository); assert.isUndefined(cached());
   });
 
+  for (const mode of ['denied', 'reject', 'ambiguous', 'malformed']) {
+    it(`preserves recovery URL and avoids duplicate creation after ${mode} feature update`, () => {
+      unconfigured(); seedCache('zshrc.sh', 'cached before setup\n');
+      const value = state(); value.exists = false; value.faults.features = mode; saveState(value);
+      const result = run(['setup'], 'y\ncreate\n\nn\ny\n');
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, 'pull-request settings step');
+      assert.include(result.stdout, 'Administration (write)');
+      assert.include(result.stdout, 'Repository creation completed at https://github.com/fixture-user/ballin-backups');
+      assert.include(result.stdout, 'initialization is unconfirmed');
+      assert.isNull(config().backup.repository); assert.equal(cached(), 'cached before setup\n');
+      assert.lengthOf(publications(), 0); assert.lengthOf(rulesetWrites(), 0);
+      const retry = run(['setup'], 'y\ncreate\n\nn\ny\n');
+      assert.equal(retry.status, 1);
+      assert.lengthOf(state().requests.filter((r) => r.endpoint === 'user/repos'), 1);
+      assert.lengthOf(state().requests.filter((r) => r.method === 'PATCH'), 1);
+    });
+  }
+  it('retains creation and cleanup failure after feature update without saving linkage', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\n', {}, transportCleanupFailure('feature-patch'));
+    assertTransportCleanupFailed(result);
+    assert.include(result.stdout, 'pull-request settings step');
+    assert.include(result.stdout, 'Repository creation completed');
+    assert.isNull(config().backup.repository); assert.lengthOf(publications(), 0);
+  });
+  it('does not change feature settings when reconnecting an existing backup', () => {
+    unconfigured(); ok(run(['setup'], 'y\nreconnect\n\nn\ny\n'));
+    assert.lengthOf(state().requests.filter((r) => r.method === 'PATCH'), 0);
+  });
   it('retains confirmed protection without linkage after its transport cleanup fails', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n', {}, transportCleanupFailure('ruleset-post'));
@@ -1518,7 +1548,7 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, '"update.backup" set to: "false"\nBackup setup complete.\n');
     assertSavedSensitiveChoice(result, 'false');
     assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
-    assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 3);
+    assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 4);
     assert.isBelow(result.stdout.indexOf('Selected GitHub.com account: fixture-user'), result.stdout.indexOf('Confirm this destination'));
     assert.notInclude(result.stdout, 'zshrc.sh:');
     assert.include(result.stdout, 'GitHub branch protection enabled.');
@@ -1552,7 +1582,7 @@ describe('repository backup lifecycle', function() {
       assert.deepEqual(config().backup.repository, fixtureDestination); assert.isUndefined(cached());
       assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
       assert.equal(state().requests.filter((request) => request.endpoint === 'user/repos').length, 1);
-      assert.equal(rulesetWrites().length, 1); assert.equal(mutations().length, 3);
+      assert.equal(rulesetWrites().length, 1); assert.equal(mutations().length, 4);
     });
   });
   it('revalidates and protects a linked repository after an earlier permission-limited attempt', () => {
@@ -1818,7 +1848,7 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n', { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
     assert.equal(result.status, 1); assert.deepEqual(config(), before); assert.include(result.stdout, 'Reconnect to the existing backup');
     assert.notInclude(result.stdout, '"backup.includeSensitive" set to:');
-    ok(run(['setup'], 'y\nreconnect\n\nn\ny\nn\n')); assert.equal(mutations().length, 3);
+    ok(run(['setup'], 'y\nreconnect\n\nn\ny\nn\n')); assert.equal(mutations().length, 4);
     assert.equal(rulesetWrites().length, 1);
   });
   it('identifies an ambiguous creation without retrying or linking an unconfirmed seed', () => {
