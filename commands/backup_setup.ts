@@ -66,6 +66,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     if (configured.kind === 'unconfigured') {
       writeStdoutLine('Ballin backup is optional. Backups are stored in a private GitHub repository.');
       writeStdoutLine('GitHub and anyone authorized to access the repository can read its contents.');
+      writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+      writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
       const start = readPromptLine('Set up optional private backups now? [y/N] ');
       if (start.eof || !/^[yY]$/u.test(start.text)) {
         writeStdoutLine('Backup setup skipped. Run `ballin backup setup` when you are ready.');
@@ -96,8 +98,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
         return true;
       };
-      // Inherited Git diagnostics may leave the shared terminal cursor mid-line.
-      return options.maintenanceOnly ? withTemporaryStatus('\r\nUpdating...', maintain) : maintain();
+      return maintain();
     }
     const account = readRepositoryAccount();
     writeStdoutLine();
@@ -126,7 +127,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         candidate = restorePortablePreferences(candidate, originalConfig, remote);
       }
       writeStdoutLine('Stop backups from other installations before running `ballin backup` here.');
-      writeStdoutLine('Reconnecting does not mark local files as matching the backup or allow overwriting different saved data.');
+      writeStdoutLine('Reconnect can recover supported Ballin preferences; existing local choices take precedence.');
+      writeStdoutLine('Reconnect does not authorize overwriting different saved data.');
     } else if (found && !found.redirected) {
       writeStdoutLine('That repository name is already in use. Reconnect to a valid backup, or explicitly choose another name.');
       return false;
@@ -137,6 +139,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const includeSensitive = selectSensitiveSources();
     if (includeSensitive === null) return cancelled();
     if (includeSensitive === undefined) return false;
+    writeStdoutLine(`Confirming ${previous ? 'reconnects to' : 'creates'} this backup, clears local backup comparison state, and saves these choices.`);
     const confirmation = readPromptLine('Confirm this destination and source selection? [y/N] ');
     if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) return cancelled();
     remoteMayExist = true;

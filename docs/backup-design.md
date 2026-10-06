@@ -206,7 +206,11 @@ content. `backup list` and `backup open` fetch only marker content. List present
 current canonical selectors actually present, distinguishes retired names,
 omits reserved metadata, and counts unexpected entries without disclosing their
 names. Retired and unexpected content require deliberate inspection through
-`backup open`, which prints the validated destination URL before opening it.
+`backup open`, which shows immediate progress through destination validation and
+browser dispatch, then confirms the verified URL after successful dispatch.
+Capable terminals replace the progress line; redirected output uses a plain
+progress line on stderr and the completion message on stdout. Browser failures
+retain the verified URL in the manual-open error.
 These commands use immutable blob IDs and the same content validation.
 Unrequested snapshot contents are not validated. Inventory-only inspection still
 requires the complete tree, marker and final revision checks; it cannot infer
@@ -387,9 +391,10 @@ filesystem operations, and decoded content is never executed or restored.
 Bundle snapshots use `.bundle.json` names. Plain snapshots retain their existing
 names. Old bundle names are retired without read aliases and are retained if
 present; they can coexist with new bundle filenames. The flat repository layout
-and backup marker version remain unchanged. Bundle listings supply an inspection
-hint; raw and file-list hints appear only when stdin, stdout and stderr are
-terminals. Raw hints require a known bundle name and a validated archive.
+and backup marker version remain unchanged. Snapshot listings offer the
+snapshot-read command. Raw and file-list inspection hints require a validated
+archive and appear only when stdin, stdout and stderr are terminals. Raw hints
+also require a known bundle name.
 
 Reconciliation uses exact stored bytes and the ordinary conflict rules. No
 format-conversion exception or semantic JSON normalization applies. Old-name
@@ -422,8 +427,9 @@ blobs. Remote-reader resource bounds remain separate follow-up work.
 Codex and Claude Code traversal and reads use a private synchronous cwd-pinning
 helper. Each directory identity is captured from its pinned parent and verified after entry;
 callbacks use only the pinned directory or immediate names. Leaf opens reject
-symlinks; review opens and closes regular files to check readability without
-reading contents. Caller cwd identity is verified after restoration. Restoration
+symlinks; review opens and closes regular payload files to check readability
+without reading their contents. Synced skill selection also reads bounded
+manifest metadata. Caller cwd identity is verified after restoration. Restoration
 failure is fatal and bypasses optional-source handling. These checks pin selected
 directory objects; they do not provide an atomic snapshot of concurrent edits.
 
@@ -433,9 +439,13 @@ packages.
 The same source-specific selection governs discovery, review, and capture.
 Skills require an exact-case regular `SKILL.md` in an immediate nonhidden personal
 folder or a `synced/<collection>/<skill>/` package. Collection names are generic
-namespaces; sync manifests and origin labels do not decide eligibility. All
-validated synced packages are included, including defaults, downloaded and
-organization-provided material, and plugin-origin skills. Container manifests,
+namespaces. Synced packages require a unique manifest name matching the folder
+and exact source `plugin`; all other origins and unlisted packages are omitted.
+The same pinned traversal reads regular single-link collection manifests with
+an aggregate 1 MiB / 8,192-record metadata budget. Invalid or ambiguous manifests
+make the entire skills source unavailable, retaining its saved bundle. Discovery
+and review read only selection metadata and file attributes, not skill bodies.
+Container manifests,
 staging/completion/discarded state, reserved personal names, hidden root folders,
 plugin-shaped folders, and legacy
 manifest-managed roots are excluded as specified in the
@@ -450,11 +460,20 @@ supporting dependencies from sensitive content; visible files can contain
 credentials too. Provider-specific managed, plugin, legacy, Git, and link
 boundaries define exclusions instead of guessed secret filenames. Skill content
 uses the existing sensitive-source consent and private-repository access boundary,
-with no scanning or redaction claim. Synced package paths retain their collection
-namespace; equal skill names in different collections remain distinct. The
-same v2 writer, serialized-byte cap, and visited-entry cap govern both locations.
+with no scanning or redaction claim. Claude skill archive paths use direct
+`<skill>/` roots; the synced collection prefix is removed only from stored member
+paths, while pinned filesystem reads retain the original source paths. Selected
+skill directory names must be unique across synced collections and personal
+folders. A collision makes the whole skills source unavailable and retains its
+previous bundle, without merging packages or choosing one origin. The same v2
+writer, serialized-byte cap, and visited-entry cap govern both locations.
+Old namespaced v2 bundles remain readable without aliases or schema conversion.
+Normalizing an existing bundle is an ordinary byte change subject to the existing
+cache and conflict rules; sync-directory churn alone does not change normalized
+capture bytes. No source-identity metadata or generated manifest is added.
 Origin labels cannot establish ownership or that downloaded defaults remain
-unedited, so there is no default-name or origin filter.
+unedited. This explicit plugin-origin policy excludes edited defaults too;
+there is no default-name heuristic or edit-detection mechanism.
 
 The current updater compares the Git blob identities of the source-definition
 file before and after a successful update. Changed or unavailable comparison

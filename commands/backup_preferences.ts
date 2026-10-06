@@ -112,30 +112,20 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   writeStdoutLine();
   writeStdoutLine(available.length ? 'Sensitive sources available now:' : 'Sensitive sources available now: none.');
   available.forEach((line) => writeStdoutLine(`  ${line}`));
-  if (absent.length) writeStdoutLine(`Not found now: ${absent.join(', ')}`);
+  if (absent.length) writeStdoutLine(`Sources not found now: ${absent.length}.`);
   if (unavailable.length) writeStdoutLine(`Unavailable now: ${unavailable.join(', ')}`);
-  writeStdoutLine('pipx installation metadata may contain original URLs, credentials, and backend arguments.');
-  writeStdoutLine('This review checks paths and availability; it reads no file contents and runs no collectors.');
+  writeStdoutLine('Ballin checks local paths and availability, reading synced Claude skill manifests to select plugin packages.');
+  writeStdoutLine('This preview does not read selected file contents or create backup snapshots.');
   return true;
 };
-// Selection and non-content inspection are shared; destination confirmation belongs to its caller.
+// Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('\nTool inventories and filtered preferences can include private tools, identities, paths, or URLs.');
-  writeStdoutLine('Even without sensitive sources, backups may contain secrets.');
-  writeStdoutLine('Sensitive sources include raw shell, Git, and editor configuration,');
-  writeStdoutLine('Codex and Claude Code configuration, Node.js version files (.nvmrc),');
-  writeStdoutLine('and pipx installation metadata.');
-  writeStdoutLine('Codex includes whole configuration files (including embedded trust settings),');
-  writeStdoutLine('hook definitions, recursive skills/rules/agents, and the personal marketplace manifest.');
-  writeStdoutLine('Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
-  writeStdoutLine('Claude Code includes personal CLAUDE.md, Markdown rules/agents/commands, and eligible skills.');
-  writeStdoutLine('Claude skills include downloaded defaults, organization-provided and plugin-origin synced packages.');
-  writeStdoutLine('Skill folders include hidden files, executable scripts, and binary supporting assets.');
-  writeStdoutLine('Settings, credential stores, runtime state, sync bookkeeping, and plugin installations are excluded.');
-  writeStdoutLine('Selected content may contain secrets; Ballin does not scan or redact it.');
-  writeStdoutLine('Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
-  writeStdoutLine('Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md');
-  const sensitive = readPromptLine(`Also include sensitive sources? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
+  writeStdoutLine('\nSensitive sources may contain credentials or other private information.');
+  writeStdoutLine('Ballin does not scan or redact them.');
+  writeStdoutLine('Your choice also covers future supported sources.');
+  writeStdoutLine('Synced Claude skills include plugin-origin packages only; defaults and other origins are excluded.');
+  writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
+  const sensitive = readPromptLine(`Include sensitive sources? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
   if (sensitive.eof) return null;
   const includeSensitive = sensitive.text === '' ? defaultIncluded : /^[yY]$/u.test(sensitive.text);
   if (includeSensitive) {
@@ -143,8 +133,7 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
     if (!reviewSensitiveSources(process.env.HOME, process.env)) return undefined;
   }
   writeStdoutLine(`\nSelected: inventory and filtered preferences; sensitive sources ${includeSensitive ? 'included' : 'excluded'}.`);
-  writeStdoutLine('This choice applies to future backups as files, symlink targets, and installed metadata change.');
-  writeStdoutLine('Ballin does not detect or redact credentials. Excluding sources does not remove saved files or history.');
+  writeStdoutLine('Excluding sources does not remove saved files or history.');
   return includeSensitive;
 };
 

@@ -4,6 +4,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { snapshotDefinitions, observeSnapshotSources } = require('../commands/backup_snapshots.ts');
 const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError, SnapshotCwdError, sourceStat } = require('../commands/recursive_snapshot.ts');
+const { readDirectorySnapshot } = require('../commands/directory_snapshot.ts');
 import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 
 const collectorPath = path.resolve(__dirname, '../commands/recursive_snapshot.ts');
@@ -158,6 +159,79 @@ describe('Codex durable snapshots', () => {
       assert.equal(capture(`codex_${directory}.bundle.json`).status, 0);
     });
   });
+
+  for (const name of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json']) {
+    it(`omits standard OpenAI skill metadata while preserving resources in ${name}`, () => {
+      const active = path.join(homeDir, 'active codex');
+      const skillRoot = name === 'codex_skills.bundle.json' ? path.join(active, 'skills') : path.join(homeDir, '.agents/skills');
+      const files = new Map<string, Buffer>([
+        ['demo/SKILL.md', Buffer.from('# Synthetic skill\r\nlast')],
+        ['demo/scripts/run.sh', Buffer.from('#!/bin/sh\necho synthetic\n')],
+        ['demo/references/guide.md', Buffer.from('Synthetic reference\n')],
+        ['demo/assets/icon.bin', Buffer.from([0, 255, 128, 10])],
+        ['demo/.hidden', Buffer.from('Hidden support')],
+        ['demo/agents/other.yaml', Buffer.from('keep: true\n')],
+        ['demo/agents/openai.yml', Buffer.from('different extension')],
+        ['demo/agents/nested/openai.yaml', Buffer.from('nested resource')],
+        ['demo/references/agents/openai.yaml', Buffer.from('reference resource')],
+        ['demo/openai.yaml', Buffer.from('root resource')],
+        ['agents/openai.yaml', Buffer.from('tree-root resource')],
+        ['case/agents/OpenAI.yaml', Buffer.from('different spelling')],
+        ['directory/agents/openai.yaml/keep.txt', Buffer.from('directory contents')],
+        ['binary/SKILL.md', Buffer.from('# Second synthetic skill\n')],
+      ]);
+      const omitted = new Map<string, Buffer>([
+        ['demo/agents/openai.yaml', Buffer.from('interface:\n  display_name: Synthetic\ndependencies:\n  tools: []\npolicy:\n  allow_implicit_invocation: false\n')],
+        ['binary/agents/openai.yaml', Buffer.from([0, 255, 128])],
+      ]);
+      for (const [relative, bytes] of [...files, ...omitted]) write(relative, bytes, skillRoot);
+      const script = path.join(skillRoot, 'demo/scripts/run.sh');
+      fs.chmodSync(script, 0o755);
+      const env = { CODEX_HOME: active };
+      const expected = [...files.keys()].sort();
+      assert.deepEqual(recursiveFiles(skillRoot, false, true), expected);
+      assert.deepEqual(reviewRecursiveFiles(skillRoot, false, true), expected);
+      const result = capture(name, env);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(capture(name, env).stdout, result.stdout);
+      const { version, entries } = readDirectorySnapshot(Buffer.from(result.stdout));
+      assert.equal(version, 2);
+      assert.deepEqual(entries.map((entry: { path: string }) => entry.path), expected);
+      for (const entry of entries) {
+        assert.deepEqual(entry.bytes, files.get(entry.path), entry.path);
+        assert.equal(entry.executable, entry.path === 'demo/scripts/run.sh', entry.path);
+      }
+      for (const [relative, bytes] of [...files, ...omitted]) assert.deepEqual(fs.readFileSync(path.join(skillRoot, relative)), bytes);
+      assert.equal(fs.statSync(script).mode & 0o777, 0o755);
+    });
+  }
+
+  it('skips metadata-only skills without opening metadata and still counts visited entries', () => {
+    const skillRoot = path.join(root, 'skills');
+    write('skills/demo/agents/openai.yaml', 'not: [valid YAML');
+    const originalOpen = fs.openSync;
+    try {
+      fs.openSync = () => { throw new Error('Excluded metadata must not be opened'); };
+      assert.equal(discover('codex_skills.bundle.json').status, 'absent');
+      assert.deepEqual(reviewRecursiveFiles(skillRoot, false, true), []);
+      assert.throws(() => recursiveSnapshot(skillRoot, false, true), /no regular files/);
+    } finally { fs.openSync = originalOpen; }
+    assert.deepEqual(recursiveFiles(skillRoot, false, true, { maxEntries: 3 }), []);
+    assert.throws(() => recursiveFiles(skillRoot, false, true, { maxEntries: 2 }), SnapshotLimitError);
+    assert.equal(fs.readFileSync(path.join(skillRoot, 'demo/agents/openai.yaml'), 'utf8'), 'not: [valid YAML');
+  });
+
+  for (const directory of ['rules', 'agents']) {
+    it(`preserves OpenAI YAML paths outside Codex skill sources: ${directory}`, () => {
+      const content = 'synthetic: retained\n';
+      write(`${directory}/demo/agents/openai.yaml`, content);
+      const result = capture(`codex_${directory}.bundle.json`);
+      assert.equal(result.status, 0, result.stderr);
+      const { entries } = readDirectorySnapshot(Buffer.from(result.stdout));
+      assert.deepEqual(entries.map((entry: { path: string }) => entry.path), ['demo/agents/openai.yaml']);
+      assert.deepEqual(entries[0].bytes, Buffer.from(content));
+    });
+  }
 
   it('does not follow descendant or top-level file symlinks', () => {
     write('outside', 'outside', homeDir);

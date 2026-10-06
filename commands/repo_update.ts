@@ -26,9 +26,9 @@ const runGitQuiet = (args: string[], cwd: string): number | null => (
   runGit(args, cwd, 'ignore')
 );
 
-const runFetch = (cwd: string): number | null => (
+const runFetch = (cwd: string, quiet: boolean): number | null => (
   runGit(
-    ['fetch', 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`],
+    ['fetch', ...(quiet ? ['--quiet'] : []), 'origin', `+${updateBranch}:refs/remotes/origin/${updateBranch}`],
     cwd,
     ['inherit', 'ignore', 'inherit'],
   )
@@ -71,13 +71,13 @@ const checkoutUpdateBranch = (repoDir: string): boolean => {
   return true;
 };
 
-const updateInstalledRepo = (repoDir: string): boolean => {
+const updateInstalledRepo = (repoDir: string, options: { quietFetch?: boolean } = {}): boolean => {
   if (!isDirectory(repoDir)) {
     writeStdoutLine(`install directory not found: ${repoDir}`);
     return false;
   }
 
-  if (runFetch(repoDir) !== 0) {
+  if (runFetch(repoDir, options.quietFetch === true) !== 0) {
     writeStdoutLine(`git fetch origin ${updateBranch} failed`);
     return false;
   }

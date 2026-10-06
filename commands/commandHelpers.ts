@@ -109,8 +109,8 @@ const readPromptLine = (prompt: string): PromptLine => {
   return { text: Buffer.from(bytes).toString('utf8'), eof: true };
 };
 
-const progress = (text: string): void => {
-  process.stdout.write(`\n${terminalEmphasis(`==> ${text}`, 'bold')}\n`);
+const progress = (text: string, leadingNewline = true): void => {
+  process.stdout.write(`${leadingNewline ? '\n' : ''}${terminalEmphasis(`==> ${text}`, 'bold')}\n`);
 };
 
 const reportSpawnError = (command: string, error: Error): number => {
