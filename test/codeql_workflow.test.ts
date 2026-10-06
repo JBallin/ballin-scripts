@@ -3,10 +3,18 @@ const path = require('path');
 
 const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'codeql.yml'), 'utf8');
 
-describe('staged CodeQL workflow', () => {
-  it('remains manual-only until the separately approved activation', () => {
+describe('CodeQL workflow', () => {
+  it('scans all main pull requests and pushes, weekly, and on demand', () => {
     const triggers = workflow.match(/^on:\n([\s\S]*?)(?=^\S)/mu)?.[1].trim();
-    assert.equal(triggers, 'workflow_dispatch:');
+    assert.equal(triggers, [
+      'pull_request:',
+      '    branches: [main]',
+      '  push:',
+      '    branches: [main]',
+      '  schedule:',
+      "    - cron: '23 4 * * 2'",
+      '  workflow_dispatch:',
+    ].join('\n'));
   });
 
   it('preserves both language analyses, required job names, and result categories', () => {
