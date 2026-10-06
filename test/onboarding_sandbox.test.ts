@@ -139,7 +139,7 @@ describe('onboarding sandbox', function() {
     assert.equal(update.status, 0, update.stdout + update.stderr);
     assert.include(update.stdout, 'Checking Ballin readiness');
     assert.include(update.stdout, "You're ballin.");
-    assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'git:fetch origin +main:refs/remotes/origin/main');
+    assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'git:fetch --quiet origin +main:refs/remotes/origin/main');
     assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'softwareupdate:-ia');
     assert.isEmpty(remote().requests);
   });

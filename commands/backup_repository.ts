@@ -1,6 +1,6 @@
 const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
+const { repositoryCacheDirectory } = require('./backup_cache.ts');
 const { makeTempFile, removeTempFile, runCommand, writeStderrLine } = require('./commandHelpers.ts');
 const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
 const {
@@ -297,19 +297,22 @@ const inspect = (
       commitUrl: `https://github.com/${info.login}/${info.destination.name}/commit/${info.revision.head}`,
     };
     info.revision.entries = readInventory(info, options);
+    if (seed) {
+      if (info.revision.parents.length !== 0 || info.revision.entries.length !== 1
+        || info.revision.entries[0].path !== repositoryReadmeFileName) throw new RepositoryError('unsupported');
+    } else {
+      const expectedMarker = markerBytes(destination);
+      const markerEntry = info.revision.entries.find((entry) => entry.path === repositoryMarkerFileName);
+      if (!markerEntry || markerEntry.size !== expectedMarker.length) throw new RepositoryError('unsupported');
+      const marker = readBlob(info, markerEntry, options);
+      if (!marker.equals(expectedMarker)) throw new RepositoryError('unsupported');
+      inspected.snapshots.set(repositoryMarkerFileName, marker);
+    }
     for (const entry of info.revision.entries) {
       if ((entry.classification === 'current' && (snapshot === undefined || entry.path === snapshot))
-        || entry.path === repositoryMarkerFileName || (seed && entry.path === repositoryReadmeFileName)) {
+        || (seed && entry.path === repositoryReadmeFileName)) {
         inspected.snapshots.set(entry.path, readBlob(info, entry, options));
       }
-    }
-    if (seed) {
-      if (info.revision.parents.length !== 0 || info.revision.entries.length !== 1 || !inspected.snapshots.has(repositoryReadmeFileName)) {
-        throw new RepositoryError('unsupported');
-      }
-    } else {
-      const marker = inspected.snapshots.get(repositoryMarkerFileName);
-      if (!marker || !marker.equals(markerBytes(destination))) throw new RepositoryError('unsupported');
     }
     assertCurrent(inspected, options);
     return { status: 'complete', read: inspected };
@@ -638,8 +641,6 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
     throw failure;
   }
 };
-const repositoryCacheDirectory = (root: string, destination: RepositoryDestination): string => path.join(root,
-  crypto.createHash('sha256').update(JSON.stringify(['github.com', destination.ownerId, destination.id, destination.branch])).digest('hex'));
 const repositoryUrl = (destination: RepositoryDestination, account: Account): string => {
   if (destination.ownerId !== account.id) throw new RepositoryError('identity');
   return `https://github.com/${account.login}/${destination.name}`;

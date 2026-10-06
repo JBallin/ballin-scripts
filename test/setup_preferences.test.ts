@@ -99,6 +99,8 @@ fs.readFileSync = (file, ...args) => {
     assert.include(result.stdout, 'Not found now: bash_profile.sh, bashrc.sh, claude_agents.bundle.json, claude_commands.bundle.json, claude_instructions, claude_rules.bundle.json, claude_skills.bundle.json, codex_agents.bundle.json, codex_AGENTS.md, codex_AGENTS.override.md, codex_config.toml, codex_hooks.json, codex_marketplace.json, codex_profiles.bundle.json, codex_rules.bundle.json, codex_skills.bundle.json, codex_user_skills.bundle.json, gitconfig, gitignore_global, nanorc, nvmrc, profile.sh, vimrc, zprofile.sh\n');
     assert.include(result.stdout, 'Unavailable now: vs_keybindings, vs_settings, vsI_keybindings, vsI_settings\n');
     assert.include(result.stdout, 'pipx installation metadata may contain original URLs, credentials, and backend arguments.');
+    assert.include(result.stdout, 'may read bounded Claude skill selection metadata.');
+    assert.include(result.stdout, 'It reads no skill bodies or other source contents and runs no collectors.');
     assert.notInclude(result.stdout, 'fixture private content');
   });
 

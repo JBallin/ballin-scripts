@@ -115,10 +115,11 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   if (absent.length) writeStdoutLine(`Not found now: ${absent.join(', ')}`);
   if (unavailable.length) writeStdoutLine(`Unavailable now: ${unavailable.join(', ')}`);
   writeStdoutLine('pipx installation metadata may contain original URLs, credentials, and backend arguments.');
-  writeStdoutLine('This review checks paths and availability; it reads no file contents and runs no collectors.');
+  writeStdoutLine('This review checks paths and availability and may read bounded Claude skill selection metadata.');
+  writeStdoutLine('It reads no skill bodies or other source contents and runs no collectors.');
   return true;
 };
-// Selection and non-content inspection are shared; destination confirmation belongs to its caller.
+// Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('\nTool inventories and filtered preferences can include private tools, identities, paths, or URLs.');
   writeStdoutLine('Even without sensitive sources, backups may contain secrets.');
@@ -129,7 +130,7 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
   writeStdoutLine('hook definitions, recursive skills/rules/agents, and the personal marketplace manifest.');
   writeStdoutLine('Referenced files and plugin payloads are excluded; nothing is automatically restored or executed.');
   writeStdoutLine('Claude Code includes personal CLAUDE.md, Markdown rules/agents/commands, and eligible skills.');
-  writeStdoutLine('Claude skills include downloaded defaults, organization-provided and plugin-origin synced packages.');
+  writeStdoutLine('Synced Claude skills require manifest source "plugin"; other origins, including defaults, are excluded.');
   writeStdoutLine('Skill folders include hidden files, executable scripts, and binary supporting assets.');
   writeStdoutLine('Settings, credential stores, runtime state, sync bookkeeping, and plugin installations are excluded.');
   writeStdoutLine('Selected content may contain secrets; Ballin does not scan or redact it.');
