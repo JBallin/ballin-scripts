@@ -109,4 +109,4 @@ The saved text remains useful outside Ballin, but moving to a dotfile manager
 requires deciding which configuration to manage and how to apply it.
 
 Missing a capability you need? [Start a discussion](https://github.com/JBallin/ballin-scripts/discussions)
-to discuss it, or propose a change through a [pull request](../CONTRIBUTING.md).
+or propose a change through a [pull request](../CONTRIBUTING.md).
