@@ -72,8 +72,8 @@ def abort_collection(directory, result, log, stderr, reason):
     print(json.dumps(result, indent=2), flush=True)
     print("BEGIN_SAMPLE_STDOUT " + directory.name + "\n" + log + "\nEND_SAMPLE_STDOUT", flush=True)
     print("BEGIN_SAMPLE_STDERR " + directory.name + "\n" + stderr + "\nEND_SAMPLE_STDERR", flush=True)
-    # Only file/log evidence is retained after this point; no source probes,
-    # coverage diagnostics or later samples may run on this VM.
+    # The driver retains only file/log evidence after abort; it starts no further
+    # probes, diagnostics or samples. GitHub/action cleanup precedes VM disposal.
     raise SystemExit(1)
 
 
