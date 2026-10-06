@@ -137,11 +137,18 @@ describe('offline Claude caller contracts', () => {
       g.event.comment.author_association = association;
       assert.isFalse(eligible(source, { github: g }), association);
     }
-    for (const field of ['comment', 'sender'] as const) {
-      const g = github();
-      if (field === 'comment') g.event.comment.user.type = 'Bot';
-      else g.event.sender.type = 'Bot';
-      assert.isFalse(eligible(source, { github: g }), field);
+    for (const eventName of ['issue_comment', 'pull_request_review_comment']) {
+      for (const commenter of ['User', 'Bot']) {
+        for (const sender of ['User', 'Bot']) {
+          const g = github();
+          g.event_name = eventName;
+          g.event.comment.user.type = commenter;
+          g.event.sender.type = sender;
+          if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
+          assert.equal(eligible(source, { github: g }), commenter === 'User' && sender === 'User',
+            `${eventName}: commenter ${commenter}, sender ${sender}`);
+        }
+      }
     }
     const issueComment = github();
     issueComment.event.issue.pull_request = null;
@@ -150,7 +157,9 @@ describe('offline Claude caller contracts', () => {
 
   it('protects the manual preflight response guards, eligibility predicate and shell wiring', () => {
     const eligibility = job(manual, 'eligibility');
-    assert.match(eligibility, /eligible: \$\{\{ steps\.eligibility\.outputs\.eligible \}\}/u);
+    assert.match(eligibility, /^    outputs:\n      eligible: \$\{\{ steps\.eligibility\.outputs\.eligible \}\}\n(?=    [\w-]+:)/mu);
+    assert.equal([...eligibility.matchAll(/^    outputs:/gmu)].length, 1, 'only one canonical outputs map is supported');
+    assert.notMatch(eligibility, /^    ['"]outputs['"]:/mu, 'quoted outputs keys are unsupported');
     const step = eligibility.match(/^      - name: [^\n]+\n        id: eligibility\n([\s\S]*?)(?=^      - |$(?![\s\S]))/mu);
     assert.exists(step, 'the preflight producer must retain its eligibility step ID');
     const source = step![1];
@@ -258,9 +267,14 @@ describe('offline Claude caller contracts', () => {
 
   it('uses the reviewed immutable revision consistently for the three runtime entry points', () => {
     const pin = '9acfdda9358a9eff22bd4a133135c3fbb2b8f512';
-    for (const [workflow, entry] of [[automatic, 'claude-review.yml'], [manual, 'claude.yml'], [status, 'claude-review-status.yml']]) {
-      const calls = [...workflow.matchAll(/^\s+uses: (\S+)$/gmu)].map((match) => match[1]);
+    for (const [workflow, name, entry] of [[automatic, 'review', 'claude-review.yml'], [manual, 'review', 'claude.yml'], [status, 'status', 'claude-review-status.yml']]) {
+      const source = job(workflow, name);
+      assert.notMatch(source, /^    ['"]uses['"]:/mu, 'quoted invocation keys are unsupported');
+      const calls = [...source.matchAll(/^    uses: (\S+)$/gmu)].map((match) => match[1]);
       assert.deepEqual(calls, [`JBallin/claude-review-runtime/.github/workflows/${entry}@${pin}`]);
+      // The bound invocation must also be the workflow's only uses call.
+      const allCalls = [...workflow.matchAll(/^\s+uses: (\S+)$/gmu)].map((match) => match[1]);
+      assert.deepEqual(allCalls, calls, 'unexpected workflow-level or step uses call');
     }
   });
 });
