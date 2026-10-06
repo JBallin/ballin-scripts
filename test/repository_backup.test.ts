@@ -752,7 +752,7 @@ describe('repository backup lifecycle', function() {
         assert.notInclude(remote('claude_skills.bundle.json'), 'DUMMY_EXCLUDED_SECRET');
         assert.equal(cached('claude_skills.bundle.json'), remote('claude_skills.bundle.json'));
         const listed = run(['read', 'claude_skills.bundle.json', '--list']); ok(listed);
-        assert.deepEqual(JSON.parse(listed.stdout).map((entry: { path: string }) => entry.path), skillPaths);
+        assert.deepEqual(JSON.parse(listed.stdout), skillPaths);
         const member = run(['read', 'claude_skills.bundle.json', '--file', 'demo/.support']); ok(member);
         assert.equal(member.stdout, 'DUMMY_SELECTED_SKILL_SECRET');
         const syncedMember = run(['read', 'claude_skills.bundle.json', '--file', 'pdf/.support']); ok(syncedMember);

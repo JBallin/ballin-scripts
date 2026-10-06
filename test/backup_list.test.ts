@@ -128,7 +128,7 @@ describe('saved backup discovery', function() {
       save(fixtureState({ [snapshot]: archive })); const before = state();
       const listed = run(['read', snapshot, '--list']);
       assert.equal(listed.status, 0, listed.stderr); assert.equal(listed.stderr, '');
-      assert.deepEqual(JSON.parse(listed.stdout), [{ path: member.path, executable: true, bytes: Buffer.byteLength(content) }]);
+      assert.deepEqual(JSON.parse(listed.stdout), [member.path]);
       assert.notInclude(listed.stdout, 'Synthetic example');
       const read = run(['read', snapshot, '--file', member.path]);
       assert.equal(read.status, 0, read.stderr); assert.equal(read.stderr, ''); assert.equal(read.stdout, content);
@@ -158,7 +158,7 @@ describe('saved backup discovery', function() {
     assert.include(raw.stderr, 'backup read <bundle> --list'); assert.notInclude(raw.stderr, '--file');
     const listed = run(['read', 'codex_rules.bundle.json', '--list'], {}, tty);
     assert.equal(listed.status, 0, listed.stderr);
-    assert.deepEqual(JSON.parse(listed.stdout), [{ path: 'rule.md', executable: false, bytes: 15 }]);
+    assert.deepEqual(JSON.parse(listed.stdout), ['rule.md']);
     assert.include(listed.stderr, 'backup read <bundle> --file <path>');
     const member = run(['read', 'codex_rules.bundle.json', '--file', 'rule.md'], {}, tty);
     assert.equal(member.status, 0, member.stderr); assert.equal(member.stdout, 'synthetic\r\nlast'); assert.equal(member.stderr, '');
@@ -206,7 +206,7 @@ describe('saved backup discovery', function() {
     save(fixtureState({ 'claude_rules.bundle.json': archive }));
     const listed = run(['read', 'claude_rules.bundle.json', '--list']); assert.equal(listed.status, 0, listed.stderr);
     assert.deepEqual(JSON.parse(listed.stdout), [
-      { path: 'rule.md', executable: false, bytes: Buffer.byteLength(content) }, { path: 'empty.md', executable: false, bytes: 0 },
+      'rule.md', 'empty.md',
     ]);
     const read = run(['read', 'claude_rules.bundle.json', '--file', 'rule.md']); assert.equal(read.status, 0, read.stderr); assert.equal(read.stdout, content);
     const empty = run(['read', 'claude_rules.bundle.json', '--file', 'empty.md']); assert.equal(empty.status, 0, empty.stderr); assert.equal(empty.stdout, '');

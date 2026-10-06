@@ -52,9 +52,7 @@ const readDirectorySnapshot = (bytes: Buffer): DirectorySnapshot => {
   });
   return { version, entries };
 };
-const listDirectoryMembers = (entries: DirectoryEntry[]): string => `${JSON.stringify(entries.map((entry) => ({
-  path: entry.path, executable: entry.executable, bytes: entry.bytes.length,
-})), null, 2).replace(/[\u007f-\u009f\u2028\u2029\p{Bidi_Control}]/gu, (character) => (
+const listDirectoryMembers = (entries: DirectoryEntry[]): string => `${JSON.stringify(entries.map((entry) => entry.path), null, 2).replace(/[\u007f-\u009f\u2028\u2029\p{Bidi_Control}]/gu, (character) => (
   `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
 ))}\n`;
 const readDirectoryMember = (entries: DirectoryEntry[], selected: string): Buffer => {

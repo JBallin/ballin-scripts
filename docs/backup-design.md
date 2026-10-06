@@ -369,8 +369,8 @@ symlink rejection are documented in [source sensitivity](backup-sources.md#codex
 
 ### Bundle inspection
 
-`backup read <snapshot> --list` returns member metadata as JSON, with control and
-directional formatting characters escaped for display. `--file <path>` emits the
+`backup read <snapshot> --list` returns only member paths as a JSON array in saved
+order, with control and directional formatting characters escaped for display. `--file <path>` emits the
 exact decoded bytes of one member to stdout without framing or newline changes.
 Both use the existing saved-snapshot reader, including destination, inventory,
 marker, account and revision validation. The entire bundle archive is checked

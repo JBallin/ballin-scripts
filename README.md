@@ -99,7 +99,7 @@ Saved snapshots of your tools and configuration give you a reference when
 | `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
 | `ballin backup list` | Lists supported snapshots saved in the configured backup. |
 | `ballin backup read <snapshot>` | Prints one supported snapshot from the destination. |
-| `ballin backup read <snapshot> --list` | Lists files in a saved bundle snapshot. |
+| `ballin backup read <snapshot> --list` | Lists only file paths in a saved bundle snapshot. |
 | `ballin backup read <snapshot> --file <path>` | Prints one file's contents from a bundle snapshot. |
 | `ballin update` | Runs configured update tasks. |
 | `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
