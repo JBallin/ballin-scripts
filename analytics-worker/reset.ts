@@ -31,8 +31,10 @@ const aggregateTables = [
 ] as const;
 
 const usage = [
-  'Usage: node analytics-worker/reset.ts --dry-run [--database NAME]',
-  `       node analytics-worker/reset.ts --confirm ${confirmationPhrase} [--database NAME]`,
+  'Usage: npm run reset -- --dry-run [--database NAME]',
+  `       npm run reset -- --confirm ${confirmationPhrase} [--database NAME]`,
+  '',
+  'Run from analytics-worker/.',
   '',
   'Prints row counts or clears the production analytics aggregate tables.',
 ].join('\n');

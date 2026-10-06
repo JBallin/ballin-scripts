@@ -232,7 +232,7 @@ describe('analytics Worker deployment', () => {
   it('deploys and verifies with the same installed local Wrangler', () => {
     const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
     const verifier = fs.readFileSync(verifierPath, 'utf8');
-    assert.match(workflow, /working-directory: analytics-worker[\s\S]*?CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}[\s\S]*?CLOUDFLARE_ACCOUNT_ID: \$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}[\s\S]*?\.\/node_modules\/\.bin\/wrangler deploy\n\s+node verify-deployment\.ts/u);
+    assert.match(workflow, /working-directory: analytics-worker[\s\S]*?CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}[\s\S]*?CLOUDFLARE_ACCOUNT_ID: \$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}[\s\S]*?npm run deploy\n\s+npm run verify:deployment/u);
     assert.include(verifier, "spawnSync(localWranglerPath(path.join(__dirname, '..')), args");
     assert.notInclude(verifier, "spawnSync('npx'");
     assert.deepEqual(requiredBindings, [

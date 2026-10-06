@@ -282,7 +282,7 @@ describe('analytics D1 reset', () => {
     const runner = (): D1Row[] => [{ rows: 3, table_name: 'install_days' }];
 
     assert.equal(runCli(['-h'], runner, writeOut, writeError), 0);
-    assert.include(stdout.pop(), 'Usage: node analytics-worker/reset.ts');
+    assert.include(stdout.pop(), 'Usage: npm run reset');
     assert.equal(runCli(['--dry-run'], runner, writeOut, writeError), 0);
     assert.include(stdout.pop(), 'install_days: 3');
     assert.equal(runCli([], runner, writeOut, writeError), 1);
@@ -296,7 +296,8 @@ describe('analytics D1 reset', () => {
     });
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Usage: node analytics-worker/reset.ts');
+    assert.include(result.stdout, 'Usage: npm run reset');
+    assert.include(result.stdout, 'Run from analytics-worker/.');
     assert.equal(result.stderr, '');
   });
 
