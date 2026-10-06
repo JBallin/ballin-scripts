@@ -2,16 +2,61 @@
 
 *User guide to Ballin snapshot sources, captured files, and data sensitivity considerations.*
 
-`ballin backup` uses an explicit source allowlist. The allowlist limits which
-files and command outputs Ballin selects, but it does not make their contents
-safe: files and command outputs can contain credentials, private URLs,
-usernames, paths, commands, and other sensitive data. This guide explains source
-sensitivity and repository policy; Ballin does not scan or redact
-these snapshots.
+## What will Ballin back up?
 
-Repository capture includes the fixed inventory/preferences baseline and uses
-one local `backup.includeSensitive` choice (default: `false`) for all sensitive
-sources. `ballin_config` saves only supported preferences.
+Backups are optional. By default, a backup includes allowlisted tool inventories
+and filtered Ballin preferences. These can contain private tool choices,
+identities, paths, URLs, or secrets. Backups are stored in a private GitHub
+repository; GitHub and anyone
+with authorized repository access can read them.
+
+Sensitive sources are off by default on a new installation. The local
+`backup.includeSensitive` choice adds all currently supported sensitive sources
+and future additions: raw shell/Git/editor configuration, Codex and Claude Code
+configuration and authoring files, `.nvmrc`, and pipx installation metadata.
+Eligible skill packages can include hidden files, executable scripts, and binary
+assets.
+
+Ballin does not scan or redact credentials. It does not automatically restore
+sensitive content or execute saved definitions. Excluding a source from future
+backups does not remove previously saved files, history, or cached content.
+
+See the [source catalog](#source-catalog) for captured files and commands,
+[Codex configuration](#codex-configuration) and
+[Claude Code configuration](#claude-code-configuration) for their detailed
+boundaries, and [repository inclusion](#repository-inclusion) for source review
+and consent persistence.
+
+## Repository inclusion
+
+New and replacement installations start with these sensitive sources off and
+make their own choice; approval is never recovered from a backup. Configured
+setup retains established local consent; fresh reconnect requires its own
+review. Source changes are documented here and in release/update guidance.
+
+Review shows logical paths and resolved targets for selected regular files,
+including symlinked dotfiles outside `HOME`. It identifies pipx separately as
+installation metadata whose URLs and arguments may contain credentials, without
+running its collector or presenting its executable as a raw configuration file.
+Review may read bounded Claude skill selection metadata; it reads no skill bodies
+or other source contents and runs no collectors. Codex and Claude Code
+directory discovery recursively inspects names and file types to identify
+nonempty sources. Missing and unavailable sources are shown; access or
+resolution errors prevent confirmation. Closing input or declining final
+confirmation cancels without saving consent or changing destination, cache, or
+remote state. Excluded
+sensitive sources are not inspected just to verify them.
+
+Consent covers later captures as files, symlink targets, and installed-tool
+metadata change. It does not certify future contents or require repeated review
+during unattended backups. Deliberately selected content remains intact without
+redaction, subject to the existing final-newline and empty-file normalization;
+snapshots do not preserve filesystem bytes and metadata exactly. Known
+credential stores, authentication/session files, SSH private keys, and arbitrary
+home trees remain outside direct selection. Allowed sources may still contain
+credentials.
+
+## Source catalog
 
 Listed filenames may live under an application's configuration directory. To
 inspect editor files before enabling backup or sharing snapshots, check
@@ -43,48 +88,6 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `pipx list --json` | `pipx` | Record Python tool installation metadata. | Original install URLs, backend arguments that may contain credentials, and local paths. | Sensitive; the same local opt-in as raw files. |
 | `.nvmrc` | `nvmrc` | Preserve the preferred Node.js version. | Usually a version, but the file is arbitrary user-authored content. | Sensitive; one local opt-in. |
 | `mas list` | `mas` | Record installed Mac App Store applications. | Application choices and versions. | Inventory; default included. |
-
-## Repository inclusion
-
-Backup remains optional. Private-repository backups include the fixed
-inventory baseline and supported Ballin preferences by default. Inventories
-may contain private tool choices, identities, paths, and URLs; they are not
-guaranteed public-safe or secret-free. Backups are stored in a private GitHub
-repository. GitHub and anyone authorized to access the repository can read its
-contents.
-
-The single `backup.includeSensitive` setting controls **sensitive sources**:
-raw shell/Git/editor configuration, Codex and Claude Code configuration, `.nvmrc`,
-and pipx installation metadata.
-New and replacement installations start with these sensitive sources off and
-make their own choice; approval is never recovered from a backup. Configured
-setup retains established local consent; fresh reconnect requires its own
-review. The choice covers current and future supported sensitive sources,
-including Codex and Claude Code for existing opt-ins. Setup discloses this scope;
-source changes are documented in the source guide and release/update guidance.
-
-Review shows logical paths and resolved targets for selected regular files,
-including symlinked dotfiles outside `HOME`. It identifies pipx separately as
-installation metadata whose URLs and arguments may contain credentials, without
-running its collector or presenting its executable as a raw configuration file.
-Review reads no file contents and runs no collectors. Codex and Claude Code
-directory discovery recursively inspects names and file types to identify nonempty sources. Missing
-and unavailable sources are shown; access or resolution errors prevent
-confirmation. Closing input or declining final confirmation cancels without
-saving consent or changing destination, cache, or remote state. Excluded
-sensitive sources are not inspected just to verify them.
-
-Consent covers later captures as files, symlink targets, and installed-tool
-metadata change. It does not certify future contents or require repeated review
-during unattended backups. Deliberately selected content remains intact without
-redaction, subject to the existing final-newline and empty-file normalization;
-snapshots do not preserve filesystem bytes and metadata exactly. Known
-credential stores, authentication/session files, SSH private keys, and arbitrary
-home trees remain outside direct selection. Allowed sources may still contain
-credentials.
-
-Omitting a category from future captures does not delete older remote files,
-history, or cached content.
 
 ## Codex configuration
 
@@ -160,9 +163,10 @@ relative paths, exact file bytes, and executable flags. The Markdown sources
 omit non-Markdown files. All Claude sources omit symlinks, special files, empty
 directories, `.git`, and `.DS_Store`.
 Selected hard links stop capture; Ballin does not search for their other paths.
-Discovery and review inspect metadata; review checks readability without
-reading contents. Discovery or collection failure stops the backup before
-publication. Capture is not atomic across concurrent edits.
+Discovery and review inspect file attributes and may read bounded skill
+selection metadata; review reads no skill bodies or other source contents.
+Discovery or collection failure stops the backup before publication. Capture is
+not atomic across concurrent edits.
 
 Claude Code has its own **16 MiB combined** normalized capture allowance,
 including unchanged snapshots and archive/encoding overhead, plus **8,192 visited

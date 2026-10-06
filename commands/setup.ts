@@ -46,8 +46,8 @@ const runSetupCommand = (): void => {
 
     reviewing = true;
     writeStdoutLine('Review your Ballin preferences. Each confirmed choice is saved locally.');
-    writeStdoutLine('Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md');
     if (destination.kind === 'repository') {
+      writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
       const included = selectSensitiveSources(sensitive);
       if (included === null) { cancelSetup(); return; }
       if (included === undefined) { process.exitCode = 1; return; }

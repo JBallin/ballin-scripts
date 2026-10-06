@@ -488,7 +488,7 @@ describe('repository backup lifecycle', function() {
       assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(mutations(), 0);
       const embedded = runSetup(); assert.equal(embedded.status, 1);
       assert.include(embedded.stdout, 'Unable to configure backup');
-      assert.include(embedded.stdout, 'Retry with: `ballin backup setup`');
+      assert.include(embedded.stdout, 'before retrying `ballin backup setup`');
       assert.notInclude(embedded.stdout, 'Validated private backup:');
       assert.include(embedded.stdout, result.stdout.trim());
       assert.deepEqual(config(), before); assert.equal(cached(), 'unchanged\n');
@@ -685,13 +685,10 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SUPPORT_SECRET');
     const result = run(['setup'], 'y\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Claude Code includes personal CLAUDE.md');
+    assert.include(result.stdout, 'Sensitive sources may contain credentials or other private information.');
     assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
     assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
-    assert.include(result.stdout, 'Skill folders include hidden files, executable scripts, and binary supporting assets.');
-    assert.include(result.stdout, 'Claude skills include downloaded defaults, organization-provided and plugin-origin synced packages.');
-    assert.include(result.stdout, 'sync bookkeeping, and plugin installations are excluded');
-    assert.include(result.stdout, 'future additions to this maintained catalog');
+    assert.include(result.stdout, 'Your choice also covers future supported sources.');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
     assert.lengthOf(mutations(), 0);
   });
@@ -1415,7 +1412,7 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
     assert.equal(config().update.backup, 'false');
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
-    assert.include(result.stdout, '\nSelected GitHub.com account: fixture-user\nCandidate backup: https://github.com/fixture-user/ballin-backups\n\nTool inventories');
+    assert.include(result.stdout, '\nSelected GitHub.com account: fixture-user\nCandidate backup: https://github.com/fixture-user/ballin-backups\n\nSensitive sources');
     assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups\n');
     assert.include(result.stdout, '"update.backup" set to: "false"\nBackup setup complete.\n');
     assertSavedSensitiveChoice(result, 'false');
@@ -1448,8 +1445,11 @@ describe('repository backup lifecycle', function() {
       const value = state(); value.exists = false; value.faults = faults; saveState(value);
       const result = run(['setup'], 'y\ncreate\n\nn\ny\n');
       ok(result);
-      if (message) assert.include(result.stdout, message);
-      else assert.notInclude(result.stdout, 'branch protection');
+      const confirmation = 'Confirm this destination and source selection? [y/N] ';
+      assert.include(result.stdout, `Ballin also attempts optional GitHub branch protection.\n${confirmation}`);
+      const outcomeOutput = result.stdout.slice(result.stdout.indexOf(confirmation) + confirmation.length);
+      if (message) assert.include(outcomeOutput, message);
+      else assert.notInclude(outcomeOutput, 'branch protection');
       assert.include(result.stdout, 'https://github.com/fixture-user/ballin-backups');
       assert.deepEqual(config().backup.repository, fixtureDestination); assert.isUndefined(cached());
       assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
@@ -1601,13 +1601,13 @@ describe('repository backup lifecycle', function() {
     it(`confirms the independently reviewed sensitive-source choice once after reconnect saves ${preference}`, () => {
       unconfigured(); const before = config(); before.backup.includeSensitive = preference === 'true' ? 'false' : 'true'; saveConfig(before);
       const result = run(['setup'], `y\nreconnect\n\n${preference === 'true' ? 'y' : 'n'}\ny\nn\n`); ok(result);
-      assert.include(result.stdout, 'Also include sensitive sources? [y/N]');
+      assert.include(result.stdout, 'Include sensitive sources? [y/N]');
       assert.equal(config().backup.includeSensitive, preference);
       assertSavedSensitiveChoice(result, preference);
       assert.include(result.stdout, 'Private backup reconnected: https://github.com/fixture-user/ballin-backups\n');
       assert.notInclude(result.stdout, 'Unrecognized backup entries:');
       assert.include(result.stdout, 'Stop backups from other installations before running `ballin backup` here.');
-      assert.include(result.stdout, 'Reconnecting does not mark local files as matching the backup or allow overwriting different saved data.');
+      assert.include(result.stdout, 'Reconnect does not authorize overwriting different saved data.');
       assert.include(result.stdout, 'Backup setup complete.');
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
     });
@@ -1647,7 +1647,7 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, 'Validated private backup: https://github.com/renamed-user/renamed\nSensitive sources: included\nAutomatic backup during update: disabled\n');
     assert.notInclude(result.stdout, 'https://github.com/fixture-user/ballin-backups');
     assert.notInclude(result.stdout, '"backup.includeSensitive" set to:');
-    assert.notInclude(result.stdout, 'Also include sensitive sources');
+    assert.notInclude(result.stdout, 'Include sensitive sources');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'false');
     assert.equal(cached(), 'base\n'); assert.equal(mutations().length, 0);
     assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);

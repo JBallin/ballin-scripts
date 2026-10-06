@@ -5,7 +5,7 @@ const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
-const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
 
 type RunInstallOptions = {
   env?: NodeJS.ProcessEnv;
@@ -161,14 +161,16 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "🏀 let's ball...");
     assert.include(result.stdout, 'Installation plan');
-    assert.include(result.stdout, 'create or reconnect to a private GitHub.com repository');
-    assert.include(result.stdout, 'Ask whether to share usage analytics (default No)');
-    assert.include(result.stdout, 'Reconnect can recover compatible Ballin preferences');
-    assert.include(result.stdout, 'leaves the configured remote backup untouched');
+    assert.include(result.stdout, `Clone Ballin into ${repoDir} and create its config there.`);
+    assert.include(result.stdout, `otherwise from ${homeDir}/.local/bin.`);
+    assert.include(result.stdout, 'An existing non-directory command target may be replaced.');
+    assert.notInclude(result.stdout, 'private GitHub');
+    assert.notInclude(result.stdout, 'analytics');
+    assert.notInclude(result.stdout, '.backup-cache');
     assert.notInclude(result.stdout, 'secret-Gist');
     assert.notInclude(result.stdout, 'remote Gist');
-    assert.include(result.stdout, 'Review installer source:');
-    assert.include(result.stdout, 'Inspect effects, uninstall, and manual removal:');
+    assert.include(result.stdout, `\n${docsUrl}#what-will-installation-change\n`);
+    assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 1);
     assert.deepEqual(commandLog(), [
       'git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts',
       setupCommand('fresh'),
@@ -272,9 +274,9 @@ esac
     const result = runInstall();
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Node.js is required');
-    assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
-    assert.include(result.stdout, 'docs/installation.md');
+    assert.include(result.stdout, 'Node.js 24.12 or newer is required');
+    assert.include(result.stdout, 'Install a supported version with nvm');
+    assert.include(result.stdout, 'docs/optional-capabilities.md#nodejs');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -318,8 +320,8 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js 24.12 or newer is required');
-    assert.include(result.stdout, 'Node.js 24.12 or newer with nvm');
-    assert.include(result.stdout, 'docs/installation.md');
+    assert.include(result.stdout, 'Install a supported version with nvm');
+    assert.include(result.stdout, 'docs/optional-capabilities.md#nodejs');
     assert.include(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');

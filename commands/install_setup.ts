@@ -118,7 +118,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
   const updateOutput = updateResult.stdout.trimEnd();
   if (updateOutput) {
     writeStdoutLine(`\n🙌 ${updateOutput}`);
-    writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
+    writeStdoutLine(`\n${docsUrl}#local-effects`);
   }
 
   return true;
@@ -263,14 +263,16 @@ const setup = (
     });
     if (!backupSetupSucceeded) {
       if (!backupSetupCancelled) writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
-      writeStdoutLine('\nBallin maintenance is installed. Retry with: `ballin backup setup`');
+      writeStdoutLine(backupSetupCancelled
+        ? '\nBallin remains installed. Resume optional setup later with `ballin backup setup`.'
+        : '\nBallin remains installed. Follow the backup recovery guidance above before retrying `ballin backup setup`.');
     }
   }
 
   setupAnalytics(repoDir);
 
-  if (!configExisted && fs.existsSync(configPathFor(repoDir))) {
-    writeStdoutLine(`\n👀 Docs: ${docsUrl}`);
+  if (!configExisted && fs.existsSync(configPathFor(repoDir)) && mode !== 'fresh') {
+    writeStdoutLine(`\n${docsUrl}#what-will-installation-change`);
   }
 
   if (backupSetupSucceeded && mode === 'fresh') {

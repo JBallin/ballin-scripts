@@ -114,7 +114,7 @@ const appendActivation = (target: CompletionTarget): boolean => {
 
 const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions = {}): void => {
   const write = options.write ?? writeStdoutLine;
-  const fallback = (): void => write(`Enable shell completion later: ${docsUrl}#shell-completion`);
+  const fallback = (): void => write(`${docsUrl}#shell-completion`);
   if (!(options.interactive ?? process.stdin.isTTY)) { fallback(); return; }
   const prompt = options.prompt ?? readPromptLine;
   try {

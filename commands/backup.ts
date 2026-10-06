@@ -674,7 +674,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       onCancelled: () => { cancelled = true; },
     });
     if (!configured && !cancelled) {
-      writeStderrLine('ballin backup setup: setup did not complete; check the message above and retry with `ballin backup setup`.');
+      writeStderrLine('ballin backup setup: setup incomplete; follow the recovery guidance above before running `ballin backup setup` again.');
     }
     process.exitCode = configured ? 0 : 1;
     return;

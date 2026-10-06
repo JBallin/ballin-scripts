@@ -3,8 +3,7 @@ printf '%s\n' "🏀 let's ball..."
 
 repo_dir="$HOME/.ballin-scripts"
 docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
-analytics_docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md'
-installer_source_url='https://github.com/JBallin/ballin-scripts/blob/main/install.sh'
+analytics_docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share'
 required_node_version='24.12'
 repo_existed=true
 setup_mode='refresh'
@@ -30,18 +29,14 @@ if ! command -v git >/dev/null 2>&1 || ! git --version >/dev/null 2>&1; then
 fi
 
 if [ ! -x "$(command -v node)" ]; then
-  printf '\n⚠️  ERROR: Node.js is required.\n'
-  printf '\nRecommended: install Node.js %s or newer with nvm.' "$required_node_version"
-  printf '\nSetup guide: %s\n' "$docs_url"
-  printf '\nAlternatively:\n  brew install node\n'
-  printf '\nThen run this installer again.\n'
+  printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
+  printf '\nInstall a supported version with nvm or `brew install node`, then run this installer again.\n'
+  printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
   exit 1
 elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null)" != 'true' ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
-  printf '\nRecommended: install Node.js %s or newer with nvm.' "$required_node_version"
-  printf '\nSetup guide: %s\n' "$docs_url"
-  printf '\nAlternatively:\n  brew install node\n'
-  printf '\nThen run this installer again.\n'
+  printf '\nInstall a supported version with nvm or `brew install node`, then run this installer again.\n'
+  printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
   exit 1
 fi
 
@@ -49,16 +44,8 @@ if [ "$repo_existed" = false ]; then
   printf '\nInstallation plan\n'
   printf -- '- Clone Ballin into %s and create its config there.\n' "$repo_dir"
   printf -- '- Link the ballin command from Homebrew\047s bin directory when available, otherwise from %s.\n' "$HOME/.local/bin"
-  printf -- '- Ask whether to share usage analytics (default No); create a local install ID only if analytics are enabled.\n'
-  printf -- '- Offer optional shell completion; append its activation only after showing the startup file and receiving confirmation.\n'
-  printf -- '- Offer optional backup setup: create or reconnect to a private GitHub.com repository.\n'
-  printf -- '- Reconnect can recover compatible Ballin preferences.\n'
-  printf -- '- Treat .backup-cache as derived state; later backup setup may invalidate an unproven cache before configuring a destination.\n'
-  printf -- '- Do not run ballin update or collect backup snapshots during installation.\n'
-  printf -- '- Existing command targets may be replaced; later refreshes can merge checkout files and add config defaults.\n'
-  printf -- '- Uninstall removes local Ballin state but leaves the configured remote backup untouched.\n'
-  printf 'Review installer source: %s\n' "$installer_source_url"
-  printf 'Inspect effects, uninstall, and manual removal: %s\n' "$docs_url"
+  printf -- '- An existing non-directory command target may be replaced.\n'
+  printf '%s#what-will-installation-change\n' "$docs_url"
 
   printf '\nProceed with installation? [y/N] '
   IFS= read -r install_confirm
