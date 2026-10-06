@@ -200,9 +200,20 @@ exact `source: "plugin"`. Other source values, including `anthropic`,
 `anthropic-example`, unknown values, and unlisted packages, are omitted.
 There is no skill-name allowlist or guessed mapping between names and origins.
 Their complete regular-file contents follow the same rules as personal skills;
-hidden package/support names are preserved. Relative paths retain `synced/` and
-the collection namespace to prevent collisions. Collection names may identify
-accounts or organizations and are part of the sensitive snapshot.
+hidden package/support names are preserved. Stored member paths use
+`<skill>/SKILL.md` and `<skill>/<supporting-file>`, omitting the `synced/` and
+collection directory prefix. Personal skill paths keep their existing layout.
+If eligible packages in different collections or a personal folder share a
+skill directory name, the whole skills source is unavailable and its previous
+saved bundle is retained. Packages are never merged or deduplicated, even when
+their contents match.
+
+Existing version-2 bundles with namespaced paths remain readable by their saved
+paths. The first successful normalized capture changes stored paths through the
+ordinary byte-based backup comparison; it does not rewrite existing history or
+bypass conflicts when a trusted comparison base is missing. Sync-directory
+changes alone no longer change an otherwise identical capture. File contents,
+including any paths or references inside them, are preserved unchanged.
 
 Loose files in sync containers are omitted. `manifest.json`, `.staging`,
 `.last-complete-round`, and `.trash` entries at the synced root or collection

@@ -455,9 +455,17 @@ supporting dependencies from sensitive content; visible files can contain
 credentials too. Provider-specific managed, plugin, legacy, Git, and link
 boundaries define exclusions instead of guessed secret filenames. Skill content
 uses the existing sensitive-source consent and private-repository access boundary,
-with no scanning or redaction claim. Synced package paths retain their collection
-namespace; equal skill names in different collections remain distinct. The
-same v2 writer, serialized-byte cap, and visited-entry cap govern both locations.
+with no scanning or redaction claim. Claude skill archive paths use direct
+`<skill>/` roots; the synced collection prefix is removed only from stored member
+paths, while pinned filesystem reads retain the original source paths. Selected
+skill directory names must be unique across synced collections and personal
+folders. A collision makes the whole skills source unavailable and retains its
+previous bundle, without merging packages or choosing one origin. The same v2
+writer, serialized-byte cap, and visited-entry cap govern both locations.
+Old namespaced v2 bundles remain readable without aliases or schema conversion.
+Normalizing an existing bundle is an ordinary byte change subject to the existing
+cache and conflict rules; sync-directory churn alone does not change normalized
+capture bytes. No source-identity metadata or generated manifest is added.
 Origin labels cannot establish ownership or that downloaded defaults remain
 unedited. This explicit plugin-origin policy excludes edited defaults too;
 there is no default-name heuristic or edit-detection mechanism.

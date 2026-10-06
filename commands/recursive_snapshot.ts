@@ -181,6 +181,7 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
   if (!sourceStat(path.dirname(root), path.basename(root)).isDirectory()) return [];
   const files: string[] = [];
   const pending = [''];
+  const skillNames = new Set<string>();
   let visited = 0;
   let pathBytes = 0;
   let manifestBytes = 0;
@@ -244,6 +245,11 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
         // filesystems. Plugin markers exclude the complete candidate payload.
         if (candidates.some((name) => name.toLowerCase() === '.claude-plugin')
           || !candidates.includes('SKILL.md') || !fs.lstatSync('SKILL.md').isFile()) return;
+        // Direct archive roots must never combine distinct source packages,
+        // even when their files or contents happen to be identical.
+        const name = synced ? parts[2] : relative;
+        if (skillNames.has(name)) throw new SnapshotSourceTypeError('Claude skill name collision');
+        skillNames.add(name);
         candidates.forEach(visitEntry);
       }
     });
@@ -303,13 +309,23 @@ const encodeDirectoryEntry = (relative: string, executable: boolean, bytes: Buff
   return { entry, size };
 };
 
+const snapshotMemberPath = (relative: string, claudeSkills = false): string => {
+  const parts = relative.split(path.sep);
+  return (claudeSkills && parts[0].toLowerCase() === 'synced' ? parts.slice(2) : parts).join('/');
+};
+
 const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}, selection: RecursiveSelection = {}): string => {
   const files = recursiveFiles(root, profilesOnly, skills, limits, selection);
   if (files.length === 0) throw new Error('Snapshot source has no regular files');
+  // Keep original paths for every filesystem read; project only stored paths.
+  if (selection.claudeSkills) files.sort((left, right) => {
+    const a = snapshotMemberPath(left, true), b = snapshotMemberPath(right, true);
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
   const maxBytes = limits.maxBytes ?? snapshotByteLimit;
   const stats = files.map((relative) => fileStat(root, relative, selection.rejectHardlinks));
   const entries: ReadableRecursiveEntry[] = files.map((relative, index) => ({
-    path: relative.split(path.sep).join('/'), executable: (stats[index].mode & 0o111) !== 0, encoding: 'utf8', content: [],
+    path: snapshotMemberPath(relative, selection.claudeSkills), executable: (stats[index].mode & 0o111) !== 0, encoding: 'utf8', content: [],
   }));
   const serialize = (): string => `${JSON.stringify({ format: 'ballin-directory', version: 2, entries }, null, 2)}\n`;
   let usedBytes = Buffer.byteLength(serialize());
@@ -326,7 +342,7 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
     const { bytes, executable } = inDirectory(root, path.dirname(relative), () => (
       readBoundedFile(path.basename(relative), available, selection.rejectHardlinks)
     ));
-    const captured = encodeDirectoryEntry(relative, executable, bytes, available);
+    const captured = encodeDirectoryEntry(entries[index].path, executable, bytes, available);
     entries[index] = captured.entry;
     usedBytes += captured.size - placeholderBytes;
   });

@@ -536,6 +536,69 @@ describe('repository backup lifecycle', function() {
       assert.equal(rulesetRequests().length, 0);
     });
   });
+  ['synced', 'personal'].forEach((collision) => {
+    it(`retains the complete saved Claude skills bundle and cache for a ${collision} name collision`, () => {
+      const claude = path.join(home, '.claude');
+      const first = path.join(claude, 'skills/synced/first/shared');
+      const personal = path.join(claude, 'skills/personal');
+      [first, personal].forEach(folder => fs.mkdirSync(folder, { recursive: true }));
+      fs.writeFileSync(path.join(first, 'SKILL.md'), 'old synced skill');
+      fs.writeFileSync(path.join(personal, 'SKILL.md'), 'old personal skill');
+      fs.writeFileSync(path.join(first, '../manifest.json'), '{"skills":[{"name":"shared","source":"plugin"}]}');
+      fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'old instructions\n');
+      ok(run());
+      const prior = remote('claude_skills.bundle.json');
+      fs.writeFileSync(path.join(first, 'SKILL.md'), 'new synced skill');
+      fs.writeFileSync(path.join(personal, 'SKILL.md'), 'new personal skill');
+      const second = path.join(claude, 'skills', collision === 'synced' ? 'synced/second/shared' : 'shared');
+      fs.mkdirSync(second, { recursive: true });
+      fs.writeFileSync(path.join(second, 'SKILL.md'), 'DUMMY_COLLIDING_SKILL');
+      if (collision === 'synced') fs.writeFileSync(path.join(second, '../manifest.json'), '{"skills":[{"name":"shared","source":"plugin"}]}');
+      fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'new instructions\n');
+      const result = run(); ok(result);
+      assert.equal(remote('claude_skills.bundle.json'), prior);
+      assert.equal(cached('claude_skills.bundle.json'), prior);
+      assert.equal(remote('claude_instructions'), 'new instructions\n');
+      assert.notInclude(result.stdout + result.stderr, 'DUMMY_COLLIDING_SKILL');
+      const saved = run(['read', 'claude_skills.bundle.json', '--file', 'shared/SKILL.md']); ok(saved);
+      assert.equal(saved.stdout, 'old synced skill');
+      assert.lengthOf(publications(), 2);
+    });
+  });
+
+  [false, true].forEach((trustedCache) => {
+    it(`reconciles old namespaced Claude v2 paths with the ordinary cache rules: ${trustedCache}`, () => {
+      const folder = path.join(home, '.claude/skills/synced/collection/package');
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, 'SKILL.md'), 'same skill\n');
+      fs.writeFileSync(path.join(folder, '../manifest.json'), '{"skills":[{"name":"package","source":"plugin"}]}');
+      const oldPath = 'synced/collection/package/SKILL.md';
+      const previous = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+        { path: oldPath, executable: false, encoding: 'utf8', content: ['same skill\n'] },
+      ] }, null, 2)}\n`;
+      saveState(fixtureState({ 'claude_skills.bundle.json': previous }));
+      if (trustedCache) seedCache('claude_skills.bundle.json', previous);
+      const saved = run(['read', 'claude_skills.bundle.json', '--file', oldPath]); ok(saved);
+      assert.equal(saved.stdout, 'same skill\n');
+      const result = run();
+      if (!trustedCache) {
+        assert.equal(result.status, 1); assert.include(result.stderr, 'conflict for claude_skills.bundle.json');
+        assert.equal(remote('claude_skills.bundle.json'), previous);
+        assert.isUndefined(cached('claude_skills.bundle.json'));
+        assert.lengthOf(publications(), 0);
+        return;
+      }
+      ok(result);
+      assert.deepEqual(JSON.parse(remote('claude_skills.bundle.json')!).entries.map((entry: { path: string }) => entry.path), ['package/SKILL.md']);
+      assert.equal(cached('claude_skills.bundle.json'), remote('claude_skills.bundle.json'));
+      const direct = run(['read', 'claude_skills.bundle.json', '--file', 'package/SKILL.md']); ok(direct);
+      assert.equal(direct.stdout, 'same skill\n');
+      const head = state().head; ok(run());
+      assert.equal(state().head, head);
+      assert.lengthOf(publications(), 1);
+    });
+  });
+
   it('retains the complete saved skills bundle when sync metadata is unavailable while other Claude sources advance', () => {
     const claude = path.join(home, '.claude');
     const collection = path.join(claude, 'skills', 'synced', 'collection');
@@ -677,7 +740,7 @@ describe('repository backup lifecycle', function() {
       fs.writeFileSync(path.join(synced, 'default', 'SKILL.md'), 'DUMMY_EXCLUDED_SECRET');
       fs.mkdirSync(path.join(synced, '.staging', 'partial'), { recursive: true });
       fs.writeFileSync(path.join(synced, '.staging', 'partial', 'SKILL.md'), 'DUMMY_EXCLUDED_SECRET');
-      const skillPaths = ['demo/.support', 'demo/SKILL.md', 'demo/run.sh', `synced/${collection}/pdf/.support`, `synced/${collection}/pdf/SKILL.md`];
+      const skillPaths = ['demo/.support', 'demo/SKILL.md', 'demo/run.sh', 'pdf/.support', 'pdf/SKILL.md'];
       ok(run([], '', { CLAUDE_CONFIG_DIR: claude }));
       if (included) {
         assert.equal(remote('claude_instructions'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
@@ -692,7 +755,7 @@ describe('repository backup lifecycle', function() {
         assert.deepEqual(JSON.parse(listed.stdout).map((entry: { path: string }) => entry.path), skillPaths);
         const member = run(['read', 'claude_skills.bundle.json', '--file', 'demo/.support']); ok(member);
         assert.equal(member.stdout, 'DUMMY_SELECTED_SKILL_SECRET');
-        const syncedMember = run(['read', 'claude_skills.bundle.json', '--file', `synced/${collection}/pdf/.support`]); ok(syncedMember);
+        const syncedMember = run(['read', 'claude_skills.bundle.json', '--file', 'pdf/.support']); ok(syncedMember);
         assert.equal(syncedMember.stdout, 'DUMMY_SELECTED_SYNCED_SECRET');
       } else {
         assert.isUndefined(remote('claude_instructions'));

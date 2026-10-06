@@ -268,8 +268,8 @@ describe('Claude Code selected configuration', () => {
       [`${base}/custom-review/scripts/run.sh`]: '#!/bin/sh\n',
       [`${base}/custom-review/assets/image.bin`]: Buffer.from([0, 255, 128]),
       [`${base}/pdf/SKILL.md`]: 'plugin with a default-looking name\r\n"quoted" \\ text\n',
-      'synced/org-team/pdf/SKILL.md': 'organization copy',
-      'synced/org-team/pdf/assets/雪.txt': 'Unicode support\n',
+      'synced/org-team/team-review/SKILL.md': 'organization copy',
+      'synced/org-team/team-review/assets/雪.txt': 'Unicode support\n',
       'synced/org-team/anthropic-skills:fixture/SKILL.md': 'no reserved-name filter inside collections',
       'synced/.private-collection/.private-skill/SKILL.md': 'hidden validated package',
     };
@@ -280,10 +280,11 @@ describe('Claude Code selected configuration', () => {
       { name: 'default-edit', source: 'anthropic' }, { name: 'example', source: 'anthropic-example' },
       { name: 'future', source: 'future-default' }, { name: 'wrong-case', source: 'Plugin' },
       { name: 'missing-source' }, { name: 'wrong-type', source: { plugin: true } },
+      { name: 'personal', source: 'anthropic' },
     ], privateMetadata: 'DUMMY_EXCLUDED_SECRET' }));
-    manifest('org-team', [{ name: 'pdf', source: 'plugin' }, { name: 'anthropic-skills:fixture', source: 'plugin' }, { name: 'plugin-shaped', source: 'plugin' }]);
+    manifest('org-team', [{ name: 'team-review', source: 'plugin' }, { name: 'anthropic-skills:fixture', source: 'plugin' }, { name: 'plugin-shaped', source: 'plugin' }]);
     manifest('.private-collection', [{ name: '.private-skill', source: 'plugin' }]);
-    ['default-edit', 'example', 'future', 'wrong-case', 'missing-source', 'wrong-type', 'unlisted'].forEach((name) => {
+    ['default-edit', 'example', 'future', 'wrong-case', 'missing-source', 'wrong-type', 'unlisted', 'personal'].forEach((name) => {
       write(`skills/${base}/${name}/SKILL.md`, 'DUMMY_EXCLUDED_SECRET');
     });
     ['manifest.json', '.last-complete-round', 'loose.txt', 'SKILL.md'].forEach((name) => write(`skills/synced/${name}`, 'DUMMY_EXCLUDED_SECRET'));
@@ -303,15 +304,29 @@ describe('Claude Code selected configuration', () => {
     assert.equal(result.status, 0, result.stderr);
     const archive = JSON.parse(result.stdout);
     assert.equal(archive.version, 2);
-    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), Object.keys(fixtures).sort());
+    const expected: Record<string, string | Buffer> = {
+      'personal/SKILL.md': fixtures['personal/SKILL.md'],
+      'custom-review/SKILL.md': fixtures[`${base}/custom-review/SKILL.md`],
+      'custom-review/.support/reference.txt': fixtures[`${base}/custom-review/.support/reference.txt`],
+      'custom-review/scripts/run.sh': fixtures[`${base}/custom-review/scripts/run.sh`],
+      'custom-review/assets/image.bin': fixtures[`${base}/custom-review/assets/image.bin`],
+      'pdf/SKILL.md': fixtures[`${base}/pdf/SKILL.md`],
+      'team-review/SKILL.md': fixtures['synced/org-team/team-review/SKILL.md'],
+      'team-review/assets/雪.txt': fixtures['synced/org-team/team-review/assets/雪.txt'],
+      'anthropic-skills:fixture/SKILL.md': fixtures['synced/org-team/anthropic-skills:fixture/SKILL.md'],
+      '.private-skill/SKILL.md': fixtures['synced/.private-collection/.private-skill/SKILL.md'],
+    };
+    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), Object.keys(expected).sort());
     archive.entries.forEach((entry: { path: string; encoding: string; content: string | string[]; executable: boolean }) => {
       const bytes = entry.encoding === 'utf8' ? Buffer.from((entry.content as string[]).join('')) : Buffer.from(entry.content as string, 'base64');
-      assert.deepEqual(bytes, Buffer.from(fixtures[entry.path]));
+      assert.deepEqual(bytes, Buffer.from(expected[entry.path]));
       assert.equal(entry.executable, entry.path.endsWith('/scripts/run.sh'));
     });
     const metadata = JSON.parse(fs.readFileSync(path.join(root, `skills/${base}/manifest.json`), 'utf8'));
     metadata.skills.reverse(); metadata.changed = 'DUMMY_EXCLUDED_SECRET';
     write(`skills/${base}/manifest.json`, JSON.stringify(metadata));
+    assert.equal(capture('claude_skills.bundle.json').stdout, result.stdout);
+    fs.renameSync(path.join(root, 'skills', base), path.join(root, 'skills/synced/renamed-collection'));
     assert.equal(capture('claude_skills.bundle.json').stdout, result.stdout);
     assert.notInclude(result.stdout, 'DUMMY_EXCLUDED_SECRET');
     assert.notInclude(result.stdout, homeDir);
@@ -320,6 +335,34 @@ describe('Claude Code selected configuration', () => {
     const failed = capture('claude_skills.bundle.json', {}, ['--max-bytes', String(maxBytes - 1)]);
     assert.equal(failed.status, 1); assert.equal(failed.stdout, '');
     assert.include(failed.stderr, 'Snapshot bytes limit exceeded');
+  });
+
+  ['synced', 'personal'].forEach((collision) => {
+    it(`rejects a ${collision} skill name collision before reading bodies or emitting a partial bundle`, () => {
+      write('skills/synced/first/shared/SKILL.md', 'identical skill');
+      write('skills/synced/first/shared/first.txt', 'first supporting file');
+      const manifests = [manifest('first', [{ name: 'shared', source: 'plugin' }])];
+      const prior = discover('claude_skills.bundle.json');
+      if (prior.status !== 'available') throw new Error('Expected available fixture before collision');
+      const second = collision === 'synced' ? 'synced/second/shared' : 'shared';
+      write(`skills/${second}/SKILL.md`, 'identical skill');
+      write(`skills/${second}/second.txt`, 'second supporting file');
+      if (collision === 'synced') manifests.push(manifest('second', [{ name: 'shared', source: 'plugin' }]));
+      const metadataInodes = new Set(manifests.map(file => fs.statSync(file).ino));
+      const originalRead = fs.readSync;
+      try {
+        fs.readSync = (fd: number, ...args: unknown[]) => {
+          if (!metadataInodes.has(fs.fstatSync(fd).ino)) throw new Error('Collision detection must not read skill bodies');
+          return originalRead(fd, ...args);
+        };
+        assert.equal(discover('claude_skills.bundle.json').status, 'unavailable');
+        assert.throws(() => reviewRecursiveFiles(path.join(root, 'skills'), false, false, {}, skillSelection), 'Claude skill name collision');
+      } finally { fs.readSync = originalRead; }
+      const result = spawnSync(prior.collector.command, prior.collector.args, {
+        encoding: 'utf8', env: prior.collector.env,
+      });
+      assert.equal(result.status, 1); assert.equal(result.stdout, '');
+    });
   });
 
   it('reads only bounded manifest metadata during discovery/review and never opens omitted payloads', () => {
@@ -364,7 +407,7 @@ describe('Claude Code selected configuration', () => {
     fs.symlinkSync(path.join(outside, 'package/SKILL.md'), path.join(root, 'skills/synced/collection/linked-marker/SKILL.md'));
     fs.symlinkSync(outside, path.join(root, 'skills/synced/collection/valid/linked-support'));
     const archive = JSON.parse(capture('claude_skills.bundle.json').stdout);
-    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['synced/collection/valid/SKILL.md']);
+    assert.deepEqual(archive.entries.map((entry: { path: string }) => entry.path), ['valid/SKILL.md']);
     fs.rmSync(path.join(root, 'skills/synced'), { recursive: true });
     fs.symlinkSync(outside, path.join(root, 'skills/synced'));
     assert.equal(discover('claude_skills.bundle.json').status, 'absent');
@@ -424,7 +467,7 @@ describe('Claude Code selected configuration', () => {
       "description":${description},"description":"ignored","source":"\\u0070lugin","name":"package"
     }],"extra":[{"source":"anthropic","source":"plugin"}]}`);
     assert.deepEqual(JSON.parse(capture('claude_skills.bundle.json').stdout).entries.map((entry: { path: string }) => entry.path), [
-      'synced/collection/package/SKILL.md',
+      'package/SKILL.md',
     ]);
   });
 
