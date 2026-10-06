@@ -175,12 +175,26 @@ configure_path() {
   if [[ -f "$profile" ]]; then
     "$node_tool" -e '
       const fs = require("fs");
-      const contents = fs.readFileSync(process.argv[1], "utf8");
-      const trailing = contents.match(/(\\+)(?:\r?\n)?$/u)?.[1];
-      if (trailing && trailing.length % 2 !== 0) {
-        fs.writeFileSync(process.argv[2], contents.replace(/\r?\n$/u, "") + " )\n");
+      const original = fs.readFileSync(process.argv[1]);
+      const contents = original.toString("utf8");
+      const continuationCheck = (text, destination) => {
+        const trailing = text.match(/(\\+)(?:\r?\n)?$/u)?.[1];
+        if (trailing && trailing.length % 2 !== 0) {
+          fs.writeFileSync(destination, text.replace(/\r?\n$/u, "") + " )\n");
+        }
+      };
+      continuationCheck(contents, process.argv[2]);
+      const withoutFinalNewline = contents.endsWith("\n") ? contents.slice(0, -1) : contents;
+      const lastLineStart = withoutFinalNewline.lastIndexOf("\n") + 1;
+      if (withoutFinalNewline.slice(lastLineStart) === process.argv[3]) {
+        const prefix = contents.slice(0, lastLineStart);
+        fs.writeFileSync(process.argv[4], prefix);
+        continuationCheck(prefix, process.argv[5]);
+        fs.writeFileSync(process.argv[6], original);
       }
-    ' "$profile" "$scratch/profile-continuation-check" \
+    ' "$profile" "$scratch/profile-continuation-check" "$line" \
+      "$scratch/profile-path-prefix" "$scratch/profile-path-continuation-check" \
+      "$scratch/profile-path-original" \
       || fail 'The startup file could not be checked; it was left unchanged.'
     # The shell ignores this unmatched token in a trailing comment. An active
     # backslash escapes its leading space, leaving the unmatched token visible.
@@ -197,7 +211,18 @@ configure_path() {
       fail 'The startup file ends at an unfinished heredoc; it was left unchanged.'
     fi
   fi
-  if [[ -f "$profile" ]] && grep -Fqx "$line" "$profile"; then return; fi
+  # Reuse only a final standalone command. Matching text inside a construct or
+  # after a continued command needs a new confirmed line; never source the file.
+  if [[ -f "$scratch/profile-path-prefix" ]] \
+    && "$profile_shell" -n "$scratch/profile-path-prefix" >/dev/null 2>&1; then
+    if [[ ! -f "$scratch/profile-path-continuation-check" ]] \
+      || "$profile_shell" -n "$scratch/profile-path-continuation-check" >/dev/null 2>&1; then
+      cp "$scratch/profile-path-prefix" "$scratch/profile-path-boundary-check"
+      printf '\n)\n' >> "$scratch/profile-path-boundary-check"
+      if ! "$profile_shell" -n "$scratch/profile-path-boundary-check" >/dev/null 2>&1 \
+        && cmp -s "$profile" "$scratch/profile-path-original"; then return; fi
+    fi
+  fi
   printf '\nAdd to %s:\n%s\n' "$profile" "$line"
   confirm 'Use these tools in new Terminal windows?' || fail 'PATH setup was declined; prerequisites remain available, but Ballin setup has not run.'
   [[ -d "${profile%/*}" ]] || fail "The startup directory ${profile%/*} does not exist."

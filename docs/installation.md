@@ -150,6 +150,9 @@ directory otherwise. For Bash it uses the first existing login profile
 (`.bash_profile`, `.bash_login`, or `.profile`), creating `.bash_profile` if
 needed. Custom startup locations or non-login Bash sessions may need manual
 PATH setup. It leaves symlinked or invalid startup files unchanged. It uses
+syntax-only checks to reuse a matching PATH line only as a final standalone
+command. If later edits make that placement ambiguous, it asks before appending
+a new line. Startup-file contents are never executed by these checks. It uses
 existing GitHub CLI authentication or starts its normal browser login flow,
 then runs the core installer, captures a backup, and opens it only after a
 successful capture.

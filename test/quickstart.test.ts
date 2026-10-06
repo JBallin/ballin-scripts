@@ -76,6 +76,9 @@ case "$name" in
   node)
     if [[ "$1" == -p ]]; then
       if [[ "$0" == "$FAKE_ROOT/tools/node" && "\${FAKE_OLD_NODE:-0}" == 1 ]]; then printf 'false\\n'; else printf 'true\\n'; fi
+    elif [[ "\${FAKE_CHANGE_PROFILE:-0}" == 1 && "$1" == -e && "$3" == "$HOME/.zshrc" ]]; then
+      "$TEST_NODE_RUNTIME" "$@"
+      printf '# Changed while validating\\n' > "$3"
     else exec "$TEST_NODE_RUNTIME" "$@"; fi ;;
   gh)
     case "$*" in
@@ -399,6 +402,86 @@ esac
         assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       }
     }
+    assert.notInclude(readLog(), 'install.sh:');
+    assert.notInclude(readLog(), 'auth status --active');
+  });
+  for (const shell of ['bash', 'zsh']) {
+    for (const kind of ['false-branch', 'completed-heredoc', 'heredoc-delimiter', 'continued-command'] as const) {
+      it(`adds a usable PATH after an inactive matching line in ${shell}: ${kind}`, () => {
+        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+        const commandBin = path.join(home, '.local/bin');
+        const line = `export PATH='${quickBin}':$PATH:'${commandBin}'`;
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const sentinel = path.join(root, 'profile-executed');
+        const constructs = {
+          'false-branch': `if false; then\n${line}\nfi\n`,
+          'completed-heredoc': `: <<'END'\n${line}\nEND\n`,
+          'heredoc-delimiter': `: <<"${line}"\nExisting text\n${line}\n`,
+          'continued-command': `: \\\n${line}\n`,
+        };
+        const contents = `touch '${sentinel}'\n` + constructs[kind];
+        fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const result = run('y\ny\n', { SHELL: `/bin/${shell}` });
+        assert.equal(result.status, 0, result.stdout + result.stderr + readLog());
+        assert.include(result.stdout, 'Use these tools in new Terminal windows?');
+        assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+        const after = contents + '\n' + line + '\n';
+        assert.equal(fs.readFileSync(profile, 'utf8'), after);
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+        const args = shell === 'bash' ? ['--noprofile', '--norc', '-c'] : ['-f', '-c'];
+        const fresh = spawnSync(`/bin/${shell}`, [...args, 'source "$FAKE_PROFILE"; printf "%s" "$PATH"'], {
+          encoding: 'utf8', cwd: home,
+          env: testChildEnvironment({ HOME: home, PATH: tools, FAKE_PROFILE: profile }),
+        });
+        assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+        assert.equal(fresh.stdout, `${quickBin}:${tools}:${commandBin}`);
+        fs.unlinkSync(sentinel);
+        const rerun = run('', { SHELL: `/bin/${shell}`, PATH: `${quickBin}:${tools}` });
+        assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+        assert.equal(fs.readFileSync(profile, 'utf8'), after);
+        assert.notInclude(rerun.stdout, 'Use these tools in new Terminal windows?');
+        assert.isFalse(fs.existsSync(sentinel), 'Repeat validation must not execute startup contents');
+      });
+    }
+    it(`preserves an inactive matching line when the ${shell} PATH change is declined`, () => {
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      const line = `export PATH='${quickBin}':$PATH:'${path.join(home, '.local/bin')}'`;
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      const contents = `if false; then\n${line}\nfi\n`;
+      fs.writeFileSync(profile, contents);
+      const result = run('n\n', { SHELL: `/bin/${shell}` });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'PATH setup was declined');
+      assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+      assert.notInclude(readLog(), 'install.sh:');
+      assert.notInclude(readLog(), 'auth status --active');
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
+  it('reuses a final standalone PATH command after a comment backslash, with or without a final newline', () => {
+    const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+    const line = `export PATH='${quickBin}':$PATH:'${path.join(home, '.local/bin')}'`;
+    for (const shell of ['bash', 'zsh']) {
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      for (const ending of ['', '\n']) {
+        const contents = '# Windows path C:\\\n' + line + ending;
+        fs.writeFileSync(profile, contents);
+        const result = run('y\n', { SHELL: `/bin/${shell}` });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+        assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+      }
+    }
+  });
+  it('asks before changing a profile that changed after the PATH reuse check', () => {
+    const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+    const line = `export PATH='${quickBin}':$PATH:'${path.join(home, '.local/bin')}'`;
+    const profile = path.join(home, '.zshrc');
+    fs.writeFileSync(profile, line + '\n');
+    const result = run('n\n', { FAKE_CHANGE_PROFILE: '1' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'PATH setup was declined');
+    assert.equal(fs.readFileSync(profile, 'utf8'), '# Changed while validating\n');
     assert.notInclude(readLog(), 'install.sh:');
     assert.notInclude(readLog(), 'auth status --active');
   });
