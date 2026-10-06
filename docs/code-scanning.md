@@ -13,10 +13,12 @@ start its automatic scan before merge. Do not dispatch Advanced scans or open
 an activation PR while default setup is enabled:
 [GitHub rejects Advanced CodeQL uploads in that state](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/troubleshoot-sarif-uploads/default-setup-enabled).
 The manual-only staging workflow landed in
-[#509](https://github.com/JBallin/ballin-scripts/pull/509). Keep
-[#466](https://github.com/JBallin/ballin-scripts/issues/466) open until current-head
-same-repository and fork scans pass the qualification below; adding automatic
-triggers alone does not establish that coverage.
+[#509](https://github.com/JBallin/ballin-scripts/pull/509). Complete the main
+migration only after main and same-repository scans pass the qualification below
+and the merged activation produces a successful main push scan. If the owner
+then closes [#466](https://github.com/JBallin/ballin-scripts/issues/466), its
+completion note must explicitly defer live fork verification until the next
+real external PR. Adding triggers alone does not establish actual fork coverage.
 
 The candidate retains the observed default scan configuration: Actions and
 JavaScript/TypeScript, `build-mode: none`, the default query suite, no custom
@@ -105,15 +107,19 @@ the activation PR.
    rename, remove, spoof, or relax the requirement. The human owner merges only
    after this evidence is complete. Verify the resulting main push scan, then
    resume unrelated merges after main and same-repository qualification succeed.
-   Keep #466 open with contributor-fork coverage explicitly unverified.
+   Keep #466 open until merged automatic activation is verified. The owner may
+   then close the main migration scope with a note that fork approval/upload
+   behavior and a later real fork head update remain untested. Do not mark those
+   original fork-verification acceptance items as completed.
 7. Defer fork qualification until the next real external contributor PR against
    activated main. No new account or synthetic contributor PR is needed for the
    main cutover. On that real PR, record its current head SHA and merge SHA,
    workflow event/run, observed contributor approval classification and any
    wait/approval, both language jobs, processed categories/results, and required
    checks. Verify a later real head update produces fresh evidence rather than
-   relying on the earlier revision. Keep #466 open until actual current-head
-   same-repository and fork results establish coverage. Report only the approval
+   relying on the earlier revision. Record fork coverage as unverified until
+   those results establish it, even if #466's main migration scope is closed.
+   Link the eventual fork evidence to #466. Report only the approval
    behavior actually observed; do not infer first-time approval from a returning
    contributor.
 
