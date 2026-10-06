@@ -2,16 +2,63 @@
 
 *User guide to Ballin snapshot sources, captured files, and data sensitivity considerations.*
 
-`ballin backup` uses an explicit source allowlist. The allowlist limits which
-files and command outputs Ballin selects, but it does not make their contents
-safe: files and command outputs can contain credentials, private URLs,
-usernames, paths, commands, and other sensitive data. This guide explains source
-sensitivity and repository policy; Ballin does not scan or redact
-these snapshots.
+## What will Ballin back up?
 
-Repository capture includes the fixed inventory/preferences baseline and uses
-one local `backup.includeSensitive` choice (default: `false`) for all sensitive
-sources. `ballin_config` saves only supported preferences.
+Backups are optional. By default, a backup includes allowlisted tool inventories
+and filtered Ballin preferences. These can contain private tool choices,
+identities, paths, URLs, or secrets. Backups are stored in a private GitHub
+repository; GitHub and anyone
+with authorized repository access can read them.
+
+Sensitive sources are off by default on a new installation. The local
+`backup.includeSensitive` choice adds all currently supported sensitive sources
+and future additions: raw shell/Git/editor configuration, Codex and Claude Code
+configuration and authoring files, `.nvmrc`, and pipx installation metadata.
+Eligible skill packages can include hidden files, executable scripts, and binary
+assets. Synced Claude skills include only plugin-origin packages selected by
+local manifests; defaults and other origins are excluded even if edited.
+
+Ballin does not scan or redact credentials. It does not automatically restore
+sensitive content or execute saved definitions. Excluding a source from future
+backups does not remove previously saved files, history, or cached content.
+
+See the [source catalog](#source-catalog) for captured files and commands,
+[Codex configuration](#codex-configuration) and
+[Claude Code configuration](#claude-code-configuration) for their detailed
+boundaries, and [repository inclusion](#repository-inclusion) for source review
+and consent persistence.
+
+## Repository inclusion
+
+New and replacement installations start with these sensitive sources off and
+make their own choice; approval is never recovered from a backup. Configured
+setup retains established local consent; fresh reconnect requires its own
+review. Source changes are documented here and in release/update guidance.
+
+Ballin previews logical paths and resolved targets for selected regular files,
+including symlinked dotfiles outside `HOME`. It identifies pipx separately as
+installation metadata whose URLs and arguments may contain credentials, without
+running its collector or presenting its executable as a raw configuration file.
+For synced Claude skills, Ballin reads bounded local collection manifests to
+select plugin packages. It checks selected file readability without reading
+their contents or creating backup snapshots. Codex and Claude Code directory
+discovery recursively inspects names and file types to identify
+nonempty sources. Missing and unavailable sources are shown; access or
+resolution errors prevent confirmation. Closing input or declining final
+confirmation cancels without saving consent or changing destination, cache, or
+remote state. Excluded
+sensitive sources are not inspected just to verify them.
+
+Consent covers later captures as files, symlink targets, and installed-tool
+metadata change. It does not certify future contents or require repeated review
+during unattended backups. Deliberately selected content remains intact without
+redaction, subject to the existing final-newline and empty-file normalization;
+snapshots do not preserve filesystem bytes and metadata exactly. Known
+credential stores, authentication/session files, SSH private keys, and arbitrary
+home trees remain outside direct selection. Allowed sources may still contain
+credentials.
+
+## Source catalog
 
 Listed filenames may live under an application's configuration directory. To
 inspect editor files before enabling backup or sharing snapshots, check
@@ -44,49 +91,6 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `.nvmrc` | `nvmrc` | Preserve the preferred Node.js version. | Usually a version, but the file is arbitrary user-authored content. | Sensitive; one local opt-in. |
 | `mas list` | `mas` | Record installed Mac App Store applications. | Application choices and versions. | Inventory; default included. |
 
-## Repository inclusion
-
-Backup remains optional. Private-repository backups include the fixed
-inventory baseline and supported Ballin preferences by default. Inventories
-may contain private tool choices, identities, paths, and URLs; they are not
-guaranteed public-safe or secret-free. Backups are stored in a private GitHub
-repository. GitHub and anyone authorized to access the repository can read its
-contents.
-
-The single `backup.includeSensitive` setting controls **sensitive sources**:
-raw shell/Git/editor configuration, Codex and Claude Code configuration, `.nvmrc`,
-and pipx installation metadata.
-New and replacement installations start with these sensitive sources off and
-make their own choice; approval is never recovered from a backup. Configured
-setup retains established local consent; fresh reconnect requires its own
-review. The choice covers current and future supported sensitive sources,
-including Codex and Claude Code for existing opt-ins. Setup discloses this scope;
-source changes are documented in the source guide and release/update guidance.
-
-Review shows logical paths and resolved targets for selected regular files,
-including symlinked dotfiles outside `HOME`. It identifies pipx separately as
-installation metadata whose URLs and arguments may contain credentials, without
-running its collector or presenting its executable as a raw configuration file.
-Review may read bounded Claude skill selection metadata; it reads no skill bodies
-or other source contents and runs no collectors. Codex and Claude Code
-directory discovery recursively inspects names and file types to identify nonempty sources. Missing
-and unavailable sources are shown; access or resolution errors prevent
-confirmation. Closing input or declining final confirmation cancels without
-saving consent or changing destination, cache, or remote state. Excluded
-sensitive sources are not inspected just to verify them.
-
-Consent covers later captures as files, symlink targets, and installed-tool
-metadata change. It does not certify future contents or require repeated review
-during unattended backups. Deliberately selected content remains intact without
-redaction, subject to the existing final-newline and empty-file normalization;
-snapshots do not preserve filesystem bytes and metadata exactly. Known
-credential stores, authentication/session files, SSH private keys, and arbitrary
-home trees remain outside direct selection. Allowed sources may still contain
-credentials.
-
-Omitting a category from future captures does not delete older remote files,
-history, or cached content.
-
 ## Codex configuration
 
 Ballin uses the active `CODEX_HOME` when set, otherwise `~/.codex`. Personal
@@ -114,7 +118,11 @@ Recursive snapshots are versioned JSON archives of regular files, with sorted
 relative paths, readable UTF-8 lines or Base64 bytes, and an executable flag.
 Hidden files and binary
 assets are included; empty directories, symlinks, special files, `.git` metadata,
-and `.DS_Store` are omitted. Both skill sources omit root `.system`. Codex
+and `.DS_Store` are omitted. Both Codex skill sources omit root `.system` and each
+skill's `agents/openai.yaml`, regardless of its contents. `SKILL.md`, scripts,
+references, assets, and other eligible files, including other YAML files, remain
+included. Previously saved metadata remains readable; the exclusion does not
+delete source files or rewrite backup history. Codex
 source paths reject descendant symlinks; an explicitly selected Codex root may
 be a symlink. Empty or generated-only directory sources are not published.
 Review opens and closes selected regular files to check readability without
@@ -161,10 +169,11 @@ relative paths, exact file bytes, and executable flags. The Markdown sources
 omit non-Markdown files. All Claude sources omit symlinks, special files, empty
 directories, `.git`, and `.DS_Store`.
 Selected hard links stop capture; Ballin does not search for their other paths.
-Discovery and review inspect file attributes and bounded skill selection
-metadata; review checks readability without reading skill bodies or other
-source contents. Discovery or collection failure stops the backup before
-publication. Capture is not atomic across concurrent edits.
+During discovery and preview, Ballin checks file attributes and reads bounded
+local collection manifests to select synced plugin packages. The preview checks
+readability without reading selected file contents or creating backup snapshots.
+Discovery or collection failure stops the backup before publication. Capture is
+not atomic across concurrent edits.
 
 Claude Code has its own **16 MiB combined** normalized capture allowance,
 including unchanged snapshots and archive/encoding overhead, plus **8,192 visited
@@ -227,8 +236,9 @@ paths. Across the skills source, manifest reads are bounded to 1 MiB and 8,192
 records, separate from the existing capture limits. Missing, unreadable,
 malformed, oversized, symlinked, hard-linked, or ambiguously named manifests make
 the whole skills source unavailable, retaining its previous saved bundle rather
-than publishing a partial capture. Discovery and review read this metadata but
-do not read skill contents or traverse omitted payloads.
+than publishing a partial capture. Ballin reads the collection manifests during
+discovery and preview; it does not read skill contents or traverse omitted
+payloads at those stages.
 
 The plugin origin does not prove personal authorship: third-party or
 organization-provided plugin-origin packages can qualify. Other origins are

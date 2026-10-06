@@ -206,7 +206,11 @@ content. `backup list` and `backup open` fetch only marker content. List present
 current canonical selectors actually present, distinguishes retired names,
 omits reserved metadata, and counts unexpected entries without disclosing their
 names. Retired and unexpected content require deliberate inspection through
-`backup open`, which prints the validated destination URL before opening it.
+`backup open`, which shows immediate progress through destination validation and
+browser dispatch, then confirms the verified URL after successful dispatch.
+Capable terminals replace the progress line; redirected output uses a plain
+progress line on stderr and the completion message on stdout. Browser failures
+retain the verified URL in the manual-open error.
 These commands use immutable blob IDs and the same content validation.
 Unrequested snapshot contents are not validated. Inventory-only inspection still
 requires the complete tree, marker and final revision checks; it cannot infer
@@ -369,9 +373,15 @@ symlink rejection are documented in [source sensitivity](backup-sources.md#codex
 
 ### Bundle inspection
 
-`backup read <snapshot> --list` returns only member paths as a JSON array in saved
-order, with control and directional formatting characters escaped for display. `--file <path>` emits the
-exact decoded bytes of one member to stdout without framing or newline changes.
+`backup read <snapshot> --list` prints one member path per line in saved order,
+without a heading or metadata. Control characters, including newlines, and
+directional formatting characters use visible escapes so each path stays on one
+physical line. This display output is not JSON or a lossless machine-readable
+path format: literal backslashes can resemble display escapes. Stored paths and
+exact member lookup are unchanged. On an interactive terminal, one blank line
+separates the listing from the member-read hint on stderr; redirected streams
+receive no hint or extra blank line. `--file <path>` emits the exact decoded bytes
+of one member to stdout without framing or newline changes.
 Both use the existing saved-snapshot reader, including destination, inventory,
 marker, account and revision validation. The entire bundle archive is checked
 before any member output: version-2 schema, relative paths, unique
@@ -387,9 +397,10 @@ filesystem operations, and decoded content is never executed or restored.
 Bundle snapshots use `.bundle.json` names. Plain snapshots retain their existing
 names. Old bundle names are retired without read aliases and are retained if
 present; they can coexist with new bundle filenames. The flat repository layout
-and backup marker version remain unchanged. Bundle listings supply an inspection
-hint; raw and file-list hints appear only when stdin, stdout and stderr are
-terminals. Raw hints require a known bundle name and a validated archive.
+and backup marker version remain unchanged. Snapshot listings offer the
+snapshot-read command. Raw and file-list inspection hints require a validated
+archive and appear only when stdin, stdout and stderr are terminals. Raw hints
+also require a known bundle name.
 
 Reconciliation uses exact stored bytes and the ordinary conflict rules. No
 format-conversion exception or semantic JSON normalization applies. Old-name

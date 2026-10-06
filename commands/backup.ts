@@ -108,9 +108,6 @@ const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
   if (current.length > 0) {
     writeStdoutLine(`Saved snapshots:\n${current.map((name) => `  ${name}`).join('\n')}`);
     writeStdoutLine('Read a snapshot with `ballin backup read <snapshot>`.');
-    if (current.some((name) => directorySnapshotFileNames.has(name))) {
-      writeStdoutLine('List files in a bundle with `ballin backup read <bundle> --list`.');
-    }
   } else {
     writeStdoutLine('No current snapshots are saved in this backup.');
   }
@@ -674,7 +671,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       onCancelled: () => { cancelled = true; },
     });
     if (!configured && !cancelled) {
-      writeStderrLine('ballin backup setup: setup did not complete; check the message above and retry with `ballin backup setup`.');
+      writeStderrLine('ballin backup setup: setup incomplete; follow the recovery guidance above before running `ballin backup setup` again.');
     }
     process.exitCode = configured ? 0 : 1;
     return;
@@ -734,7 +731,10 @@ function runBackupCommand(args = process.argv.slice(2)): void {
         if (directoryList || directoryFile) {
           const { entries } = readDirectorySnapshot(bytes);
           process.stdout.write(directoryList ? listDirectoryMembers(entries) : readDirectoryMember(entries, args[3]));
-          if (directoryList) writeDirectoryReadHint('--file <path>');
+          if (directoryList && interactiveReadHint()) {
+            writeStderrLine('');
+            writeDirectoryReadHint('--file <path>');
+          }
         } else {
           process.stdout.write(bytes);
           if (directorySnapshotFileNames.has(args[1]) && interactiveReadHint()) {
@@ -752,11 +752,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     } else if (command === 'list') {
       writeSavedSnapshots(readRepositoryInventory(config.repository));
     } else if (command === 'open') {
-      const url = repositoryOpenUrl(config.repository);
-      writeStdoutLine(`Opening ${url} in your browser.`);
-      const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
-      process.exitCode = result.error ? 1 : spawnResultStatus(result);
-      if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
+      withTemporaryStatus('Opening...', () => {
+        const url = repositoryOpenUrl(config.repository);
+        const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
+        process.exitCode = result.error ? 1 : spawnResultStatus(result);
+        if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
+        else writeStdoutLine(`Opened ${url} in your browser.`);
+      }, true);
     } else {
       /* c8 ignore next 3 -- The catalog predicate and handled cases enforce the supported command union. */
       const unhandledCommand: never = command;

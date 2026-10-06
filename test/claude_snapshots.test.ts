@@ -213,6 +213,7 @@ describe('Claude Code selected configuration', () => {
       'demo/.env.example': 'DUMMY_SELECTED_SECRET',
       'demo/.support/reference.txt': 'reference',
       'demo/assets/image.bin': Buffer.from([0, 255, 128]),
+      'demo/agents/openai.yaml': 'synthetic: Claude support remains eligible\n',
       'demo/scripts/run.sh': '#!/bin/sh\n',
       'demo/settings.json': '{"synthetic":"supporting example"}',
       'demo/build/fixture.key': 'ordinary authoring asset',

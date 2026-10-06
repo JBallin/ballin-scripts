@@ -488,7 +488,7 @@ describe('repository backup lifecycle', function() {
       assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(mutations(), 0);
       const embedded = runSetup(); assert.equal(embedded.status, 1);
       assert.include(embedded.stdout, 'Unable to configure backup');
-      assert.include(embedded.stdout, 'Retry with: `ballin backup setup`');
+      assert.include(embedded.stdout, 'before retrying `ballin backup setup`');
       assert.notInclude(embedded.stdout, 'Validated private backup:');
       assert.include(embedded.stdout, result.stdout.trim());
       assert.deepEqual(config(), before); assert.equal(cached(), 'unchanged\n');
@@ -660,6 +660,27 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1);
     });
   });
+  for (const snapshot of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json']) {
+    it(`retains saved ${snapshot} when only omitted skill metadata remains locally`, () => {
+      const skillRoot = snapshot === 'codex_skills.bundle.json' ? path.join(home, '.codex/skills') : path.join(home, '.agents/skills');
+      const metadata = path.join(skillRoot, 'demo/agents/openai.yaml');
+      fs.mkdirSync(path.dirname(metadata), { recursive: true });
+      fs.writeFileSync(metadata, 'synthetic: source remains intact\n');
+      const archived = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+        { path: 'demo/SKILL.md', executable: false, encoding: 'utf8', content: ['saved instructions\n'] },
+        { path: 'demo/agents/openai.yaml', executable: false, encoding: 'utf8', content: ['saved metadata\n'] },
+      ] });
+      saveState(fixtureState({ [snapshot]: archived }));
+      seedCache(snapshot, archived);
+      source();
+      ok(run());
+      assert.equal(remote(snapshot), archived);
+      assert.equal(cached(snapshot), archived);
+      assert.equal(fs.readFileSync(metadata, 'utf8'), 'synthetic: source remains intact\n');
+      assert.equal(remote('zshrc.sh'), 'local\n');
+      assert.lengthOf(publications(), 1);
+    });
+  }
   describe('bundle reset and conflicts', () => {
     const bytes = Buffer.from('\ufeffsynthetic\r\nlast');
     const legacyEntry = { path: 'nested/fixture.md', executable: false, content: bytes.toString('base64') };
@@ -752,7 +773,7 @@ describe('repository backup lifecycle', function() {
         assert.notInclude(remote('claude_skills.bundle.json'), 'DUMMY_EXCLUDED_SECRET');
         assert.equal(cached('claude_skills.bundle.json'), remote('claude_skills.bundle.json'));
         const listed = run(['read', 'claude_skills.bundle.json', '--list']); ok(listed);
-        assert.deepEqual(JSON.parse(listed.stdout), skillPaths);
+        assert.equal(listed.stdout, `${skillPaths.join('\n')}\n`);
         const member = run(['read', 'claude_skills.bundle.json', '--file', 'demo/.support']); ok(member);
         assert.equal(member.stdout, 'DUMMY_SELECTED_SKILL_SECRET');
         const syncedMember = run(['read', 'claude_skills.bundle.json', '--file', 'pdf/.support']); ok(syncedMember);
@@ -782,13 +803,11 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SUPPORT_SECRET');
     const result = run(['setup'], 'y\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Claude Code includes personal CLAUDE.md');
+    assert.include(result.stdout, 'Sensitive sources may contain credentials or other private information.');
     assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
     assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
-    assert.include(result.stdout, 'Skill folders include hidden files, executable scripts, and binary supporting assets.');
-    assert.include(result.stdout, 'Synced Claude skills require manifest source "plugin"; other origins, including defaults, are excluded.');
-    assert.include(result.stdout, 'sync bookkeeping, and plugin installations are excluded');
-    assert.include(result.stdout, 'future additions to this maintained catalog');
+    assert.include(result.stdout, 'Your choice also covers future supported sources.');
+    assert.include(result.stdout, 'Synced Claude skills include plugin-origin packages only; defaults and other origins are excluded.');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
     assert.lengthOf(mutations(), 0);
   });
@@ -1232,7 +1251,7 @@ describe('repository backup lifecycle', function() {
     fs.symlinkSync(home, cacheRoot);
     assert.equal(run(['read', 'zshrc.sh']).stdout, bytes);
     const opened = run(['open']); ok(opened);
-    assert.equal(opened.stdout, 'Opening https://github.com/fixture-user/renamed in your browser.\n');
+    assert.equal(opened.stdout, 'Opened https://github.com/fixture-user/renamed in your browser.\n');
     assert.deepEqual(state().requests.at(-1)?.payload?.args, ['browse', '--repo', 'https://github.com/fixture-user/renamed']);
     assert.isTrue(fs.lstatSync(cacheRoot).isSymbolicLink()); assert.equal(mutations().length, 0);
     assert.equal(run(['read', '.ballin-backup.json']).status, 1);
@@ -1319,31 +1338,89 @@ describe('repository backup lifecycle', function() {
     assert.equal(rulesetRequests().length, 0);
   });
 
-  const browserOrderingPreload = (): string => `
-    const fs = require('fs'); const write = process.stdout.write; let output = '';
-    process.stdout.write = function(text, ...rest) { output += text; return write.call(this, text, ...rest); };
+  const browserOrderingPreload = (tty = false, diagnostic = false): string => `
+    for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: ${tty} });
+    Object.defineProperty(process.stderr, 'columns', { value: 80 });
+    const fs = require('fs'); const write = process.stdout.write; const errorWrite = process.stderr.write; const writeSync = fs.writeSync;
+    let output = '', feedback = '', combined = '', validated = false;
+    process.stdout.write = function(text, ...rest) { output += text; combined += text; return write.call(this, text, ...rest); };
+    process.stderr.write = function(text, ...rest) { combined += text; return errorWrite.call(this, text, ...rest); };
+    fs.writeSync = function(fd, text, ...rest) { if (fd === 2) { feedback += text; combined += text; } return writeSync.call(this, fd, text, ...rest); };
+    process.on('exit', () => fs.writeFileSync(${JSON.stringify(path.join(root, 'opening-transcript.json'))}, JSON.stringify({ combined })));
     const child = require('child_process'); const spawn = child.spawnSync;
     child.spawnSync = function(command, args, options) {
-      if (command === 'gh' && args[0] === 'browse') fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, args, stdio: options.stdio, host: options.env.GH_HOST }));
+      if (command === 'gh' && args[0] === 'browse') {
+        fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, feedback, validated, args, stdio: options.stdio, host: options.env.GH_HOST }));
+        const result = spawn.call(this, command, args, options);
+        fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-completion-order.json'))}, JSON.stringify({ output, feedback, status: result.status }));
+        return result;
+      }
       return spawn.call(this, command, args, options);
     };
+    const repository = require(${JSON.stringify(require.resolve('../commands/backup_repository.ts'))});
+    const openUrl = repository.repositoryOpenUrl;
+    repository.repositoryOpenUrl = function(...args) {
+      fs.writeFileSync(${JSON.stringify(path.join(root, 'validation-order.json'))}, JSON.stringify({ feedback, output }));
+      if (${diagnostic}) require(${JSON.stringify(require.resolve('../commands/commandHelpers.ts'))}).writeStderrLine('fixture validation diagnostic');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+      const url = openUrl.apply(this, args); validated = true; return url;
+    };
   `;
-  for (const failed of [false, true]) {
-    it(`displays the validated URL before ${failed ? 'failed' : 'successful'} browser dispatch`, () => {
-      const value = state(); value.faults.open = failed; saveState(value);
-      const result = run(['open'], '', {}, browserOrderingPreload());
-      assert.equal(result.status, failed ? 7 : 0);
-      const notice = 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n';
-      assert.equal(result.stdout, notice);
-      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')), {
-        output: notice, args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
+  for (const tty of [false, true]) {
+    for (const failed of [false, true]) {
+      it(`shows immediate opening feedback before delayed validation and ${failed ? 'failed' : 'successful'} browser dispatch in ${tty ? 'TTY' : 'redirected'} output`, () => {
+        const value = state(); value.faults.open = failed; saveState(value);
+        const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(tty));
+        assert.equal(result.status, failed ? 7 : 0);
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'validation-order.json'), 'utf8')), {
+          feedback: tty ? 'Opening...' : 'Opening...\n', output: '',
+        });
+        const notice = 'Opened https://github.com/fixture-user/ballin-backups in your browser.\n';
+        const error = 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n';
+        assert.equal(result.stdout, failed ? '' : notice);
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')), {
+          output: '', feedback: tty ? 'Opening...' : 'Opening...\n', validated: true,
+          args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
+        });
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-completion-order.json'), 'utf8')), {
+          output: '', feedback: tty ? 'Opening...' : 'Opening...\n', status: failed ? 7 : 0,
+        });
+        const feedback = tty ? 'Opening...\r\x1b[2K' : 'Opening...\n';
+        assert.equal(result.stderr, feedback + (failed ? error : ''));
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'opening-transcript.json'), 'utf8')), {
+          combined: feedback + (failed ? error : notice),
+        });
+        assert.equal(state().requests.at(-1)?.endpoint, 'open');
+        assert.equal(mutations().length, 0);
+        assert.isFalse(fs.existsSync(cacheRoot));
       });
-      assert.equal(result.stderr, failed ? 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n' : '');
-      assert.equal(state().requests.at(-1)?.endpoint, 'open');
-      assert.equal(mutations().length, 0);
-      assert.isFalse(fs.existsSync(cacheRoot));
+    }
+  }
+  for (const tty of [false, true]) {
+    it(`keeps opening feedback distinct from validation failure in ${tty ? 'TTY' : 'redirected'} output`, () => {
+      const value = state(); value.faults.auth = true; saveState(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(tty));
+      assert.equal(result.status, 1); assert.equal(result.stdout, '');
+      const feedback = tty ? 'Opening...\r\x1b[2K' : 'Opening...\n';
+      assert.isTrue(result.stderr.startsWith(feedback));
+      assert.include(result.stderr, 'authentication');
+      assert.notInclude(result.stderr, 'in your browser');
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'validation-order.json'), 'utf8')), {
+        feedback: tty ? 'Opening...' : 'Opening...\n', output: '',
+      });
+      assert.isFalse(fs.existsSync(path.join(root, 'browser-order.json')));
+      assert.isFalse(state().requests.some((request) => request.endpoint === 'open'));
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
     });
   }
+  it('does not erase validation diagnostics when replacing opening feedback', () => {
+    const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(true, true)); ok(result);
+    assert.equal(result.stderr, 'Opening...\r\x1b[2Kfixture validation diagnostic\n');
+    assert.equal(result.stdout, 'Opened https://github.com/fixture-user/ballin-backups in your browser.\n');
+    assert.isTrue(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')).validated);
+  });
   for (const failure of ['spawn', 'signal']) {
     it(`reports browser ${failure} failure without exposing child diagnostics`, () => {
       const result = run(['open'], '', {}, `
@@ -1358,7 +1435,9 @@ describe('repository backup lifecycle', function() {
         };
       `);
       assert.equal(result.status, failure === 'spawn' ? 1 : 143);
+      assert.equal(result.stdout, '');
       assert.include(result.stderr, 'unable to open your browser'); assert.include(result.stderr, 'manually');
+      assert.include(result.stderr, 'https://github.com/fixture-user/ballin-backups');
       assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_BROWSER_ERROR');
       assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
     });
@@ -1513,7 +1592,7 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
     assert.equal(config().update.backup, 'false');
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
-    assert.include(result.stdout, '\nSelected GitHub.com account: fixture-user\nCandidate backup: https://github.com/fixture-user/ballin-backups\n\nTool inventories');
+    assert.include(result.stdout, '\nSelected GitHub.com account: fixture-user\nCandidate backup: https://github.com/fixture-user/ballin-backups\n\nSensitive sources');
     assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups\n');
     assert.include(result.stdout, '"update.backup" set to: "false"\nBackup setup complete.\n');
     assertSavedSensitiveChoice(result, 'false');
@@ -1546,8 +1625,12 @@ describe('repository backup lifecycle', function() {
       const value = state(); value.exists = false; value.faults = faults; saveState(value);
       const result = run(['setup'], 'y\ncreate\n\nn\ny\n');
       ok(result);
-      if (message) assert.include(result.stdout, message);
-      else assert.notInclude(result.stdout, 'branch protection');
+      const confirmation = 'Confirm this destination and source selection? [y/N] ';
+      assert.include(result.stdout, confirmation);
+      assert.notInclude(result.stdout.slice(0, result.stdout.indexOf(confirmation)), 'branch protection');
+      const outcomeOutput = result.stdout.slice(result.stdout.indexOf(confirmation) + confirmation.length);
+      if (message) assert.include(outcomeOutput, message);
+      else assert.notInclude(outcomeOutput, 'branch protection');
       assert.include(result.stdout, 'https://github.com/fixture-user/ballin-backups');
       assert.deepEqual(config().backup.repository, fixtureDestination); assert.isUndefined(cached());
       assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
@@ -1699,13 +1782,13 @@ describe('repository backup lifecycle', function() {
     it(`confirms the independently reviewed sensitive-source choice once after reconnect saves ${preference}`, () => {
       unconfigured(); const before = config(); before.backup.includeSensitive = preference === 'true' ? 'false' : 'true'; saveConfig(before);
       const result = run(['setup'], `y\nreconnect\n\n${preference === 'true' ? 'y' : 'n'}\ny\nn\n`); ok(result);
-      assert.include(result.stdout, 'Also include sensitive sources? [y/N]');
+      assert.include(result.stdout, 'Include sensitive sources? [y/N]');
       assert.equal(config().backup.includeSensitive, preference);
       assertSavedSensitiveChoice(result, preference);
       assert.include(result.stdout, 'Private backup reconnected: https://github.com/fixture-user/ballin-backups\n');
       assert.notInclude(result.stdout, 'Unrecognized backup entries:');
       assert.include(result.stdout, 'Stop backups from other installations before running `ballin backup` here.');
-      assert.include(result.stdout, 'Reconnecting does not mark local files as matching the backup or allow overwriting different saved data.');
+      assert.include(result.stdout, 'Reconnect does not authorize overwriting different saved data.');
       assert.include(result.stdout, 'Backup setup complete.');
       assert.notInclude(result.stdout, `"backup.includeSensitive" set to: "${before.backup.includeSensitive}"`);
     });
@@ -1745,7 +1828,7 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, 'Validated private backup: https://github.com/renamed-user/renamed\nSensitive sources: included\nAutomatic backup during update: disabled\n');
     assert.notInclude(result.stdout, 'https://github.com/fixture-user/ballin-backups');
     assert.notInclude(result.stdout, '"backup.includeSensitive" set to:');
-    assert.notInclude(result.stdout, 'Also include sensitive sources');
+    assert.notInclude(result.stdout, 'Include sensitive sources');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'false');
     assert.equal(cached(), 'base\n'); assert.equal(mutations().length, 0);
     assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
