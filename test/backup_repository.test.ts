@@ -291,6 +291,30 @@ describe('private repository transport', () => {
       name: state.name, description: 'Developer environment backups created by Ballin', private: true, auto_init: true,
     });
   });
+  for (const seed of ['extra snapshot', 'snapshot only', 'parented README']) {
+    it(`rejects an unexpected ${seed} seed before reading content`, () => {
+      state.exists = false;
+      options.runCommand = (_command, args, opts) => {
+        const result = requestFixture(state, args, opts);
+        if (args.includes('user/repos')) {
+          const files = seed === 'parented README' ? { 'README.md': Buffer.from('seed\n').toString('base64') }
+            : seed === 'snapshot only' ? { 'zshrc.sh': Buffer.from('snapshot\n').toString('base64') }
+              : { ...state.commits[state.head].files, 'zshrc.sh': Buffer.from('snapshot\n').toString('base64') };
+          commitFixture(state, files, seed === 'parented README' ? [state.head] : []);
+        }
+        return result;
+      };
+      try {
+        createRepositoryBackup(state.name, readRepositoryAccount(options), options);
+        assert.fail('expected seed rejection');
+      } catch (error) {
+        assert.instanceOf(error, RepositoryError);
+        assert.equal((error as InstanceType<typeof RepositoryError>).completedStage, 'repository-created');
+      }
+      assert.lengthOf(state.requests.filter((request) => request.endpoint.includes('/git/blobs/')), 0);
+      assert.lengthOf(publications(), 0);
+    });
+  }
   it('creates the exact minimal managed-branch ruleset and verifies the returned resource independently', () => {
     const before = read(); state.requests = []; state.rulesets = [];
     assert.deepEqual(ensureManagedBranchRuleset(before, options), { status: 'enabled' });

@@ -297,7 +297,10 @@ const inspect = (
       commitUrl: `https://github.com/${info.login}/${info.destination.name}/commit/${info.revision.head}`,
     };
     info.revision.entries = readInventory(info, options);
-    if (!seed) {
+    if (seed) {
+      if (info.revision.parents.length !== 0 || info.revision.entries.length !== 1
+        || info.revision.entries[0].path !== repositoryReadmeFileName) throw new RepositoryError('unsupported');
+    } else {
       const expectedMarker = markerBytes(destination);
       const markerEntry = info.revision.entries.find((entry) => entry.path === repositoryMarkerFileName);
       if (!markerEntry || markerEntry.size !== expectedMarker.length) throw new RepositoryError('unsupported');
@@ -307,13 +310,8 @@ const inspect = (
     }
     for (const entry of info.revision.entries) {
       if ((entry.classification === 'current' && (snapshot === undefined || entry.path === snapshot))
-        || (seed && (entry.path === repositoryMarkerFileName || entry.path === repositoryReadmeFileName))) {
+        || (seed && entry.path === repositoryReadmeFileName)) {
         inspected.snapshots.set(entry.path, readBlob(info, entry, options));
-      }
-    }
-    if (seed) {
-      if (info.revision.parents.length !== 0 || info.revision.entries.length !== 1 || !inspected.snapshots.has(repositoryReadmeFileName)) {
-        throw new RepositoryError('unsupported');
       }
     }
     assertCurrent(inspected, options);
