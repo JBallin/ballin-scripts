@@ -303,7 +303,7 @@ def main():
     host_node = Path(os.environ["BENCH_319_NODE24_ROOT"]).resolve()
     older_node = Path(os.environ["BENCH_319_NODE2415_ROOT"]).resolve()
     base_env = {"PATH": str(host_node / "bin") + ":/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",
-                "LANG": "C.UTF-8", "TZ": "UTC", "CI": "true", "NODE_DISABLE_COMPILE_CACHE": "1",
+                "LANG": "C.UTF-8", "CI": "true", "NODE_DISABLE_COMPILE_CACHE": "1",
                 "BENCH_319_SOURCE": str(ROOT), "BENCH_319_CONTRACT": str(ARTIFACTS / "contract.json")}
     preflight = json.loads(bounded(ARTIFACTS, "host-capacity", ["node", str(DRIVER / "observe.cjs"), "--resources"], base_env))
     validate_resources(preflight, four, "v24.21.0")
