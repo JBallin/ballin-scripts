@@ -21,6 +21,12 @@ refresh existing presentation without running Claude. For a fresh review of an
 open, non-draft, same-repository PR, a human owner, member, or collaborator can
 post `/claude-review` as the entire top-level or inline PR comment.
 
+Run `npm run test:unit -- test/claude_workflows.test.ts` for offline caller
+regression tests covering eligibility, permissions, credential routing, runtime
+pins, and model-free status refresh. They also run through `npm test`, use fixture
+PR responses, and require no credentials or model calls. Shared runtime behavior
+is tested in the runtime repository.
+
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
 Closing the PR or converting it to a draft does not cancel an accepted request.
