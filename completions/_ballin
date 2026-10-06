@@ -8,7 +8,8 @@ if (( ! $+functions[compdef] )); then
 fi
 
 _ballin() {
-  local -a candidates
+  local -a candidates=()
+  local member_paths
   case "$CURRENT" in
     2) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update' '--help') ;;
     3)
@@ -41,7 +42,8 @@ _ballin() {
       ;;
     6)
       if [[ "${words[2]}" == backup && "${words[3]}" == read && "${words[5]}" == --file ]]; then
-        candidates=("${(@f)$(command node "$_ballin_completion_helper" "${words[4]}" 2>/dev/null)}")
+        member_paths="$(command node "$_ballin_completion_helper" "${words[4]}" 2>/dev/null)"
+        [[ -n "$member_paths" ]] && candidates=("${(@f)member_paths}")
       fi
       ;;
   esac

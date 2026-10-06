@@ -59,6 +59,34 @@ describe('shell completions', () => {
     }
   });
 
+  it('never calls zsh compadd with an empty member result', () => {
+    const shellPath = findShell('zsh');
+    for (const state of ['missing bundle', 'unknown bundle', 'unusable config']) {
+      const fixture = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-empty-member-completion-')));
+      try {
+        const files = prepareMemberFixture(fixture);
+        if (state === 'missing bundle') fs.unlinkSync(files.file);
+        if (state === 'unusable config') fs.writeFileSync(files.config, '{');
+        const before = fixtureState(fixture);
+        const result = spawnSync(shellPath, ['-d', '-f', '-c', [
+          'compdef() { :; }',
+          'compadd() { printf "COMPADD:%s\\n" "$#"; printf "<%s>\\n" "$@"; }',
+          'source "$COMPLETION_ASSET"',
+          'CURRENT=6; words=(ballin backup read "$BUNDLE" --file "")',
+          '_ballin',
+        ].join('\n')], { cwd: fixture, encoding: 'utf8', timeout: 3000,
+          env: fixtureEnvironment(fixture, { COMPLETION_ASSET: zshCompletionPath,
+            BUNDLE: state === 'unknown bundle' ? 'unknown.bundle.json' : 'codex_skills.bundle.json',
+            NODE_OPTIONS: `--require=${path.join(fixture, 'completion-guard.cjs')}` }) });
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout, '', state);
+        assert.equal(result.stderr, '', state);
+        assert.isFalse(fs.existsSync(path.join(fixture, 'forbidden')));
+        assert.deepEqual(fixtureState(fixture), before);
+      } finally { fs.rmSync(fixture, { recursive: true, force: true }); }
+    }
+  });
+
   for (const shell of ['zsh', 'bash'] as const) {
     it(`preserves native ${shell} current-command context after harmless compound prefixes`, function () {
       this.timeout(10000);
