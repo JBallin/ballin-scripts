@@ -4,8 +4,9 @@
 
 Run commands from the repository root. Use `npm test` for the complete local
 and CI gate, or `npm run test:coverage` for coverage alone. Both use the shared
-two-worker Mocha command in `test:unit`; lint, typechecks and coverage checks
-remain part of `npm test`.
+Mocha command in `test:unit`; lint, typechecks and coverage checks remain part
+of `npm test`. The [Mocha configuration](../.mocharc.js) uses two workers when
+Node reports at least four available CPUs and runs serially on smaller hosts.
 
 ## Pull request review
 
@@ -273,9 +274,19 @@ median paired reduction was 17.87%; CPU time increased 5.52–5.85%. Queue and
 evidence capture time are excluded. Statement/function outcomes and effective
 V8 covered/uncovered intervals matched across all 36 production files; branch
 map geometry differed in two files. Coverage thresholds and Mocha timeouts are
-unchanged. These repeated results support the two-worker default. Runtime varies
-with machine load and later source changes. Use focused selection for feedback
-and retain the single complete final gate.
+unchanged. These repeated results support two workers on the measured four-CPU
+host. The shared configuration retains serial execution below four available CPUs
+to limit contention between subprocess-heavy suites. Node supplies the CPU estimate
+through `os.availableParallelism()`. Runtime varies with machine load and later
+source changes. Use focused selection for feedback and retain the single complete
+final gate.
+
+A later [two-CPU affinity check](https://github.com/JBallin/ballin-scripts/actions/runs/37420139731)
+at `c9f0a9c` passed serially with 1,842 tests in 735.05s. The two-worker gate
+then failed with one default two-second timeout in the update destination-type
+test, which performs four CLI launches. Collection stopped after that failure;
+the attempt produced no valid speedup comparison. It used Node 24.21.0 and
+affinity control, so it does not reproduce the earlier Node 24.15 quota report.
 
 ## Runtime and platform limits
 
