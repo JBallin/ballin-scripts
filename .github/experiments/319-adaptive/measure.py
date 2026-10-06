@@ -2,13 +2,14 @@
 import base64, hashlib, io, json, os, re, shutil, signal, statistics, subprocess, sys, tarfile, time, urllib.request
 from pathlib import Path
 
-HEAD = "c14b98be8e27ca8f7f0810c827fc7050b4ed446f"
-TREE = "a5658ffda63aa55002d3b686d3dca8a4b7741e3d"
+HEAD = "f6759244d12f3f6eac2141f4c8b6da90887acded"
+TREE = "d825bcfa9a8963e5061c006fda447934287857f6"
 LOCK = "3abd4922490a95cf538c52e16e16fccc739b9c277d4217e21d0064efe9acd797"
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
 DRIVER = Path(__file__).resolve().parent
 ARTIFACTS = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "319-adaptive-evidence"
 BUDGET = 1200
+ORDINARY_SETUP_MARGIN = 180
 ORDER = ("affinity2-adaptive", "quota2-node2415-adaptive", "four-serial", "four-adaptive", "four-adaptive", "four-serial")
 CONTAINER = None
 CONTAINER_REMOVAL_ATTEMPTED = False
@@ -397,12 +398,13 @@ def main():
             gain = 100 * (serial["elapsedSeconds"] - adaptive["elapsedSeconds"]) / serial["elapsedSeconds"]
             pairs.append({"serialSeconds": serial["elapsedSeconds"], "adaptiveSeconds": adaptive["elapsedSeconds"], "reductionPercent": gain})
     median = statistics.median(pair["reductionPercent"] for pair in pairs)
-    qualified = all(pair["reductionPercent"] > 0 for pair in pairs) and median >= 10
+    ordinary_margin = 1200 - max(row["elapsedSeconds"] for row in rows if row["mode"] == "four-adaptive")
+    qualified = all(pair["reductionPercent"] > 0 for pair in pairs) and median >= 10 and ordinary_margin >= ORDINARY_SETUP_MARGIN
     summary = {"collectionComplete": True, "allGatesPassed": True, "pairs": pairs, "medianReductionPercent": median,
                "qualified": qualified, "coverageEquivalent": True, "passingTests": expected_count,
                "constrainedInterpretation": "Each constrained case is one successful smoke check; no repeatability claim",
                "ordinaryCi": "Still requires the actual 20-minute CI job, including setup and evidence margin",
-               "ordinaryCiRemainingSeconds": 1200 - max(row["elapsedSeconds"] for row in rows if row["mode"] == "four-adaptive"),
+               "ordinaryCiRemainingSeconds": ordinary_margin, "ordinaryCiReservedSetupSeconds": ORDINARY_SETUP_MARGIN,
                "detachedDescendantsVerified": False, "runnerTeardownObserved": False}
     write(ARTIFACTS / "summary.json", summary)
     print("ADAPTIVE_COMPARISON_SUMMARY " + json.dumps(summary), flush=True)

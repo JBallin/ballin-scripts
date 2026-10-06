@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 5
         with:
-          ref: c14b98be8e27ca8f7f0810c827fc7050b4ed446f
+          ref: f6759244d12f3f6eac2141f4c8b6da90887acded
           path: source
           persist-credentials: false
       - name: Set up the older diagnostic runtime
