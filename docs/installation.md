@@ -38,7 +38,7 @@ with `ballin backup setup`. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
-Self-updates report “Ballin updated.” after a successful refresh. They check the
+Self-updates report completion after a successful refresh. They check the
 configured backup destination without reading saved snapshot contents.
 Warnings and errors remain visible without repeating the setup summary.
 
