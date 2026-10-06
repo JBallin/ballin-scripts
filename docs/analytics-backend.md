@@ -71,10 +71,10 @@ active installs, top-level command usage, command success/failure counts,
 application/Node/macOS-version trends, and a separate behavioral-outcomes
 section. It does not require, accept, or print Cloudflare secret values.
 
-Run `npx wrangler login` first if local Wrangler authentication is not
-configured. The report tries a directly available `wrangler` command first. If
-that command is unavailable, it falls back to `npx --yes wrangler`, which allows
-npx to install Wrangler without prompting.
+From the repository root, install the locked tool with
+`npm ci --prefix analytics-worker --include=dev`, then run
+`analytics-worker/node_modules/.bin/wrangler login` if local authentication is
+not configured. Reporting and reset require that installed local executable.
 
 Analytics ingestion is public client telemetry. Valid events can be spoofed, so
 reports are directional maintenance signals rather than security-trustworthy
@@ -152,8 +152,8 @@ Confirm the fresh reporting baseline after reset:
 npm run analytics:report
 ```
 
-The reset utility uses the same local Wrangler authentication and fallback
-behavior as the report.
+The reset utility uses the same local Wrangler authentication and installed
+tool as the report.
 
 ## Abuse Controls
 

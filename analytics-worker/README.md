@@ -129,8 +129,14 @@ still send `X-Ballin-Analytics-Token`; the Worker ignores that legacy header.
 
 ## Production Setup
 
-Run these commands from `analytics-worker/`. If Wrangler is not installed
-globally, use `npx wrangler` in place of `wrangler`.
+Run these commands from `analytics-worker/`. Install the locked maintenance
+and deployment tool first:
+
+```shell
+npm ci --include=dev
+```
+
+Use `./node_modules/.bin/wrangler` for maintenance commands in this directory.
 
 1. Copy `wrangler.toml.example` to the ignored local deployment config:
 
@@ -141,20 +147,20 @@ globally, use `npx wrangler` in place of `wrangler`.
 2. Create a D1 database:
 
    ```shell
-   wrangler d1 create ballin-scripts-analytics
+   ./node_modules/.bin/wrangler d1 create ballin-scripts-analytics
    ```
 
 3. Fill in the database ID in `wrangler.toml`.
 4. Set the hash secret:
 
    ```shell
-   wrangler secret put INSTALL_ID_HASH_SECRET
+   ./node_modules/.bin/wrangler secret put INSTALL_ID_HASH_SECRET
    ```
 
 5. Apply migrations:
 
    ```shell
-   wrangler d1 migrations apply ballin-scripts-analytics --remote
+   ./node_modules/.bin/wrangler d1 migrations apply ballin-scripts-analytics --remote
    ```
 
 6. Create the `analytics-worker-production` GitHub deployment environment, allow
@@ -177,10 +183,14 @@ do not deploy; edits that also change a deployment input still do. The Worker
 directory remains a conservative ownership boundary so new Worker-local
 deployment inputs are not missed.
 
+The workflow pins its GitHub Actions to full commit SHAs and installs Wrangler
+with `npm ci` from this directory's lockfile. Deployment and verification use
+that local executable.
+
 Before an automatic deployment, the workflow stops if migrations must be
 applied manually. It then creates an ignored runner-local `wrangler.toml` from
 `wrangler.toml.example`, and requires `CLOUDFLARE_D1_DATABASE_ID` before running
-`wrangler deploy` from this directory. It then inspects every Worker version
+`./node_modules/.bin/wrangler deploy` from this directory. It then inspects every Worker version
 receiving production traffic and fails unless each version exposes
 `ANALYTICS_DB` as a D1 binding,
 `ANALYTICS_RATE_LIMITER` as a rate-limit binding, and
@@ -204,7 +214,7 @@ Remote D1 migrations remain manual. An automatic deploy stops when
 applying the remote migration, rerun the workflow manually from `main`.
 
 ```shell
-wrangler d1 migrations apply ballin-scripts-analytics --remote
+./node_modules/.bin/wrangler d1 migrations apply ballin-scripts-analytics --remote
 ```
 
 ### Behavioral Analytics Rollout
@@ -244,7 +254,7 @@ command behavior.
 Manual deploys remain available for emergency or local maintenance:
 
 ```shell
-wrangler deploy
+./node_modules/.bin/wrangler deploy
 ```
 
 The production endpoint is:
@@ -306,19 +316,19 @@ cp analytics-worker/wrangler.toml.example analytics-worker/wrangler.toml
 ```
 
 Then fill in the D1 `database_id` and make sure Wrangler is authenticated for
-the Cloudflare account. For local maintainer authentication, run:
+the Cloudflare account. Install the locked tool from the repository root, then authenticate locally:
 
 ```shell
-npx wrangler login
+npm ci --prefix analytics-worker --include=dev
+analytics-worker/node_modules/.bin/wrangler login
 ```
 
 The database ID is not a secret by itself; remote reads are still controlled by
 Wrangler auth.
 
 The report does not read or print Cloudflare secrets. Do not paste secret
-values into the report command. If `wrangler` is not directly available, the
-script falls back to `npx --yes wrangler`; `--yes` allows npx to install
-Wrangler without prompting.
+values into the report command. Reporting requires the installed local Wrangler
+and prints an installation command if it is missing.
 
 Reporting reads these aggregate tables:
 
@@ -369,6 +379,6 @@ npm run analytics:report
 
 The reset command uses local Wrangler authentication and the ignored
 `analytics-worker/wrangler.toml` file, like the report command. Run
-`npx wrangler login` first if local Wrangler authentication is not configured.
-If `wrangler` is not directly available, the script falls back to
-`npx --yes wrangler`, which allows npx to install Wrangler without prompting.
+`analytics-worker/node_modules/.bin/wrangler login` from the repository root
+first if local Wrangler authentication is not configured. Reset requires the
+same installed local Wrangler as reporting.

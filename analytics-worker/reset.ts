@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { localWranglerPath, missingWranglerMessage } = require('./wrangler.ts');
 
 import type { SpawnSyncReturns } from 'child_process';
 
@@ -167,16 +168,13 @@ const runWrangler = (
   }
 
   const wranglerArgs = wranglerArgsFor(sql, options);
-  let result = spawnRunner('wrangler', wranglerArgs, {
+  const result = spawnRunner(localWranglerPath(rootDir), wranglerArgs, {
     cwd: rootDir,
     encoding: 'utf8',
   });
 
   if (result.error && 'code' in result.error && result.error.code === 'ENOENT') {
-    result = spawnRunner('npx', ['--yes', 'wrangler', ...wranglerArgs], {
-      cwd: rootDir,
-      encoding: 'utf8',
-    });
+    throw new Error(missingWranglerMessage);
   }
 
   if (result.error) {

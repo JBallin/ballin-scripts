@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { localWranglerPath, missingWranglerMessage } = require('../analytics-worker/wrangler.ts');
 const {
   aggregateTables,
   confirmationPhrase,
@@ -30,6 +31,16 @@ const d1Success = (rows: D1Row[] = []) => ({
   status: 0,
   stderr: '',
   stdout: JSON.stringify([{ results: rows, success: true }]),
+});
+
+const ownedRoots: string[] = [];
+const makeRoot = (): string => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-reset-'));
+  ownedRoots.push(directory);
+  return directory;
+};
+afterEach(() => {
+  for (const directory of ownedRoots.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
 describe('analytics D1 reset', () => {
@@ -207,35 +218,22 @@ describe('analytics D1 reset', () => {
     assert.deepEqual(calls, []);
   });
 
-  it('falls back to npx --yes wrangler when wrangler is unavailable', () => {
+  it('requires the installed local Wrangler without an install fallback', () => {
     const calls: SpawnCall[] = [];
-    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-reset-'));
+    const rootDir = makeRoot();
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
-    const options = {
-      database: defaultDatabase,
-      dryRun: true,
-      help: false,
-      rootDir,
-    };
-    const wranglerArgs = wranglerArgsFor('SELECT 1', options);
+    const options = { database: defaultDatabase, dryRun: true, help: false, rootDir };
+    const args = wranglerArgsFor('SELECT 1', options);
 
-    const rows = runWrangler('SELECT 1', options, (command: string, args: string[]) => {
-      calls.push({ args, command });
-      if (command === 'wrangler') {
-        return {
-          ...d1Success(),
-          error: Object.assign(new Error('missing wrangler'), { code: 'ENOENT' }),
-        };
-      }
-      return d1Success([{ rows: 1, table_name: 'install_days' }]);
-    });
-
-    assert.deepEqual(calls, [
-      { args: wranglerArgs, command: 'wrangler' },
-      { args: ['--yes', 'wrangler', ...wranglerArgs], command: 'npx' },
-    ]);
-    assert.deepEqual(rows, [{ rows: 1, table_name: 'install_days' }]);
+    assert.throws(() => runWrangler('SELECT 1', options, (command: string, argv: string[]) => {
+      calls.push({ command, args: argv });
+      return {
+        error: Object.assign(new Error('missing local tool'), { code: 'ENOENT' }),
+        output: [], pid: 1, signal: null, status: null, stderr: '', stdout: '',
+      };
+    }), missingWranglerMessage);
+    assert.deepEqual(calls, [{ command: localWranglerPath(rootDir), args }]);
   });
 
   it('normalizes supported Wrangler JSON shapes and rejects malformed results', () => {
@@ -250,7 +248,7 @@ describe('analytics D1 reset', () => {
   });
 
   it('surfaces reset spawn errors and stderr/stdout/default failure messages', () => {
-    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-reset-'));
+    const rootDir = makeRoot();
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
     const options = { database: defaultDatabase, dryRun: true, help: false, rootDir };
