@@ -212,8 +212,9 @@ production deploys are guarded by the `analytics-worker-production` environment
 and a `main` ref check.
 
 Remote D1 migrations remain manual. An automatic deploy stops when
-`analytics-worker/migrations/` changed since the last successful deploy; after
-applying the remote migration, rerun the workflow manually from `main`.
+`analytics-worker/migrations/` changed since the last successful deploy. From
+`analytics-worker/`, apply the remote migration, then rerun the workflow manually
+from `main`.
 
 ```shell
 npm run migrate:remote
@@ -253,7 +254,8 @@ The old Worker cannot write to the recreated table, so ingestion may fail
 between steps 1 and 2. Analytics are best-effort and cannot affect Ballin
 command behavior.
 
-Manual deploys remain available for emergency or local maintenance:
+Manual deploys remain available for emergency or local maintenance. Run these
+commands from `analytics-worker/`:
 
 ```shell
 npm run deploy
