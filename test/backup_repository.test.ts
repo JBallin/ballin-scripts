@@ -5,7 +5,7 @@ const {
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
   readRepositorySnapshot, readRepositoryInventory, repositoryOpenUrl, inspectRepositoryMaintenance,
 } = require('../commands/backup_repository.ts');
-const { fixtureDestination, fixtureRuleset, fixtureState, commitFixture, requestFixture } = require('./helpers/repository.ts');
+const { fixtureDestination, fixtureMarker, fixtureRuleset, fixtureState, commitFixture, requestFixture, blobHash } = require('./helpers/repository.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 import type { FixtureState } from './helpers/repository.ts';
 import type { RepositoryRead, RepositoryInventory, RepositoryMaintenance, RepositoryOptions } from '../commands/backup_repository.ts';
@@ -35,6 +35,39 @@ describe('private repository transport', () => {
     assert.equal(result.snapshots.get('zshrc.sh')?.toString(), 'original\n');
     assert.isTrue(state.requests.every((request) => request.debug === ''));
     assert.equal(publications().length, 0);
+  });
+  for (const mode of ['full', 'snapshot', 'inventory', 'maintenance', 'open']) {
+    for (const marker of [undefined, 'wrong marker', fixtureMarker().replace('ballin-backup', 'ballin-backuq')]) {
+      it(`validates the marker before snapshot reads in ${mode}: ${marker === undefined ? 'missing' : marker.length === fixtureMarker().length ? 'same size' : 'wrong size'}`, () => {
+        const files = { ...state.commits[state.head].files };
+        delete files['.ballin-backup.json'];
+        if (marker !== undefined) files['.ballin-backup.json'] = Buffer.from(marker).toString('base64');
+        // Place the marker last to exercise ordering independently of provider tree order.
+        commitFixture(state, files);
+        const invoke = () => mode === 'full' ? read()
+          : mode === 'snapshot' ? readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options)
+            : mode === 'inventory' ? readRepositoryInventory(fixtureDestination, options)
+              : mode === 'maintenance' ? inspectRepositoryMaintenance(fixtureDestination, options)
+                : repositoryOpenUrl(fixtureDestination, options);
+        assert.throws(invoke, RepositoryError, 'not a supported');
+        const blobs = state.requests.filter((request) => request.endpoint.includes('/git/blobs/'));
+        assert.lengthOf(blobs, marker?.length === fixtureMarker().length ? 1 : 0);
+        assert.isFalse(blobs.some((request) => request.endpoint.endsWith(blobHash(files['zshrc.sh']))));
+        assert.lengthOf(publications(), 0);
+      });
+    }
+  }
+  it('reads a valid marker first regardless of tree order and preserves snapshot bytes', () => {
+    const files = { ...state.commits[state.head].files };
+    const marker = files['.ballin-backup.json'];
+    delete files['.ballin-backup.json'];
+    files['.ballin-backup.json'] = marker;
+    commitFixture(state, files);
+    const result = read();
+    const blobs = state.requests.filter((request) => request.endpoint.includes('/git/blobs/'));
+    assert.isTrue(blobs[0].endpoint.endsWith(blobHash(marker)));
+    assert.equal(result.snapshots.get('zshrc.sh')?.toString(), 'original\n');
+    assert.isTrue(result.snapshots.get('.ballin-backup.json')?.equals(Buffer.from(fixtureMarker())));
   });
   it('recognizes the real string 404 response without claiming a prior destination was deleted', () => {
     state.exists = false;
