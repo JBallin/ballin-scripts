@@ -57,8 +57,17 @@ function resources() {
   };
 }
 
-const entry = process.argv[1] || '';
-const isMochaEntry = /\/node_modules\/mocha\/(?:bin\/(?:mocha\.js|_mocha)|lib\/nodejs\/worker\.js)$/.test(entry);
+let isMochaEntry = false;
+if (process.env.BENCH_319_EVENT_DIR && process.env.BENCH_319_SOURCE && process.argv[1]) {
+  try {
+    const entry = fs.realpathSync(process.argv[1]);
+    const installedMocha = fs.realpathSync(path.join(process.env.BENCH_319_SOURCE, 'node_modules/mocha'));
+    isMochaEntry = ['bin/mocha.js', 'bin/_mocha', 'lib/nodejs/worker.js']
+      .some(filename => entry === path.join(installedMocha, filename));
+  } catch {
+    // node -e/-p may use argv[1] as data rather than a filename.
+  }
+}
 if (isMochaEntry && process.env.BENCH_319_EVENT_DIR && process.env.BENCH_319_SOURCE) {
   const directory = process.env.BENCH_319_EVENT_DIR;
   const root = process.env.BENCH_319_SOURCE;
