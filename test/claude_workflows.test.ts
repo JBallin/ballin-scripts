@@ -8,10 +8,30 @@ const readWorkflow = (name: string): string => fs.readFileSync(
 const automatic = readWorkflow('claude-review.yml');
 const manual = readWorkflow('claude.yml');
 const status = readWorkflow('claude-review-status.yml');
+const jobs = (workflow: string): string => {
+  const result = workflow.match(/^jobs:\n([\s\S]*?)(?=^\S|$(?![\s\S]))/mu);
+  assert.exists(result, 'missing jobs map');
+  return result![1];
+};
 const job = (workflow: string, name: string): string => {
-  const result = workflow.match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, 'mu'));
+  const result = jobs(workflow).match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, 'mu'));
   assert.exists(result, `missing job ${name}`);
   return result![1];
+};
+const predicateExpression = (predicate: string): string => {
+  // Match one token at the current offset; never backtrack across prior tokens.
+  const tokenPattern = /\s+|"[^"\\]*"|\.[a-z_]+(?:\.[a-z_]+)*|\$repo\b|\band\b|==|true\b|false\b/gyu;
+  let expression = '';
+  for (let offset = 0; offset < predicate.length;) {
+    tokenPattern.lastIndex = offset;
+    const match = tokenPattern.exec(predicate);
+    assert.exists(match, 'unsupported preflight predicate: extend the fixture coverage deliberately');
+    const token = match![0];
+    expression += token.startsWith('.') ? `field(response, ${JSON.stringify(token.slice(1))})`
+      : ({ $repo: 'repo', and: '&&', '==': '===' } as Record<string, string>)[token] ?? token;
+    offset = tokenPattern.lastIndex;
+  }
+  return expression;
 };
 const condition = (source: string): string => {
   const result = source.match(/^    if: >-\n((?:      .+\n)+)/mu);
@@ -49,6 +69,20 @@ const github = () => ({
 });
 
 describe('offline Claude caller contracts', () => {
+  it('rejects unsupported predicate syntax after long whitespace and field tokens', () => {
+    for (const prefix of [' '.repeat(100_000), `.field${'.field'.repeat(10_000)}`]) {
+      assert.throws(() => predicateExpression(`${prefix}!`), 'unsupported preflight predicate');
+    }
+  });
+
+  it('distinguishes event triggers from jobs with the same names', () => {
+    for (const name of ['pull_request', 'issue_comment', 'pull_request_review_comment']) {
+      const workflow = `on:\n  ${name}:\n    types: [created]\njobs:\n  ${name}:\n    permissions:\n      contents: write\n`;
+      assert.deepEqual([...jobs(workflow).matchAll(/^  ([\w-]+):$/gmu)].map((match) => match[1]), [name]);
+      assert.match(job(workflow, name), /contents: write/u);
+    }
+  });
+
   it('selects only the intended automatic, manual and model-free refresh events', () => {
     const triggers = (workflow: string) => workflow.match(/^on:\n([\s\S]*?)(?=^\S)/mu)![1].trim();
     assert.equal(triggers(automatic), 'pull_request:\n    types: [opened, ready_for_review]');
@@ -105,17 +139,21 @@ describe('offline Claude caller contracts', () => {
   });
 
   it('protects the manual preflight response guards, eligibility predicate and shell wiring', () => {
-    const source = job(manual, 'eligibility');
+    const eligibility = job(manual, 'eligibility');
+    assert.match(eligibility, /eligible: \$\{\{ steps\.eligibility\.outputs\.eligible \}\}/u);
+    const step = eligibility.match(/^      - name: [^\n]+\n        id: eligibility\n([\s\S]*?)(?=^      - |$(?![\s\S]))/mu);
+    assert.exists(step, 'the preflight producer must retain its eligibility step ID');
+    const source = step![1];
+    assert.match(source, /^          GH_TOKEN: \$\{\{ github\.token \}\}$/mu);
     assert.match(source, /PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \|\| github\.event\.issue\.number \}\}/u);
     assert.match(source, /REPO: \$\{\{ github\.repository \}\}/u);
-    assert.match(source, /eligible: \$\{\{ steps\.eligibility\.outputs\.eligible \}\}/u);
     assert.match(source, /^          set -euo pipefail$/mu);
     // Bind the fetched response, evaluated filter and emitted result together.
     // An unrelated filter or an unconditional eligible=true must not substitute.
     const pipeline = source.match(/^          pr=\$\(timeout 30s gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"\)\n          eligible=\$\(printf '%s' "\$pr" \| jq -er --arg repo "\$REPO" --argjson number "\$PR_NUMBER" '\n([\s\S]*?)'\)\n          printf 'eligible=%s\\n' "\$eligible" >> "\$GITHUB_OUTPUT"\n/mu);
     assert.exists(pipeline, 'the jq result must be assigned to eligible and immediately emitted');
-    assert.equal([...source.matchAll(/^\s+eligible=/gmu)].length, 1, 'eligibility must not be overwritten');
-    assert.equal([...source.matchAll(/\$GITHUB_OUTPUT/gu)].length, 1, 'only the checked result may be emitted');
+    assert.equal([...eligibility.matchAll(/^\s+eligible=/gmu)].length, 1, 'eligibility must not be overwritten');
+    assert.equal([...eligibility.matchAll(/\$GITHUB_OUTPUT/gu)].length, 1, 'only the checked result may be emitted');
     const filter = pipeline![1].trim();
     assert.match(filter, /if\s+type\s*!=\s*"object"\s+then\s+error\(/u);
     assert.match(filter, /elif\s+\(\.number\s*\|\s*type\)\s*!=\s*"number"\s+or\s+\.number\s*!=\s*\$number\s+then\s+error\(/u);
@@ -125,12 +163,7 @@ describe('offline Claude caller contracts', () => {
     // Response/error guards and shell wiring above are structural assertions;
     // these fixtures do not execute Bash or validate the jq language/runtime.
     const predicate = filter.match(/\belse\s+([\s\S]*?)\s+end\s*\|\s*tostring/u)![1];
-    assert.match(predicate, /^(?:\s+|\.[a-z_]+(?:\.[a-z_]+)*|==|and\b|\$repo\b|"[^"\\]*"|true\b|false\b)+$/u,
-      'unsupported preflight predicate: extend the fixture coverage deliberately');
-    const expression = predicate.replace(/"[^"\\]*"|\.[a-z_]+(?:\.[a-z_]+)*|\$repo\b|\band\b|==/gu, (token: string) => {
-      if (token.startsWith('.')) return `field(response, ${JSON.stringify(token.slice(1))})`;
-      return ({ $repo: 'repo', and: '&&', '==': '===' } as Record<string, string>)[token] ?? token;
-    });
+    const expression = predicateExpression(predicate);
     const evaluate = (response: object): boolean => Boolean(vm.runInNewContext(expression, {
       response, repo: 'JBallin/ballin-scripts',
       field: (input: unknown, name: string): unknown => name.split('.').reduce<unknown>((value, key) => (
@@ -188,7 +221,7 @@ describe('offline Claude caller contracts', () => {
       [status, ['status'], [['contents: read', 'pull-requests: write', 'issues: write']]],
     ] as const) {
       assert.match(workflow, /^permissions: \{\}$/mu);
-      assert.deepEqual([...workflow.matchAll(/^  ([\w-]+):$/gmu)].map((match) => match[1]).filter((name) => !['pull_request', 'issue_comment', 'pull_request_review_comment'].includes(name)), [...names]);
+      assert.deepEqual([...jobs(workflow).matchAll(/^  ([\w-]+):$/gmu)].map((match) => match[1]), [...names]);
       names.forEach((name, index) => {
         const source = job(workflow, name);
         const permissionBlock = source.match(/^    permissions:\n((?:      .+\n)+)/mu)![1];
