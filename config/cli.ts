@@ -1,6 +1,7 @@
 const { configAction } = require('./index.ts');
 const { ConfigError } = require('./store.ts');
 const { Console } = require('node:console');
+const { commandHelpOptionName } = require('../commands/top_level_commands.ts');
 import type { ConfigError as ConfigFailure } from './store.ts';
 
 const configConsole = new Console({ stdout: process.stdout, stderr: process.stderr, colorMode: false });
@@ -16,7 +17,7 @@ Read settings with dot paths, such as \`update.cleanup\`.
 `;
 
 const runConfigCli = (args: string[] = process.argv.slice(2)): void => {
-  if (args.length === 1 && (args[0] === 'help' || args[0] === '--help')) {
+  if (args.length === 1 && (args[0] === 'help' || args[0] === commandHelpOptionName)) {
     process.stdout.write(configHelp);
     process.exitCode = 0;
     return;
