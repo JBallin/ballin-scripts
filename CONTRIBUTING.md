@@ -37,6 +37,6 @@ For more repo context, see [AGENTS.md](AGENTS.md).
 For deeper user and maintainer documentation, see the
 [documentation index](docs/README.md).
 
-## Suggestions Welcome
+## Feedback and Discussions
 
-Please open issues (or PRs) with any suggestions for additions to `ballin backup`, `ballin update`, or anything else.
+Questions, feedback, and ideas are welcome in [Discussions](https://github.com/JBallin/ballin-scripts/discussions). Report bugs in [Issues](https://github.com/JBallin/ballin-scripts/issues).
