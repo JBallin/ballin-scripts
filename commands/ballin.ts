@@ -34,8 +34,12 @@ const {
 import type { TopLevelCommandName } from './top_level_commands.ts';
 const {
   isTopLevelCommandName,
+  commandHelpOptionName,
+  doctorVerboseOptionName,
 } = require('./top_level_commands.ts') as {
   isTopLevelCommandName: (value: unknown) => value is TopLevelCommandName;
+  commandHelpOptionName: string;
+  doctorVerboseOptionName: string;
 };
 import type { DoctorReport } from './doctor_report.ts';
 
@@ -117,7 +121,7 @@ Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
 `;
 
 const isCommandHelp = (args: string[]): boolean => (
-  args.length === 2 && args[1] === '--help'
+  args.length === 2 && args[1] === commandHelpOptionName
   && isTopLevelCommandName(args[0])
 );
 
@@ -166,7 +170,7 @@ const runConfigCommand = (args: string[]): void => {
 };
 
 const runDoctorCommand = (args: string[]): void => {
-  const verbose = args.length === 1 && args[0] === '--verbose';
+  const verbose = args.length === 1 && args[0] === doctorVerboseOptionName;
   if (args.length > 0 && !verbose) {
     usageError('ballin doctor [--verbose]');
     return;
@@ -188,7 +192,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
 
   switch (command) {
     case undefined:
-    case '--help':
+    case commandHelpOptionName:
     case 'help':
       writeStdout(ballinHelp);
       return;
@@ -230,7 +234,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       runConfigCommand(commandArgs);
       return;
     case 'setup':
-      if (commandArgs.length === 1 && commandArgs[0] === '--help') {
+      if (commandArgs.length === 1 && commandArgs[0] === commandHelpOptionName) {
         writeStdout(setupHelp);
         return;
       }
@@ -273,7 +277,7 @@ const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => 
 
 const runBallinCli = (): void => {
   const args = process.argv.slice(2);
-  if (args.length === 0 || (args.length === 1 && ['help', '--help'].includes(args[0])) || isCommandHelp(args)) {
+  if (args.length === 0 || (args.length === 1 && ['help', commandHelpOptionName].includes(args[0])) || isCommandHelp(args)) {
     runBallinCommand(args);
     return;
   }

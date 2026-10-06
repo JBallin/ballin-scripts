@@ -16,6 +16,15 @@ describe('directory snapshot inspection', () => {
     assert.deepEqual(JSON.parse(listDirectoryMembers(members)), [{ path: entry.path, executable: true, bytes: 11 }]);
     assert.deepEqual(readDirectoryMember(members, entry.path), Buffer.from('# Example\r\n'));
   });
+  it('reads old namespaced and new direct Claude skill paths without rewriting saved paths', () => {
+    for (const name of ['synced/old-collection/example/SKILL.md', 'example/SKILL.md']) {
+      const { entries } = readDirectorySnapshot(archive([{ ...entry, path: name }]));
+      assert.equal(JSON.parse(listDirectoryMembers(entries))[0].path, name);
+      assert.deepEqual(readDirectoryMember(entries, name), Buffer.from('# Example\r\n'));
+      const other = name.startsWith('synced/') ? 'example/SKILL.md' : 'synced/old-collection/example/SKILL.md';
+      assert.throws(() => readDirectoryMember(entries, other), DirectorySnapshotError);
+    }
+  });
   it('round-trips captured Unicode, CRLF, no-final-newline, empty and binary files', () => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-directory-read-')));
     const files = new Map([

@@ -71,13 +71,13 @@ describe('first-run onboarding walkthroughs', function() {
     const backupResult = runInstalled(['backup']);
     assert.equal(updateResult.status, 0, updateResult.stderr);
     assert.equal(selfUpdateResult.status, 0, selfUpdateResult.stderr);
-    assert.equal(selfUpdateResult.stdout, 'Ballin updated.\n'
+    assert.equal(selfUpdateResult.stdout, 'Updating Ballin...\nBallin updated.\n'
       + 'Backup source definitions may have changed. Sensitive-source opt-in covers current and future supported sources.\n'
       + 'Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n');
     assert.equal(backupResult.status, 1);
     assert.include(backupResult.stderr, "run `ballin backup setup` to enable it");
     assert.notInclude(commandLog(), 'gh:');
-    assert.include(commandLog(), 'git:fetch origin +main:refs/remotes/origin/main');
+    assert.include(commandLog(), 'git:fetch --quiet origin +main:refs/remotes/origin/main');
   });
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
