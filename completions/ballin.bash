@@ -1,7 +1,7 @@
 _ballin_completion_helper="$(builtin cd -- "${BASH_SOURCE[0]%/*}/.." && builtin pwd -P)/commands/completion_members.ts"
 
 _ballin_completion_unquote() {
-  local text="$1" char quote="" escaped=0 index
+  local text="$1" char quote="${2-}" escaped=0 index
   _ballin_word=""
   for (( index=0; index<${#text}; index++ )); do
     char="${text:index:1}"
@@ -16,6 +16,7 @@ _ballin_completion_unquote() {
     else _ballin_word+="$char"; fi
   done
   (( escaped )) && _ballin_word+=\\
+  _ballin_decoded_quote="$quote"
   return 0
 }
 
@@ -32,6 +33,7 @@ _ballin_completion_words() {
       if [[ -n "$raw" ]]; then _ballin_completion_unquote "$raw"; words+=("$_ballin_word"); raw=""; fi
     else raw+="$char"; fi
   done
+  _ballin_raw_word="$raw"
   _ballin_completion_unquote "$raw"; words+=("$_ballin_word")
   _ballin_quote="$quote"
 }
@@ -51,7 +53,7 @@ _ballin_completion_quote() {
 _ballin_completion() {
   COMPREPLY=()
   local -a candidates=() words=()
-  local candidate current _ballin_word _ballin_quote="" replacement_prefix="" member=0
+  local candidate current _ballin_word _ballin_quote="" _ballin_decoded_quote="" _ballin_raw_word="" replacement_prefix="" member=0
   local replacement_word="${2-${COMP_WORDS[$COMP_CWORD]}}"
   local COMP_CWORD="$COMP_CWORD"
   if [[ -n "${COMP_LINE+x}" ]]; then
@@ -101,9 +103,11 @@ _ballin_completion() {
   esac
   current="${words[$COMP_CWORD]}"
   if [[ -n "${COMP_LINE+x}" ]]; then
-    _ballin_completion_unquote "$replacement_word"; replacement_word="$_ballin_word"
-    [[ "$current" == *"$replacement_word" ]] || return 0
-    replacement_prefix="${current:0:${#current}-${#replacement_word}}"
+    [[ "$_ballin_raw_word" == *"$replacement_word" ]] || return 0
+    replacement_prefix="${_ballin_raw_word:0:${#_ballin_raw_word}-${#replacement_word}}"
+    _ballin_completion_unquote "$replacement_prefix"; replacement_prefix="$_ballin_word"
+    _ballin_completion_unquote "$replacement_word" "$_ballin_decoded_quote"; replacement_word="$_ballin_word"
+    [[ "$current" == "$replacement_prefix$replacement_word" ]] || return 0
   fi
   for candidate in "${candidates[@]}"; do
     [[ "$candidate" == "$current"* ]] || continue

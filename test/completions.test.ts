@@ -195,6 +195,20 @@ describe('shell completions', () => {
       }
     });
 
+    it(`preserves native ${shell} quote context at the replacement boundary`, function () {
+      this.timeout(10000);
+      const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
+      for (const [prefix, member] of [[`"quotes'an`, `quotes'and"marks/file.md`], [String.raw`'back\sl`, String.raw`back\slash/file.md`]]) {
+        const result = runNativeCompletion(shell, asset, `ballin backup read codex_skills.bundle.json --file ${prefix}\t`, (fixture: string) => {
+          const files = prepareMemberFixture(fixture);
+          fs.writeFileSync(files.file, archive([member]));
+        });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.deepEqual(result.arguments, ['backup', 'read', 'codex_skills.bundle.json', '--file', member]);
+        assert.isFalse(result.forbidden);
+      }
+    });
+
     it(`inserts shell metacharacters literally with native ${shell} completion`, function () {
       this.timeout(10000);
       const member = 'literal$(touch forbidden)/file.md';
