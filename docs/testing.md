@@ -30,6 +30,14 @@ predicate in Node; response/error guards and shell wiring are checked structural
 They do not execute Bash or validate the jq runtime. Shared runtime behavior is
 tested in the runtime repository.
 
+These are supported-source-form checks for the current thin callers. Direct-child
+job keys must use the unquoted form, the eligibility job must contain only the
+canonical checked `GITHUB_OUTPUT` emission, and the captured filter must retain
+its active ordered response guards without comments. Secret access must retain
+the approved dot reference; indexed access is rejected. Alternative valid YAML,
+shell, jq, or Actions spellings intentionally fail closed until their coverage
+is extended and reviewed.
+
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
 Closing the PR or converting it to a draft does not cancel an accepted request.

@@ -11,6 +11,9 @@ const status = readWorkflow('claude-review-status.yml');
 const jobs = (workflow: string): string => {
   const result = workflow.match(/^jobs:\n([\s\S]*?)(?=^\S|$(?![\s\S]))/mu);
   assert.exists(result, 'missing jobs map');
+  for (const line of result![1].split('\n').filter((line: string) => /^  \S/u.test(line))) {
+    assert.match(line, /^  [\w-]+:$/u, 'unsupported direct-child job key: use the canonical unquoted form');
+  }
   return result![1];
 };
 const job = (workflow: string, name: string): string => {
@@ -80,6 +83,13 @@ describe('offline Claude caller contracts', () => {
       const workflow = `on:\n  ${name}:\n    types: [created]\njobs:\n  ${name}:\n    permissions:\n      contents: write\n`;
       assert.deepEqual([...jobs(workflow).matchAll(/^  ([\w-]+):$/gmu)].map((match) => match[1]), [name]);
       assert.match(job(workflow, name), /contents: write/u);
+    }
+  });
+
+  it('fails closed on quoted direct-child job keys', () => {
+    for (const key of ["'audit'", '"audit"']) {
+      assert.throws(() => jobs(`jobs:\n  ${key}:\n    runs-on: ubuntu-latest\n  review:\n`),
+        'unsupported direct-child job key');
     }
   });
 
@@ -153,11 +163,16 @@ describe('offline Claude caller contracts', () => {
     const pipeline = source.match(/^          pr=\$\(timeout 30s gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"\)\n          eligible=\$\(printf '%s' "\$pr" \| jq -er --arg repo "\$REPO" --argjson number "\$PR_NUMBER" '\n([\s\S]*?)'\)\n          printf 'eligible=%s\\n' "\$eligible" >> "\$GITHUB_OUTPUT"\n/mu);
     assert.exists(pipeline, 'the jq result must be assigned to eligible and immediately emitted');
     assert.equal([...eligibility.matchAll(/^\s+eligible=/gmu)].length, 1, 'eligibility must not be overwritten');
-    assert.equal([...eligibility.matchAll(/\$GITHUB_OUTPUT/gu)].length, 1, 'only the checked result may be emitted');
+    assert.equal([...eligibility.matchAll(/\bGITHUB_OUTPUT\b/gu)].length, 1, 'only the canonical checked result may be emitted');
     const filter = pipeline![1].trim();
-    assert.match(filter, /if\s+type\s*!=\s*"object"\s+then\s+error\(/u);
-    assert.match(filter, /elif\s+\(\.number\s*\|\s*type\)\s*!=\s*"number"\s+or\s+\.number\s*!=\s*\$number\s+then\s+error\(/u);
-    assert.match(filter, /end\s*\|\s*tostring$/u);
+    assert.notMatch(filter, /#/u, 'comments are unsupported in this bounded preflight filter');
+    assert.deepEqual(filter.split('\n').slice(0, 4).map((line: string) => line.trim()), [
+      'if type != "object" then error("Invalid PR response")',
+      'elif (.number | type) != "number" or .number != $number',
+      'then error("Unexpected PR number")',
+      'else',
+    ], 'the active response guards must precede the eligibility predicate');
+    assert.equal(filter.split('\n').at(-1)?.trim(), 'end | tostring');
 
     // Evaluate the actual predicate's field equalities and conjunctions in Node.
     // Response/error guards and shell wiring above are structural assertions;
@@ -221,6 +236,7 @@ describe('offline Claude caller contracts', () => {
       [status, ['status'], [['contents: read', 'pull-requests: write', 'issues: write']]],
     ] as const) {
       assert.match(workflow, /^permissions: \{\}$/mu);
+      assert.notMatch(workflow, /\bsecrets\s*\[/u, 'indexed secrets access is unsupported; retain the approved dot reference');
       assert.deepEqual([...jobs(workflow).matchAll(/^  ([\w-]+):$/gmu)].map((match) => match[1]), [...names]);
       names.forEach((name, index) => {
         const source = job(workflow, name);
