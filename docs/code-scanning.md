@@ -2,15 +2,23 @@
 
 *Maintainer guide to staging, activating, verifying, and rolling back CodeQL.*
 
-## Staged setup
+## Advanced setup
 
-Ballin still uses CodeQL default setup. The checked-in
-[workflow](../.github/workflows/codeql.yml) is manual-only staging for Advanced
-setup; merging it does not add fork PR scans or complete
-[#466](https://github.com/JBallin/ballin-scripts/issues/466).
-Do not dispatch it while default setup is enabled:
+The checked-in [workflow](../.github/workflows/codeql.yml) enables Advanced
+CodeQL scans for ordinary pull requests to `main`, pushes to `main`, a weekly
+schedule, and manual dispatch. Publish this activation change only through the
+approved transition below, after default setup is disabled and the manual-only
+workflow has produced processed results on stable main. Publishing the PR can
+start its automatic scan before merge. Do not dispatch Advanced scans or open
+an activation PR while default setup is enabled:
 [GitHub rejects Advanced CodeQL uploads in that state](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/troubleshoot-sarif-uploads/default-setup-enabled).
-Default setup continues supplying existing same-repository PR scans.
+The manual-only staging workflow landed in
+[#509](https://github.com/JBallin/ballin-scripts/pull/509). Complete the main
+migration only after main and same-repository scans pass the qualification below
+and the merged activation produces a successful main push scan. If the owner
+then closes [#466](https://github.com/JBallin/ballin-scripts/issues/466), its
+completion note must explicitly defer live fork verification until the next
+real external PR. Adding triggers alone does not establish actual fork coverage.
 
 The candidate retains the observed default scan configuration: Actions and
 JavaScript/TypeScript, `build-mode: none`, the default query suite, no custom
@@ -19,10 +27,8 @@ queries, model packs, or additional threat models, and categories
 checkout v6 and CodeQL v4 revisions. Review action updates deliberately; adding
 languages or queries is a separate coverage change.
 
-The intended automatic triggers are ordinary `pull_request` to `main`, push to
-`main`, and a weekly schedule. `main` is currently the only protected branch.
-The activation step below adds those triggers only after main uploads succeed.
-No path filters or fork exclusion should suppress a required scan.
+`main` is currently the only protected branch. The workflow has no path filters
+or fork exclusion to suppress a required scan.
 
 ## Fork trust boundary
 
@@ -48,33 +54,41 @@ approval. The staging PR authorizes neither. Keep all existing required checks
 and protection settings throughout; do not use an administrator bypass to land
 the activation PR.
 
-1. Merge the reviewed manual-only staging PR through the normal required checks.
-   Prepare an activation branch and review its trigger change before switching
-   settings. Run `npm test` and actionlint on that candidate.
+1. The manual-only staging PR, #509, is merged. Prepare and review the activation
+   trigger change locally before switching settings. Run `npm test` and
+   actionlint on that candidate. Keep the candidate unpublished until the
+   manual main qualification in step 4 succeeds.
 2. Immediately before cutover, capture the current main SHA, default setup
    configuration and successful scans, workflow enabled state, full branch
    protection/rulesets, code-scanning alert gate/severity settings, and fork
-   workflow approval policy. An owner must supply settings unavailable through
-   the inspecting account. Preserve unknown settings rather than assuming
-   defaults. Reconcile any drift from the baseline below before proceeding.
+   workflow approval policy. Capture alert thresholds where available and
+   preserve any uncaptured settings without assuming defaults. Main upload
+   qualification does not require choosing a new severity policy. Verify the
+   existing PR result gate and provider in step 6. Reconcile observed drift
+   from the baseline below before proceeding.
 3. Pause unrelated merges and keep main stable. With separate approval, switch
-   off default setup. Re-enable the staged workflow if GitHub disabled it during
-   the setup switch, then dispatch it on the captured main revision. This is a
-   bounded transition interval: the previous scan covers stable main while the
-   replacement runs. Advanced uploads cannot be qualified concurrently with
+   off default setup. Wait for its state to become `not-configured` and any
+   already-running default analyses to finish. Re-enable the staged workflow if
+   GitHub disabled it during the setup switch, then dispatch it with ref `main`.
+   Confirm main still matches the captured SHA before dispatch and confirm the
+   resulting run analyzed that SHA. [Dispatch accepts a branch or tag](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+   rather than a commit SHA. This is a bounded transition interval: the previous
+   scan covers stable main while the replacement runs. Advanced uploads cannot be
+   qualified concurrently with
    default setup. If the run or result processing fails, roll back before
    resuming merges.
 4. Require both analysis jobs to succeed, both SARIF uploads to finish processing,
    and both expected categories to appear on that main revision. Verify the
-   analysis jobs come from `github-actions`. Main scans do not need a `CodeQL`
+   analysis jobs come from `github-actions`. Record fresh Advanced analysis IDs
+   linked to the approved run, upload, and captured SHA; preexisting default
+   analyses with matching categories do not qualify. Main scans do not need a `CodeQL`
    PR result check: verify that result gate and its provider in step 6. Job
    success alone does not prove processed results. A manual main run also does
    not qualify fork PR uploads.
-5. Open the reviewed activation PR, replacing the workflow's `on` block with the
-   following and removing the staging comment. Update the manual-only trigger
-   assertion in `test/codeql_workflow.test.ts` to validate these automatic
-   triggers, and update this guide to describe the activated setup. Leave the
-   scan jobs, query configuration, categories, and required checks unchanged.
+5. After step 4 succeeds, publish the reviewed activation PR with the following
+   trigger block, its updated trigger assertion, and this guide. If main changed,
+   stop and reconcile the candidate and qualification before publishing. Leave
+   the scan jobs, query configuration, categories, and required checks unchanged.
 
    ```yaml
    on:
@@ -91,14 +105,23 @@ the activation PR.
    processed `CodeQL` result on its current head/merge revision. If a required
    check remains pending or its provider differs, stop and investigate; do not
    rename, remove, spoof, or relax the requirement. The human owner merges only
-   after this evidence is complete. Verify the resulting main push scan.
-7. Open a harmless contributor-fork PR against activated main, using a small
-   documentation edit. Record its current head SHA and merge SHA, workflow
-   event/run, any approval wait and approval, both language jobs, processed
-   categories/results, and required checks. Verify a new harmless head update
-   produces fresh evidence, rather than relying on the earlier revision. Resume
-   unrelated merges only after qualification succeeds. Keep #466 open until
-   actual current-head same-repository and fork results establish coverage.
+   after this evidence is complete. Verify the resulting main push scan, then
+   resume unrelated merges after main and same-repository qualification succeed.
+   Keep #466 open until merged automatic activation is verified. The owner may
+   then close the main migration scope with a note that fork approval/upload
+   behavior and a later real fork head update remain untested. Do not mark those
+   original fork-verification acceptance items as completed.
+7. Defer fork qualification until the next real external contributor PR against
+   activated main. No new account or synthetic contributor PR is needed for the
+   main cutover. On that real PR, record its current head SHA and merge SHA,
+   workflow event/run, observed contributor approval classification and any
+   wait/approval, both language jobs, processed categories/results, and required
+   checks. Verify a later real head update produces fresh evidence rather than
+   relying on the earlier revision. Record fork coverage as unverified until
+   those results establish it, even if #466's main migration scope is closed.
+   Link the eventual fork evidence to #466. Report only the approval
+   behavior actually observed; do not infer first-time approval from a returning
+   contributor.
 
 The weekly time above is UTC. Scheduled scans run on the default branch; verify
 the first scheduled run after activation separately from PR qualification.
@@ -117,13 +140,15 @@ Baseline observed on 2026-10-06 (recheck at cutover):
 
 The baseline has strict required status checks, no repository rulesets, and
 `first_time_contributors` fork workflow approval. Full branch protection was read
-successfully; code-scanning alert thresholds still need owner confirmation at
-cutover. No identity or protection change is planned.
+successfully; exact alert thresholds were not captured. Preserve the existing
+severity settings and verify the actual PR result gate during activation.
+No severity policy, identity, or protection change is planned.
 
 ## Rollback
 
 Keep unrelated merges paused. With the approved rollback authority, disable the
-Advanced workflow before restoring the captured default setup configuration.
+Advanced workflow and wait for its active runs to finish, or cancel them, before
+restoring the captured default setup configuration.
 Confirm default setup is configured for the captured languages/query suite and
 that a fresh main scan finishes with both language analyses and processed
 categories. Verify the expected `CodeQL` PR result and all required-check
@@ -137,7 +162,7 @@ Rollback restores the existing fork exclusion, so #466 remains unresolved.
 
 ## Validation limits
 
-Local tests and actionlint qualify workflow structure, staging triggers, query
+Local tests and actionlint qualify workflow structure, automatic triggers, query
 and category continuity, and the intended trust boundary. They cannot prove
 GitHub fork approvals, token behavior, uploads, processed results, required-check
 matching, or alert severity enforcement. Those require the approved transition
