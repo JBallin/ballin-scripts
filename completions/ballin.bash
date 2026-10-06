@@ -27,11 +27,16 @@ _ballin_completion() {
     _ballin_completion_unquote "$candidate"; words+=("$_ballin_word")
   done
   case "$COMP_CWORD" in
-    1) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update') ;;
+    1) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update' '--help') ;;
     2)
       case "${words[1]}" in
-        backup) candidates=('open' 'read' 'list' 'setup' 'disconnect') ;;
-        config) candidates=('get' 'set' 'reset') ;;
+        backup) candidates=('open' 'read' 'list' 'setup' 'disconnect' '--help') ;;
+        config) candidates=('get' 'set' 'reset' '--help') ;;
+        doctor) candidates=('--verbose' '--help') ;;
+        self-update) candidates=('--help') ;;
+        setup) candidates=('--help') ;;
+        uninstall) candidates=('--help') ;;
+        update) candidates=('--help') ;;
       esac
       ;;
     3)

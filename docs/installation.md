@@ -55,9 +55,10 @@ install offers to enable it after the command is installed, showing the startup
 file and exact activation line before asking for confirmation (default: no).
 Refreshes and `ballin self-update` do not enable completion or ask again.
 
-Completion covers commands, backup snapshot names, and the `--list` and `--file`
-options after a snapshot name. `config get` completes known sections and setting
-keys; `config set` completes setting keys and boolean `true`/`false` values.
+Completion covers commands, `--help`, `doctor --verbose`, backup snapshot names,
+and the `--list` and `--file` options after a snapshot name. `config get` completes
+known sections and setting keys; `config set` completes setting keys and boolean
+`true`/`false` values.
 Unique prefixes work, such as `ballin config set update.cl<Tab>`.
 Setting suggestions come from bundled defaults; `set` still requires the key
 to exist in your local config.

@@ -14,7 +14,7 @@ const {
   writeCompletionAssets,
 } = require('../commands/completions.ts');
 const {
-  topLevelCommandNames,
+  topLevelCommandNames, commandHelpOptionName, doctorVerboseOptionName,
 } = require('../commands/top_level_commands.ts');
 
 const repoRoot = path.join(__dirname, '..');
@@ -123,6 +123,14 @@ describe('shell completions', () => {
         assert.deepEqual(fixtureState(fixture), before);
         fs.unlinkSync(files.file);
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--file', '']), []);
+        fs.unlinkSync(path.join(fixture, 'node'));
+        fs.writeFileSync(files.config, 'unusable saved config');
+        const unavailable = fixtureState(fixture);
+        assert.deepEqual(complete(['ballin', 'config', 'get', '']), names.readable);
+        assert.deepEqual(complete(['ballin', 'config', 'set', 'update.cleanup', 'f']), ['false']);
+        assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_user_sk']), ['codex_user_skills.bundle.json']);
+        assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--file', '']), []);
+        assert.deepEqual(fixtureState(fixture), unavailable);
         assert.isFalse(fs.existsSync(forbidden));
       } finally { fs.rmSync(fixture, { recursive: true, force: true }); }
     });
@@ -207,21 +215,21 @@ describe('shell completions', () => {
         });
         assert.equal(syntax.status, 0, syntax.stderr);
         const cases: [number, string, string, readonly string[]][] = [
-          [1, '', '', topLevelCommandNames], [1, 'upd', '', ['update']],
+          [1, '', '', [...topLevelCommandNames, commandHelpOptionName]], [1, 'upd', '', ['update']],
           [1, 'u', '', ['uninstall', 'update']], [1, 'missing', '', []],
-          [2, '', 'backup', backupCommandNames], [2, 'op', 'backup', ['open']],
+          [2, '', 'backup', [...backupCommandNames, commandHelpOptionName]], [2, 'op', 'backup', ['open']],
           [2, 's', 'backup', ['setup']], [2, 'r', 'backup', ['read']],
           [2, 'd', 'backup', ['disconnect']], [2, 'l', 'backup', ['list']],
-          [2, '', 'config', configOperationNames], [2, 'g', 'config', ['get']],
+          [2, '', 'config', [...configOperationNames, commandHelpOptionName]], [2, 'g', 'config', ['get']],
           [2, 's', 'config', ['set']], [2, 'r', 'config', ['reset']],
-          [2, 'help', 'config', []], [2, '--', 'config', []],
-          [2, 'help', 'backup', []], [2, '--', 'backup', []],
+          [2, 'help', 'config', []], [2, '--', 'config', [commandHelpOptionName]],
+          [2, 'help', 'backup', []], [2, '--', 'backup', [commandHelpOptionName]],
           [2, 'missing', 'backup', []], [2, '', 'unknown', []],
           [3, '', 'backup', []], [3, '', 'config', []], [4, '', 'config', []],
           [4, '', 'backup', ['--list', '--file']], [4, '--f', 'backup', ['--file']],
         ];
         for (const family of topLevelCommandNames.filter((name: string) => !['backup', 'config'].includes(name))) {
-          cases.push([2, '', family, []]);
+          cases.push([2, '', family, [...(family === 'doctor' ? [doctorVerboseOptionName] : []), commandHelpOptionName]]);
         }
         for (const [position, prefix, family, expected] of cases) {
           const result = complete(position, prefix, family);
@@ -242,6 +250,9 @@ describe('shell completions', () => {
       const assetPath = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
       for (const [input, expected] of [
         ['ballin upd\t', 'ballin update'],
+        ['ballin --h\t', 'ballin --help'],
+        ['ballin update --h\t', 'ballin update --help'],
+        ['ballin doctor --v\t', 'ballin doctor --verbose'],
         ['ballin backup op\t', 'ballin backup open'],
         ['ballin config ge\t', 'ballin config get'],
         ['ballin config get update.cl\t', 'ballin config get update.cleanup'],

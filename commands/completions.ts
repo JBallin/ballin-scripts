@@ -3,7 +3,7 @@ import type { BackupCommandName } from './backup_commands.ts';
 import type { ConfigOperationName } from '../config/commands.ts';
 const fs = require('fs');
 const path = require('path');
-const { topLevelCommandNames } = require('./top_level_commands.ts');
+const { topLevelCommandNames, commandHelpOptionName, doctorVerboseOptionName } = require('./top_level_commands.ts');
 const { backupCommandNames, backupReadOptionNames } = require('./backup_commands.ts') as {
   backupCommandNames: readonly BackupCommandName[];
   backupReadOptionNames: readonly string[];
@@ -15,10 +15,16 @@ const { configCompletionNames } = require('../config/completion.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
 import type { SnapshotDefinition } from './backup_snapshots.ts';
 
-const nestedCommandNames = {
+const nestedCommandNames: Partial<Record<TopLevelCommandName, readonly string[]>> = {
   backup: backupCommandNames,
   config: configOperationNames,
-} satisfies Partial<Record<TopLevelCommandName, readonly string[]>>;
+};
+const topLevelCompletionNames = [...topLevelCommandNames, commandHelpOptionName];
+const commandCompletionNames = (topLevelCommandNames as readonly TopLevelCommandName[]).map((command) => [command, [
+  ...(nestedCommandNames[command] ?? []),
+  ...(command === 'doctor' ? [doctorVerboseOptionName] : []),
+  commandHelpOptionName,
+]] as const);
 const configNames: { readable: string[]; leaves: string[]; booleans: string[] } = configCompletionNames();
 const snapshotNames = (snapshotDefinitions as SnapshotDefinition[]).map(({ name }) => name);
 const quote = (word: string): string => `'${word.replaceAll("'", "'\\''")}'`;
@@ -30,10 +36,10 @@ const selection = (shell: 'bash' | 'zsh'): string[] => {
   const word = (index: number): string => `\${words[${index + offset}]}`;
   return [
     `  case "$${shell === 'zsh' ? 'CURRENT' : 'COMP_CWORD'}" in`,
-    `    ${1 + offset}) candidates=(${arrayWords(topLevelCommandNames)}) ;;`,
+    `    ${1 + offset}) candidates=(${arrayWords(topLevelCompletionNames)}) ;;`,
     `    ${2 + offset})`,
     `      case "${word(1)}" in`,
-    ...Object.entries(nestedCommandNames).map(([command, names]) => (
+    ...commandCompletionNames.map(([command, names]) => (
       `        ${command}) candidates=(${arrayWords(names)}) ;;`
     )),
     '      esac',

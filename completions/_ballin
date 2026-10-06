@@ -10,11 +10,16 @@ fi
 _ballin() {
   local -a candidates
   case "$CURRENT" in
-    2) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update') ;;
+    2) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update' '--help') ;;
     3)
       case "${words[2]}" in
-        backup) candidates=('open' 'read' 'list' 'setup' 'disconnect') ;;
-        config) candidates=('get' 'set' 'reset') ;;
+        backup) candidates=('open' 'read' 'list' 'setup' 'disconnect' '--help') ;;
+        config) candidates=('get' 'set' 'reset' '--help') ;;
+        doctor) candidates=('--verbose' '--help') ;;
+        self-update) candidates=('--help') ;;
+        setup) candidates=('--help') ;;
+        uninstall) candidates=('--help') ;;
+        update) candidates=('--help') ;;
       esac
       ;;
     4)
