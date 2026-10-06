@@ -1,23 +1,54 @@
 #compdef ballin
 
+_ballin_completion_helper="${${(%):-%x}:A:h:h}/commands/completion_members.ts"
+
 if (( ! $+functions[compdef] )); then
   autoload -Uz compinit
   compinit
 fi
 
 _ballin() {
+  local -a candidates=()
+  local member_paths
   case "$CURRENT" in
-    2) compadd -- backup config doctor self-update setup uninstall update ;;
+    2) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update' '--help') ;;
     3)
       case "${words[2]}" in
-        backup) compadd -- open read list setup disconnect ;;
-        config) compadd -- get set reset ;;
+        backup) candidates=('open' 'read' 'list' 'setup' 'disconnect' '--help') ;;
+        config) candidates=('get' 'set' 'reset' '--help') ;;
+        doctor) candidates=('--verbose' '--help') ;;
+        self-update) candidates=('--help') ;;
+        setup) candidates=('--help') ;;
+        uninstall) candidates=('--help') ;;
+        update) candidates=('--help') ;;
+      esac
+      ;;
+    4)
+      case "${words[2]} ${words[3]}" in
+        'config get') candidates=('update' 'update.cleanup' 'update.selfUpdate' 'update.backup' 'update.softwareupdate' 'update.npm' 'update.nvm' 'backup' 'backup.repository' 'backup.includeSensitive' 'analytics' 'analytics.enabled') ;;
+        'config set') candidates=('update.cleanup' 'update.selfUpdate' 'update.backup' 'update.softwareupdate' 'update.npm' 'update.nvm' 'backup.repository' 'backup.includeSensitive' 'analytics.enabled') ;;
+        'backup read') candidates=('bash_profile.sh' 'bashrc.sh' 'profile.sh' 'zprofile.sh' 'zshrc.sh' 'bash_completions' 'brew_list' 'brew_leaves' 'brew_cask' 'brew_services' 'Brewfile' 'gitignore_global' 'gitconfig' 'npm_global' 'pipx' 'uv_tools' 'pyenv_versions' 'nvmrc' 'vs_settings' 'vs_keybindings' 'vs_extensions' 'vsI_settings' 'vsI_keybindings' 'vsI_extensions' 'vimrc' 'nanorc' 'codex_AGENTS.md' 'codex_AGENTS.override.md' 'codex_config.toml' 'codex_profiles.bundle.json' 'codex_hooks.json' 'codex_skills.bundle.json' 'codex_user_skills.bundle.json' 'codex_rules.bundle.json' 'codex_agents.bundle.json' 'codex_marketplace.json' 'claude_instructions' 'claude_rules.bundle.json' 'claude_agents.bundle.json' 'claude_commands.bundle.json' 'claude_skills.bundle.json' 'ballin_config' 'mas') ;;
       esac
       ;;
     5)
-      if [[ "${words[2]}" == backup && "${words[3]}" == read ]]; then compadd -- --list --file; fi
+      case "${words[2]} ${words[3]}" in
+        'config set')
+          case "${words[4]}" in
+            'update.cleanup'|'update.selfUpdate'|'update.backup'|'update.softwareupdate'|'update.npm'|'update.nvm'|'backup.includeSensitive'|'analytics.enabled') candidates=(true false) ;;
+          esac
+          ;;
+        'backup read') candidates=('--list' '--file') ;;
+      esac
+      ;;
+    6)
+      if [[ "${words[2]}" == backup && "${words[3]}" == read && "${words[5]}" == --file ]]; then
+        member_paths="$(command node "$_ballin_completion_helper" "${words[4]}" 2>/dev/null)"
+        [[ -n "$member_paths" ]] && candidates=("${(@f)member_paths}")
+      fi
       ;;
   esac
+  (( ${#candidates} )) && compadd -- "${candidates[@]}"
+  return 0
 }
 
 compdef _ballin ballin

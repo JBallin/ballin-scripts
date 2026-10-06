@@ -49,7 +49,7 @@ again. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
-Self-updates report “Ballin updated.” after a successful refresh. They check the
+Self-updates report completion after a successful refresh. They check the
 configured backup destination without reading saved snapshot contents.
 Warnings and errors remain visible without repeating the setup summary.
 
@@ -66,11 +66,20 @@ install offers to enable it after the command is installed, showing the startup
 file and exact activation line before asking for confirmation (default: no).
 Refreshes and `ballin self-update` do not enable completion or ask again.
 
-Completion covers supported top-level commands and the operations under
-`ballin backup` and `ballin config`, plus the `--list` and `--file` options after
-a snapshot name in `ballin backup read`. Unique prefixes work too, such as
-`ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
-Other options, values, and file paths are not completed.
+Completion covers commands, `--help`, `doctor --verbose`, backup snapshot names,
+and the `--list` and `--file` options after a snapshot name. `config get` completes
+known sections and setting keys; `config set` completes setting keys and boolean
+`true`/`false` values.
+Unique prefixes work, such as `ballin config set update.cl<Tab>`.
+Setting suggestions come from bundled defaults; `set` still requires the key
+to exist in your local config.
+
+For `backup read <bundle> --file`, completion offers member paths only from an
+existing usable local cache for your selected backup destination. It never
+contacts GitHub, fetches a backup, or changes config or cache state. Missing or
+unusable cache data produces no suggestions; cached paths may be out of date.
+Snapshot-name suggestions describe supported snapshots and do not imply that
+they exist in your backup.
 
 ### Startup files and manual activation
 
@@ -201,9 +210,10 @@ baseline, sensitive-source scope, and privacy limitations.
 
 Reconnect inspects the existing backup before asking. Declining skips
 sensitive-source discovery. Selecting it reviews paths, resolved targets, and
-availability. Review may read bounded Claude skill selection metadata; it reads
-no skill bodies or other source contents and runs no collectors. Access or
-resolution errors stop setup. See [source review](backup-sources.md#repository-inclusion).
+availability. For synced Claude skills, Ballin reads local collection manifests
+to select plugin packages; it does not read selected file contents or create
+backup snapshots during this preview. Access or resolution errors stop setup.
+See [source preview](backup-sources.md#repository-inclusion).
 
 Final confirmation covers the destination and source selection. If you decline,
 Ballin makes no backup-specific changes. If you approve, it revalidates the

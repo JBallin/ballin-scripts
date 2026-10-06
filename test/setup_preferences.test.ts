@@ -98,8 +98,8 @@ fs.readFileSync = (file, ...args) => {
     assert.notInclude(result.stdout, ' -> ');
     assert.include(result.stdout, 'Sources not found now: 24.\n');
     assert.include(result.stdout, 'Unavailable now: vs_keybindings, vs_settings, vsI_keybindings, vsI_settings\n');
-    assert.include(result.stdout, 'may read bounded Claude skill selection metadata.');
-    assert.include(result.stdout, 'It reads no skill bodies or other source contents and runs no collectors.');
+    assert.include(result.stdout, 'Ballin checks local paths and availability, reading synced Claude skill manifests to select plugin packages.');
+    assert.include(result.stdout, 'This preview does not read selected file contents or create backup snapshots.');
     assert.notInclude(result.stdout, 'fixture private content');
   });
 

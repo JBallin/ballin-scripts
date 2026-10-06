@@ -536,6 +536,101 @@ describe('repository backup lifecycle', function() {
       assert.equal(rulesetRequests().length, 0);
     });
   });
+  ['synced', 'personal'].forEach((collision) => {
+    it(`retains the complete saved Claude skills bundle and cache for a ${collision} name collision`, () => {
+      const claude = path.join(home, '.claude');
+      const first = path.join(claude, 'skills/synced/first/shared');
+      const personal = path.join(claude, 'skills/personal');
+      [first, personal].forEach(folder => fs.mkdirSync(folder, { recursive: true }));
+      fs.writeFileSync(path.join(first, 'SKILL.md'), 'old synced skill');
+      fs.writeFileSync(path.join(personal, 'SKILL.md'), 'old personal skill');
+      fs.writeFileSync(path.join(first, '../manifest.json'), '{"skills":[{"name":"shared","source":"plugin"}]}');
+      fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'old instructions\n');
+      ok(run());
+      const prior = remote('claude_skills.bundle.json');
+      fs.writeFileSync(path.join(first, 'SKILL.md'), 'new synced skill');
+      fs.writeFileSync(path.join(personal, 'SKILL.md'), 'new personal skill');
+      const second = path.join(claude, 'skills', collision === 'synced' ? 'synced/second/shared' : 'shared');
+      fs.mkdirSync(second, { recursive: true });
+      fs.writeFileSync(path.join(second, 'SKILL.md'), 'DUMMY_COLLIDING_SKILL');
+      if (collision === 'synced') fs.writeFileSync(path.join(second, '../manifest.json'), '{"skills":[{"name":"shared","source":"plugin"}]}');
+      fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'new instructions\n');
+      const result = run(); ok(result);
+      assert.equal(remote('claude_skills.bundle.json'), prior);
+      assert.equal(cached('claude_skills.bundle.json'), prior);
+      assert.equal(remote('claude_instructions'), 'new instructions\n');
+      assert.notInclude(result.stdout + result.stderr, 'DUMMY_COLLIDING_SKILL');
+      const saved = run(['read', 'claude_skills.bundle.json', '--file', 'shared/SKILL.md']); ok(saved);
+      assert.equal(saved.stdout, 'old synced skill');
+      assert.lengthOf(publications(), 2);
+    });
+  });
+
+  [false, true].forEach((trustedCache) => {
+    it(`reconciles old namespaced Claude v2 paths with the ordinary cache rules: ${trustedCache}`, () => {
+      const folder = path.join(home, '.claude/skills/synced/collection/package');
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, 'SKILL.md'), 'same skill\n');
+      fs.writeFileSync(path.join(folder, '../manifest.json'), '{"skills":[{"name":"package","source":"plugin"}]}');
+      const oldPath = 'synced/collection/package/SKILL.md';
+      const previous = `${JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+        { path: oldPath, executable: false, encoding: 'utf8', content: ['same skill\n'] },
+      ] }, null, 2)}\n`;
+      saveState(fixtureState({ 'claude_skills.bundle.json': previous }));
+      if (trustedCache) seedCache('claude_skills.bundle.json', previous);
+      const saved = run(['read', 'claude_skills.bundle.json', '--file', oldPath]); ok(saved);
+      assert.equal(saved.stdout, 'same skill\n');
+      const result = run();
+      if (!trustedCache) {
+        assert.equal(result.status, 1); assert.include(result.stderr, 'conflict for claude_skills.bundle.json');
+        assert.equal(remote('claude_skills.bundle.json'), previous);
+        assert.isUndefined(cached('claude_skills.bundle.json'));
+        assert.lengthOf(publications(), 0);
+        return;
+      }
+      ok(result);
+      assert.deepEqual(JSON.parse(remote('claude_skills.bundle.json')!).entries.map((entry: { path: string }) => entry.path), ['package/SKILL.md']);
+      assert.equal(cached('claude_skills.bundle.json'), remote('claude_skills.bundle.json'));
+      const direct = run(['read', 'claude_skills.bundle.json', '--file', 'package/SKILL.md']); ok(direct);
+      assert.equal(direct.stdout, 'same skill\n');
+      const head = state().head; ok(run());
+      assert.equal(state().head, head);
+      assert.lengthOf(publications(), 1);
+    });
+  });
+
+  it('retains the complete saved skills bundle when sync metadata is unavailable while other Claude sources advance', () => {
+    const claude = path.join(home, '.claude');
+    const collection = path.join(claude, 'skills', 'synced', 'collection');
+    fs.mkdirSync(path.join(collection, 'custom'), { recursive: true });
+    fs.mkdirSync(path.join(claude, 'skills', 'personal'));
+    fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'old instructions\n');
+    fs.writeFileSync(path.join(claude, 'skills', 'personal', 'SKILL.md'), 'old personal skill');
+    fs.writeFileSync(path.join(collection, 'custom', 'SKILL.md'), 'synced plugin skill');
+    const manifest = path.join(collection, 'manifest.json');
+    fs.writeFileSync(manifest, '{"skills":[{"name":"custom","source":"plugin"}]}');
+    ok(run());
+    const prior = remote('claude_skills.bundle.json');
+    fs.writeFileSync(path.join(claude, 'CLAUDE.md'), 'new instructions\n');
+    fs.writeFileSync(path.join(claude, 'skills', 'personal', 'SKILL.md'), 'new personal skill');
+    fs.writeFileSync(manifest, '{DUMMY_INVALID_METADATA');
+    const malformed = run(); ok(malformed);
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.equal(cached('claude_skills.bundle.json'), prior);
+    assert.equal(remote('claude_instructions'), 'new instructions\n');
+    assert.notInclude(malformed.stdout + malformed.stderr, 'DUMMY_INVALID_METADATA');
+    fs.writeFileSync(manifest, '{"skills":[{"name":"custom","source":"anthropic","source":"plugin"}]}');
+    ok(run());
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.equal(cached('claude_skills.bundle.json'), prior);
+    fs.writeFileSync(manifest, '{"skills":[],"skills":[{"name":"custom","source":"plugin"}]}');
+    ok(run());
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.equal(cached('claude_skills.bundle.json'), prior);
+    fs.rmSync(manifest); ok(run());
+    assert.equal(remote('claude_skills.bundle.json'), prior);
+    assert.lengthOf(publications(), 2);
+  });
   [false, true].forEach((included) => {
     it(`publishes synthetic Codex sources with the existing sensitive preference: ${included}`, () => {
       const value = config();
@@ -638,12 +733,14 @@ describe('repository backup lifecycle', function() {
       const collection = '1ee7e3ab-14cd-4d49-9fce-a2f5fa33d125_e29e4a19-d6c5-4efd-a06e-1dbd9ea691a8';
       const synced = path.join(claude, 'skills', 'synced', collection);
       fs.mkdirSync(path.join(synced, 'pdf'), { recursive: true });
-      fs.writeFileSync(path.join(synced, 'pdf', 'SKILL.md'), 'locally edited downloaded default');
+      fs.writeFileSync(path.join(synced, 'pdf', 'SKILL.md'), 'plugin package with a default-looking name');
       fs.writeFileSync(path.join(synced, 'pdf', '.support'), 'DUMMY_SELECTED_SYNCED_SECRET');
-      fs.writeFileSync(path.join(synced, 'manifest.json'), '{"skills":[{"name":"pdf","source":"anthropic"}],"private":"DUMMY_EXCLUDED_SECRET"}');
+      fs.writeFileSync(path.join(synced, 'manifest.json'), '{"skills":[{"name":"pdf","source":"plugin"},{"name":"default","source":"anthropic"}],"private":"DUMMY_EXCLUDED_SECRET"}');
+      fs.mkdirSync(path.join(synced, 'default'));
+      fs.writeFileSync(path.join(synced, 'default', 'SKILL.md'), 'DUMMY_EXCLUDED_SECRET');
       fs.mkdirSync(path.join(synced, '.staging', 'partial'), { recursive: true });
       fs.writeFileSync(path.join(synced, '.staging', 'partial', 'SKILL.md'), 'DUMMY_EXCLUDED_SECRET');
-      const skillPaths = ['demo/.support', 'demo/SKILL.md', 'demo/run.sh', `synced/${collection}/pdf/.support`, `synced/${collection}/pdf/SKILL.md`];
+      const skillPaths = ['demo/.support', 'demo/SKILL.md', 'demo/run.sh', 'pdf/.support', 'pdf/SKILL.md'];
       ok(run([], '', { CLAUDE_CONFIG_DIR: claude }));
       if (included) {
         assert.equal(remote('claude_instructions'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
@@ -658,7 +755,7 @@ describe('repository backup lifecycle', function() {
         assert.deepEqual(JSON.parse(listed.stdout).map((entry: { path: string }) => entry.path), skillPaths);
         const member = run(['read', 'claude_skills.bundle.json', '--file', 'demo/.support']); ok(member);
         assert.equal(member.stdout, 'DUMMY_SELECTED_SKILL_SECRET');
-        const syncedMember = run(['read', 'claude_skills.bundle.json', '--file', `synced/${collection}/pdf/.support`]); ok(syncedMember);
+        const syncedMember = run(['read', 'claude_skills.bundle.json', '--file', 'pdf/.support']); ok(syncedMember);
         assert.equal(syncedMember.stdout, 'DUMMY_SELECTED_SYNCED_SECRET');
       } else {
         assert.isUndefined(remote('claude_instructions'));
@@ -689,6 +786,7 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
     assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
     assert.include(result.stdout, 'Your choice also covers future supported sources.');
+    assert.include(result.stdout, 'Synced Claude skills include plugin-origin packages only; defaults and other origins are excluded.');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
     assert.lengthOf(mutations(), 0);
   });
@@ -765,6 +863,7 @@ describe('repository backup lifecycle', function() {
     it('counts synced package serialization toward the shared Claude allowance before remote reads', () => {
       sparse(path.join(home, '.claude', 'CLAUDE.md'), 9 * mib);
       sparse(path.join(home, '.claude', 'skills', 'synced', 'collection', 'pdf', 'SKILL.md'), 6 * mib);
+      fs.writeFileSync(path.join(home, '.claude', 'skills', 'synced', 'collection', 'manifest.json'), '{"skills":[{"name":"pdf","source":"plugin"}]}');
       const result = run();
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
@@ -1218,31 +1317,74 @@ describe('repository backup lifecycle', function() {
     assert.equal(rulesetRequests().length, 0);
   });
 
-  const browserOrderingPreload = (): string => `
-    const fs = require('fs'); const write = process.stdout.write; let output = '';
+  const browserOrderingPreload = (tty = false, diagnostic = false): string => `
+    for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: ${tty} });
+    Object.defineProperty(process.stderr, 'columns', { value: 80 });
+    const fs = require('fs'); const write = process.stdout.write; const writeSync = fs.writeSync;
+    let output = '', feedback = '', validated = false;
     process.stdout.write = function(text, ...rest) { output += text; return write.call(this, text, ...rest); };
+    fs.writeSync = function(fd, text, ...rest) { if (fd === 2) feedback += text; return writeSync.call(this, fd, text, ...rest); };
     const child = require('child_process'); const spawn = child.spawnSync;
     child.spawnSync = function(command, args, options) {
-      if (command === 'gh' && args[0] === 'browse') fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, args, stdio: options.stdio, host: options.env.GH_HOST }));
+      if (command === 'gh' && args[0] === 'browse') fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, validated, args, stdio: options.stdio, host: options.env.GH_HOST }));
       return spawn.call(this, command, args, options);
     };
+    const repository = require(${JSON.stringify(require.resolve('../commands/backup_repository.ts'))});
+    const openUrl = repository.repositoryOpenUrl;
+    repository.repositoryOpenUrl = function(...args) {
+      fs.writeFileSync(${JSON.stringify(path.join(root, 'validation-order.json'))}, JSON.stringify({ feedback, output }));
+      if (${diagnostic}) require(${JSON.stringify(require.resolve('../commands/commandHelpers.ts'))}).writeStderrLine('fixture validation diagnostic');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+      const url = openUrl.apply(this, args); validated = true; return url;
+    };
   `;
-  for (const failed of [false, true]) {
-    it(`displays the validated URL before ${failed ? 'failed' : 'successful'} browser dispatch`, () => {
-      const value = state(); value.faults.open = failed; saveState(value);
-      const result = run(['open'], '', {}, browserOrderingPreload());
-      assert.equal(result.status, failed ? 7 : 0);
-      const notice = 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n';
-      assert.equal(result.stdout, notice);
-      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')), {
-        output: notice, args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
+  for (const tty of [false, true]) {
+    for (const failed of [false, true]) {
+      it(`shows immediate opening feedback before delayed validation and ${failed ? 'failed' : 'successful'} browser dispatch in ${tty ? 'TTY' : 'redirected'} output`, () => {
+        const value = state(); value.faults.open = failed; saveState(value);
+        const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(tty));
+        assert.equal(result.status, failed ? 7 : 0);
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'validation-order.json'), 'utf8')), {
+          feedback: tty ? 'Opening...' : 'Opening...\n', output: '',
+        });
+        const notice = 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n';
+        assert.equal(result.stdout, notice);
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')), {
+          output: notice, validated: true, args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
+        });
+        assert.equal(result.stderr, (tty ? 'Opening...\r\x1b[2K' : 'Opening...\n')
+          + (failed ? 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n' : ''));
+        assert.equal(state().requests.at(-1)?.endpoint, 'open');
+        assert.equal(mutations().length, 0);
+        assert.isFalse(fs.existsSync(cacheRoot));
       });
-      assert.equal(result.stderr, failed ? 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n' : '');
-      assert.equal(state().requests.at(-1)?.endpoint, 'open');
-      assert.equal(mutations().length, 0);
-      assert.isFalse(fs.existsSync(cacheRoot));
+    }
+  }
+  for (const tty of [false, true]) {
+    it(`keeps opening feedback distinct from validation failure in ${tty ? 'TTY' : 'redirected'} output`, () => {
+      const value = state(); value.faults.auth = true; saveState(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(tty));
+      assert.equal(result.status, 1); assert.equal(result.stdout, '');
+      const feedback = tty ? 'Opening...\r\x1b[2K' : 'Opening...\n';
+      assert.isTrue(result.stderr.startsWith(feedback));
+      assert.include(result.stderr, 'authentication');
+      assert.notInclude(result.stderr, 'in your browser');
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'validation-order.json'), 'utf8')), {
+        feedback: tty ? 'Opening...' : 'Opening...\n', output: '',
+      });
+      assert.isFalse(fs.existsSync(path.join(root, 'browser-order.json')));
+      assert.isFalse(state().requests.some((request) => request.endpoint === 'open'));
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
     });
   }
+  it('does not erase validation diagnostics when replacing opening feedback', () => {
+    const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(true, true)); ok(result);
+    assert.equal(result.stderr, 'Opening...\r\x1b[2Kfixture validation diagnostic\n');
+    assert.equal(result.stdout, 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n');
+    assert.isTrue(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')).validated);
+  });
   for (const failure of ['spawn', 'signal']) {
     it(`reports browser ${failure} failure without exposing child diagnostics`, () => {
       const result = run(['open'], '', {}, `
@@ -1283,14 +1425,14 @@ describe('repository backup lifecycle', function() {
     { name: 'with a newline', diagnostic: 'successful fetch diagnostic\n' },
     { name: 'without a newline on redirected stderr', diagnostic: 'successful fetch diagnostic', nonTTY: 'stderr' as const },
   ]) {
-    it(`preserves a successful fetch diagnostic ${name} before setup-child feedback`, () => {
+    it(`preserves a successful fetch diagnostic ${name} without adding temporary setup-child feedback`, () => {
       fs.cpSync(path.join(repoRoot, 'commands'), path.join(checkout, 'commands'), { recursive: true });
       fs.mkdirSync(path.join(checkout, 'bin'));
       fs.copyFileSync(path.join(repoRoot, 'bin', 'ballin'), path.join(checkout, 'bin', 'ballin'));
       fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}
         const args = process.argv.slice(2); const exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);
         if (exact(['rev-parse', '--verify', 'HEAD:commands/backup_snapshots.ts'])) process.stdout.write('a'.repeat(40) + '\\n');
-        else if (exact(['fetch', 'origin', '+main:refs/remotes/origin/main'])) process.stderr.write(${JSON.stringify(diagnostic)});
+        else if (exact(['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'])) process.stderr.write(${JSON.stringify(diagnostic)});
         else if (!exact(['checkout', 'main']) && !exact(['merge', 'origin/main'])) process.exitCode = 2;
       `, { mode: 0o755 });
       const preload = path.join(root, 'successful-fetch-preload.cjs');
@@ -1303,13 +1445,13 @@ describe('repository backup lifecycle', function() {
         }),
       });
       ok(result);
-      assert.equal(result.stderr, diagnostic + (nonTTY ? '' : '\r\nUpdating...\r\x1b[2K'));
-      assert.equal(result.stdout, 'Ballin updated.\n');
+      assert.equal(result.stderr, diagnostic);
+      assert.equal(result.stdout, 'Updating Ballin...\nBallin updated.\n');
       assert.lengthOf(publications(), 0);
     });
   }
   for (const mode of ['tty', 'stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
-    it(`limits self-update feedback to configured backup maintenance in ${mode} mode`, () => {
+    it(`leaves configured self-update backup maintenance free of temporary feedback in ${mode} mode`, () => {
       seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess();
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const env = { ...ttyEnv };
@@ -1318,30 +1460,30 @@ describe('repository backup lifecycle', function() {
       const nonTTY = ['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined;
       const result = runSetup('self-update', env, progressPreload(nonTTY, mode === 'narrow' ? 10 : 80)); ok(result);
       assert.equal(result.stdout, '');
-      assert.equal(result.stderr, mode === 'tty' ? '\r\nUpdating...\r\x1b[2K' : '');
+      assert.equal(result.stderr, '');
       const requests = progressRequests();
       const github = requests.filter((request) => request.args[0] === 'api');
       assert.isAbove(github.length, 0);
-      assert.isTrue(github.every((request) => request.status === (mode === 'tty' ? 'Updating...' : '')));
+      assert.isTrue(github.every((request) => request.status === ''));
       assert.isTrue(requests.filter((request) => request.args[0] !== 'api').every((request) => request.status === ''));
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
       assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
     });
   }
-  it('clears self-update maintenance feedback before failure guidance', () => {
+  it('preserves self-update maintenance failure guidance without temporary feedback', () => {
     const value = state(); value.faults.query = 'errors'; saveState(value);
     const result = runSetup('self-update', ttyEnv, progressPreload());
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, '\r\nUpdating...\r\x1b[2K');
+    assert.equal(result.stderr, '');
     assert.include(result.stdout, 'Unable to configure backup');
     assert.notInclude(result.stdout, 'Updating...');
     assert.lengthOf(publications(), 0);
   });
-  it('clears self-update maintenance feedback before optional protection warnings', () => {
+  it('preserves optional protection warnings without temporary self-update feedback', () => {
     const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
     const result = runSetup('self-update', ttyEnv, progressPreload()); ok(result);
-    assert.equal(result.stderr, '\r\nUpdating...\r\x1b[2K');
+    assert.equal(result.stderr, '');
     assert.include(result.stdout, 'Optional GitHub branch protection was not enabled with the current permissions');
     assert.notInclude(result.stdout, 'Updating...');
     assert.lengthOf(publications(), 0);

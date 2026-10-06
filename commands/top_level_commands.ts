@@ -7,6 +7,8 @@ const topLevelCommandNames = [
   'uninstall',
   'update',
 ] as const;
+const commandHelpOptionName = '--help';
+const doctorVerboseOptionName = '--verbose';
 
 export type TopLevelCommandName = typeof topLevelCommandNames[number];
 
@@ -19,4 +21,6 @@ const isTopLevelCommandName = (value: unknown): value is TopLevelCommandName => 
 module.exports = {
   isTopLevelCommandName,
   topLevelCommandNames,
+  commandHelpOptionName,
+  doctorVerboseOptionName,
 };

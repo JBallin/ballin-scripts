@@ -6,6 +6,7 @@ const path = require('path');
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const updateLine = 'Updating Ballin...\n';
 type SpawnSelfUpdateOverrides = Omit<
   import('child_process').SpawnSyncOptionsWithStringEncoding,
   'encoding' | 'env'
@@ -40,8 +41,27 @@ describe('ballin self-update', () => {
   const installGitStub = () => {
     writeExecutable('git', `#!/usr/bin/env bash
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
+printf '%s|%s\\n' "$*" "$GIT_NO_LAZY_FETCH" >> "$BALLIN_UPDATE_TEST_LOCAL_GIT_LOG"
 case "$1" in
   rev-parse)
+    if [ "$2" = '--verify' ] && [ "$3" = 'HEAD' ]; then
+      if [ -z "$FAKE_HEAD_BEFORE" ]; then exit 1; fi
+      if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
+        if [ "\${FAKE_HEAD_POST_STATUS:-0}" != 0 ]; then exit "$FAKE_HEAD_POST_STATUS"; fi
+        printf '%s\\n' "\${FAKE_HEAD_AFTER:-$FAKE_HEAD_BEFORE}"
+      else printf '%s\\n' "$FAKE_HEAD_BEFORE"; fi
+      exit 0
+    fi
+    if [ "$2" = '--short=7' ]; then
+      if [ "\${FAKE_ABBREV_STATUS:-0}" != 0 ]; then exit "$FAKE_ABBREV_STATUS"; fi
+      if [ -n "$FAKE_ABBREV" ]; then printf '%s\\n' "$FAKE_ABBREV";
+      else printf '%.*s\\n' "\${FAKE_ABBREV_LENGTH:-7}" "$4"; fi
+      exit 0
+    fi
+    if [ "$2" = '--is-shallow-repository' ]; then
+      printf '%s\\n' "\${FAKE_SHALLOW:-false}"
+      exit "\${FAKE_SHALLOW_STATUS:-0}"
+    fi
     if [ "$2" = '--verify' ] && [ "$3" = 'HEAD:commands/backup_snapshots.ts' ]; then
       if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
         if [ "\${FAKE_SOURCE_POST_STATUS:-0}" != '0' ]; then exit "$FAKE_SOURCE_POST_STATUS"; fi
@@ -57,6 +77,15 @@ case "$1" in
       exit 0
     fi
     exit 1
+    ;;
+  config)
+    if [ "$FAKE_PROMISOR" = 1 ]; then printf 'remote.origin.promisor true\\n'; exit 0; fi
+    exit "\${FAKE_CONFIG_STATUS:-1}"
+    ;;
+  merge-base) exit "\${FAKE_ANCESTRY_STATUS:-0}" ;;
+  rev-list)
+    printf '%s\\n' "\${FAKE_NEW_COMMITS:-6}"
+    exit "\${FAKE_COUNT_STATUS:-0}"
     ;;
   fetch)
     printf '%s' "$FAKE_GIT_FETCH_STDERR" >&2
@@ -135,6 +164,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       PATH: toolDir,
       BALLIN_NO_ANALYTICS: '1',
       BALLIN_UPDATE_TEST_LOG: commandLogPath,
+      BALLIN_UPDATE_TEST_LOCAL_GIT_LOG: path.join(testDir, 'local-git.log'),
       FAKE_GIT_MERGE_COUNT_PATH: mergeCountPath,
       FAKE_GIT_CHECKOUT_COUNT_PATH: checkoutCountPath,
       FAKE_GIT_FETCH_STATUS: '0',
@@ -153,7 +183,9 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   const commandLog = (includeSourceChecks = false) => (
     fs.existsSync(commandLogPath)
       ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter((line: string) => line
-        && (includeSourceChecks || !line.endsWith('|git:rev-parse --verify HEAD:commands/backup_snapshots.ts')))
+        && (includeSourceChecks || !line.endsWith('|git:rev-parse --verify HEAD:commands/backup_snapshots.ts'))
+        && !line.endsWith('|git:rev-parse --verify HEAD')
+        && !/\|git:(rev-parse --short=7|rev-parse --is-shallow-repository|config --get-regexp|merge-base --is-ancestor|rev-list --count)/u.test(line))
       : []
   );
 
@@ -189,9 +221,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       const fs = require('fs'); const write = fs.writeSync;
       let feedback = '';
       fs.writeSync = function(fd, text, ...rest) { if (fd === 2) feedback += text; return write.call(this, fd, text, ...rest); };
+      let stdout = ''; const stdoutWrite = process.stdout.write;
+      process.stdout.write = function(text, ...rest) { stdout += text; return stdoutWrite.call(this, text, ...rest); };
       const child = require('child_process'); const spawn = child.spawnSync;
       child.spawnSync = function(command, args, options) {
-        if (command === 'git' && args[0] === 'fetch') fs.writeFileSync(${JSON.stringify(path.join(testDir, 'fetch-feedback.json'))}, JSON.stringify({ feedback, stdio: options.stdio }));
+        if (command === 'git' && args[0] === 'fetch') fs.writeFileSync(${JSON.stringify(path.join(testDir, 'fetch-feedback.json'))}, JSON.stringify({ feedback, stdout, args, stdio: options.stdio }));
         return spawn.call(this, command, args, options);
       };
     `);
@@ -199,63 +233,131 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   };
 
   for (const mode of ['stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
-    it(`leaves self-update output unchanged in ${mode} mode`, () => {
+    it(`prints plain permanent self-update progress in ${mode} mode`, () => {
       const env = interactiveEnv(['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined, mode === 'narrow' ? 10 : 80);
       if (mode === 'dumb') env.TERM = 'dumb';
       if (mode === 'NO_COLOR') env.NO_COLOR = '1';
       const result = runSelfUpdate(env);
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated.\n');
+      assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
       assert.equal(result.stderr, '');
     });
   }
-  it('reports a missing installed repository without progress or child work', () => {
+  it('reports a missing installed repository after the update heading without child work', () => {
     const env = interactiveEnv();
     fs.rmSync(repoDir, { recursive: true, force: true });
     const result = runSelfUpdate(env);
     assert.equal(result.status, 1);
     assert.equal(result.stderr, '');
-    assert.equal(result.stdout, `install directory not found: ${repoDir}\n`);
+    assert.equal(result.stdout, updateLine + `install directory not found: ${repoDir}\n`);
     assert.deepEqual(commandLog(), []);
   });
 
-  it('leaves a silent fetch free of parent progress and preserves inherited streams', () => {
+  it('prints one permanent heading before quiet fetch while preserving inherited streams', () => {
     const result = runSelfUpdate(interactiveEnv());
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(testDir, 'fetch-feedback.json'), 'utf8')), {
-      feedback: '', stdio: ['inherit', 'ignore', 'inherit'],
+      feedback: '', stdout: updateLine, args: ['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'],
+      stdio: ['inherit', 'ignore', 'inherit'],
     });
   });
-  it('preserves inherited credential and setup output without parent progress', () => {
+  const revisions = { FAKE_HEAD_BEFORE: 'a'.repeat(40), FAKE_HEAD_AFTER: 'b'.repeat(40) };
+  it('reports an unchanged installed revision after still completing setup', () => {
+    const result = runSelfUpdate({ ...revisions, FAKE_HEAD_AFTER: revisions.FAKE_HEAD_BEFORE });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, updateLine + 'Ballin is already up to date.\n');
+    assert.include(commandLog(), setupLog());
+  });
+  for (const count of [1, 6]) {
+    it(`reports changed revisions with ${count} locally known new commit${count === 1 ? '' : 's'}`, () => {
+      const result = runSelfUpdate({ ...revisions, FAKE_NEW_COMMITS: String(count), GIT_NO_LAZY_FETCH: '0' });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, updateLine + `Ballin updated: aaaaaaa to bbbbbbb (${count} new commit${count === 1 ? '' : 's'}).\n`);
+      const metadata = fs.readFileSync(path.join(testDir, 'local-git.log'), 'utf8').trim().split('\n')
+        .filter((line: string) => /^(rev-parse --verify HEAD\||rev-parse --short=7|rev-parse --is-shallow-repository|config --get-regexp|merge-base --is-ancestor|rev-list --count)/u.test(line));
+      assert.isAbove(metadata.length, 0);
+      assert.isTrue(metadata.every((line: string) => line.endsWith('|1')));
+      assert.equal(commandLog().filter((line: string) => line.includes('|git:fetch ')).length, 1);
+    });
+  }
+  for (const env of [
+    { FAKE_SHALLOW: 'true' }, { FAKE_SHALLOW: 'unknown' }, { FAKE_SHALLOW_STATUS: '1' },
+    { FAKE_PROMISOR: '1' }, { FAKE_CONFIG_STATUS: '2' },
+    { FAKE_ANCESTRY_STATUS: '1' }, { FAKE_ANCESTRY_STATUS: '2' }, { FAKE_COUNT_STATUS: '128' },
+    { FAKE_NEW_COMMITS: 'invalid' }, { FAKE_NEW_COMMITS: '0' }, { FAKE_NEW_COMMITS: '9007199254740992' },
+  ]) {
+    it(`keeps revision details when a local count is unavailable: ${JSON.stringify(env)}`, () => {
+      const result = runSelfUpdate({ ...revisions, ...env });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, updateLine + 'Ballin updated: aaaaaaa to bbbbbbb.\n');
+      assert.equal(result.stderr, '');
+      assert.equal(commandLog().filter((line: string) => line.includes('|git:fetch ')).length, 1);
+    });
+  }
+  for (const env of [
+    { FAKE_HEAD_BEFORE: 'unavailable' }, { FAKE_HEAD_POST_STATUS: '1' },
+    { FAKE_ABBREV_STATUS: '1' }, { FAKE_ABBREV: 'invalid' }, { FAKE_ABBREV: 'ccccccc' },
+  ]) {
+    it(`retains generic success when revision details are unavailable: ${JSON.stringify(env)}`, () => {
+      const result = runSelfUpdate({ ...revisions, ...env });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
+    });
+  }
+  it('compares full SHA-256 revisions even when their short prefixes match', () => {
+    const result = runSelfUpdate({
+      FAKE_HEAD_BEFORE: 'a'.repeat(7) + 'b'.repeat(57), FAKE_HEAD_AFTER: 'a'.repeat(7) + 'c'.repeat(57),
+      FAKE_ABBREV_LENGTH: '8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, updateLine + 'Ballin updated: aaaaaaab to aaaaaaac (6 new commits).\n');
+  });
+  for (const query of ['merge-base', 'rev-list']) {
+    it(`keeps successful revision details when optional ${query} metadata throws`, () => {
+      const preload = path.join(testDir, 'optional-metadata.cjs');
+      fs.writeFileSync(preload, `
+        const child = require('child_process'); const original = child.spawnSync;
+        child.spawnSync = function(command, args, ...rest) {
+          if (command === 'git' && args[0] === ${JSON.stringify(query)}) throw new Error('fixture metadata failure');
+          return original.call(this, command, args, ...rest);
+        };
+      `);
+      const result = runSelfUpdate({ ...revisions, NODE_OPTIONS: `--require=${preload}` });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, updateLine + 'Ballin updated: aaaaaaa to bbbbbbb.\n');
+      assert.equal(result.stderr, '');
+    });
+  }
+  it('preserves inherited credential and setup output after the permanent heading', () => {
     const result = runSelfUpdate({
       ...interactiveEnv(), FAKE_GIT_FETCH_READ_STDIN: '1', FAKE_SETUP_STDERR: 'setup warning without newline',
     }, ballinPath, { input: 'fixture-credential\n' });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, 'credential prompt\nsetup warning without newline');
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
     assert.include(commandLog(), 'fetch-stdin:fixture-credential');
   });
   it('preserves fetch diagnostics without a trailing newline and does not erase them on failure', () => {
     const result = runSelfUpdate({ ...interactiveEnv(), FAKE_GIT_FETCH_STDERR: 'fetch diagnostic', FAKE_GIT_FETCH_STATUS: '17' });
     assert.equal(result.status, 1);
     assert.equal(result.stderr, 'fetch diagnostic');
-    assert.equal(result.stdout, 'git fetch origin main failed\n');
+    assert.equal(result.stdout, updateLine + 'git fetch origin main failed\n');
   });
   for (const [setting, value, status] of [
     ['FAKE_GIT_FETCH_STATUS', '17', 1],
     ['FAKE_SETUP_STATUS', '27', 27],
     ['FAKE_SETUP_SIGNAL', 'SIGTERM', 143],
   ] as const) {
-    it(`preserves ${setting} failure status without parent progress`, () => {
+    it(`preserves ${setting} failure status without a success completion`, () => {
       const result = runSelfUpdate({ ...interactiveEnv(), [setting]: value });
       assert.equal(result.status, status);
       assert.equal(result.stderr, '');
       assert.notInclude(result.stdout, 'Ballin updated.');
     });
   }
-  it('keeps the embedded update heading and readiness check without parent progress', () => {
+  it('keeps the embedded update headings and readiness check', () => {
     const configPath = path.join(testDir, 'config.json');
     const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8'));
     config.update = Object.fromEntries(Object.keys(config.update).map((key) => [key, key === 'selfUpdate' ? 'true' : 'false']));
@@ -267,6 +369,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(result.stderr, '');
     assert.include(result.stdout, '==> Updating Ballin');
+    assert.equal(result.stdout.split(updateLine).length - 1, 1);
     assert.include(result.stdout, 'Ballin updated.');
     assert.include(result.stdout, '==> Checking Ballin readiness');
     assert.notInclude(result.stdout, 'Updating...');
@@ -276,7 +379,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({ FAKE_SOURCE_CHANGED: '1' });
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Backup source definitions may have changed.');
-    assert.include(result.stdout, 'Sensitive-source opt-in covers current and future supported sources.\nReview: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n');
+    assert.include(result.stdout, 'Sensitive-source opt-in covers current and future supported sources.\nReview:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n');
     assert.equal(commandLog(true).filter((line: string) => line.includes('HEAD:commands/backup_snapshots.ts')).length, 2);
     assert.isBelow(result.stdout.indexOf('Ballin updated.'), result.stdout.indexOf('Backup source definitions'));
   });
@@ -302,10 +405,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate();
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       setupLog(),
@@ -320,7 +423,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     });
 
     assert.equal(result.status, 19);
-    assert.equal(result.stdout, 'operational output\n');
+    assert.equal(result.stdout, updateLine + 'operational output\n');
     assert.equal(result.stderr, 'setup warning\n');
     assert.equal(commandLog().at(-1), setupLog());
   });
@@ -329,7 +432,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({ FAKE_GIT_FETCH_STATUS: '17' });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, 'git fetch origin main failed\n');
+    assert.equal(result.stdout, updateLine + 'git fetch origin main failed\n');
     assert.notInclude(commandLog().join('\n'), 'install_setup:');
   });
 
@@ -339,7 +442,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'setup output\nBallin updated.\n');
+    assert.equal(result.stdout, updateLine + 'setup output\nBallin updated.\n');
     assert.equal(result.stderr, '');
   });
 
@@ -351,10 +454,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     );
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
     assert.equal(result.stderr, 'credential prompt\n');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       'fetch-stdin:secret-token',
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
@@ -371,10 +474,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({}, symlinkPath);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       setupLog(),
@@ -385,10 +488,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({ FAKE_SETUP_STATUS: '27' });
 
     assert.equal(result.status, 27);
-    assert.equal(result.stdout, '');
+    assert.equal(result.stdout, updateLine);
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       setupLog(),
@@ -401,10 +504,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate();
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, '');
+    assert.equal(result.stdout, updateLine);
     assert.include(result.stderr, 'Cannot find module');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
     ]);
@@ -414,10 +517,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({ FAKE_SETUP_SIGNAL: 'SIGTERM' });
 
     assert.equal(result.status, 143);
-    assert.equal(result.stdout, '');
+    assert.equal(result.stdout, updateLine);
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       setupLog(),
@@ -428,10 +531,10 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({ FAKE_GIT_FETCH_STATUS: '23' });
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, 'git fetch origin main failed\n');
+    assert.equal(result.stdout, updateLine + 'git fetch origin main failed\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
     ]);
   });
 
@@ -441,7 +544,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate();
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, `install directory not found: ${repoDir}\n`);
+    assert.equal(result.stdout, updateLine + `install directory not found: ${repoDir}\n`);
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), []);
   });
@@ -453,7 +556,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate();
 
     assert.equal(result.status, 1);
-    assert.equal(result.stdout, `install directory not found: ${repoDir}\n`);
+    assert.equal(result.stdout, updateLine + `install directory not found: ${repoDir}\n`);
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), []);
   });
@@ -464,11 +567,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stdout,
-      'git checkout main failed. stashing changes and trying again...\nBallin updated.\n',
+      updateLine + 'git checkout main failed. stashing changes and trying again...\nBallin updated.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
       `${repoDir}|git:stash push --include-untracked`,
@@ -487,12 +590,12 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 1);
     assert.equal(
       result.stdout,
-      'git checkout main failed. stashing changes and trying again...\n'
+      updateLine + 'git checkout main failed. stashing changes and trying again...\n'
         + 'git stash failed during checkout recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
       `${repoDir}|git:stash push --include-untracked`,
@@ -508,12 +611,12 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 1);
     assert.equal(
       result.stdout,
-      'git checkout main failed. stashing changes and trying again...\n'
+      updateLine + 'git checkout main failed. stashing changes and trying again...\n'
         + 'git checkout failed during checkout recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
       `${repoDir}|git:stash push --include-untracked`,
@@ -527,11 +630,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stdout,
-      'git merge failed. stashing changes and trying again...\nBallin updated.\n',
+      updateLine + 'git merge failed. stashing changes and trying again...\nBallin updated.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
@@ -551,11 +654,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stdout,
-      'git merge failed. stashing changes and trying again...\nBallin updated.\n',
+      updateLine + 'git merge failed. stashing changes and trying again...\nBallin updated.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
@@ -577,12 +680,12 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 1);
     assert.equal(
       result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
+      updateLine + 'git merge failed. stashing changes and trying again...\n'
         + 'git merge abort failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
@@ -599,12 +702,12 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 1);
     assert.equal(
       result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
+      updateLine + 'git merge failed. stashing changes and trying again...\n'
         + 'git merge failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
@@ -623,12 +726,12 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 1);
     assert.equal(
       result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
+      updateLine + 'git merge failed. stashing changes and trying again...\n'
         + 'git stash failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
@@ -645,12 +748,12 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.status, 1);
     assert.equal(
       result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
+      updateLine + 'git merge failed. stashing changes and trying again...\n'
         + 'git checkout failed during merge recovery.\n',
     );
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch origin +main:refs/remotes/origin/main`,
+      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
       `${repoDir}|git:checkout main`,
       `${repoDir}|git:merge origin/main`,
       `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,

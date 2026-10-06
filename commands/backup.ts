@@ -749,7 +749,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     } else if (command === 'list') {
       writeSavedSnapshots(readRepositoryInventory(config.repository));
     } else if (command === 'open') {
-      const url = repositoryOpenUrl(config.repository);
+      const url = withTemporaryStatus('Opening...', () => repositoryOpenUrl(config.repository), true);
       writeStdoutLine(`Opening ${url} in your browser.`);
       const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
       process.exitCode = result.error ? 1 : spawnResultStatus(result);

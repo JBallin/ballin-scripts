@@ -114,8 +114,8 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   available.forEach((line) => writeStdoutLine(`  ${line}`));
   if (absent.length) writeStdoutLine(`Sources not found now: ${absent.length}.`);
   if (unavailable.length) writeStdoutLine(`Unavailable now: ${unavailable.join(', ')}`);
-  writeStdoutLine('This review checks paths and availability and may read bounded Claude skill selection metadata.');
-  writeStdoutLine('It reads no skill bodies or other source contents and runs no collectors.');
+  writeStdoutLine('Ballin checks local paths and availability, reading synced Claude skill manifests to select plugin packages.');
+  writeStdoutLine('This preview does not read selected file contents or create backup snapshots.');
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
@@ -123,6 +123,7 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
   writeStdoutLine('\nSensitive sources may contain credentials or other private information.');
   writeStdoutLine('Ballin does not scan or redact them.');
   writeStdoutLine('Your choice also covers future supported sources.');
+  writeStdoutLine('Synced Claude skills include plugin-origin packages only; defaults and other origins are excluded.');
   writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
   const sensitive = readPromptLine(`Include sensitive sources? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
   if (sensitive.eof) return null;

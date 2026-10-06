@@ -11,6 +11,7 @@ type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean; c
 const snapshotByteLimit = 16 * 1024 * 1024;
 const recursiveEntryLimit = 8192;
 const claudeSyncBookkeeping = new Set(['manifest.json', '.staging', '.last-complete-round', '.trash']);
+const claudeManifestByteLimit = 1024 * 1024;
 class SnapshotLimitError extends Error {
   constructor(kind: 'bytes' | 'entries', actual: number, limit: number) {
     super(`Snapshot ${kind} limit exceeded (${actual} > ${limit}).`);
@@ -88,8 +89,8 @@ const requireWithinLimit = (kind: 'bytes' | 'entries', actual: number, limit: nu
   if (actual > limit) throw new SnapshotLimitError(kind, actual, limit);
 };
 
-// Enumerate regular files without following symlinks. Metadata-only discovery
-// uses this same traversal, so empty or generated-only sources stay absent.
+// Enumerate regular files without following symlinks. Discovery uses this same
+// traversal and bounded selection metadata, so empty sources stay absent.
 const checkedPath = (root: string, relative: string): string => {
   if (sourceStat(root, relative).isSymbolicLink()) throw symlinkError();
   return path.join(root, relative);
@@ -123,12 +124,68 @@ const fileEntry = (root: string, relative: string, maxBytes = snapshotByteLimit,
   return { path: relative.split(path.sep).join('/'), executable, content: bytes.toString('base64') };
 };
 
+// Check selection keys in the original JSON before using its parsed value.
+// Validate syntax first so malformed escaped strings cannot repeatedly restart
+// tokenization. String tokens keep braces and commas inside values inert.
+const requireUniqueManifestSelection = (text: string): void => {
+  const contexts: { array: boolean; key: boolean; field?: string; seen: Set<string> }[] = [];
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\],]/gu)) {
+    if (token === '{' || token === '[') {
+      contexts.push({ array: token === '[', key: token === '{', seen: new Set() });
+    } else if (token === '}' || token === ']') contexts.pop();
+    else {
+      const context = contexts.at(-1);
+      if (!context || context.array) continue;
+      if (token === ',') context.key = true;
+      else if (context.key) {
+        const key = JSON.parse(token);
+        const selection = contexts.length === 1 ? key === 'skills'
+          : contexts.length === 3 && contexts[0].field === 'skills' && contexts[1].array
+            && (key === 'name' || key === 'source');
+        if (selection && context.seen.has(key)) throw new Error('Duplicate manifest selection key');
+        if (selection) context.seen.add(key);
+        context.field = key;
+        context.key = false;
+      }
+    }
+  }
+};
+
+// Called only inside the pinned collection directory. Manifest names are lookup
+// keys, never paths to follow; only the exact recorded plugin origin qualifies.
+const syncedPluginNames = (maxBytes: number, maxRecords: number): { names: Set<string>; bytes: number; records: number } => {
+  try {
+    const { bytes } = readBoundedFile('manifest.json', maxBytes, true);
+    if (!isUtf8(bytes)) throw new Error('Invalid manifest text');
+    const text = bytes.toString('utf8');
+    const manifest = JSON.parse(text);
+    requireUniqueManifestSelection(text);
+    if (!manifest || !Array.isArray(manifest.skills) || manifest.skills.length > maxRecords) throw new Error('Invalid manifest records');
+    const seen = new Set<string>();
+    const names = new Set<string>();
+    for (const record of manifest.skills) {
+      if (!record || typeof record.name !== 'string' || !record.name || /[\\/]/u.test(record.name)
+        || record.name === '.' || record.name === '..' || seen.has(record.name)) throw new Error('Ambiguous manifest name');
+      seen.add(record.name);
+      if (record.source === 'plugin') names.add(record.name);
+    }
+    return { names, bytes: bytes.length, records: manifest.skills.length };
+  } catch {
+    // An ambiguous selection must retain the last saved bundle, not replace it
+    // with a partial capture of the remaining personal or synced packages.
+    throw new SnapshotSourceTypeError('Claude synced skills manifest');
+  }
+};
+
 const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits: SnapshotLimits, reviewReadability: boolean, selection: RecursiveSelection): string[] => {
   if (!sourceStat(path.dirname(root), path.basename(root)).isDirectory()) return [];
   const files: string[] = [];
   const pending = [''];
+  const skillNames = new Set<string>();
   let visited = 0;
   let pathBytes = 0;
+  let manifestBytes = 0;
+  let manifestRecords = 0;
   while (pending.length) {
     const relative = pending.pop()!;
     inDirectory(root, relative, () => {
@@ -136,6 +193,13 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
       const parts = relative.split(path.sep);
       const synced = selection.claudeSkills && parts[0].toLowerCase() === 'synced';
       const syncContainer = synced && parts.length < 3;
+      let plugins: Set<string> | undefined;
+      if (synced && parts.length === 2) {
+        const manifest = syncedPluginNames(claudeManifestByteLimit - manifestBytes, recursiveEntryLimit - manifestRecords);
+        manifestBytes += manifest.bytes;
+        manifestRecords += manifest.records;
+        plugins = manifest.names;
+      }
       const skillFolder = selection.claudeSkills && (synced
         ? parts.length === 3 : relative !== '' && parts.length === 1);
       const candidates: string[] = [];
@@ -167,8 +231,9 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
             if (name.startsWith('.') || reserved === 'anthropic-skills' || reserved.startsWith('anthropic-skills:')) continue;
           }
           // Sync containers hold collections and packages, not authoring files.
-          // Keep their lifecycle state outside capture without reading manifests.
+          // Keep their lifecycle state outside capture.
           if (syncContainer && claudeSyncBookkeeping.has(name.toLowerCase())) continue;
+          if (plugins && !plugins.has(name)) continue;
           if (profilesOnly && !/^.+\.config\.toml$/u.test(name)) continue;
           if (name === '.git' || name === '.DS_Store' || (skills && !relative && name === '.system')) continue;
           if (skillFolder) candidates.push(name);
@@ -180,6 +245,11 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
         // filesystems. Plugin markers exclude the complete candidate payload.
         if (candidates.some((name) => name.toLowerCase() === '.claude-plugin')
           || !candidates.includes('SKILL.md') || !fs.lstatSync('SKILL.md').isFile()) return;
+        // Direct archive roots must never combine distinct source packages,
+        // even when their files or contents happen to be identical.
+        const name = synced ? parts[2] : relative;
+        if (skillNames.has(name)) throw new SnapshotSourceTypeError('Claude skill name collision');
+        skillNames.add(name);
         candidates.forEach(visitEntry);
       }
     });
@@ -239,13 +309,23 @@ const encodeDirectoryEntry = (relative: string, executable: boolean, bytes: Buff
   return { entry, size };
 };
 
+const snapshotMemberPath = (relative: string, claudeSkills = false): string => {
+  const parts = relative.split(path.sep);
+  return (claudeSkills && parts[0].toLowerCase() === 'synced' ? parts.slice(2) : parts).join('/');
+};
+
 const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}, selection: RecursiveSelection = {}): string => {
   const files = recursiveFiles(root, profilesOnly, skills, limits, selection);
   if (files.length === 0) throw new Error('Snapshot source has no regular files');
+  // Keep original paths for every filesystem read; project only stored paths.
+  if (selection.claudeSkills) files.sort((left, right) => {
+    const a = snapshotMemberPath(left, true), b = snapshotMemberPath(right, true);
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
   const maxBytes = limits.maxBytes ?? snapshotByteLimit;
   const stats = files.map((relative) => fileStat(root, relative, selection.rejectHardlinks));
   const entries: ReadableRecursiveEntry[] = files.map((relative, index) => ({
-    path: relative.split(path.sep).join('/'), executable: (stats[index].mode & 0o111) !== 0, encoding: 'utf8', content: [],
+    path: snapshotMemberPath(relative, selection.claudeSkills), executable: (stats[index].mode & 0o111) !== 0, encoding: 'utf8', content: [],
   }));
   const serialize = (): string => `${JSON.stringify({ format: 'ballin-directory', version: 2, entries }, null, 2)}\n`;
   let usedBytes = Buffer.byteLength(serialize());
@@ -262,7 +342,7 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
     const { bytes, executable } = inDirectory(root, path.dirname(relative), () => (
       readBoundedFile(path.basename(relative), available, selection.rejectHardlinks)
     ));
-    const captured = encodeDirectoryEntry(relative, executable, bytes, available);
+    const captured = encodeDirectoryEntry(entries[index].path, executable, bytes, available);
     entries[index] = captured.entry;
     usedBytes += captured.size - placeholderBytes;
   });
@@ -271,7 +351,7 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
   return snapshot;
 };
 
-module.exports = { checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
+module.exports = { inDirectory, checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
   snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, SnapshotSourceTypeError, requireWithinLimit, isReadableText, encodeDirectoryEntry };
 export type { RecursiveEntry, ReadableRecursiveEntry, SnapshotLimits, RecursiveSelection };
 
