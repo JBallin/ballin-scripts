@@ -271,7 +271,7 @@ const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, l
   return snapshot;
 };
 
-module.exports = { checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
+module.exports = { inDirectory, checkedPath, sourceStat, fileStat, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot,
   snapshotByteLimit, recursiveEntryLimit, SnapshotLimitError, SnapshotCwdError, SnapshotSourceTypeError, requireWithinLimit, isReadableText, encodeDirectoryEntry };
 export type { RecursiveEntry, ReadableRecursiveEntry, SnapshotLimits, RecursiveSelection };
 

@@ -1,6 +1,6 @@
 const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
+const { repositoryCacheDirectory } = require('./backup_cache.ts');
 const { makeTempFile, removeTempFile, runCommand, writeStderrLine } = require('./commandHelpers.ts');
 const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
 const {
@@ -638,8 +638,6 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
     throw failure;
   }
 };
-const repositoryCacheDirectory = (root: string, destination: RepositoryDestination): string => path.join(root,
-  crypto.createHash('sha256').update(JSON.stringify(['github.com', destination.ownerId, destination.id, destination.branch])).digest('hex'));
 const repositoryUrl = (destination: RepositoryDestination, account: Account): string => {
   if (destination.ownerId !== account.id) throw new RepositoryError('identity');
   return `https://github.com/${account.login}/${destination.name}`;

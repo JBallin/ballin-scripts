@@ -55,11 +55,19 @@ install offers to enable it after the command is installed, showing the startup
 file and exact activation line before asking for confirmation (default: no).
 Refreshes and `ballin self-update` do not enable completion or ask again.
 
-Completion covers supported top-level commands and the operations under
-`ballin backup` and `ballin config`, plus the `--list` and `--file` options after
-a snapshot name in `ballin backup read`. Unique prefixes work too, such as
-`ballin upd<Tab>`, `ballin backup op<Tab>`, and `ballin config ge<Tab>`.
-Other options, values, and file paths are not completed.
+Completion covers commands, backup snapshot names, and the `--list` and `--file`
+options after a snapshot name. `config get` completes known sections and setting
+keys; `config set` completes setting keys and boolean `true`/`false` values.
+Unique prefixes work, such as `ballin config set update.cl<Tab>`.
+Setting suggestions come from bundled defaults; `set` still requires the key
+to exist in your local config.
+
+For `backup read <bundle> --file`, completion offers member paths only from an
+existing usable local cache for your selected backup destination. It never
+contacts GitHub, fetches a backup, or changes config or cache state. Missing or
+unusable cache data produces no suggestions; cached paths may be out of date.
+Snapshot-name suggestions describe supported snapshots and do not imply that
+they exist in your backup.
 
 ### Startup files and manual activation
 
