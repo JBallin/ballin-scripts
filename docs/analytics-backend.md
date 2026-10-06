@@ -172,7 +172,8 @@ reported by the application.
 
 ## Production Checklist
 
-For production setup or recreation:
+For production setup or recreation, first install the locked Wrangler as
+described in the [Worker setup guide](../analytics-worker/README.md#production-setup):
 
 - create the D1 database
 - copy `analytics-worker/wrangler.toml.example` to ignored local
@@ -182,8 +183,8 @@ For production setup or recreation:
 - create the `analytics-worker-production` GitHub deployment environment with a
   `main` branch rule and environment secrets `CLOUDFLARE_API_TOKEN`,
   `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`
-- apply all pending D1 migrations with `wrangler d1 migrations apply
-  ballin-scripts-analytics --remote`
+- from `analytics-worker/`, apply all pending D1 migrations with
+  `./node_modules/.bin/wrangler d1 migrations apply ballin-scripts-analytics --remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
   Worker or deployment input changed on `main`; after deploying, the workflow
   verifies every Worker version receiving traffic has the required D1,
@@ -231,7 +232,8 @@ The migration that removes the redundant OS-family dimension intentionally
 recreates `version_events_daily` without preserving its historical rows. If
 completing this historical cutover, use this order after the change is on `main`:
 
-1. Apply pending D1 migrations with `wrangler d1 migrations apply
+1. From `analytics-worker/`, apply pending D1 migrations with the installed
+   locked tool: `./node_modules/.bin/wrangler d1 migrations apply
    ballin-scripts-analytics --remote`.
 2. Rerun the `Deploy Analytics Worker` workflow so the Worker and revised table
    schema become compatible.

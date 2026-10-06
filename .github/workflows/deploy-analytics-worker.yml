@@ -115,7 +115,7 @@ jobs:
           fi
 
           if [ -n "${migration_changes}" ]; then
-            echo "::error::Remote D1 migrations remain manual. Apply migrations with wrangler d1 migrations apply ballin-scripts-analytics --remote, then rerun this workflow from main."
+            echo "::error::Remote D1 migrations remain manual. From analytics-worker/, run ./node_modules/.bin/wrangler d1 migrations apply ballin-scripts-analytics --remote, then rerun this workflow from main."
             exit 1
           fi
 

@@ -47,13 +47,22 @@ const runVerifierCli = (options: VerifierCliOptions = {}) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-deploy-'));
   const workerDir = path.join(tempDir, 'analytics-worker');
   const binDir = path.join(workerDir, 'node_modules', '.bin');
-  const fixtureVerifierPath = path.join(workerDir, 'verify-deployment.ts');
+  const preloadPath = path.join(tempDir, 'spawn-fixture.cjs');
   const commandLogPath = path.join(tempDir, 'commands.log');
   fs.mkdirSync(binDir, { recursive: true });
-  fs.copyFileSync(verifierPath, fixtureVerifierPath);
-  fs.copyFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.ts'), path.join(workerDir, 'wrangler.ts'));
 
   try {
+    // Exercise the original CLI and its coverage while routing child execution to owned fixtures.
+    fs.writeFileSync(preloadPath, `
+const childProcess = require('child_process');
+const assert = require('assert');
+const spawn = childProcess.spawnSync;
+childProcess.spawnSync = (command, args, options) => {
+  assert.strictEqual(command, ${JSON.stringify(path.join(rootDir, 'analytics-worker', 'node_modules', '.bin', 'wrangler'))});
+  assert.strictEqual(options.cwd, ${JSON.stringify(path.join(rootDir, 'analytics-worker'))});
+  return spawn(${JSON.stringify(path.join(binDir, 'wrangler'))}, args, { ...options, cwd: ${JSON.stringify(workerDir)} });
+};
+`);
     if (options.installWrangler !== false) {
       const wranglerPath = path.join(binDir, 'wrangler');
       fs.writeFileSync(wranglerPath, `#!${process.execPath}
@@ -84,7 +93,7 @@ if (process.env.FAKE_WRANGLER_STATUS) {
       fs.chmodSync(wranglerPath, 0o755);
     }
 
-    const result = spawnSync(process.execPath, [fixtureVerifierPath], {
+    const result = spawnSync(process.execPath, ['--require', preloadPath, verifierPath], {
       encoding: 'utf8',
       env: testChildEnvironment({
         HOME: tempDir,
