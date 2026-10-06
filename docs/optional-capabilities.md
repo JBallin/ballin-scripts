@@ -18,8 +18,9 @@ the single sensitive-source choice; any configured backup offers automatic
 backup after `ballin update`. Analytics can always be reviewed. With no backup
 configured, use `ballin backup setup` first if you want backups.
 
-Selecting sensitive sources reviews paths and availability without reading raw
-contents or collecting pipx metadata. Confirm the choice to save it for future
+Selecting sensitive sources reviews paths and availability. Review may read
+bounded Claude skill selection metadata; it reads no skill bodies or other
+source contents and runs no collectors. Confirm the choice to save it for future
 backups. Excluding sources does not remove saved files or history; read
 [source sensitivity](backup-sources.md) before opting in.
 

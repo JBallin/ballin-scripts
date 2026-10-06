@@ -543,8 +543,8 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
   prerequisites: [{ kind: recursive ? 'directory' : 'file', name: relative }],
   discover: (context) => {
     const claude = category === 'claude';
-    // Claude skills include personal folders and validated synced packages;
-    // discovery never uses sync origin metadata to filter their contents.
+    // Claude skills include personal folders and manifest-verified plugin-origin
+    // synced packages. Manifest metadata selects packages without reading skills.
     const selection = claude ? { markdownOnly: !skills, claudeSkills: skills, rejectHardlinks: true } : {};
     const directoryMode = claude && skills ? 'claude-skills' : claude ? 'markdown' : profiles ? 'profiles' : skills ? 'skills' : 'directory';
     const logicalRoot = claude
