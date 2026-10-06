@@ -148,6 +148,7 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
         else if (stat.isFile()) {
           if (selection.claudeSkills && (!relative || syncContainer)) return;
           if (selection.markdownOnly && !name.endsWith('.md')) return;
+          if (skills && !selection.claudeSkills && parts.length === 2 && parts[1] === 'agents' && name === 'openai.yaml') return;
           requireSingleLink(stat, selection.rejectHardlinks ?? false);
           if (reviewReadability) readableFileStat(name, selection.rejectHardlinks);
           files.push(entry);

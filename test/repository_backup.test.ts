@@ -565,6 +565,27 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1);
     });
   });
+  for (const snapshot of ['codex_skills.bundle.json', 'codex_user_skills.bundle.json']) {
+    it(`retains saved ${snapshot} when only omitted skill metadata remains locally`, () => {
+      const skillRoot = snapshot === 'codex_skills.bundle.json' ? path.join(home, '.codex/skills') : path.join(home, '.agents/skills');
+      const metadata = path.join(skillRoot, 'demo/agents/openai.yaml');
+      fs.mkdirSync(path.dirname(metadata), { recursive: true });
+      fs.writeFileSync(metadata, 'synthetic: source remains intact\n');
+      const archived = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
+        { path: 'demo/SKILL.md', executable: false, encoding: 'utf8', content: ['saved instructions\n'] },
+        { path: 'demo/agents/openai.yaml', executable: false, encoding: 'utf8', content: ['saved metadata\n'] },
+      ] });
+      saveState(fixtureState({ [snapshot]: archived }));
+      seedCache(snapshot, archived);
+      source();
+      ok(run());
+      assert.equal(remote(snapshot), archived);
+      assert.equal(cached(snapshot), archived);
+      assert.equal(fs.readFileSync(metadata, 'utf8'), 'synthetic: source remains intact\n');
+      assert.equal(remote('zshrc.sh'), 'local\n');
+      assert.lengthOf(publications(), 1);
+    });
+  }
   describe('bundle reset and conflicts', () => {
     const bytes = Buffer.from('\ufeffsynthetic\r\nlast');
     const legacyEntry = { path: 'nested/fixture.md', executable: false, content: bytes.toString('base64') };
