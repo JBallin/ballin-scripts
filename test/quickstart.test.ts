@@ -84,8 +84,20 @@ case "$name" in
     case "$*" in
       --version) printf 'gh version fixture\\n' ;;
       'auth status --help') printf '%s\\n' '--active' ;;
-      'auth status --active --hostname github.com') [[ "\${FAKE_AUTH:-ready}" == ready || -f "$FAKE_ROOT/login-complete" ]] ;;
+      'auth status --active --hostname github.com')
+        if [[ -n "\${FAKE_TOKEN_SOURCE:-}" ]]; then
+          [[ "\${!FAKE_TOKEN_SOURCE}" == fixture-invalid-token ]] || exit 97
+          printf 'token-preserved:status:%s\\n' "$FAKE_TOKEN_SOURCE" >> "$FAKE_COMMAND_LOG"
+          exit 1
+        fi
+        [[ "\${FAKE_AUTH:-ready}" == ready || -f "$FAKE_ROOT/login-complete" ]] ;;
       'auth login --hostname github.com --git-protocol https --web')
+        if [[ -n "\${FAKE_TOKEN_SOURCE:-}" ]]; then
+          [[ "\${!FAKE_TOKEN_SOURCE}" == fixture-invalid-token ]] || exit 97
+          printf 'token-preserved:login:%s\\n' "$FAKE_TOKEN_SOURCE" >> "$FAKE_COMMAND_LOG"
+          printf 'The %s environment variable controls authentication.\\nClear it from the environment before logging in.\\n' "$FAKE_TOKEN_SOURCE" >&2
+          exit 1
+        fi
         printf 'Native login prompt: '; IFS= read -r answer
         [[ "$answer" == device-code ]] || exit 1
         touch "$FAKE_ROOT/login-complete" ;;
@@ -294,6 +306,23 @@ esac
     assert.include(readLog(), 'gh:auth login --hostname github.com --git-protocol https --web');
     assert.isTrue(fs.existsSync(path.join(root, 'login-complete')));
   });
+  for (const tokenSource of ['GH_TOKEN', 'GITHUB_TOKEN']) {
+    it(`retains ${tokenSource} and exposes native CLI refusal before installing Ballin`, () => {
+      const result = run('y\n', { FAKE_TOKEN_SOURCE: tokenSource, [tokenSource]: 'fixture-invalid-token' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, tokenSource);
+      assert.include(result.stderr, 'Clear it from the environment before logging in');
+      assert.notInclude(result.stdout + result.stderr + readLog(), 'fixture-invalid-token');
+      assert.include(readLog(), `token-preserved:status:${tokenSource}`);
+      assert.include(readLog(), `token-preserved:login:${tokenSource}`);
+      assert.notInclude(result.stdout, 'Native login prompt:');
+      assert.isFalse(fs.existsSync(path.join(root, 'login-complete')));
+      assert.notInclude(readLog(), '/main/install.sh');
+      assert.notInclude(readLog(), 'install.sh:');
+      assert.notInclude(readLog(), 'ballin:');
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
   for (const flag of ['FAKE_SIGNATURE_FAIL', 'FAKE_BAD_PUBLISHER', 'FAKE_SUDO_FAIL']) {
     it(`stops Node setup safely after ${flag}`, () => {
       const result = run('y\n', { FAKE_OLD_NODE: '1', [flag]: '1' });
@@ -485,6 +514,168 @@ esac
     assert.notInclude(readLog(), 'install.sh:');
     assert.notInclude(readLog(), 'auth status --active');
   });
+  it('refuses a confirmed PATH append when the checked profile changed', () => {
+    const profile = path.join(home, '.zshrc');
+    fs.writeFileSync(profile, '# Original settings\n');
+    const result = run('y\n', { FAKE_CHANGE_PROFILE: '1' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'startup file changed during setup');
+    assert.equal(fs.readFileSync(profile, 'utf8'), '# Changed while validating\n');
+    assert.notInclude(readLog(), 'install.sh:');
+    assert.notInclude(readLog(), 'auth status --active');
+    assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+  });
+  it('refuses a transfer introduced while copying the checked profile', () => {
+    const profile = path.join(home, '.zshrc');
+    fs.writeFileSync(profile, '# Original settings\n');
+    fs.unlinkSync(path.join(tools, 'cp'));
+    fs.writeFileSync(path.join(tools, 'cp'), `#!/bin/bash
+set -euo pipefail
+if [[ "$1" == -p && "$2" == "$HOME/.zshrc" ]]; then printf 'return\\n' > "$2"; fi
+exec /bin/cp "$@"
+`, { mode: 0o755 });
+    const result = run('y\n');
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'startup file changed during setup');
+    assert.equal(fs.readFileSync(profile, 'utf8'), 'return\n');
+    assert.notInclude(readLog(), 'install.sh:');
+    assert.notInclude(readLog(), 'auth status --active');
+    assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    assert.notInclude(fs.readdirSync(home).join('\n'), '.ballin-quickstart.');
+  });
+  for (const shell of ['bash', 'zsh']) {
+    it(`requires manual PATH placement for ambiguous arithmetic in ${shell}`, () => {
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+      const sentinel = path.join(root, 'profile-executed');
+      for (const arithmetic of ['(( value = (1 << 2) ))', 'VALUE=$[1 << 2]']) {
+        for (const existingPath of [false, true]) {
+          const contents = `touch '${sentinel}'\n${arithmetic}\nreturn\n` + (existingPath ? line + '\n' : '');
+          fs.writeFileSync(profile, contents, { mode: 0o640 });
+          const result = run('', { SHELL: `/bin/${shell}` });
+          assert.equal(result.status, 1, contents + result.stdout + result.stderr);
+          assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+          assert.include(result.stderr, 'arithmetic or heredoc syntax that this check cannot interpret safely');
+          assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+          assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+          assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+          assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        }
+      }
+      assert.notInclude(readLog(), 'auth status --active');
+      assert.notInclude(readLog(), '/main/install.sh');
+      assert.notInclude(readLog(), 'install.sh:');
+      assert.notInclude(readLog(), 'ballin:');
+    });
+    for (const existingPath of [false, true]) {
+      it(`preserves ${shell} profiles with arithmetic then transfer before PATH ${existingPath ? 'reuse' : 'append'}`, () => {
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+        const sentinel = path.join(root, 'profile-executed');
+        for (const arithmetic of ['(( value = 1 << 2 ))', 'VALUE=$((1 << 2))']) {
+          for (const transfer of ['return', 'exit 0']) {
+            const contents = `touch '${sentinel}'\n${arithmetic}\n${transfer}\n` + (existingPath ? line + '\n' : '');
+            fs.writeFileSync(profile, contents, { mode: 0o640 });
+            const result = run('', { SHELL: `/bin/${shell}` });
+            assert.equal(result.status, 1, contents + result.stdout + result.stderr);
+            assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+            assert.include(result.stderr, 'recognized return, exit, or executable exec form');
+            assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+            assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+            assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+            assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+            assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+          }
+        }
+        assert.notInclude(readLog(), 'auth status --active');
+        assert.notInclude(readLog(), '/main/install.sh');
+        assert.notInclude(readLog(), 'install.sh:');
+        assert.notInclude(readLog(), 'ballin:');
+      });
+      it(`preserves ${shell} profiles with a here-string then transfer before PATH ${existingPath ? 'reuse' : 'append'}`, () => {
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+        const sentinel = path.join(root, 'profile-executed');
+        for (const operand of ['text', "'return; exit; exec /bin/true'", '"text"', '"multi\nreturn\nline"']) {
+          for (const transfer of ['return', 'exit 0']) {
+            const contents = `touch '${sentinel}'\n: <<< ${operand}\n${transfer}\n` + (existingPath ? line + '\n' : '');
+            fs.writeFileSync(profile, contents, { mode: 0o640 });
+            const result = run('', { SHELL: `/bin/${shell}` });
+            assert.equal(result.status, 1, contents + result.stdout + result.stderr);
+            assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+            assert.include(result.stderr, 'recognized return, exit, or executable exec form');
+            assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+            assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+            assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+            assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+            assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+          }
+        }
+        assert.notInclude(readLog(), 'auth status --active');
+        assert.notInclude(readLog(), '/main/install.sh');
+        assert.notInclude(readLog(), 'install.sh:');
+        assert.notInclude(readLog(), 'ballin:');
+      });
+      it(`leaves recognized transfers unchanged in ${shell} before PATH ${existingPath ? 'reuse' : 'append'}`, () => {
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+        const sentinel = path.join(root, 'profile-executed');
+        const transfers = [
+          'return', 'exit 0', 'exec /bin/true', 'exec "$SHELL"',
+          'command return 0', 'VALUE=x builtin exit 0',
+          'if false; then return; fi', 'stop() { return 0; }',
+          'exec -a replacement /bin/true', 'exec 3>&1 /bin/true', 'return\\\n 0',
+        ];
+        for (const transfer of transfers) {
+          const contents = `touch '${sentinel}'\n${transfer}\n` + (existingPath ? line + '\n' : '');
+          fs.writeFileSync(profile, contents, { mode: 0o640 });
+          const result = run('', { SHELL: `/bin/${shell}` });
+          assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
+          assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+          assert.include(result.stderr, 'recognized return, exit, or executable exec form');
+          assert.include(result.stderr, 'Place the displayed line where your shell will execute it');
+          assert.include(result.stderr, '/docs/installation.md');
+          assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+          assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+          assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+          assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        }
+        assert.notInclude(readLog(), 'auth status --active');
+        assert.notInclude(readLog(), '/main/install.sh');
+        assert.notInclude(readLog(), 'install.sh:');
+        assert.notInclude(readLog(), 'ballin:');
+      });
+    }
+    it(`accepts harmless transfer words and redirection-only exec in ${shell}`, () => {
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      const sentinel = path.join(root, 'profile-executed');
+      const harmless = [
+        '# return; exit 0; exec /bin/true\n',
+        "printf '%s\\n' 'return; exit 0; exec /bin/true' # return\n",
+        'VALUE="return\nexit 0\nexec /bin/true"\n',
+        ": <<'END'\nreturn\nexit 0\nexec /bin/true\nEND\n",
+        ': <<-"END"\n\treturn\n\texit 0\n\texec /bin/true\n\tEND\n',
+        ": <<< 'return; exit; exec /bin/true'\n: <<< text\n",
+        '(( value = 1 << 2 ))\nVALUE=$((1 << 2))\n',
+        'exec 3>&1\nexec >"$HOME/output"\n',
+        'VALUE=${EXAMPLE:-return}\nprintf %s "$(printf exit)"\n',
+        'returnish=1\nexit_status=0\nprintf %s exec\n',
+      ];
+      for (const text of harmless) {
+        const contents = `touch '${sentinel}'\n` + text;
+        fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const result = run('y\ny\n', { SHELL: `/bin/${shell}` });
+        assert.equal(result.status, 0, text + result.stdout + result.stderr);
+        assert.isTrue(fs.readFileSync(profile, 'utf8').startsWith(contents + '\nexport PATH='));
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+        assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      }
+      assert.include(readLog(), 'ballin:backup open');
+    });
+  }
   it('appends PATH after complete heredocs in both supported shells', () => {
     const contents = "cat <<'EOF'\nExisting text\nEOF\n";
     for (const shell of ['/bin/zsh', '/bin/bash']) {

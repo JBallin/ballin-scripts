@@ -177,6 +177,86 @@ configure_path() {
       const fs = require("fs");
       const original = fs.readFileSync(process.argv[1]);
       const contents = original.toString("utf8");
+      // Recognize simple literal command forms without evaluating shell code.
+      // Quoted data, comments and simple heredoc bodies are opaque to this check.
+      let plain = "";
+      const heredocs = [];
+      for (let index = 0; index < contents.length;) {
+        const character = contents[index];
+        if (character === "#" && (plain === "" || /[\s;&|(){}]$/u.test(plain))) {
+          const newline = contents.indexOf("\n", index);
+          index = newline < 0 ? contents.length : newline;
+          continue;
+        }
+        if (["\x27", "\"", "`"].includes(character)) {
+          plain += "Q";
+          index++;
+          while (index < contents.length) {
+            if (contents[index] === character) { index++; break; }
+            if (character !== "\x27" && contents[index] === "\\") index++;
+            index++;
+          }
+          continue;
+        }
+        if (character === "\\") {
+          plain += contents[index + 1] === "\n" ? "" : "Q";
+          index += 2;
+          continue;
+        }
+        if (contents.startsWith("((", index)) {
+          const arithmetic = contents.slice(index).match(/^\(\([^()]*\)\)/u);
+          if (!arithmetic) { fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n"); break; }
+          plain += "Q";
+          index += arithmetic[0].length;
+          continue;
+        }
+        // Consume the entire here-string operator before looking for heredocs.
+        if (contents.startsWith("<<<", index)) { plain += "<<<"; index += 3; continue; }
+        if (character === "<") {
+          const match = contents.slice(index).match(/^<<(-?)[ \t]*(?:\x27([^\x27\n]*)\x27|"([^"\n]*)"|([^\s;&|<>\x27"`\\]+))(?=[\s;&|<>]|$)/u);
+          if (match) {
+            heredocs.push({ delimiter: match[2] ?? match[3] ?? match[4], tabs: match[1] === "-" });
+            plain += " << Q";
+            index += match[0].length;
+            continue;
+          }
+        }
+        plain += character;
+        index++;
+        if (character === "\n") {
+          while (heredocs.length > 0 && index < contents.length) {
+            const document = heredocs[0];
+            const newline = contents.indexOf("\n", index);
+            const ending = newline < 0 ? contents.length : newline;
+            const text = contents.slice(index, ending);
+            if ((document.tabs ? text.replace(/^\t+/u, "") : text) === document.delimiter) heredocs.shift();
+            index = newline < 0 ? contents.length : newline + 1;
+          }
+        }
+      }
+      if (heredocs.length > 0) fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
+      // Remove redirections before splitting commands so exec 3>&1 has no
+      // executable argument. Parameter and command expansions are not evaluated.
+      plain = plain.replace(/\$\{[^}]*\}|\$\([^)]*\)/gu, "Q")
+        .replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|{}]+/gu, " ");
+      for (const statement of plain.split(/[\n;&|{}]+/u)) {
+        const words = statement.trim().split(/\s+/u);
+        while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[0] ?? "")
+          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin"].includes(words[0])) words.shift();
+        const command = words.shift();
+        let transfer = command === "return" || command === "exit";
+        if (command === "exec") {
+          while (words.length > 0) {
+            if (words[0] === "--") { words.shift(); break; }
+            if (/^-[cl]+$/u.test(words[0])) words.shift();
+            else if (words[0] === "-a") words.splice(0, 2);
+            else break;
+          }
+          transfer = words.length > 0;
+        }
+        if (transfer) { fs.writeFileSync(process.argv[7], "manual\n"); break; }
+      }
+      fs.writeFileSync(process.argv[6], original);
       const continuationCheck = (text, destination) => {
         const trailing = text.match(/(\\+)(?:\r?\n)?$/u)?.[1];
         if (trailing && trailing.length % 2 !== 0) {
@@ -190,11 +270,10 @@ configure_path() {
         const prefix = contents.slice(0, lastLineStart);
         fs.writeFileSync(process.argv[4], prefix);
         continuationCheck(prefix, process.argv[5]);
-        fs.writeFileSync(process.argv[6], original);
       }
     ' "$profile" "$scratch/profile-continuation-check" "$line" \
       "$scratch/profile-path-prefix" "$scratch/profile-path-continuation-check" \
-      "$scratch/profile-path-original" \
+      "$scratch/profile-path-original" "$scratch/profile-transfer-check" \
       || fail 'The startup file could not be checked; it was left unchanged.'
     # The shell ignores this unmatched token in a trailing comment. An active
     # backslash escapes its leading space, leaving the unmatched token visible.
@@ -211,6 +290,13 @@ configure_path() {
       fail 'The startup file ends at an unfinished heredoc; it was left unchanged.'
     fi
   fi
+  if [[ -f "$scratch/profile-transfer-check" || -f "$scratch/profile-transfer-check.ambiguous" ]]; then
+    printf '\nManual PATH setup for %s:\n%s\n' "$profile" "$line" >&2
+    if [[ -f "$scratch/profile-transfer-check.ambiguous" ]]; then
+      fail 'The startup file contains arithmetic or heredoc syntax that this check cannot interpret safely. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
+    fi
+    fail 'The startup file contains a recognized return, exit, or executable exec form that may skip PATH setup. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
+  fi
   # Reuse only a final standalone command. Matching text inside a construct or
   # after a continued command needs a new confirmed line; never source the file.
   if [[ -f "$scratch/profile-path-prefix" ]] \
@@ -225,12 +311,17 @@ configure_path() {
   fi
   printf '\nAdd to %s:\n%s\n' "$profile" "$line"
   confirm 'Use these tools in new Terminal windows?' || fail 'PATH setup was declined; prerequisites remain available, but Ballin setup has not run.'
+  if [[ -f "$scratch/profile-path-original" ]]; then
+    cmp -s "$profile" "$scratch/profile-path-original" || fail 'The startup file changed during setup; it was left unchanged. Review it before retrying.'
+  elif [[ -e "$profile" || -L "$profile" ]]; then
+    fail 'The startup file changed during setup; it was left unchanged. Review it before retrying.'
+  fi
   [[ -d "${profile%/*}" ]] || fail "The startup directory ${profile%/*} does not exist."
   profile_temp=$(mktemp "$profile.ballin-quickstart.XXXXXX")
-  original="$scratch/profile-original"
+  original="$scratch/profile-path-original"
   if [[ -f "$profile" ]]; then
     cp -p "$profile" "$profile_temp"
-    cp -p "$profile" "$original"
+    cmp -s "$profile_temp" "$original" || fail 'The startup file changed during setup; it was left unchanged. Review it before retrying.'
   fi
   printf '\n%s\n' "$line" >> "$profile_temp"
   "$profile_shell" -n "$profile_temp" || fail 'The startup file has invalid shell syntax; it was left unchanged.'

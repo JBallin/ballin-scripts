@@ -152,8 +152,20 @@ needed. Custom startup locations or non-login Bash sessions may need manual
 PATH setup. It leaves symlinked or invalid startup files unchanged. It uses
 syntax-only checks to reuse a matching PATH line only as a final standalone
 command. If later edits make that placement ambiguous, it asks before appending
-a new line. Startup-file contents are never executed by these checks. It uses
-existing GitHub CLI authentication or starts its normal browser login flow,
+a new line. A recognized unquoted `return`, `exit`, or `exec` with an executable
+argument stops automatic PATH setup, including inside a function or conditional.
+The helper leaves the file unchanged and prints the exact PATH line for manual
+placement before following this standard installation guide. This conservative
+check ignores comments, quoted data, and simple heredoc bodies; it does not
+interpret dynamic shell behavior. Arithmetic with nested parentheses and
+ambiguous heredoc forms also require manual placement. Startup-file contents
+are never executed by these checks.
+
+The helper uses existing GitHub CLI authentication or requests its normal
+browser login flow. If `GH_TOKEN` or `GITHUB_TOKEN` prevents login, GitHub CLI
+names the variable and tells you to clear it. Review and correct or remove your
+exported credential before retrying; the helper does not change it or switch
+accounts. Authentication must succeed before the core installer runs. The helper
 then runs the core installer, captures a backup, and opens it only after a
 successful capture.
 Rerunning reuses available tools and revalidates an existing backup; an
