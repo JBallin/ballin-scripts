@@ -190,8 +190,8 @@ that local executable.
 Before an automatic deployment, the workflow stops if migrations must be
 applied manually. It then creates an ignored runner-local `wrangler.toml` from
 `wrangler.toml.example`, and requires `CLOUDFLARE_D1_DATABASE_ID` before running
-`./node_modules/.bin/wrangler deploy` from this directory. It then inspects every Worker version
-receiving production traffic and fails unless each version exposes
+`./node_modules/.bin/wrangler deploy` from this directory. It then inspects
+every Worker version receiving production traffic and fails unless each version exposes
 `ANALYTICS_DB` as a D1 binding,
 `ANALYTICS_RATE_LIMITER` as a rate-limit binding, and
 `INSTALL_ID_HASH_SECRET` as a secret-text binding. The check uses structured
@@ -316,7 +316,8 @@ cp analytics-worker/wrangler.toml.example analytics-worker/wrangler.toml
 ```
 
 Then fill in the D1 `database_id` and make sure Wrangler is authenticated for
-the Cloudflare account. Install the locked tool from the repository root, then authenticate locally:
+the Cloudflare account. Install the locked tool from the repository root, then
+authenticate locally:
 
 ```shell
 npm ci --prefix analytics-worker --include=dev
