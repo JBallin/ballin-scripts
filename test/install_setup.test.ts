@@ -641,10 +641,10 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'Ballin can send minimal analytics about top-level command usage and outcomes, '
-      + 'real backup outcomes, and automatic backup and self-update outcomes during ballin update. '
-      + 'Backup contents, destination identities and configuration values are not sent. '
-      + 'Payload and retention details: https://example.test/analytics',
+      'Ballin can report command usage and results, backup results, and automatic backup/self-update results during ballin update.\n'
+      + 'Backup contents, destination identities and configuration values are not sent.\n'
+      + 'Reports include a random install ID stored locally.\n'
+      + 'https://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
     assert.equal(analyticsPromptFor(true), 'Share usage analytics to help improve Ballin? [Y/n] ');
@@ -1029,7 +1029,7 @@ require('https').request = () => {
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Check gh, service availability, and account access; the cause is unconfirmed.');
     assert.notInclude(result.stdout, 'GitHub.com authentication is required');
-    assert.include(result.stdout, '\nBallin maintenance is installed. Retry with: `ballin backup setup`\n');
+    assert.include(result.stdout, '\nBallin remains installed. Follow the backup recovery guidance above before retrying `ballin backup setup`.\n');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1054,7 +1054,7 @@ require('https').request = () => {
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
     assert.include(result.stdout, '"backup.includeSensitive" set to: "false"\n');
     assert.isBelow(result.stdout.indexOf('"backup.includeSensitive" set to: "false"'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
-    assert.notInclude(result.stdout, 'Retry with: `ballin backup setup`');
+    assert.notInclude(result.stdout, 'before retrying `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
     assert.deepEqual(readRepoConfig().backup.repository, fixtureDestination); assert.equal(readRepoConfig().update.backup, 'false');
@@ -1074,7 +1074,7 @@ require('https').request = () => {
     });
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Backup setup cancelled;');
-    assert.include(result.stdout, 'Ballin maintenance is installed. Retry with: `ballin backup setup`');
+    assert.include(result.stdout, 'Ballin remains installed. Resume optional setup later with `ballin backup setup`.');
     assert.notInclude(result.stdout + result.stderr, 'ERROR:');
     assert.notInclude(result.stdout, 'Backup setup complete.');
     assert.isNull(readRepoConfig().backup.repository ?? null);

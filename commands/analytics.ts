@@ -119,13 +119,13 @@ const pendingBehavioralSends = new Set<Promise<void>>();
 let currentAnalyticsRuntime: AnalyticsRuntime | undefined;
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
-  'Ballin can send minimal analytics about top-level command usage and outcomes, '
-  + 'real backup outcomes, and automatic backup and self-update outcomes during ballin update. '
-  + 'Backup contents, destination identities and configuration values are not sent. '
-  + `Payload and retention details: ${docsUrl}`
+  'Ballin can report command usage and results, backup results, and automatic backup/self-update results during ballin update.\n'
+  + 'Backup contents, destination identities and configuration values are not sent.\n'
+  + 'Reports include a random install ID stored locally.\n'
+  + docsUrl
 );
 const analyticsPromptFor = (defaultEnabled = false): string => (
   `Share usage analytics to help improve Ballin? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `

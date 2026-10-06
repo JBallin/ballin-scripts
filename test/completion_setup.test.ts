@@ -30,7 +30,7 @@ describe('optional completion setup', () => {
     assert.include(output, profile);
     assert.include(output, activationLine('zsh'));
     assert.isFalse(fs.existsSync(profile));
-    assert.include(offer([], false), '#shell-completion');
+    assert.include(offer([], false), 'Enable shell completion later:\nhttps://example.test/install#shell-completion');
     offer([]);
     assert.isFalse(fs.existsSync(profile));
   });

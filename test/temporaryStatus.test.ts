@@ -75,6 +75,15 @@ describe('temporary terminal status', () => {
       else Object.defineProperty({ stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }[mode], 'isTTY', { configurable: true, value: false });
       assert.equal(withTemporaryStatus('Working...', () => 7), 7); assert.equal(output, '');
     });
+    it(`can show plain immediate feedback in ${mode} mode`, () => {
+      if (mode === 'dumb') process.env.TERM = 'dumb';
+      else if (mode === 'NO_COLOR') process.env.NO_COLOR = '1';
+      else Object.defineProperty({ stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }[mode], 'isTTY', { configurable: true, value: false });
+      assert.throws(() => withTemporaryStatus('Opening...', () => {
+        assert.equal(output, 'Opening...\n'); throw new Error('fixture operation failure');
+      }, true), 'fixture operation failure');
+      assert.equal(output, 'Opening...\n');
+    });
   }
   for (const signal of ['SIGINT', 'SIGTERM']) {
     it(`preserves native ${signal} during synchronous child work`, () => {
@@ -115,6 +124,7 @@ describe('temporary terminal status', () => {
   it('skips narrow terminals and ignores optional display failures', () => {
     Object.defineProperty(process.stderr, 'columns', { configurable: true, value: 5 });
     assert.equal(withTemporaryStatus('Working...', () => 1), 1); assert.equal(output, '');
+    assert.equal(withTemporaryStatus('Opening...', () => 1, true), 1); assert.equal(output, 'Opening...\n');
     Object.defineProperty(process.stderr, 'columns', { configurable: true, value: 80 });
     fs.writeSync = () => { throw new Error('closed terminal'); };
     assert.equal(withTemporaryStatus('Working...', () => 2), 2);
