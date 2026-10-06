@@ -44,11 +44,22 @@ const predicateExpression = (predicate: string): string => {
   }
   return expression;
 };
-const condition = (source: string): string => {
-  const result = source.match(/^    if: >-\n((?:      .+\n)+)/mu);
-  assert.exists(result, 'missing job condition');
-  return result![1].trim();
+const section = (source: string, header: string): string[] => {
+  const lines = source.split('\n');
+  const start = lines.indexOf(`    ${header}`);
+  assert.isAtLeast(start, 0, `missing canonical ${header} section`);
+  const end = lines.findIndex((line: string, index: number) => index > start && /^    [\w-]+:/u.test(line));
+  const body = lines.slice(start + 1, end === -1 ? lines.length : end);
+  // A final newline is not a scalar/map entry; internal blank lines are retained.
+  if (end === -1 && body.at(-1) === '') body.pop();
+  assert.isNotEmpty(body, `empty ${header} section`);
+  for (const line of body) {
+    assert.match(line, /^      \S/u, `unsupported line in complete ${header} section`);
+    assert.notMatch(line, /^      #/u, `unsupported comment in complete ${header} section`);
+  }
+  return body.map((line: string) => line.slice(6));
 };
+const condition = (source: string): string => section(source, 'if: >-').join('\n');
 
 // These callers use only boolean operators, property reads, contains and fromJSON.
 // Evaluate that subset against fixtures, folding strings like Actions comparisons.
@@ -165,6 +176,7 @@ describe('offline Claude caller contracts', () => {
 
   it('protects the manual preflight response guards, eligibility predicate and shell wiring', () => {
     const eligibility = job(manual, 'eligibility');
+    assert.match(eligibility, /^    runs-on: ubuntu-latest$/mu);
     assert.match(eligibility, /^    outputs:\n      eligible: \$\{\{ steps\.eligibility\.outputs\.eligible \}\}\n(?=    [\w-]+:)/mu);
     assert.equal([...eligibility.matchAll(/^    outputs:/gmu)].length, 1, 'only one canonical outputs map is supported');
     assert.notMatch(eligibility, /^    ['"]outputs['"]:/mu, 'quoted outputs keys are unsupported');
@@ -273,8 +285,7 @@ describe('offline Claude caller contracts', () => {
       names.forEach((name, index) => {
         const source = job(workflow, name);
         assert.deepEqual(directKeys(source, '    '), [...keys[index]], `unsupported keys in ${name}`);
-        const permissionBlock = source.match(/^    permissions:\n((?:      .+\n)+)/mu)![1];
-        assert.deepEqual(permissionBlock.trim().split('\n').map((line: string) => line.trim()), [...permissions[index]]);
+        assert.deepEqual(section(source, 'permissions:'), [...permissions[index]]);
         if (name === 'review') {
           assert.match(source, /^    secrets:\n      CLAUDE_CODE_OAUTH_TOKEN: \$\{\{ secrets\.CLAUDE_CODE_OAUTH_TOKEN \}\}$/mu);
           assert.equal([...source.matchAll(/secrets\./gu)].length, 1);

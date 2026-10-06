@@ -45,7 +45,10 @@ fixtures use each caller's configured event names and actions.
 The supported direct workflow and job keys are explicit, so execution defaults,
 matrix strategies, and quoted key alternatives fail closed. Rejected commands
 and untrusted associations cover both comment events; fork and closed-PR cases
-cover both status paths. These remain bounded coverage checks, not exhaustive
+cover both status paths. Conditions and permission maps are captured through the
+next job key or end, with internal blank lines and comments rejected rather than
+truncating the checked section. The manual preflight retains `ubuntu-latest`.
+These remain bounded coverage checks, not exhaustive
 proof about arbitrary source changes.
 
 Each accepted automatic or manual review can consume the existing Claude
