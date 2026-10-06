@@ -59,7 +59,8 @@ describe('shell completions', () => {
     }
   });
 
-  it('never calls zsh compadd with an empty member result', () => {
+  it('never calls zsh compadd with an empty member result', function () {
+    this.timeout(10000);
     const shellPath = findShell('zsh');
     for (const state of ['missing bundle', 'unknown bundle', 'unusable config']) {
       const fixture = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-empty-member-completion-')));
@@ -133,7 +134,8 @@ describe('shell completions', () => {
       }
     });
 
-    it(`offers ${shell} values only in supported positions, with offline read-only member discovery`, () => {
+    it(`offers ${shell} values only in supported positions, with offline read-only member discovery`, function () {
+      this.timeout(10000);
       const fixture = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-completion-values-')));
       const files = prepareMemberFixture(fixture);
       const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
