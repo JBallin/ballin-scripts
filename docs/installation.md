@@ -6,24 +6,34 @@ Ballin can be installed for maintenance without configuring backups. Git and a
 supported Node.js version are the only prerequisites for the installer. Backups
 and integrations such as Homebrew are optional.
 
+## What will installation change?
+
+After you confirm a fresh installation, Ballin clones its checkout into
+`~/.ballin-scripts/`, creates local settings there, and links the `ballin`
+command into Homebrew's bin directory when available, otherwise `~/.local/bin`.
+An existing non-directory command target may be replaced; directories are not
+replaced. Declining makes no installation changes and exits successfully.
+
+Analytics, [shell completion](#shell-completion), and
+[private backups](#optional-backup-setup-and-reconnect) have separate choices.
+Installation does not run updates or collect backup snapshots. See
+[local effects](#local-effects) for the affected paths and refresh behavior,
+and [uninstall](#uninstall) for removal. Review the [installer source](../install.sh)
+before running it.
+
 ## Install
 
-Review the [installer source](../install.sh), then run it through Bash process
-substitution so the installer can read your confirmation from standard input:
+Run the installer through Bash process substitution so it can read your
+confirmation from standard input:
 
 ```shell
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
 A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
-before cloning or making installation changes. Declining exits successfully
-without cloning. During setup, Ballin creates the local installation and asks
-whether to enable [usage analytics](analytics.md), with No as the default.
-This one local choice covers command usage and outcomes, real backup outcomes,
-and automatic backup and self-update outcomes during `ballin update`. It is
-not saved in backups or restored when reconnecting; ordinary refreshes and
-self-updates preserve the choice without asking again. Installation and the
-choice send no analytics event.
+before making installation changes. It then offers
+[usage analytics](analytics.md#what-will-analytics-share), disabled by default.
+Refreshes preserve existing choices without repeating onboarding.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run
@@ -33,8 +43,9 @@ this later to create or reconnect to a destination without reinstalling:
 ballin backup setup
 ```
 
-If backup setup fails, Ballin remains installed and usable for maintenance. Retry
-with `ballin backup setup`. If GitHub may already have created the repository,
+If backup setup fails, Ballin remains installed and usable for maintenance.
+Follow the reported recovery instructions before running `ballin backup setup`
+again. If GitHub may already have created the repository,
 inspect the reported repository before retrying. If initialization succeeded,
 reconnect to it instead of creating another one.
 
@@ -192,26 +203,26 @@ that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision requires an explicit different name or reconnect choice.
 
-Fresh create or reconnect setup offers one `backup.includeSensitive` choice
-(default: `false`) for raw shell/Git/editor configuration, Codex and Claude Code
-configuration, `.nvmrc`, and pipx metadata.
-Opting in covers current and future supported sensitive sources; existing opt-ins
-include added sources. Review the [source list](backup-sources.md) when support
-changes.
+Fresh create or reconnect setup asks whether to include sensitive sources,
+with No as the default. Review
+[what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
+baseline, sensitive-source scope, and privacy limitations.
 
 Reconnect inspects the existing backup before asking. Declining skips
 sensitive-source discovery. Selecting it reviews paths, resolved targets, and
-availability. Review may read bounded Claude skill selection metadata; it reads
-no skill bodies or other source contents and runs no collectors. Access or
-resolution errors stop setup. See [source review](backup-sources.md#repository-inclusion).
+availability. For synced Claude skills, Ballin reads local collection manifests
+to select plugin packages; it does not read selected file contents or create
+backup snapshots during this preview. Access or resolution errors stop setup.
+See [source preview](backup-sources.md#repository-inclusion).
 
 Final confirmation covers the destination and source selection. If you decline,
 Ballin makes no backup-specific changes. If you approve, it revalidates the
 destination, creates or reconnects to the repository, attempts optional branch
-protection, and then saves the destination, sensitive-source choice, and any
-supported preferences recovered from the backup. Successful new protection gets
-one concise confirmation. Unsupported protection is silent. A permission note
-or warning about unconfirmed protection is nonfatal and does not mean backup
+protection, clears local backup comparison state, and then saves the destination,
+sensitive-source choice, and any supported preferences recovered from the backup.
+Successful new protection gets one concise confirmation. Unsupported protection
+is silent. A permission note or warning about unconfirmed protection is nonfatal
+and does not mean backup
 setup failed. After updating GitHub access, rerun `ballin backup setup` to make a
 bounded protection attempt on the configured repository without changing local
 backup choices.
