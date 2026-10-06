@@ -114,7 +114,7 @@ Recursive snapshots are versioned JSON archives of regular files, with sorted
 relative paths, readable UTF-8 lines or Base64 bytes, and an executable flag.
 Hidden files and binary
 assets are included; empty directories, symlinks, special files, `.git` metadata,
-and `.DS_Store` are omitted. Both skill sources omit root `.system` and each
+and `.DS_Store` are omitted. Both Codex skill sources omit root `.system` and each
 skill's `agents/openai.yaml`, regardless of its contents. `SKILL.md`, scripts,
 references, assets, and other eligible files, including other YAML files, remain
 included. Previously saved metadata remains readable; the exclusion does not
