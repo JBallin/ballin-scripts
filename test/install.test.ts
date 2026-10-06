@@ -230,6 +230,7 @@ esac
 
     assert.equal(retry.status, 0, retry.stderr);
     assert.notInclude(retry.stdout, 'Installation plan');
+    assert.include(retry.stdout, `${docsUrl}#what-will-installation-change\n`);
     assert.deepEqual(commandLog(), [
       `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
       setupCommand('fresh'),

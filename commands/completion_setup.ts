@@ -114,12 +114,15 @@ const appendActivation = (target: CompletionTarget): boolean => {
 
 const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions = {}): void => {
   const write = options.write ?? writeStdoutLine;
-  const fallback = (): void => write(`${docsUrl}#shell-completion`);
-  if (!(options.interactive ?? process.stdin.isTTY)) { fallback(); return; }
+  const fallback = (needsContext = false): void => {
+    if (needsContext) write('\nEnable shell completion later:');
+    write(`${docsUrl}#shell-completion`);
+  };
+  if (!(options.interactive ?? process.stdin.isTTY)) { fallback(true); return; }
   const prompt = options.prompt ?? readPromptLine;
   try {
     const target = completionTarget(options.env ?? process.env, prompt);
-    if (!target) { fallback(); return; }
+    if (!target) { fallback(true); return; }
     write(`\nShell completion for ${target.shell}: append to ${target.profile}`);
     write(target.line);
     const answer = prompt('Enable shell completion? [y/N] ');

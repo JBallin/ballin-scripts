@@ -1626,7 +1626,8 @@ describe('repository backup lifecycle', function() {
       const result = run(['setup'], 'y\ncreate\n\nn\ny\n');
       ok(result);
       const confirmation = 'Confirm this destination and source selection? [y/N] ';
-      assert.include(result.stdout, `Ballin also attempts optional GitHub branch protection.\n${confirmation}`);
+      assert.include(result.stdout, confirmation);
+      assert.notInclude(result.stdout.slice(0, result.stdout.indexOf(confirmation)), 'branch protection');
       const outcomeOutput = result.stdout.slice(result.stdout.indexOf(confirmation) + confirmation.length);
       if (message) assert.include(outcomeOutput, message);
       else assert.notInclude(outcomeOutput, 'branch protection');

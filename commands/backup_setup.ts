@@ -140,7 +140,6 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     if (includeSensitive === null) return cancelled();
     if (includeSensitive === undefined) return false;
     writeStdoutLine(`Confirming ${previous ? 'reconnects to' : 'creates'} this backup, clears local backup comparison state, and saves these choices.`);
-    writeStdoutLine('Ballin also attempts optional GitHub branch protection.');
     const confirmation = readPromptLine('Confirm this destination and source selection? [y/N] ');
     if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) return cancelled();
     remoteMayExist = true;

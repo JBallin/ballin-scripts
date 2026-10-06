@@ -96,6 +96,10 @@ if [ ! -f "$repo_dir/commands/install_setup.ts" ]; then
   exit 1
 fi
 
+if [ "$repo_existed" = true ] && [ "$setup_mode" = fresh ]; then
+  printf '\nInitial configuration\n%s#what-will-installation-change\n' "$docs_url"
+fi
+
 (
   cd "$repo_dir" || exit
   node "$repo_dir/commands/install_setup.ts" setup "$repo_dir" "$docs_url" "$analytics_docs_url" "$setup_mode"
