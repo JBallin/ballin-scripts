@@ -10,7 +10,7 @@ const {
   updateInstalledRepo,
 } = require('./repo_update.ts');
 
-const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const sourcesUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md';
 const sourceDefinitionOid = (repoDir: string): string | undefined => {
