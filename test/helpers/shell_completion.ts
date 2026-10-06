@@ -129,16 +129,18 @@ const nativeDriver = [
 ].join('\n');
 
 // Without input this runs only the readiness/exit/cleanup protocol, for isolation review.
-const runNativeCompletion = (shell: 'zsh' | 'bash', asset: string, input?: string) => {
-  if (input !== undefined && !/^ballin(?: [a-z-]+)+\t$/.test(input)) {
+const runNativeCompletion = (shell: 'zsh' | 'bash', asset: string, input?: string, prepareFixture?: (fixture: string) => void) => {
+  if (input !== undefined && !/^(?:true(?: &&|;) )?ballin [a-zA-Z0-9_.:=?*\[\] /'"\\-]+\t$/.test(input)) {
     throw new Error('Native completion input must be one fixture command ending in Tab');
   }
   const zshPath = findShell('zsh');
   const shellPath = findShell(shell);
   const fixture = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-native-completion-')));
+  prepareFixture?.(fixture);
   const marker = randomUUID();
   const rcPath = path.join(fixture, shell === 'zsh' ? '.zshrc' : 'bashrc');
   const logPath = path.join(fixture, 'fixture-calls');
+  const argumentLog = path.join(fixture, 'fixture-arguments');
   const readyChecks = [
     '[[ "$PATH" == "$FIXTURE_ROOT" && "$HOME" == "$FIXTURE_ROOT" && "$PWD" == "$FIXTURE_ROOT" ]] || exit 80',
     '[[ "$ZDOTDIR" == "$FIXTURE_ROOT" && "$TMPDIR" == "$FIXTURE_ROOT" ]] || exit 80',
@@ -150,7 +152,7 @@ const runNativeCompletion = (shell: 'zsh' | 'bash', asset: string, input?: strin
   ];
   fs.writeFileSync(rcPath, [
     // The fixture function exists before any completion code is sourced.
-    'ballin() { printf "%s\\n" "$*" >> "$FIXTURE_LOG"; printf "\\nINSERTED:%s:ballin %s\\n" "$FIXTURE_MARKER" "$*"; }',
+    'ballin() { printf "%s\\n" "$*" >> "$FIXTURE_LOG"; printf "%s\\0" "$@" >> "$FIXTURE_ARGUMENTS"; printf "\\nINSERTED:%s:ballin %s\\n" "$FIXTURE_MARKER" "$*"; }',
     ...(shell === 'zsh' ? ['unsetopt GLOBAL_RCS'] : []),
     'trap \'printf "\\nCHILD_EXIT:%s:%s\\n" "$FIXTURE_MARKER" "$?"\' EXIT',
     ...readyChecks,
@@ -172,10 +174,15 @@ const runNativeCompletion = (shell: 'zsh' | 'bash', asset: string, input?: strin
       cwd: fixture, encoding: 'utf8', timeout: 15000, killSignal: 'SIGTERM',
       env: fixtureEnvironment(fixture, {
         COMPLETION_ASSET: asset, FIXTURE_ROOT: fixture, FIXTURE_MARKER: marker, FIXTURE_LOG: logPath,
+        FIXTURE_ARGUMENTS: argumentLog,
+        NODE_OPTIONS: fs.existsSync(path.join(fixture, 'completion-guard.cjs'))
+          ? `--require=${path.join(fixture, 'completion-guard.cjs')}` : undefined,
       }),
     });
     return {
       ...result, marker,
+      forbidden: fs.existsSync(path.join(fixture, 'forbidden')),
+      arguments: fs.existsSync(argumentLog) ? fs.readFileSync(argumentLog, 'utf8').split('\0').slice(0, -1) : [],
       calls: fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trimEnd().split('\n') : [],
     };
   } finally {
