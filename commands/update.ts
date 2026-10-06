@@ -13,7 +13,7 @@ const {
 const {
   commandExists,
   makeTempFile,
-  progress,
+  progress: printProgress,
   reportSpawnError,
   removeTempFile,
   runCommand,
@@ -87,6 +87,7 @@ const readConfigObject = (filePath: string, description: string): ConfigObject =
 const resolveUpdateSettings = (
   defaultConfigPath = path.join(__dirname, '..', 'config', '.defaultConfig.json'),
   userConfigPath = configPath,
+  reportWarning: (text: string) => void = writeStderrLine,
 ): UpdateSettings => {
   const defaults = readConfigObject(defaultConfigPath, 'bundled default config');
   if (!isConfigObject(defaults.update)) {
@@ -127,7 +128,7 @@ const resolveUpdateSettings = (
   });
 
   if (defaultedKeys.length > 0) {
-    writeStderrLine(`Warning: using bundled defaults for missing settings: ${defaultedKeys.join(', ')}.`);
+    reportWarning(`Warning: using bundled defaults for missing settings: ${defaultedKeys.join(', ')}.`);
   }
   return settings;
 };
@@ -240,18 +241,29 @@ const runAutomaticStage = (
 };
 
 function runUpdateCommand(): void {
+  let hasOutput = false;
+  const reportDiagnostic = (text = ''): void => {
+    writeStderrLine(text);
+    hasOutput = true;
+  };
+
   let settings: UpdateSettings;
   try {
-    settings = resolveUpdateSettings();
+    settings = resolveUpdateSettings(undefined, undefined, reportDiagnostic);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown configuration error.';
-    writeStderrLine(`Unable to resolve update configuration: ${message}`);
+    reportDiagnostic(`Unable to resolve update configuration: ${message}`);
     process.exitCode = 1;
     return;
   }
 
   let childEnv = process.env;
   let exitStatus = 0;
+
+  const progress = (text: string): void => {
+    printProgress(text, hasOutput);
+    hasOutput = true;
+  };
 
   const recordFailure = (status: number): void => {
     if (status !== 0) {
@@ -300,13 +312,13 @@ function runUpdateCommand(): void {
       const result = runNvmInstall(childEnv);
       recordFailure(result.status);
       if (result.captureFailed) {
-        writeStderrLine('Unable to capture the updated Node.js environment after running nvm.');
+        reportDiagnostic('Unable to capture the updated Node.js environment after running nvm.');
       }
       childEnv = result.env ?? childEnv;
     } else {
-      writeStderrLine();
-      writeStderrLine('Unable to update Node.js LTS: unable to load nvm.');
-      writeStderrLine('Set `NVM_DIR` to your nvm installation or disable this update with: `ballin config set update.nvm false`');
+      reportDiagnostic();
+      reportDiagnostic('Unable to update Node.js LTS: unable to load nvm.');
+      reportDiagnostic('Set `NVM_DIR` to your nvm installation or disable this update with: `ballin config set update.nvm false`');
       recordFailure(1);
     }
   }
@@ -316,7 +328,7 @@ function runUpdateCommand(): void {
       progress('Updating global npm packages');
       runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
     } else {
-      writeStderrLine('Unable to update global npm packages: npm is not available on PATH.');
+      reportDiagnostic('Unable to update global npm packages: npm is not available on PATH.');
       recordFailure(1);
     }
   }
@@ -331,7 +343,7 @@ function runUpdateCommand(): void {
       progress('Installing macOS updates');
       runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
     } else {
-      writeStderrLine('Unable to install macOS updates: softwareupdate is not available on PATH.');
+      reportDiagnostic('Unable to install macOS updates: softwareupdate is not available on PATH.');
       recordFailure(1);
     }
   }

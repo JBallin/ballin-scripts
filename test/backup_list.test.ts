@@ -89,8 +89,8 @@ describe('saved backup discovery', function() {
     it(`discovers and reads saved ${provider} snapshots with future sensitive capture disabled`, () => {
       const bytes = 'synthetic = true\r\n\n';
       save(fixtureState({ [primary]: bytes, [secondary]: '{"synthetic":true}\n' }));
-      const options = `Saved snapshots:\n  ${primary}\n  ${secondary}\nRead a snapshot with \`ballin backup read <snapshot>\`.\nList files in a bundle with \`ballin backup read <bundle> --list\`.\n`;
-      for (const args of [['list'], ['read'], ['read', missing]]) {
+      const options = `Saved snapshots:\n  ${primary}\n  ${secondary}\nRead a snapshot with \`ballin backup read <snapshot>\`.\n`;
+      for (const args of [['list'], ['read'], ['read', missing], ['read', missing, '--list'], ['read', missing, '--file', 'unselected.md']]) {
         const before = state(); before.requests = []; save(before);
         const result = run(args);
         assert.equal(result.status, args[0] === 'list' ? 0 : 1, result.stderr);
@@ -191,7 +191,7 @@ describe('saved backup discovery', function() {
     const result = run(); assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, '  codex_rules.bundle.json\n'); assert.include(result.stdout, '  gitconfig\n');
     assert.include(result.stdout, 'Retired snapshots:\n  codex_rules.json\n');
-    assert.include(result.stdout, 'backup read <bundle> --list'); assert.notInclude(result.stdout, '--file');
+    assert.notInclude(result.stdout, 'backup read <bundle> --list'); assert.notInclude(result.stdout, '--file');
     assert.lengthOf(state().requests.filter((request) => request.endpoint.includes('/git/blobs/')), 1);
     const old = run(['read', 'codex_rules.json']); assert.equal(old.status, 1);
     assert.include(old.stderr, 'no supported snapshot found'); assert.notInclude(old.stdout, 'old bytes');
@@ -230,6 +230,7 @@ describe('saved backup discovery', function() {
     save(fixtureState({ 'claude_rules.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 2, entries: [{ path: 'rule.md', executable: false, encoding: 'base64', content: '' }] }) }));
     const result = run(['read', 'claude_rules.bundle.json', '--file', 'DUMMY_PRIVATE_PATH']);
     expectFailure(result, 'no matching file found in the bundle'); assert.notInclude(result.stderr, 'DUMMY_PRIVATE');
+    assert.include(result.stderr, 'use `--list` to find saved paths.');
   });
   it('rejects invalid directory option combinations offline before reading configuration', () => {
     fs.writeFileSync(configPath, '{broken');

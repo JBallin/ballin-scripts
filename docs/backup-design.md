@@ -387,9 +387,10 @@ filesystem operations, and decoded content is never executed or restored.
 Bundle snapshots use `.bundle.json` names. Plain snapshots retain their existing
 names. Old bundle names are retired without read aliases and are retained if
 present; they can coexist with new bundle filenames. The flat repository layout
-and backup marker version remain unchanged. Bundle listings supply an inspection
-hint; raw and file-list hints appear only when stdin, stdout and stderr are
-terminals. Raw hints require a known bundle name and a validated archive.
+and backup marker version remain unchanged. Snapshot listings offer the
+snapshot-read command. Raw and file-list inspection hints require a validated
+archive and appear only when stdin, stdout and stderr are terminals. Raw hints
+also require a known bundle name.
 
 Reconciliation uses exact stored bytes and the ordinary conflict rules. No
 format-conversion exception or semantic JSON normalization applies. Old-name

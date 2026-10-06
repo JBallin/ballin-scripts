@@ -108,9 +108,6 @@ const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
   if (current.length > 0) {
     writeStdoutLine(`Saved snapshots:\n${current.map((name) => `  ${name}`).join('\n')}`);
     writeStdoutLine('Read a snapshot with `ballin backup read <snapshot>`.');
-    if (current.some((name) => directorySnapshotFileNames.has(name))) {
-      writeStdoutLine('List files in a bundle with `ballin backup read <bundle> --list`.');
-    }
   } else {
     writeStdoutLine('No current snapshots are saved in this backup.');
   }
