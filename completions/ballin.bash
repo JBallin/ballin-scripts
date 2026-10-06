@@ -19,13 +19,48 @@ _ballin_completion_unquote() {
   return 0
 }
 
+_ballin_completion_words() {
+  local text="${COMP_LINE:0:COMP_POINT}" raw="" char quote="" escaped=0 index
+  words=()
+  for (( index=0; index<${#text}; index++ )); do
+    char="${text:index:1}"
+    if (( escaped )); then raw+="$char"; escaped=0
+    elif [[ "$char" == \\ && "$quote" != "'" ]]; then raw+="$char"; escaped=1
+    elif [[ "$char" == "$quote" ]]; then raw+="$char"; quote=""
+    elif [[ -z "$quote" && ( "$char" == "'" || "$char" == '"' ) ]]; then raw+="$char"; quote="$char"
+    elif [[ -z "$quote" && ( "$char" == ' ' || "$char" == $'\t' ) ]]; then
+      if [[ -n "$raw" ]]; then _ballin_completion_unquote "$raw"; words+=("$_ballin_word"); raw=""; fi
+    else raw+="$char"; fi
+  done
+  _ballin_completion_unquote "$raw"; words+=("$_ballin_word")
+  _ballin_quote="$quote"
+}
+
+_ballin_completion_quote() {
+  local text="$1" char index escaped=""
+  if [[ -z "$_ballin_quote" ]]; then printf -v _ballin_word '%q' "$text"; return; fi
+  for (( index=0; index<${#text}; index++ )); do
+    char="${text:index:1}"
+    if [[ "$_ballin_quote" == "'" && "$char" == "'" ]]; then escaped+="'\\''"
+    elif [[ "$_ballin_quote" == '"' && ( "$char" == '"' || "$char" == \\ || "$char" == '$' || "$char" == $'\x60' ) ]]; then escaped+="\\$char"
+    else escaped+="$char"; fi
+  done
+  _ballin_word="$escaped"
+}
+
 _ballin_completion() {
   COMPREPLY=()
   local -a candidates=() words=()
-  local candidate current _ballin_word
-  for candidate in "${COMP_WORDS[@]}"; do
-    _ballin_completion_unquote "$candidate"; words+=("$_ballin_word")
-  done
+  local candidate current _ballin_word _ballin_quote="" replacement_prefix="" prefix char member=0
+  local COMP_CWORD="$COMP_CWORD"
+  if [[ -n "${COMP_LINE+x}" ]]; then
+    _ballin_completion_words
+    COMP_CWORD=$((${#words[@]} - 1))
+  else
+    for candidate in "${COMP_WORDS[@]}"; do
+      _ballin_completion_unquote "$candidate"; words+=("$_ballin_word")
+    done
+  fi
   case "$COMP_CWORD" in
     1) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update' '--help') ;;
     2)
@@ -58,15 +93,29 @@ _ballin_completion() {
       ;;
     5)
       if [[ "${words[1]}" == backup && "${words[2]}" == read && "${words[4]}" == --file ]]; then
+        member=1
         while IFS= read -r candidate; do candidates+=("$candidate"); done < <(command node "$_ballin_completion_helper" "${words[3]}" 2>/dev/null)
       fi
       ;;
   esac
   current="${words[$COMP_CWORD]}"
+  if [[ -n "${COMP_LINE+x}" && -z "$_ballin_quote" ]]; then
+    for char in ':' '='; do
+      if [[ "$COMP_WORDBREAKS" == *"$char"* && "$current" == *"$char"* ]]; then
+        prefix="${current%${current##*"$char"}}"
+        (( ${#prefix} > ${#replacement_prefix} )) && replacement_prefix="$prefix"
+      fi
+    done
+  fi
   for candidate in "${candidates[@]}"; do
-    [[ "$candidate" == "$current"* ]] && COMPREPLY+=("$candidate")
+    [[ "$candidate" == "$current"* ]] || continue
+    candidate="${candidate#"$replacement_prefix"}"
+    if (( member )) && [[ -n "${COMP_LINE+x}" ]]; then
+      _ballin_completion_quote "$candidate"; candidate="$_ballin_word"
+    fi
+    COMPREPLY+=("$candidate")
   done
   return 0
 }
 
-complete -o filenames -F _ballin_completion ballin
+complete -F _ballin_completion ballin

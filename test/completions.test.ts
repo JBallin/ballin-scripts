@@ -60,6 +60,37 @@ describe('shell completions', () => {
   });
 
   for (const shell of ['zsh', 'bash'] as const) {
+    it(`keeps native ${shell} static candidates independent of cwd directory collisions`, function () {
+      this.timeout(20000);
+      const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
+      for (const [input, candidate] of [
+        ['ballin upd\t', 'update'], ['ballin con\t', 'config'],
+        ['ballin backup read codex_user_sk\t', 'codex_user_skills.bundle.json'],
+      ]) {
+        const result = runNativeCompletion(shell, asset, input, (fixture: string) => fs.mkdirSync(path.join(fixture, candidate)));
+        const expected = input.slice(0, input.lastIndexOf(' ') + 1) + candidate;
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.deepEqual(result.calls, [expected.slice('ballin '.length)]);
+      }
+    });
+
+    it(`preserves native ${shell} member prefixes containing wordbreaks`, function () {
+      this.timeout(30000);
+      const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
+      for (const [prefix, member] of [
+        ['colon:s', 'colon:skill/SKILL.md'], ['equals=s', 'equals=skill/SKILL.md'],
+        ["'colon:s", 'colon:skill/SKILL.md'], ['"equals=s', 'equals=skill/SKILL.md'],
+      ]) {
+        const result = runNativeCompletion(shell, asset, `ballin backup read codex_skills.bundle.json --file ${prefix}\t`, (fixture: string) => {
+          const files = prepareMemberFixture(fixture);
+          fs.writeFileSync(files.file, archive([member]));
+        });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.deepEqual(result.arguments, ['backup', 'read', 'codex_skills.bundle.json', '--file', member]);
+        assert.isFalse(result.forbidden);
+      }
+    });
+
     it(`offers ${shell} values only in supported positions, with offline read-only member discovery`, () => {
       const fixture = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-completion-values-')));
       const files = prepareMemberFixture(fixture);
