@@ -1286,14 +1286,14 @@ describe('repository backup lifecycle', function() {
     { name: 'with a newline', diagnostic: 'successful fetch diagnostic\n' },
     { name: 'without a newline on redirected stderr', diagnostic: 'successful fetch diagnostic', nonTTY: 'stderr' as const },
   ]) {
-    it(`preserves a successful fetch diagnostic ${name} before setup-child feedback`, () => {
+    it(`preserves a successful fetch diagnostic ${name} without adding temporary setup-child feedback`, () => {
       fs.cpSync(path.join(repoRoot, 'commands'), path.join(checkout, 'commands'), { recursive: true });
       fs.mkdirSync(path.join(checkout, 'bin'));
       fs.copyFileSync(path.join(repoRoot, 'bin', 'ballin'), path.join(checkout, 'bin', 'ballin'));
       fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}
         const args = process.argv.slice(2); const exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);
         if (exact(['rev-parse', '--verify', 'HEAD:commands/backup_snapshots.ts'])) process.stdout.write('a'.repeat(40) + '\\n');
-        else if (exact(['fetch', 'origin', '+main:refs/remotes/origin/main'])) process.stderr.write(${JSON.stringify(diagnostic)});
+        else if (exact(['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'])) process.stderr.write(${JSON.stringify(diagnostic)});
         else if (!exact(['checkout', 'main']) && !exact(['merge', 'origin/main'])) process.exitCode = 2;
       `, { mode: 0o755 });
       const preload = path.join(root, 'successful-fetch-preload.cjs');
@@ -1306,13 +1306,13 @@ describe('repository backup lifecycle', function() {
         }),
       });
       ok(result);
-      assert.equal(result.stderr, diagnostic + (nonTTY ? '' : '\r\nUpdating...\r\x1b[2K'));
-      assert.equal(result.stdout, 'Ballin updated.\n');
+      assert.equal(result.stderr, diagnostic);
+      assert.equal(result.stdout, 'Updating Ballin...\nBallin updated.\n');
       assert.lengthOf(publications(), 0);
     });
   }
   for (const mode of ['tty', 'stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
-    it(`limits self-update feedback to configured backup maintenance in ${mode} mode`, () => {
+    it(`leaves configured self-update backup maintenance free of temporary feedback in ${mode} mode`, () => {
       seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess();
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const env = { ...ttyEnv };
@@ -1321,30 +1321,30 @@ describe('repository backup lifecycle', function() {
       const nonTTY = ['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined;
       const result = runSetup('self-update', env, progressPreload(nonTTY, mode === 'narrow' ? 10 : 80)); ok(result);
       assert.equal(result.stdout, '');
-      assert.equal(result.stderr, mode === 'tty' ? '\r\nUpdating...\r\x1b[2K' : '');
+      assert.equal(result.stderr, '');
       const requests = progressRequests();
       const github = requests.filter((request) => request.args[0] === 'api');
       assert.isAbove(github.length, 0);
-      assert.isTrue(github.every((request) => request.status === (mode === 'tty' ? 'Updating...' : '')));
+      assert.isTrue(github.every((request) => request.status === ''));
       assert.isTrue(requests.filter((request) => request.args[0] !== 'api').every((request) => request.status === ''));
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
       assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
     });
   }
-  it('clears self-update maintenance feedback before failure guidance', () => {
+  it('preserves self-update maintenance failure guidance without temporary feedback', () => {
     const value = state(); value.faults.query = 'errors'; saveState(value);
     const result = runSetup('self-update', ttyEnv, progressPreload());
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, '\r\nUpdating...\r\x1b[2K');
+    assert.equal(result.stderr, '');
     assert.include(result.stdout, 'Unable to configure backup');
     assert.notInclude(result.stdout, 'Updating...');
     assert.lengthOf(publications(), 0);
   });
-  it('clears self-update maintenance feedback before optional protection warnings', () => {
+  it('preserves optional protection warnings without temporary self-update feedback', () => {
     const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
     const result = runSetup('self-update', ttyEnv, progressPreload()); ok(result);
-    assert.equal(result.stderr, '\r\nUpdating...\r\x1b[2K');
+    assert.equal(result.stderr, '');
     assert.include(result.stdout, 'Optional GitHub branch protection was not enabled with the current permissions');
     assert.notInclude(result.stdout, 'Updating...');
     assert.lengthOf(publications(), 0);

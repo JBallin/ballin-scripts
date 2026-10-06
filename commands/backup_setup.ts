@@ -96,8 +96,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
         return true;
       };
-      // Inherited Git diagnostics may leave the shared terminal cursor mid-line.
-      return options.maintenanceOnly ? withTemporaryStatus('\r\nUpdating...', maintain) : maintain();
+      return maintain();
     }
     const account = readRepositoryAccount();
     writeStdoutLine();
