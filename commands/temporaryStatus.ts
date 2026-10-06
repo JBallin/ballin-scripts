@@ -12,9 +12,12 @@ const canShowStatus = (text: string): boolean => Boolean(
   && process.env.TERM !== 'dumb' && !process.env.NO_COLOR
   && !(process.stderr.columns > 0 && process.stderr.columns <= text.length),
 );
-const withTemporaryStatus = <T>(text: string, action: () => T): T => {
+const withTemporaryStatus = <T>(text: string, action: () => T, plainFallback = false): T => {
   clearTemporaryStatus();
-  if (!canShowStatus(text)) return action();
+  if (!canShowStatus(text)) {
+    if (plainFallback) write(`${text}\n`);
+    return action();
+  }
   const finish = (): void => {
     if (active?.finish !== finish) return;
     const visible = active.visible;

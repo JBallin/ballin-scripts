@@ -363,6 +363,7 @@ exit 0
     });
 
     assert.equal(result.status, 0);
+    assert.match(result.stdout, /^==> Updating Homebrew\nvisible Homebrew output\n\n==> Updating Homebrew packages\n/u);
     assert.include(result.stdout, 'visible Homebrew output');
     [
       'Updating Homebrew',
@@ -1187,7 +1188,7 @@ kill -TERM "$$"
     const result = runUpdate({ NVM_DIR: nvmDir });
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Updating Node.js LTS');
+    assert.equal(result.stdout, '==> Updating Node.js LTS\n');
     assert.equal(fs.readFileSync(logPath, 'utf8'), 'install --lts\n');
   });
 
@@ -1276,8 +1277,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     });
 
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Updating Node.js LTS');
-    assert.include(result.stdout, 'Updating global npm packages');
+    assert.equal(result.stdout, '==> Updating Node.js LTS\n\n==> Updating global npm packages\n');
     assert.equal(fs.readFileSync(logPath, 'utf8').split('\n')[0], 'install --lts');
     assert.deepEqual(commandLog().slice(1), [
       'npm|,|update -g',
@@ -1465,7 +1465,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 127);
     assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
     assert.include(result.stderr, 'ballin: command not found');
-    assert.include(result.stdout, 'Updating Ballin');
+    assert.equal(result.stdout, '\n==> Updating Ballin\n');
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
   });
 
@@ -1514,6 +1514,9 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 
       assert.equal(result.status, 1);
       assert.include(result.stderr, diagnostic);
+      if (name !== 'nvm') {
+        assert.equal(result.stdout, '\n==> Backing up development environment\n');
+      }
       assert.deepEqual(commandLog(), ['ballin|,|backup']);
     });
   });
