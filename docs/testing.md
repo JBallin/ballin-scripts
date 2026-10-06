@@ -42,6 +42,11 @@ API capture, filter assignment, and final output form one canonical critical
 block. These checks protect that source form and representative predicate
 behavior; they do not prove arbitrary YAML or shell behavior. Eligibility
 fixtures use each caller's configured event names and actions.
+The supported direct workflow and job keys are explicit, so execution defaults,
+matrix strategies, and quoted key alternatives fail closed. Rejected commands
+and untrusted associations cover both comment events; fork and closed-PR cases
+cover both status paths. These remain bounded coverage checks, not exhaustive
+proof about arbitrary source changes.
 
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.

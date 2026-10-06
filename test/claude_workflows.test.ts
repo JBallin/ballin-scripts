@@ -8,6 +8,14 @@ const readWorkflow = (name: string): string => fs.readFileSync(
 const automatic = readWorkflow('claude-review.yml');
 const manual = readWorkflow('claude.yml');
 const status = readWorkflow('claude-review-status.yml');
+const directKeys = (source: string, indentation: string): string[] => source.split('\n')
+  .filter((line: string) => line.startsWith(indentation) && /^\S/u.test(line.slice(indentation.length))
+    && !line.slice(indentation.length).startsWith('#'))
+  .map((line: string) => {
+    const key = line.slice(indentation.length).match(/^([\w-]+):(?: .*)?$/u);
+    assert.exists(key, 'unsupported direct key: retain the canonical unquoted form');
+    return key![1];
+  });
 const jobs = (workflow: string): string => {
   const result = workflow.match(/^jobs:\n([\s\S]*?)(?=^\S|$(?![\s\S]))/mu);
   assert.exists(result, 'missing jobs map');
@@ -122,28 +130,26 @@ describe('offline Claude caller contracts', () => {
     const source = job(manual, 'eligibility');
     for (const eventName of ['issue_comment', 'pull_request_review_comment']) {
       for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
-        const g = github();
-        g.event_name = eventName;
+        const g = github(eventName);
         g.event.comment.author_association = association;
         if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
         assert.isTrue(eligible(source, { github: g }));
       }
-    }
-    for (const body of ['/claude-review please', ' /claude-review', '/claude-review\n', 'text\n/claude-review', '/claude-review-extra', '']) {
-      const g = github();
-      g.event.comment.body = body;
-      assert.isFalse(eligible(source, { github: g }), JSON.stringify(body));
-    }
-    for (const association of ['NONE', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'CONTRIBUTOR']) {
-      const g = github();
-      g.event.comment.author_association = association;
-      assert.isFalse(eligible(source, { github: g }), association);
-    }
-    for (const eventName of ['issue_comment', 'pull_request_review_comment']) {
+      for (const body of ['/claude-review please', ' /claude-review', '/claude-review\n', 'text\n/claude-review', '/claude-review-extra', '']) {
+        const g = github(eventName);
+        g.event.comment.body = body;
+        if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
+        assert.isFalse(eligible(source, { github: g }), `${eventName}: ${JSON.stringify(body)}`);
+      }
+      for (const association of ['NONE', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'CONTRIBUTOR']) {
+        const g = github(eventName);
+        g.event.comment.author_association = association;
+        if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
+        assert.isFalse(eligible(source, { github: g }), `${eventName}: ${association}`);
+      }
       for (const commenter of ['User', 'Bot']) {
         for (const sender of ['User', 'Bot']) {
-          const g = github();
-          g.event_name = eventName;
+          const g = github(eventName);
           g.event.comment.user.type = commenter;
           g.event.sender.type = sender;
           if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
@@ -226,15 +232,23 @@ describe('offline Claude caller contracts', () => {
 
   it('refreshes on pushes and base retargets, excluding other edits, forks and closed PRs', () => {
     const source = job(status, 'status');
-    assert.isTrue(eligible(source, { github: github('pull_request', 'synchronize') }));
     const retarget = github('pull_request', 'edited');
     retarget.event.changes.base.ref.from = 'main';
-    assert.isTrue(eligible(source, { github: retarget }));
+    for (const context of [github('pull_request', 'synchronize'), retarget]) {
+      assert.isTrue(eligible(source, { github: context }));
+      for (const change of [
+        (g: ReturnType<typeof github>) => { g.event.pull_request.state = 'closed'; },
+        (g: ReturnType<typeof github>) => { g.event.pull_request.head.repo.full_name = 'contributor/fork'; },
+      ]) {
+        const g = JSON.parse(JSON.stringify(context));
+        change(g);
+        assert.isFalse(eligible(source, { github: g }), `${context.event.action}: ${change.toString()}`);
+      }
+    }
+    // An edited event without a base retarget remains ineligible.
     for (const change of [
       (g: ReturnType<typeof github>) => { g.event.action = 'edited'; },
       (g: ReturnType<typeof github>) => { g.event.action = 'opened'; },
-      (g: ReturnType<typeof github>) => { g.event.pull_request.state = 'closed'; },
-      (g: ReturnType<typeof github>) => { g.event.pull_request.head.repo.full_name = 'contributor/fork'; },
     ]) {
       const g = github('pull_request', 'synchronize');
       change(g);
@@ -244,16 +258,21 @@ describe('offline Claude caller contracts', () => {
 
   it('keeps permissions scoped to jobs and the Claude credential scoped to review calls', () => {
     const reviewPermissions = ['contents: read', 'pull-requests: write', 'checks: write', 'issues: write', 'id-token: write'];
-    for (const [workflow, names, permissions] of [
-      [automatic, ['review'], [reviewPermissions]],
-      [manual, ['eligibility', 'review'], [['pull-requests: read'], reviewPermissions]],
-      [status, ['status'], [['contents: read', 'pull-requests: write', 'issues: write']]],
+    for (const [workflow, names, permissions, keys] of [
+      [automatic, ['review'], [reviewPermissions], [['if', 'permissions', 'uses', 'secrets']]],
+      [manual, ['eligibility', 'review'], [['pull-requests: read'], reviewPermissions], [
+        ['if', 'runs-on', 'timeout-minutes', 'permissions', 'outputs', 'steps'],
+        ['needs', 'if', 'permissions', 'uses', 'secrets'],
+      ]],
+      [status, ['status'], [['contents: read', 'pull-requests: write', 'issues: write']], [['if', 'permissions', 'uses']]],
     ] as const) {
+      assert.deepEqual(directKeys(workflow, ''), ['name', 'on', 'permissions', 'jobs'], 'unsupported workflow key');
       assert.match(workflow, /^permissions: \{\}$/mu);
       assert.notMatch(workflow, /\bsecrets\s*\[/u, 'indexed secrets access is unsupported; retain the approved dot reference');
       assert.deepEqual([...jobs(workflow).matchAll(/^  ([\w-]+):$/gmu)].map((match) => match[1]), [...names]);
       names.forEach((name, index) => {
         const source = job(workflow, name);
+        assert.deepEqual(directKeys(source, '    '), [...keys[index]], `unsupported keys in ${name}`);
         const permissionBlock = source.match(/^    permissions:\n((?:      .+\n)+)/mu)![1];
         assert.deepEqual(permissionBlock.trim().split('\n').map((line: string) => line.trim()), [...permissions[index]]);
         if (name === 'review') {
