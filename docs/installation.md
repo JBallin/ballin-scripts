@@ -121,6 +121,47 @@ that line manually with the displayed command using LF line endings.
 
 ## Local effects
 
+### Quickstart helper
+
+The optional [beginner quickstart](quickstart.md) runs `quickstart.sh` before the
+core installer. It requires macOS 13.5 or newer and zsh or Bash, selects the
+GitHub CLI download for the running shell's architecture (including Intel under
+Rosetta), and reuses compatible installed tools. Homebrew is not required.
+
+When prerequisites are missing, the helper asks before starting Apple's Command
+Line Tools installation for Git, installing the latest Node.js 24 macOS package
+with `sudo installer`, or downloading GitHub CLI into
+`~/.local/share/ballin-quickstart/`. The Node package writes to `/usr/local` and
+may replace an existing Node.js/npm installation there. Downloads come from
+[Node.js](https://nodejs.org/dist/latest-v24.x/) and
+[GitHub CLI releases](https://github.com/cli/cli/releases); published SHA-256
+checksums are checked before installing or extracting them. The Node package's
+Apple signature and publisher are also checked before requesting admin access.
+
+The helper keeps Git and GitHub CLI links in its own `bin/` directory and shows
+one PATH line before asking to add it to the selected shell startup file. A
+compatible Node already on PATH stays under its existing version manager,
+including npm, so later default changes still take effect. If PATH has no
+compatible Node, the helper links its selected fallback Node/npm ahead of an
+older version. Rerunning with a compatible PATH Node removes those fallback
+links. The Ballin command directory is appended to preserve existing tool
+priority. For zsh it uses `.zshrc` in an exported `ZDOTDIR`, or in your home
+directory otherwise. For Bash it uses the first existing login profile
+(`.bash_profile`, `.bash_login`, or `.profile`), creating `.bash_profile` if
+needed. Custom startup locations or non-login Bash sessions may need manual
+PATH setup. It leaves symlinked or invalid startup files unchanged. It uses
+existing GitHub CLI authentication or starts its normal browser login flow,
+then runs the core installer, captures a backup, and opens it only after a
+successful capture.
+Rerunning reuses available tools and revalidates an existing backup; an
+unconfigured existing installation is offered backup setup once.
+
+`ballin uninstall` leaves these prerequisites, helper files, and the confirmed
+PATH line in place. Installation or login cancellation can leave completed
+prerequisite steps in place for a later retry.
+
+### Core installer
+
 The installer can create or change:
 
 - `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Rerunning the
