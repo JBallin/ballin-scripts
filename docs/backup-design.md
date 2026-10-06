@@ -206,9 +206,11 @@ content. `backup list` and `backup open` fetch only marker content. List present
 current canonical selectors actually present, distinguishes retired names,
 omits reserved metadata, and counts unexpected entries without disclosing their
 names. Retired and unexpected content require deliberate inspection through
-`backup open`, which shows immediate progress while validating the destination,
-then prints its verified URL before browser dispatch. Capable terminals replace
-the progress line; redirected output uses a plain progress line on stderr.
+`backup open`, which shows immediate progress through destination validation and
+browser dispatch, then confirms the verified URL after successful dispatch.
+Capable terminals replace the progress line; redirected output uses a plain
+progress line on stderr and the completion message on stdout. Browser failures
+retain the verified URL in the manual-open error.
 These commands use immutable blob IDs and the same content validation.
 Unrequested snapshot contents are not validated. Inventory-only inspection still
 requires the complete tree, marker and final revision checks; it cannot infer

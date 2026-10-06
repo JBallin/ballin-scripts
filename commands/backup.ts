@@ -749,11 +749,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     } else if (command === 'list') {
       writeSavedSnapshots(readRepositoryInventory(config.repository));
     } else if (command === 'open') {
-      const url = withTemporaryStatus('Opening...', () => repositoryOpenUrl(config.repository), true);
-      writeStdoutLine(`Opening ${url} in your browser.`);
-      const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
-      process.exitCode = result.error ? 1 : spawnResultStatus(result);
-      if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
+      withTemporaryStatus('Opening...', () => {
+        const url = repositoryOpenUrl(config.repository);
+        const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
+        process.exitCode = result.error ? 1 : spawnResultStatus(result);
+        if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
+        else writeStdoutLine(`Opened ${url} in your browser.`);
+      }, true);
     } else {
       /* c8 ignore next 3 -- The catalog predicate and handled cases enforce the supported command union. */
       const unhandledCommand: never = command;

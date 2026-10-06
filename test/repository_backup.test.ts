@@ -1251,7 +1251,7 @@ describe('repository backup lifecycle', function() {
     fs.symlinkSync(home, cacheRoot);
     assert.equal(run(['read', 'zshrc.sh']).stdout, bytes);
     const opened = run(['open']); ok(opened);
-    assert.equal(opened.stdout, 'Opening https://github.com/fixture-user/renamed in your browser.\n');
+    assert.equal(opened.stdout, 'Opened https://github.com/fixture-user/renamed in your browser.\n');
     assert.deepEqual(state().requests.at(-1)?.payload?.args, ['browse', '--repo', 'https://github.com/fixture-user/renamed']);
     assert.isTrue(fs.lstatSync(cacheRoot).isSymbolicLink()); assert.equal(mutations().length, 0);
     assert.equal(run(['read', '.ballin-backup.json']).status, 1);
@@ -1341,13 +1341,20 @@ describe('repository backup lifecycle', function() {
   const browserOrderingPreload = (tty = false, diagnostic = false): string => `
     for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: ${tty} });
     Object.defineProperty(process.stderr, 'columns', { value: 80 });
-    const fs = require('fs'); const write = process.stdout.write; const writeSync = fs.writeSync;
-    let output = '', feedback = '', validated = false;
-    process.stdout.write = function(text, ...rest) { output += text; return write.call(this, text, ...rest); };
-    fs.writeSync = function(fd, text, ...rest) { if (fd === 2) feedback += text; return writeSync.call(this, fd, text, ...rest); };
+    const fs = require('fs'); const write = process.stdout.write; const errorWrite = process.stderr.write; const writeSync = fs.writeSync;
+    let output = '', feedback = '', combined = '', validated = false;
+    process.stdout.write = function(text, ...rest) { output += text; combined += text; return write.call(this, text, ...rest); };
+    process.stderr.write = function(text, ...rest) { combined += text; return errorWrite.call(this, text, ...rest); };
+    fs.writeSync = function(fd, text, ...rest) { if (fd === 2) { feedback += text; combined += text; } return writeSync.call(this, fd, text, ...rest); };
+    process.on('exit', () => fs.writeFileSync(${JSON.stringify(path.join(root, 'opening-transcript.json'))}, JSON.stringify({ combined })));
     const child = require('child_process'); const spawn = child.spawnSync;
     child.spawnSync = function(command, args, options) {
-      if (command === 'gh' && args[0] === 'browse') fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, validated, args, stdio: options.stdio, host: options.env.GH_HOST }));
+      if (command === 'gh' && args[0] === 'browse') {
+        fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-order.json'))}, JSON.stringify({ output, feedback, validated, args, stdio: options.stdio, host: options.env.GH_HOST }));
+        const result = spawn.call(this, command, args, options);
+        fs.writeFileSync(${JSON.stringify(path.join(root, 'browser-completion-order.json'))}, JSON.stringify({ output, feedback, status: result.status }));
+        return result;
+      }
       return spawn.call(this, command, args, options);
     };
     const repository = require(${JSON.stringify(require.resolve('../commands/backup_repository.ts'))});
@@ -1368,13 +1375,21 @@ describe('repository backup lifecycle', function() {
         assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'validation-order.json'), 'utf8')), {
           feedback: tty ? 'Opening...' : 'Opening...\n', output: '',
         });
-        const notice = 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n';
-        assert.equal(result.stdout, notice);
+        const notice = 'Opened https://github.com/fixture-user/ballin-backups in your browser.\n';
+        const error = 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n';
+        assert.equal(result.stdout, failed ? '' : notice);
         assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')), {
-          output: notice, validated: true, args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
+          output: '', feedback: tty ? 'Opening...' : 'Opening...\n', validated: true,
+          args: ['browse', '--repo', 'https://github.com/fixture-user/ballin-backups'], stdio: 'ignore', host: 'github.com',
         });
-        assert.equal(result.stderr, (tty ? 'Opening...\r\x1b[2K' : 'Opening...\n')
-          + (failed ? 'ballin backup open: unable to open your browser. Open https://github.com/fixture-user/ballin-backups manually.\n' : ''));
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'browser-completion-order.json'), 'utf8')), {
+          output: '', feedback: tty ? 'Opening...' : 'Opening...\n', status: failed ? 7 : 0,
+        });
+        const feedback = tty ? 'Opening...\r\x1b[2K' : 'Opening...\n';
+        assert.equal(result.stderr, feedback + (failed ? error : ''));
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'opening-transcript.json'), 'utf8')), {
+          combined: feedback + (failed ? error : notice),
+        });
         assert.equal(state().requests.at(-1)?.endpoint, 'open');
         assert.equal(mutations().length, 0);
         assert.isFalse(fs.existsSync(cacheRoot));
@@ -1403,7 +1418,7 @@ describe('repository backup lifecycle', function() {
   it('does not erase validation diagnostics when replacing opening feedback', () => {
     const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(true, true)); ok(result);
     assert.equal(result.stderr, 'Opening...\r\x1b[2Kfixture validation diagnostic\n');
-    assert.equal(result.stdout, 'Opening https://github.com/fixture-user/ballin-backups in your browser.\n');
+    assert.equal(result.stdout, 'Opened https://github.com/fixture-user/ballin-backups in your browser.\n');
     assert.isTrue(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')).validated);
   });
   for (const failure of ['spawn', 'signal']) {
@@ -1420,7 +1435,9 @@ describe('repository backup lifecycle', function() {
         };
       `);
       assert.equal(result.status, failure === 'spawn' ? 1 : 143);
+      assert.equal(result.stdout, '');
       assert.include(result.stderr, 'unable to open your browser'); assert.include(result.stderr, 'manually');
+      assert.include(result.stderr, 'https://github.com/fixture-user/ballin-backups');
       assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_BROWSER_ERROR');
       assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
     });
