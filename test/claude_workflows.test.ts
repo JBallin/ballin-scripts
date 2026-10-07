@@ -485,7 +485,7 @@ describe('offline Claude caller contracts', () => {
   });
 
   it('uses the reviewed immutable revision consistently for the three runtime entry points', () => {
-    const pin = '79f70e54cf322f67e466b77403df7b2c22496ada';
+    const pin = 'c377d8a99fae247e507f385c404593b345686c1d';
     for (const [workflow, name, entry] of [[automatic, 'review', 'claude-review.yml'], [manual, 'review', 'claude.yml'], [status, 'status', 'claude-review-status.yml']]) {
       const source = job(workflow, name);
       assert.notMatch(source, /^    ['"]uses['"]:/mu, 'quoted invocation keys are unsupported');
