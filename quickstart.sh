@@ -44,13 +44,20 @@ node_compatible() {
 }
 
 node_on_path() {
-  local search_path=":$PATH:"
+  local search_path='' remaining="$PATH" entry separator='' retained=false
   # Ignore our own fallback links so a version manager can take over on rerun.
-  while [[ "$search_path" == *":$quick_bin:"* ]]; do
-    search_path=${search_path//":$quick_bin:"/:}
+  # Directory identity also covers symlink aliases and alternate spellings.
+  while :; do
+    entry=${remaining%%:*}
+    if [[ "$entry" != "$quick_bin" && ! "${entry:-.}" -ef "$quick_bin" ]]; then
+      search_path+="$separator$entry"
+      separator=':'
+      retained=true
+    fi
+    [[ "$remaining" == *:* ]] || break
+    remaining=${remaining#*:}
   done
-  search_path=${search_path#:}
-  search_path=${search_path%:}
+  "$retained" || return 0
   PATH="$search_path" command -v node || true
 }
 
@@ -107,7 +114,7 @@ bind_tool() {
   if [[ -e "$target" && ! -L "$target" ]]; then
     fail "Refusing to replace an existing file at $target."
   fi
-  if [[ -L "$target" && "$(readlink "$target")" == "$2" ]]; then return; fi
+  if [[ -L "$target" ]] && { [[ "$(readlink "$target")" == "$2" ]] || [[ "$target" -ef "$2" ]]; }; then return; fi
   ln -sfn "$2" "$target"
 }
 
@@ -248,13 +255,18 @@ configure_path() {
       // executable argument. Parameter and command expansions are not evaluated.
       plain = plain.replace(/\$\{[^}]*\}|\$\([^)]*\)/gu, "Q")
         .replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|{}]+/gu, " ");
-      const zshModifiers = process.argv[8] === "zsh" ? ["noglob", "nocorrect", "-"] : [];
+      const zshPrefixes = process.argv[8] === "zsh" ? ["noglob", "nocorrect", "-", "repeat"] : [];
       for (const statement of plain.split(/[\n;&|{})]+/u)) {
         const words = statement.trim().split(/\s+/u);
-        let unsupportedOptions = false;
+        let unsupportedPrefix = false;
         while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[0] ?? "")
-          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin", ...zshModifiers].includes(words[0])) {
+          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin", ...zshPrefixes].includes(words[0])) {
           const prefix = words.shift();
+          if (prefix === "repeat") {
+            // Only an unquoted decimal count is understood; never evaluate it.
+            if (!/^[0-9]+$/u.test(words.shift() ?? "")) { unsupportedPrefix = true; break; }
+            continue;
+          }
           if (!["time", "command", "builtin"].includes(prefix)) continue;
           // Only these literal wrapper options are understood. Other options
           // retain the existing manual fallback instead of hiding a transfer.
@@ -266,12 +278,12 @@ configure_path() {
             }
             if (prefix === "time" && option === "-p") continue;
             if (option === "--") break;
-            unsupportedOptions = true;
+            unsupportedPrefix = true;
             break;
           }
-          if (unsupportedOptions) break;
+          if (unsupportedPrefix) break;
         }
-        if (unsupportedOptions) {
+        if (unsupportedPrefix) {
           fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
           break;
         }

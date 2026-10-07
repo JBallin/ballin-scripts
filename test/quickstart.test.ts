@@ -307,6 +307,41 @@ esac
     assert.notInclude(result.stdout, 'Use these tools');
     assert.notInclude(readLog(), 'ballin:backup setup');
   });
+  for (const spelling of ['trailing slash', 'directory symlink', 'parent segment']) {
+    it('preserves managed Node fallbacks through a PATH ' + spelling, () => {
+      linkFake('npm', systemNode);
+      const first = run('y\ny\ny\n', { FAKE_OLD_NODE: '1' });
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      const alias = path.join(root, 'managed-bin-alias');
+      fs.symlinkSync(quickBin, alias);
+      const entry = spelling === 'trailing slash' ? quickBin + '/'
+        : spelling === 'directory symlink' ? alias : quickBin + '/../bin';
+      const profile = path.join(home, '.zshrc');
+      const before = fs.readFileSync(profile, 'utf8');
+      const rerun = run('', { PATH: `${entry}:${tools}`, FAKE_OLD_NODE: '1' });
+      assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+      for (const name of ['node', 'npm']) {
+        assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(systemNode, name));
+      }
+      for (const name of ['git', 'gh']) assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(tools, name));
+      assert.equal(fs.readFileSync(profile, 'utf8'), before);
+      assert.equal(readLog().split('sudo:').length - 1, 1);
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+
+      const managerBin = path.join(home, '.nvm/versions/node/v24.21.0/bin');
+      fs.mkdirSync(managerBin, { recursive: true });
+      linkFake('node', managerBin);
+      linkFake('npm', managerBin);
+      const takeover = run('', { PATH: `${entry}:${managerBin}:${tools}`, FAKE_OLD_NODE: '1' });
+      assert.equal(takeover.status, 0, takeover.stdout + takeover.stderr);
+      for (const name of ['node', 'npm']) assert.isFalse(fs.existsSync(path.join(quickBin, name)));
+      for (const name of ['git', 'gh']) assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(tools, name));
+      assert.equal(fs.readFileSync(profile, 'utf8'), before);
+      assert.equal(readLog().split('sudo:').length - 1, 1);
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
   for (const arch of ['arm64', 'x86_64']) {
     it(`installs missing official prerequisites for ${arch}`, () => {
       fs.unlinkSync(path.join(tools, 'gh'));
@@ -899,6 +934,46 @@ exec /bin/cp "$@"
     });
   }
   for (const existingPath of [false, true]) {
+    it('detects zsh repeat bodies before PATH ' + (existingPath ? 'reuse' : 'append'), () => {
+      const profile = path.join(home, '.zshrc');
+      const line = "export PATH='" + path.join(home, '.local/share/ballin-quickstart/bin')
+        + "':$PATH:'" + path.join(home, '.local/bin') + "'";
+      const sentinel = path.join(root, 'profile-executed');
+      for (const transfer of [
+        'repeat 1 return', 'repeat 1 exit 0', 'repeat 2 exec /bin/true',
+        'repeat 1 repeat 2 noglob return', 'repeat 1 command -- builtin -- exit 0',
+        'repeat 1 do return; done',
+      ]) {
+        const contents = "touch '" + sentinel + "'\n" + transfer + '\n' + (existingPath ? line + '\n' : '');
+        fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const result = run('', { SHELL: '/bin/zsh' });
+        assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
+        assert.include(result.stderr, 'recognized return, exit, or executable exec');
+        assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+        assert.isFalse(fs.existsSync(sentinel));
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      }
+      for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+    });
+    it('requires manual placement for nonliteral zsh repeat counts before PATH ' + (existingPath ? 'reuse' : 'append'), () => {
+      const profile = path.join(home, '.zshrc');
+      const line = "export PATH='" + path.join(home, '.local/share/ballin-quickstart/bin')
+        + "':$PATH:'" + path.join(home, '.local/bin') + "'";
+      const sentinel = path.join(root, 'profile-executed');
+      for (const count of ['$count', '1+1', '"1"']) {
+        const contents = "touch '" + sentinel + "'\nrepeat " + count + ' :\n' + (existingPath ? line + '\n' : '');
+        fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const result = run('', { SHELL: '/bin/zsh' });
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, 'shell syntax that this check cannot interpret safely');
+        assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+        assert.isFalse(fs.existsSync(sentinel));
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      }
+      for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+    });
     it('detects zsh precommand modifiers before PATH ' + (existingPath ? 'reuse' : 'append'), () => {
       const profile = path.join(home, '.zshrc');
       const line = "export PATH='" + path.join(home, '.local/share/ballin-quickstart/bin')
@@ -975,6 +1050,25 @@ exec /bin/cp "$@"
         assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
       }
       for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+    });
+  }
+  for (const shell of ['bash', 'zsh']) {
+    it('preserves harmless repeat forms through PATH append and reuse in ' + shell, () => {
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      const sentinel = path.join(root, 'profile-executed');
+      const contents = "touch '" + sentinel + "'\n"
+        + (shell === 'bash' ? 'repeat() { :; }\nrepeat 1 return\n' : 'repeat 2 : return exit exec\nrepeat 1 noglob : return\n')
+        + ": 'repeat 1 return'\n# repeat 1 exit\n";
+      fs.writeFileSync(profile, contents, { mode: 0o640 });
+      const result = run('y\ny\n', { SHELL: '/bin/' + shell });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const installed = fs.readFileSync(profile, 'utf8');
+      const rerun = run('', { SHELL: '/bin/' + shell });
+      assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+      assert.equal(fs.readFileSync(profile, 'utf8'), installed);
+      assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+      assert.isFalse(fs.existsSync(sentinel));
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
   }
   it('preserves harmless zsh precommand modifiers and quoted modifier text through PATH append and reuse', () => {

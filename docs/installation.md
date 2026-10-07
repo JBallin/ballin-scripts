@@ -154,8 +154,10 @@ one PATH line before asking to add it to the selected shell startup file. A
 compatible Node already on PATH stays under its existing version manager,
 including npm, so later default changes still take effect. If PATH has no
 compatible Node, the helper links its selected fallback Node/npm ahead of an
-older version. Rerunning with a compatible PATH Node removes those fallback
-links. The Ballin command directory is appended to preserve existing tool
+older version. Rerunning with a compatible PATH Node outside that directory
+removes the fallback links. Alternate spellings and symlink aliases of the
+managed directory are still treated as the fallback. The Ballin command
+directory is appended to preserve existing tool
 priority. For zsh it uses `.zshrc` in an exported `ZDOTDIR`, or in your home
 directory otherwise. For Bash it uses the first existing login profile
 (`.bash_profile`, `.bash_login`, or `.profile`), creating `.bash_profile` if
@@ -169,13 +171,14 @@ themselves can be validated without executing them. If later edits make that
 placement ambiguous, it asks before appending a new line. A recognized unquoted
 `return`, `exit`, or `exec` with an executable
 argument stops automatic PATH setup, including inside a function, conditional,
-or case arm and after zsh's `noglob`, `nocorrect`, or `-` precommand modifiers.
+or case arm, in a zsh `repeat` body with an unquoted decimal count, and after
+zsh's `noglob`, `nocorrect`, or `-` precommand modifiers.
 The helper leaves the file unchanged and prints the exact PATH line for manual
 placement before following this standard installation guide. This conservative
 check ignores comments, quoted data, and simple heredoc bodies; it does not
 interpret dynamic shell behavior. Arithmetic with nested parentheses, ambiguous
-heredoc forms, ambiguous brace/hash forms, and unsupported wrapper options
-require manual placement. This
+heredoc forms, ambiguous brace/hash forms, unsupported wrapper options, and
+quoted or nondecimal zsh `repeat` counts require manual placement. This
 includes valid zsh `{#` block comments. Startup-file contents are never executed
 by these checks.
 
