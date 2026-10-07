@@ -166,6 +166,10 @@ install_gh() {
 
 configure_path() {
   local escaped command_escaped line original
+  local syntax_check=("$profile_shell" -n)
+  # extglob affects parsing even when a profile enables it on an earlier line.
+  # Enable it only for syntax checks; never execute profile option changes.
+  if [[ "${profile_shell##*/}" == bash ]]; then syntax_check+=(-O extglob); fi
   escaped=${quick_bin//\'/\'\\\'\'}
   command_escaped=${command_bin//\'/\'\\\'\'}
   line="export PATH='$escaped':\$PATH:'$command_escaped'"
@@ -244,11 +248,12 @@ configure_path() {
       // executable argument. Parameter and command expansions are not evaluated.
       plain = plain.replace(/\$\{[^}]*\}|\$\([^)]*\)/gu, "Q")
         .replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|{}]+/gu, " ");
+      const zshModifiers = process.argv[8] === "zsh" ? ["noglob", "nocorrect", "-"] : [];
       for (const statement of plain.split(/[\n;&|{})]+/u)) {
         const words = statement.trim().split(/\s+/u);
         let unsupportedOptions = false;
         while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[0] ?? "")
-          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin"].includes(words[0])) {
+          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin", ...zshModifiers].includes(words[0])) {
           const prefix = words.shift();
           if (!["time", "command", "builtin"].includes(prefix)) continue;
           // Only these literal wrapper options are understood. Other options
@@ -300,20 +305,20 @@ configure_path() {
       }
     ' "$profile" "$scratch/profile-continuation-check" "$line" \
       "$scratch/profile-path-prefix" "$scratch/profile-path-continuation-check" \
-      "$scratch/profile-path-original" "$scratch/profile-transfer-check" \
+      "$scratch/profile-path-original" "$scratch/profile-transfer-check" "${profile_shell##*/}" \
       || fail 'The startup file could not be checked; it was left unchanged.'
     # The shell ignores this unmatched token in a trailing comment. An active
     # backslash escapes its leading space, leaving the unmatched token visible.
     if [[ -f "$scratch/profile-continuation-check" ]] \
-      && ! "$profile_shell" -n "$scratch/profile-continuation-check" >/dev/null 2>&1; then
+      && ! "${syntax_check[@]}" "$scratch/profile-continuation-check" >/dev/null 2>&1; then
       fail 'The startup file ends at an unfinished continuation; it was left unchanged.'
     fi
-    "$profile_shell" -n "$profile" || fail 'The startup file has invalid shell syntax; it was left unchanged.'
+    "${syntax_check[@]}" "$profile" || fail 'The startup file has invalid shell syntax; it was left unchanged.'
     # Both supported shells can accept an unfinished heredoc under -n. A
     # deliberate syntax error must remain visible to the parser at EOF.
     cp "$profile" "$scratch/profile-boundary-check"
     printf '\n)\n' >> "$scratch/profile-boundary-check"
-    if "$profile_shell" -n "$scratch/profile-boundary-check" >/dev/null 2>&1; then
+    if "${syntax_check[@]}" "$scratch/profile-boundary-check" >/dev/null 2>&1; then
       fail 'The startup file ends at an unfinished heredoc; it was left unchanged.'
     fi
   fi
@@ -327,12 +332,12 @@ configure_path() {
   # Reuse only a final standalone command. Matching text inside a construct or
   # after a continued command needs a new confirmed line; never source the file.
   if [[ -f "$scratch/profile-path-prefix" ]] \
-    && "$profile_shell" -n "$scratch/profile-path-prefix" >/dev/null 2>&1; then
+    && "${syntax_check[@]}" "$scratch/profile-path-prefix" >/dev/null 2>&1; then
     if [[ ! -f "$scratch/profile-path-continuation-check" ]] \
-      || "$profile_shell" -n "$scratch/profile-path-continuation-check" >/dev/null 2>&1; then
+      || "${syntax_check[@]}" "$scratch/profile-path-continuation-check" >/dev/null 2>&1; then
       cp "$scratch/profile-path-prefix" "$scratch/profile-path-boundary-check"
       printf '\n)\n' >> "$scratch/profile-path-boundary-check"
-      if ! "$profile_shell" -n "$scratch/profile-path-boundary-check" >/dev/null 2>&1 \
+      if ! "${syntax_check[@]}" "$scratch/profile-path-boundary-check" >/dev/null 2>&1 \
         && cmp -s "$profile" "$scratch/profile-path-original"; then return; fi
     fi
   fi
@@ -351,7 +356,7 @@ configure_path() {
     cmp -s "$profile_temp" "$original" || fail 'The startup file changed during setup; it was left unchanged. Review it before retrying.'
   fi
   printf '\n%s\n' "$line" >> "$profile_temp"
-  "$profile_shell" -n "$profile_temp" || fail 'The startup file has invalid shell syntax; it was left unchanged.'
+  "${syntax_check[@]}" "$profile_temp" || fail 'The startup file has invalid shell syntax; it was left unchanged.'
   if [[ -L "$profile" ]] || { [[ -f "$original" ]] && ! cmp -s "$original" "$profile"; } \
     || { [[ ! -f "$original" ]] && [[ -e "$profile" ]]; }; then
     fail 'The startup file changed during setup; it was left unchanged.'

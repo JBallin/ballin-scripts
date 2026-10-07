@@ -160,13 +160,16 @@ priority. For zsh it uses `.zshrc` in an exported `ZDOTDIR`, or in your home
 directory otherwise. For Bash it uses the first existing login profile
 (`.bash_profile`, `.bash_login`, or `.profile`), creating `.bash_profile` if
 needed. Custom startup locations or non-login Bash sessions may need manual
-PATH setup. It leaves symlinked or invalid startup files unchanged. It validates
+PATH setup. It leaves symlinked startup files and files that fail its syntax
+checks unchanged. It validates
 the absolute executable Bash or zsh path in `$SHELL` and uses that exact shell for
 syntax-only checks to reuse a matching PATH line only as a final standalone
-command. If later edits make that placement ambiguous, it asks before appending
-a new line. A recognized unquoted `return`, `exit`, or `exec` with an executable
+command. Bash checks enable `extglob` for parsing so profiles that enable it
+themselves can be validated without executing them. If later edits make that
+placement ambiguous, it asks before appending a new line. A recognized unquoted
+`return`, `exit`, or `exec` with an executable
 argument stops automatic PATH setup, including inside a function, conditional,
-or case arm.
+or case arm and after zsh's `noglob`, `nocorrect`, or `-` precommand modifiers.
 The helper leaves the file unchanged and prints the exact PATH line for manual
 placement before following this standard installation guide. This conservative
 check ignores comments, quoted data, and simple heredoc bodies; it does not
