@@ -88,6 +88,10 @@ const conditionExpression = (expression: string): string => {
     'github.event.comment.author_association', 'needs.eligibility.outputs.eligible',
   ];
   tokens.forEach((token, index) => {
+    if (/^(?:github|needs)\./u.test(token)) {
+      assert.isTrue([...stringFields, 'github.event.pull_request.draft', 'github.event.issue.pull_request'].includes(token),
+        'unsupported caller condition syntax: unsupported caller context field; extend the fixture coverage deliberately');
+    }
     if (['==', '!='].includes(token)) {
       assert.isTrue([tokens[index - 1], tokens[index + 1]].every((operand) => (
         typeof operand === 'string' && (operand.startsWith("'") || stringFields.includes(operand))
@@ -101,7 +105,14 @@ const conditionExpression = (expression: string): string => {
       assert.fail('unsupported caller condition syntax: only contains and fromJSON calls are supported');
     }
     if (token === '(') argumentsStack.push({ name: tokens[index - 1] ?? '', commas: 0 });
-    if (token === ')') argumentsStack.pop();
+    if (token === ')') {
+      const call = argumentsStack.pop();
+      if (call && ['contains', 'fromJSON'].includes(call.name)) {
+        assert.equal(call.commas, call.name === 'contains' ? 1 : 0,
+          'unsupported caller function arguments: retain the supported arity');
+        assert.notInclude(['(', ','], tokens[index - 1], 'unsupported caller function arguments: missing argument');
+      }
+    }
     if (token === ',') {
       const call = argumentsStack.at(-1);
       assert.isTrue(call?.name === 'contains' && call.commas === 0,
@@ -164,7 +175,7 @@ describe('offline Claude caller contracts', () => {
   });
   it('rejects comparisons that require Actions type coercion', () => {
     for (const expression of [
-      'github.event.pull_request.assignee == false', 'github.event.pull_request.draft == false',
+      'github.event.pull_request.draft == false',
       "github.actor == false", "github.actor == 'jballin' == 'true'",
       "!github.actor == 'x'", "!!github.actor == 'x'",
     ]) {
@@ -173,6 +184,16 @@ describe('offline Claude caller contracts', () => {
     const source = "    if: >-\n      !(github.actor == 'jballin')\n";
     assert.isFalse(eligible(source, { github: { actor: 'jballin' } }));
     assert.isTrue(eligible(source, { github: { actor: 'human-collaborator' } }));
+  });
+
+  it('rejects inherited or unsupported context paths and incomplete function calls', () => {
+    for (const expression of ['github.constructor', 'needs.constructor', 'github.event.pull_request.head.repo.constructor',
+      'github.__proto__', 'github.event.pull_request.assignee == false']) {
+      assert.throws(() => conditionExpression(expression), 'unsupported caller context field');
+    }
+    for (const expression of ["contains('abc')", "contains('abc',)", 'fromJSON()']) {
+      assert.throws(() => conditionExpression(expression), 'unsupported caller function arguments');
+    }
   });
 
   it('inventories Claude runtime and credential references across all workflow files', () => {
@@ -220,16 +241,19 @@ describe('offline Claude caller contracts', () => {
     for (const action of ['opened', 'ready_for_review']) {
       for (const actor of ['jballin', 'human-collaborator']) {
         for (const headRef of ['feature-review', 'feature-another']) {
-          const g = github('pull_request', action);
-          g.actor = actor;
-          g.event.pull_request.head.ref = headRef;
-          assert.isTrue(eligible(source, { github: g }), `${action}: ${actor}, ${headRef}`);
+          for (const baseRef of ['main', 'release']) {
+            const context = github('pull_request', action);
+            context.actor = actor;
+            context.event.pull_request.head.ref = headRef;
+            context.event.pull_request.base.ref = baseRef;
+            assert.isTrue(eligible(source, { github: context }), `${action}: ${actor}, ${headRef}, ${baseRef}`);
+            for (const change of negatives) {
+              const g = JSON.parse(JSON.stringify(context)) as ReturnType<typeof github>;
+              change(g);
+              assert.isFalse(eligible(source, { github: g }), `${action}: ${actor}, ${headRef}, ${baseRef}: ${change.toString()}`);
+            }
+          }
         }
-      }
-      for (const change of negatives) {
-        const g = github('pull_request', action);
-        change(g);
-        assert.isFalse(eligible(source, { github: g }), `${action}: ${change.toString()}`);
       }
     }
   });
@@ -309,16 +333,23 @@ describe('offline Claude caller contracts', () => {
           ? (value as Record<string, unknown>)[key] ?? null : null
       ), input),
     }, { timeout: 100 }));
-    assert.isTrue(evaluate(pr()));
-    for (const change of [
-      (p: ReturnType<typeof pr>) => { p.state = 'closed'; },
-      (p: ReturnType<typeof pr>) => { p.draft = true; },
-      (p: ReturnType<typeof pr>) => { p.head.repo.full_name = 'contributor/fork'; },
-      (p: ReturnType<typeof pr>) => { p.base.repo.full_name = 'other/repo'; },
-    ]) {
-      const p = pr();
-      change(p);
-      assert.isFalse(evaluate(p), change.toString());
+    for (const headRef of ['feature-review', 'feature-another']) {
+      for (const baseRef of ['main', 'release']) {
+        const response = pr();
+        response.head.ref = headRef;
+        response.base.ref = baseRef;
+        assert.isTrue(evaluate(response), `${headRef}, ${baseRef}`);
+        for (const change of [
+          (p: ReturnType<typeof pr>) => { p.state = 'closed'; },
+          (p: ReturnType<typeof pr>) => { p.draft = true; },
+          (p: ReturnType<typeof pr>) => { p.head.repo.full_name = 'contributor/fork'; },
+          (p: ReturnType<typeof pr>) => { p.base.repo.full_name = 'other/repo'; },
+        ]) {
+          const p = JSON.parse(JSON.stringify(response)) as ReturnType<typeof pr>;
+          change(p);
+          assert.isFalse(evaluate(p), `${headRef}, ${baseRef}: ${change.toString()}`);
+        }
+      }
     }
     assert.isFalse(evaluate({ number: 42 }), 'missing eligibility fields fail closed');
   });
@@ -341,12 +372,15 @@ describe('offline Claude caller contracts', () => {
       return g;
     });
     const contexts = [github('pull_request', 'synchronize'), ...retargets].flatMap((context) => (
-      ['main', 'release'].flatMap((baseRef) => [false, true].map((draft) => {
-        const g = JSON.parse(JSON.stringify(context)) as ReturnType<typeof github>;
-        g.event.pull_request.base.ref = baseRef;
-        g.event.pull_request.draft = draft;
-        return g;
-      }))
+      ['main', 'release'].flatMap((baseRef) => [false, true].flatMap((draft) => (
+        ['jballin', 'human-collaborator', 'dependabot[bot]'].map((actor) => {
+          const g = JSON.parse(JSON.stringify(context)) as ReturnType<typeof github>;
+          g.event.pull_request.base.ref = baseRef;
+          g.event.pull_request.draft = draft;
+          g.actor = actor;
+          return g;
+        })
+      )))
     ));
     for (const context of contexts) {
       assert.isTrue(eligible(source, { github: context }));

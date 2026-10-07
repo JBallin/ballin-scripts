@@ -58,6 +58,11 @@ drafts and multiple current bases on pushes and retargets. Workflow-wide caller
 inventory includes every YAML file referencing the runtime or Claude credential.
 Condition equality supports only direct string literals and the explicitly known
 string fields; comparisons requiring Actions type coercion fail closed.
+All context paths must belong to the explicit supported field inventory, and
+function calls must retain their supported arity with no empty arguments.
+Automatic exclusions cross every accepted actor/head/base variant. Manual
+preflight responses vary head and base refs; status refreshes cover human and
+bot actors on each supported path.
 The supported direct workflow and job keys are explicit, so execution defaults,
 matrix strategies, and quoted key alternatives fail closed. Rejected commands
 and untrusted associations cover both comment events; fork and closed-PR cases
