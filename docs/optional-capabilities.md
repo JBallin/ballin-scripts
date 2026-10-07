@@ -133,7 +133,9 @@ preferences form the fixed baseline. The `backup.includeSensitive` choice
 (default: `false`) adds sensitive sources from the [maintained catalog](backup-sources.md),
 including future supported additions. Destination and consent stay local and are
 never recovered from backups. Changing consent affects future captures, not saved
-files or history. Run `ballin setup` to review sources or change the choice.
+files or history. Rerun `ballin backup setup` to validate your destination and
+[review backup settings](installation.md#optional-backup-setup-and-reconnect),
+or use `ballin setup` for general preference review.
 
 When self-update starts with the current updater, a successful update links to
 the source guide if definitions changed or could not be compared. The advisory

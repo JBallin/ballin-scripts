@@ -3,8 +3,8 @@ const { configPath } = require('../config/index.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configureAnalyticsPreference } = require('./analytics.ts');
-const { saveBackupConfig, reviewAutomaticUpdateBackup, selectSensitiveSources } = require('./backup_preferences.ts');
-const { readPromptLine, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
+const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
+const { writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
 const setupHelp = `Usage:
     ballin setup
@@ -16,11 +16,6 @@ Use \`ballin config get/set/reset\` for direct configuration.
 This review does not reinstall Ballin, change backup destinations, or run backup/update.
 `;
 
-const preferenceBoolean = (value: unknown, key: string): boolean => {
-  if (value === true || value === 'true') return true;
-  if (value === false || value === 'false') return false;
-  throw new Error(`Invalid \`${key}\`; expected true or false.`);
-};
 const cancelSetup = (): void => {
   writeStdoutLine('Preference review cancelled; unconfirmed choices are unchanged. Earlier confirmed choices remain saved.');
   process.exitCode = 0;
@@ -47,12 +42,9 @@ const runSetupCommand = (): void => {
     reviewing = true;
     writeStdoutLine('Review your Ballin preferences. Each confirmed choice is saved locally.');
     if (destination.kind === 'repository') {
-      writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
-      const included = selectSensitiveSources(sensitive);
+      const included = confirmSensitiveSourceChoice(sensitive);
       if (included === null) { cancelSetup(); return; }
       if (included === undefined) { process.exitCode = 1; return; }
-      const confirmation = readPromptLine('Save this sensitive-source choice for future backups? [y/N] ');
-      if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) { cancelSetup(); return; }
       const current = readSetupConfigContext(configPath);
       current.backup.includeSensitive = String(included);
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
