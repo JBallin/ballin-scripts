@@ -345,9 +345,17 @@ describe('analytics D1 report', () => {
       'example-db',
       '--remote',
       '--json',
-      '--command',
-      'SELECT 1',
+      '--command=SELECT 1',
     ]);
+  });
+
+  it('keeps leading SQL comments attached to the command option', () => {
+    const options = { database: defaultDatabase, from: '2026-10-07', to: '2026-10-07' };
+    const sql = loadReportQueries(options).backupFailures;
+    assert.match(sql, /^-- Categories/u);
+    const args = wranglerArgsFor(sql, options);
+    assert.equal(args.at(-1), `--command=${sql}`);
+    assert.isFalse(args.includes(sql));
   });
 
   it('surfaces Wrangler failures without running real commands in tests', () => {
