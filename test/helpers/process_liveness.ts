@@ -52,5 +52,35 @@ const linuxProcessIsAlive = (pid: number, procRoot = '/proc'): boolean | undefin
     return found ? false : undefined;
   } catch { return undefined; }
 };
-module.exports = { linuxProcessIsAlive, parseProcessStat };
+type NativeProbe = (pid: number) => void;
+type ProcessInspection = (pid: number) => boolean | undefined;
+const inspectProcessLiveness = (
+  pid: number,
+  probe: NativeProbe,
+  inspect: ProcessInspection,
+): boolean => {
+  const nativePresence = (): boolean | undefined => {
+    try { probe(pid); return true; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+      if ((error as NodeJS.ErrnoException).code === 'EPERM') return undefined;
+      throw error;
+    }
+  };
+  const before = nativePresence();
+  if (before !== true) return before !== false;
+  // Native probes include zombies; procfs may prove that every member is dead.
+  const inspected = inspect(pid);
+  if (inspected !== undefined) return inspected;
+  // A group may vanish between the first probe and procfs enumeration. Only fresh
+  // native ESRCH proves absence; present or permission-denied groups stay protected.
+  return nativePresence() !== false;
+};
+// Keep a single-argument predicate: Array.some/filter supply extra callback arguments.
+const processIsAlive = (pid: number): boolean => inspectProcessLiveness(
+  pid,
+  (target) => { process.kill(target, 0); },
+  (target) => process.platform === 'linux' ? linuxProcessIsAlive(target) : true,
+);
+module.exports = { linuxProcessIsAlive, parseProcessStat, processIsAlive, inspectProcessLiveness };
 export type { ProcessRecord };

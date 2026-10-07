@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { linuxProcessIsAlive, parseProcessStat } = require('./helpers/process_liveness.ts');
+const { linuxProcessIsAlive, parseProcessStat, processIsAlive, inspectProcessLiveness } = require('./helpers/process_liveness.ts');
 
 describe('sandbox Linux process liveness', () => {
   let root: string;
@@ -114,5 +114,63 @@ describe('sandbox Linux process liveness', () => {
     fs.mkdirSync(path.join(root, '100/stat'));
     assert.isUndefined(linuxProcessIsAlive(-100, root));
     assert.isUndefined(linuxProcessIsAlive(-100, path.join(root, 'missing')));
+  });
+  it('reconciles a group reaped after the native probe but before procfs enumeration', () => {
+    record(100, 'Z');
+    assert.isFalse(inspectProcessLiveness(-100, () => {}, (pid: number) => linuxProcessIsAlive(pid, root)));
+    let probes = 0;
+    const probe = (pid: number): void => {
+      assert.equal(pid, -100);
+      if (++probes === 1) { fs.rmSync(path.join(root, '100'), { recursive: true }); return; }
+      throw Object.assign(new Error('fixture group reaped'), { code: 'ESRCH' });
+    };
+    assert.isFalse(inspectProcessLiveness(-100, probe, (pid: number) => linuxProcessIsAlive(pid, root)));
+    assert.equal(probes, 2);
+  });
+  it('keeps an empty scan protected when the native group still exists or its PID is reused', () => {
+    let probes = 0;
+    const probe = (): void => { if (++probes === 2) record(100, 'S'); };
+    assert.isTrue(inspectProcessLiveness(-100, probe, (pid: number) => linuxProcessIsAlive(pid, root)));
+    assert.equal(probes, 2);
+    assert.isTrue(linuxProcessIsAlive(-100, root));
+  });
+  it('keeps present malformed and missing target records protected after reinspection', () => {
+    record(100, 'S', -1);
+    let probes = 0;
+    const probe = (): void => { probes++; };
+    assert.isTrue(inspectProcessLiveness(-100, probe, (pid: number) => linuxProcessIsAlive(pid, root)));
+    assert.equal(probes, 2);
+    fs.rmSync(path.join(root, '100/stat'));
+    assert.isTrue(inspectProcessLiveness(-100, probe, (pid: number) => linuxProcessIsAlive(pid, root)));
+    assert.equal(probes, 4);
+  });
+  it('never uses procfs to override native permission denial', () => {
+    let inspections = 0;
+    const denied = (): void => { throw Object.assign(new Error('fixture access denied'), { code: 'EPERM' }); };
+    assert.isTrue(inspectProcessLiveness(-100, denied, () => { inspections++; return false; }));
+    assert.equal(inspections, 0);
+    let probes = 0;
+    assert.isTrue(inspectProcessLiveness(-100, () => { if (++probes === 2) denied(); }, () => undefined));
+    assert.equal(probes, 2);
+  });
+  it('preserves verified live/dead results and short-circuits initial native absence', () => {
+    for (const result of [true, false]) {
+      let probes = 0;
+      assert.equal(inspectProcessLiveness(-100, () => { probes++; }, () => result), result);
+      assert.equal(probes, 1);
+    }
+    const absent = (): void => { throw Object.assign(new Error('fixture group absent'), { code: 'ESRCH' }); };
+    assert.isFalse(inspectProcessLiveness(-100, absent, () => { throw new Error('must not inspect absent group'); }));
+  });
+  it('propagates unexpected native probe failures without treating them as absence', () => {
+    const failed = (): void => { throw Object.assign(new Error('fixture probe failed'), { code: 'EIO' }); };
+    assert.throws(() => inspectProcessLiveness(-100, failed, () => false), /fixture probe failed/u);
+    let probes = 0;
+    assert.throws(() => inspectProcessLiveness(-100, () => { if (++probes === 2) failed(); }, () => undefined), /fixture probe failed/u);
+    assert.equal(probes, 2);
+  });
+  it('keeps the native predicate compatible with Array.some and Array.filter', () => {
+    assert.isTrue([process.pid].some(processIsAlive));
+    assert.deepEqual([process.pid].filter(processIsAlive), [process.pid]);
   });
 });
