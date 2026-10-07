@@ -50,6 +50,8 @@ Only edited PR fixtures include `changes`; automatic review covers more than one
 human actor. Each association is crossed with both commenter and sender identity
 types on both comment events. Conditions reject unsupported tokens and property
 calls before evaluation, including JavaScript-only equality operators.
+Function names must use call syntax. PR fixtures have distinct head and base refs;
+status fixtures cover retargets from multiple nonempty prior-base values.
 The supported direct workflow and job keys are explicit, so execution defaults,
 matrix strategies, and quoted key alternatives fail closed. Rejected commands
 and untrusted associations cover both comment events; fork and closed-PR cases

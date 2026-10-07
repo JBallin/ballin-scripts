@@ -80,6 +80,9 @@ const conditionExpression = (expression: string): string => {
   }
   const argumentsStack: { name: string; commas: number }[] = [];
   tokens.forEach((token, index) => {
+    if (['contains', 'fromJSON'].includes(token)) {
+      assert.equal(tokens[index + 1], '(', 'unsupported caller condition syntax: functions must use call syntax');
+    }
     if (token === '(' && index > 0 && !['!', '&&', '||', '(', ',', 'contains', 'fromJSON'].includes(tokens[index - 1])) {
       assert.fail('unsupported caller condition syntax: only contains and fromJSON calls are supported');
     }
@@ -111,8 +114,8 @@ const eligible = (source: string, context: object): boolean => {
 };
 const pr = () => ({
   number: 42, state: 'open', draft: false,
-  head: { repo: { full_name: 'JBallin/ballin-scripts' } },
-  base: { repo: { full_name: 'JBallin/ballin-scripts' } },
+  head: { ref: 'feature-review', repo: { full_name: 'JBallin/ballin-scripts' } },
+  base: { ref: 'main', repo: { full_name: 'JBallin/ballin-scripts' } },
 });
 const github = (eventName = 'pull_request', action = 'synchronize') => ({
   repository: 'JBallin/ballin-scripts', actor: 'jballin', event_name: eventName,
@@ -140,6 +143,7 @@ describe('offline Claude caller contracts', () => {
       "github.actor.includes('ballin')", "github.actor ? true : false",
       "(true, github.actor == 'jballin')", "true, github.actor == 'jballin'",
       "contains((true, github.actor), 'jballin')", "fromJSON('true', 'false')",
+      'true && contains', 'true && fromJSON',
     ]) {
       assert.throws(() => conditionExpression(expression), 'unsupported caller condition syntax');
     }
@@ -292,10 +296,13 @@ describe('offline Claude caller contracts', () => {
 
   it('refreshes on pushes and base retargets, excluding other edits, forks and closed PRs', () => {
     const source = job(status, 'status');
-    const retarget = github('pull_request', 'edited');
-    if (!retarget.event.changes) throw new Error('missing edited fixture changes');
-    retarget.event.changes.base.ref.from = 'main';
-    for (const context of [github('pull_request', 'synchronize'), retarget]) {
+    const retargets = ['main', 'release'].map((priorBase) => {
+      const g = github('pull_request', 'edited');
+      if (!g.event.changes) throw new Error('missing edited fixture changes');
+      g.event.changes.base.ref.from = priorBase;
+      return g;
+    });
+    for (const context of [github('pull_request', 'synchronize'), ...retargets]) {
       assert.isTrue(eligible(source, { github: context }));
       for (const change of [
         (g: ReturnType<typeof github>) => { g.event.pull_request.state = 'closed'; },
