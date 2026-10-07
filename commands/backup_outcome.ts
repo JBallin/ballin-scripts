@@ -13,7 +13,8 @@ const observeBackupFailure = (evidence: BackupFailureEvidence, category: BackupF
 const observeRepositoryFailure = (evidence: BackupFailureEvidence, error: unknown): void => {
   let category: BackupFailureCategory = 'unknown';
   if (error instanceof BackupRepositoryError) {
-    if (error.problem === 'connection' || error.problem === 'timeout') category = 'transport';
+    if (error.publicationConfirmed && error.cleanupFailed) category = 'local_state';
+    else if (error.problem === 'connection' || error.problem === 'timeout') category = 'transport';
     else if (error.problem === 'authentication') category = 'authentication';
     else if (error.problem === 'moved' || (error.problem === 'rejected' && error.reconciliationFailed)) category = 'reconciliation';
     else if (error.problem === 'local-io' || error.problem === 'cleanup') category = 'local_state';

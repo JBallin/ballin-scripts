@@ -34,6 +34,11 @@ describe('backup terminal failure evidence', () => {
     observeBackupFailure(evidence, 'local_state');
     observeBackupFailure(evidence, 'transport');
     assert.equal(evidence.category, 'unknown');
+    const confirmed = new RepositoryError('invalid-data');
+    confirmed.cleanupFailed = true; confirmed.publicationConfirmed = true;
+    const remaining: BackupFailureEvidence = {};
+    observeRepositoryFailure(remaining, confirmed);
+    assert.equal(remaining.category, 'local_state');
     for (const problem of ['connection', 'authentication', 'cleanup', 'uncertain']) {
       const error = new RepositoryError(problem); error.cleanupFailed = true;
       const evidence: BackupFailureEvidence = {};

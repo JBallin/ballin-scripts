@@ -342,6 +342,7 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, evidence
 const stageSnapshots = (observations: SnapshotSourceObservation[], evidence: BackupFailureEvidence): StagedSnapshot[] | null => {
   const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || configurationSnapshotGroups.has(source.definition.name)));
   if (failure && failure.status === 'discovery-failed') {
+    observeBackupFailure(evidence, ['source-limit-exceeded', 'source-access-failed'].includes(failure.reason) ? 'local_state' : 'unknown');
     const diagnostic = failure.reason === 'source-limit-exceeded'
       ? `recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'}`
       : `selected ${failure.definition.category === 'claude' ? 'Claude Code' : 'Codex'} source could not be discovered completely`;

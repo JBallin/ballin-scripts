@@ -36,6 +36,7 @@ class RepositoryError extends Error {
   completedStage?: 'repository-created';
   cleanupFailed?: boolean;
   reconciliationFailed?: boolean;
+  publicationConfirmed?: boolean;
   constructor(problem: RepositoryProblem) {
     super(repositoryMessages[problem]);
     this.problem = problem;
@@ -632,6 +633,7 @@ const publish = (
   ) throw new RepositoryError('uncertain');
   if (result.cleanupFailed || transportFailure) {
     writeStderrLine('ballin backup: repository publication confirmed, but transport cleanup is incomplete; cache contents were not advanced');
+    if (transportFailure) transportFailure.publicationConfirmed = true;
     throw transportFailure ?? new RepositoryError('cleanup');
   }
   return after;

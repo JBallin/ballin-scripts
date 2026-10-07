@@ -2138,6 +2138,34 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1); assertOutcome('failure', 'local_state');
     });
 
+    it('classifies only remaining cleanup after malformed publication response is confirmed by readback', () => {
+      source(); const value = state(); value.faults.publish = 'malformed'; saveState(value);
+      const result = observedRun(transportCleanupFailure('BallinPublish'));
+      assertTransportCleanupFailed(result);
+      assert.include(result.stderr, 'repository publication confirmed');
+      assert.equal(remote('zshrc.sh'), 'local\n');
+      assertOutcome('failure', 'local_state');
+    });
+
+    for (const [reason, category] of [
+      ['source-limit-exceeded', 'local_state'], ['source-access-failed', 'local_state'],
+      ['prerequisite-command-failed', 'unknown'],
+    ]) {
+      it(`recognizes ${reason} discovery evidence without exposing source diagnostics`, () => {
+        const preload = `
+          const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
+          const definition = snapshots.snapshotDefinitions.find((definition) => definition.name === 'codex_user_skills.bundle.json');
+          snapshots.observeSnapshotSources = () => [{ definition, status: 'discovery-failed', reason: ${JSON.stringify(reason)},
+            source: '/private/DUMMY_SOURCE_PATH', error: new Error('DUMMY_PRIVATE_DISCOVERY_ERROR') }];
+        `;
+        const result = observedRun(preload);
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertOutcome('failure', category);
+        assert.notInclude(JSON.stringify(capture.readEvents()), 'DUMMY');
+        assert.lengthOf(state().requests, 0);
+      });
+    }
+
     it('includes publication transport cleanup in the terminal failure despite successful readback', () => {
       source(); const result = observedRun(transportCleanupFailure('BallinPublish'));
       assertTransportCleanupFailed(result);
