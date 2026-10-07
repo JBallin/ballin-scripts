@@ -731,7 +731,10 @@ function runBackupCommand(args = process.argv.slice(2)): void {
         if (directoryList || directoryFile) {
           const { entries } = readDirectorySnapshot(bytes);
           process.stdout.write(directoryList ? listDirectoryMembers(entries) : readDirectoryMember(entries, args[3]));
-          if (directoryList) writeDirectoryReadHint('--file <path>');
+          if (directoryList && interactiveReadHint()) {
+            writeStderrLine('');
+            writeDirectoryReadHint('--file <path>');
+          }
         } else {
           process.stdout.write(bytes);
           if (directorySnapshotFileNames.has(args[1]) && interactiveReadHint()) {
