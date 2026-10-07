@@ -1,14 +1,19 @@
 name: CI
 on:
   workflow_dispatch:
+    inputs:
+      reviewed_driver_sha:
+        description: Exact qualification driver commit approved for this dispatch
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: experiment-319-adaptive-evidence
+  group: experiment-319-c8-qualification
   cancel-in-progress: false
 jobs:
-  adaptive-evidence:
-    if: github.actor == 'JBallin' && github.ref == 'refs/heads/experiment/319-adaptive-evidence'
+  c8-qualification:
+    if: github.actor == 'JBallin' && github.ref == 'refs/heads/experiment/319-c8-qualification'
     runs-on: ubuntu-24.04
     timeout-minutes: 140
     steps:
@@ -24,7 +29,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 5
         with:
-          ref: f6759244d12f3f6eac2141f4c8b6da90887acded
+          ref: 2951bb1a7ff9696f2c4b302ae6768fb9ad974475
           path: source
           persist-credentials: false
       - name: Set up the older diagnostic runtime
@@ -60,5 +65,19 @@ jobs:
           docker build --platform linux/amd64 --build-arg "BENCH_UID=$(id -u)"
           --build-arg "BENCH_GID=$(id -g)" --tag ballin-319-quota:reviewed
           driver/.github/experiments/319-adaptive
-      - name: Run the bounded adaptive comparison
+      - name: Run the bounded corrected qualification
+        env:
+          BENCH_319_REVIEWED_DRIVER_SHA: ${{ inputs.reviewed_driver_sha }}
         run: python3 driver/.github/experiments/319-adaptive/measure.py "$GITHUB_WORKSPACE/source"
+      - name: Retain raw profiles from every terminated sample
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        timeout-minutes: 5
+        with:
+          name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/319-c8-qualification/**/raw-profiles.tar.gz
+            ${{ runner.temp }}/319-c8-qualification/**/raw-manifest.json
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,14 +1,18 @@
-"""One bounded harness-corrected #319 comparison; no automatic retry or adoption."""
-import base64, hashlib, io, json, os, re, shutil, signal, statistics, subprocess, sys, tarfile, time, urllib.request
+"""One c8-corrected #319 qualification; no retries or automatic adoption."""
+import base64, datetime, hashlib, io, json, os, re, shutil, signal, statistics, subprocess, sys, tarfile, time, urllib.request
 from pathlib import Path
 
-HEAD = "f6759244d12f3f6eac2141f4c8b6da90887acded"
-TREE = "d825bcfa9a8963e5061c006fda447934287857f6"
+HEAD = "2951bb1a7ff9696f2c4b302ae6768fb9ad974475"
+TREE = "9ea1d0351371980009f6152441f042d67e23f55e"
 LOCK = "3abd4922490a95cf538c52e16e16fccc739b9c277d4217e21d0064efe9acd797"
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
 DRIVER = Path(__file__).resolve().parent
-ARTIFACTS = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "319-adaptive-evidence"
+ARTIFACTS = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "319-c8-qualification"
 BUDGET = 1200
+RAW_RETENTION_BUDGET = 120
+CAPTURE_BUDGET = 120
+POST_GATE_OVERHEAD = 300  # Group stop, source checks, comparison, and labeled removal.
+FINAL_RETENTION_RESERVE = 600
 ORDINARY_SETUP_MARGIN = 180
 ORDER = ("affinity2-adaptive", "quota2-node2415-adaptive", "four-serial", "four-adaptive", "four-adaptive", "four-serial")
 CONTAINER = None
@@ -234,6 +238,11 @@ def remove_container(directory):
     CONTAINER_REMOVAL_ATTEMPTED = True
     owned = CONTAINER
     try:
+        identity = json.loads(bounded(directory, "container-inspect", ["docker", "inspect", owned, "--format",
+            "[{{json .Id}},{{json .Name}},{{json .Config.Labels}}]"], timeout=30))
+        assert identity[0] == owned and identity[1] == "/ballin-319-" + os.environ["GITHUB_RUN_ID"]
+        assert identity[2]["ballin319.run"] == os.environ["GITHUB_RUN_ID"]
+        assert identity[2]["ballin319.driver"] == os.environ["GITHUB_SHA"]
         bounded(directory, "container-remove", ["docker", "rm", "--force", owned], timeout=60)
         CONTAINER = None
     finally:
@@ -250,7 +259,8 @@ def abort_collection(directory, result, reason):
           "isolationBoundary": "dedicated GitHub-hosted job VM; owned quota container",
           "detachedDescendantsVerified": False, "runnerTeardownObserved": False})
     # Preserve files/logs and clean the specifically owned container. No further
-    # tests, runtime probes or coverage diagnostics follow a failed gate.
+    # tests, runtime probes or coverage conversion follow a failed gate.
+    # Raw bytes were snapshotted before entering this abort path.
     print(json.dumps(result), flush=True)
     raise SystemExit(1)
 
@@ -258,15 +268,16 @@ def abort_collection(directory, result, reason):
 def bundle():
     memory = io.BytesIO()
     with tarfile.open(fileobj=memory, mode="w:gz") as archive:
-        archive.add(ARTIFACTS, arcname="319-adaptive-evidence")
+        archive.add(ARTIFACTS, arcname="319-c8-qualification",
+                    filter=lambda item: None if item.name.endswith("/raw-profiles.tar.gz") else item)
     data = memory.getvalue()
     if len(data) > 20 * 1024 * 1024:
         raise RuntimeError("Log evidence exceeds the fixed 20MiB cap")
-    print("BEGIN_319_ADAPTIVE_EVIDENCE_TGZ " + hashlib.sha256(data).hexdigest(), flush=True)
+    print("BEGIN_319_C8_QUALIFICATION_EVIDENCE_TGZ " + hashlib.sha256(data).hexdigest(), flush=True)
     encoded = base64.b64encode(data).decode("ascii")
     for offset in range(0, len(encoded), 1024):
         print(encoded[offset:offset+1024], flush=True)
-    print("END_319_ADAPTIVE_EVIDENCE_TGZ", flush=True)
+    print("END_319_C8_QUALIFICATION_EVIDENCE_TGZ", flush=True)
 
 
 def main():
@@ -274,11 +285,13 @@ def main():
     assert sys.platform == "linux" and os.getuid() != 0
     assert os.environ["GITHUB_ACTIONS"] == "true" and os.environ["RUNNER_ENVIRONMENT"] == "github-hosted"
     assert os.environ["GITHUB_REPOSITORY"] == "JBallin/ballin-scripts"
-    assert os.environ["GITHUB_REF"] == "refs/heads/experiment/319-adaptive-evidence"
+    assert os.environ["GITHUB_REF"] == "refs/heads/experiment/319-c8-qualification"
     assert os.environ["GITHUB_ACTOR"] == "JBallin" and os.environ["GITHUB_RUN_ATTEMPT"] == "1"
     assert source_unchanged()
     package = json.loads((ROOT / "package.json").read_text())
     assert package["scripts"]["test:unit"] == "mocha --parallel"
+    assert package["scripts"]["test:coverage"] == "node test/coverage.ts npm run test:unit"
+    assert package["c8"]["all"] is True
     assert package["c8"]["statements"] == package["c8"]["lines"] == 99.2
     assert package["c8"]["branches"] == 96.7 and package["c8"]["functions"] == 100
     permitted = sorted(os.sched_getaffinity(0))
@@ -286,24 +299,27 @@ def main():
     four = set(permitted[:4])
     ARTIFACTS.mkdir()
     driver_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=DRIVER.parents[2], text=True, timeout=30).strip()
-    assert driver_head == os.environ["GITHUB_SHA"], "Driver checkout must match this dispatch"
-    request = urllib.request.Request("https://api.github.com/repos/JBallin/ballin-scripts/actions/workflows/299906219/runs?branch=experiment%2F319-adaptive-evidence&event=workflow_dispatch&per_page=100",
+    assert driver_head == os.environ["GITHUB_SHA"] == os.environ["BENCH_319_REVIEWED_DRIVER_SHA"], "Exact reviewed driver required"
+    request = urllib.request.Request("https://api.github.com/repos/JBallin/ballin-scripts/actions/workflows/299906219/runs?branch=experiment%2F319-c8-qualification&event=workflow_dispatch&per_page=100",
                                     headers={"Accept": "application/vnd.github+json", "User-Agent": "ballin-319-bounded-comparison"})
     with urllib.request.urlopen(request, timeout=30) as response:
         history = json.loads(response.read(2 * 1024 * 1024))
     write(ARTIFACTS / "dispatch-history.json", history)
-    assert history["total_count"] == 2 and len(history["workflow_runs"]) == 2, "Only the failed original and one harness-corrected dispatch are approved"
-    prior = [item for item in history["workflow_runs"] if item["id"] == 37553982854]
-    assert len(prior) == 1
-    prior = prior[0]
-    assert prior["head_sha"] == "82440556d525b602fbefba27b6e1df5b7217165d" and prior["run_attempt"] == 1
-    assert prior["status"] == "completed" and prior["conclusion"] == "failure"
-    current = [item for item in history["workflow_runs"] if str(item["id"]) == os.environ["GITHUB_RUN_ID"]]
-    assert len(current) == 1 and current[0]["id"] != prior["id"]
-    run = current[0]
+    assert history["total_count"] == 1 and len(history["workflow_runs"]) == 1, "Exactly one branch dispatch is approved"
+    run = history["workflow_runs"][0]
     assert str(run["id"]) == os.environ["GITHUB_RUN_ID"] and run["head_sha"] == driver_head and run["run_attempt"] == 1
-    started = int(os.environ["BENCH_319_JOB_STARTED_EPOCH"])
-    DEADLINE = started + 138 * 60  # Reserve two minutes within the 140-minute job for cleanup/log retention.
+    jobs_request = urllib.request.Request(
+        "https://api.github.com/repos/JBallin/ballin-scripts/actions/runs/" + os.environ["GITHUB_RUN_ID"] + "/jobs?per_page=100",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "ballin-319-bounded-comparison"})
+    with urllib.request.urlopen(jobs_request, timeout=30) as response:
+        jobs = json.loads(response.read(2 * 1024 * 1024))
+    matches = [job for job in jobs["jobs"] if job["name"] == "c8-qualification"]
+    assert jobs["total_count"] == 1 and len(matches) == 1 and matches[0]["status"] == "in_progress"
+    started = int(datetime.datetime.fromisoformat(matches[0]["started_at"].replace("Z", "+00:00")).timestamp())
+    assert started <= int(os.environ["BENCH_319_JOB_STARTED_EPOCH"]) <= time.time()
+    DEADLINE = started + 140 * 60 - FINAL_RETENTION_RESERVE
+    write(ARTIFACTS / "job-clock.json", {"job": matches[0], "actualJobStartedEpoch": started,
+          "operationsDeadline": DEADLINE, "finalRetentionReserveSeconds": FINAL_RETENTION_RESERVE})
     contract = selected_files()
     write(ARTIFACTS / "contract.json", {"commit": HEAD, "tree": TREE, "lockSha256": LOCK, **contract})
     os.sched_setaffinity(0, four)
@@ -317,12 +333,14 @@ def main():
     RUNTIMES["v24.21.0"] = preflight
     write(ARTIFACTS / "preflight.json", {"runtime": preflight, "order": ORDER, "sampleBudgetSeconds": BUDGET,
           "gateCountCap": 6, "jobBudgetMinutes": 140, "retries": 0,
-          "attemptOrdinal": 2, "priorFailedRun": prior["id"], "dispatchCountCap": 2,
+          "attemptOrdinal": 1, "dispatchCountCap": 1, "rawRetentionBudgetSeconds": RAW_RETENTION_BUDGET,
+          "captureBudgetSeconds": CAPTURE_BUDGET, "postGateOverheadSeconds": POST_GATE_OVERHEAD,
+          "finalRetentionReserveSeconds": FINAL_RETENTION_RESERVE,
           "constrainedInterpretation": "Two single smoke checks, not repeatability or the original full environment reproduction",
           "comparison": "Four-CPU Node24.21 ABBA only; identical preload/source/dependencies/selection; fresh fixtures and coverage"})
     name = "ballin-319-" + os.environ["GITHUB_RUN_ID"]
     create = ["docker", "create", "--init", "--name", name, "--label", "ballin319.run=" + os.environ["GITHUB_RUN_ID"],
-              "--cpus=2", "--cpuset-cpus", ",".join(map(str, sorted(four))), "--user", str(os.getuid()) + ":" + str(os.getgid()),
+              "--label", "ballin319.driver=" + driver_head, "--cpus=2", "--cpuset-cpus", ",".join(map(str, sorted(four))), "--user", str(os.getuid()) + ":" + str(os.getgid()),
               "--mount", f"type=bind,src={ROOT},dst={ROOT}",
               "--mount", f"type=bind,src={os.environ['RUNNER_TEMP']},dst={os.environ['RUNNER_TEMP']}",
               "--mount", f"type=bind,src={DRIVER},dst={DRIVER},readonly",
@@ -339,7 +357,7 @@ def main():
     pairs = []
     expected_count = None
     for index, mode in enumerate(ORDER, 1):
-        assert DEADLINE - time.time() >= BUDGET + 120, "Insufficient remaining budget; do not start another gate"
+        assert DEADLINE - time.time() >= BUDGET + RAW_RETENTION_BUDGET + CAPTURE_BUDGET + POST_GATE_OVERHEAD, "Insufficient remaining budget; do not start another gate"
         assert source_unchanged()
         cpus = set(permitted[:2]) if index == 1 else four
         os.sched_setaffinity(0, cpus)
@@ -361,7 +379,7 @@ def main():
         # Adaptive samples use the actual default; only serial controls add a boolean flag.
         gate = ["npm", "test"] + (["--", "--", "--", "--no-parallel"] if mode == "four-serial" else [])
         command = docker_command(["/usr/bin/time", "-v", *gate], sample_env) if index == 2 else gate
-        assert DEADLINE - time.time() >= BUDGET + 120, "Preparation left insufficient budget for another gate"
+        assert DEADLINE - time.time() >= BUDGET + RAW_RETENTION_BUDGET + CAPTURE_BUDGET + POST_GATE_OVERHEAD, "Preparation left insufficient budget for another gate"
         write(directory / "provenance.json", {"commit": HEAD, "tree": TREE, "lockSha256": LOCK,
               "mode": mode, "command": gate, "environment": sample_env, "affinity": sorted(cpus),
               "comparisonEligible": index >= 3})
@@ -369,6 +387,13 @@ def main():
         result["mode"] = mode
         result["completedStages"] = re.findall(r"^> ballin-scripts@\S+ (\S+)\s*$", log, re.M)
         result["passingCounts"] = [int(value) for value in re.findall(r"^\s*(\d+) passing", log, re.M)]
+        try:
+            retained = bounded(directory, "raw-retention", ["python3", str(DRIVER / "retain_raw.py"), str(ROOT), str(directory)],
+                               base_env, timeout=RAW_RETENTION_BUDGET)
+            result["rawRetention"] = json.loads(retained)
+        except Exception as error:
+            result["rawRetention"] = {"complete": False, "error": str(error)}
+            abort_collection(directory, result, "Raw retention failed; stop qualification")
         completed = (result["exitCode"] == 0 and result["ownedGroupCleanup"] is None
                      and not result["outerBudgetExceeded"] and not result["interrupted"]
                      and len(result["passingCounts"]) == 1 and result["passingCounts"][0] > 0
@@ -388,11 +413,14 @@ def main():
             result["fixtureEntries"] = leftovers
         except Exception as error:
             abort_collection(directory, result, "Post-gate verification failed: " + str(error))
+        diagnostic_env = {key: value for key, value in base_env.items() if key not in {"NODE_OPTIONS", "NODE_V8_COVERAGE"}}
+        try:
+            bounded(directory, "coverage-capture", ["node", str(DRIVER / "coverage.cjs"), "capture", str(directory)],
+                    diagnostic_env, timeout=CAPTURE_BUDGET)
+        except Exception as error:
+            abort_collection(directory, result, "Corrected coverage capture failed: " + str(error))
         if index == 2:
             remove_container(directory)
-        if index >= 3:
-            diagnostic_env = {key: value for key, value in sample_env.items() if key != "NODE_OPTIONS"}
-            bounded(directory, "coverage-capture", ["node", str(DRIVER / "coverage.cjs"), "capture", str(directory)], diagnostic_env, timeout=60)
         result["completedGate"] = True
         write(directory / "result.json", result)
         print(json.dumps(result), flush=True)
@@ -414,6 +442,8 @@ def main():
                "constrainedInterpretation": "Each constrained case is one successful smoke check; no repeatability claim",
                "ordinaryCi": "Still requires the actual 20-minute CI job, including setup and evidence margin",
                "ordinaryCiRemainingSeconds": ordinary_margin, "ordinaryCiReservedSetupSeconds": ORDINARY_SETUP_MARGIN,
+               "rawArtifactExpectedName": "coverage-raw-" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"],
+               "rawArtifactUploadConfirmed": False,
                "detachedDescendantsVerified": False, "runnerTeardownObserved": False}
     write(ARTIFACTS / "summary.json", summary)
     print("ADAPTIVE_COMPARISON_SUMMARY " + json.dumps(summary), flush=True)
