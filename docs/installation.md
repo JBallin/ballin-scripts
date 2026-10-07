@@ -169,9 +169,10 @@ or case arm.
 The helper leaves the file unchanged and prints the exact PATH line for manual
 placement before following this standard installation guide. This conservative
 check ignores comments, quoted data, and simple heredoc bodies; it does not
-interpret dynamic shell behavior. Arithmetic with nested parentheses and
-ambiguous heredoc forms also require manual placement. Startup-file contents
-are never executed by these checks.
+interpret dynamic shell behavior. Arithmetic with nested parentheses, ambiguous
+heredoc forms, and ambiguous brace/hash forms require manual placement. This
+includes valid zsh `{#` block comments. Startup-file contents are never executed
+by these checks.
 
 The helper uses existing GitHub CLI authentication or requests its normal
 browser login flow. If `GH_TOKEN` or `GITHUB_TOKEN` prevents login, GitHub CLI

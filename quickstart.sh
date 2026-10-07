@@ -183,7 +183,12 @@ configure_path() {
       const heredocs = [];
       for (let index = 0; index < contents.length;) {
         const character = contents[index];
-        if (character === "#" && (plain === "" || /[\s;&|(){}]$/u.test(plain))) {
+        if (character === "#" && !plain.endsWith("\x24{")
+          && (plain === "" || /[\s;&|(){}]$/u.test(plain))) {
+          if (/[{}]$/u.test(plain)) {
+            fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
+            break;
+          }
           const newline = contents.indexOf("\n", index);
           index = newline < 0 ? contents.length : newline;
           continue;
@@ -293,7 +298,7 @@ configure_path() {
   if [[ -f "$scratch/profile-transfer-check" || -f "$scratch/profile-transfer-check.ambiguous" ]]; then
     printf '\nManual PATH setup for %s:\n%s\n' "$profile" "$line" >&2
     if [[ -f "$scratch/profile-transfer-check.ambiguous" ]]; then
-      fail 'The startup file contains arithmetic or heredoc syntax that this check cannot interpret safely. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
+      fail 'The startup file contains shell syntax that this check cannot interpret safely. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
     fi
     fail 'The startup file contains a recognized return, exit, or executable exec form that may skip PATH setup. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
   fi

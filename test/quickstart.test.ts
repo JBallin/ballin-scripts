@@ -555,7 +555,7 @@ exec /bin/cp "$@"
           const result = run('', { SHELL: `/bin/${shell}` });
           assert.equal(result.status, 1, contents + result.stdout + result.stderr);
           assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
-          assert.include(result.stderr, 'arithmetic or heredoc syntax that this check cannot interpret safely');
+          assert.include(result.stderr, 'shell syntax that this check cannot interpret safely');
           assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
           assert.equal(fs.readFileSync(profile, 'utf8'), contents);
           assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
@@ -569,6 +569,79 @@ exec /bin/cp "$@"
       assert.notInclude(readLog(), 'ballin:');
     });
     for (const existingPath of [false, true]) {
+      it(`preserves ${shell} profiles with ambiguous brace/hash words before PATH ${existingPath ? 'reuse' : 'append'}`, () => {
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+        const sentinel = path.join(root, 'profile-executed');
+        for (const prefix of [': \\${#PATH};', 'echo foo{#bar};', 'echo foo}#bar;']) {
+          for (const command of ['return', 'exit 0', 'exec /bin/true']) {
+            const contents = `touch '${sentinel}'\n${prefix} ${command}\n` + (existingPath ? line + '\n' : '');
+            fs.writeFileSync(profile, contents, { mode: 0o640 });
+            const result = run('', { SHELL: `/bin/${shell}` });
+            assert.equal(result.status, 1, contents + result.stdout + result.stderr);
+            assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+            assert.include(result.stderr, 'shell syntax that this check cannot interpret safely');
+            assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+            assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+            assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+            assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+            assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+          }
+        }
+        assert.notInclude(readLog(), 'auth status --active');
+        assert.notInclude(readLog(), '/main/install.sh');
+        assert.notInclude(readLog(), 'install.sh:');
+        assert.notInclude(readLog(), 'ballin:');
+      });
+      if (shell === 'zsh') {
+        it(`requires manual placement for a zsh brace-adjacent block comment before PATH ${existingPath ? 'reuse' : 'append'}`, () => {
+          const profile = path.join(home, '.zshrc');
+          const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+          const sentinel = path.join(root, 'profile-executed');
+          const contents = `touch '${sentinel}'\n{# harmless block comment\n:\n}\n` + (existingPath ? line + '\n' : '');
+          fs.writeFileSync(profile, contents, { mode: 0o640 });
+          const result = run('', { SHELL: '/bin/zsh' });
+          assert.equal(result.status, 1, result.stdout + result.stderr);
+          assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+          assert.include(result.stderr, 'shell syntax that this check cannot interpret safely');
+          assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+          assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+          assert.isFalse(fs.existsSync(sentinel));
+          assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+          assert.notInclude(readLog(), 'auth status --active');
+          assert.notInclude(readLog(), '/main/install.sh');
+          assert.notInclude(readLog(), 'ballin:');
+        });
+      }
+      it(`preserves ${shell} profiles with parameter-length expansions before PATH ${existingPath ? 'reuse' : 'append'}`, () => {
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+        const sentinel = path.join(root, 'profile-executed');
+        const forms = [
+          '[ ${#PATH} -gt 0 ] && return',
+          'if [ ${#example} -gt 3 ]; then exit 0; fi',
+          '[ ${#PATH} -gt 0 ] && exec /bin/true',
+          'case ${#PATH} in *) builtin return ;; esac',
+          'VALUE=${#PATH} return 0',
+        ];
+        for (const form of forms) {
+          const contents = `touch '${sentinel}'\nexample=abcd\n${form}\n` + (existingPath ? line + '\n' : '');
+          fs.writeFileSync(profile, contents, { mode: 0o640 });
+          const result = run('', { SHELL: `/bin/${shell}` });
+          assert.equal(result.status, 1, contents + result.stdout + result.stderr);
+          assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+          assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+          assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+          assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+          assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        }
+        assert.notInclude(readLog(), 'auth status --active');
+        assert.notInclude(readLog(), '/main/install.sh');
+        assert.notInclude(readLog(), 'install.sh:');
+        assert.notInclude(readLog(), 'ballin:');
+      });
       it(`preserves ${shell} profiles with case-arm transfers before PATH ${existingPath ? 'reuse' : 'append'}`, () => {
         const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
         const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
@@ -694,6 +767,11 @@ exec /bin/cp "$@"
         'case "$TERM" in dumb) : ;; *) printf %s return ;; esac\n',
         "CASE_TEXT='case \"$TERM\" in dumb) return ;; esac'\n# case text) exit ;;\n",
         "case \"$TERM\" in 'dumb) return') : ;; esac\n",
+        '[ ${#PATH} -gt 0 ] && printf %s return\n',
+        'VALUE=${#PATH} # return; exit; exec /bin/true\n',
+        "printf %s '${#PATH} && return'\n",
+        '{ # return; exit; exec /bin/true\n:\n}\n',
+        "printf %s 'foo{#bar}; return'\n",
       ];
       for (const text of harmless) {
         const contents = `touch '${sentinel}'\n` + text;
