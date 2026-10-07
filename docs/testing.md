@@ -3,8 +3,15 @@
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
 Run commands from the repository root. Use `npm test` for the complete local
-gate, or `npm run test:coverage` for coverage alone. CI runs the same coverage
-command once.
+and CI gate, or `npm run test:coverage` for coverage alone. Both use the shared
+Mocha command in `test:unit`; lint, typechecks and coverage checks remain part
+of `npm test`. The [Mocha configuration](../.mocharc.js) uses two workers when
+Node reports at least four available CPUs and runs serially on smaller hosts.
+
+The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
+executed absolute script paths. It retains `all: true` and every coverage threshold;
+unexecuted included files still count as uncovered. Use the same wrapper when
+reporting saved profiles, and review the compatibility correction when updating c8.
 
 ## Pull request review
 
@@ -154,6 +161,11 @@ Neither command needs an analytics opt-out or `CI=true` in your shell.
 suppression, Ballin overrides, and test fixture selectors before production
 imports. Production commands still suppress analytics in CI.
 
+Each parallel worker owns a separate config and retains it until process exit,
+so reused workers and cached config modules see the same path. Normal process
+exit removes the config. Tests must restore their own temporary environment
+and module overrides.
+
 Analytics-enabled tests use explicit environments, temporary install IDs, and
 injected senders or mocked HTTPS requests. Installer, config, and public CLI
 fixtures use complete child environments through the
@@ -184,9 +196,9 @@ run replaces the raw coverage data:
 
 ```shell
 npm run test:coverage
-node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
+node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
 CI=true npm run test:coverage
-node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
+node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
 ```
 
 Compare exact totals in `coverage-summary.json` and file/source-location maps
@@ -199,8 +211,9 @@ Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
 
-When the coverage gate fails, CI attempts to retain exact reports and runtime,
-commit, tree, and lockfile metadata in a compact artifact for seven days. A
+When the complete gate fails after producing raw V8 coverage, CI attempts to
+retain exact reports and runtime, commit, tree, and lockfile metadata in a compact
+artifact for seven days. Failures before coverage starts skip these diagnostics. A
 separate failure-only artifact upload retains the raw V8 data when available,
 even if compact report generation fails. An intentional successful
 `workflow_dispatch` run retains only the compact evidence. Ordinary successful
@@ -299,12 +312,44 @@ That merged tree includes other changes, so these runs are not a controlled
 before/after estimate of the optimization. Use exact run provenance before
 attributing differences to a patch or resource contention.
 
-Retain serial execution and the single complete gate. Mocha's parallel workers
-load required setup once per worker and can run multiple files, while the current
-root `afterAll` removes its config and restores the environment after a file.
-Worker reuse would need a compatible fixture lifecycle before enabling parallel
-mode. Splitting suites adds maintenance cost without a demonstrated additional
-benefit; use focused selection for feedback and retain complete final validation.
+The October 5, 2026 [Linux comparison](https://github.com/JBallin/ballin-scripts/actions/runs/37362898477)
+ran six complete gates on one four-CPU Ubuntu runner at frozen commit `c587fa6`,
+with Node 24.21.0, Mocha 11.7.6 and c8 12.0.0. Adjacent pairs alternated order:
+
+| Pair | Serial | Two workers | Reduction |
+| --- | --- | --- | --- |
+| 1 | 727.46s | 597.46s | 17.87% |
+| 2 | 713.72s | 590.49s | 17.27% |
+| 3 | 716.61s | 582.39s | 18.73% |
+
+All six passed 1,694 tests with no timeout, interruption or fixture leak. The
+median paired reduction was 17.87%; CPU time increased 5.52–5.85%. Queue and
+evidence capture time are excluded. Statement/function outcomes and effective
+V8 covered/uncovered intervals matched across all 36 production files; branch
+map geometry differed in two files. Coverage thresholds and Mocha timeouts are
+unchanged. These repeated results support two workers on the measured four-CPU
+host. The shared configuration retains serial execution below four available CPUs
+to limit contention between subprocess-heavy suites. Node supplies the CPU estimate
+through `os.availableParallelism()`. Runtime varies with machine load and later
+source changes. Use focused selection for feedback and retain the single complete
+final gate.
+
+A later [two-CPU affinity check](https://github.com/JBallin/ballin-scripts/actions/runs/37420139731)
+at `c9f0a9c` passed serially with 1,842 tests in 735.05s. The two-worker gate
+then failed with one default two-second timeout in the update destination-type
+test, which performs four CLI launches. Collection stopped after that failure;
+the attempt produced no valid speedup comparison. It used Node 24.21.0 and
+affinity control, so it does not reproduce the earlier Node 24.15 quota report.
+
+The October 7, 2026 [corrected qualification](https://github.com/JBallin/ballin-scripts/actions/runs/37645821911)
+at `2951bb1` passed six complete gates with 2,001 tests each and unchanged
+coverage thresholds. Two four-CPU serial/two-worker pairs reduced gate time by
+19.20% and 20.16%, with a 19.68% median and equivalent statement/function
+outcomes and effective V8 coverage across 40 production files. The two-CPU
+affinity case on Node 24.21.0 and the two-CPU quota case on Node 24.15.0 each
+passed serially; these are single smoke checks. The slower two-worker gate left
+443.73 seconds within the ordinary 20-minute budget. Setup and later source
+changes still require verification in ordinary CI.
 
 ## Runtime and platform limits
 
