@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { linuxProcessIsAlive } = require('./process_liveness.ts');
+const { processIsAlive } = require('./process_liveness.ts');
 const { activeScenario, scenarioPath } = require('./sandbox_scenarios.ts');
 const { fixtureState, installRepositoryFixture } = require('./repository.ts');
 import type { FixtureState } from './repository.ts';
@@ -16,18 +16,6 @@ const source = path.resolve(__dirname, '../..');
 const systemTools = ['bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'rm', 'tail'];
 const sandboxCommandTimeout = 120000;
 const sandboxSuiteTimeout = 300000;
-const processIsAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    // kill(0) includes zombies. Only verified Linux dead processes may be ignored;
-    // macOS and unavailable/ambiguous inspection retain the native conservative result.
-    return process.platform === 'linux' ? linuxProcessIsAlive(pid) ?? true : true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
-    if ((error as NodeJS.ErrnoException).code === 'EPERM') return true;
-    throw error;
-  }
-};
 const existsWithoutFollowingLinks = (file: string): boolean => {
   try { fs.lstatSync(file); return true; } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
