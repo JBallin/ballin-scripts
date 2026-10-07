@@ -52,6 +52,12 @@ types on both comment events. Conditions reject unsupported tokens and property
 calls before evaluation, including JavaScript-only equality operators.
 Function names must use call syntax. PR fixtures have distinct head and base refs;
 status fixtures cover retargets from multiple nonempty prior-base values.
+Automatic positives vary actors and head refs. Manual fixtures cross actors,
+command bodies, associations, and both identity types. Status positives cover
+drafts and multiple current bases on pushes and retargets. Workflow-wide caller
+inventory includes every YAML file referencing the runtime or Claude credential.
+Condition equality supports only direct string literals and the explicitly known
+string fields; comparisons requiring Actions type coercion fail closed.
 The supported direct workflow and job keys are explicit, so execution defaults,
 matrix strategies, and quoted key alternatives fail closed. Rejected commands
 and untrusted associations cover both comment events; fork and closed-PR cases

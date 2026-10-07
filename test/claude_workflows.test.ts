@@ -79,7 +79,21 @@ const conditionExpression = (expression: string): string => {
     offset = tokenPattern.lastIndex;
   }
   const argumentsStack: { name: string; commas: number }[] = [];
+  const stringFields = [
+    'github.repository', 'github.actor', 'github.event_name', 'github.event.action',
+    'github.event.pull_request.state', 'github.event.pull_request.head.repo.full_name',
+    'github.event.pull_request.base.repo.full_name', 'github.event.pull_request.head.ref',
+    'github.event.pull_request.base.ref', 'github.event.changes.base.ref.from',
+    'github.event.comment.body', 'github.event.comment.user.type', 'github.event.sender.type',
+    'github.event.comment.author_association', 'needs.eligibility.outputs.eligible',
+  ];
   tokens.forEach((token, index) => {
+    if (['==', '!='].includes(token)) {
+      assert.isTrue([tokens[index - 1], tokens[index + 1]].every((operand) => (
+        typeof operand === 'string' && (operand.startsWith("'") || stringFields.includes(operand))
+      )) && !['==', '!='].includes(tokens[index - 2]),
+      'unsupported caller condition comparison: only direct string operands are supported');
+    }
     if (['contains', 'fromJSON'].includes(token)) {
       assert.equal(tokens[index + 1], '(', 'unsupported caller condition syntax: functions must use call syntax');
     }
@@ -148,6 +162,21 @@ describe('offline Claude caller contracts', () => {
       assert.throws(() => conditionExpression(expression), 'unsupported caller condition syntax');
     }
   });
+  it('rejects comparisons that require Actions type coercion', () => {
+    for (const expression of [
+      'github.event.pull_request.assignee == false', 'github.event.pull_request.draft == false',
+      "github.actor == false", "github.actor == 'jballin' == 'true'",
+    ]) {
+      assert.throws(() => conditionExpression(expression), 'unsupported caller condition comparison');
+    }
+  });
+
+  it('inventories Claude runtime and credential references across all workflow files', () => {
+    const directory = path.join(__dirname, '..', '.github', 'workflows');
+    const callers = fs.readdirSync(directory).filter((name: string) => /\.ya?ml$/u.test(name)
+      && /claude-review-runtime|CLAUDE_CODE_OAUTH_TOKEN/iu.test(readWorkflow(name))).sort();
+    assert.deepEqual(callers, ['claude-review-status.yml', 'claude-review.yml', 'claude.yml']);
+  });
   it('rejects unsupported predicate syntax after long whitespace and field tokens', () => {
     for (const prefix of [' '.repeat(100_000), `.field${'.field'.repeat(10_000)}`]) {
       assert.throws(() => predicateExpression(`${prefix}!`), 'unsupported preflight predicate');
@@ -186,9 +215,12 @@ describe('offline Claude caller contracts', () => {
     ];
     for (const action of ['opened', 'ready_for_review']) {
       for (const actor of ['jballin', 'human-collaborator']) {
-        const g = github('pull_request', action);
-        g.actor = actor;
-        assert.isTrue(eligible(source, { github: g }), `${action}: ${actor}`);
+        for (const headRef of ['feature-review', 'feature-another']) {
+          const g = github('pull_request', action);
+          g.actor = actor;
+          g.event.pull_request.head.ref = headRef;
+          assert.isTrue(eligible(source, { github: g }), `${action}: ${actor}, ${headRef}`);
+        }
       }
       for (const change of negatives) {
         const g = github('pull_request', action);
@@ -202,20 +234,22 @@ describe('offline Claude caller contracts', () => {
     const source = job(manual, 'eligibility');
     for (const eventName of ['issue_comment', 'pull_request_review_comment']) {
       const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-      for (const body of ['/claude-review please', ' /claude-review', '/claude-review\n', 'text\n/claude-review', '/claude-review-extra', '']) {
-        const g = commentGithub(eventName);
-        g.event.comment.body = body;
-        assert.isFalse(eligible(source, { github: g }), `${eventName}: ${JSON.stringify(body)}`);
-      }
-      for (const association of [...trusted, 'NONE', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'CONTRIBUTOR']) {
-        for (const commenter of ['User', 'Bot']) {
-          for (const sender of ['User', 'Bot']) {
-            const g = commentGithub(eventName);
-            g.event.comment.author_association = association;
-            g.event.comment.user.type = commenter;
-            g.event.sender.type = sender;
-            assert.equal(eligible(source, { github: g }), trusted.includes(association) && commenter === 'User' && sender === 'User',
-              `${eventName}: ${association}, commenter ${commenter}, sender ${sender}`);
+      for (const actor of ['jballin', 'human-collaborator']) {
+        for (const body of ['/claude-review', '/claude-review please', ' /claude-review', '/claude-review\n', 'text\n/claude-review', '/claude-review-extra', '']) {
+          for (const association of [...trusted, 'NONE', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'CONTRIBUTOR']) {
+            for (const commenter of ['User', 'Bot']) {
+              for (const sender of ['User', 'Bot']) {
+                const g = commentGithub(eventName);
+                g.actor = actor;
+                g.event.comment.body = body;
+                g.event.comment.author_association = association;
+                g.event.comment.user.type = commenter;
+                g.event.sender.type = sender;
+                assert.equal(eligible(source, { github: g }), body === '/claude-review' && trusted.includes(association)
+                  && commenter === 'User' && sender === 'User',
+                `${eventName}: ${actor}, ${JSON.stringify(body)}, ${association}, commenter ${commenter}, sender ${sender}`);
+              }
+            }
           }
         }
       }
@@ -302,7 +336,15 @@ describe('offline Claude caller contracts', () => {
       g.event.changes.base.ref.from = priorBase;
       return g;
     });
-    for (const context of [github('pull_request', 'synchronize'), ...retargets]) {
+    const contexts = [github('pull_request', 'synchronize'), ...retargets].flatMap((context) => (
+      ['main', 'release'].flatMap((baseRef) => [false, true].map((draft) => {
+        const g = JSON.parse(JSON.stringify(context)) as ReturnType<typeof github>;
+        g.event.pull_request.base.ref = baseRef;
+        g.event.pull_request.draft = draft;
+        return g;
+      }))
+    ));
+    for (const context of contexts) {
       assert.isTrue(eligible(source, { github: context }));
       for (const change of [
         (g: ReturnType<typeof github>) => { g.event.pull_request.state = 'closed'; },
