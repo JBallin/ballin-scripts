@@ -668,6 +668,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       configPath,
       originalConfig,
       repositoryName: args[1],
+      reviewExistingSettings: true,
       onCancelled: () => { cancelled = true; },
     });
     if (!configured && !cancelled) {
