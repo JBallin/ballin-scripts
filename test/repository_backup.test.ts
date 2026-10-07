@@ -1995,11 +1995,12 @@ describe('repository backup lifecycle', function() {
   describe('behavioral analytics', () => {
     let capture: ReturnType<typeof createAnalyticsCapture>;
     const observedRun = (preload = '') => run([], '', capture.env, preload);
-    const assertOutcome = (status: string): void => {
+    const assertOutcome = (status: string, failureCategory = 'unknown'): void => {
       const events: CapturedAnalyticsEvent[] = capture.readEvents();
-      assert.deepEqual(events.filter((event) => event.schemaVersion === 2), [{
-        schemaVersion: 2, installId: fixtureInstallId,
+      assert.deepEqual(events.filter((event) => event.schemaVersion === 3), [{
+        schemaVersion: 3, installId: fixtureInstallId,
         dateBucket: new Date().toISOString().slice(0, 10), event: 'backup.run', status,
+        ...(status === 'failure' ? { failureCategory } : {}),
       }]);
       const commands = events.filter((event) => event.schemaVersion === 1);
       assert.lengthOf(commands, 1);
@@ -2040,9 +2041,59 @@ describe('repository backup lifecycle', function() {
         const result = observedRun();
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assert.lengthOf(publications(), 0);
-        assertOutcome('failure');
+        assertOutcome('failure', fault === 'auth' ? 'authentication' : fault === 'conflict' ? 'reconciliation' : fault === 'cache preflight' ? 'local_state' : 'unknown');
       });
     }
+
+    for (const [stderr, category] of [
+      ['error connecting to api.github.com\n', 'transport'],
+      ['request timed out\n', 'transport'],
+      ['gh: DUMMY_PRIVATE_ACCESS_ERROR (HTTP 403)\n', 'unknown'],
+    ]) {
+      it(`records the reliable family for a terminal provider failure (${category})`, () => {
+        source(); const value = state();
+        value.faults.transport = { target: 'user', response: { status: 1, stdout: '{}', stderr, signal: null } };
+        saveState(value);
+        const result = observedRun();
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertOutcome('failure', category);
+        assert.notInclude(JSON.stringify(capture.readEvents()), 'DUMMY_PRIVATE');
+        assert.lengthOf(publications(), 0);
+      });
+    }
+
+    it('keeps competing authentication and transport-file cleanup failures unknown', () => {
+      source(); const value = state(); value.faults.auth = true; saveState(value);
+      const result = observedRun(transportCleanupFailure('user'));
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assertOutcome('failure', 'unknown');
+      assert.lengthOf(publications(), 0);
+    });
+
+    it('records known local staging failure without transmitting source details', () => {
+      source();
+      const result = observedRun(cacheFailure('openSync', "String(args[0]).includes('ballin-backup-input-')"));
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assertOutcome('failure', 'local_state');
+      assert.lengthOf(publications(), 0);
+    });
+
+    it('makes a confirmed publication fail when final snapshot cleanup fails', () => {
+      source();
+      const result = observedRun(cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-input-')"));
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(remote('zshrc.sh'), 'local\n');
+      assertOutcome('failure', 'local_state');
+      assert.lengthOf(publications(), 1);
+    });
+
+    it('keeps a reconciliation conflict plus final cleanup failure unknown', () => {
+      source(); saveState(fixtureState({ 'zshrc.sh': 'conflicting remote\n' }));
+      const result = observedRun(cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-input-')"));
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assertOutcome('failure', 'unknown');
+      assert.lengthOf(publications(), 0);
+    });
 
     for (const mode of ['ambiguous', 'malformed']) {
       it(`emits once after ${mode} publication is confirmed by internal readback`, () => {
@@ -2061,7 +2112,7 @@ describe('repository backup lifecycle', function() {
         const result = observedRun();
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assert.lengthOf(publications(), 1); assert.equal(cached(), 'base\n');
-        assertOutcome('failure');
+        assertOutcome('failure', mode === 'advance' ? 'reconciliation' : 'unknown');
       });
     }
 
@@ -2075,7 +2126,7 @@ describe('repository backup lifecycle', function() {
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assert.include(result.stderr, 'publication confirmed');
         assert.equal(remote('zshrc.sh'), 'local\n');
-        assert.lengthOf(publications(), 1); assertOutcome('failure');
+        assert.lengthOf(publications(), 1); assertOutcome('failure', 'local_state');
       });
     }
 
@@ -2084,7 +2135,7 @@ describe('repository backup lifecycle', function() {
       const result = observedRun(cacheFailure('copyFileSync', "String(args[1]).includes('.ballin-backup-cache-')"));
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.include(result.stderr, 'state confirmed unchanged');
-      assert.lengthOf(publications(), 1); assertOutcome('failure');
+      assert.lengthOf(publications(), 1); assertOutcome('failure', 'local_state');
     });
 
     it('includes publication transport cleanup in the terminal failure despite successful readback', () => {
@@ -2092,7 +2143,7 @@ describe('repository backup lifecycle', function() {
       assertTransportCleanupFailed(result);
       assert.include(result.stderr, 'repository publication confirmed');
       assert.equal(remote('zshrc.sh'), 'local\n');
-      assertOutcome('failure');
+      assertOutcome('failure', 'local_state');
     });
   });
 });
