@@ -39,6 +39,23 @@ checksum() {
   [[ "${actual%% *}" == "$expected" ]] || fail "Checksum verification failed for $2; nothing from that download was installed."
 }
 
+normalize_process_path() {
+  local remaining="$PATH" entry result='' separator=''
+  # Keep the same search order across the core installer's directory changes.
+  while :; do
+    entry=${remaining%%:*}
+    if [[ "$entry" != /* ]]; then
+      [[ "$PWD" != *:* ]] || fail 'Relative PATH entries need a current directory without colons. Change directories or use absolute PATH entries, then try again.'
+      entry="$PWD/${entry:-.}"
+    fi
+    result+="$separator$entry"
+    separator=':'
+    [[ "$remaining" == *:* ]] || break
+    remaining=${remaining#*:}
+  done
+  export PATH="$result"
+}
+
 node_compatible() {
   [[ -x "$1" ]] && [[ "$("$1" -p 'const [major, minor] = process.versions.node.split(".").map(Number); major > 24 || (major === 24 && minor >= 12)' 2>/dev/null)" == true ]]
 }
@@ -86,7 +103,7 @@ release_node_links() {
 find_git() {
   local candidate
   for candidate in "$(command -v git || true)" "$system_git"; do
-    if [[ "$candidate" == "$system_git" ]] && ! xcode-select -p >/dev/null 2>&1; then
+    if [[ "$candidate" -ef "$system_git" ]] && ! xcode-select -p >/dev/null 2>&1; then
       continue
     fi
     if [[ "$candidate" == /* && -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
@@ -253,8 +270,17 @@ configure_path() {
       if (heredocs.length > 0) fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
       // Remove redirections before splitting commands so exec 3>&1 has no
       // executable argument. Parameter and command expansions are not evaluated.
-      plain = plain.replace(/\$\{[^}]*\}|\$\([^)]*\)/gu, "Q")
-        .replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|{}]+/gu, " ");
+      plain = plain.replace(/\$\{[^}]*\}|\$\([^)]*\)/gu, "Q");
+      // Variable descriptors can hide an exec argument at a brace boundary.
+      // Keep their entire placement manual rather than interpreting the form.
+      if (/(?:^|[\s;&|()])\{[A-Za-z_][A-Za-z0-9_]*\}(?=[ \t]*[<>])/u.test(plain)) {
+        fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
+      }
+      plain = plain.replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|]+/gu, (redirection) => {
+        // Fail closed before operand braces can become command boundaries.
+        if (/[{}]/u.test(redirection)) fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
+        return " ";
+      });
       const zshPrefixes = process.argv[8] === "zsh" ? ["noglob", "nocorrect", "-", "repeat"] : [];
       for (const statement of plain.split(/[\n;&|{})]+/u)) {
         const words = statement.trim().split(/\s+/u);
@@ -406,6 +432,7 @@ main() {
   esac
   profile_shell="$shell_name"
   [[ "$profile" == /* ]] || fail 'The shell startup directory must be an absolute path.'
+  normalize_process_path
   quick_root="$HOME/.local/share/ballin-quickstart"
   quick_bin="$quick_root/bin"
   if [[ -e "$quick_root" || -L "$quick_root" ]]; then

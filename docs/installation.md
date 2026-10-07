@@ -138,6 +138,9 @@ The optional [beginner quickstart](quickstart.md) runs `quickstart.sh` before th
 core installer. It requires macOS 13.5 or newer and zsh or Bash, selects the
 GitHub CLI download for the running shell's architecture (including Intel under
 Rosetta), and reuses compatible installed tools. Homebrew is not required.
+Relative and empty PATH entries are resolved against the current directory for
+the helper and its children, preserving search order through installer directory
+changes. A current directory containing a colon requires absolute PATH entries.
 
 When prerequisites are missing, the helper asks before starting Apple's Command
 Line Tools installation for Git, installing the latest Node.js 24 macOS package
@@ -148,6 +151,8 @@ may replace an existing Node.js/npm installation there. Downloads come from
 [GitHub CLI releases](https://github.com/cli/cli/releases); published SHA-256
 checksums are checked before installing or extracting them. The Node package's
 Apple signature and publisher are also checked before requesting admin access.
+Aliases of Apple's Git stub are identified by file identity and are not probed
+until Command Line Tools are available.
 
 The helper keeps Git and GitHub CLI links in its own `bin/` directory and shows
 one PATH line before asking to add it to the selected shell startup file. A
@@ -177,8 +182,10 @@ The helper leaves the file unchanged and prints the exact PATH line for manual
 placement before following this standard installation guide. This conservative
 check ignores comments, quoted data, and simple heredoc bodies; it does not
 interpret dynamic shell behavior. Arithmetic with nested parentheses, ambiguous
-heredoc forms, ambiguous brace/hash forms, unsupported wrapper options, and
-quoted or nondecimal zsh `repeat` counts require manual placement. This
+heredoc forms, ambiguous brace/hash forms, unsupported wrapper options,
+quoted or nondecimal zsh `repeat` counts, and variable file-descriptor
+redirections such as `exec {fd}>file /bin/true` require manual placement.
+Unquoted braces in redirection operands also require manual placement. This
 includes valid zsh `{#` block comments. Startup-file contents are never executed
 by these checks.
 
