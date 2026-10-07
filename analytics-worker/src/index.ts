@@ -40,11 +40,12 @@ type CommandAnalyticsEvent = {
 };
 
 type BehaviorAnalyticsEvent = {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   installId: string;
   dateBucket: string;
   event: string;
   status: string;
+  failureCategory?: string;
 };
 
 type AnalyticsEvent = CommandAnalyticsEvent | BehaviorAnalyticsEvent;
@@ -81,6 +82,8 @@ const allowedBehaviorPayloadKeys = new Set([
   'event',
   'status',
 ]);
+const allowedBackupPayloadKeys = new Set([...allowedBehaviorPayloadKeys, 'failureCategory']);
+const allowedBackupFailureCategories = new Set(['transport', 'authentication', 'reconciliation', 'local_state', 'unknown']);
 const allowedBehaviorEvents = new Set(['backup.run', 'update.backup', 'update.self-update']);
 const allowedBehaviorStatuses = new Set(['success', 'failure']);
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
@@ -207,12 +210,13 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
   if (!isObject(payload)) {
     return 'event payload must be a JSON object';
   }
-  const allowedKeys = payload.schemaVersion === 2 ? allowedBehaviorPayloadKeys : allowedPayloadKeys;
+  const allowedKeys = payload.schemaVersion === 3 ? allowedBackupPayloadKeys
+    : payload.schemaVersion === 2 ? allowedBehaviorPayloadKeys : allowedPayloadKeys;
   if (!hasOnlyAllowedPayloadKeys(payload, allowedKeys)) {
     return 'event payload contains unsupported fields';
   }
-  if (payload.schemaVersion !== 1 && payload.schemaVersion !== 2) {
-    return 'schemaVersion must be 1 or 2';
+  if (payload.schemaVersion !== 1 && payload.schemaVersion !== 2 && payload.schemaVersion !== 3) {
+    return 'schemaVersion must be 1, 2 or 3';
   }
 
   const installId = stringField(payload, 'installId');
@@ -228,13 +232,23 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
   if (!isDateBucketWithinSkew(dateBucket, options.now)) {
     return 'dateBucket is outside the accepted clock skew';
   }
-  if (payload.schemaVersion === 2) {
+  if (payload.schemaVersion === 2 || payload.schemaVersion === 3) {
     const event = stringField(payload, 'event');
     if (!event || !allowedBehaviorEvents.has(event)) {
       return 'event is not supported';
     }
     if (!status || !allowedBehaviorStatuses.has(status)) {
       return 'status is not supported';
+    }
+    if (payload.schemaVersion === 3) {
+      if (event !== 'backup.run') return 'schemaVersion 3 supports only backup.run';
+      if (status === 'success') {
+        if ('failureCategory' in payload) return 'success must not have a failureCategory';
+        return { schemaVersion: 3, installId, dateBucket, event, status };
+      }
+      const failureCategory = stringField(payload, 'failureCategory');
+      if (!failureCategory || !allowedBackupFailureCategories.has(failureCategory)) return 'failureCategory is not supported';
+      return { schemaVersion: 3, installId, dateBucket, event, status, failureCategory };
     }
     return { schemaVersion: 2, installId, dateBucket, event, status };
   }
@@ -326,14 +340,23 @@ const storeAnalyticsEvent = async (env: Env, event: CommandAnalyticsEvent, insta
 };
 
 const storeBehaviorEvent = async (env: Env, event: BehaviorAnalyticsEvent): Promise<void> => {
-  await env.ANALYTICS_DB.batch([
+  const statements = [
     env.ANALYTICS_DB.prepare(`
       INSERT INTO behavior_events_daily (date_bucket, event, status, count)
       VALUES (?1, ?2, ?3, 1)
       ON CONFLICT(date_bucket, event, status)
       DO UPDATE SET count = count + 1
     `).bind(event.dateBucket, event.event, event.status),
-  ]);
+  ];
+  if (event.schemaVersion === 3 && event.failureCategory) {
+    statements.push(env.ANALYTICS_DB.prepare(`
+      INSERT INTO backup_failures_daily (date_bucket, category, count)
+      VALUES (?1, ?2, 1)
+      ON CONFLICT(date_bucket, category) DO UPDATE SET count = count + 1
+    `).bind(event.dateBucket, event.failureCategory));
+  }
+  // D1 batch is transactional: one accepted outcome increments its total and category together.
+  await env.ANALYTICS_DB.batch(statements);
 };
 
 const rateLimitEventRequest = async (env: Env, keys: string[]): Promise<Response | null> => {
@@ -391,7 +414,7 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
     return installRateLimitedResponse;
   }
 
-  if (event.schemaVersion === 2) {
+  if (event.schemaVersion !== 1) {
     await storeBehaviorEvent(env, event);
   } else {
     await storeAnalyticsEvent(env, event, installIdHash);
@@ -411,6 +434,7 @@ const cleanupOldRows = async (env: Env, scheduledTime: number): Promise<void> =>
     env.ANALYTICS_DB.prepare('DELETE FROM command_events_daily WHERE date_bucket < ?1').bind(cutoff),
     env.ANALYTICS_DB.prepare('DELETE FROM version_events_daily WHERE date_bucket < ?1').bind(cutoff),
     env.ANALYTICS_DB.prepare('DELETE FROM behavior_events_daily WHERE date_bucket < ?1').bind(cutoff),
+    env.ANALYTICS_DB.prepare('DELETE FROM backup_failures_daily WHERE date_bucket < ?1').bind(cutoff),
   ]);
 };
 

@@ -28,6 +28,7 @@ const aggregateTables = [
   'command_events_daily',
   'version_events_daily',
   'behavior_events_daily',
+  'backup_failures_daily',
 ] as const;
 
 const usage = [

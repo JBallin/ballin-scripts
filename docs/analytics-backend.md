@@ -81,8 +81,9 @@ reports are directional maintenance signals rather than security-trustworthy
 counts.
 
 The report reads `install_days`, `command_events_daily`,
-`version_events_daily`, and `behavior_events_daily`. Behavioral rows contain
-only UTC date, event name, terminal status, and count. They contain no raw or
+`version_events_daily`, `behavior_events_daily`, and `backup_failures_daily`.
+Behavioral rows contain only UTC date, event name, terminal status, and count;
+category rows contain UTC date, failure category, and count. They contain no raw or
 hashed installation identity and do not contribute to observed-install activity
 or runtime trends.
 
@@ -131,6 +132,7 @@ The reset scope is the full aggregate schema:
 - `command_events_daily`
 - `version_events_daily`
 - `behavior_events_daily`
+- `backup_failures_daily`
 
 There is no raw event table to preserve or delete.
 
@@ -161,10 +163,10 @@ The Worker accepts public client events and relies on layered abuse controls
 instead of a client-shipped secret. It rejects oversized payloads and unsupported
 fields, validates dates and low-cardinality values, applies global/source rate
 limits before parsing, and applies an installation-HMAC rate limit before D1
-writes. Both schemas share those rate-limit budgets. Schema-v1 ingestion stores
+writes. All schemas share those rate-limit budgets. Schema-v1 ingestion stores
 the HMAC-derived installation ID only in the separate `install_days` activity
 table. The `command_events_daily` and `version_events_daily` aggregates retain
-no installation identity or install-to-command association. Schema-v2 behavioral
+no installation identity or install-to-command association. Schema-v2/v3 behavioral
 ingestion uses the hash transiently for rate limiting and retains neither raw
 nor hashed installation identity. Request source metadata is used only as a
 transient Cloudflare rate-limit key; it is not stored, queried, logged, or
@@ -223,6 +225,59 @@ The migration preserves existing aggregates, and compatible ingestion continues
 to accept current v1 command payloads. Do not backfill behavioral outcomes from
 command counts or reset data for this rollout. Production migration, deployment,
 reset, and live ingestion verification require separate authorization.
+
+## Backup Failure Categories
+
+The schema-v3 extension covers only terminal `backup.run` outcomes. Failures
+carry one of `transport`, `authentication`, `reconciliation`, `local_state`, or
+`unknown`; successes carry no category. V1 command and v2 behavioral ingestion
+remain compatible. Parent `update.backup` outcomes stay v2 and receive no category.
+
+Each accepted v3 failure increments its behavioral total and its category in one
+transactional D1 batch. The additive `backup_failures_daily` table stores only
+UTC date, category, and count. Both tables expire after 395 days and belong to the
+existing aggregate reset scope. There are no raw events or new identifiers.
+This counts each accepted request once; replayed public requests can still be
+counted again. No invocation ID or deduplication history is introduced.
+
+The report shows backup-only category counts. `legacy_uncategorized` is the
+backup failure total minus v3 category counts; it represents older outcomes
+without categories. `unknown` is an explicit new failure with insufficient or
+competing evidence. Category-schema coverage is all v3 failures divided by
+observed backup failures; identified-family coverage excludes both legacy and
+unknown failures. These measures describe reported failures, not all executions.
+Do not add automatic-update parent failures to either denominator.
+
+Categories suggest different investigations: transport points to connection and
+timeout handling, authentication to credential selection and reauthentication,
+reconciliation to moved state and conflict guidance, and local state to
+configuration, staging, cache, or cleanup handling. Authentication requires
+positive evidence; ambiguous access and publication errors stay unknown. The
+client uses existing structured repository classifications, never arbitrary
+displayed messages or exit numbers. It emits after readback/recovery and cleanup:
+confirmed recovery remains success, while required cleanup or cache failure
+remains failure. Multiple incompatible failure families fall back to unknown.
+
+Participation, interrupted processes, incorrect success, and lost delivery
+(including network failures that prevent their own reporting) remain blind spots.
+These aggregate categories cannot reproduce a bug, prove a root cause, or
+establish complete population failure rates. Rate-limit policy remains unchanged.
+
+### Category compatibility requirements
+
+Schema-v3 ingestion requires additive migration `0004` before compatible backend
+deployment; client v3 sends require verified backend readiness. Every serving
+Worker version must accept v1/v2/v3 payloads and preserve atomic aggregate
+counting. Binding metadata alone does not establish schema or ingestion
+readiness. Report/reset also require migration `0004` before use.
+
+Installation and self-update consume `main`, so backend readiness must precede
+client release. An older Worker rejects v3 best-effort sends without affecting
+backups; delivery loss does not satisfy compatibility. Preserve existing
+aggregates without category backfill or reset. Production migration, deployment,
+live ingestion checks, secret access, and reset require separate authorization.
+Use the locked Worker-local tooling in the
+[Worker setup guide](../analytics-worker/README.md#production-setup).
 
 ## Historical OS-Family Removal Cutover
 

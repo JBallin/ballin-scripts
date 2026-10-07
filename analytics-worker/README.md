@@ -10,7 +10,7 @@ install activity, command usage, and terminal behavioral outcomes. Schema-v1
 ingestion stores the HMAC-derived installation ID only in the separate
 `install_days` activity table. The `command_events_daily` and
 `version_events_daily` aggregates retain no installation identity or
-install-to-command association. Schema-v2 behavioral ingestion retains neither
+install-to-command association. Schema-v2/v3 behavioral ingestion retains neither
 raw nor hashed installation identity.
 
 ## Data Policy
@@ -22,6 +22,7 @@ The worker may store:
 - command name from a fixed allowlist
 - behavioral event name: `backup.run`, `update.backup`, or `update.self-update`
 - status from a fixed allowlist
+- backup failure category from a fixed allowlist
 - duration bucket from a fixed allowlist
 - released Ballin version, Node.js major version, and coarse macOS product
   version
@@ -80,10 +81,30 @@ The date is the UTC terminal-outcome bucket. No command, duration, runtime,
 caller, or other dimensions are accepted.
 
 The installation ID is used transiently to derive the existing HMAC rate-limit
-key. Behavioral ingestion increments only
+key. V2 ingestion increments only
 `behavior_events_daily(date_bucket, event, status, count)`, keyed by date/event/status.
 It retains no raw or hashed identity and writes nothing to install-day, command,
 or runtime aggregates. Schema v1 continues to populate those existing tables.
+
+Schema-v3 backup outcome payload extends v2 only for `backup.run`:
+
+```json
+{
+  "schemaVersion": 3,
+  "installId": "826f9faa-9995-4f66-a01b-73b4f7aebdf1",
+  "dateBucket": "2026-06-27",
+  "event": "backup.run",
+  "status": "failure",
+  "failureCategory": "transport"
+}
+```
+
+V3 failures require exactly one allowlisted `failureCategory`: `transport`,
+`authentication`, `reconciliation`, `local_state`, or `unknown`. V3 successes
+omit that field. Other fields and parent event names are rejected. V1 and v2
+remain accepted unchanged. A v3 failure increments its existing behavioral total
+and `backup_failures_daily(date_bucket, category, count)` in one atomic batch.
+Success increments only the existing total. Category storage retains no identity.
 
 Responses:
 
@@ -93,7 +114,7 @@ Responses:
 - `404` for unknown paths
 - `405` for unsupported methods
 
-Both schemas require:
+All schemas require:
 
 - `installId` is a lowercase UUID
 - `dateBucket` is today, yesterday, or tomorrow in UTC
@@ -121,7 +142,7 @@ The endpoint accepts public client telemetry. Valid events can be spoofed, so
 aggregate analytics are directional and not security-trustworthy. The Worker
 limits abuse with strict schema validation, low-cardinality fields, body-size and
 date-skew checks, server-side install ID hashing, and Cloudflare Workers rate
-limits. Both schemas share the global, source, and installation rate-limit keys;
+limits. All schemas share the global, source, and installation rate-limit keys;
 missing rate-limit or hash-secret configuration fails closed. Request source
 metadata is used only as a transient rate-limit key and is
 not stored, queried, logged, or reported by the application. Older clients may
@@ -235,6 +256,16 @@ The new migration preserves existing data. Do not reset or backfill aggregates
 for behavioral analytics. Deployment binding checks alone cannot establish that
 the migration is applied or that all serving Worker versions accept v2.
 
+### Backup Category Compatibility
+
+Schema-v3 ingestion and the category report/reset require additive migration
+`0004`. Apply that migration before compatible backend deployment and verify all
+serving versions' schema, v1/v2/v3 ingestion, and atomic counting before releasing
+client v3 sends. See [category compatibility requirements](../docs/analytics-backend.md#category-compatibility-requirements).
+Binding checks alone do not establish readiness. Preserve existing counts without
+category backfill or reset. Migration and deployment require separate production
+authorization.
+
 ### Historical OS-Family Removal Cutover
 
 This earlier destructive cutover does not apply to the behavioral migration.
@@ -301,6 +332,7 @@ The report uses local Wrangler authentication and
 - command success, failure, and unknown counts
 - application, Node.js, and macOS-version trends from existing aggregate rows
 - behavioral outcomes by event: total, successes, failures, and failure rate
+- backup-only failure categories, legacy uncategorized failures, and coverage
 
 Behavioral totals include terminal outcomes only; `total = successes + failures`
 and `failure_rate = failures / total`. The query examples also support daily
@@ -342,6 +374,7 @@ Reporting reads these aggregate tables:
 - `command_events_daily`
 - `version_events_daily`
 - `behavior_events_daily`
+- `backup_failures_daily`
 
 It does not expose installation-linked behavioral history, command
 arguments, local paths, backup destination details, package/editor data, raw errors,
@@ -361,6 +394,7 @@ The reset clears all aggregate analytics tables:
 - `command_events_daily`
 - `version_events_daily`
 - `behavior_events_daily`
+- `backup_failures_daily`
 
 There is no raw event table.
 
