@@ -721,7 +721,7 @@ exec /bin/cp "$@"
           const result = run('', { SHELL: `/bin/${shell}` });
           assert.equal(result.status, 1, contents + result.stdout + result.stderr);
           assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
-          assert.include(result.stderr, 'recognized return, exit, or executable exec form');
+          assert.include(result.stderr, 'recognized return, exit, logout, or executable exec form');
           assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
           assert.equal(fs.readFileSync(profile, 'utf8'), contents);
           assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
@@ -744,7 +744,7 @@ exec /bin/cp "$@"
             const result = run('', { SHELL: `/bin/${shell}` });
             assert.equal(result.status, 1, contents + result.stdout + result.stderr);
             assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
-            assert.include(result.stderr, 'recognized return, exit, or executable exec form');
+            assert.include(result.stderr, 'recognized return, exit, logout, or executable exec form');
             assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
             assert.equal(fs.readFileSync(profile, 'utf8'), contents);
             assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
@@ -768,7 +768,7 @@ exec /bin/cp "$@"
             const result = run('', { SHELL: `/bin/${shell}` });
             assert.equal(result.status, 1, contents + result.stdout + result.stderr);
             assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
-            assert.include(result.stderr, 'recognized return, exit, or executable exec form');
+            assert.include(result.stderr, 'recognized return, exit, logout, or executable exec form');
             assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
             assert.equal(fs.readFileSync(profile, 'utf8'), contents);
             assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
@@ -797,7 +797,7 @@ exec /bin/cp "$@"
           const result = run('', { SHELL: `/bin/${shell}` });
           assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
           assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
-          assert.include(result.stderr, 'recognized return, exit, or executable exec form');
+          assert.include(result.stderr, 'recognized return, exit, logout, or executable exec form');
           assert.include(result.stderr, 'Place the displayed line where your shell will execute it');
           assert.include(result.stderr, '/docs/installation.md');
           assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
@@ -904,7 +904,7 @@ exec /bin/cp "$@"
         fs.writeFileSync(profile, contents, { mode: 0o640 });
         const result = run('', { SHELL: '/bin/bash' });
         assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
-        assert.include(result.stderr, 'recognized return, exit, or executable exec');
+        assert.include(result.stderr, 'recognized return, exit, logout, or executable exec');
         assert.include(result.stderr, 'Manual PATH setup for ' + profile);
         assert.equal(fs.readFileSync(profile, 'utf8'), contents);
         assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
@@ -933,6 +933,58 @@ exec /bin/cp "$@"
       for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
     });
   }
+  for (const shell of ['bash', 'zsh']) {
+    for (const existingPath of [false, true]) {
+      it('detects logout transfers in ' + shell + ' before PATH ' + (existingPath ? 'reuse' : 'append'), () => {
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const line = `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+        const sentinel = path.join(root, 'profile-executed');
+        const transfers = [
+          'logout', 'logout 0', 'command logout', 'builtin logout 0',
+          'VALUE=x command -- builtin -- logout 0', 'time -p logout',
+          'if false; then logout; fi', 'case "$TERM" in dumb) logout ;; esac',
+          'stop() { logout; }', 'logout\\\n 0',
+          ...(shell === 'zsh' ? ['noglob logout', 'repeat 1 logout', 'repeat 1 nocorrect builtin logout'] : []),
+        ];
+        for (const transfer of transfers) {
+          const contents = `touch '${sentinel}'\n${transfer}\n` + (existingPath ? line + '\n' : '');
+          fs.writeFileSync(profile, contents, { mode: 0o640 });
+          const result = run('', { SHELL: '/bin/' + shell });
+          assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
+          assert.include(result.stderr, `Manual PATH setup for ${profile}:\n${line}\n`);
+          assert.include(result.stderr, 'recognized return, exit, logout, or executable exec form');
+          assert.notInclude(result.stdout, 'Use these tools in new Terminal windows?');
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+          assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+          assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+          assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        }
+        assert.notInclude(readLog(), 'auth status --active');
+        assert.notInclude(readLog(), '/main/install.sh');
+        assert.notInclude(readLog(), 'ballin:');
+      });
+    }
+    it('preserves harmless logout data through PATH append and reuse in ' + shell, () => {
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      const sentinel = path.join(root, 'profile-executed');
+      const contents = `touch '${sentinel}'\n`
+        + '# logout\n: logout\ncommand -v logout\ncommand -V logout\n'
+        + "VALUE='logout'\n: <<'END'\nlogout\nEND\n"
+        + ": <<< 'logout'\nlogout_status=0\nprintf %s 'logout'\n";
+      fs.writeFileSync(profile, contents, { mode: 0o640 });
+      const appended = run('y\ny\n', { SHELL: '/bin/' + shell });
+      assert.equal(appended.status, 0, appended.stdout + appended.stderr);
+      const installed = fs.readFileSync(profile, 'utf8');
+      assert.isTrue(installed.startsWith(contents));
+      const reused = run('y\n', { SHELL: '/bin/' + shell });
+      assert.equal(reused.status, 0, reused.stdout + reused.stderr);
+      assert.equal(fs.readFileSync(profile, 'utf8'), installed);
+      assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+      assert.isFalse(fs.existsSync(sentinel), 'Validation must not execute startup contents');
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
+
   for (const existingPath of [false, true]) {
     it('detects zsh repeat bodies before PATH ' + (existingPath ? 'reuse' : 'append'), () => {
       const profile = path.join(home, '.zshrc');
@@ -948,7 +1000,7 @@ exec /bin/cp "$@"
         fs.writeFileSync(profile, contents, { mode: 0o640 });
         const result = run('', { SHELL: '/bin/zsh' });
         assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
-        assert.include(result.stderr, 'recognized return, exit, or executable exec');
+        assert.include(result.stderr, 'recognized return, exit, logout, or executable exec');
         assert.equal(fs.readFileSync(profile, 'utf8'), contents);
         assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
         assert.isFalse(fs.existsSync(sentinel));
@@ -988,7 +1040,7 @@ exec /bin/cp "$@"
         fs.writeFileSync(profile, contents, { mode: 0o640 });
         const result = run('', { SHELL: '/bin/zsh' });
         assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
-        assert.include(result.stderr, 'recognized return, exit, or executable exec');
+        assert.include(result.stderr, 'recognized return, exit, logout, or executable exec');
         assert.include(result.stderr, 'Manual PATH setup for ' + profile);
         assert.equal(fs.readFileSync(profile, 'utf8'), contents);
         assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
@@ -1043,7 +1095,7 @@ exec /bin/cp "$@"
         fs.writeFileSync(profile, contents, { mode: 0o640 });
         const result = run('', { SHELL: '/bin/bash' });
         assert.equal(result.status, 1, result.stdout + result.stderr);
-        assert.include(result.stderr, 'recognized return, exit, or executable exec');
+        assert.include(result.stderr, 'recognized return, exit, logout, or executable exec');
         assert.equal(fs.readFileSync(profile, 'utf8'), contents);
         assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
         assert.isFalse(fs.existsSync(sentinel));

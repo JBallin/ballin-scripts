@@ -288,7 +288,7 @@ configure_path() {
           break;
         }
         const command = words.shift();
-        let transfer = command === "return" || command === "exit";
+        let transfer = ["return", "exit", "logout"].includes(command);
         if (command === "exec") {
           while (words.length > 0) {
             if (words[0] === "--") { words.shift(); break; }
@@ -339,7 +339,7 @@ configure_path() {
     if [[ -f "$scratch/profile-transfer-check.ambiguous" ]]; then
       fail 'The startup file contains shell syntax that this check cannot interpret safely. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
     fi
-    fail 'The startup file contains a recognized return, exit, or executable exec form that may skip PATH setup. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
+    fail 'The startup file contains a recognized return, exit, logout, or executable exec form that may skip PATH setup. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
   fi
   # Reuse only a final standalone command. Matching text inside a construct or
   # after a continued command needs a new confirmed line; never source the file.

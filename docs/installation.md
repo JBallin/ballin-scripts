@@ -169,7 +169,7 @@ syntax-only checks to reuse a matching PATH line only as a final standalone
 command. Bash checks enable `extglob` for parsing so profiles that enable it
 themselves can be validated without executing them. If later edits make that
 placement ambiguous, it asks before appending a new line. A recognized unquoted
-`return`, `exit`, or `exec` with an executable
+`return`, `exit`, `logout`, or `exec` with an executable
 argument stops automatic PATH setup, including inside a function, conditional,
 or case arm, in a zsh `repeat` body with an unquoted decimal count, and after
 zsh's `noglob`, `nocorrect`, or `-` precommand modifiers.
