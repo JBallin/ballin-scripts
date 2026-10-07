@@ -229,8 +229,8 @@ const wranglerArgsFor = (sql: string, options: ReportOptions): string[] => {
     options.database,
     '--remote',
     '--json',
-    '--command',
-    sql,
+    // SQL can start with a -- comment; keep it attached to its option value.
+    `--command=${sql}`,
   ];
 };
 

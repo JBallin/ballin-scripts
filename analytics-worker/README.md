@@ -256,13 +256,15 @@ The new migration preserves existing data. Do not reset or backfill aggregates
 for behavioral analytics. Deployment binding checks alone cannot establish that
 the migration is applied or that all serving Worker versions accept v2.
 
-### Backup Category Rollout
+### Backup Category Compatibility
 
-Follow the separate [backend-before-client category rollout](../docs/analytics-backend.md#category-rollout).
-Apply additive migration `0004` and verify all serving versions support v3
-before releasing client sends. Report/reset use the new table and require the
-migration. Deployment and migration need separate production authorization.
-Preserve existing counts; no reset or backfill belongs to this rollout.
+Schema-v3 ingestion and the category report/reset require additive migration
+`0004`. Apply that migration before compatible backend deployment and verify all
+serving versions' schema, v1/v2/v3 ingestion, and atomic counting before releasing
+client v3 sends. See [category compatibility requirements](../docs/analytics-backend.md#category-compatibility-requirements).
+Binding checks alone do not establish readiness. Preserve existing counts without
+category backfill or reset. Migration and deployment require separate production
+authorization.
 
 ### Historical OS-Family Removal Cutover
 

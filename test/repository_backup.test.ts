@@ -330,7 +330,7 @@ describe('repository backup lifecycle', function() {
   });
   it('reports unavailable during validated setup without creating status; reads never advance it', () => {
     const before = config(); const setup = run(['setup']); ok(setup);
-    assert.equal(setup.stdout, 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: unavailable\n');
+    assert.equal(setup.stdout, 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: unavailable\n\nReview backup settings? [y/N] ');
     assert.include(setup.stdout, 'on this installation: unavailable'); assert.isFalse(fs.existsSync(statusFile()));
     assert.deepEqual(config(), before);
     saveState(fixtureState({ 'zshrc.sh': 'local\n' })); seedSuccess();
@@ -352,7 +352,10 @@ describe('repository backup lifecycle', function() {
           const configBytes = fs.readFileSync(configPath, 'utf8'); const head = state().head;
           const noPromptsOrDiscovery = `
             const helpers = require(${JSON.stringify(path.join(repoRoot, 'commands', 'commandHelpers.ts'))});
-            helpers.readPromptLine = () => { throw new Error('Unexpected setup prompt'); };
+            helpers.readPromptLine = (prompt) => {
+              if (prompt !== '\\nReview backup settings? [y/N] ') throw new Error('Unexpected setup prompt');
+              process.stdout.write(prompt); return { text: '', eof: false };
+            };
             const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
             snapshots.observeSnapshotSources = () => { throw new Error('Unexpected snapshot discovery'); };
             snapshots.snapshotDefinitions.forEach((definition) => {
@@ -360,7 +363,7 @@ describe('repository backup lifecycle', function() {
             });
           `;
           const result = run(['setup'], '', {}, noPromptsOrDiscovery); ok(result);
-          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${priorSuccess}`);
+          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${priorSuccess}\nReview backup settings? [y/N] `);
           assert.equal(fs.readFileSync(configPath, 'utf8'), configBytes);
           assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
           assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
@@ -373,6 +376,103 @@ describe('repository backup lifecycle', function() {
       }
     }
   }
+  for (const input of ['', '\n', 'n\n', 'N\n', 'invalid\n']) {
+    it(`defaults to keeping existing backup settings: ${JSON.stringify(input)}`, () => {
+      seedCache('zshrc.sh', 'unchanged'); seedSuccess();
+      const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+      const result = run(['setup'], input); ok(result);
+      assert.include(result.stdout, '\nReview backup settings? [y/N] ');
+      assert.notInclude(result.stdout, 'Include sensitive sources?');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.equal(cached(), 'unchanged'); assert.equal(state().head, head);
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.lengthOf(mutations(), 0);
+    });
+  }
+  for (const representation of ['boolean', 'string']) {
+    for (const enabled of [false, true]) {
+      it(`reviews existing ${representation} choices using current ${enabled} defaults`, () => {
+        const before = config();
+        before.backup.includeSensitive = representation === 'string' ? String(enabled) : enabled;
+        before.update.backup = representation === 'string' ? String(enabled) : enabled;
+        before.analytics.enabled = 'true'; before.custom = { retained: true };
+        saveConfig(before); seedCache('zshrc.sh', 'unchanged'); seedSuccess();
+        const head = state().head;
+        const result = run(['setup'], 'y\n\ny\n\n'); ok(result);
+        const suffix = enabled ? '[Y/n]' : '[y/N]';
+        assert.include(result.stdout, `Include sensitive sources? ${suffix}`);
+        assert.include(result.stdout, `Automatically run \`ballin backup\` as part of \`ballin update\`? ${suffix}`);
+        assert.include(result.stdout, 'Save this sensitive-source choice for future backups? [y/N]');
+        assert.include(result.stdout, 'Backup settings review complete.');
+        assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: String(enabled) },
+          update: { ...before.update, backup: String(enabled) } });
+        assert.notInclude(result.stdout, 'analytics');
+        assert.equal(cached(), 'unchanged'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      });
+    }
+  }
+  it('saves explicitly confirmed changes without changing the destination or creating snapshots', () => {
+    const before = config(); before.backup.includeSensitive = 'false'; saveConfig(before);
+    const head = state().head; source('SYNTHETIC_PRIVATE_CONTENT');
+    const result = run(['setup'], 'y\ny\ny\ny\n'); ok(result);
+    assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'true' },
+      update: { ...before.update, backup: 'true' } });
+    assert.include(result.stdout, 'Sensitive sources available now:');
+    assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
+    assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+    assert.isFalse(fs.existsSync(cacheRoot));
+  });
+  for (const input of ['y\n', 'y\nn\n', 'y\nn\nn\n', 'y\nn\n\n', 'y\nn\ny\n']) {
+    it(`cancels the whole backup settings review without partial persistence: ${JSON.stringify(input)}`, () => {
+      seedCache('zshrc.sh', 'unchanged'); seedSuccess();
+      const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+      const result = run(['setup'], input);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Backup settings review cancelled; existing settings are unchanged.');
+      assert.notInclude(result.stdout, 'set to:'); assert.notInclude(result.stderr, 'setup incomplete');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.equal(cached(), 'unchanged'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+    });
+  }
+  it('does not broaden sensitive capture when automatic-backup review is cancelled', () => {
+    const before = config(); before.backup.includeSensitive = 'false'; saveConfig(before);
+    const bytes = fs.readFileSync(configPath, 'utf8');
+    const result = run(['setup'], 'y\ny\ny\n');
+    assert.equal(result.status, 1); assert.include(result.stdout, 'review cancelled');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), bytes); assert.lengthOf(mutations(), 0);
+  });
+  it('leaves both settings unchanged when sensitive-source review fails', () => {
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run(['setup'], 'y\ny\n', {}, `
+      const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
+      snapshots.snapshotDefinitions.find((definition) => definition.name === 'zshrc.sh').discover = () => ({ status: 'discovery-failed' });
+    `);
+    assert.equal(result.status, 1); assert.include(result.stdout, 'source access failed');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before); assert.lengthOf(mutations(), 0);
+  });
+  for (const preference of ['sensitive', 'automatic']) {
+    it(`rejects invalid ${preference} values before beginning backup preference review`, () => {
+      const before = config();
+      if (preference === 'sensitive') before.backup.includeSensitive = 'TRUE';
+      else before.update.backup = 'TRUE';
+      saveConfig(before);
+      const bytes = fs.readFileSync(configPath, 'utf8');
+      const result = run(['setup'], 'y\n'); assert.equal(result.status, 1);
+      assert.include(result.stdout, 'expected true or false');
+      assert.notInclude(result.stdout, 'Include sensitive sources?');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), bytes); assert.lengthOf(mutations(), 0);
+    });
+  }
+  it('keeps both settings unchanged when the final review save fails', () => {
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run(['setup'], 'y\nn\ny\ny\n', { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
+    assert.equal(result.status, 1); assert.include(result.stdout, 'Unable to save backup configuration');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.isFalse(fs.readdirSync(path.dirname(configPath)).some((name: string) => name.endsWith('.backup.tmp')));
+    assert.lengthOf(mutations(), 0);
+  });
   for (const mode of ['refresh', 'self-update']) {
     it(`preserves validation and state during ${mode} setup with caller-specific output`, () => {
       seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess(); source('different local bytes\n');
