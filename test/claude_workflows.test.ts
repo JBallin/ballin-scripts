@@ -80,11 +80,19 @@ const pr = () => ({
   head: { repo: { full_name: 'JBallin/ballin-scripts' } },
   base: { repo: { full_name: 'JBallin/ballin-scripts' } },
 });
-const github = (eventName = 'issue_comment', action = 'created') => ({
+const github = (eventName = 'pull_request', action = 'synchronize') => ({
   repository: 'JBallin/ballin-scripts', actor: 'jballin', event_name: eventName,
   event: {
     action, pull_request: pr(), changes: { base: { ref: { from: '' } } },
-    issue: { number: 42, pull_request: { url: 'fixture' } as object | null },
+  },
+});
+const commentGithub = (eventName = 'issue_comment') => ({
+  repository: 'JBallin/ballin-scripts', actor: 'jballin', event_name: eventName,
+  event: {
+    action: 'created',
+    ...(eventName === 'issue_comment'
+      ? { issue: { number: 42, pull_request: { url: 'fixture' } as object | null } }
+      : { pull_request: pr() }),
     comment: { body: '/claude-review', user: { type: 'User' }, author_association: 'OWNER' },
     sender: { type: 'User' },
   },
@@ -141,35 +149,32 @@ describe('offline Claude caller contracts', () => {
     const source = job(manual, 'eligibility');
     for (const eventName of ['issue_comment', 'pull_request_review_comment']) {
       for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
-        const g = github(eventName);
+        const g = commentGithub(eventName);
         g.event.comment.author_association = association;
-        if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
         assert.isTrue(eligible(source, { github: g }));
       }
       for (const body of ['/claude-review please', ' /claude-review', '/claude-review\n', 'text\n/claude-review', '/claude-review-extra', '']) {
-        const g = github(eventName);
+        const g = commentGithub(eventName);
         g.event.comment.body = body;
-        if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
         assert.isFalse(eligible(source, { github: g }), `${eventName}: ${JSON.stringify(body)}`);
       }
       for (const association of ['NONE', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'CONTRIBUTOR']) {
-        const g = github(eventName);
+        const g = commentGithub(eventName);
         g.event.comment.author_association = association;
-        if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
         assert.isFalse(eligible(source, { github: g }), `${eventName}: ${association}`);
       }
       for (const commenter of ['User', 'Bot']) {
         for (const sender of ['User', 'Bot']) {
-          const g = github(eventName);
+          const g = commentGithub(eventName);
           g.event.comment.user.type = commenter;
           g.event.sender.type = sender;
-          if (eventName === 'pull_request_review_comment') g.event.issue.pull_request = null;
           assert.equal(eligible(source, { github: g }), commenter === 'User' && sender === 'User',
             `${eventName}: commenter ${commenter}, sender ${sender}`);
         }
       }
     }
-    const issueComment = github();
+    const issueComment = commentGithub();
+    if (!('issue' in issueComment.event)) throw new Error('missing issue_comment fixture issue');
     issueComment.event.issue.pull_request = null;
     assert.isFalse(eligible(source, { github: issueComment }));
   });
@@ -287,7 +292,7 @@ describe('offline Claude caller contracts', () => {
         assert.deepEqual(directKeys(source, '    '), [...keys[index]], `unsupported keys in ${name}`);
         assert.deepEqual(section(source, 'permissions:'), [...permissions[index]]);
         if (name === 'review') {
-          assert.match(source, /^    secrets:\n      CLAUDE_CODE_OAUTH_TOKEN: \$\{\{ secrets\.CLAUDE_CODE_OAUTH_TOKEN \}\}$/mu);
+          assert.deepEqual(section(source, 'secrets:'), ['CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}']);
           assert.equal([...source.matchAll(/secrets\./gu)].length, 1);
           assert.notMatch(source, /^    (?:steps|env|with):/mu);
         } else {
@@ -301,7 +306,7 @@ describe('offline Claude caller contracts', () => {
   });
 
   it('uses the reviewed immutable revision consistently for the three runtime entry points', () => {
-    const pin = '9acfdda9358a9eff22bd4a133135c3fbb2b8f512';
+    const pin = 'c000fb8c200fe4231cdbdb542b45d1ce85b5310c';
     for (const [workflow, name, entry] of [[automatic, 'review', 'claude-review.yml'], [manual, 'review', 'claude.yml'], [status, 'status', 'claude-review-status.yml']]) {
       const source = job(workflow, name);
       assert.notMatch(source, /^    ['"]uses['"]:/mu, 'quoted invocation keys are unsupported');

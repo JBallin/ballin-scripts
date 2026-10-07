@@ -41,7 +41,9 @@ The manual preflight's single step, authentication environment, shell prologue,
 API capture, filter assignment, and final output form one canonical critical
 block. These checks protect that source form and representative predicate
 behavior; they do not prove arbitrary YAML or shell behavior. Eligibility
-fixtures use each caller's configured event names and actions.
+fixtures use each caller's configured event names, actions, and payload fields:
+top-level PR comments have `issue.pull_request`; inline comments have `pull_request`
+and no synthetic `issue`. The secrets map must contain only the approved token.
 The supported direct workflow and job keys are explicit, so execution defaults,
 matrix strategies, and quoted key alternatives fail closed. Rejected commands
 and untrusted associations cover both comment events; fork and closed-PR cases
