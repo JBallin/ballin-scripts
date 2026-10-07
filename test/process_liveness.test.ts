@@ -12,6 +12,12 @@ describe('sandbox Linux process liveness', () => {
     fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, 'stat'), `${pid} (fixture ) process) ${state} ${parent} ${group} 0 0 0\n`);
   };
+  const withStatRead = (pid: number, read: () => string, inspect: () => void): void => {
+    const original = fs.readFileSync;
+    const stat = path.join(root, String(pid), 'stat');
+    fs.readFileSync = (file: string, ...args: unknown[]) => file === stat ? read() : original(file, ...args);
+    try { inspect(); } finally { fs.readFileSync = original; }
+  };
   it('parses PID, PPID, PGID and state despite spaces and parentheses in comm', () => {
     record(101, 'Z');
     assert.deepEqual(parseProcessStat(fs.readFileSync(path.join(root, '101/stat'), 'utf8')), { pid: 101, parent: 1, group: 100, state: 'Z' });
@@ -45,6 +51,54 @@ describe('sandbox Linux process liveness', () => {
       '100 (unsafe group) S 1 9007199254740992 0\n',
     ]) assert.isUndefined(parseProcessStat(contents));
     for (const target of [0, 1.5, -1.5, Number.MAX_SAFE_INTEGER + 1]) assert.isUndefined(linuxProcessIsAlive(target, root));
+  });
+  it('skips ENOENT and ESRCH reads only after verifying the enumerated PID disappeared', () => {
+    for (const code of ['ENOENT', 'ESRCH']) {
+      record(100, 'Z'); record(200, 'S', 200);
+      withStatRead(200, () => {
+        fs.rmSync(path.join(root, '200'), { recursive: true });
+        throw Object.assign(new Error('fixture process exited'), { code });
+      }, () => assert.isFalse(linuxProcessIsAlive(-100, root)));
+      record(200, 'S', 200);
+      withStatRead(200, () => {
+        throw Object.assign(new Error('fixture record unavailable'), { code });
+      }, () => assert.isUndefined(linuxProcessIsAlive(-100, root)));
+      fs.rmSync(path.join(root, '200'), { recursive: true });
+      record(200, 'S', 100);
+      withStatRead(200, () => {
+        throw Object.assign(new Error('fixture target record unavailable'), { code });
+      }, () => assert.isUndefined(linuxProcessIsAlive(-100, root)));
+    }
+  });
+  it('skips malformed dying records only after their PID directory disappears', () => {
+    for (const state of ['X', 'S']) {
+      record(100, 'Z'); record(200, state, 200);
+      const invalid = `200 (dying fixture) ${state} 0 -1 0\n`;
+      assert.isUndefined(parseProcessStat(invalid));
+      withStatRead(200, () => invalid, () => assert.isUndefined(linuxProcessIsAlive(-100, root)));
+      withStatRead(200, () => {
+        fs.rmSync(path.join(root, '200'), { recursive: true });
+        return invalid;
+      }, () => assert.isFalse(linuxProcessIsAlive(-100, root)));
+    }
+    record(101, 'S'); record(50, 'X', 200);
+    withStatRead(50, () => {
+      fs.rmSync(path.join(root, '50'), { recursive: true });
+      return '50 (dying fixture) X 0 -1 0\n';
+    }, () => assert.isTrue(linuxProcessIsAlive(-100, root)));
+  });
+  it('keeps permission errors ambiguous while checking whether a PID disappeared', () => {
+    record(100, 'Z'); record(200, 'S', 200);
+    const original = fs.lstatSync;
+    fs.lstatSync = (file: string, ...args: unknown[]) => {
+      if (file === path.join(root, '200')) throw Object.assign(new Error('fixture access denied'), { code: 'EACCES' });
+      return original(file, ...args);
+    };
+    try {
+      withStatRead(200, () => {
+        throw Object.assign(new Error('fixture record unavailable'), { code: 'ESRCH' });
+      }, () => assert.isUndefined(linuxProcessIsAlive(-100, root)));
+    } finally { fs.lstatSync = original; }
   });
   it('fails closed for unreadable, malformed, missing or mismatched inspection evidence', () => {
     record(100, 'Z');
