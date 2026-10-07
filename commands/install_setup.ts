@@ -248,7 +248,10 @@ const setup = (
     return false;
   }
 
-  if (mode === 'fresh') offerCompletionSetup(docsUrl);
+  if (mode === 'fresh') {
+    offerCompletionSetup(docsUrl);
+    writeStdoutLine();
+  }
 
   const destination = configuredBackupDestination(readJsonObject(configPathFor(repoDir)));
   const backupConfigured = destination.kind === 'repository' || destination.kind === 'legacy-gist';
