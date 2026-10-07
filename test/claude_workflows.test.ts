@@ -16,13 +16,20 @@ const directKeys = (source: string, indentation: string): string[] => source.spl
     assert.exists(key, 'unsupported direct key: retain the canonical unquoted form');
     return key![1];
   });
+const rootMap = (workflow: string, name: string): string => {
+  const lines = workflow.split('\n');
+  const start = lines.indexOf(`${name}:`);
+  assert.isAtLeast(start, 0, `missing canonical ${name} map`);
+  const end = lines.findIndex((line: string, index: number) => index > start && /^[\w-]+:/u.test(line));
+  // Comments do not close a YAML map; retain all content until the next root key.
+  return lines.slice(start + 1, end === -1 ? lines.length : end).join('\n');
+};
 const jobs = (workflow: string): string => {
-  const result = workflow.match(/^jobs:\n([\s\S]*?)(?=^\S|$(?![\s\S]))/mu);
-  assert.exists(result, 'missing jobs map');
-  for (const line of result![1].split('\n').filter((line: string) => /^  \S/u.test(line))) {
+  const source = rootMap(workflow, 'jobs');
+  for (const line of source.split('\n').filter((line: string) => /^  \S/u.test(line))) {
     assert.match(line, /^  [\w-]+:$/u, 'unsupported direct-child job key: use the canonical unquoted form');
   }
-  return result![1];
+  return source;
 };
 const job = (workflow: string, name: string): string => {
   const result = jobs(workflow).match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, 'mu'));
@@ -121,7 +128,7 @@ describe('offline Claude caller contracts', () => {
   });
 
   it('selects only the intended automatic, manual and model-free refresh events', () => {
-    const triggers = (workflow: string) => workflow.match(/^on:\n([\s\S]*?)(?=^\S)/mu)![1].trim();
+    const triggers = (workflow: string) => rootMap(workflow, 'on').trim();
     assert.equal(triggers(automatic), 'pull_request:\n    types: [opened, ready_for_review]');
     assert.equal(triggers(manual), 'issue_comment:\n    types: [created]\n  pull_request_review_comment:\n    types: [created]');
     assert.equal(triggers(status), 'pull_request:\n    types: [synchronize, edited]');

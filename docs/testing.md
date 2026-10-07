@@ -31,7 +31,9 @@ They do not execute Bash or validate the jq runtime. Shared runtime behavior is
 tested in the runtime repository.
 
 These are supported-source-form checks for the current thin callers. Direct-child
-job keys must use the unquoted form, the eligibility job must contain only the
+job keys must use the unquoted form. Jobs and triggers are captured through the
+next root key or end; root-aligned comments cannot hide later entries.
+The eligibility job must contain only the
 canonical checked `GITHUB_OUTPUT` emission, and the captured filter must retain
 its active ordered response guards without comments. Secret access must retain
 the approved dot reference; indexed access is rejected. Alternative valid YAML,
