@@ -21,12 +21,30 @@ describe('sandbox Linux process liveness', () => {
     assert.isFalse(linuxProcessIsAlive(-100, root));
     assert.isFalse(linuxProcessIsAlive(101, root));
   });
+  it('accepts namespace-visible zero PGIDs without matching a positive sandbox group', () => {
+    record(1, 'S', 0, 0); record(100, 'Z'); record(101, 'Z');
+    assert.deepEqual(parseProcessStat(fs.readFileSync(path.join(root, '1/stat'), 'utf8')), { pid: 1, parent: 0, group: 0, state: 'S' });
+    assert.isTrue(linuxProcessIsAlive(1, root));
+    assert.isFalse(linuxProcessIsAlive(-100, root));
+    record(101, 'S');
+    assert.isTrue(linuxProcessIsAlive(-100, root));
+    assert.isUndefined(linuxProcessIsAlive(-200, root));
+  });
   it('refuses groups with any live descendant and treats unfamiliar states as live', () => {
     for (const state of ['R', 'S', 'D', 'T', 't', 'I', 'Q']) {
       record(100, 'Z'); record(101, state, 100, 100); record(102, 'S', 200);
       assert.isTrue(linuxProcessIsAlive(-100, root));
       assert.isTrue(linuxProcessIsAlive(101, root));
     }
+  });
+  it('keeps malformed numeric records and invalid target groups ambiguous', () => {
+    for (const contents of [
+      '0 (invalid PID) S 0 0 0\n',
+      '100 (invalid group) S 1 -1 0\n',
+      '100 (fractional group) S 1 0.5 0\n',
+      '100 (unsafe group) S 1 9007199254740992 0\n',
+    ]) assert.isUndefined(parseProcessStat(contents));
+    for (const target of [0, 1.5, -1.5, Number.MAX_SAFE_INTEGER + 1]) assert.isUndefined(linuxProcessIsAlive(target, root));
   });
   it('fails closed for unreadable, malformed, missing or mismatched inspection evidence', () => {
     record(100, 'Z');

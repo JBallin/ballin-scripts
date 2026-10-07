@@ -7,13 +7,15 @@ const parseProcessStat = (contents: string): ProcessRecord | undefined => {
   const match = contents.match(/^(\d+) \(.*\) ([A-Za-z]) (\d+) (\d+) /su);
   if (!match) return undefined;
   const [, pid, state, parent, group] = match;
+  // A group outside the procfs PID namespace is reported as zero.
   const record = { pid: Number(pid), parent: Number(parent), group: Number(group), state };
-  if (![record.pid, record.parent, record.group].every(Number.isSafeInteger) || record.pid < 1 || record.group < 1) return undefined;
+  if (![record.pid, record.parent, record.group].every(Number.isSafeInteger) || record.pid < 1 || record.group < 0) return undefined;
   return record;
 };
 const dead = (record: ProcessRecord): boolean => ['Z', 'X', 'x'].includes(record.state);
 // undefined means inspection cannot establish liveness; callers must fail closed.
 const linuxProcessIsAlive = (pid: number, procRoot = '/proc'): boolean | undefined => {
+  if (!Number.isSafeInteger(pid) || pid === 0) return undefined;
   try {
     if (pid > 0) {
       const record = parseProcessStat(fs.readFileSync(path.join(procRoot, String(pid), 'stat'), 'utf8'));
