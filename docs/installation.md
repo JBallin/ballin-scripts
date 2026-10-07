@@ -272,11 +272,11 @@ For an already-configured backup, `ballin backup setup` shows the validated
 destination, whether sensitive sources are included, and whether automatic
 backup during update is enabled, plus the
 [local last-success record](backup-sources.md#last-successful-backup). It then
-offers to review backup settings, defaulting to No. Choose Yes to review
-sensitive-source inclusion and automatic backup using your current settings as
-defaults. The sensitive-source choice requires explicit confirmation; both
-choices are saved after the review completes. Cancelling leaves these settings
-unchanged. This review keeps the destination and does not run a backup.
+offers to review sensitive-source inclusion and automatic backup using your
+current settings as defaults. The sensitive-source choice requires explicit
+confirmation; both choices are saved after the review completes. Cancelling
+leaves these settings unchanged. This review keeps the destination and does not
+run a backup.
 
 To change sensitive-source inclusion or automatic backup during update while
 keeping your destination, run `ballin setup` for
