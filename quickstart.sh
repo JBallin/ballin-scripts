@@ -239,7 +239,7 @@ configure_path() {
       // executable argument. Parameter and command expansions are not evaluated.
       plain = plain.replace(/\$\{[^}]*\}|\$\([^)]*\)/gu, "Q")
         .replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|{}]+/gu, " ");
-      for (const statement of plain.split(/[\n;&|{}]+/u)) {
+      for (const statement of plain.split(/[\n;&|{})]+/u)) {
         const words = statement.trim().split(/\s+/u);
         while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[0] ?? "")
           || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin"].includes(words[0])) words.shift();

@@ -164,7 +164,8 @@ PATH setup. It leaves symlinked or invalid startup files unchanged. It uses
 syntax-only checks to reuse a matching PATH line only as a final standalone
 command. If later edits make that placement ambiguous, it asks before appending
 a new line. A recognized unquoted `return`, `exit`, or `exec` with an executable
-argument stops automatic PATH setup, including inside a function or conditional.
+argument stops automatic PATH setup, including inside a function, conditional,
+or case arm.
 The helper leaves the file unchanged and prints the exact PATH line for manual
 placement before following this standard installation guide. This conservative
 check ignores comments, quoted data, and simple heredoc bodies; it does not
