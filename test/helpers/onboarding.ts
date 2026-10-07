@@ -2,6 +2,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { linuxProcessIsAlive } = require('./process_liveness.ts');
+const { activeScenario, scenarioPath } = require('./sandbox_scenarios.ts');
 const { fixtureState, installRepositoryFixture } = require('./repository.ts');
 import type { FixtureState } from './repository.ts';
 
@@ -15,7 +17,12 @@ const systemTools = ['bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'rm', 
 const sandboxCommandTimeout = 120000;
 const sandboxSuiteTimeout = 300000;
 const processIsAlive = (pid: number): boolean => {
-  try { process.kill(pid, 0); return true; } catch (error) {
+  try {
+    process.kill(pid, 0);
+    // kill(0) includes zombies. Only verified Linux dead processes may be ignored;
+    // macOS and unavailable/ambiguous inspection retain the native conservative result.
+    return process.platform === 'linux' ? linuxProcessIsAlive(pid) ?? true : true;
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
     if ((error as NodeJS.ErrnoException).code === 'EPERM') return true;
     throw error;
@@ -50,6 +57,7 @@ const recordSession = (sandbox: Sandbox, groups: number[], launchPending = false
 };
 const validateSandbox = (sandbox: Sandbox): void => {
   validateRoot(sandbox.root);
+  activeScenario(sandbox);
   for (const directory of [sandbox.home, sandbox.tools, sandbox.bin, sandbox.scratch, sandbox.remote]) {
     if (fs.realpathSync(directory) !== directory) throw new Error('Sandbox directory was replaced');
   }
@@ -105,6 +113,8 @@ const resetSandbox = (sandbox: Sandbox, mode: 'fresh' | 'create' | 'reconnect'):
     fs.rmSync(path.join(sandbox.repo, '.backup-cache'), { recursive: true, force: true });
   }
   resetRemote(sandbox, mode === 'reconnect');
+  fs.writeFileSync(scenarioPath(sandbox), JSON.stringify({ name: 'none' }));
+  fs.rmSync(path.join(sandbox.root, 'update-stage.ready'), { force: true });
 };
 const cleanupSandbox = (root: string): void => {
   validateRoot(root);
@@ -131,6 +141,7 @@ const createSandbox = (): Sandbox => {
     guard: path.join(root, 'guard.ts'), expected: new Map(), links: new Map(),
   };
   try {
+    fs.writeFileSync(scenarioPath(sandbox), JSON.stringify({ name: 'none' }));
     fs.writeFileSync(path.join(root, markerName), JSON.stringify({ version: 1, root }));
     [sandbox.home, sandbox.tools, sandbox.bin, sandbox.remote, sandbox.scratch].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
     for (const name of systemTools) {
@@ -144,10 +155,10 @@ const createSandbox = (): Sandbox => {
     sandbox.links.set(path.join(sandbox.tools, 'node'), process.execPath);
     fs.copyFileSync(path.join(__dirname, 'onboarding_guard.ts'), sandbox.guard);
     const git = path.join(sandbox.tools, 'git');
-    fs.writeFileSync(git, `#!/usr/bin/env node\nconst fs = require('fs');\nconst path = require('path');\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(sandbox.log)}, 'git:' + args.join(' ') + '\\n');\nconst exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);\nif (exact(['--version'])) process.stdout.write('git version onboarding fixture\\n');\nelse if (exact(['clone', 'https://github.com/JBallin/ballin-scripts.git', '.ballin-scripts']) && process.cwd() === ${JSON.stringify(sandbox.home)}) {\n  fs.mkdirSync(${JSON.stringify(sandbox.repo)}, { recursive: true });\n  for (const name of ['commands', 'config', 'bin', 'completions', 'package.json']) fs.cpSync(path.join(${JSON.stringify(source)}, name), path.join(${JSON.stringify(sandbox.repo)}, name), { recursive: true });\n} else if (exact(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])) process.exitCode = 1;\nelse if (process.cwd() === ${JSON.stringify(sandbox.repo)} && [\n  ['fetch', 'origin', '+main:refs/remotes/origin/main'], ['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'], ['checkout', 'main'], ['merge', 'origin/main'], ['stash', 'push', '--include-untracked']\n].some(exact)) {}\nelse { process.stderr.write('Unsupported sandbox Git operation\\n'); process.exitCode = 2; }\n`, { mode: 0o755 });
+    fs.writeFileSync(git, `#!/usr/bin/env node\nconst fs = require('fs');\nconst path = require('path');\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(sandbox.log)}, 'git:' + args.join(' ') + '\\n');\nconst exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);\nif (exact(['--version'])) process.stdout.write('git version onboarding fixture\\n');\nelse if (exact(['clone', 'https://github.com/JBallin/ballin-scripts.git', '.ballin-scripts']) && process.cwd() === ${JSON.stringify(sandbox.home)}) {\n  fs.mkdirSync(${JSON.stringify(sandbox.repo)}, { recursive: true });\n  for (const name of ['commands', 'config', 'bin', 'completions', 'package.json']) fs.cpSync(path.join(${JSON.stringify(source)}, name), path.join(${JSON.stringify(sandbox.repo)}, name), { recursive: true });\n} else if (exact(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])) process.exitCode = 1;\nelse if (process.cwd() === ${JSON.stringify(sandbox.repo)} && [\n  ['fetch', 'origin', '+main:refs/remotes/origin/main'], ['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'], ['checkout', 'main'], ['merge', 'origin/main'], ['stash', 'push', '--include-untracked']\n].some(exact)) {\n  if (args[0] === 'fetch' && JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name === 'self-update') { process.stderr.write('Simulated sandbox fetch failure\\n'); process.exitCode = 1; }\n}\nelse { process.stderr.write('Unsupported sandbox Git operation\\n'); process.exitCode = 2; }\n`, { mode: 0o755 });
     installRepositoryFixture(sandbox.tools, path.join(sandbox.remote, 'repository.json'), true);
     const softwareUpdate = path.join(sandbox.tools, 'softwareupdate');
-    fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
+    fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); const scenario = JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name;\n  if (scenario === 'update-failure') { process.stderr.write('Simulated sandbox macOS update failure\\n'); process.exitCode = 1; }\n  else if (scenario === 'update-interrupt') { fs.writeFileSync(${JSON.stringify(path.join(sandbox.root, 'update-stage.ready'))}, 'ready'); process.stdout.write('Sandbox update stage ready for interruption\\n'); setInterval(() => {}, 1000); }\n  else process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
     for (const file of [git, path.join(sandbox.tools, 'gh'), softwareUpdate, sandbox.guard]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
     fs.writeFileSync(path.join(sandbox.home, '.zshrc'), '# Harmless onboarding QA fixture\nexport BALLIN_QA_EXAMPLE=1\n');
     resetRemote(sandbox);

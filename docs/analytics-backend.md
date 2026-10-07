@@ -71,10 +71,10 @@ active installs, top-level command usage, command success/failure counts,
 application/Node/macOS-version trends, and a separate behavioral-outcomes
 section. It does not require, accept, or print Cloudflare secret values.
 
-Run `npx wrangler login` first if local Wrangler authentication is not
-configured. The report tries a directly available `wrangler` command first. If
-that command is unavailable, it falls back to `npx --yes wrangler`, which allows
-npx to install Wrangler without prompting.
+From the repository root, install the locked tool with
+`npm ci --prefix analytics-worker --include=dev`, then run
+`npm --prefix analytics-worker run wrangler -- login` if local authentication is
+not configured. Reporting and reset require that installed local executable.
 
 Analytics ingestion is public client telemetry. Valid events can be spoofed, so
 reports are directional maintenance signals rather than security-trustworthy
@@ -120,7 +120,7 @@ IPs, or raw install IDs.
 
 ## Resetting Aggregates
 
-Use `analytics-worker/reset.ts` when production analytics should start from a
+Use the Worker reset script when production analytics should start from a
 fresh reporting baseline. It is a rare maintenance utility, not a normal
 project workflow. The first expected use is the Ballin 2 canonical CLI rename,
 where the chosen cleanup path is a clean reset instead of mapping old `up` /
@@ -136,16 +136,16 @@ The reset scope is the full aggregate schema:
 
 There is no raw event table to preserve or delete.
 
-Preview production row counts:
+From the repository root, preview production row counts:
 
 ```shell
-node analytics-worker/reset.ts --dry-run
+npm --prefix analytics-worker run reset -- --dry-run
 ```
 
 Clear production aggregate rows:
 
 ```shell
-node analytics-worker/reset.ts --confirm RESET_ANALYTICS_AGGREGATES
+npm --prefix analytics-worker run reset -- --confirm RESET_ANALYTICS_AGGREGATES
 ```
 
 Confirm the fresh reporting baseline after reset:
@@ -154,8 +154,8 @@ Confirm the fresh reporting baseline after reset:
 npm run analytics:report
 ```
 
-The reset utility uses the same local Wrangler authentication and fallback
-behavior as the report.
+The reset utility uses the same local Wrangler authentication and installed
+tool as the report.
 
 ## Abuse Controls
 
@@ -174,7 +174,8 @@ reported by the application.
 
 ## Production Checklist
 
-For production setup or recreation:
+For production setup or recreation, first install the locked Wrangler as
+described in the [Worker setup guide](../analytics-worker/README.md#production-setup):
 
 - create the D1 database
 - copy `analytics-worker/wrangler.toml.example` to ignored local
@@ -184,8 +185,8 @@ For production setup or recreation:
 - create the `analytics-worker-production` GitHub deployment environment with a
   `main` branch rule and environment secrets `CLOUDFLARE_API_TOKEN`,
   `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_D1_DATABASE_ID`
-- apply all pending D1 migrations with `wrangler d1 migrations apply
-  ballin-scripts-analytics --remote`
+- from `analytics-worker/`, apply all pending D1 migrations with
+  `npm run migrate:remote`
 - confirm the `Deploy Analytics Worker` workflow completed after the relevant
   Worker or deployment input changed on `main`; after deploying, the workflow
   verifies every Worker version receiving traffic has the required D1,
@@ -196,8 +197,9 @@ For production setup or recreation:
   stored
 
 Deploy failures are visible in GitHub Actions. Remote D1 migrations remain
-manual and should use `--remote`; migration changes stop publishing until the
-remote migration is applied and the deploy workflow succeeds from `main`.
+manual; `migrate:remote` targets the remote database. Migration changes stop
+publishing until the remote migration is applied and the deploy workflow succeeds
+from `main`.
 The deployment check verifies Cloudflare binding metadata without exposing
 secret values. It cannot verify the hash secret's value, D1 schema or migration
 state, resource reachability, or runtime rate-limit behavior.
@@ -296,13 +298,13 @@ The migration that removes the redundant OS-family dimension intentionally
 recreates `version_events_daily` without preserving its historical rows. If
 completing this historical cutover, use this order after the change is on `main`:
 
-1. Apply pending D1 migrations with `wrangler d1 migrations apply
-   ballin-scripts-analytics --remote`.
+1. From `analytics-worker/`, apply pending D1 migrations with
+   `npm run migrate:remote`.
 2. Rerun the `Deploy Analytics Worker` workflow so the Worker and revised table
    schema become compatible.
-3. Run `node analytics-worker/reset.ts --confirm
-   RESET_ANALYTICS_AGGREGATES` to establish a clean baseline across every
-   aggregate table.
+3. From the repository root, run
+   `npm --prefix analytics-worker run reset -- --confirm RESET_ANALYTICS_AGGREGATES`
+   to establish a clean baseline across every aggregate table.
 4. Confirm a current schema-v1 event is accepted and use `npm run
    analytics:report` to verify the fresh aggregate shape.
 

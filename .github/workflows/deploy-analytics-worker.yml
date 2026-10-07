@@ -28,15 +28,18 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .nvmrc
           check-latest: true
+
+      - name: Install locked Wrangler
+        run: npm ci --prefix analytics-worker --include=dev
 
       - name: Check for manual D1 migrations
         if: github.event_name == 'push'
@@ -112,7 +115,7 @@ jobs:
           fi
 
           if [ -n "${migration_changes}" ]; then
-            echo "::error::Remote D1 migrations remain manual. Apply migrations with wrangler d1 migrations apply ballin-scripts-analytics --remote, then rerun this workflow from main."
+            echo "::error::Remote D1 migrations remain manual. From analytics-worker/, run npm run migrate:remote, then rerun this workflow from main."
             exit 1
           fi
 
@@ -138,13 +141,11 @@ jobs:
           fs.writeFileSync(path, value);
           NODE
 
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Rate-limit bindings require Wrangler >=4.36.0.
-          wranglerVersion: "^4.36.0"
-          command: deploy
-          workingDirectory: analytics-worker
-          postCommands: node verify-deployment.ts
+      - name: Deploy and verify Worker
+        working-directory: analytics-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm run deploy
+          npm run verify:deployment
