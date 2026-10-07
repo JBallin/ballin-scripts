@@ -78,9 +78,18 @@ const conditionExpression = (expression: string): string => {
     if (match![0].trim()) tokens.push(match![0]);
     offset = tokenPattern.lastIndex;
   }
+  const argumentsStack: { name: string; commas: number }[] = [];
   tokens.forEach((token, index) => {
     if (token === '(' && index > 0 && !['!', '&&', '||', '(', ',', 'contains', 'fromJSON'].includes(tokens[index - 1])) {
       assert.fail('unsupported caller condition syntax: only contains and fromJSON calls are supported');
+    }
+    if (token === '(') argumentsStack.push({ name: tokens[index - 1] ?? '', commas: 0 });
+    if (token === ')') argumentsStack.pop();
+    if (token === ',') {
+      const call = argumentsStack.at(-1);
+      assert.isTrue(call?.name === 'contains' && call.commas === 0,
+        'unsupported caller condition syntax: commas must separate the two contains arguments');
+      call!.commas += 1;
     }
   });
   return expression;
@@ -129,6 +138,8 @@ describe('offline Claude caller contracts', () => {
     for (const expression of [
       "github.actor === 'jballin'", "github.actor !== 'dependabot[bot]'",
       "github.actor.includes('ballin')", "github.actor ? true : false",
+      "(true, github.actor == 'jballin')", "true, github.actor == 'jballin'",
+      "contains((true, github.actor), 'jballin')", "fromJSON('true', 'false')",
     ]) {
       assert.throws(() => conditionExpression(expression), 'unsupported caller condition syntax');
     }
