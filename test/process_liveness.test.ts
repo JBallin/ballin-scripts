@@ -71,7 +71,7 @@ describe('sandbox Linux process liveness', () => {
     }
   });
   it('skips malformed dying records only after their PID directory disappears', () => {
-    for (const state of ['X', 'S']) {
+    for (const state of ['X', 'R', 'S']) {
       record(100, 'Z'); record(200, state, 200);
       const invalid = `200 (dying fixture) ${state} 0 -1 0\n`;
       assert.isUndefined(parseProcessStat(invalid));
