@@ -160,8 +160,12 @@ compatible Node already on PATH stays under its existing version manager,
 including npm, so later default changes still take effect. If PATH has no
 compatible Node, the helper links its selected fallback Node/npm ahead of an
 older version. Rerunning with a compatible PATH Node outside that directory
-removes the fallback links. Alternate spellings and symlink aliases of the
-managed directory are still treated as the fallback. The Ballin command directory is appended to preserve existing tool priority.
+removes the fallback links. Alternate spellings or symlink aliases of the
+managed directory, and executable symlinks through its Node link, are still
+treated as the fallback. The Ballin command directory is appended to preserve
+existing tool priority.
+If Homebrew returns a successful but empty prefix, the helper stops before PATH
+setup or Ballin installation. Inspect and fix `brew --prefix`, then retry.
 
 For persistent PATH setup, select the startup file your terminal actually reads:
 choose `home` or an absolute directory containing `.zshrc` for zsh, or `login`

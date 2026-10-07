@@ -222,8 +222,8 @@ esac
     assert.include(result.stdout, 'Native installation prompt:');
     assert.notInclude(readLog(), 'sudo:');
     assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
-    for (const unexpected of ['sudo:', 'xcode-select:--install', 'releases/latest', 'ballin:update']) assert.notInclude(readLog(), unexpected);
-    assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), 'export PATH=');
+    for (const unexpected of ['sudo:', 'xcode-select:--install', 'releases/latest', 'ballin:update', 'brew:']) assert.notInclude(readLog(), unexpected);
+    assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
   });
   for (const name of ['node', 'git', 'gh']) {
     for (const spelling of ['relative-tools', '.', '']) {
@@ -300,6 +300,86 @@ esac
     assert.include(readLog(), 'ballin:backup open');
     assert.notInclude(readLog(), 'sudo:');
   });
+  for (const existingProfile of [false, true]) {
+    it(`stops before profile, auth, install or backup for an empty Homebrew prefix (existing profile: ${existingProfile})`, () => {
+      linkFake('brew');
+      const profile = path.join(home, '.zshrc');
+      const contents = '# Existing settings\n';
+      if (existingProfile) fs.writeFileSync(profile, contents, { mode: 0o640 });
+      const result = run('y\ny\n', { FAKE_BREW_PREFIX: '' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'Homebrew returned an empty installation prefix');
+      assert.include(result.stderr, 'Inspect and fix `brew --prefix`, then rerun this quickstart');
+      assert.notInclude(result.stdout, 'Add this PATH line?');
+      assert.equal(fs.existsSync(profile), existingProfile);
+      if (existingProfile) {
+        assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+      }
+      for (const forbidden of ['gh:auth status --active', 'gh:auth login', '/main/install.sh', 'install.sh:', 'ballin:']) {
+        assert.notInclude(readLog(), forbidden);
+      }
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      const retry = run('y\ny\n', { FAKE_BREW_PREFIX: path.join(root, 'brew') });
+      assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+      assert.include(fs.readFileSync(profile, 'utf8'), ":$PATH:'" + path.join(root, 'brew/bin') + "'");
+      assert.include(readLog(), 'ballin:backup open');
+    });
+  }
+  for (const kind of ['absolute', 'relative', 'multihop', 'newline hop', 'managed parent alias']) {
+    it(`retains an executable Node alias through ${kind} links and permits independent same-binary manager takeover`, () => {
+      linkFake('npm', systemNode);
+      const first = run('y\ny\ny\n', { FAKE_OLD_NODE: '1' });
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      const aliasBin = path.join(home, 'bin');
+      fs.mkdirSync(aliasBin);
+      const alias = path.join(aliasBin, 'node');
+      let target = path.join(quickBin, 'node');
+      if (kind === 'relative') target = path.relative(aliasBin, target);
+      if (kind === 'multihop' || kind === 'newline hop') {
+        const hop = kind === 'newline hop' ? 'current-node\n' : 'current-node';
+        fs.symlinkSync(path.relative(aliasBin, target), path.join(aliasBin, hop));
+        target = './' + hop;
+      }
+      if (kind === 'managed parent alias') {
+        const parentAlias = path.join(root, 'managed-parent');
+        fs.symlinkSync(path.dirname(quickBin), parentAlias);
+        target = path.join(parentAlias, 'bin/node');
+      }
+      fs.symlinkSync(target, alias);
+      const profile = path.join(home, '.zshrc');
+      const before = fs.readFileSync(profile, 'utf8');
+      const rerun = run('', { PATH: `${aliasBin}:${quickBin}:${tools}`, FAKE_OLD_NODE: '1' });
+      assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+      for (const name of ['node', 'npm']) {
+        assert.isTrue(fs.existsSync(path.join(quickBin, name)), `${name} fallback must remain available`);
+        assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(systemNode, name));
+      }
+      assert.equal(fs.realpathSync(alias), fs.realpathSync(path.join(systemNode, 'node')));
+      assert.equal(fs.readFileSync(profile, 'utf8'), before);
+      assert.notInclude(rerun.stderr, 'Persistent PATH setup incomplete');
+      const managerBin = path.join(home, '.nvm/current/bin');
+      fs.mkdirSync(managerBin, { recursive: true });
+      for (const name of ['node', 'npm']) fs.symlinkSync(path.join(systemNode, name), path.join(managerBin, name));
+      assert.equal(fs.realpathSync(path.join(managerBin, 'node')), fs.realpathSync(alias));
+      const takeover = run('', { PATH: `${aliasBin}:${quickBin}:${managerBin}:${tools}`, FAKE_OLD_NODE: '1' });
+      assert.equal(takeover.status, 0, takeover.stdout + takeover.stderr);
+      for (const name of ['node', 'npm']) {
+        assert.isFalse(fs.existsSync(path.join(quickBin, name)));
+        assert.isTrue(fs.existsSync(path.join(managerBin, name)));
+      }
+      const resolved = spawnSync('/bin/bash', ['-c', 'command -v node; command -v npm'], {
+        encoding: 'utf8', cwd: home,
+        env: testChildEnvironment({ HOME: home, PATH: `${aliasBin}:${quickBin}:${managerBin}:${tools}` }),
+      });
+      assert.equal(resolved.status, 0, resolved.stdout + resolved.stderr);
+      assert.deepEqual(resolved.stdout.trim().split('\n'), [path.join(managerBin, 'node'), path.join(managerBin, 'npm')]);
+      assert.equal(fs.readFileSync(profile, 'utf8'), before);
+      assert.equal(readLog().split('sudo:').length - 1, 1);
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
   for (const installed of [true, false]) {
     it(`uses working system Git past a broken PATH shim${installed ? ' without installation' : ' after installing Command Line Tools'}`, () => {
       const systemGit = path.join(root, 'system-git');
@@ -429,6 +509,8 @@ esac
       const result = run('y\n\ny\ny\n', { FAKE_GIT: 'missing', FAKE_ARCH: arch, FAKE_OLD_NODE: '1' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(readLog(), 'xcode-select:--install');
+      assert.notInclude(readLog(), 'brew:');
+      assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
       assert.include(readLog(), 'sudo:/usr/sbin/installer -pkg');
       assert.include(readLog(), `gh_2.102.0_macOS_${arch === 'arm64' ? 'arm64' : 'amd64'}.zip`);
       assert.include(readLog(), 'ballin:backup open');

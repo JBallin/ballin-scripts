@@ -60,13 +60,31 @@ node_compatible() {
   [[ -x "$1" ]] && [[ "$("$1" -p 'const [major, minor] = process.versions.node.split(".").map(Number); major > 24 || (major === 24 && minor >= 12)' 2>/dev/null)" == true ]]
 }
 
+node_uses_managed_link() {
+  local candidate="$1" target hops=0
+  # Follow executable links, not just the PATH directory. Equal final binaries
+  # can still be independently reachable through a version manager.
+  while :; do
+    if [[ "${candidate##*/}" == node && "${candidate%/*}" -ef "$quick_bin" ]]; then return 0; fi
+    [[ -L "$candidate" ]] || return 1
+    (( hops += 1 ))
+    (( hops <= 40 )) || return 0
+    # Suppress readlink's delimiter and preserve target newlines with a sentinel.
+    target=$(readlink -n "$candidate" && printf .) || return 0
+    target=${target%.}
+    if [[ "$target" == /* ]]; then candidate="$target"
+    else candidate="${candidate%/*}/$target"; fi
+  done
+}
+
 node_on_path() {
   local search_path='' remaining="$PATH" entry separator='' retained=false
   # Ignore our own fallback links so a version manager can take over on rerun.
-  # Directory identity also covers symlink aliases and alternate spellings.
+  # Exclude aliases that need the managed executable link to remain in place.
   while :; do
     entry=${remaining%%:*}
-    if [[ "$entry" != "$quick_bin" && ! "${entry:-.}" -ef "$quick_bin" ]]; then
+    if [[ "$entry" != "$quick_bin" && ! "${entry:-.}" -ef "$quick_bin" ]] \
+      && ! node_uses_managed_link "${entry:-.}/node"; then
       search_path+="$separator$entry"
       separator=':'
       retained=true
@@ -385,6 +403,7 @@ main() {
   bind_tool git "$git_tool"
   command_bin="$HOME/.local/bin"
   if command -v brew >/dev/null 2>&1 && brew_prefix=$(brew --prefix 2>/dev/null); then
+    [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix \`brew --prefix\`, then rerun this quickstart. PATH setup and Ballin installation have not run."
     command_bin="$brew_prefix/bin"
   fi
   [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
