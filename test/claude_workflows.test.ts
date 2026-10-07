@@ -68,6 +68,24 @@ const section = (source: string, header: string): string[] => {
 };
 const condition = (source: string): string => section(source, 'if: >-').join('\n');
 
+const conditionExpression = (expression: string): string => {
+  const tokenPattern = /\s+|'[^'\\]*'|(?:github|needs)(?:\.[a-z_]+)+\b|contains\b|fromJSON\b|true\b|false\b|==|!=|&&|\|\||!|[(),]/gyu;
+  const tokens: string[] = [];
+  for (let offset = 0; offset < expression.length;) {
+    tokenPattern.lastIndex = offset;
+    const match = tokenPattern.exec(expression);
+    assert.exists(match, 'unsupported caller condition syntax: extend the fixture coverage deliberately');
+    if (match![0].trim()) tokens.push(match![0]);
+    offset = tokenPattern.lastIndex;
+  }
+  tokens.forEach((token, index) => {
+    if (token === '(' && index > 0 && !['!', '&&', '||', '(', ',', 'contains', 'fromJSON'].includes(tokens[index - 1])) {
+      assert.fail('unsupported caller condition syntax: only contains and fromJSON calls are supported');
+    }
+  });
+  return expression;
+};
+
 // These callers use only boolean operators, property reads, contains and fromJSON.
 // Evaluate that subset against fixtures, folding strings like Actions comparisons.
 // This is consumer coverage, not a general GitHub Actions expression interpreter.
@@ -75,7 +93,7 @@ const eligible = (source: string, context: object): boolean => {
   const folded = JSON.parse(JSON.stringify(context, (_key, value: unknown) => (
     typeof value === 'string' ? value.toLowerCase() : value
   )));
-  const expression = condition(source).replace(/'[^']*'/gu, (literal: string) => literal.toLowerCase());
+  const expression = conditionExpression(condition(source)).replace(/'[^']*'/gu, (literal: string) => literal.toLowerCase());
   return Boolean(vm.runInNewContext(expression, {
     ...folded,
     fromJSON: JSON.parse,
@@ -90,7 +108,8 @@ const pr = () => ({
 const github = (eventName = 'pull_request', action = 'synchronize') => ({
   repository: 'JBallin/ballin-scripts', actor: 'jballin', event_name: eventName,
   event: {
-    action, pull_request: pr(), changes: { base: { ref: { from: '' } } },
+    action, pull_request: pr(),
+    ...(action === 'edited' ? { changes: { base: { ref: { from: '' } } } } : {}),
   },
 });
 const commentGithub = (eventName = 'issue_comment') => ({
@@ -106,6 +125,14 @@ const commentGithub = (eventName = 'issue_comment') => ({
 });
 
 describe('offline Claude caller contracts', () => {
+  it('rejects JavaScript-only condition syntax before evaluating fixtures', () => {
+    for (const expression of [
+      "github.actor === 'jballin'", "github.actor !== 'dependabot[bot]'",
+      "github.actor.includes('ballin')", "github.actor ? true : false",
+    ]) {
+      assert.throws(() => conditionExpression(expression), 'unsupported caller condition syntax');
+    }
+  });
   it('rejects unsupported predicate syntax after long whitespace and field tokens', () => {
     for (const prefix of [' '.repeat(100_000), `.field${'.field'.repeat(10_000)}`]) {
       assert.throws(() => predicateExpression(`${prefix}!`), 'unsupported preflight predicate');
@@ -143,7 +170,11 @@ describe('offline Claude caller contracts', () => {
       (g: ReturnType<typeof github>) => { g.actor = 'dependabot[bot]'; },
     ];
     for (const action of ['opened', 'ready_for_review']) {
-      assert.isTrue(eligible(source, { github: github('pull_request', action) }));
+      for (const actor of ['jballin', 'human-collaborator']) {
+        const g = github('pull_request', action);
+        g.actor = actor;
+        assert.isTrue(eligible(source, { github: g }), `${action}: ${actor}`);
+      }
       for (const change of negatives) {
         const g = github('pull_request', action);
         change(g);
@@ -155,28 +186,22 @@ describe('offline Claude caller contracts', () => {
   it('requires an entire manual command from trusted humans on a PR comment', () => {
     const source = job(manual, 'eligibility');
     for (const eventName of ['issue_comment', 'pull_request_review_comment']) {
-      for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
-        const g = commentGithub(eventName);
-        g.event.comment.author_association = association;
-        assert.isTrue(eligible(source, { github: g }));
-      }
+      const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
       for (const body of ['/claude-review please', ' /claude-review', '/claude-review\n', 'text\n/claude-review', '/claude-review-extra', '']) {
         const g = commentGithub(eventName);
         g.event.comment.body = body;
         assert.isFalse(eligible(source, { github: g }), `${eventName}: ${JSON.stringify(body)}`);
       }
-      for (const association of ['NONE', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'CONTRIBUTOR']) {
-        const g = commentGithub(eventName);
-        g.event.comment.author_association = association;
-        assert.isFalse(eligible(source, { github: g }), `${eventName}: ${association}`);
-      }
-      for (const commenter of ['User', 'Bot']) {
-        for (const sender of ['User', 'Bot']) {
-          const g = commentGithub(eventName);
-          g.event.comment.user.type = commenter;
-          g.event.sender.type = sender;
-          assert.equal(eligible(source, { github: g }), commenter === 'User' && sender === 'User',
-            `${eventName}: commenter ${commenter}, sender ${sender}`);
+      for (const association of [...trusted, 'NONE', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'CONTRIBUTOR']) {
+        for (const commenter of ['User', 'Bot']) {
+          for (const sender of ['User', 'Bot']) {
+            const g = commentGithub(eventName);
+            g.event.comment.author_association = association;
+            g.event.comment.user.type = commenter;
+            g.event.sender.type = sender;
+            assert.equal(eligible(source, { github: g }), trusted.includes(association) && commenter === 'User' && sender === 'User',
+              `${eventName}: ${association}, commenter ${commenter}, sender ${sender}`);
+          }
         }
       }
     }
@@ -257,6 +282,7 @@ describe('offline Claude caller contracts', () => {
   it('refreshes on pushes and base retargets, excluding other edits, forks and closed PRs', () => {
     const source = job(status, 'status');
     const retarget = github('pull_request', 'edited');
+    if (!retarget.event.changes) throw new Error('missing edited fixture changes');
     retarget.event.changes.base.ref.from = 'main';
     for (const context of [github('pull_request', 'synchronize'), retarget]) {
       assert.isTrue(eligible(source, { github: context }));
@@ -270,13 +296,9 @@ describe('offline Claude caller contracts', () => {
       }
     }
     // An edited event without a base retarget remains ineligible.
-    for (const change of [
-      (g: ReturnType<typeof github>) => { g.event.action = 'edited'; },
-      (g: ReturnType<typeof github>) => { g.event.action = 'opened'; },
-    ]) {
-      const g = github('pull_request', 'synchronize');
-      change(g);
-      assert.isFalse(eligible(source, { github: g }), change.toString());
+    for (const action of ['edited', 'opened']) {
+      const g = github('pull_request', action);
+      assert.isFalse(eligible(source, { github: g }), action);
     }
   });
 

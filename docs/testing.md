@@ -46,6 +46,10 @@ behavior; they do not prove arbitrary YAML or shell behavior. Eligibility
 fixtures use each caller's configured event names, actions, and payload fields:
 top-level PR comments have `issue.pull_request`; inline comments have `pull_request`
 and no synthetic `issue`. The secrets map must contain only the approved token.
+Only edited PR fixtures include `changes`; automatic review covers more than one
+human actor. Each association is crossed with both commenter and sender identity
+types on both comment events. Conditions reject unsupported tokens and property
+calls before evaluation, including JavaScript-only equality operators.
 The supported direct workflow and job keys are explicit, so execution defaults,
 matrix strategies, and quoted key alternatives fail closed. Rejected commands
 and untrusted associations cover both comment events; fork and closed-PR cases
