@@ -38,32 +38,45 @@ const versionJson = (id: string, bindings: BindingMetadata[]): string => JSON.st
 });
 
 type VerifierCliOptions = {
-  installNpx?: boolean;
+  installWrangler?: boolean;
   status?: number;
   stderr?: string;
 };
 
 const runVerifierCli = (options: VerifierCliOptions = {}) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-deploy-'));
-  const binDir = path.join(tempDir, 'bin');
+  const workerDir = path.join(tempDir, 'analytics-worker');
+  const binDir = path.join(workerDir, 'node_modules', '.bin');
+  const preloadPath = path.join(tempDir, 'spawn-fixture.cjs');
   const commandLogPath = path.join(tempDir, 'commands.log');
-  fs.mkdirSync(binDir);
+  fs.mkdirSync(binDir, { recursive: true });
 
   try {
-    if (options.installNpx !== false) {
-      const npxPath = path.join(binDir, 'npx');
-      fs.writeFileSync(npxPath, `#!${process.execPath}
+    // Exercise the original CLI and its coverage while routing child execution to owned fixtures.
+    fs.writeFileSync(preloadPath, `
+const childProcess = require('child_process');
+const assert = require('assert');
+const spawn = childProcess.spawnSync;
+childProcess.spawnSync = (command, args, options) => {
+  assert.strictEqual(command, ${JSON.stringify(path.join(rootDir, 'analytics-worker', 'node_modules', '.bin', 'wrangler'))});
+  assert.strictEqual(options.cwd, ${JSON.stringify(path.join(rootDir, 'analytics-worker'))});
+  return spawn(${JSON.stringify(path.join(binDir, 'wrangler'))}, args, { ...options, cwd: ${JSON.stringify(workerDir)} });
+};
+`);
+    if (options.installWrangler !== false) {
+      const wranglerPath = path.join(binDir, 'wrangler');
+      fs.writeFileSync(wranglerPath, `#!${process.execPath}
 const fs = require('fs');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.FAKE_COMMAND_LOG, JSON.stringify(args) + '\\n');
-if (process.env.FAKE_NPX_STATUS) {
-  process.stderr.write(process.env.FAKE_NPX_STDERR || '');
-  process.exitCode = Number(process.env.FAKE_NPX_STATUS);
-} else if (args[2] === 'deployments' && args[3] === 'status') {
+if (process.env.FAKE_WRANGLER_STATUS) {
+  process.stderr.write(process.env.FAKE_WRANGLER_STDERR || '');
+  process.exitCode = Number(process.env.FAKE_WRANGLER_STATUS);
+} else if (args[0] === 'deployments' && args[1] === 'status') {
   process.stdout.write(JSON.stringify({ versions: [{ percentage: 100, version_id: 'version-a' }] }));
-} else if (args[2] === 'versions' && args[3] === 'view') {
+} else if (args[0] === 'versions' && args[1] === 'view') {
   process.stdout.write(JSON.stringify({
-    id: args[4],
+    id: args[2],
     resources: {
       bindings: [
         { name: 'ANALYTICS_DB', type: 'd1' },
@@ -73,21 +86,21 @@ if (process.env.FAKE_NPX_STATUS) {
     },
   }));
 } else {
-  process.stderr.write('unexpected fake npx invocation');
+  process.stderr.write('unexpected fake Wrangler invocation');
   process.exitCode = 97;
 }
 `);
-      fs.chmodSync(npxPath, 0o755);
+      fs.chmodSync(wranglerPath, 0o755);
     }
 
-    const result = spawnSync(process.execPath, [verifierPath], {
+    const result = spawnSync(process.execPath, ['--require', preloadPath, verifierPath], {
       encoding: 'utf8',
       env: testChildEnvironment({
         HOME: tempDir,
         PATH: binDir,
         FAKE_COMMAND_LOG: commandLogPath,
-        FAKE_NPX_STATUS: options.status?.toString(),
-        FAKE_NPX_STDERR: options.stderr,
+        FAKE_WRANGLER_STATUS: options.status?.toString(),
+        FAKE_WRANGLER_STDERR: options.stderr,
       }),
     });
     const calls = fs.existsSync(commandLogPath)
@@ -163,10 +176,11 @@ describe('analytics Worker deployment', () => {
     ]);
     assert.match(
       workflow,
-      /uses:\s*actions\/setup-node@v6[\s\S]*?node-version-file:\s*\.nvmrc/u,
+      /uses:\s*actions\/setup-node@[a-f0-9]{40}[^\n]*[\s\S]*?node-version-file:\s*\.nvmrc/u,
     );
     assert.notMatch(workflow, /^\s+cache:\s*npm\s*$/mu);
-    assert.notMatch(workflow, /^\s+(?:run:\s*)?npm (?:ci|test)(?:\s|$)/mu);
+    assert.match(workflow, /^\s+run: npm ci --prefix analytics-worker --include=dev$/mu);
+    assert.notMatch(workflow, /^\s+(?:run:\s*)?npm test(?:\s|$)/mu);
   });
 
   const triggerCases: Array<{ name: string; files: string[]; expected: boolean }> = [
@@ -193,35 +207,34 @@ describe('analytics Worker deployment', () => {
     assert.match(workflow, /^  workflow_dispatch:\s*$/mu);
   });
 
-  it('uses a compatible Wrangler version for the production rate-limit binding', () => {
+  it('pins deployment actions and uses an exact integrity-locked Wrangler', () => {
     const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
     const config = fs.readFileSync(wranglerConfigPath, 'utf8');
-    const versionMatch = workflow.match(/wranglerVersion:\s*["']\^(\d+)\.(\d+)\.(\d+)["']/u);
-
-    assert.match(workflow, /uses:\s*cloudflare\/wrangler-action@v4\b/u);
-    assert.isNotNull(versionMatch, 'deployment must declare a caret Wrangler version range');
-
-    const lowerBound = versionMatch?.slice(1).map(Number) ?? [];
-    assert.equal(lowerBound[0], 4, 'deployment must stay on the compatible Wrangler 4 line');
-    assert.isAtLeast(
-      compareVersions(lowerBound, [4, 36, 0]),
-      0,
-      'rate-limit bindings require Wrangler 4.36.0 or newer',
-    );
-    assert.match(
-      config,
-      /\[\[ratelimits\]\][\s\S]*?name\s*=\s*"ANALYTICS_RATE_LIMITER"/u,
-    );
+    const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, 'analytics-worker', 'package.json'), 'utf8'));
+    const lock = JSON.parse(fs.readFileSync(path.join(rootDir, 'analytics-worker', 'package-lock.json'), 'utf8'));
+    const declaredVersion = manifest.devDependencies.wrangler;
+    assert.match(declaredVersion, /^4\.\d+\.\d+$/u);
+    assert.isAtLeast(compareVersions(declaredVersion.split('.').map(Number), [4, 36, 0]), 0);
+    assert.equal(lock.packages[''].devDependencies.wrangler, declaredVersion);
+    assert.equal(lock.packages['node_modules/wrangler'].version, declaredVersion);
+    for (const [name, metadata] of Object.entries(lock.packages)) {
+      if (name === '') continue;
+      assert.match((metadata as { integrity: string }).integrity, /^sha512-/u, name);
+    }
+    const actions = [...workflow.matchAll(/uses:\s*([^\s#]+)/gu)].map((match) => match[1]);
+    assert.lengthOf(actions, 2);
+    for (const action of actions) assert.match(action, /^[^@]+@[a-f0-9]{40}$/u);
+    assert.notInclude(workflow, 'wrangler-action');
+    assert.notInclude(workflow, 'wranglerVersion');
+    assert.match(config, /\[\[ratelimits\]\][\s\S]*?name\s*=\s*"ANALYTICS_RATE_LIMITER"/u);
   });
 
-  it('runs structured production verification in the deploy action context', () => {
+  it('deploys and verifies with the same installed local Wrangler', () => {
     const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
     const verifier = fs.readFileSync(verifierPath, 'utf8');
-
-    assert.match(workflow, /workingDirectory:\s*analytics-worker[\s\S]*?postCommands:\s*node verify-deployment\.ts/u);
-    assert.include(verifier, "spawnSync('npx', ['--no-install', 'wrangler', ...args]");
-    assert.include(verifier, "runner(['deployments', 'status', '--json'])");
-    assert.include(verifier, "runner(['versions', 'view', versionId, '--json'])");
+    assert.match(workflow, /working-directory: analytics-worker[\s\S]*?CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}[\s\S]*?CLOUDFLARE_ACCOUNT_ID: \$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}[\s\S]*?npm run deploy\n\s+npm run verify:deployment/u);
+    assert.include(verifier, "spawnSync(localWranglerPath(path.join(__dirname, '..')), args");
+    assert.notInclude(verifier, "spawnSync('npx'");
     assert.deepEqual(requiredBindings, [
       { name: 'ANALYTICS_DB', type: 'd1' },
       { name: 'ANALYTICS_RATE_LIMITER', type: 'ratelimit' },
@@ -318,8 +331,8 @@ describe('analytics Worker deployment', () => {
     assert.include(result.stdout, 'INSTALL_ID_HASH_SECRET (secret_text)');
     assert.notInclude(result.stdout, 'sensitive-value');
     assert.deepEqual(calls, [
-      ['--no-install', 'wrangler', 'deployments', 'status', '--json'],
-      ['--no-install', 'wrangler', 'versions', 'view', 'version-a', '--json'],
+      ['deployments', 'status', '--json'],
+      ['versions', 'view', 'version-a', '--json'],
     ]);
   });
 
@@ -338,19 +351,19 @@ describe('analytics Worker deployment', () => {
     );
     assert.notInclude(result.stderr, 'sensitive Wrangler failure details');
     assert.deepEqual(calls, [
-      ['--no-install', 'wrangler', 'deployments', 'status', '--json'],
+      ['deployments', 'status', '--json'],
     ]);
   });
 
-  it('fails the real verifier CLI when npx cannot be started', () => {
-    const { calls, result } = runVerifierCli({ installNpx: false });
+  it('requires local Wrangler for the real verifier CLI', () => {
+    const { calls, result } = runVerifierCli({ installWrangler: false });
 
     assert.isUndefined(result.error);
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
     assert.equal(
       result.stderr,
-      'analytics deployment verification: Wrangler deployments status failed\n',
+      'analytics deployment verification: Missing local Wrangler. Run npm ci --prefix analytics-worker --include=dev from the repository root.\n',
     );
     assert.deepEqual(calls, []);
   });

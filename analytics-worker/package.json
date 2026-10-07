@@ -1,0 +1,19 @@
+{
+  "name": "ballin-analytics-worker",
+  "private": true,
+  "scripts": {
+    "wrangler": "./node_modules/.bin/wrangler",
+    "deploy": "./node_modules/.bin/wrangler deploy",
+    "verify:deployment": "node verify-deployment.ts",
+    "reset": "node reset.ts",
+    "migrate:remote": "./node_modules/.bin/wrangler d1 migrations apply ballin-scripts-analytics --remote"
+  },
+  "devDependencies": {
+    "wrangler": "4.147.0"
+  },
+  "overrides": {
+    "miniflare": {
+      "sharp": "0.35.5"
+    }
+  }
+}

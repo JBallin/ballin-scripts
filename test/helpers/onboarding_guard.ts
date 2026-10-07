@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const root = process.env.BALLIN_QA_ROOT;
 const fail = (): never => { throw new Error('Onboarding sandbox safeguard refused the operation'); };
-if (!root || fs.realpathSync(root) !== root || process.env.HOME !== path.join(root, 'home')
+if (process.env.BALLIN_NO_ANALYTICS !== '1' || !root || fs.realpathSync(root) !== root || process.env.HOME !== path.join(root, 'home')
   || process.env.PATH !== [path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)) fail();
 
 const deny = (): never => fail();
@@ -38,7 +38,7 @@ for (const name of ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork']) {
     }
     const options = args.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as { env?: NodeJS.ProcessEnv; shell?: unknown; cwd?: string } | undefined;
     const env = options?.env ?? process.env;
-    if (options?.shell || env.HOME !== process.env.HOME || env.PATH !== process.env.PATH
+    if (env.BALLIN_NO_ANALYTICS !== '1' || options?.shell || env.HOME !== process.env.HOME || env.PATH !== process.env.PATH
       || env.NODE_OPTIONS !== process.env.NODE_OPTIONS || env.BALLIN_QA_ROOT !== root
       || (options?.cwd && !path.resolve(options.cwd).startsWith(root + path.sep))) fail();
     return original(command, ...args);

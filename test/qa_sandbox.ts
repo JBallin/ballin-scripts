@@ -5,7 +5,8 @@ const { createSandbox, cleanupSandbox, resetSandbox, sandboxEnvironment, recordS
 import type { Sandbox } from './helpers/onboarding.ts';
 import type { ChildProcess } from 'child_process';
 
-const usage = 'Usage: npm run sandbox -- [--keep | --cleanup <sandbox-root>]';
+const { scenarios, activeScenario, selectScenario } = require('./helpers/sandbox_scenarios.ts');
+const usage = 'Usage: npm run sandbox -- [--keep] [--scenario <name>] | --cleanup <sandbox-root>';
 const write = (text: string): void => { process.stdout.write(text + '\n'); };
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\"'\"'")}'`;
 const readLine = (): Promise<string | null> => new Promise((resolve, reject) => {
@@ -42,7 +43,8 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
     write('Onboarding sandbox removed.');
     return 0;
   }
-  if (args.length && !(args.length === 1 && args[0] === '--keep')) {
+  const options = args.filter((arg) => arg !== '--keep');
+  if (args.filter((arg) => arg === '--keep').length > 1 || (options.length && !(options.length === 2 && options[0] === '--scenario' && Object.hasOwn(scenarios, options[1])))) {
     write(usage);
     return 2;
   }
@@ -52,7 +54,7 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
   const groups = new Set<number>();
   let launchPending = false;
   recordSession(sandbox, []);
-  let preserve = args[0] === '--keep';
+  let preserve = args.includes('--keep');
   let interrupted = false;
   let child: ChildProcess | undefined;
   let killTimer: ReturnType<typeof setTimeout> | undefined;
@@ -121,14 +123,21 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
   process.on('SIGTERM', interrupt);
   write(`Ballin onboarding sandbox: ${sandbox.root}\nHOME: ${sandbox.home}\nInstalled checkout: ${sandbox.repo}\nFake repository: ${sandbox.remote}\nExternal services are blocked. Commands below run only in this sandbox.`);
   try {
+    if (options.length) selectScenario(sandbox, options[1]);
+    write(`Active scenario: ${activeScenario(sandbox)}`);
     if (await launch(['install'])) preserve = true;
     while (!interrupted) {
-      write('\nCommands: install | ballin <arguments> | inspect | reset fresh | reset create | reset reconnect | keep | exit');
+      write(`\nActive scenario: ${activeScenario(sandbox)}\nCommands: scenarios | scenario <name> | clear | install | ballin <arguments> | inspect | reset fresh | reset create | reset reconnect | keep | exit`);
       process.stdout.write('sandbox> ');
       const line = await readLine();
       if (line === null || line === 'exit') break;
       if (interrupted) break;
       if (line === 'keep') { preserve = true; write('Sandbox will be preserved.'); }
+      else if (line === 'scenarios') { for (const [name, description] of Object.entries(scenarios)) write(`${name}: ${description}`); }
+      else if (line === 'clear' || line.startsWith('scenario ')) {
+        try { selectScenario(sandbox, line === 'clear' ? 'none' : line.slice(9)); write(`Active scenario: ${activeScenario(sandbox)}`); }
+        catch (error) { write((error as Error).message); }
+      }
       else if (line === 'inspect') inspectSandbox(sandbox);
       else if (['reset fresh', 'reset create', 'reset reconnect'].includes(line)) {
         resetSandbox(sandbox, line.split(' ')[1] as 'fresh' | 'create' | 'reconnect');

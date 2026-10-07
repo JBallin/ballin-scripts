@@ -1,4 +1,6 @@
 const { spawnSync } = require('child_process');
+const path = require('path');
+const { localWranglerPath, missingWranglerMessage } = require('./wrangler.ts');
 
 type WranglerRunner = (args: string[]) => string;
 type OutputWriter = (value: string) => unknown;
@@ -101,10 +103,14 @@ const verifyBindings = (versionId: string, bindings: BindingMetadata[]): void =>
 };
 
 const runWrangler: WranglerRunner = (args) => {
-  const result = spawnSync('npx', ['--no-install', 'wrangler', ...args], {
+  const result = spawnSync(localWranglerPath(path.join(__dirname, '..')), args, {
+    cwd: __dirname,
     encoding: 'utf8',
     env: process.env,
   });
+  if (result.error?.code === 'ENOENT') {
+    throw new Error(missingWranglerMessage);
+  }
   if (result.error || result.status !== 0) {
     throw new Error(`Wrangler ${args.slice(0, 2).join(' ')} failed`);
   }
