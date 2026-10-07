@@ -10,6 +10,7 @@
     "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "typecheck:analytics-worker": "node node_modules/@typescript/native/bin/tsc --noEmit --strict --target ES2023 --module ESNext --lib ES2023,WebWorker --ignoreConfig analytics-worker/src/index.ts",
     "test:unit": "mocha",
+    "test:claude-preflight": "mocha test/ci/claude_preflight.test.ts",
     "sandbox": "node test/qa_sandbox.ts",
     "test:coverage": "c8 npm run test:unit",
     "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage"
@@ -61,6 +62,7 @@
     "chai": "^6.2.2",
     "eslint": "^10.5.0",
     "globals": "^17.7.0",
+    "js-yaml": "^4.3.2",
     "mocha": "^11.7.6",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.62.0"
