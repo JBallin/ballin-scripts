@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { localWranglerPath, missingWranglerMessage } = require('./wrangler.ts');
 
 import type { SpawnSyncReturns } from 'child_process';
 
@@ -31,8 +32,10 @@ const aggregateTables = [
 ] as const;
 
 const usage = [
-  'Usage: node analytics-worker/reset.ts --dry-run [--database NAME]',
-  `       node analytics-worker/reset.ts --confirm ${confirmationPhrase} [--database NAME]`,
+  'Usage: npm run reset -- --dry-run [--database NAME]',
+  `       npm run reset -- --confirm ${confirmationPhrase} [--database NAME]`,
+  '',
+  'Run from analytics-worker/.',
   '',
   'Prints row counts or clears the production analytics aggregate tables.',
 ].join('\n');
@@ -168,16 +171,13 @@ const runWrangler = (
   }
 
   const wranglerArgs = wranglerArgsFor(sql, options);
-  let result = spawnRunner('wrangler', wranglerArgs, {
+  const result = spawnRunner(localWranglerPath(rootDir), wranglerArgs, {
     cwd: rootDir,
     encoding: 'utf8',
   });
 
   if (result.error && 'code' in result.error && result.error.code === 'ENOENT') {
-    result = spawnRunner('npx', ['--yes', 'wrangler', ...wranglerArgs], {
-      cwd: rootDir,
-      encoding: 'utf8',
-    });
+    throw new Error(missingWranglerMessage);
   }
 
   if (result.error) {

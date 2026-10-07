@@ -81,7 +81,7 @@ The date is the UTC terminal-outcome bucket. No command, duration, runtime,
 caller, or other dimensions are accepted.
 
 The installation ID is used transiently to derive the existing HMAC rate-limit
-key. Behavioral ingestion increments only
+key. V2 ingestion increments only
 `behavior_events_daily(date_bucket, event, status, count)`, keyed by date/event/status.
 It retains no raw or hashed identity and writes nothing to install-day, command,
 or runtime aggregates. Schema v1 continues to populate those existing tables.
@@ -150,8 +150,15 @@ still send `X-Ballin-Analytics-Token`; the Worker ignores that legacy header.
 
 ## Production Setup
 
-Run these commands from `analytics-worker/`. If Wrangler is not installed
-globally, use `npx wrangler` in place of `wrangler`.
+Run these commands from `analytics-worker/`. Install the locked maintenance
+and deployment tool first:
+
+```shell
+npm ci --include=dev
+```
+
+The package scripts use the installed local Wrangler. Use `npm run wrangler --`
+followed by Wrangler arguments for other maintenance commands.
 
 1. Copy `wrangler.toml.example` to the ignored local deployment config:
 
@@ -162,20 +169,20 @@ globally, use `npx wrangler` in place of `wrangler`.
 2. Create a D1 database:
 
    ```shell
-   wrangler d1 create ballin-scripts-analytics
+   npm run wrangler -- d1 create ballin-scripts-analytics
    ```
 
 3. Fill in the database ID in `wrangler.toml`.
 4. Set the hash secret:
 
    ```shell
-   wrangler secret put INSTALL_ID_HASH_SECRET
+   npm run wrangler -- secret put INSTALL_ID_HASH_SECRET
    ```
 
 5. Apply migrations:
 
    ```shell
-   wrangler d1 migrations apply ballin-scripts-analytics --remote
+   npm run migrate:remote
    ```
 
 6. Create the `analytics-worker-production` GitHub deployment environment, allow
@@ -198,11 +205,16 @@ do not deploy; edits that also change a deployment input still do. The Worker
 directory remains a conservative ownership boundary so new Worker-local
 deployment inputs are not missed.
 
+The workflow pins its GitHub Actions to full commit SHAs and installs Wrangler
+with `npm ci` from this directory's lockfile. Deployment and verification use
+that local executable.
+
 Before an automatic deployment, the workflow stops if migrations must be
 applied manually. It then creates an ignored runner-local `wrangler.toml` from
 `wrangler.toml.example`, and requires `CLOUDFLARE_D1_DATABASE_ID` before running
-`wrangler deploy` from this directory. It then inspects every Worker version
-receiving production traffic and fails unless each version exposes
+`npm run deploy` from this directory. It then runs `npm run verify:deployment`
+to inspect every Worker version receiving production traffic and fails unless
+each version exposes
 `ANALYTICS_DB` as a D1 binding,
 `ANALYTICS_RATE_LIMITER` as a rate-limit binding, and
 `INSTALL_ID_HASH_SECRET` as a secret-text binding. The check uses structured
@@ -221,11 +233,12 @@ production deploys are guarded by the `analytics-worker-production` environment
 and a `main` ref check.
 
 Remote D1 migrations remain manual. An automatic deploy stops when
-`analytics-worker/migrations/` changed since the last successful deploy; after
-applying the remote migration, rerun the workflow manually from `main`.
+`analytics-worker/migrations/` changed since the last successful deploy. From
+`analytics-worker/`, apply the remote migration, then rerun the workflow manually
+from `main`.
 
 ```shell
-wrangler d1 migrations apply ballin-scripts-analytics --remote
+npm run migrate:remote
 ```
 
 ### Behavioral Analytics Rollout
@@ -261,8 +274,8 @@ change is on `main`:
 
 1. Apply pending remote D1 migrations with the command above.
 2. Rerun the `Deploy Analytics Worker` workflow.
-3. Establish a clean baseline with `node analytics-worker/reset.ts --confirm
-   RESET_ANALYTICS_AGGREGATES`.
+3. From the repository root, establish a clean baseline with
+   `npm --prefix analytics-worker run reset -- --confirm RESET_ANALYTICS_AGGREGATES`.
 4. Confirm a current schema-v1 event is accepted and run `npm run
    analytics:report` to verify the fresh aggregate shape.
 
@@ -270,10 +283,12 @@ The old Worker cannot write to the recreated table, so ingestion may fail
 between steps 1 and 2. Analytics are best-effort and cannot affect Ballin
 command behavior.
 
-Manual deploys remain available for emergency or local maintenance:
+Manual deploys remain available for emergency or local maintenance. Run these
+commands from `analytics-worker/`:
 
 ```shell
-wrangler deploy
+npm run deploy
+npm run verify:deployment
 ```
 
 The production endpoint is:
@@ -336,19 +351,20 @@ cp analytics-worker/wrangler.toml.example analytics-worker/wrangler.toml
 ```
 
 Then fill in the D1 `database_id` and make sure Wrangler is authenticated for
-the Cloudflare account. For local maintainer authentication, run:
+the Cloudflare account. Install the locked tool from the repository root, then
+authenticate locally:
 
 ```shell
-npx wrangler login
+npm ci --prefix analytics-worker --include=dev
+npm --prefix analytics-worker run wrangler -- login
 ```
 
 The database ID is not a secret by itself; remote reads are still controlled by
 Wrangler auth.
 
 The report does not read or print Cloudflare secrets. Do not paste secret
-values into the report command. If `wrangler` is not directly available, the
-script falls back to `npx --yes wrangler`; `--yes` allows npx to install
-Wrangler without prompting.
+values into the report command. Reporting requires the installed local Wrangler
+and prints an installation command if it is missing.
 
 Reporting reads these aggregate tables:
 
@@ -364,7 +380,7 @@ environment variables, arbitrary config values, IP storage, or raw install IDs.
 
 ## Resetting Aggregates
 
-`analytics-worker/reset.ts` clears the aggregate analytics tables when an
+The Worker reset script clears the aggregate analytics tables when an
 operator wants a fresh reporting baseline. It is a rare maintenance utility,
 not a normal project workflow. The first expected use is the Ballin 2 CLI
 rename, where a clean canonical-command baseline is more useful than mixing
@@ -380,17 +396,18 @@ The reset clears all aggregate analytics tables:
 
 There is no raw event table.
 
-Preview the current production row counts before deleting anything:
+From the repository root, preview the current production row counts before
+deleting anything:
 
 ```shell
-node analytics-worker/reset.ts --dry-run
+npm --prefix analytics-worker run reset -- --dry-run
 ```
 
 Reset the production aggregates only after confirming that historical aggregate
 data is no longer needed:
 
 ```shell
-node analytics-worker/reset.ts --confirm RESET_ANALYTICS_AGGREGATES
+npm --prefix analytics-worker run reset -- --confirm RESET_ANALYTICS_AGGREGATES
 ```
 
 Verify the fresh reporting baseline:
@@ -401,6 +418,6 @@ npm run analytics:report
 
 The reset command uses local Wrangler authentication and the ignored
 `analytics-worker/wrangler.toml` file, like the report command. Run
-`npx wrangler login` first if local Wrangler authentication is not configured.
-If `wrangler` is not directly available, the script falls back to
-`npx --yes wrangler`, which allows npx to install Wrangler without prompting.
+`npm --prefix analytics-worker run wrangler -- login` from the repository root
+first if local Wrangler authentication is not configured. Reset requires the
+same installed local Wrangler as reporting.

@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { localWranglerPath, missingWranglerMessage } = require('../analytics-worker/wrangler.ts');
 const { DatabaseSync } = require('node:sqlite');
 const {
   dateRangeFromArgs,
@@ -21,6 +22,16 @@ type SpawnCall = {
   args: string[];
   command: string;
 };
+
+const ownedRoots: string[] = [];
+const makeRoot = (): string => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+  ownedRoots.push(directory);
+  return directory;
+};
+afterEach(() => {
+  for (const directory of ownedRoots.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+});
 
 describe('analytics D1 report', () => {
   it('defaults to the last 30 UTC days ending today', () => {
@@ -341,7 +352,7 @@ describe('analytics D1 report', () => {
 
   it('surfaces Wrangler failures without running real commands in tests', () => {
     const calls: SpawnCall[] = [];
-    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    const rootDir = makeRoot();
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
 
@@ -365,12 +376,12 @@ describe('analytics D1 report', () => {
       });
     }, 'D1 unavailable');
 
-    assert.deepEqual(calls.map((call) => call.command), ['wrangler']);
+    assert.deepEqual(calls.map((call) => call.command), [localWranglerPath(rootDir)]);
     assert.include(calls[0].args, '--remote');
   });
 
   it('surfaces spawn errors and stdout/default Wrangler failure messages', () => {
-    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    const rootDir = makeRoot();
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
     const options = { database: defaultDatabase, from: '2026-06-01', rootDir, to: '2026-06-30' };
@@ -398,48 +409,22 @@ describe('analytics D1 report', () => {
     })), 'Wrangler D1 query failed');
   });
 
-  it('falls back to npx --yes wrangler when wrangler is unavailable', () => {
+  it('requires the installed local Wrangler without an install fallback', () => {
     const calls: SpawnCall[] = [];
-    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-analytics-report-'));
+    const rootDir = makeRoot();
     fs.mkdirSync(path.join(rootDir, 'analytics-worker'));
     fs.writeFileSync(path.join(rootDir, 'analytics-worker', 'wrangler.toml'), '');
-    const options = {
-      database: defaultDatabase,
-      from: '2026-06-01',
-      rootDir,
-      to: '2026-06-30',
-    };
-    const wranglerArgs = wranglerArgsFor('SELECT 1', options);
+    const options = { database: defaultDatabase, from: '2026-06-01', rootDir, to: '2026-06-30' };
+    const args = wranglerArgsFor('SELECT 1', options);
 
-    const rows = runWrangler('SELECT 1', options, (command: string, args: string[]) => {
-      calls.push({ args, command });
-      if (command === 'wrangler') {
-        return {
-          error: Object.assign(new Error('missing wrangler'), { code: 'ENOENT' }),
-          output: [],
-          pid: 1,
-          signal: null,
-          status: null,
-          stderr: '',
-          stdout: '',
-        };
-      }
+    assert.throws(() => runWrangler('SELECT 1', options, (command: string, argv: string[]) => {
+      calls.push({ command, args: argv });
       return {
-        error: undefined,
-        output: [],
-        pid: 1,
-        signal: null,
-        status: 0,
-        stderr: '',
-        stdout: JSON.stringify([{ results: [{ total: 1 }], success: true }]),
+        error: Object.assign(new Error('missing local tool'), { code: 'ENOENT' }),
+        output: [], pid: 1, signal: null, status: null, stderr: '', stdout: '',
       };
-    });
-
-    assert.deepEqual(calls, [
-      { args: wranglerArgs, command: 'wrangler' },
-      { args: ['--yes', 'wrangler', ...wranglerArgs], command: 'npx' },
-    ]);
-    assert.deepEqual(rows, [{ total: 1 }]);
+    }), missingWranglerMessage);
+    assert.deepEqual(calls, [{ command: localWranglerPath(rootDir), args }]);
   });
 
   it('explains the required local Wrangler config before running commands', () => {
