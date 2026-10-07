@@ -114,7 +114,7 @@ describe('analytics D1 report', () => {
     assert.include(output, '2026-06-02  0');
     assert.include(output, 'ballin update  5      3        1        1        20.0%');
     assert.include(output, '2026-06-01  1.0.0        24          26.6           5');
-    const behaviorSection = output.split('Behavioral outcomes\n')[1].split('\nRuntime/version trends')[0];
+    const behaviorSection = output.split('Behavioral outcomes\n')[1].split('\nBackup failure categories')[0];
     assert.match(behaviorSection, /backup\.run\s+5\s+3\s+2\s+40\.0%/);
     assert.match(behaviorSection, /update\.backup\s+3\s+2\s+1\s+33\.3%/);
     assert.match(behaviorSection, /update\.self-update\s+4\s+4\s+0\s+0\.0%/);
@@ -183,6 +183,7 @@ describe('analytics D1 report', () => {
           unknown: 0,
         }];
       }
+      if (sql.includes('backup_failures_daily')) return [];
       if (sql.includes('behavior_events_daily')) {
         return [{ event: 'backup.run', failures: 1, successes: 2, total: 3 }];
       }
@@ -195,10 +196,40 @@ describe('analytics D1 report', () => {
       }];
     });
 
-    assert.lengthOf(sqlStatements, 4);
+    assert.lengthOf(sqlStatements, 5);
     assert.include(report, '2026-06-01  4');
     assert.include(report, 'ballin backup  2      2        0        0        0.0%');
     assert.match(report, /backup\.run\s+3\s+2\s+1\s+33\.3%/);
+  });
+
+  it('reports mixed legacy/category failures and coverage without adding parent failures', () => {
+    const database = new DatabaseSync(':memory:');
+    const rootDir = path.join(__dirname, '..');
+    try {
+      for (const filename of fs.readdirSync(path.join(rootDir, 'analytics-worker', 'migrations')).sort()) {
+        database.exec(fs.readFileSync(path.join(rootDir, 'analytics-worker', 'migrations', filename), 'utf8'));
+      }
+      database.exec(`INSERT INTO behavior_events_daily VALUES
+        ('2026-06-01', 'backup.run', 'failure', 10), ('2026-06-01', 'update.backup', 'failure', 100),
+        ('2026-05-31', 'backup.run', 'failure', 100), ('2026-06-03', 'backup.run', 'failure', 100);
+        INSERT INTO backup_failures_daily VALUES
+        ('2026-06-01', 'transport', 3), ('2026-06-01', 'authentication', 1), ('2026-06-01', 'unknown', 2),
+        ('2026-05-31', 'transport', 100), ('2026-06-03', 'transport', 100);`);
+      const options = { database: defaultDatabase, from: '2026-06-01', to: '2026-06-02' };
+      const rows = database.prepare(loadReportQueries(options).backupFailures).all();
+      assert.deepEqual(rows, [
+        { category: 'authentication', failures: 1 }, { category: 'legacy_uncategorized', failures: 4 },
+        { category: 'transport', failures: 3 }, { category: 'unknown', failures: 2 },
+      ]);
+      const report = generateReport(options, (sql: string) => database.prepare(sql).all());
+      assert.include(report, 'Category-schema coverage: 6/10 (60.0%); identified-family coverage: 4/10 (40.0%).');
+      assert.include(report, 'unknown means a new outcome lacked reliable single-family evidence');
+      const legacyOptions = { ...options, from: '2026-07-01', to: '2026-07-02' };
+      assert.deepEqual(database.prepare(loadReportQueries(legacyOptions).backupFailures).all(), []);
+      database.exec("INSERT INTO behavior_events_daily VALUES ('2026-07-01', 'backup.run', 'failure', 5)");
+      const legacyReport = generateReport(legacyOptions, (sql: string) => database.prepare(sql).all());
+      assert.include(legacyReport, 'Category-schema coverage: 0/5 (0.0%); identified-family coverage: 0/5 (0.0%).');
+    } finally { database.close(); }
   });
 
   it('queries terminal behavioral totals and daily outcomes over inclusive UTC dates', () => {

@@ -157,7 +157,7 @@ describe('analytics D1 reset', () => {
     assert.include(resetSql, 'DELETE FROM version_events_daily;');
     assert.include(resetSql, 'DELETE FROM behavior_events_daily;');
     assert.deepEqual(aggregateTables, [
-      'install_days', 'command_events_daily', 'version_events_daily', 'behavior_events_daily',
+      'install_days', 'command_events_daily', 'version_events_daily', 'behavior_events_daily', 'backup_failures_daily',
     ]);
     assert.notMatch(resetSql, /\bDROP\b/i);
     assert.include(output, 'Analytics aggregate rows before reset');
