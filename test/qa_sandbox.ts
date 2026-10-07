@@ -5,7 +5,7 @@ const { createSandbox, cleanupSandbox, resetSandbox, sandboxEnvironment, recordS
 import type { Sandbox } from './helpers/onboarding.ts';
 import type { ChildProcess } from 'child_process';
 
-const usage = 'Usage: npm run qa:onboarding -- [--keep | --cleanup <sandbox-root>]';
+const usage = 'Usage: npm run sandbox -- [--keep | --cleanup <sandbox-root>]';
 const write = (text: string): void => { process.stdout.write(text + '\n'); };
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\"'\"'")}'`;
 const readLine = (): Promise<string | null> => new Promise((resolve, reject) => {
@@ -48,7 +48,7 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
   }
   const sandbox: Sandbox = createSandbox();
   const activePath = path.join(sandbox.root, '.active');
-  const cleanupCommand = `npm run qa:onboarding -- --cleanup ${shellQuote(sandbox.root)}`;
+  const cleanupCommand = `npm run sandbox -- --cleanup ${shellQuote(sandbox.root)}`;
   const groups = new Set<number>();
   let launchPending = false;
   recordSession(sandbox, []);
