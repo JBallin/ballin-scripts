@@ -323,6 +323,16 @@ already unconfigured.
 
 ## Health and recovery
 
+Normal repository reads support up to 32 MiB per stored snapshot and 64 MiB per
+full current snapshot set. Oversized saved data is retained, but normal backup,
+reconnect, or readiness checks may refuse it. `ballin backup list` and
+`ballin backup open` validate the destination without downloading snapshots,
+so they remain available when snapshot contents exceed these limits. They still
+require readable, supported metadata. In GitHub, review the selected repository
+and download individual raw files deliberately; Ballin does not restore or
+execute them. You can choose a new backup destination while retaining the old
+repository and its history.
+
 `ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
 Configured repositories are checked for authentication, expected private identity,
 supported layout, and coherent readability. This is readiness only: it does not

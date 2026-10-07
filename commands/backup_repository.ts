@@ -12,9 +12,10 @@ import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
-type RepositoryProblem = 'authentication' | 'connection' | 'timeout' | 'request' | 'unavailable' | 'identity' | 'unsupported'
+type RepositoryProblem = 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
+  'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub.',
   'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
   authentication: 'GitHub.com authentication is required; check the effective gh account and environment token.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
@@ -46,6 +47,35 @@ type RepositoryOptions = {
     status: number | null; signal?: string | null; error?: NodeJS.ErrnoException; stdout?: string; stderr?: string;
   };
 };
+const repositorySnapshotByteLimit = 32 * 1024 * 1024;
+const repositorySnapshotSetByteLimit = 64 * 1024 * 1024;
+const metadataResponseByteLimit = 1024 * 1024;
+const treeResponseByteLimit = 8 * 1024 * 1024;
+const inspectionResponseByteLimit = 128 * 1024 * 1024;
+const inspectionMetadataByteLimit = 16 * 1024 * 1024;
+const requestByteLimit = 96 * 1024 * 1024;
+const repositoryRequestTimeoutMs = 30_000;
+type ResponseBudget = { remaining: number; metadataRemaining: number };
+const responseBudgets = new WeakMap<RepositoryOptions, ResponseBudget>();
+const inspectionOptions = (options: RepositoryOptions): RepositoryOptions => {
+  const scoped = { ...options };
+  responseBudgets.set(scoped, { remaining: inspectionResponseByteLimit, metadataRemaining: inspectionMetadataByteLimit });
+  return scoped;
+};
+const requireRepositorySnapshotSizes = (sizes: Iterable<number>): void => {
+  let total = 0;
+  for (const size of sizes) {
+    if (!Number.isSafeInteger(size) || size < 0) throw new RepositoryError('invalid-data');
+    if (size > repositorySnapshotByteLimit || size > repositorySnapshotSetByteLimit - total) {
+      throw new RepositoryError('resource-limit');
+    }
+    total += size;
+  }
+};
+// Allow line wrapping and JSON metadata in addition to canonical base64 bytes.
+const blobResponseByteLimit = (size: number): number => Math.min(
+  48 * 1024 * 1024, Math.ceil(4 * Math.ceil(size / 3) * 1.08) + 64 * 1024,
+);
 type Account = { id: string; login: string };
 type Entry = { path: string; sha: string; size: number; classification: SnapshotNameClassification };
 // A revision is a storage-local handle. Callers pass it back without interpreting Git objects.
@@ -93,7 +123,7 @@ const requireCleanTransport = (result: ApiResult): void => {
 const protectionTransportFailure = (error: unknown): RepositoryError | undefined => {
   if (!(error instanceof RepositoryError)) return undefined;
   if (error.cleanupFailed && error.problem !== 'cleanup') return new RepositoryError('cleanup');
-  return ['local-io', 'cleanup'].includes(error.problem) ? error : undefined;
+  return ['local-io', 'cleanup', 'resource-limit'].includes(error.problem) ? error : undefined;
 };
 
 const object = (value: unknown): Record<string, unknown> => {
@@ -110,11 +140,20 @@ const oid = (value: unknown): string => {
   if (typeof value !== 'string' || !/^[a-f0-9]{40}$/u.test(value)) throw new RepositoryError('invalid-data');
   return value;
 };
-const api = (endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false, method?: 'PATCH'): ApiResult => {
+const api = (
+  endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false, method?: 'PATCH',
+  responseLimit = metadataResponseByteLimit, metadata = true,
+): ApiResult => {
   let output: string | undefined;
   let response: ApiResult = { ok: false, body: {} };
   let failure: RepositoryError | undefined;
   try {
+    const budget = responseBudgets.get(options);
+    const maxBuffer = Math.min(responseLimit, budget?.remaining ?? responseLimit,
+      metadata ? budget?.metadataRemaining ?? responseLimit : responseLimit);
+    if (maxBuffer <= 0) throw new RepositoryError('resource-limit');
+    const input = payload === undefined ? undefined : JSON.stringify(payload);
+    if (input !== undefined && Buffer.byteLength(input) > requestByteLimit) throw new RepositoryError('resource-limit');
     output = makeTempFile('ballin-repository-');
     const fd = fs.openSync(output, 'wx', 0o600);
     let result;
@@ -124,12 +163,22 @@ const api = (endpoint: string, payload: unknown, options: RepositoryOptions, all
         endpoint, ...(payload === undefined ? [] : ['--input', '-']),
       ], {
         env: { ...(options.env ?? process.env), GH_HOST: 'github.com', GH_DEBUG: '', DEBUG: '' },
-        input: payload === undefined ? undefined : JSON.stringify(payload),
-        stdio: [payload === undefined ? 'ignore' : 'pipe', fd, 'pipe'],
+        input,
+        stdio: [payload === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+        maxBuffer, timeout: repositoryRequestTimeoutMs, killSignal: 'SIGKILL',
       });
     } finally { fs.closeSync(fd); }
-    // The injected runner used by readiness fixtures may return stdout directly.
+    // Native maxBuffer stops excess output; fixture runners need the same check.
+    if (result.error?.code === 'ENOBUFS') throw new RepositoryError('resource-limit');
+    if (fs.statSync(output).size > maxBuffer) throw new RepositoryError('resource-limit');
     const contents = result.stdout || fs.readFileSync(output, 'utf8');
+    const responseBytes = Buffer.byteLength(contents) + Buffer.byteLength(result.stderr ?? '');
+    if (responseBytes > maxBuffer) throw new RepositoryError('resource-limit');
+    if (budget) {
+      budget.remaining -= responseBytes;
+      if (metadata) budget.metadataRemaining -= responseBytes;
+    }
+    fs.writeFileSync(output, contents);
     let body: Record<string, unknown> = {};
     let items: unknown[] | undefined;
     try {
@@ -247,12 +296,13 @@ const repositoryReadmeBytes = (): Buffer => Buffer.from(repositoryReadmeContents
 const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')
   .update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[] => {
-  const result = api(`repos/${info.login}/${info.destination.name}/git/trees/${info.revision.tree}?recursive=1`, undefined, options);
+  const result = api(`repos/${info.login}/${info.destination.name}/git/trees/${info.revision.tree}?recursive=1`, undefined, options, false, undefined, treeResponseByteLimit);
   if (!result.ok) throw new RepositoryError(result.problem ?? 'incomplete');
   requireCleanTransport(result);
   const data = result.body;
   if (data.truncated !== false) throw new RepositoryError('incomplete');
   if (data.sha !== info.revision.tree || !Array.isArray(data.tree)) throw new RepositoryError('invalid-data');
+  if (data.tree.length > 100_000) throw new RepositoryError('resource-limit');
   const names = new Set<string>();
   return data.tree.map((value) => {
     const entry = object(value);
@@ -268,13 +318,19 @@ const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[
   });
 };
 const readBlob = (info: RepositoryInfo, entry: Entry, options: RepositoryOptions): Buffer => {
-  const result = api(`repos/${info.login}/${info.destination.name}/git/blobs/${entry.sha}`, undefined, options);
+  requireRepositorySnapshotSizes([entry.size]);
+  const result = api(`repos/${info.login}/${info.destination.name}/git/blobs/${entry.sha}`, undefined, options,
+    false, undefined, blobResponseByteLimit(entry.size), false);
   if (!result.ok) throw new RepositoryError(result.problem ?? 'incomplete');
   requireCleanTransport(result);
   const data = result.body;
   if (data.sha !== entry.sha || data.size !== entry.size || data.encoding !== 'base64'
     || typeof data.content !== 'string' || data.truncated === true) throw new RepositoryError('invalid-data');
   const encoded = data.content.replace(/[\r\n]/gu, '');
+  const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+  if (encoded.length !== 4 * Math.ceil(entry.size / 3) || encoded.length / 4 * 3 - padding !== entry.size) {
+    throw new RepositoryError('invalid-data');
+  }
   const bytes = Buffer.from(encoded, 'base64');
   if (bytes.toString('base64') !== encoded || bytes.length !== entry.size || blobOid(bytes) !== entry.sha) {
     throw new RepositoryError('invalid-data');
@@ -290,6 +346,7 @@ const inspect = (
   destination: RepositoryDestination, account: Account, options: RepositoryOptions, seed: boolean,
   snapshot?: string | null,
 ): RepositoryInspection => {
+  if (!responseBudgets.has(options)) options = inspectionOptions(options);
   let inspected: RepositoryRead | undefined;
   try {
     const info = readInfo(destination, account, options);
@@ -309,12 +366,12 @@ const inspect = (
       if (!marker.equals(expectedMarker)) throw new RepositoryError('unsupported');
       inspected.snapshots.set(repositoryMarkerFileName, marker);
     }
-    for (const entry of info.revision.entries) {
-      if ((entry.classification === 'current' && (snapshot === undefined || entry.path === snapshot))
-        || (seed && entry.path === repositoryReadmeFileName)) {
-        inspected.snapshots.set(entry.path, readBlob(info, entry, options));
-      }
-    }
+    const requested = info.revision.entries.filter((entry) => (
+      (entry.classification === 'current' && (snapshot === undefined || entry.path === snapshot))
+      || (seed && entry.path === repositoryReadmeFileName)
+    ));
+    requireRepositorySnapshotSizes(requested.map((entry) => entry.size));
+    for (const entry of requested) inspected.snapshots.set(entry.path, readBlob(info, entry, options));
     assertCurrent(inspected, options);
     return { status: 'complete', read: inspected };
   } catch (error) {
@@ -322,6 +379,7 @@ const inspect = (
   }
 };
 const inspectRepository = (destination: RepositoryDestination, options: RepositoryOptions = {}): RepositoryInspection => {
+  options = inspectionOptions(options);
   try { return inspect(destination, readRepositoryAccount(options), options, false); } catch (error) {
     return { status: 'incomplete', problem: error instanceof RepositoryError ? error.problem : 'local-io' };
   }
@@ -333,6 +391,7 @@ const requireRepositoryRead = (inspection: RepositoryInspection): RepositoryRead
 const inspectRepositoryMaintenance = (
   destination: RepositoryDestination, options: RepositoryOptions = {},
 ): RepositoryMaintenance => {
+  options = inspectionOptions(options);
   const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
   return { destination: read.destination, revision: read.revision };
 };
@@ -341,6 +400,7 @@ const inspectRepositoryMaintenance = (
 const readRepositorySnapshotWithInventory = (
   destination: RepositoryDestination, name: string, options: RepositoryOptions = {},
 ): RepositorySnapshotRead => {
+  options = inspectionOptions(options);
   const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
   return {
     bytes: classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined,
@@ -353,6 +413,7 @@ const readRepositorySnapshot = (
 const readRepositoryInventory = (
   destination: RepositoryDestination, options: RepositoryOptions = {},
 ): RepositoryInventory => {
+  options = inspectionOptions(options);
   const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
   return { entries: read.revision.entries };
 };
@@ -561,6 +622,12 @@ const ensureManagedBranchRuleset = (
 const publish = (
   before: RepositoryRead, additions: Map<string, Buffer>, initialize: boolean, options: RepositoryOptions,
 ): RepositoryRead => {
+  const prospective = new Map(before.revision.entries.filter((entry) => entry.classification === 'current')
+    .map((entry) => [entry.path, entry.size]));
+  additions.forEach((bytes, name) => {
+    if (classifySnapshotFileName(name) === 'current') prospective.set(name, bytes.length);
+  });
+  requireRepositorySnapshotSizes(prospective.values());
   assertCurrent(before, options);
   const expected = new Map(before.revision.entries.map((entry) => [entry.path, entry.sha]));
   additions.forEach((bytes, name) => expected.set(name, blobOid(bytes)));
@@ -579,7 +646,7 @@ const publish = (
     } },
   }, options); } catch (error) {
     // Confirm possible remote effects, but cleanup failure must remain fatal.
-    if (error instanceof RepositoryError && error.cleanupFailed) transportFailure = error;
+    if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'resource-limit')) transportFailure = error;
   }
   const errors = result.body.errors;
   const data = isConfigObject(result.body.data) ? result.body.data as Record<string, unknown> : {};
@@ -602,6 +669,10 @@ const publish = (
       name !== repositoryReadmeFileName && !after.snapshots.get(name)?.equals(bytes)
     ))
   ) throw new RepositoryError('uncertain');
+  if (transportFailure?.problem === 'resource-limit') {
+    writeStderrLine('ballin backup: repository publication confirmed, but transport limits were exceeded; cache contents were not advanced');
+    throw transportFailure;
+  }
   if (result.cleanupFailed || transportFailure) {
     writeStderrLine('ballin backup: repository publication confirmed, but transport cleanup is incomplete; cache contents were not advanced');
     throw transportFailure ?? new RepositoryError('cleanup');
@@ -669,6 +740,7 @@ const repositoryUrl = (destination: RepositoryDestination, account: Account): st
   return `https://github.com/${account.login}/${destination.name}`;
 };
 const repositoryOpenUrl = (destination: RepositoryDestination, options: RepositoryOptions = {}): string => {
+  options = inspectionOptions(options);
   const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
   return repositoryUrl(read.destination, readRepositoryAccount(options));
 };
@@ -680,6 +752,7 @@ module.exports = {
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
+  repositorySnapshotByteLimit, repositorySnapshotSetByteLimit, requireRepositorySnapshotSizes,
 };
 export type {
   RepositoryRead, RepositoryInventory, RepositorySnapshotRead, RepositoryInspection, RepositoryOptions, RepositoryProblem, RepositoryError, Account,

@@ -45,6 +45,7 @@ const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   unexpectedRepositoryEntries,
+  repositorySnapshotByteLimit, requireRepositorySnapshotSizes,
 } = require('./backup_repository.ts');
 import type { RepositoryDestination } from './backup_config.ts';
 const { lastSuccessFileName, recordLastBackupSuccess, previousBackupSuccessLine } = require('./backup_status.ts');
@@ -212,7 +213,8 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
 
 const snapshotFilesMatch = (leftFile: string, rightFile: string, boundLeft = false): boolean => {
   try {
-    return (boundLeft ? readBoundedFile(leftFile).bytes : fs.readFileSync(leftFile)).equals(fs.readFileSync(rightFile));
+    return readBoundedFile(leftFile, boundLeft ? snapshotByteLimit : repositorySnapshotByteLimit).bytes
+      .equals(readBoundedFile(rightFile, repositorySnapshotByteLimit).bytes);
   } catch (error) {
     if (error instanceof SnapshotLimitError) (error as Error).message = `${path.basename(leftFile)}: ${(error as Error).message}`;
     throw error;
@@ -220,7 +222,7 @@ const snapshotFilesMatch = (leftFile: string, rightFile: string, boundLeft = fal
 };
 
 const snapshotIsEmpty = (filePath: string, bound = false): boolean => (
-  (bound ? readBoundedFile(filePath).bytes.toString('utf8') : fs.readFileSync(filePath, 'utf8')) === emptySnapshotContent
+  readBoundedFile(filePath, bound ? snapshotByteLimit : repositorySnapshotByteLimit).bytes.toString('utf8') === emptySnapshotContent
 );
 
 const classifySnapshotResult = (
@@ -316,8 +318,9 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes
     const createdInputFile = makeTempFile('ballin-backup-input-');
     inputFile = createdInputFile;
     if (captureSnapshotInput(snapshot, createdInputFile)) {
-      normalizeSnapshotInput(createdInputFile);
-      if (maxBytes !== undefined) requireWithinLimit('bytes', fs.statSync(createdInputFile).size, maxBytes);
+      const storedLimit = maxBytes ?? repositorySnapshotByteLimit;
+      normalizeSnapshotInput(createdInputFile, storedLimit);
+      requireWithinLimit('bytes', fs.statSync(createdInputFile).size, storedLimit);
       captured = true;
     }
   } catch (error) {
@@ -367,6 +370,13 @@ const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapsh
   ));
 
   if (collection.some(({ status }: SnapshotCollectionObservation) => status === 'collector-failed')) {
+    if (!removeStagedSnapshots(stagedSnapshots)) reportTemporaryCleanupFailure();
+    return null;
+  }
+  try {
+    requireRepositorySnapshotSizes(stagedSnapshots.map(({ localFile }: StagedSnapshot) => fs.statSync(localFile).size));
+  } catch {
+    writeStderrLine(`ballin backup: ${repositoryMessages['resource-limit']} No snapshots were published.`);
     if (!removeStagedSnapshots(stagedSnapshots)) reportTemporaryCleanupFailure();
     return null;
   }
@@ -538,7 +548,7 @@ const runRepositoryBackup = (
     const encodedBytes = { codex: 0, claude: 0 };
     for (const { snapshot, localFile } of changed) {
       const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(snapshot.fileName);
-      const bytes = group ? readBoundedFile(localFile, snapshotByteLimit - changedBytes[group]).bytes : fs.readFileSync(localFile);
+      const bytes = readBoundedFile(localFile, group ? snapshotByteLimit - changedBytes[group] : repositorySnapshotByteLimit).bytes;
       if (group) {
         changedBytes[group] += bytes.length;
         encodedBytes[group] += 4 * Math.ceil(bytes.length / 3);

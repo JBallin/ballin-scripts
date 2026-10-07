@@ -133,6 +133,47 @@ describe('repository backup lifecycle', function() {
   };
   const statusClock = (time: number) => `Date.now = () => ${time};`;
 
+  const sizedFile = (file: string, size: number, newline = true): void => {
+    const fd = fs.openSync(file, 'w');
+    try {
+      fs.ftruncateSync(fd, size);
+      if (newline) fs.writeSync(fd, Buffer.from('\n'), 0, 1, size - 1);
+    } finally { fs.closeSync(fd); }
+  };
+  it('refuses oversized ordinary staging before normalization, remote reads or publication', () => {
+    const limit = 32 * 1024 * 1024;
+    sizedFile(path.join(home, '.zshrc'), limit + 1);
+    const before = state().head, result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, 'unable to stage zshrc.sh');
+    assert.equal(state().head, before); assert.lengthOf(state().requests, 0);
+    assert.isFalse(fs.existsSync(cache)); assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('rechecks the ordinary stored-size limit after final-newline normalization', () => {
+    sizedFile(path.join(home, '.zshrc'), 32 * 1024 * 1024, false);
+    const result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, 'unable to stage zshrc.sh');
+    assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('refuses a staged set above 64 MiB before any remote inspection', () => {
+    for (const name of ['.zshrc', '.bashrc', '.vimrc']) sizedFile(path.join(home, name), 22 * 1024 * 1024);
+    const result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, '64 MiB per full snapshot set');
+    assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('refuses an oversized compared ordinary cache without publication or cache promotion', () => {
+    source(); seedCache('zshrc.sh', 'prior'); seedSuccess();
+    saveState(fixtureState({ 'zshrc.sh': 'saved\n' }));
+    sizedFile(path.join(cache, 'zshrc.sh'), 32 * 1024 * 1024 + 1);
+    const before = state().head, result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, 'Repository and cache contents were not changed');
+    assert.equal(state().head, before); assert.lengthOf(publications(), 0);
+    assert.equal(fs.statSync(path.join(cache, 'zshrc.sh')).size, 32 * 1024 * 1024 + 1);
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+
   it('aborts before collection or remote effects when Codex cwd restoration fails', () => {
     const codex = fs.realpathSync(home) + '/.codex';
     fs.mkdirSync(path.join(codex, 'skills'), { recursive: true });
@@ -1107,7 +1148,7 @@ describe('repository backup lifecycle', function() {
       assert.equal(cached('codex_config.toml'), content);
     });
 
-    it('retains old absent Codex data without imposing a remote aggregate quota', () => {
+    it('retains old absent Codex data beyond the local capture allowance', () => {
       const retained = 'r'.repeat(12 * mib - 1) + '\n';
       const content = 'n'.repeat(12 * mib - 1) + '\n';
       saveState(fixtureState({ 'codex_AGENTS.md': retained }));

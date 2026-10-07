@@ -402,7 +402,8 @@ before any member output: version-2 schema, relative paths, unique
 names, boolean executable flags, valid text lines or canonical Base64 regular-file
 content. Unsupported versions, link records and malformed entries fail without disclosing payloads in
 diagnostics. Inspection accepts at most 16 MiB of stored archive bytes and 8,192
-members. These checks occur after transport and do not bound remote downloads.
+members. These member-inspection limits are separate from the bounded raw
+snapshot transport described below.
 
 Raw reads return stored bytes unchanged. Inspection accepts version 2 only;
 older versions require manual decoding outside Ballin. Member paths never reach
@@ -436,13 +437,52 @@ outer base64 allocation. Its wire allowance is derived from the stored-byte cap,
 not a second 16 MiB cap. Only Codex and Claude Code cache files actually compared
 are bounded, individually, to 16 MiB. The independent capture allowances permit up to 32 MiB
 of combined staged assistant configuration; adding Claude Code does not reduce
-the existing Codex allowance. Other sources retain their existing behavior.
+the existing Codex allowance. Other stored snapshots and compared cache files
+are bounded individually to 32 MiB; the complete staged snapshot set must fit
+within 64 MiB. Opened-file checks precede allocation and detect growth. Captured
+files are checked before normalization and again after a final newline is added.
 
-There is no retained-remote quota or partial-reader contract. Existing full
-remote inspection, retained snapshots, and mixed-source payloads can exceed
-the local capture envelope; this is not a global request or process-memory
-guarantee. New canonical names may recognize previously unexpected large remote
-blobs. Remote-reader resource bounds remain separate follow-up work.
+### Normal repository resource limits
+
+Normal reads allow at most 32 MiB per stored snapshot and 64 MiB of current
+canonical snapshot bytes per full inspection. After validating the marker,
+full inspection checks the complete requested set before downloading any
+canonical snapshot. A selected read checks only its selected snapshot. Retained
+current snapshots count toward full inspection even when their local sources
+are absent or excluded from future capture. README, marker, retired names, and
+unexpected entries do not consume the canonical snapshot-set allowance.
+
+Inventory, browser-open, and maintenance operations validate identity, the
+complete inventory, the marker, and the final revision without hydrating
+snapshot contents. Oversized canonical contents therefore remain accessible
+through `ballin backup list` and `ballin backup open`. Metadata must still meet
+normal transport limits. No oversized file is truncated, deleted, or rewritten
+to fit. An oversized full set can prevent backup, reconnect, and readiness
+checks; owners can inspect the existing repository in GitHub and choose a new
+destination without removing the old repository or its history.
+
+Repository API stdout and stderr use bounded subprocess pipes and a 30-second
+request timeout. Ordinary responses are limited to 1 MiB; tree responses to
+8 MiB and 100,000 entries. Each inspection permits at most 16 MiB of metadata
+responses and 128 MiB of total captured responses. Blob-response allowances
+derive from checked stored size, canonical Base64 expansion, line wrapping and
+bounded JSON overhead, up to 48 MiB. Overflow terminates the request and refuses
+the partial response before JSON parsing. Native subprocess limits may overshoot
+slightly while stopping a producer; these are byte budgets, not exact process
+memory ceilings.
+
+Before hashing additions or allocating outer Base64, publication overlays
+changed sizes onto all retained current entries and checks the same 32/64 MiB
+limits. Replacements replace their old size contribution. The serialized
+publication request has a separate 96 MiB cap. This prevents a normal accepted
+write from exceeding its confirmation reader's stored-byte policy. Ambiguous
+remote effects still require readback without another mutation; transport-limit
+failure does not authorize cache promotion. Consent, retained entries, exact
+bytes, commit history, and the existing conflict rules remain unchanged.
+
+Serialized responses, decoded snapshots, changed buffers, previous snapshots,
+confirmation snapshots, and subprocess input copies can coexist. These bounds
+do not establish a 512 MiB RSS guarantee or a repository-history storage quota.
 
 Codex and Claude Code traversal and reads use a private synchronous cwd-pinning
 helper. Each directory identity is captured from its pinned parent and verified after entry;

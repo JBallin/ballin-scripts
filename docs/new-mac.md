@@ -19,6 +19,14 @@ On a Mac already connected to the backup, `ballin backup list` shows saved
 snapshot names and `ballin backup read Brewfile` prints the saved Brewfile, if
 present. `ballin backup open` opens the repository and its history on GitHub.
 
+Normal CLI reads support up to 32 MiB per stored snapshot and 64 MiB per full
+current snapshot set. If an older backup exceeds these limits, its saved data
+and history stay intact. Use `ballin backup open`, or browse the existing private
+repository directly with an authorized GitHub account, to review and download
+individual raw files deliberately. Ballin does not automatically decode or
+restore downloaded files. An oversized set can prevent reconnecting; choosing
+a new destination preserves the old repository as a reference.
+
 Snapshots are references for manual setup. Ballin does not automatically restore
 dotfiles or reinstall packages, and it does not synchronize Macs. Keep a broader
 backup for documents, applications, and other data.
