@@ -272,9 +272,10 @@ and self-update consume `main` immediately:
    backend tests, and this deployment contract. Do not land client v3 sends yet.
 2. With separate production authorization, apply `0004` using the existing
    manual migration process and deploy compatible ingestion from `main`. Use
-   the deployment tooling from #510 when available; this change does not replace
-   or modify its tooling. The migration guard should stop automatic deployment
-   until the manual migration is complete.
+   the locked Worker-local tooling described in the
+   [Worker setup guide](../analytics-worker/README.md#production-setup). The
+   migration guard should stop automatic deployment until the manual migration
+   is complete.
 3. Verify the additive schema and all serving versions' v1/v2/v3 ingestion and
    atomic aggregate behavior under separately authorized production checks.
    Binding metadata alone does not establish schema or ingestion readiness.

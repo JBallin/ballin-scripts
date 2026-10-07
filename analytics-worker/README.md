@@ -81,7 +81,7 @@ The date is the UTC terminal-outcome bucket. No command, duration, runtime,
 caller, or other dimensions are accepted.
 
 The installation ID is used transiently to derive the existing HMAC rate-limit
-key. Behavioral ingestion increments only
+key. V2 ingestion increments only
 `behavior_events_daily(date_bucket, event, status, count)`, keyed by date/event/status.
 It retains no raw or hashed identity and writes nothing to install-day, command,
 or runtime aggregates. Schema v1 continues to populate those existing tables.
