@@ -33,6 +33,7 @@ type SpawnRunner = (
 type ReportRows = {
   activeInstalls: D1Row[];
   behaviorOutcomes: D1Row[];
+  backupFailures?: D1Row[];
   commandStatus: D1Row[];
   runtimeTrends: D1Row[];
 };
@@ -42,6 +43,7 @@ const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const reportQueryFiles = {
   activeInstalls: 'report-active-installs.sql',
   behaviorOutcomes: 'report-behavior-outcomes.sql',
+  backupFailures: 'report-backup-failures.sql',
   commandStatus: 'report-command-status.sql',
   runtimeTrends: 'report-runtime-trends.sql',
 };
@@ -151,6 +153,9 @@ const buildQuery = (template: string, range: DateRange): string => (
 const loadReportQueries = (options: ReportOptions): Record<keyof typeof reportQueryFiles, string> => {
   const rootDir = options.rootDir ?? path.join(__dirname, '..');
   return {
+    backupFailures: buildQuery(
+      fs.readFileSync(queryPath(rootDir, reportQueryFiles.backupFailures), 'utf8'), options,
+    ),
     activeInstalls: buildQuery(
       fs.readFileSync(queryPath(rootDir, reportQueryFiles.activeInstalls), 'utf8'),
       options,
@@ -380,6 +385,23 @@ const formatBehaviorOutcomes = (rows: D1Row[]): string => {
   ].join('\n');
 };
 
+const formatBackupFailures = (rows: D1Row[]): string => {
+  const total = rows.reduce((sum, row) => sum + numberValue(row.failures), 0);
+  const known = rows.filter((row) => row.category !== 'unknown' && row.category !== 'legacy_uncategorized')
+    .reduce((sum, row) => sum + numberValue(row.failures), 0);
+  const versioned = rows.filter((row) => row.category !== 'legacy_uncategorized')
+    .reduce((sum, row) => sum + numberValue(row.failures), 0);
+  const percentage = (count: number): string => total === 0 ? '0.0%' : `${(100 * count / total).toFixed(1)}%`;
+  return [
+    'Backup failure categories (backup.run only)',
+    rows.length ? table(['category', 'failures'], rows.map((row) => [stringValue(row.category), String(numberValue(row.failures))]))
+      : 'No backup failures found for this range.',
+    `Category-schema coverage: ${versioned}/${total} (${percentage(versioned)}); identified-family coverage: ${known}/${total} (${percentage(known)}).`,
+    'legacy_uncategorized means older outcomes had no category; unknown means a new outcome lacked reliable single-family evidence.',
+    'These families suggest investigations, not root causes or complete population failure rates; opt-outs, interruptions and lost sends remain blind spots.',
+  ].join('\n');
+};
+
 const renderReport = (rows: ReportRows, options: ReportOptions): string => [
   `Analytics report (${options.from} to ${options.to})`,
   publicTelemetryCaveat,
@@ -390,6 +412,8 @@ const renderReport = (rows: ReportRows, options: ReportOptions): string => [
   '',
   formatBehaviorOutcomes(rows.behaviorOutcomes),
   '',
+  formatBackupFailures(rows.backupFailures ?? []),
+  '',
   formatRuntimeTrends(rows.runtimeTrends),
   '',
 ].join('\n');
@@ -399,6 +423,7 @@ const generateReport = (options: ReportOptions, runner: D1Runner = runWrangler):
   return renderReport({
     activeInstalls: runner(queries.activeInstalls, options),
     behaviorOutcomes: runner(queries.behaviorOutcomes, options),
+    backupFailures: runner(queries.backupFailures, options),
     commandStatus: runner(queries.commandStatus, options),
     runtimeTrends: runner(queries.runtimeTrends, options),
   }, options);
