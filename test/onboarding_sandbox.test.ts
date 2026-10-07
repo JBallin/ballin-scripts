@@ -118,7 +118,12 @@ describe('onboarding sandbox', function() {
     const child = spawn(path.join(sandbox.bin, 'ballin'), ['update'], { cwd: sandbox.home, env: sandboxEnvironment(sandbox), detached: true, stdio: 'ignore' });
     const group = child.pid as number;
     recordSession(sandbox, [group]);
-    const closed = new Promise((resolve, reject) => { child.once('close', resolve); child.once('error', reject); });
+    const closed = new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+      child.once('close', (code: number | null, signal: string | null) => resolve({ code, signal }));
+      child.once('error', reject);
+    });
+    const config = fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8');
+    const state = remote();
     try {
       const deadline = Date.now() + 15000;
       while (!fs.existsSync(path.join(sandbox.root, 'update-stage.ready'))) {
@@ -127,12 +132,15 @@ describe('onboarding sandbox', function() {
       }
       assert.throws(() => cleanupSandbox(sandbox.root), /still running/u);
       process.kill(-group, 'SIGINT');
-      await closed;
+      assert.deepEqual(await closed, { code: null, signal: 'SIGINT' });
     } finally {
       if (processIsAlive(-group)) process.kill(-group, 'SIGKILL');
       await waitForGroupExit(group);
       fs.rmSync(path.join(sandbox.root, '.active'), { force: true });
     }
+    assert.isFalse(processIsAlive(-group));
+    assert.equal(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'), config);
+    assert.deepEqual(remote(), state);
     selectScenario(sandbox, 'none');
     assert.equal(runSandbox(sandbox, ['update']).status, 0);
   });
@@ -447,6 +455,47 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.include(result.stdout, 'Ballin updated.');
     assert.include(result.stdout, 'Active scenario: none');
     assert.notInclude(result.stdout, '${activeScenario');
+  });
+  it('preserves state, releases the interrupted update group, and permits explicit cleanup and retry', async () => {
+    const child = spawn(process.execPath, [cli, '--scenario', 'update-interrupt'], { env: testChildEnvironment(), stdio: ['pipe', 'pipe', 'pipe'] });
+    let output = '';
+    let errors = '';
+    let root = '';
+    let config = '';
+    let remote = '';
+    let interrupted = false;
+    child.stdout.on('data', (bytes: Buffer) => {
+      output += bytes.toString();
+      if (!root && output.includes('Ballin onboarding sandbox:')) root = findRoot(output);
+      if (!interrupted && output.includes('Sandbox update stage ready for interruption')) {
+        interrupted = true;
+        config = fs.readFileSync(path.join(root, 'home/.ballin-scripts/ballin.config.json'), 'utf8');
+        remote = fs.readFileSync(path.join(root, 'remote/repository.json'), 'utf8');
+        child.kill('SIGINT');
+      }
+    });
+    child.stderr.on('data', (bytes: Buffer) => { errors += bytes.toString(); });
+    child.stdin.end('y\nn\nn\nballin update\n');
+    const closed = new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code: number | null, signal: string | null) => resolve({ code, signal }));
+    });
+    const timer = setTimeout(() => { child.kill('SIGTERM'); }, 30000);
+    let result;
+    try { result = await closed; } finally { clearTimeout(timer); }
+    assert.isTrue(interrupted, output + errors);
+    assert.deepEqual(result, { code: 130, signal: null });
+    assert.include(output, 'Preserved sandbox:');
+    assert.notInclude(output, 'child process group remains active');
+    assert.isFalse(fs.existsSync(path.join(root, '.active')));
+    assert.equal(fs.readFileSync(path.join(root, 'home/.ballin-scripts/ballin.config.json'), 'utf8'), config);
+    assert.equal(fs.readFileSync(path.join(root, 'remote/repository.json'), 'utf8'), remote);
+    assert.equal(run('', ['--cleanup', root]).status, 0);
+    assert.isFalse(fs.existsSync(root));
+    const retry = run('y\nn\nn\nballin update\nexit\n');
+    findRoot(retry.stdout);
+    assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+    assert.include(retry.stdout, "You're ballin.");
   });
   it('runs actual installer and setup prompts, inspects fake state, and preserves explicitly', () => {
     const result = run('y\nn\nn\nballin backup setup\ny\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\ny\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);

@@ -132,7 +132,9 @@ Cleanup accepts only a marked temporary sandbox root and refuses a still-running
 parent or recorded child process group, including children surviving a parent
 crash. If a crash leaves an ambiguous launch marker, cleanup refuses rather than
 assuming that no child started; inspect and stop the sandbox processes before
-removing that marker and retrying cleanup. Never run its installed command
+removing that marker and retrying cleanup. On Linux, verified zombie or dead
+processes do not block cleanup; live processes and unavailable or ambiguous
+liveness inspection still do. Never run its installed command
 directly from your normal shell: the menu supplies the isolation safeguards on
 every launch.
 
