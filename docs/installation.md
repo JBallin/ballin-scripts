@@ -160,7 +160,8 @@ priority. For zsh it uses `.zshrc` in an exported `ZDOTDIR`, or in your home
 directory otherwise. For Bash it uses the first existing login profile
 (`.bash_profile`, `.bash_login`, or `.profile`), creating `.bash_profile` if
 needed. Custom startup locations or non-login Bash sessions may need manual
-PATH setup. It leaves symlinked or invalid startup files unchanged. It uses
+PATH setup. It leaves symlinked or invalid startup files unchanged. It validates
+the absolute executable Bash or zsh path in `$SHELL` and uses that exact shell for
 syntax-only checks to reuse a matching PATH line only as a final standalone
 command. If later edits make that placement ambiguous, it asks before appending
 a new line. A recognized unquoted `return`, `exit`, or `exec` with an executable
@@ -170,7 +171,8 @@ The helper leaves the file unchanged and prints the exact PATH line for manual
 placement before following this standard installation guide. This conservative
 check ignores comments, quoted data, and simple heredoc bodies; it does not
 interpret dynamic shell behavior. Arithmetic with nested parentheses, ambiguous
-heredoc forms, and ambiguous brace/hash forms require manual placement. This
+heredoc forms, ambiguous brace/hash forms, and unsupported wrapper options
+require manual placement. This
 includes valid zsh `{#` block comments. Startup-file contents are never executed
 by these checks.
 

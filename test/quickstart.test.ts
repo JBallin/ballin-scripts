@@ -15,6 +15,19 @@ describe('beginner quickstart bootstrap', function() {
   const source = path.resolve(__dirname, '../quickstart.sh');
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const linkFake = (name: string, destination = tools): void => fs.symlinkSync(path.join(root, 'fake-tool'), path.join(destination, name));
+  const runCopiedCommand = (shell: string, input: string, overrides: NodeJS.ProcessEnv = {}) => {
+    const guide = fs.readFileSync(path.join(__dirname, '../docs/quickstart.md'), 'utf8');
+    const command = guide.match(/```shell\n([\s\S]*?)\n```/)?.[1];
+    assert.isString(command, 'Exercise the actual pasted guide command');
+    return spawnSync('/bin/' + shell, ['-c', command], {
+      encoding: 'utf8', input, cwd: home, timeout: 12000,
+      env: testChildEnvironment({
+        HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/' + shell,
+        FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_QUICK_DOWNLOAD: 'success',
+        FAKE_QUICKSTART_EXIT: '0', ...overrides,
+      }),
+    });
+  };
   const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}) => spawnSync('/bin/bash', ['-c', `
 source "$FAKE_SOURCE"
 system_node_bin="$FAKE_SYSTEM_NODE"
@@ -38,6 +51,15 @@ main
     log = path.join(root, 'commands.log');
     [home, tools, systemNode, path.join(root, 'tmp')].forEach((dir) => fs.mkdirSync(dir));
     fs.writeFileSync(log, '');
+    fs.writeFileSync(path.join(root, 'quickstart-entrypoint'), '#!/bin/bash\n'
+      + 'set -euo pipefail\n'
+      + 'printf "downloaded-quickstart:started\\n" >> "$FAKE_COMMAND_LOG"\n'
+      + 'touch "$FAKE_ROOT/entrypoint-ran"\n'
+      + 'printf "Native fixture prompt: "\n'
+      + 'IFS= read -r answer\n'
+      + '[[ "$answer" == device-code ]] || exit 91\n'
+      + 'printf "downloaded-quickstart:stdin-preserved\\n" >> "$FAKE_COMMAND_LOG"\n'
+      + 'exit "$FAKE_QUICKSTART_EXIT"\n');
     for (const name of ['awk', 'bash', 'cat', 'chmod', 'cmp', 'cp', 'grep', 'ln', 'mkdir', 'mktemp', 'mv', 'readlink', 'rm', 'shasum', 'touch', 'zsh']) {
       const target = ['/bin', '/usr/bin'].map((dir) => path.join(dir, name)).find((file) => fs.existsSync(file));
       assert.exists(target, `Fixture requires ${name}`);
@@ -122,6 +144,11 @@ case "$name" in
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_checksums.txt) cp "$FAKE_ROOT/gh-checksums.txt" "$target" ;;
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_arm64.zip|https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_amd64.zip)
         cp "$FAKE_ROOT/gh.zip" "$target"; if [[ "\${FAKE_CORRUPT_GH:-0}" == 1 ]]; then printf 'corruption' >> "$target"; fi ;;
+      https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)
+        if [[ "$FAKE_QUICK_DOWNLOAD" == empty ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi
+        if [[ -n "$target" ]]; then cp "$FAKE_ROOT/quickstart-entrypoint" "$target"
+        else cat "$FAKE_ROOT/quickstart-entrypoint"; fi
+        if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
         cp "$FAKE_ROOT/fake-tool" "$target" ;;
@@ -825,6 +852,153 @@ exec /bin/cp "$@"
   it('does not capture after cancelling a fresh Ballin install', () => {
     assert.equal(run('y\nn\n').status, 0);
     assert.notInclude(readLog(), 'ballin:');
+  });
+  for (const existingPath of [false, true]) {
+    it('detects supported Bash wrapper options before PATH ' + (existingPath ? 'reuse' : 'append'), () => {
+      const profile = path.join(home, '.bash_profile');
+      const line = "export PATH='" + path.join(home, '.local/share/ballin-quickstart/bin')
+        + "':$PATH:'" + path.join(home, '.local/bin') + "'";
+      const sentinel = path.join(root, 'profile-executed');
+      const transfers = [
+        'command -p return', 'command -- exit 0', 'command -p -- exec /bin/true',
+        'builtin -- return', 'command -- builtin -- return',
+        'time -p exit 0', 'time -- return', 'time -p command -p builtin -- exec /bin/true',
+      ];
+      for (const transfer of transfers) {
+        const contents = "touch '" + sentinel + "'\n" + transfer + '\n' + (existingPath ? line + '\n' : '');
+        fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const result = run('', { SHELL: '/bin/bash' });
+        assert.equal(result.status, 1, transfer + result.stdout + result.stderr);
+        assert.include(result.stderr, 'recognized return, exit, or executable exec');
+        assert.include(result.stderr, 'Manual PATH setup for ' + profile);
+        assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+        assert.isFalse(fs.existsSync(sentinel));
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      }
+      for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+    });
+    it('uses manual fallback for unsupported Bash wrapper options before PATH ' + (existingPath ? 'reuse' : 'append'), () => {
+      const profile = path.join(home, '.bash_profile');
+      const line = "export PATH='" + path.join(home, '.local/share/ballin-quickstart/bin')
+        + "':$PATH:'" + path.join(home, '.local/bin') + "'";
+      const sentinel = path.join(root, 'profile-executed');
+      for (const wrapper of ['command -q return', 'builtin -q exit 0', 'time -q /bin/true']) {
+        const contents = "touch '" + sentinel + "'\n" + wrapper + '\n' + (existingPath ? line + '\n' : '');
+        fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const result = run('', { SHELL: '/bin/bash' });
+        assert.equal(result.status, 1, wrapper + result.stdout + result.stderr);
+        assert.include(result.stderr, 'shell syntax that this check cannot interpret safely');
+        assert.include(result.stderr, 'Manual PATH setup for ' + profile);
+        assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+        assert.isFalse(fs.existsSync(sentinel));
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      }
+      for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+    });
+  }
+  for (const shell of ['bash', 'zsh']) {
+    it('preserves command inspection options through PATH append and reuse in ' + shell, () => {
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      const sentinel = path.join(root, 'profile-executed');
+      const contents = "touch '" + sentinel + "'\n" + [
+        'command -v exit', 'command -V return', 'command -pv exec', 'command -pV exit',
+        'command -vp return', 'command -Vp exec', 'command -p -v exit',
+        'command -- command -pv return',
+      ].join('\n') + '\n';
+      fs.writeFileSync(profile, contents, { mode: 0o640 });
+      const result = run('y\ny\n', { SHELL: '/bin/' + shell });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const installed = fs.readFileSync(profile, 'utf8');
+      assert.isTrue(installed.startsWith(contents + '\nexport PATH='));
+      const rerun = run('', { SHELL: '/bin/' + shell });
+      assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+      assert.notInclude(rerun.stdout, 'Use these tools in new Terminal windows?');
+      assert.equal(fs.readFileSync(profile, 'utf8'), installed);
+      assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+      assert.isFalse(fs.existsSync(sentinel));
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+    for (const invalidProfile of [false, true]) {
+      it('uses the exact selected ' + shell + ' parser instead of PATH for ' + (invalidProfile ? 'invalid' : 'valid') + ' profiles', () => {
+        const selectedDirectory = path.join(root, 'selected shell');
+        fs.mkdirSync(selectedDirectory);
+        const selectedShell = path.join(selectedDirectory, shell);
+        fs.writeFileSync(selectedShell, '#!/bin/bash\n'
+          + 'printf "selected-parser:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n'
+          + 'exec /bin/' + shell + ' "$@"\n', { mode: 0o755 });
+        fs.unlinkSync(path.join(tools, shell));
+        fs.writeFileSync(path.join(tools, shell), '#!/bin/bash\n'
+          + 'if [[ "$1" == -n ]]; then printf "PATH-parser\\n" >> "$FAKE_COMMAND_LOG"; exit '
+          + (invalidProfile ? '0' : '71') + '; fi\n'
+          + 'exec /bin/' + shell + ' "$@"\n', { mode: 0o755 });
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const sentinel = path.join(root, 'profile-executed');
+        const contents = "touch '" + sentinel + "'\n" + (invalidProfile ? 'if\n' : '# Valid fixture\n');
+        fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const result = run('y\ny\n', { SHELL: selectedShell });
+        assert.equal(result.status, invalidProfile ? 1 : 0, result.stdout + result.stderr);
+        assert.include(readLog(), 'selected-parser:-n');
+        assert.notInclude(readLog(), 'PATH-parser');
+        if (invalidProfile) {
+          assert.include(result.stderr, 'invalid shell syntax');
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+          for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+        } else {
+          const installed = fs.readFileSync(profile, 'utf8');
+          const rerun = run('', { SHELL: selectedShell });
+          assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+          assert.equal(fs.readFileSync(profile, 'utf8'), installed);
+          assert.notInclude(rerun.stdout, 'Use these tools in new Terminal windows?');
+          assert.notInclude(readLog(), 'PATH-parser');
+        }
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+        assert.isFalse(fs.existsSync(sentinel));
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      });
+    }
+    for (const failure of ['empty', 'partial', 'helper', 'mktemp', 'none']) {
+      it('preserves the copied command status, stdin and cleanup in ' + shell + ' after ' + failure, () => {
+        if (failure === 'mktemp') {
+          fs.unlinkSync(path.join(tools, 'mktemp'));
+          fs.writeFileSync(path.join(tools, 'mktemp'), '#!/bin/bash\nexit 73\n', { mode: 0o755 });
+        }
+        const result = runCopiedCommand(shell, 'device-code\n', {
+          FAKE_QUICK_DOWNLOAD: ['empty', 'partial'].includes(failure) ? failure : 'success',
+          FAKE_QUICKSTART_EXIT: failure === 'helper' ? '7' : '0',
+        });
+        const expected = ['empty', 'partial'].includes(failure) ? 22 : failure === 'helper' ? 7 : failure === 'mktemp' ? 73 : 0;
+        assert.equal(result.status, expected, result.stdout + result.stderr);
+        const executed = ['helper', 'none'].includes(failure);
+        assert.equal(fs.existsSync(path.join(root, 'entrypoint-ran')), executed);
+        if (executed) {
+          assert.include(result.stdout, 'Native fixture prompt:');
+          assert.include(readLog(), 'downloaded-quickstart:stdin-preserved');
+        } else assert.notInclude(readLog(), 'downloaded-quickstart:started');
+        if (['empty', 'partial'].includes(failure)) assert.include(result.stderr, 'Fixture curl failure');
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        assert.isEmpty(fs.readdirSync(home));
+        for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+      });
+    }
+  }
+  it('rejects invalid selected shells before preparing prerequisites or profiles', () => {
+    const unavailable = path.join(root, 'unavailable/bash');
+    const notExecutable = path.join(root, 'not-executable/bash');
+    fs.mkdirSync(path.dirname(notExecutable));
+    fs.writeFileSync(notExecutable, '#!/bin/bash\n', { mode: 0o644 });
+    const directory = path.join(root, 'directory/bash');
+    fs.mkdirSync(directory, { recursive: true });
+    const unsupported = path.join(root, 'fish');
+    fs.writeFileSync(unsupported, '#!/bin/bash\n', { mode: 0o755 });
+    for (const selectedShell of ['bash', '', unavailable, notExecutable, directory, unsupported]) {
+      const result = run('', { SHELL: selectedShell });
+      assert.equal(result.status, 1, selectedShell + result.stdout + result.stderr);
+      assert.match(result.stderr, /selected shell must be an absolute path|supports the standard zsh or Bash/);
+      assert.isEmpty(fs.readdirSync(home));
+      for (const prohibited of ['node:', 'git:', 'gh:', 'xcode-select:', 'sudo:', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+    }
   });
   it('rejects unsupported platforms before changing home files', () => {
     for (const env of [{ FAKE_OS: 'Linux' }, { FAKE_MACOS: '13.4' }, { FAKE_ARCH: 'i386' }]) {

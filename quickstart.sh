@@ -246,8 +246,30 @@ configure_path() {
         .replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|{}]+/gu, " ");
       for (const statement of plain.split(/[\n;&|{})]+/u)) {
         const words = statement.trim().split(/\s+/u);
+        let unsupportedOptions = false;
         while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[0] ?? "")
-          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin"].includes(words[0])) words.shift();
+          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin"].includes(words[0])) {
+          const prefix = words.shift();
+          if (!["time", "command", "builtin"].includes(prefix)) continue;
+          // Only these literal wrapper options are understood. Other options
+          // retain the existing manual fallback instead of hiding a transfer.
+          while (words[0]?.startsWith("-")) {
+            const option = words.shift();
+            if (prefix === "command" && /^-[pvV]+$/u.test(option)) {
+              if (/[vV]/u.test(option)) { words.length = 0; break; }
+              continue;
+            }
+            if (prefix === "time" && option === "-p") continue;
+            if (option === "--") break;
+            unsupportedOptions = true;
+            break;
+          }
+          if (unsupportedOptions) break;
+        }
+        if (unsupportedOptions) {
+          fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
+          break;
+        }
         const command = words.shift();
         let transfer = command === "return" || command === "exit";
         if (command === "exec") {
@@ -353,17 +375,19 @@ main() {
     *) fail "Unsupported Mac architecture: $machine." ;;
   esac
   shell_name=${SHELL:-}
+  [[ "$shell_name" == /* && -f "$shell_name" && -x "$shell_name" ]] \
+    || fail 'The selected shell must be an absolute path to an executable Bash or zsh file.'
   case "${shell_name##*/}" in
-    zsh) profile="${ZDOTDIR:-$HOME}/.zshrc"; profile_shell='zsh' ;;
+    zsh) profile="${ZDOTDIR:-$HOME}/.zshrc" ;;
     bash)
       profile="$HOME/.bash_profile"
       for candidate in .bash_profile .bash_login .profile; do
         if [[ -e "$HOME/$candidate" || -L "$HOME/$candidate" ]]; then profile="$HOME/$candidate"; break; fi
       done
-      profile_shell='bash'
       ;;
     *) fail 'This quickstart supports the standard zsh or Bash Terminal setup.' ;;
   esac
+  profile_shell="$shell_name"
   [[ "$profile" == /* ]] || fail 'The shell startup directory must be an absolute path.'
   quick_root="$HOME/.local/share/ballin-quickstart"
   quick_bin="$quick_root/bin"

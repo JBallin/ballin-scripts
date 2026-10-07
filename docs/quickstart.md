@@ -5,7 +5,7 @@
 On macOS 13.5 or newer, open Terminal. Paste this, answer any prompts:
 
 ```shell
-bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)
+bash -c 'set -e; quickstart_file=$(mktemp); cleanup() { rm -f -- "$quickstart_file"; }; trap cleanup EXIT; curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh -o "$quickstart_file"; bash "$quickstart_file"'
 ```
 
 The [helper](../quickstart.sh) reuses working Git, Node.js 24.12 or newer, and
