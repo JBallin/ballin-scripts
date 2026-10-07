@@ -81,6 +81,7 @@ if (process.env.FAKE_WRANGLER_STATUS) {
       bindings: [
         { name: 'ANALYTICS_DB', type: 'd1' },
         { name: 'ANALYTICS_RATE_LIMITER', type: 'ratelimit' },
+        { name: 'ANALYTICS_SOURCE_RATE_LIMITER', type: 'ratelimit' },
         { name: 'INSTALL_ID_HASH_SECRET', type: 'secret_text', text: 'sensitive-value' },
       ],
     },
@@ -238,6 +239,7 @@ describe('analytics Worker deployment', () => {
     assert.deepEqual(requiredBindings, [
       { name: 'ANALYTICS_DB', type: 'd1' },
       { name: 'ANALYTICS_RATE_LIMITER', type: 'ratelimit' },
+      { name: 'ANALYTICS_SOURCE_RATE_LIMITER', type: 'ratelimit' },
       { name: 'INSTALL_ID_HASH_SECRET', type: 'secret_text' },
     ]);
   });
@@ -264,6 +266,7 @@ describe('analytics Worker deployment', () => {
     ]);
     assert.include(output, '2 traffic-serving production version(s)');
     assert.include(output, 'ANALYTICS_RATE_LIMITER (ratelimit)');
+    assert.include(output, 'ANALYTICS_SOURCE_RATE_LIMITER (ratelimit)');
     assert.notInclude(output, 'must-not-appear');
     assert.notInclude(output, 'UNRELATED_SECRET');
   });
@@ -284,6 +287,32 @@ describe('analytics Worker deployment', () => {
       ]),
       'Production version wrong-type-version binding ANALYTICS_DB has type kv_namespace; expected d1',
     );
+  });
+
+  it('requires the source binding on every traffic-serving version', () => {
+    const withoutSource = requiredBindings.filter((binding: BindingMetadata) => binding.name !== 'ANALYTICS_SOURCE_RATE_LIMITER');
+    assert.throws(() => verifyProductionDeployment(runnerFor([
+      { percentage: 50, version_id: 'version-a' }, { percentage: 50, version_id: 'version-b' },
+    ], { 'version-a': requiredBindings, 'version-b': withoutSource })), 'missing required binding ANALYTICS_SOURCE_RATE_LIMITER');
+    const source = { name: 'ANALYTICS_SOURCE_RATE_LIMITER', type: 'ratelimit' };
+    assert.throws(() => verifyBindings('duplicate-source', [...requiredBindings, source]), 'duplicate binding metadata for ANALYTICS_SOURCE_RATE_LIMITER');
+    assert.throws(() => verifyBindings('wrong-source', [...withoutSource, { ...source, type: 'kv_namespace' }]), 'expected ratelimit');
+  });
+
+  it('configures a distinct lower source window while preserving global and installation policy', () => {
+    const config = fs.readFileSync(wranglerConfigPath, 'utf8');
+    const entries = config.split('[[ratelimits]]').slice(1);
+    assert.lengthOf(entries, 2);
+    const settings = entries.map((entry: string) => ({
+      name: entry.match(/name\s*=\s*"([^"]+)"/u)![1],
+      namespace: entry.match(/namespace_id\s*=\s*"([^"]+)"/u)![1],
+      limit: Number(entry.match(/limit\s*=\s*([0-9_]+)/u)![1].replaceAll('_', '')),
+      period: Number(entry.match(/period\s*=\s*([0-9]+)/u)![1]),
+    }));
+    assert.deepEqual(settings, [
+      { name: 'ANALYTICS_RATE_LIMITER', namespace: '1001', limit: 1500, period: 60 },
+      { name: 'ANALYTICS_SOURCE_RATE_LIMITER', namespace: '1002', limit: 1000, period: 60 },
+    ]);
   });
 
   it('fails closed on malformed deployment or version metadata', () => {

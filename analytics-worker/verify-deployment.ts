@@ -18,6 +18,7 @@ type BindingMetadata = {
 const requiredBindings: BindingContract[] = [
   { name: 'ANALYTICS_DB', type: 'd1' },
   { name: 'ANALYTICS_RATE_LIMITER', type: 'ratelimit' },
+  { name: 'ANALYTICS_SOURCE_RATE_LIMITER', type: 'ratelimit' },
   { name: 'INSTALL_ID_HASH_SECRET', type: 'secret_text' },
 ];
 

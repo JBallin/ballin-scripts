@@ -20,7 +20,8 @@ type MakeEnvOptions = {
   batchError?: Error;
   hashSecret?: string;
   rateLimiter?: boolean;
-  rateLimitFailure?: (key: string) => boolean;
+  sourceRateLimiter?: boolean;
+  rateLimitFailure?: (key: string, binding: string) => boolean;
 };
 
 type EventRequestOptions = {
@@ -63,14 +64,20 @@ class TestStatement {
 
 const makeEnv = (options: MakeEnvOptions = {}) => {
   const rateLimitKeys: string[] = [];
+  const rateLimitCalls: Array<{ binding: string; key: string }> = [];
   const runs: StatementRun[] = [];
-  const rateLimiter = options.rateLimiter === false ? {} : {
-    ANALYTICS_RATE_LIMITER: {
-      async limit({ key }: { key: string }) {
-        rateLimitKeys.push(key);
-        return { success: !options.rateLimitFailure?.(key) };
-      },
+  const limiter = (binding: string) => ({
+    async limit({ key }: { key: string }) {
+      rateLimitKeys.push(key);
+      rateLimitCalls.push({ binding, key });
+      return { success: !options.rateLimitFailure?.(key, binding) };
     },
+  });
+  const rateLimiter = options.rateLimiter === false ? {} : {
+    ANALYTICS_RATE_LIMITER: limiter('global-install'),
+  };
+  const sourceRateLimiter = options.sourceRateLimiter === false ? {} : {
+    ANALYTICS_SOURCE_RATE_LIMITER: limiter('source'),
   };
   return {
     env: {
@@ -92,11 +99,27 @@ const makeEnv = (options: MakeEnvOptions = {}) => {
         },
       },
       ...rateLimiter,
+      ...sourceRateLimiter,
       INSTALL_ID_HASH_SECRET: options.hashSecret ?? 'test-secret',
     },
     rateLimitKeys,
+    rateLimitCalls,
     runs,
   };
+};
+
+// Deterministic local windows verify routing and order, not Cloudflare's
+// location-local, permissive counters or an optimal production quota.
+const makeWindowEnv = (sourceLimit = 1000) => {
+  let counts = new Map<string, number>();
+  const fixture = makeEnv({ rateLimitFailure: (key, binding) => {
+    assert.equal(binding, key.startsWith('v1-events:source:') ? 'source' : 'global-install');
+    const next = (counts.get(key) ?? 0) + 1;
+    counts.set(key, next);
+    return next > (binding === 'source' ? sourceLimit : 1500);
+  } });
+  return { ...fixture, count: (key: string) => counts.get(key) ?? 0,
+    advanceWindow: () => { counts = new Map(); } };
 };
 
 const payloadForCommand = (command: string) => ({
@@ -117,6 +140,10 @@ const payloadForBehavior = (event = 'backup.run', status = 'success') => ({
   dateBucket: new Date().toISOString().slice(0, 10),
   event,
   status,
+});
+
+const payloadForBackupFailure = () => ({
+  ...payloadForBehavior('backup.run', 'failure'), schemaVersion: 3, failureCategory: 'transport',
 });
 
 const eventRequest = (
@@ -277,8 +304,8 @@ describe('analytics Worker', () => {
 
     assert.equal(response.status, 204);
     assert.deepEqual(rateLimitKeys.slice(0, 2), [
-      'v1-events:global',
       'v1-events:source:203.0.113.7',
+      'v1-events:global',
     ]);
     assert.match(rateLimitKeys[2], /^v1-events:install:[0-9a-f]{64}$/);
     assert.includeDeepMembers(runs.map(({ values }) => values), [
@@ -311,7 +338,7 @@ describe('analytics Worker', () => {
     }
   });
 
-  it('shares all abuse-limit keys across command and behavioral schemas', async () => {
+  it('shares all rate-limit keys across all three schemas', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, rateLimitKeys, runs } = makeEnv();
 
@@ -321,15 +348,22 @@ describe('analytics Worker', () => {
     const behaviorResponse = await worker.fetch(eventRequest(payloadForBehavior(), {
       sourceIp: '203.0.113.7',
     }), env);
+    const categoryResponse = await worker.fetch(eventRequest(payloadForBackupFailure(), {
+      sourceIp: '203.0.113.7',
+    }), env);
 
     assert.equal(commandResponse.status, 204);
     assert.equal(behaviorResponse.status, 204);
-    assert.deepEqual(rateLimitKeys.slice(0, 3), rateLimitKeys.slice(3));
-    assert.lengthOf(runs, 4);
+    assert.equal(categoryResponse.status, 204);
+    assert.deepEqual(rateLimitKeys.slice(0, 3), rateLimitKeys.slice(3, 6));
+    assert.deepEqual(rateLimitKeys.slice(0, 3), rateLimitKeys.slice(6));
+    assert.lengthOf(runs, 6);
     assert.include(runs[0].query, 'INSERT OR IGNORE INTO install_days');
     assert.include(runs[1].query, 'INSERT INTO command_events_daily');
     assert.include(runs[2].query, 'INSERT INTO version_events_daily');
     assert.include(runs[3].query, 'INSERT INTO behavior_events_daily');
+    assert.include(runs[4].query, 'INSERT INTO behavior_events_daily');
+    assert.include(runs[5].query, 'INSERT INTO backup_failures_daily');
   });
 
   it('increments behavioral SQL counts without changing existing installation, command, or runtime aggregates', async () => {
@@ -740,7 +774,7 @@ describe('analytics Worker', () => {
 
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { error: 'request body is too large' });
-    assert.deepEqual(rateLimitKeys, ['v1-events:global', 'v1-events:source:198.51.100.5']);
+    assert.deepEqual(rateLimitKeys, ['v1-events:source:198.51.100.5', 'v1-events:global']);
     assert.deepEqual(runs, []);
     assert.equal(controlled.state.deliveredBytes, 2049);
     assert.equal(controlled.state.pulls, 1);
@@ -758,13 +792,13 @@ describe('analytics Worker', () => {
       headers: { 'x-forwarded-for': ' CLIENT @ EXAMPLE! ' },
     }), malformed.env)).status, 204);
 
-    assert.equal(missing.rateLimitKeys[1], 'v1-events:source:unknown');
-    assert.equal(malformed.rateLimitKeys[1], 'v1-events:source:client___example_');
+    assert.equal(missing.rateLimitKeys[0], 'v1-events:source:unknown');
+    assert.equal(malformed.rateLimitKeys[0], 'v1-events:source:client___example_');
   });
 
-  it('applies source rate limits before parsing or D1 writes', async () => {
+  it('applies the source binding before global admission, parsing or D1 writes', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
-    const { env, rateLimitKeys, runs } = makeEnv({
+    const { env, rateLimitKeys, rateLimitCalls, runs } = makeEnv({
       rateLimitFailure: (key) => key === 'v1-events:source:203.0.113.7',
     });
     const controlled = controlledBody([
@@ -777,14 +811,14 @@ describe('analytics Worker', () => {
 
     assert.equal(response.status, 429);
     assert.deepEqual(rateLimitKeys, [
-      'v1-events:global',
       'v1-events:source:203.0.113.7',
     ]);
+    assert.deepEqual(rateLimitCalls, [{ binding: 'source', key: 'v1-events:source:203.0.113.7' }]);
     assert.deepEqual(runs, []);
     assert.equal(controlled.state.pulls, 0);
   });
 
-  it('applies global rate limits before source keys, parsing, or D1 writes', async () => {
+  it('applies global rate limits after source admission and before parsing or D1 writes', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, rateLimitKeys, runs } = makeEnv({
       rateLimitFailure: (key) => key === 'v1-events:global',
@@ -798,7 +832,7 @@ describe('analytics Worker', () => {
     }), env);
 
     assert.equal(response.status, 429);
-    assert.deepEqual(rateLimitKeys, ['v1-events:global']);
+    assert.deepEqual(rateLimitKeys, ['v1-events:source:203.0.113.7', 'v1-events:global']);
     assert.deepEqual(runs, []);
     assert.equal(controlled.state.pulls, 0);
   });
@@ -845,38 +879,112 @@ describe('analytics Worker', () => {
   it('enforces all three behavioral rate limits before any aggregate write', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
 
-    for (const [prefix, keyCount, readsBody] of [
-      ['v1-events:global', 1, false],
-      ['v1-events:source:', 2, false],
-      ['v1-events:install:', 3, true],
-    ] as const) {
-      const { env, rateLimitKeys, runs } = makeEnv({
-        rateLimitFailure: (key) => key.startsWith(prefix),
-      });
-      const controlled = controlledBody([new TextEncoder().encode(JSON.stringify(payloadForBehavior()))]);
-      const response = await worker.fetch(streamedEventRequest(controlled.body, { sourceIp: '203.0.113.7' }), env);
+    for (const payload of [payloadForBehavior(), { ...payloadForBehavior(), schemaVersion: 3 }, payloadForBackupFailure()]) {
+      for (const [prefix, keyCount, readsBody] of [
+        ['v1-events:source:', 1, false],
+        ['v1-events:global', 2, false],
+        ['v1-events:install:', 3, true],
+      ] as const) {
+        const { env, rateLimitKeys, runs } = makeEnv({
+          rateLimitFailure: (key) => key.startsWith(prefix),
+        });
+        const controlled = controlledBody([new TextEncoder().encode(JSON.stringify(payload))]);
+        const response = await worker.fetch(streamedEventRequest(controlled.body, { sourceIp: '203.0.113.7' }), env);
 
-      assert.equal(response.status, 429);
-      assert.lengthOf(rateLimitKeys, keyCount);
-      assert.deepEqual(runs, []);
-      assert.equal(controlled.state.pulls > 0, readsBody);
+        assert.equal(response.status, 429);
+        assert.lengthOf(rateLimitKeys, keyCount);
+        assert.deepEqual(runs, []);
+        assert.equal(controlled.state.pulls > 0, readsBody);
+      }
     }
   });
 
   it('fails closed for behavioral requests without a hash secret or rate-limit binding', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
 
-    for (const options of [{ hashSecret: '' }, { rateLimiter: false }]) {
-      const { env, rateLimitKeys, runs } = makeEnv(options);
-      const controlled = controlledBody([new TextEncoder().encode(JSON.stringify(payloadForBehavior()))]);
-      const response = await worker.fetch(streamedEventRequest(controlled.body), env);
+    for (const payload of [payloadForBehavior(), payloadForBackupFailure()]) {
+      for (const options of [{ hashSecret: '' }, { rateLimiter: false }, { sourceRateLimiter: false }]) {
+        const { env, rateLimitKeys, runs } = makeEnv(options);
+        const controlled = controlledBody([new TextEncoder().encode(JSON.stringify(payload))]);
+        const response = await worker.fetch(streamedEventRequest(controlled.body), env);
 
-      assert.equal(response.status, 500);
-      assert.deepEqual(await response.json(), { error: 'analytics backend is not configured' });
-      assert.deepEqual(rateLimitKeys, []);
-      assert.deepEqual(runs, []);
-      assert.equal(controlled.state.pulls, 0);
+        assert.equal(response.status, 500);
+        assert.deepEqual(await response.json(), { error: 'analytics backend is not configured' });
+        assert.deepEqual(rateLimitKeys, []);
+        assert.deepEqual(runs, []);
+        assert.equal(controlled.state.pulls, 0);
+      }
     }
+  });
+
+  it('fails closed without the source binding before reading a command body', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, rateLimitKeys, runs } = makeEnv({ sourceRateLimiter: false });
+    const controlled = controlledBody([new TextEncoder().encode(JSON.stringify(payloadForCommand('ballin')))]);
+    const response = await worker.fetch(streamedEventRequest(controlled.body), env);
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: 'analytics backend is not configured' });
+    assert.deepEqual(rateLimitKeys, []); assert.deepEqual(runs, []);
+    assert.equal(controlled.state.pulls, 0);
+  });
+
+  it('stops charging global capacity when a deterministic source window is full', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const fixture = makeWindowEnv();
+    for (let index = 0; index < 1500; index += 1) {
+      const response = await worker.fetch(eventRequest('{', { sourceIp: '203.0.113.7' }), fixture.env);
+      assert.equal(response.status, index < 1000 ? 400 : 429);
+    }
+    assert.equal(fixture.count('v1-events:global'), 1000);
+    assert.deepEqual(fixture.runs, []);
+    for (let index = 0; index < 500; index += 1) {
+      const payload = index % 3 === 0 ? payloadForCommand('ballin') : index % 3 === 1 ? payloadForBehavior() : payloadForBackupFailure();
+      assert.equal((await worker.fetch(eventRequest(payload, { sourceIp: '203.0.113.8' }), fixture.env)).status, 204);
+    }
+    assert.equal(fixture.count('v1-events:global'), 1500);
+    assert.lengthOf(fixture.runs, 1000);
+    assert.equal((await worker.fetch(eventRequest(payloadForBehavior(), { sourceIp: '203.0.113.9' }), fixture.env)).status, 429);
+    fixture.advanceWindow();
+    assert.equal((await worker.fetch(eventRequest(payloadForBehavior(), { sourceIp: '203.0.113.7' }), fixture.env)).status, 204);
+  });
+
+  it('shares the source allowance across installations and all event schemas', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const fixture = makeWindowEnv();
+    for (let index = 0; index < 1200; index += 1) {
+      const payload = index % 3 === 0 ? payloadForCommand('ballin update') : index % 3 === 1 ? payloadForBehavior() : payloadForBackupFailure();
+      payload.installId = `00000000-0000-4000-8000-${Math.floor(index / 4).toString().padStart(12, '0')}`;
+      assert.equal((await worker.fetch(eventRequest(payload, { sourceIp: '203.0.113.7' }), fixture.env)).status,
+        index < 1000 ? 204 : 429);
+    }
+    assert.equal(fixture.count('v1-events:global'), 1000);
+    assert.lengthOf(fixture.runs, 2001);
+    assert.notInclude(JSON.stringify(fixture.runs), '203.0.113.7');
+    assert.equal((await worker.fetch(eventRequest(payloadForBehavior(), { sourceIp: '203.0.113.8' }), fixture.env)).status, 204);
+  });
+
+  it('retains the global bound across several admitted sources', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const fixture = makeWindowEnv();
+    let accepted = 0;
+    for (const sourceIp of ['203.0.113.7', '203.0.113.8', '203.0.113.9']) {
+      for (let index = 0; index < 600; index += 1) {
+        const status = (await worker.fetch(eventRequest(payloadForBehavior(), { sourceIp }), fixture.env)).status;
+        assert.oneOf(status, [204, 429]);
+        if (status === 204) accepted += 1;
+      }
+    }
+    assert.equal(accepted, 1500); assert.lengthOf(fixture.runs, 1500);
+  });
+
+  it('shows that equal source and global windows leave no separate-source allowance', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const fixture = makeWindowEnv(1500);
+    for (let index = 0; index < 1500; index += 1) {
+      assert.equal((await worker.fetch(eventRequest('{', { sourceIp: '203.0.113.7' }), fixture.env)).status, 400);
+    }
+    assert.equal((await worker.fetch(eventRequest(payloadForBehavior(), { sourceIp: '203.0.113.8' }), fixture.env)).status, 429);
+    assert.deepEqual(fixture.runs, []);
   });
 
   it('does not acknowledge behavioral storage failures as accepted outcomes', async () => {
