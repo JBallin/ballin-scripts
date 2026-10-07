@@ -263,32 +263,21 @@ Participation, interrupted processes, incorrect success, and lost delivery
 These aggregate categories cannot reproduce a bug, prove a root cause, or
 establish complete population failure rates. Rate-limit policy remains unchanged.
 
-### Category rollout
+### Category compatibility requirements
 
-Keep the backend and client changes in separate releases because installation
-and self-update consume `main` immediately:
+Schema-v3 ingestion requires additive migration `0004` before compatible backend
+deployment; client v3 sends require verified backend readiness. Every serving
+Worker version must accept v1/v2/v3 payloads and preserve atomic aggregate
+counting. Binding metadata alone does not establish schema or ingestion
+readiness. Report/reset also require migration `0004` before use.
 
-1. Merge only compatible v1/v2/v3 ingestion, migration `0004`, reporting/reset,
-   backend tests, and this deployment contract. Do not land client v3 sends yet.
-2. With separate production authorization, apply `0004` using the existing
-   manual migration process and deploy compatible ingestion from `main`. Use
-   the locked Worker-local tooling described in the
-   [Worker setup guide](../analytics-worker/README.md#production-setup). The
-   migration guard should stop automatic deployment until the manual migration
-   is complete.
-3. Verify the additive schema and all serving versions' v1/v2/v3 ingestion and
-   atomic aggregate behavior under separately authorized production checks.
-   Binding metadata alone does not establish schema or ingestion readiness.
-   The updated report/reset require `0004` to be applied before use.
-4. Only after recorded backend readiness, retarget/merge the client change,
-   including its disclosure and isolated terminal-outcome tests. Keep the client
-   draft while backend readiness is unconfirmed.
-
-Preserve existing aggregates; do not reset or backfill categories. If backend
-readiness is delayed, keep existing clients sending v2. An old Worker rejects v3
-best-effort sends without affecting backups, but that loss is not a rollout plan.
-Production migration, deployment, live telemetry, secret access, and reset are
-outside implementation authorization and are not performed by these changes.
+Installation and self-update consume `main`, so backend readiness must precede
+client release. An older Worker rejects v3 best-effort sends without affecting
+backups; delivery loss does not satisfy compatibility. Preserve existing
+aggregates without category backfill or reset. Production migration, deployment,
+live ingestion checks, secret access, and reset require separate authorization.
+Use the locked Worker-local tooling in the
+[Worker setup guide](../analytics-worker/README.md#production-setup).
 
 ## Historical OS-Family Removal Cutover
 
