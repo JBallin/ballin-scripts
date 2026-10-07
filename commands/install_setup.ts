@@ -41,6 +41,7 @@ type ConfigureBackupOptions = {
   onCancelled?: () => void;
   showValidationSummary?: boolean;
   maintenanceOnly?: boolean;
+  reviewExistingSettings?: boolean;
 };
 
 const isConfigObject = (value: unknown): value is ConfigObject => (
@@ -156,6 +157,7 @@ const configureBackup = (
     configPath, originalConfig, repositoryName: options.repositoryName, onCancelled: options.onCancelled,
     showValidationSummary: options.showValidationSummary,
     maintenanceOnly: options.maintenanceOnly,
+    reviewExistingSettings: options.reviewExistingSettings,
     backupCacheDir: options.backupCacheDir ?? path.join(repoDir, '.backup-cache'),
   });
 };

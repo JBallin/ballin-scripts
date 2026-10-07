@@ -27,14 +27,23 @@ const saveBackupConfig = (configPath: string, config: Record<string, unknown>): 
     }
   }
 };
+const preferenceBoolean = (value: unknown, key: string): boolean => {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  throw new Error(`Invalid \`${key}\`; expected true or false.`);
+};
 type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean };
-const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
+const selectAutomaticUpdateBackup = (options: AutomaticBackupOptions = {}): boolean | null => {
   const defaultEnabled = options.defaultEnabled ?? false;
   const response = readPromptLine(`\n🤔 Automatically run \`ballin backup\` as part of \`ballin update\`? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `);
-  if (response.eof && options.cancelOnEof) return 'cancelled';
+  if (response.eof && options.cancelOnEof) return null;
   // Existing destination onboarding treats empty EOF as no; guided review cancels instead.
   const answer = response.eof && !response.text ? 'n' : response.text;
-  const enabled = answer === '' ? defaultEnabled : answer === 'y' || answer === 'Y';
+  return answer === '' ? defaultEnabled : answer === 'y' || answer === 'Y';
+};
+const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
+  const enabled = selectAutomaticUpdateBackup(options);
+  if (enabled === null) return 'cancelled';
   const preference = String(enabled);
   let saved = false;
   if (createConfigStore({ configPath }).readLeafValue('update.backup') !== undefined) {
@@ -137,4 +146,16 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
   return includeSensitive;
 };
 
-module.exports = { saveBackupConfig, offerAutomaticUpdateBackup, reviewAutomaticUpdateBackup, selectSensitiveSources };
+const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null | undefined => {
+  writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+  const included = selectSensitiveSources(defaultIncluded);
+  if (included === null || included === undefined) return included;
+  const confirmation = readPromptLine('Save this sensitive-source choice for future backups? [y/N] ');
+  if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) return null;
+  return included;
+};
+
+module.exports = {
+  saveBackupConfig, offerAutomaticUpdateBackup, reviewAutomaticUpdateBackup, selectSensitiveSources,
+  preferenceBoolean, selectAutomaticUpdateBackup, confirmSensitiveSourceChoice,
+};
