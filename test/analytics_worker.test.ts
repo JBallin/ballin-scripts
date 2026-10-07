@@ -374,6 +374,80 @@ describe('analytics Worker', () => {
     }
   });
 
+  it('strictly validates v3 backup-only categories and success shapes', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    for (const failureCategory of ['transport', 'authentication', 'reconciliation', 'local_state', 'unknown']) {
+      const { env, runs, rateLimitKeys } = makeEnv();
+      assert.equal((await worker.fetch(eventRequest({ ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory }), env)).status, 204);
+      assert.lengthOf(runs, 2);
+      assert.deepEqual(runs[0].values, [payloadForBehavior().dateBucket, 'backup.run', 'failure']);
+      assert.deepEqual(runs[1].values, [payloadForBehavior().dateBucket, failureCategory]);
+      assert.lengthOf(rateLimitKeys, 3);
+      assert.notInclude(JSON.stringify(runs), 'install_id');
+    }
+    const { env, runs } = makeEnv();
+    assert.equal((await worker.fetch(eventRequest({ ...payloadForBehavior(), schemaVersion: 3 }), env)).status, 204);
+    assert.lengthOf(runs, 1);
+    const valid = { ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory: 'unknown' };
+    const missing = { ...valid } as Record<string, unknown>; delete missing.failureCategory;
+    const invalid: Record<string, unknown>[] = [missing,
+      ...[null, '', {}, [], true, 'unclassified', 'TRANSPORT', 'DUMMY_PRIVATE_ERROR'].map((failureCategory) => ({ ...valid, failureCategory })),
+      ...['update.backup', 'update.self-update'].map((event) => ({ ...valid, event })),
+      ...['error', 'stack', 'path', 'config', 'source', 'installIdHash', 'appVersion'].map((key) => ({ ...valid, [key]: 'DUMMY_PRIVATE' })),
+      { ...valid, status: 'success' }, { ...valid, schemaVersion: 2 },
+      { ...valid, status: 'success', failureCategory: null },
+    ];
+    for (const payload of invalid) {
+      const { env, runs } = makeEnv();
+      assert.equal((await worker.fetch(eventRequest(payload), env)).status, 400, JSON.stringify(payload));
+      assert.deepEqual(runs, []);
+    }
+  });
+
+  it('counts each v3 failure once with its category atomically, retaining legacy failures and parent separation', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const database = new DatabaseSync(':memory:');
+    const migrations = path.join(__dirname, '..', 'analytics-worker', 'migrations');
+    const { env } = makeEnv();
+    let failCategory = false;
+    let batches = 0;
+    env.ANALYTICS_DB.batch = async (statements: TestStatement[]) => {
+      batches += 1;
+      database.exec('BEGIN');
+      try {
+        for (const { query, values } of statements) {
+          if (failCategory && query.includes('backup_failures_daily')) throw new Error('fixture category write failure');
+          database.prepare(query).run(Object.fromEntries(values.map((value, index) => [`?${index + 1}`, value])));
+        }
+        database.exec('COMMIT');
+      } catch (error) { database.exec('ROLLBACK'); throw error; }
+      return [];
+    };
+    try {
+      for (const filename of fs.readdirSync(migrations).sort()) database.exec(fs.readFileSync(path.join(migrations, filename), 'utf8'));
+      for (const payload of [payloadForBehavior('backup.run', 'failure'), payloadForBehavior('update.backup', 'failure'),
+        { ...payloadForBehavior(), schemaVersion: 3 },
+        ...['transport', 'unknown'].map((failureCategory) => ({ ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory })),
+      ]) assert.equal((await worker.fetch(eventRequest(payload), env)).status, 204);
+      assert.equal(batches, 5);
+      assert.deepEqual(database.prepare('SELECT event, status, count FROM behavior_events_daily ORDER BY event, status').all(), [
+        { event: 'backup.run', status: 'failure', count: 3 }, { event: 'backup.run', status: 'success', count: 1 },
+        { event: 'update.backup', status: 'failure', count: 1 },
+      ]);
+      const categoryRows = [{ category: 'transport', count: 1 }, { category: 'unknown', count: 1 }];
+      assert.deepEqual(database.prepare('SELECT category, count FROM backup_failures_daily ORDER BY category').all(), categoryRows);
+      failCategory = true;
+      await worker.fetch(eventRequest({ ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory: 'authentication' }), env).then(
+        () => assert.fail('storage failure must not be accepted'), (error: Error) => assert.equal(error.message, 'fixture category write failure'),
+      );
+      assert.equal(database.prepare("SELECT count FROM behavior_events_daily WHERE event = 'backup.run' AND status = 'failure'").get().count, 3);
+      assert.deepEqual(database.prepare('SELECT category, count FROM backup_failures_daily ORDER BY category').all(), categoryRows);
+      for (const table of ['install_days', 'command_events_daily', 'version_events_daily']) {
+        assert.deepEqual(database.prepare(`SELECT * FROM ${table}`).all(), []);
+      }
+    } finally { database.close(); }
+  });
+
   it('rejects missing, mistyped, unsupported, and cross-schema behavioral fields before storage', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const payload = payloadForBehavior();
@@ -395,7 +469,7 @@ describe('analytics Worker', () => {
     for (const status of ['unknown', 'attempted', 'skipped', 'partial', 'SUCCESS']) {
       invalidPayloads.push([`status ${status}`, { ...payload, status }]);
     }
-    for (const schemaVersion of [0, 1, 3, '2']) {
+    for (const schemaVersion of [0, 1, 4, '2']) {
       invalidPayloads.push([`schema ${schemaVersion}`, { ...payload, schemaVersion }]);
     }
     for (const installId of [payload.installId.toUpperCase(), 'invalid', '826f9faa-9995-0f66-a01b-73b4f7aebdf1']) {
@@ -461,7 +535,7 @@ describe('analytics Worker', () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const cases: Array<[Record<string, unknown> | string, string]> = [
       ['null', 'event payload must be a JSON object'],
-      [{ ...payloadForCommand('ballin'), schemaVersion: 3 }, 'schemaVersion must be 1 or 2'],
+      [{ ...payloadForCommand('ballin'), schemaVersion: 4 }, 'schemaVersion must be 1, 2 or 3'],
       [{ ...payloadForCommand('ballin'), installId: '' }, 'installId must be a lowercase UUID'],
       [{ ...payloadForCommand('ballin'), dateBucket: '2026/06/01' }, 'dateBucket must be YYYY-MM-DD'],
       [{ ...payloadForCommand('ballin'), command: 'ballin destroy' }, 'command is not supported'],
@@ -832,8 +906,9 @@ describe('analytics Worker', () => {
     });
     await cleanup;
 
-    assert.lengthOf(runs, 4);
+    assert.lengthOf(runs, 5);
     assert.deepEqual(runs.map(({ values }) => values), [
+      ['2025-05-31'],
       ['2025-05-31'],
       ['2025-05-31'],
       ['2025-05-31'],
@@ -844,6 +919,7 @@ describe('analytics Worker', () => {
       'DELETE FROM command_events_daily WHERE date_bucket < ?1',
       'DELETE FROM version_events_daily WHERE date_bucket < ?1',
       'DELETE FROM behavior_events_daily WHERE date_bucket < ?1',
+      'DELETE FROM backup_failures_daily WHERE date_bucket < ?1',
     ]);
   });
 
@@ -861,6 +937,7 @@ describe('analytics Worker', () => {
       const insert = database.prepare('INSERT INTO behavior_events_daily VALUES (?, ?, ?, 1)');
       for (const date of ['2025-05-30', '2025-05-31', '2025-06-01']) {
         insert.run(date, 'backup.run', 'success');
+        database.prepare('INSERT INTO backup_failures_daily VALUES (?, ?, 1)').run(date, 'unknown');
       }
 
       await worker.scheduled({ cron: '0 4 * * *', scheduledTime: Date.parse('2026-06-30T04:00:00.000Z') }, env, {
@@ -873,6 +950,9 @@ describe('analytics Worker', () => {
         database.prepare(query).run({ '?1': values[0] });
       }
 
+      assert.deepEqual(database.prepare('SELECT date_bucket FROM backup_failures_daily ORDER BY date_bucket').all(), [
+        { date_bucket: '2025-05-31' }, { date_bucket: '2025-06-01' },
+      ]);
       assert.deepEqual(database.prepare('SELECT date_bucket FROM behavior_events_daily ORDER BY date_bucket').all(), [
         { date_bucket: '2025-05-31' },
         { date_bucket: '2025-06-01' },
