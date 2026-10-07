@@ -975,7 +975,7 @@ require('https').request = () => {
     assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
     assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#shell-completion`));
     assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository.\nGitHub and anyone authorized to access the repository can read its contents.');
-    assert.include(result.stdout, `${docsUrl}#shell-completion`);
+    assert.include(result.stdout, `${docsUrl}#shell-completion\n\nBallin backup is optional.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.equal(result.stdout.match(/😎 ballin!/gu)?.length, 1);
@@ -988,6 +988,26 @@ require('https').request = () => {
     assert.notInclude(commandLog(), 'gh:');
     assert.equal(readRepoConfig().update.backup, 'false');
   });
+
+  for (const enableCompletion of [false, true]) {
+    it(`separates completion guidance from backup setup (completion enabled: ${enableCompletion})`, () => {
+      installConfigSources();
+      const preloadPath = path.join(testDir, 'interactive-completion.cjs');
+      fs.writeFileSync(preloadPath, 'process.stdin.isTTY = true;\n');
+      const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
+        encoding: 'utf8', input: `n\nhome\n${enableCompletion ? 'y' : 'n'}\nn\n`,
+        env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const completionResult = enableCompletion
+        ? 'Shell completion enabled. Open a new terminal or reload this startup file.'
+        : `${docsUrl}#shell-completion`;
+      assert.include(result.stdout, `${completionResult}\n\nBallin backup is optional.`);
+      assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
+      assert.equal(readRepoConfig().update.backup, 'false');
+      assert.notInclude(commandLog(), 'gh:');
+    });
+  }
 
   for (const backupFails of [false, true]) {
     it(`preserves the original setup result when completion fails (backup failure: ${backupFails})`, () => {
@@ -1004,6 +1024,7 @@ require('https').request = () => {
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Shell completion setup could not finish. Ballin remains installed.');
+      assert.include(result.stdout, `${docsUrl}#shell-completion\n\nBallin backup is optional.`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
