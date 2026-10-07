@@ -91,7 +91,7 @@ const conditionExpression = (expression: string): string => {
     if (['==', '!='].includes(token)) {
       assert.isTrue([tokens[index - 1], tokens[index + 1]].every((operand) => (
         typeof operand === 'string' && (operand.startsWith("'") || stringFields.includes(operand))
-      )) && !['==', '!='].includes(tokens[index - 2]),
+      )) && !['==', '!=', '!'].includes(tokens[index - 2]),
       'unsupported caller condition comparison: only direct string operands are supported');
     }
     if (['contains', 'fromJSON'].includes(token)) {
@@ -166,9 +166,13 @@ describe('offline Claude caller contracts', () => {
     for (const expression of [
       'github.event.pull_request.assignee == false', 'github.event.pull_request.draft == false',
       "github.actor == false", "github.actor == 'jballin' == 'true'",
+      "!github.actor == 'x'", "!!github.actor == 'x'",
     ]) {
       assert.throws(() => conditionExpression(expression), 'unsupported caller condition comparison');
     }
+    const source = "    if: >-\n      !(github.actor == 'jballin')\n";
+    assert.isFalse(eligible(source, { github: { actor: 'jballin' } }));
+    assert.isTrue(eligible(source, { github: { actor: 'human-collaborator' } }));
   });
 
   it('inventories Claude runtime and credential references across all workflow files', () => {
