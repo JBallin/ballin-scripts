@@ -138,7 +138,7 @@ exit ${status}
     writeConfig(config);
     const result = spawnUpdate({ ...capture.env, BALLIN_NO_ANALYTICS: '0', ...env });
     const events = capture.readEvents() as CapturedAnalyticsEvent[];
-    return { result, events, outcomes: events.filter(({ schemaVersion }) => schemaVersion === 2) };
+    return { result, events, outcomes: events.filter(({ schemaVersion }) => schemaVersion !== 1) };
   };
 
   const installNvmStub = (nvmDir: string) => {
@@ -745,7 +745,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     assert.deepEqual(events.filter(({ schemaVersion }) => schemaVersion === 1).map(({ command, status }) => ({ command, status })), [
       { command: 'ballin update', status: 'success' },
     ]);
-    assert.deepEqual(events.filter(({ schemaVersion }) => schemaVersion === 2).map(({ event, status }) => ({ event, status })), [
+    assert.deepEqual(events.filter(({ schemaVersion }) => schemaVersion !== 1).map(({ event, status }) => ({ event, status })), [
       { event: 'backup.run', status: 'success' },
       { event: 'update.backup', status: 'success' },
     ]);
@@ -806,7 +806,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     writeConfig({ update: { selfUpdate: 'invalid' }, analytics: { enabled: 'true' } });
     const result = spawnUpdate({ ...capture.env, BALLIN_NO_ANALYTICS: '0' });
     assert.equal(result.status, 1);
-    assert.deepEqual(capture.readEvents().filter(({ schemaVersion }: CapturedAnalyticsEvent) => schemaVersion === 2), []);
+    assert.deepEqual(capture.readEvents().filter(({ schemaVersion }: CapturedAnalyticsEvent) => schemaVersion !== 1), []);
     assert.deepEqual(commandLog(), []);
   });
 

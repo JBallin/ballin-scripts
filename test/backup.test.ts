@@ -1470,13 +1470,14 @@ printf '%*s\\n' 1048577 '' >&2
       ...options,
       env: { ...capture.env, ...options.env },
     });
-    const assertOutcome = (status: string, commandStatus = status): void => {
+    const assertOutcome = (status: string, commandStatus = status, failureCategory = 'unknown'): void => {
       const events: CapturedAnalyticsEvent[] = capture.readEvents();
-      const behaviors = events.filter((event) => event.schemaVersion === 2);
+      const behaviors = events.filter((event) => event.schemaVersion !== 1);
       assert.lengthOf(behaviors, 1);
       assert.deepEqual(behaviors[0], {
-        schemaVersion: 2, installId: fixtureInstallId,
+        schemaVersion: 3, installId: fixtureInstallId,
         dateBucket: new Date().toISOString().slice(0, 10), event: 'backup.run', status,
+        ...(status === 'failure' ? { failureCategory } : {}),
       });
       const commands = events.filter((event) => event.schemaVersion === 1);
       assert.lengthOf(commands, 1);
@@ -1533,7 +1534,9 @@ printf '%*s\\n' 1048577 '' >&2
         const result = observedRun(prepare());
         assert.isAbove(result.status ?? 0, 0, result.stdout + result.stderr);
         assert.include(result.stderr.toLowerCase(), message.toLowerCase());
-        assertOutcome('failure');
+        assertOutcome('failure', 'failure', name === 'authentication' ? 'authentication'
+          : ['reconciliation', 'publication'].includes(name) ? 'reconciliation'
+            : ['missing destination configuration', 'missing HOME'].includes(name) ? 'local_state' : 'unknown');
       });
     }
 
@@ -1571,7 +1574,7 @@ require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))}).runW
         seedRemote('read-only fixture\n');
         observedRun({ args, input: 'n\n' });
         const events: CapturedAnalyticsEvent[] = capture.readEvents();
-        assert.deepEqual(events.filter((event) => event.schemaVersion === 2), []);
+        assert.deepEqual(events.filter((event) => event.schemaVersion !== 1), []);
         assert.lengthOf(events.filter((event) => event.schemaVersion === 1), 1);
         assert.deepEqual(publicationCalls(), []);
       });
