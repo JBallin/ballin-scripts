@@ -13,6 +13,7 @@ See [installation details](installation.md#quickstart-helper).
 
 During setup:
 
+- Select the startup file your Terminal reads (`home` for standard zsh); skip if unsure.
 - Sign into GitHub if asked.
 - Choose **yes** for private backups, **create**, and press Enter for
   `ballin-backups`. Check your GitHub account and destination before confirming.

@@ -161,42 +161,39 @@ including npm, so later default changes still take effect. If PATH has no
 compatible Node, the helper links its selected fallback Node/npm ahead of an
 older version. Rerunning with a compatible PATH Node outside that directory
 removes the fallback links. Alternate spellings and symlink aliases of the
-managed directory are still treated as the fallback. The Ballin command
-directory is appended to preserve existing tool
-priority. For zsh it uses `.zshrc` in an exported absolute `ZDOTDIR`, or in your
-home directory when `ZDOTDIR` is unset. An exported empty value stops the helper
-before prerequisite changes; set the directory or unset the variable before
-retrying. For Bash it uses the first existing login profile
-(`.bash_profile`, `.bash_login`, or `.profile`), creating `.bash_profile` if
-needed. Custom startup locations or non-login Bash sessions may need manual
-PATH setup. It leaves symlinked startup files and files that fail its syntax
-checks unchanged. It validates
-the absolute executable Bash or zsh path in `$SHELL` and uses that exact shell for
-syntax-only checks to reuse a matching PATH line only as a final standalone
-command. Bash checks enable `extglob` for parsing so profiles that enable it
-themselves can be validated without executing them. A detected literal
-`shopt -u extglob` requires manual placement because syntax-only parsing cannot
-follow that option change; queries such as `shopt -p -u extglob` do not change it.
-zsh checks also use `-f` to disable user startup loading; the shell's system
-`/etc/zshenv` remains outside that option's control. If later edits make PATH
-placement ambiguous, it asks before appending a new line. A recognized literal
-`return`, `exit`, `logout`, or `exec` with an executable
-argument stops automatic PATH setup, including inside a function, conditional,
-or case arm, with simple quoted or escaped command-name fragments, including
-double-quoted line continuations, in a zsh `repeat` body with an unquoted decimal
-count, and after
-zsh's `noglob`, `nocorrect`, or `-` precommand modifiers.
-The helper leaves the file unchanged and prints the exact PATH line for manual
-placement before following this standard installation guide. This conservative
-check ignores comments, quoted data, and simple heredoc bodies; it does not
-interpret dynamic shell behavior. Arithmetic with nested parentheses, ambiguous
-heredoc forms, ambiguous brace/hash forms, unsupported wrapper options,
-quoted or nondecimal zsh `repeat` counts, dollar-quoted command spellings, and
-variable file-descriptor
-redirections such as `exec {fd}>file /bin/true` require manual placement.
-Unquoted braces in redirection operands also require manual placement. This
-includes valid zsh `{#` block comments. The inspected profile is never executed
-by these checks.
+managed directory are still treated as the fallback. The Ballin command directory is appended to preserve existing tool priority.
+
+For persistent PATH setup, select the startup file your terminal actually reads:
+choose `home` or an absolute directory containing `.zshrc` for zsh, or `login`
+or `bashrc` for Bash. An exported `ZDOTDIR` is shown as context; an empty value
+is distinct from an unset variable and never implies the home directory.
+Bash login setup uses the first existing `.bash_profile`, `.bash_login`, or
+`.profile`, creating `.bash_profile` only when none exists. Press Enter to skip
+if you are unsure. Completion activation is a separate optional step in the
+core installer; select the same actual startup target there when supported.
+
+The helper displays the exact PATH line and asks before appending it. It
+preserves existing bytes and permissions, refuses symlinked or non-regular
+startup targets, and rechecks the inspected file for concurrent changes. Small
+syntax-only checks guard against appending into unfinished syntax, continuations,
+or heredocs. Bash parsing enables `extglob`; zsh uses `-f` to suppress user
+startup loading (system `/etc/zshenv` remains outside that option’s control).
+Unsupported syntax can require manual placement without making the profile
+invalid. The helper never executes your profile or determines whether its
+control flow will reach the line.
+
+An exact existing line is reported as **already present**, even inside a
+conditional or quoted block; this does not verify activation. After an append
+or presence report, open a new Terminal. To use the tools in the current window,
+run the displayed PATH line there. If `ballin` remains unavailable, check which
+startup file your shell reads and place the line where it will execute.
+
+If persistent setup is skipped, declined, or cannot safely append, the helper
+leaves the file untouched and reports **persistent PATH setup incomplete**.
+Installation and the first backup can still proceed with the helper’s
+process-local PATH. Review or edit your startup file manually, or rerun the
+quickstart to retry. Installation, authentication, and backup failures still
+stop their dependent steps.
 
 The helper uses existing GitHub CLI authentication or requests its normal
 browser login flow. If `GH_TOKEN` or `GITHUB_TOKEN` prevents login, GitHub CLI

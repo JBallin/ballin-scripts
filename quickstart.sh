@@ -188,256 +188,140 @@ install_gh() {
   "$gh_tool" --version >/dev/null
 }
 
+path_incomplete() {
+  printf '\nPersistent PATH setup incomplete: %s\n' "$1" >&2
+  printf 'The startup file was left unchanged. First-backup setup can continue with the helper PATH.\n' >&2
+  printf 'Review your shell startup and PATH setup, or rerun this quickstart to retry.\n' >&2
+}
+
+profile_unchanged() {
+  "$node_tool" -e '
+    const fs = require("fs");
+    const [file, snapshot, metadata] = process.argv.slice(1);
+    try {
+      const before = JSON.parse(fs.readFileSync(metadata));
+      const parent = fs.lstatSync(require("path").dirname(file));
+      if (!parent.isDirectory() || parent.dev !== before.parent.dev || parent.ino !== before.parent.ino) process.exit(1);
+      let current = null;
+      try { current = fs.lstatSync(file); } catch (error) { if (error.code !== "ENOENT") throw error; }
+      const keys = ["dev", "ino", "mode", "size", "mtimeMs", "ctimeMs"];
+      if (before.file === null) process.exit(current === null ? 0 : 1);
+      if (!current?.isFile() || keys.some(key => current[key] !== before.file[key])
+        || !fs.readFileSync(file).equals(fs.readFileSync(snapshot))) process.exit(1);
+    } catch { process.exit(1); }
+  ' "$profile" "$scratch/profile-original" "$scratch/profile-metadata"
+}
+
 configure_path() {
-  local escaped command_escaped line original
-  local syntax_check=("$profile_shell" -n)
-  # extglob affects parsing even when a profile enables it on an earlier line.
-  # Enable it only for syntax checks; never execute profile option changes.
-  if [[ "${profile_shell##*/}" == bash ]]; then syntax_check+=(-O extglob)
-  else syntax_check+=(-f); fi
+  local escaped command_escaped line choice candidate original
   escaped=${quick_bin//\'/\'\\\'\'}
   command_escaped=${command_bin//\'/\'\\\'\'}
   line="export PATH='$escaped':\$PATH:'$command_escaped'"
-  if [[ -L "$profile" || ( -e "$profile" && ! -f "$profile" ) ]]; then
-    fail "The startup file $profile is not a regular file; leave it unchanged and use the standard installation guide."
+  printf '\nPATH line (also run this in your current Bash/zsh Terminal to use these tools there):\n%s\n' "$line"
+  printf 'If ballin is unavailable in a new Terminal, review the startup file your shell reads and the placement of the line.\n'
+  profile_shell=${SHELL:-}
+  if [[ "$profile_shell" != /* || ! -f "$profile_shell" || ! -x "$profile_shell" ]]; then
+    path_incomplete 'Select an executable Bash or zsh in SHELL before retrying.'; return
   fi
-  if [[ -f "$profile" ]]; then
-    "$node_tool" -e '
-      const fs = require("fs");
-      const original = fs.readFileSync(process.argv[1]);
-      const contents = original.toString("utf8");
-      // Recognize simple literal command forms without evaluating shell code.
-      // Keep simple literal quote fragments inspectable without expansion.
-      // Other quoted data, comments and simple heredoc bodies remain opaque.
-      if (/[\x01-\x03]/u.test(contents)) fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-      let plain = "";
-      const heredocs = [];
-      for (let index = 0; index < contents.length;) {
-        const character = contents[index];
-        if (character === "#" && !plain.endsWith("\x24{")
-          && (plain === "" || /[\s;&|(){}]$/u.test(plain))) {
-          if (/[{}]$/u.test(plain)) {
-            fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-            break;
-          }
-          const newline = contents.indexOf("\n", index);
-          index = newline < 0 ? contents.length : newline;
-          continue;
-        }
-        if (["\x27", "\"", "`"].includes(character)) {
-          // Dollar-prefixed quotes need expansion rules; mark active command
-          // positions for manual placement rather than decoding their value.
-          if (character !== "\x60" && plain.endsWith("$")) plain = plain.slice(0, -1) + "\x03";
-          const start = index + 1;
-          index++;
-          while (index < contents.length) {
-            if (contents[index] === character) break;
-            if (character !== "\x27" && contents[index] === "\\") index++;
-            index++;
-          }
-          let value = contents.slice(start, index);
-          // Only double quotes remove backslash-newline before literal words.
-          if (character === "\"") value = value.replace(/\\\n/gu, "");
-          // Mark quotes so a quoted zsh repeat count remains unsupported.
-          plain += character !== "\x60" && /^[A-Za-z0-9_-]*$/u.test(value)
-            ? "\x01" + value + "\x02" : "Q";
-          index++;
-          continue;
-        }
-        if (character === "\\") {
-          const value = contents[index + 1] ?? "";
-          plain += value === "\n" ? "" : /^[A-Za-z0-9_-]$/u.test(value) ? "\x01" + value + "\x02" : "Q";
-          index += 2;
-          continue;
-        }
-        if (contents.startsWith("((", index)) {
-          const arithmetic = contents.slice(index).match(/^\(\([^()]*\)\)/u);
-          if (!arithmetic) { fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n"); break; }
-          plain += "Q";
-          index += arithmetic[0].length;
-          continue;
-        }
-        // Consume the entire here-string operator before looking for heredocs.
-        if (contents.startsWith("<<<", index)) { plain += "<<<"; index += 3; continue; }
-        if (character === "<") {
-          const match = contents.slice(index).match(/^<<(-?)[ \t]*(?:\x27([^\x27\n]*)\x27|"([^"\n]*)"|([^\s;&|<>\x27"`\\]+))(?=[\s;&|<>]|$)/u);
-          if (match) {
-            heredocs.push({ delimiter: match[2] ?? match[3] ?? match[4], tabs: match[1] === "-" });
-            plain += " << Q";
-            index += match[0].length;
-            continue;
-          }
-        }
-        plain += character;
-        index++;
-        if (character === "\n") {
-          while (heredocs.length > 0 && index < contents.length) {
-            const document = heredocs[0];
-            const newline = contents.indexOf("\n", index);
-            const ending = newline < 0 ? contents.length : newline;
-            const text = contents.slice(index, ending);
-            if ((document.tabs ? text.replace(/^\t+/u, "") : text) === document.delimiter) heredocs.shift();
-            index = newline < 0 ? contents.length : newline + 1;
-          }
-        }
-      }
-      if (heredocs.length > 0) fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-      // Remove redirections before splitting commands so exec 3>&1 has no
-      // executable argument. Parameter and command expansions are not evaluated.
-      plain = plain.replace(/\$\{[^}]*\}|\$\([^)]*\)/gu, "Q");
-      // Variable descriptors can hide an exec argument at a brace boundary.
-      // Keep their entire placement manual rather than interpreting the form.
-      if (/(?:^|[\s;&|()])\{[A-Za-z_][A-Za-z0-9_]*\}(?=[ \t]*[<>])/u.test(plain)) {
-        fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-      }
-      plain = plain.replace(/[0-9]*(?:<<<|<<-?|>>|<>|>\||[<>]&|[<>])[ \t]*[^\s;&|]+/gu, (redirection) => {
-        // Fail closed before operand braces can become command boundaries.
-        if (/[{}]/u.test(redirection)) fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-        return " ";
-      });
-      const zshPrefixes = process.argv[8] === "zsh" ? ["noglob", "nocorrect", "-", "repeat"] : [];
-      const literalWord = (word) => word.replace(/[\x01\x02]/gu, "");
-      for (const statement of plain.split(/[\n;&|{})]+/u)) {
-        const words = statement.trim().split(/\s+/u);
-        let unsupportedPrefix = false;
-        while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(literalWord(words[0] ?? ""))
-          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin", ...zshPrefixes].includes(literalWord(words[0] ?? ""))) {
-          const prefix = literalWord(words.shift());
-          if (prefix === "repeat") {
-            // Only an unquoted decimal count is understood; never evaluate it.
-            if (!/^[0-9]+$/u.test(words.shift() ?? "")) { unsupportedPrefix = true; break; }
-            continue;
-          }
-          if (!["time", "command", "builtin"].includes(prefix)) continue;
-          // Only these literal wrapper options are understood. Other options
-          // retain the existing manual fallback instead of hiding a transfer.
-          while (literalWord(words[0] ?? "").startsWith("-")) {
-            const option = literalWord(words.shift());
-            if (prefix === "command" && /^-[pvV]+$/u.test(option)) {
-              if (/[vV]/u.test(option)) { words.length = 0; break; }
-              continue;
-            }
-            if (prefix === "time" && option === "-p") continue;
-            if (option === "--") break;
-            unsupportedPrefix = true;
-            break;
-          }
-          if (unsupportedPrefix) break;
-        }
-        if (unsupportedPrefix) {
-          fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-          break;
-        }
-        const command = literalWord(words.shift() ?? "");
-        const commandArguments = words.map(literalWord);
-        if (command.includes("\x03") || (command === "shopt" && commandArguments.some((word) => word.includes("\x03")))) {
-          fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-          break;
-        }
-        if (process.argv[8] === "bash" && command === "shopt" && commandArguments.includes("extglob")) {
-          const options = [];
-          for (const word of commandArguments) {
-            if (!/^-[A-Za-z]+$/u.test(word)) break;
-            options.push(word);
-          }
-          // Parsing with extglob enabled cannot prove reachability after a
-          // literal disablement. Queries do not change the parser option.
-          if (options.some((option) => option.includes("u")) && !options.some((option) => /[pq]/u.test(option))) {
-            fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
-            break;
-          }
-        }
-        let transfer = ["return", "exit", "logout"].includes(command);
-        if (command === "exec") {
-          while (commandArguments.length > 0) {
-            if (commandArguments[0] === "--") { commandArguments.shift(); break; }
-            if (/^-[cl]+$/u.test(commandArguments[0])) commandArguments.shift();
-            else if (commandArguments[0] === "-a") commandArguments.splice(0, 2);
-            else break;
-          }
-          transfer = commandArguments.length > 0;
-        }
-        if (transfer) { fs.writeFileSync(process.argv[7], "manual\n"); break; }
-      }
-      fs.writeFileSync(process.argv[6], original);
-      const continuationCheck = (text, destination) => {
-        const trailing = text.match(/(\\+)(?:\r?\n)?$/u)?.[1];
-        if (trailing && trailing.length % 2 !== 0) {
-          fs.writeFileSync(destination, text.replace(/\r?\n$/u, "") + " )\n");
-        }
-      };
-      continuationCheck(contents, process.argv[2]);
-      const withoutFinalNewline = contents.endsWith("\n") ? contents.slice(0, -1) : contents;
-      const lastLineStart = withoutFinalNewline.lastIndexOf("\n") + 1;
-      if (withoutFinalNewline.slice(lastLineStart) === process.argv[3]) {
-        const prefix = contents.slice(0, lastLineStart);
-        fs.writeFileSync(process.argv[4], prefix);
-        continuationCheck(prefix, process.argv[5]);
-      }
-    ' "$profile" "$scratch/profile-continuation-check" "$line" \
-      "$scratch/profile-path-prefix" "$scratch/profile-path-continuation-check" \
-      "$scratch/profile-path-original" "$scratch/profile-transfer-check" "${profile_shell##*/}" \
-      || fail 'The startup file could not be checked; it was left unchanged.'
-    # The shell ignores this unmatched token in a trailing comment. An active
-    # backslash escapes its leading space, leaving the unmatched token visible.
-    if [[ -f "$scratch/profile-continuation-check" ]] \
-      && ! "${syntax_check[@]}" "$scratch/profile-continuation-check" >/dev/null 2>&1; then
-      fail 'The startup file ends at an unfinished continuation; it was left unchanged.'
-    fi
-    "${syntax_check[@]}" "$profile" || fail 'The startup file has invalid shell syntax; it was left unchanged.'
-    # Both supported shells can accept an unfinished heredoc under -n. A
-    # deliberate syntax error must remain visible to the parser at EOF.
-    cp "$profile" "$scratch/profile-boundary-check"
-    printf '\n)\n' >> "$scratch/profile-boundary-check"
-    if "${syntax_check[@]}" "$scratch/profile-boundary-check" >/dev/null 2>&1; then
-      fail 'The startup file ends at an unfinished heredoc; it was left unchanged.'
-    fi
+  case "${profile_shell##*/}" in
+    zsh)
+      if [[ -n "${ZDOTDIR+x}" ]]; then printf 'Exported ZDOTDIR: "%s" (an empty value does not mean home).\n' "$ZDOTDIR"; fi
+      printf 'Which directory contains the .zshrc your terminal reads? [home or absolute directory; Enter to skip] '
+      IFS= read -r choice || choice=''
+      [[ "$choice" != home ]] || choice="$HOME"
+      if [[ "$choice" != /* ]]; then path_incomplete 'No absolute zsh startup directory selected.'; return; fi
+      profile="${choice%/}/.zshrc"
+      ;;
+    bash)
+      printf 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] '
+      IFS= read -r choice || choice=''
+      case "$choice" in
+        bashrc) profile="$HOME/.bashrc" ;;
+        login)
+          profile="$HOME/.bash_profile"
+          for candidate in .bash_profile .bash_login .profile; do
+            if [[ -e "$HOME/$candidate" || -L "$HOME/$candidate" ]]; then profile="$HOME/$candidate"; break; fi
+          done
+          ;;
+        *) path_incomplete 'No Bash startup file selected.'; return ;;
+      esac
+      ;;
+    *) path_incomplete 'Automatic PATH setup supports Bash and zsh. Configure the equivalent PATH for your shell, or retry in Bash/zsh.'; return ;;
+  esac
+  printf '\nPATH setup for %s\n' "$profile"
+  local syntax_check=("$profile_shell" -n)
+  # Parsing only: never follow option changes or infer runtime reachability.
+  if [[ "${profile_shell##*/}" == bash ]]; then syntax_check+=(-O extglob)
+  else syntax_check+=(-f); fi
+  original="$scratch/profile-original"
+  if ! "$node_tool" -e '
+    const fs = require("fs");
+    const [file, snapshot, metadata, line, check] = process.argv.slice(1);
+    const parent = fs.lstatSync(require("path").dirname(file));
+    if (!parent.isDirectory()) throw new Error("Startup directory is not a regular directory");
+    let stat = null;
+    let contents = Buffer.alloc(0);
+    try {
+      const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      try {
+        stat = fs.fstatSync(fd);
+        if (!stat.isFile()) throw new Error("Startup file is not a regular file");
+        contents = fs.readFileSync(fd);
+      } finally { fs.closeSync(fd); }
+    } catch (error) { if (error.code !== "ENOENT") throw error; }
+    fs.writeFileSync(snapshot, contents);
+    fs.writeFileSync(metadata, JSON.stringify({ parent, file: stat }));
+    const text = contents.toString("utf8");
+    if (text.split("\n").includes(line)) fs.writeFileSync(check + ".present", "");
+    const trailing = text.match(/(\\+)(?:\r?\n)?$/u)?.[1];
+    if (trailing && trailing.length % 2 !== 0) {
+      fs.writeFileSync(check + ".continuation", text.replace(/\r?\n$/u, "") + " )\n");
+    }
+    fs.writeFileSync(check, Buffer.concat([contents, Buffer.from("\n)\n")]));
+  ' "$profile" "$original" "$scratch/profile-metadata" "$line" "$scratch/profile-boundary" 2>/dev/null; then
+    path_incomplete 'The startup file or directory could not be safely inspected.'; return
   fi
-  if [[ -f "$scratch/profile-transfer-check" || -f "$scratch/profile-transfer-check.ambiguous" ]]; then
-    printf '\nManual PATH setup for %s:\n%s\n' "$profile" "$line" >&2
-    if [[ -f "$scratch/profile-transfer-check.ambiguous" ]]; then
-      fail 'The startup file contains shell syntax that this check cannot interpret safely. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
-    fi
-    fail 'The startup file contains a recognized return, exit, logout, or executable exec form that may skip PATH setup. It was left unchanged. Place the displayed line where your shell will execute it, then follow the standard installation guide: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
+  if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
+  # Literal presence is not evidence that the shell executes this line.
+  if [[ -f "$scratch/profile-boundary.present" ]]; then
+    printf 'PATH line already present in %s; open a new Terminal. Its activation was not checked.\n' "$profile"
+    return
   fi
-  # Reuse only a final standalone command. Matching text inside a construct or
-  # after a continued command needs a new confirmed line; never source the file.
-  if [[ -f "$scratch/profile-path-prefix" ]] \
-    && "${syntax_check[@]}" "$scratch/profile-path-prefix" >/dev/null 2>&1; then
-    if [[ ! -f "$scratch/profile-path-continuation-check" ]] \
-      || "${syntax_check[@]}" "$scratch/profile-path-continuation-check" >/dev/null 2>&1; then
-      cp "$scratch/profile-path-prefix" "$scratch/profile-path-boundary-check"
-      printf '\n)\n' >> "$scratch/profile-path-boundary-check"
-      if ! "${syntax_check[@]}" "$scratch/profile-path-boundary-check" >/dev/null 2>&1 \
-        && cmp -s "$profile" "$scratch/profile-path-original"; then return; fi
-    fi
+  # Small append-boundary checks: syntax must parse, a trailing backslash must
+  # be inert (for example in a comment), and EOF must expose an invalid token.
+  if ! "${syntax_check[@]}" "$original" >/dev/null 2>&1; then
+    path_incomplete 'The non-executing check could not confirm a safe append boundary.'; return
+  fi
+  if [[ -f "$scratch/profile-boundary.continuation" ]] \
+    && ! "${syntax_check[@]}" "$scratch/profile-boundary.continuation" >/dev/null 2>&1; then
+    path_incomplete 'The startup file may end at an unfinished continuation.'; return
+  fi
+  if "${syntax_check[@]}" "$scratch/profile-boundary" >/dev/null 2>&1; then
+    path_incomplete 'The startup file may end at an unfinished heredoc.'; return
   fi
   printf '\nAdd to %s:\n%s\n' "$profile" "$line"
-  confirm 'Use these tools in new Terminal windows?' || fail 'PATH setup was declined; prerequisites remain available, but Ballin setup has not run.'
-  if [[ -f "$scratch/profile-path-original" ]]; then
-    cmp -s "$profile" "$scratch/profile-path-original" || fail 'The startup file changed during setup; it was left unchanged. Review it before retrying.'
-  elif [[ -e "$profile" || -L "$profile" ]]; then
-    fail 'The startup file changed during setup; it was left unchanged. Review it before retrying.'
+  if ! confirm 'Add this PATH line?'; then path_incomplete 'PATH setup was declined.'; return; fi
+  if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
+  if ! profile_temp=$(mktemp "$profile.ballin-quickstart.XXXXXX"); then
+    path_incomplete 'A temporary startup file could not be created.'; return
   fi
-  [[ -d "${profile%/*}" ]] || fail "The startup directory ${profile%/*} does not exist."
-  profile_temp=$(mktemp "$profile.ballin-quickstart.XXXXXX")
-  original="$scratch/profile-path-original"
   if [[ -f "$profile" ]]; then
-    cp -p "$profile" "$profile_temp"
-    cmp -s "$profile_temp" "$original" || fail 'The startup file changed during setup; it was left unchanged. Review it before retrying.'
+    if ! cp -p "$profile" "$profile_temp" || ! cmp -s "$profile_temp" "$original"; then
+      path_incomplete 'The startup file changed or could not be copied.'; return
+    fi
   fi
-  printf '\n%s\n' "$line" >> "$profile_temp"
-  "${syntax_check[@]}" "$profile_temp" || fail 'The startup file has invalid shell syntax; it was left unchanged.'
-  if [[ -L "$profile" ]] || { [[ -f "$original" ]] && ! cmp -s "$original" "$profile"; } \
-    || { [[ ! -f "$original" ]] && [[ -e "$profile" ]]; }; then
-    fail 'The startup file changed during setup; it was left unchanged.'
+  if ! printf '\n%s\n' "$line" >> "$profile_temp" \
+    || ! "${syntax_check[@]}" "$profile_temp" >/dev/null 2>&1; then
+    path_incomplete 'The proposed append could not be checked.'; return
   fi
-  mv "$profile_temp" "$profile"
+  if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
+  if ! mv "$profile_temp" "$profile"; then path_incomplete 'The startup file could not be replaced.'; return; fi
   profile_temp=''
+  printf 'PATH line added to %s; open a new Terminal.\n' "$profile"
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh fresh repo candidate shell_name path_node brew_prefix
+  local os_version major minor machine git_tool need_git need_node need_gh fresh repo path_node brew_prefix
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -450,25 +334,6 @@ main() {
     x86_64) gh_arch='amd64' ;;
     *) fail "Unsupported Mac architecture: $machine." ;;
   esac
-  shell_name=${SHELL:-}
-  [[ "$shell_name" == /* && -f "$shell_name" && -x "$shell_name" ]] \
-    || fail 'The selected shell must be an absolute path to an executable Bash or zsh file.'
-  case "${shell_name##*/}" in
-    zsh)
-      [[ -z "${ZDOTDIR+x}" || -n "${ZDOTDIR:-}" ]] \
-        || fail 'An exported empty ZDOTDIR needs manual PATH setup. Set an absolute startup directory or unset ZDOTDIR before retrying.'
-      profile="${ZDOTDIR-$HOME}/.zshrc"
-      ;;
-    bash)
-      profile="$HOME/.bash_profile"
-      for candidate in .bash_profile .bash_login .profile; do
-        if [[ -e "$HOME/$candidate" || -L "$HOME/$candidate" ]]; then profile="$HOME/$candidate"; break; fi
-      done
-      ;;
-    *) fail 'This quickstart supports the standard zsh or Bash Terminal setup.' ;;
-  esac
-  profile_shell="$shell_name"
-  [[ "$profile" == /* ]] || fail 'The shell startup directory must be an absolute path.'
   normalize_process_path
   quick_root="$HOME/.local/share/ballin-quickstart"
   quick_bin="$quick_root/bin"
