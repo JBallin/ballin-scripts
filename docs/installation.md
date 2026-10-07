@@ -331,12 +331,18 @@ entries. These commands require remote access and work with read-only
 permissions. For offline help, run `ballin backup --help`.
 
 Bundle snapshots use `.bundle.json` filenames. List their files, then read one
-using its exact listed path:
+using its original stored path:
 
 ```shell
 ballin backup read codex_skills.bundle.json --list
 ballin backup read codex_skills.bundle.json --file 'example/SKILL.md'
 ```
+
+`--list` displays control and directional characters as visible escapes;
+`--file` does not decode those escapes. For escaped or ambiguous names, read the
+raw bundle without `--list` or `--file` and pass the selected entry’s JSON-decoded
+`path` value to `--file` as one shell argument. See
+[bundle inspection](backup-design.md#bundle-inspection) for details.
 
 `--file` prints the original bytes, including binary content and line endings.
 These commands inspect saved content without restoring files or executing them.
