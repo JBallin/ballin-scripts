@@ -13,13 +13,22 @@ describe('directory snapshot inspection', () => {
     const { version, entries: members } = readDirectorySnapshot(archive());
     assert.equal(version, 2);
     assert.deepEqual(members, [{ path: entry.path, executable: true, bytes: Buffer.from('# Example\r\n') }]);
-    assert.deepEqual(JSON.parse(listDirectoryMembers(members)), [{ path: entry.path, executable: true, bytes: 11 }]);
+    assert.equal(listDirectoryMembers(members), `${entry.path}\n`);
     assert.deepEqual(readDirectoryMember(members, entry.path), Buffer.from('# Example\r\n'));
+  });
+  it('lists only literal paths in saved order without metadata', () => {
+    const names = ['z folder/run.sh', 'a/雪.md', 'C:relative', '\\literal', 'bytes/executable', 'quote"comma,.md'];
+    const { entries } = readDirectorySnapshot(archive(names.map((name, index) => ({
+      ...entry, path: name, executable: index % 2 === 0,
+    }))));
+    assert.equal(listDirectoryMembers(entries), `${names.join('\n')}\n`);
+    assert.deepEqual(entries.map((member: { executable: boolean }) => member.executable), [true, false, true, false, true, false]);
+    for (const name of names) assert.deepEqual(readDirectoryMember(entries, name), Buffer.from('# Example\r\n'));
   });
   it('reads old namespaced and new direct Claude skill paths without rewriting saved paths', () => {
     for (const name of ['synced/old-collection/example/SKILL.md', 'example/SKILL.md']) {
       const { entries } = readDirectorySnapshot(archive([{ ...entry, path: name }]));
-      assert.equal(JSON.parse(listDirectoryMembers(entries))[0].path, name);
+      assert.equal(listDirectoryMembers(entries), `${name}\n`);
       assert.deepEqual(readDirectoryMember(entries, name), Buffer.from('# Example\r\n'));
       const other = name.startsWith('synced/') ? 'example/SKILL.md' : 'synced/old-collection/example/SKILL.md';
       assert.throws(() => readDirectoryMember(entries, other), DirectorySnapshotError);
@@ -65,7 +74,22 @@ describe('directory snapshot inspection', () => {
     assert.notInclude(listed, '\x1b'); assert.notInclude(listed, '\t');
     assert.notInclude(listed, '\u009b');
     for (const character of directional + separators) assert.notInclude(listed, character);
-    assert.equal(JSON.parse(listed)[0].path, name);
+    assert.lengthOf(listed.split('\n'), 2);
+    assert.include(listed, 'nested/\\u001b[31m\\tline\\n\\u009b');
+    assert.equal(listed, `${JSON.stringify(name).slice(1, -1).replace(/[\u007f-\u009f\u2028\u2029\p{Bidi_Control}]/gu, (character) => (
+      `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
+    ))}\n`);
+    const members = readDirectorySnapshot(archive([{ ...entry, path: name }])).entries;
+    assert.equal(members[0].path, name);
+    assert.deepEqual(readDirectoryMember(members, name), Buffer.from('# Example\r\n'));
+  });
+  it('escapes every non-NUL control character on one physical line', () => {
+    const controls = Array.from({ length: 159 }, (_, index) => String.fromCharCode(index + 1)).filter((character) => /\p{Cc}/u.test(character)).join('');
+    const members = readDirectorySnapshot(archive([{ ...entry, path: `nested/${controls}.md` }])).entries;
+    const listed = listDirectoryMembers(members);
+    assert.notMatch(listed.slice(0, -1), /[\p{Cc}\p{Bidi_Control}\u2028\u2029]/u);
+    assert.include(listed, '\\b\\t\\n\\u000b\\f\\r');
+    assert.equal(members[0].path, `nested/${controls}.md`);
   });
   for (const value of ['broken', 'null', '[]', '1', '"text"']) it(`rejects invalid archive ${value}`, () => reject(Buffer.from(value)));
   it('rejects invalid UTF-8 without replacing path bytes', () => reject(Buffer.from([0xff])));
