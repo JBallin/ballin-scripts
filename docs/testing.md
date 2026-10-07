@@ -70,6 +70,52 @@ contents. The printed paths also let you inspect the cache and full fake request
 history using your editor. Menu arguments are separated by whitespace; shell
 quoting, expansion, pipelines, and arbitrary shell commands are unavailable.
 
+### Controlled failure walkthroughs
+
+Use `scenarios` to list the allowlisted catalog, `scenario <name>` to select one,
+and `clear` to remove faults. The menu shows the active scenario. Selection and
+clearing retain installed config, fake remote commits and requests, and comparison
+cache. Clearing does not undo writes or reconcile divergent files. The `reset`
+commands above remain destructive and also clear the active scenario.
+
+Installer faults can be selected before the first prompt:
+
+```shell
+npm run sandbox -- --scenario auth
+```
+
+Alternatively, cancel the initial installer, select a scenario in the menu, and
+run `install`. For the backup cases below, enable backup, include the sandbox's
+harmless sensitive source (`.zshrc`), and choose create during setup. Decline
+analytics unless testing consent; even opt-in saves consent only in temporary
+config, creates no analytics install ID, and sends no telemetry because the hard
+`BALLIN_NO_ANALYTICS=1` guard remains active.
+
+| Scenario | Setup and command | Expected outcome and recovery |
+| --- | --- | --- |
+| `auth` | Select before installation; enable backup, or run `ballin backup setup` | Authentication fails. `clear`, then retry setup; the installation remains available. |
+| `connection`, `timeout` | Same setup as `auth` | Fixture transport error stops setup. `clear`, then retry setup. These simulate responses, not real network timing. |
+| `permission` | Finish backup setup; select, then `ballin backup` | Publication is denied with no new commit. `clear`, then retry backup. |
+| `ambiguous` | Finish backup setup; select, then `ballin backup` | Write succeeds despite a lost response; readback confirms it. `inspect`, `clear`, and retry to verify no duplicate commit. |
+| `readback` | Finish backup setup; select, then `ballin backup` | Write succeeds, but unexpected remote content prevents confirmation. `inspect`, `clear`, and retry; the prior write remains and no duplicate snapshot commit is needed. |
+| `conflict` | Finish setup and run a successful `ballin backup`; then select and run `ballin backup` again | Selection requires matching local, cache and remote zshrc bytes, then changes both sides. Backup refuses the conflict. `clear` preserves divergence. In your editor, copy the fake remote `zshrc.sh` contents shown by `inspect` into the printed temporary HOME's `.zshrc`; retry backup to accept that version without a duplicate remote commit. |
+| `self-update` | Install, select, then `ballin self-update` | Controlled Git fetch fails. `clear`, then retry. |
+| `update-failure` | Install with default maintenance settings; select, then `ballin update` | The fake macOS stage fails; Ballin self-update and readiness still run, and the command exits nonzero. `clear`, then retry. |
+| `update-interrupt` | Install, select, then `ballin update` | Wait for “Sandbox update stage ready for interruption” (also recorded in `update-stage.ready` under the printed root), then press Ctrl-C. The process group stops and the sandbox is preserved. Inspect it, clean it up with the printed command, and start a new session without the scenario to retry. |
+| `none` | `clear` or `scenario none` | Normal controlled tools and fake services. |
+
+For a temporary-config corruption walkthrough, install and use your editor to
+save a copy of the printed checkout's `ballin.config.json` outside that checkout
+but inside the sandbox root. Replace the original with invalid JSON, run
+`ballin doctor`, restore the saved bytes, and retry. Do not edit the installed
+checkout or config outside the sandbox.
+
+The catalog covers representative faults rather than every fixture combination.
+Filesystem-permission selectors and real authentication/network checks, host-tool
+installation, and real macOS updates are excluded. Existing automated tests cover
+path-specific permission failures, decline/EOF, ordinary failures, and session
+interruption. Scenario selection accepts no shell commands or environment overrides.
+
 Normal exit or EOF cleans up automatically. Start with
 `npm run sandbox -- --keep`, or enter `keep`, to preserve the sandbox.
 Failed commands, safeguard failures, and interruptions preserve it for debugging.
@@ -86,7 +132,9 @@ Cleanup accepts only a marked temporary sandbox root and refuses a still-running
 parent or recorded child process group, including children surviving a parent
 crash. If a crash leaves an ambiguous launch marker, cleanup refuses rather than
 assuming that no child started; inspect and stop the sandbox processes before
-removing that marker and retrying cleanup. Never run its installed command
+removing that marker and retrying cleanup. On Linux, verified zombie or dead
+processes do not block cleanup; live processes and unavailable or ambiguous
+liveness inspection still do. Never run its installed command
 directly from your normal shell: the menu supplies the isolation safeguards on
 every launch.
 

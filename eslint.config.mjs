@@ -15,6 +15,7 @@ const tsFiles = [
   'analytics-worker/report.ts',
   'analytics-worker/reset.ts',
   'analytics-worker/verify-deployment.ts',
+  'analytics-worker/wrangler.ts',
   'commands/**/*.ts',
   'config/**/*.ts',
   'test/**/*.ts',
