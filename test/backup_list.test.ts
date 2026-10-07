@@ -128,7 +128,7 @@ describe('saved backup discovery', function() {
       save(fixtureState({ [snapshot]: archive })); const before = state();
       const listed = run(['read', snapshot, '--list']);
       assert.equal(listed.status, 0, listed.stderr); assert.equal(listed.stderr, '');
-      assert.deepEqual(JSON.parse(listed.stdout), [{ path: member.path, executable: true, bytes: Buffer.byteLength(content) }]);
+      assert.equal(listed.stdout, `${member.path}\n`);
       assert.notInclude(listed.stdout, 'Synthetic example');
       const read = run(['read', snapshot, '--file', member.path]);
       assert.equal(read.status, 0, read.stderr); assert.equal(read.stderr, ''); assert.equal(read.stdout, content);
@@ -144,7 +144,7 @@ describe('saved backup discovery', function() {
       save(fixtureState({ [snapshot]: archive }));
       const listed = run(['read', snapshot, '--list']);
       assert.equal(listed.status, 0, listed.stderr);
-      assert.deepEqual(JSON.parse(listed.stdout), [{ path: member.path, executable: false, bytes: Buffer.byteLength(content) }]);
+      assert.equal(listed.stdout, `${member.path}\n`);
       const read = run(['read', snapshot, '--file', member.path]);
       assert.equal(read.status, 0, read.stderr);
       assert.equal(read.stdout, content);
@@ -152,6 +152,20 @@ describe('saved backup discovery', function() {
       preserved();
     });
   }
+  it('lists ordered literal paths and escapes unusual controls without framing or writes', () => {
+    const names = ['z folder/run.sh', 'a/雪.md', 'quote"comma,.md', '\\literal', 'nested/line\nbreak\t\x1b\u202e.md'];
+    const archive = JSON.stringify({ format: 'ballin-directory', version: 2, entries: names.map((name) => ({
+      path: name, executable: true, encoding: 'utf8', content: ['saved'],
+    })) });
+    save(fixtureState({ 'codex_skills.bundle.json': archive }));
+    const result = run(['read', 'codex_skills.bundle.json', '--list']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'z folder/run.sh\na/雪.md\nquote"comma,.md\n\\literal\nnested/line\\nbreak\\t\\u001b\\u202e.md\n');
+    assert.equal(result.stderr, '');
+    const member = run(['read', 'codex_skills.bundle.json', '--file', names[4]]);
+    assert.equal(member.status, 0, member.stderr); assert.equal(member.stdout, 'saved');
+    assert.equal(run(['read', 'codex_skills.bundle.json']).stdout, archive); preserved();
+  });
   it('writes exact binary and empty member bytes to stdout with no framing', () => {
     for (const bytes of [Buffer.from([0, 255, 128, 13, 10]), Buffer.alloc(0)]) {
       save(fixtureState({ 'codex_skills.bundle.json': JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
@@ -163,7 +177,7 @@ describe('saved backup discovery', function() {
       assert.equal(result.status, 0, result.stderr.toString()); assert.deepEqual(result.stdout, bytes); preserved();
     }
   });
-  it('stages interactive bundle hints while preserving exact raw, JSON and member stdout', () => {
+  it('stages interactive bundle hints while preserving exact raw, plain listing and member stdout', () => {
     const archive = JSON.stringify({ format: 'ballin-directory', version: 2, entries: [
       { path: 'rule.md', executable: false, encoding: 'utf8', content: ['synthetic\r\n', 'last'] },
     ] });
@@ -174,8 +188,8 @@ describe('saved backup discovery', function() {
     assert.include(raw.stderr, 'backup read <bundle> --list'); assert.notInclude(raw.stderr, '--file');
     const listed = run(['read', 'codex_rules.bundle.json', '--list'], {}, tty);
     assert.equal(listed.status, 0, listed.stderr);
-    assert.deepEqual(JSON.parse(listed.stdout), [{ path: 'rule.md', executable: false, bytes: 15 }]);
-    assert.include(listed.stderr, 'backup read <bundle> --file <path>');
+    assert.equal(listed.stdout, 'rule.md\n');
+    assert.equal(listed.stderr, '\nRead saved files with `ballin backup read <bundle> --file <path>`.\n');
     const member = run(['read', 'codex_rules.bundle.json', '--file', 'rule.md'], {}, tty);
     assert.equal(member.status, 0, member.stderr); assert.equal(member.stdout, 'synthetic\r\nlast'); assert.equal(member.stderr, '');
     preserved();
@@ -190,6 +204,7 @@ describe('saved backup discovery', function() {
       for (const options of [[], ['--list']]) {
         const result = run(['read', 'codex_rules.bundle.json', ...options], {}, tty);
         assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, '');
+        assert.equal(result.stdout, options.length ? 'rule.md\n' : archive);
       }
     }
     const tty = "for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', {value:true});";
@@ -221,9 +236,7 @@ describe('saved backup discovery', function() {
     ] }, null, 2)}\n`;
     save(fixtureState({ 'claude_rules.bundle.json': archive }));
     const listed = run(['read', 'claude_rules.bundle.json', '--list']); assert.equal(listed.status, 0, listed.stderr);
-    assert.deepEqual(JSON.parse(listed.stdout), [
-      { path: 'rule.md', executable: false, bytes: Buffer.byteLength(content) }, { path: 'empty.md', executable: false, bytes: 0 },
-    ]);
+    assert.equal(listed.stdout, 'rule.md\nempty.md\n');
     const read = run(['read', 'claude_rules.bundle.json', '--file', 'rule.md']); assert.equal(read.status, 0, read.stderr); assert.equal(read.stdout, content);
     const empty = run(['read', 'claude_rules.bundle.json', '--file', 'empty.md']); assert.equal(empty.status, 0, empty.stderr); assert.equal(empty.stdout, '');
     assert.equal(run(['read', 'claude_rules.bundle.json']).stdout, archive); preserved();
