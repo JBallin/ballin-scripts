@@ -2,15 +2,23 @@
 
 *User guide to what Ballin sends, how to opt in or out, and how long data is kept.*
 
-Analytics help show which top-level Ballin commands are used, how real backups
-finish, and whether automatic backup and Ballin self-update steps succeed
-during `ballin update`.
+## What will analytics share?
+
+If you opt in, Ballin reports top-level command usage and results, real backup
+results, and automatic backup and self-update results during `ballin update`.
+Backup contents, destination identities, and configuration values are not sent.
+Reports use a random installation ID stored locally. See
+[what is sent](#what-is-sent) for payload fields,
+[what is never sent](#what-is-never-sent) for exclusions, and
+[storage](#storage) for retention.
 
 Analytics start disabled. During a fresh installation, Ballin asks whether to
 enable usage analytics, with No as the default.
 The choice is saved only in the local Ballin config. Installation and answering
 the question send no analytics event. Refreshes and self-updates preserve an
 existing local choice without asking again.
+
+## Changing the analytics choice
 
 The single `analytics.enabled` setting controls both command and behavioral
 analytics. Missing, disabled, or malformed analytics configuration suppresses

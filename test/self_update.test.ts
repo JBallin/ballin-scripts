@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
-const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const updateLine = 'Updating Ballin...\n';
 type SpawnSelfUpdateOverrides = Omit<
@@ -270,6 +270,18 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.stdout, updateLine + 'Ballin is already up to date.\n');
     assert.include(commandLog(), setupLog());
   });
+  it('passes the guide that owns both setup recovery anchors', () => {
+    const result = runSelfUpdate();
+    assert.equal(result.status, 0, result.stderr);
+    const setupCall = commandLog().find((line: string) => line.includes('|install_setup:setup ')) ?? '';
+    assert.isNotEmpty(setupCall);
+    const guideUrl = setupCall.match(/https:\/\/github\.com\/JBallin\/ballin-scripts\/blob\/main\/docs\/[A-Za-z-]+\.md/u)?.[0] ?? '';
+    assert.isNotEmpty(guideUrl);
+    const guidePath = new URL(guideUrl).pathname.replace('/JBallin/ballin-scripts/blob/main/', '');
+    const guide = fs.readFileSync(path.join(__dirname, '..', guidePath), 'utf8');
+    assert.match(guide, /^## Local effects$/mu);
+    assert.match(guide, /^## What will installation change\?$/mu);
+  });
   for (const count of [1, 6]) {
     it(`reports changed revisions with ${count} locally known new commit${count === 1 ? '' : 's'}`, () => {
       const result = runSelfUpdate({ ...revisions, FAKE_NEW_COMMITS: String(count), GIT_NO_LAZY_FETCH: '0' });
@@ -379,7 +391,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({ FAKE_SOURCE_CHANGED: '1' });
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Backup source definitions may have changed.');
-    assert.include(result.stdout, 'Sensitive-source opt-in covers current and future supported sources.\nReview: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n');
+    assert.include(result.stdout, 'Sensitive-source opt-in covers current and future supported sources.\nReview:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n');
     assert.equal(commandLog(true).filter((line: string) => line.includes('HEAD:commands/backup_snapshots.ts')).length, 2);
     assert.isBelow(result.stdout.indexOf('Ballin updated.'), result.stdout.indexOf('Backup source definitions'));
   });

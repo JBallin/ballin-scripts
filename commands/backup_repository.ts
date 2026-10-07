@@ -13,8 +13,9 @@ import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
 type RepositoryProblem = 'authentication' | 'connection' | 'timeout' | 'request' | 'unavailable' | 'identity' | 'unsupported'
-  | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
+  | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
+  'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
   authentication: 'GitHub.com authentication is required; check the effective gh account and environment token.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
   timeout: 'The GitHub.com request timed out. Check the network connection and GitHub service availability, then rerun.',
@@ -109,7 +110,7 @@ const oid = (value: unknown): string => {
   if (typeof value !== 'string' || !/^[a-f0-9]{40}$/u.test(value)) throw new RepositoryError('invalid-data');
   return value;
 };
-const api = (endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false): ApiResult => {
+const api = (endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false, method?: 'PATCH'): ApiResult => {
   let output: string | undefined;
   let response: ApiResult = { ok: false, body: {} };
   let failure: RepositoryError | undefined;
@@ -119,7 +120,7 @@ const api = (endpoint: string, payload: unknown, options: RepositoryOptions, all
     let result;
     try {
       result = (options.runCommand ?? runCommand)('gh', [
-        'api', '--hostname', 'github.com', '--method', payload === undefined ? 'GET' : 'POST',
+        'api', '--hostname', 'github.com', '--method', method ?? (payload === undefined ? 'GET' : 'POST'),
         endpoint, ...(payload === undefined ? [] : ['--input', '-']),
       ], {
         env: { ...(options.env ?? process.env), GH_HOST: 'github.com', GH_DEBUG: '', DEBUG: '' },
@@ -614,12 +615,33 @@ const publishRepositorySnapshots = (
   if (additions.size === 0) { assertCurrent(before, options); return before; }
   return publish(before, additions, false, options);
 };
+// Only bootstrap calls this after validating the newly created destination. Never retry the write.
+const disableCreatedRepositoryPullRequests = (
+  destination: RepositoryDestination, account: Account, options: RepositoryOptions,
+): void => {
+  try {
+    const result = api(`repos/${account.login}/${destination.name}`, { has_pull_requests: false }, options, false, 'PATCH');
+    requireCleanTransport(result);
+    if (!result.ok) throw new RepositoryError('feature-settings');
+    const owner = object(result.body.owner);
+    if (result.body.node_id !== destination.id || result.body.name !== destination.name
+      || result.body.private !== true || owner.node_id !== account.id || owner.type !== 'User'
+      || owner.login !== account.login || result.body.has_pull_requests !== false) {
+      throw new RepositoryError('feature-settings');
+    }
+  } catch (error) {
+    const failure = new RepositoryError('feature-settings');
+    if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'cleanup')) failure.cleanupFailed = true;
+    throw failure;
+  }
+};
 const createRepositoryBackup = (name: string, account: Account, options: RepositoryOptions = {}): RepositoryRead => {
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   // Confirm the effective account immediately before creating under /user.
   if (readRepositoryAccount(options).id !== account.id) throw new RepositoryError('identity');
   const result = api('user/repos', {
     name, description: 'Developer environment backups created by Ballin', private: true, auto_init: true,
+    has_issues: false, has_wiki: false, has_projects: false,
   }, options);
   if (!result.ok) throw new RepositoryError('uncertain');
   if (object(result.body.owner).node_id !== account.id || result.body.private !== true || result.body.name !== name) {
@@ -630,6 +652,7 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
   };
   try {
     requireCleanTransport(result);
+    disableCreatedRepositoryPullRequests(destination, account, options);
     const seed = requireRepositoryRead(inspect(destination, account, options, true));
     return publish(seed, new Map([
       [repositoryMarkerFileName, markerBytes(destination)],

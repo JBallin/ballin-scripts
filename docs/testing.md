@@ -55,13 +55,13 @@ Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
 Closing the PR or converting it to a draft does not cancel an accepted request.
 
-## Interactive onboarding QA
+## Interactive QA sandbox
 
 Use Node.js from `.nvmrc`, install development dependencies with `npm ci`, then
 run:
 
 ```shell
-npm run qa:onboarding
+npm run sandbox
 ```
 
 The tool prints its temporary sandbox paths and starts the real installer. Answer
@@ -101,7 +101,7 @@ history using your editor. Menu arguments are separated by whitespace; shell
 quoting, expansion, pipelines, and arbitrary shell commands are unavailable.
 
 Normal exit or EOF cleans up automatically. Start with
-`npm run qa:onboarding -- --keep`, or enter `keep`, to preserve the sandbox.
+`npm run sandbox -- --keep`, or enter `keep`, to preserve the sandbox.
 Failed commands, safeguard failures, and interruptions preserve it for debugging.
 Interrupting a running command stops its child process group before the session
 finishes. Preserved sandboxes are inspection artifacts; start a new session to
@@ -109,7 +109,7 @@ run more commands. Remove a preserved or abandoned sandbox with the exact path
 printed by the tool:
 
 ```shell
-npm run qa:onboarding -- --cleanup /path/printed/by/the/tool
+npm run sandbox -- --cleanup /path/printed/by/the/tool
 ```
 
 Cleanup accepts only a marked temporary sandbox root and refuses a still-running

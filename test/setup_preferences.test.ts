@@ -96,11 +96,10 @@ fs.readFileSync = (file, ...args) => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, `Sensitive sources available now:\n  pipx: installation metadata\n  zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))}\n`);
     assert.notInclude(result.stdout, ' -> ');
-    assert.include(result.stdout, 'Not found now: bash_profile.sh, bashrc.sh, claude_agents.bundle.json, claude_commands.bundle.json, claude_instructions, claude_rules.bundle.json, claude_skills.bundle.json, codex_agents.bundle.json, codex_AGENTS.md, codex_AGENTS.override.md, codex_config.toml, codex_hooks.json, codex_marketplace.json, codex_profiles.bundle.json, codex_rules.bundle.json, codex_skills.bundle.json, codex_user_skills.bundle.json, gitconfig, gitignore_global, nanorc, nvmrc, profile.sh, vimrc, zprofile.sh\n');
+    assert.include(result.stdout, 'Sources not found now: 24.\n');
     assert.include(result.stdout, 'Unavailable now: vs_keybindings, vs_settings, vsI_keybindings, vsI_settings\n');
-    assert.include(result.stdout, 'pipx installation metadata may contain original URLs, credentials, and backend arguments.');
-    assert.include(result.stdout, 'may read bounded Claude skill selection metadata.');
-    assert.include(result.stdout, 'It reads no skill bodies or other source contents and runs no collectors.');
+    assert.include(result.stdout, 'Ballin checks local paths and availability, reading synced Claude skill manifests to select plugin packages.');
+    assert.include(result.stdout, 'This preview does not read selected file contents or create backup snapshots.');
     assert.notInclude(result.stdout, 'fixture private content');
   });
 
@@ -125,7 +124,7 @@ fs.readFileSync = (file, ...args) => {
       assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
       if (included) assert.include(result.stdout, `codex_AGENTS.override.md: ${JSON.stringify(override)}\n`);
       else assert.notInclude(result.stdout, 'codex_AGENTS.override.md:');
-      assert.include(result.stdout, 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.');
+      assert.include(result.stdout, 'Your choice also covers future supported sources.');
       assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
     });
   });
@@ -152,8 +151,9 @@ fs.readFileSync = (file, ...args) => {
       assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
       if (included) {
         assert.include(result.stdout, `codex_user_skills.bundle.json: ${JSON.stringify(skills)}\n`);
-        assert.include(result.stdout, 'Not found now:');
-        assert.include(result.stdout, 'codex_skills.bundle.json,');
+        assert.include(result.stdout, 'Sources not found now: 24.\n');
+        assert.isBelow(result.stdout.indexOf(`codex_user_skills.bundle.json: ${JSON.stringify(skills)}`), result.stdout.indexOf('Sources not found now:'));
+        assert.notInclude(result.stdout, 'codex_skills.bundle.json');
       } else assert.notInclude(result.stdout, 'codex_user_skills.bundle.json:');
     });
   });
@@ -165,7 +165,7 @@ fs.readFileSync = (file, ...args) => {
       fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
       const result = run('\ny\n\n\n');
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, `Also include sensitive sources? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `Include sensitive sources? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
@@ -194,7 +194,7 @@ fs.readFileSync = (file, ...args) => {
     writeConfig(initial);
     const result = run('y\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Also include sensitive sources');
+    assert.notInclude(result.stdout, 'Include sensitive sources');
     assert.notInclude(result.stdout, 'Automatically run');
     assert.include(result.stdout, 'Run `ballin backup setup`');
     assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
@@ -273,7 +273,7 @@ fs.readFileSync = (file, ...args) => {
       let signalled = false;
       child.stdout.on('data', (chunk: Buffer) => {
         output += chunk.toString();
-        const prompt = choice === 'sensitive' ? 'Also include sensitive sources' : 'Automatically run';
+        const prompt = choice === 'sensitive' ? 'Include sensitive sources' : 'Automatically run';
         if (!signalled && output.includes(prompt)) { signalled = true; child.kill('SIGINT'); }
       });
       if (choice === 'automatic') child.stdin.write('n\ny\n');
@@ -304,9 +304,14 @@ fs.readFileSync = (file, ...args) => {
     writeConfig(initial);
     const result = run('n\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    const disclosure = 'Opting in covers all currently supported sensitive sources and future additions to this maintained catalog.';
+    const disclosure = 'Your choice also covers future supported sources.';
     assert.isAtLeast(result.stdout.indexOf(disclosure), 0);
-    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Also include sensitive sources'));
+    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Include sensitive sources'));
+    assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Include sensitive sources'));
+    const consent = result.stdout.slice(result.stdout.indexOf('Sensitive sources may contain'), result.stdout.indexOf('Include sensitive sources'));
+    assert.include(consent, 'Ballin does not scan or redact them.');
+    assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
+    assert.isBelow(result.stdout.indexOf('Excluding sources does not remove saved files or history.'), result.stdout.indexOf('Save this sensitive-source choice'));
     assert.deepEqual(Object.keys(readConfig().backup).sort(), Object.keys(initial.backup).sort());
     assert.equal(readConfig().backup.includeSensitive, 'false');
   });

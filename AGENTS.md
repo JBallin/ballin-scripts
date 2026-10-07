@@ -37,6 +37,12 @@
 
 ## Testing and safety
 
+- Consider `npm run sandbox` when changed installer prompts, CLI flows or output,
+  or backup setup/reset scenarios need an interactive fixture walkthrough.
+  Follow [Interactive QA sandbox](docs/testing.md#interactive-qa-sandbox) for
+  usage and safeguards. It supplements `npm test` and automated regression
+  coverage. Its controlled tools and services do not verify live network access,
+  authentication, or host-tool installation.
 - Do not exercise Ballin's install, uninstall, update, backup, Homebrew,
   GitHub/Gist, global-package, `softwareupdate`, symlink, Cloudflare/Wrangler,
   D1, deploy, migration, production report/reset, or similar environment-affecting

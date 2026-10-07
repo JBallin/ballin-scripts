@@ -10,7 +10,7 @@ const {
   updateInstalledRepo,
 } = require('./repo_update.ts');
 
-const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/README.md';
+const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const sourcesUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md';
 const sourceDefinitionOid = (repoDir: string): string | undefined => {
@@ -96,7 +96,7 @@ const refreshInstalledBallin = (): void => {
     const currentSources = sourceDefinitionOid(repoDir);
     if (!previousSources || !currentSources || previousSources !== currentSources) {
       writeStdoutLine('Backup source definitions may have changed. Sensitive-source opt-in covers current and future supported sources.');
-      writeStdoutLine(`Review: ${sourcesUrl}`);
+      writeStdoutLine(`Review:\n${sourcesUrl}`);
     }
   }
 };
