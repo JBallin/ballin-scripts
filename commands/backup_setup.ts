@@ -2,9 +2,12 @@ const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
 const { lastBackupSuccessLine } = require('./backup_status.ts');
 const { validatedBackupSummary } = require('./backup_summary.ts');
-const { saveBackupConfig, offerAutomaticUpdateBackup, selectSensitiveSources } = require('./backup_preferences.ts');
+const {
+  saveBackupConfig, offerAutomaticUpdateBackup, selectSensitiveSources, confirmSensitiveSourceChoice,
+  selectAutomaticUpdateBackup, preferenceBoolean,
+} = require('./backup_preferences.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
-const { configuredBackupDestination, isConfigObject, validRepositoryName } = require('./backup_config.ts');
+const { configuredBackupDestination, isConfigObject, validRepositoryName, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configSnapshotFileName } = require('./backup_snapshots.ts');
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 const {
@@ -41,6 +44,7 @@ type RepositorySetupOptions = {
   onCancelled?: () => void;
   showValidationSummary?: boolean;
   maintenanceOnly?: boolean;
+  reviewExistingSettings?: boolean;
 };
 const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => {
   const { configPath, backupCacheDir, originalConfig, repositoryName } = options;
@@ -96,6 +100,29 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
         if (summary) writeStdoutLine(summary);
         if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
+        if (!options.reviewExistingSettings) return true;
+        const review = readPromptLine('\nReview backup settings? [y/N] ');
+        if (review.eof || !/^[yY]$/u.test(review.text)) return true;
+        const sensitive = sensitiveSourceConsent(candidate);
+        if (sensitive === null) throw new PortableConfigError('Invalid `backup.includeSensitive`; expected true or false.');
+        const automatic = preferenceBoolean(candidate.update.backup, 'update.backup');
+        const cancelReview = (): false => {
+          writeStdoutLine('Backup settings review cancelled; existing settings are unchanged.');
+          options.onCancelled?.();
+          return false;
+        };
+        const included = confirmSensitiveSourceChoice(sensitive);
+        if (included === null) return cancelReview();
+        if (included === undefined) return false;
+        const enabled = selectAutomaticUpdateBackup({ defaultEnabled: automatic, cancelOnEof: true });
+        if (enabled === null) return cancelReview();
+        // Commit both reviewed choices together; cancellation never saves a partial review.
+        candidate.backup.includeSensitive = String(included);
+        candidate.update.backup = String(enabled);
+        if (!saveBackupConfig(configPath, candidate)) return false;
+        writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(included))}`);
+        writeStdoutLine(`"update.backup" set to: ${JSON.stringify(String(enabled))}`);
+        writeStdoutLine('Backup settings review complete.');
         return true;
       };
       return maintain();
