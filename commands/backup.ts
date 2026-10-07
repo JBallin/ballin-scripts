@@ -41,7 +41,7 @@ const {
   normalizeSnapshotInput,
   observeSnapshotSources,
 } = require('./backup_snapshots.ts');
-const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
+const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError, SnapshotCwdError } = require('./recursive_snapshot.ts');
 const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember } = require('./directory_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
@@ -196,6 +196,7 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string, evid
       env: snapshot.env,
       stdio: ['ignore', outputFd, stderrFd],
     });
+    if (result.status !== 0 || result.error) observeBackupFailure(evidence, 'unknown');
   } finally {
     fs.closeSync(outputFd);
     fs.closeSync(stderrFd);
@@ -207,7 +208,6 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string, evid
   if (result.error) {
     reportSpawnError(snapshot.command, result.error);
   }
-  if (result.status !== 0 || result.error) observeBackupFailure(evidence, 'unknown');
   removeTransportFile(stderrFile);
 
   return result.status === 0 && !result.error;
@@ -634,7 +634,8 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
       runRepositoryBackup(config.repository, includeSensitive, homeDir, backupCacheDir, evidence) ? 0 : 1
     ));
   } catch (error) {
-    observeRepositoryFailure(evidence, error);
+    if (error instanceof SnapshotCwdError) observeBackupFailure(evidence, 'local_state');
+    else observeRepositoryFailure(evidence, error);
     writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
     return 1;
   }

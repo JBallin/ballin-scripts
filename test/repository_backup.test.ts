@@ -2178,6 +2178,33 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 0);
     });
 
+    for (const collectorFailed of [false, true]) {
+      it(`preserves collector evidence when stderr reading fails (${collectorFailed})`, () => {
+        source();
+        fs.rmSync(path.join(bin, 'cat'));
+        fs.writeFileSync(path.join(bin, 'cat'), `#!/bin/sh\nprintf 'DUMMY_PRIVATE_COLLECTOR_ERROR\\n' >&2\n${collectorFailed ? 'exit 7' : '/bin/cat "$@"'}\n`, { mode: 0o755 });
+        const result = observedRun(cacheFailure('readFileSync', "String(args[0]).includes('ballin-backup-stderr-')"));
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertOutcome('failure', collectorFailed ? 'unknown' : 'local_state');
+        assert.lengthOf(publications(), 0);
+      });
+    }
+
+    for (const typed of [true, false]) {
+      it(`classifies discovery working-directory restoration evidence (${typed})`, () => {
+        const preload = `
+          const snapshots = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_snapshots.ts'))});
+          const { SnapshotCwdError } = require(${JSON.stringify(path.join(repoRoot, 'commands', 'recursive_snapshot.ts'))});
+          snapshots.observeSnapshotSources = () => { throw new ${typed ? 'SnapshotCwdError' : 'Error'}('DUMMY_PRIVATE_DISCOVERY_ERROR'); };
+        `;
+        const result = observedRun(preload);
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertOutcome('failure', typed ? 'local_state' : 'unknown');
+        assert.notInclude(JSON.stringify(capture.readEvents()), 'DUMMY');
+        assert.lengthOf(state().requests, 0);
+      });
+    }
+
     it('makes a confirmed publication fail when final snapshot cleanup fails', () => {
       source();
       const result = observedRun(cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-input-')"));
