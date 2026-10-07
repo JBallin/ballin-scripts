@@ -202,6 +202,11 @@ Backups belong to the authenticated personal GitHub.com account. Setup shows
 that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision requires an explicit different name or reconnect choice.
+New repositories start with Issues, Wiki, Projects, and pull requests disabled.
+Disabling pull requests requires Administration (write) on the effective GitHub
+credential; creation permission alone may be insufficient. If that step fails,
+setup reports the created repository for inspection without saving local linkage.
+Reconnect leaves existing feature settings unchanged.
 
 Fresh create or reconnect setup asks whether to include sensitive sources,
 with No as the default. Review

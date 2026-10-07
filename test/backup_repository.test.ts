@@ -286,10 +286,65 @@ describe('private repository transport', () => {
     assert.include(repositoryReadmeContents, 'current backup behavior and guidance');
     assert.include(repositoryReadmeContents, 'github.com/JBallin/ballin-scripts/tree/main/docs');
     assert.include(repositoryReadmeContents, 'uses `.ballin-backup.json` to identify this repository');
+    const updates = state.requests.filter((r) => r.method === 'PATCH');
+    assert.lengthOf(updates, 1);
+    assert.equal(updates[0].endpoint, `repos/${state.login}/${state.name}`);
+    assert.deepEqual(updates[0].payload, { has_pull_requests: false });
     const created = state.requests.find((r) => r.endpoint === 'user/repos');
     assert.deepEqual(created?.payload, {
       name: state.name, description: 'Developer environment backups created by Ballin', private: true, auto_init: true,
+      has_issues: false, has_wiki: false, has_projects: false,
     });
+  });
+  for (const faults of [
+    { features: 'denied' }, { features: 'reject' }, { features: 'ambiguous' }, { features: 'malformed' },
+    { featureMetadata: { has_pull_requests: true } }, { featureMetadata: { has_pull_requests: undefined } },
+    { featureMetadata: { node_id: 'R_other' } }, { featureMetadata: { name: 'other' } },
+    { featureMetadata: { private: false } }, { featureMetadata: { owner: null } },
+    { featureMetadata: { owner: { node_id: 'U_other' } } },
+    { featureMetadata: { owner: { node_id: 'U_fixture', type: 'Organization' } } },
+    { featureMetadata: { owner: { node_id: 'U_fixture', type: 'User', login: 'other' } } },
+  ]) {
+    it(`retains creation evidence without initialization after feature settings failure ${JSON.stringify(faults)}`, () => {
+      state.exists = false; Object.assign(state.faults, faults);
+      try {
+        createRepositoryBackup(state.name, readRepositoryAccount(options), options);
+        assert.fail('expected feature settings failure');
+      } catch (error) {
+        assert.instanceOf(error, RepositoryError);
+        assert.equal((error as InstanceType<typeof RepositoryError>).problem, 'feature-settings');
+        assert.equal((error as InstanceType<typeof RepositoryError>).completedStage, 'repository-created');
+      }
+      assert.isTrue(state.exists);
+      assert.lengthOf(state.requests.filter((r) => r.endpoint === 'user/repos'), 1);
+      assert.lengthOf(state.requests.filter((r) => r.method === 'PATCH'), 1);
+      assert.lengthOf(publications(), 0);
+    });
+  }
+  for (const response of [
+    { status: 1, signal: null, stdout: '', stderr: 'request timed out' },
+    { status: 0, signal: null, stdout: '{}' },
+  ]) {
+    it(`stops after a settings transport failure or missing response ${JSON.stringify(response)}`, () => {
+      state.exists = false;
+      options.runCommand = (_command, args, opts) => {
+        if (args.includes('PATCH')) {
+          requestFixture(state, args, opts);
+          return response;
+        }
+        return requestFixture(state, args, opts);
+      };
+      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount(options), options), RepositoryError, 'pull-request settings step');
+      assert.lengthOf(publications(), 0);
+      assert.lengthOf(state.requests.filter((r) => r.method === 'PATCH'), 1);
+    });
+  }
+  it('never changes feature settings during reads, maintenance, or ordinary publication', () => {
+    const before = read();
+    readRepositoryInventory(fixtureDestination, options);
+    inspectRepositoryMaintenance(fixtureDestination, options);
+    publishRepositorySnapshots(before, changes(), options);
+    assert.lengthOf(state.requests.filter((r) => r.method === 'PATCH'), 0);
   });
   for (const seed of ['extra snapshot', 'snapshot only', 'parented README']) {
     it(`rejects an unexpected ${seed} seed before reading content`, () => {
