@@ -1,64 +1,36 @@
 name: CI
 on:
   workflow_dispatch:
+    inputs:
+      reviewed_driver_sha:
+        description: Exact diagnostic commit approved for this one dispatch
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: experiment-319-adaptive-evidence
+  group: experiment-319-coverage-identity
   cancel-in-progress: false
 jobs:
-  adaptive-evidence:
-    if: github.actor == 'JBallin' && github.ref == 'refs/heads/experiment/319-adaptive-evidence'
+  coverage-identity:
+    if: github.actor == 'JBallin' && github.ref == 'refs/heads/experiment/319-coverage-identity'
     runs-on: ubuntu-24.04
-    timeout-minutes: 140
+    timeout-minutes: 10
     steps:
-      - name: Start the bounded preparation clock
-        run: printf 'BENCH_319_JOB_STARTED_EPOCH=%s\n' "$(date +%s)" >> "$GITHUB_ENV"
-      - name: Check out measurement driver
+      - name: Check out diagnostic driver
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        timeout-minutes: 5
+        timeout-minutes: 1
         with:
           path: driver
           persist-credentials: false
-      - name: Check out immutable candidate
+      - name: Check out immutable source for locked dependencies and pure module provenance
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        timeout-minutes: 5
+        timeout-minutes: 1
         with:
           ref: f6759244d12f3f6eac2141f4c8b6da90887acded
           path: source
           persist-credentials: false
-      - name: Set up the older diagnostic runtime
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        timeout-minutes: 5
-        with:
-          node-version: '24.15.0'
-          check-latest: false
-      - name: Record the older runtime root
-        run: |
-          node -e 'process.stdout.write("BENCH_319_NODE2415_ROOT=" + require("node:path").dirname(require("node:path").dirname(process.execPath)) + "\n")' >> "$GITHUB_ENV"
-      - name: Set up the comparison runtime
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        timeout-minutes: 5
-        with:
-          node-version: '24.21.0'
-          check-latest: false
-      - name: Record the comparison runtime root
-        run: |
-          node -e 'process.stdout.write("BENCH_319_NODE24_ROOT=" + require("node:path").dirname(require("node:path").dirname(process.execPath)) + "\n")' >> "$GITHUB_ENV"
-      - name: Install existing shell prerequisites
-        timeout-minutes: 10
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes zsh shellcheck
-      - name: Install locked source dependencies
-        timeout-minutes: 10
-        working-directory: source
-        run: npm ci
-      - name: Prepare the owned quota fixture image
-        timeout-minutes: 10
-        run: >-
-          docker build --platform linux/amd64 --build-arg "BENCH_UID=$(id -u)"
-          --build-arg "BENCH_GID=$(id -g)" --tag ballin-319-quota:reviewed
-          driver/.github/experiments/319-adaptive
-      - name: Run the bounded adaptive comparison
-        run: python3 driver/.github/experiments/319-adaptive/measure.py "$GITHUB_WORKSPACE/source"
+      - name: Collect four bounded coverage identity cells
+        env:
+          DIAGNOSTIC_319_REVIEWED_DRIVER_SHA: ${{ inputs.reviewed_driver_sha }}
+        run: python3 driver/.github/experiments/319-coverage-identity/measure.py "$GITHUB_WORKSPACE/source"

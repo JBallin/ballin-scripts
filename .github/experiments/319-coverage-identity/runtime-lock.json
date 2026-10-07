@@ -1,0 +1,18 @@
+[
+  {
+    "version": "24.15.0",
+    "filename": "node-v24.15.0-linux-x64.tar.xz",
+    "url": "https://nodejs.org/dist/v24.15.0/node-v24.15.0-linux-x64.tar.xz",
+    "sha256": "472655581fb851559730c48763e0c9d3bc25975c59d518003fc0849d3e4ba0f6",
+    "checksumSource": "https://nodejs.org/dist/v24.15.0/SHASUMS256.txt",
+    "checksumSourceSha256": "1e812945dee26c3e4ca41a8c0b582668ff2401ba0ae727a122300c0e8514edb0"
+  },
+  {
+    "version": "24.21.0",
+    "filename": "node-v24.21.0-linux-x64.tar.xz",
+    "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.xz",
+    "sha256": "fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6",
+    "checksumSource": "https://nodejs.org/dist/v24.21.0/SHASUMS256.txt",
+    "checksumSourceSha256": "f410428039e2c922a14058df067a4482691c9304a5c01a75847f9f3f2d3307f6"
+  }
+]
