@@ -1,4 +1,4 @@
-"""One bounded #319 adaptive comparison; no retry or automatic adoption."""
+"""One bounded harness-corrected #319 comparison; no automatic retry or adoption."""
 import base64, hashlib, io, json, os, re, shutil, signal, statistics, subprocess, sys, tarfile, time, urllib.request
 from pathlib import Path
 
@@ -292,8 +292,15 @@ def main():
     with urllib.request.urlopen(request, timeout=30) as response:
         history = json.loads(response.read(2 * 1024 * 1024))
     write(ARTIFACTS / "dispatch-history.json", history)
-    assert history["total_count"] == 1 and len(history["workflow_runs"]) == 1, "Exactly one dispatch is approved"
-    run = history["workflow_runs"][0]
+    assert history["total_count"] == 2 and len(history["workflow_runs"]) == 2, "Only the failed original and one harness-corrected dispatch are approved"
+    prior = [item for item in history["workflow_runs"] if item["id"] == 37553982854]
+    assert len(prior) == 1
+    prior = prior[0]
+    assert prior["head_sha"] == "82440556d525b602fbefba27b6e1df5b7217165d" and prior["run_attempt"] == 1
+    assert prior["status"] == "completed" and prior["conclusion"] == "failure"
+    current = [item for item in history["workflow_runs"] if str(item["id"]) == os.environ["GITHUB_RUN_ID"]]
+    assert len(current) == 1 and current[0]["id"] != prior["id"]
+    run = current[0]
     assert str(run["id"]) == os.environ["GITHUB_RUN_ID"] and run["head_sha"] == driver_head and run["run_attempt"] == 1
     started = int(os.environ["BENCH_319_JOB_STARTED_EPOCH"])
     DEADLINE = started + 138 * 60  # Reserve two minutes within the 140-minute job for cleanup/log retention.
@@ -310,10 +317,11 @@ def main():
     RUNTIMES["v24.21.0"] = preflight
     write(ARTIFACTS / "preflight.json", {"runtime": preflight, "order": ORDER, "sampleBudgetSeconds": BUDGET,
           "gateCountCap": 6, "jobBudgetMinutes": 140, "retries": 0,
+          "attemptOrdinal": 2, "priorFailedRun": prior["id"], "dispatchCountCap": 2,
           "constrainedInterpretation": "Two single smoke checks, not repeatability or the original full environment reproduction",
           "comparison": "Four-CPU Node24.21 ABBA only; identical preload/source/dependencies/selection; fresh fixtures and coverage"})
     name = "ballin-319-" + os.environ["GITHUB_RUN_ID"]
-    create = ["docker", "create", "--name", name, "--label", "ballin319.run=" + os.environ["GITHUB_RUN_ID"],
+    create = ["docker", "create", "--init", "--name", name, "--label", "ballin319.run=" + os.environ["GITHUB_RUN_ID"],
               "--cpus=2", "--cpuset-cpus", ",".join(map(str, sorted(four))), "--user", str(os.getuid()) + ":" + str(os.getgid()),
               "--mount", f"type=bind,src={ROOT},dst={ROOT}",
               "--mount", f"type=bind,src={os.environ['RUNNER_TEMP']},dst={os.environ['RUNNER_TEMP']}",
