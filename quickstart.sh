@@ -193,7 +193,8 @@ configure_path() {
   local syntax_check=("$profile_shell" -n)
   # extglob affects parsing even when a profile enables it on an earlier line.
   # Enable it only for syntax checks; never execute profile option changes.
-  if [[ "${profile_shell##*/}" == bash ]]; then syntax_check+=(-O extglob); fi
+  if [[ "${profile_shell##*/}" == bash ]]; then syntax_check+=(-O extglob)
+  else syntax_check+=(-f); fi
   escaped=${quick_bin//\'/\'\\\'\'}
   command_escaped=${command_bin//\'/\'\\\'\'}
   line="export PATH='$escaped':\$PATH:'$command_escaped'"
@@ -206,7 +207,9 @@ configure_path() {
       const original = fs.readFileSync(process.argv[1]);
       const contents = original.toString("utf8");
       // Recognize simple literal command forms without evaluating shell code.
-      // Quoted data, comments and simple heredoc bodies are opaque to this check.
+      // Keep simple literal quote fragments inspectable without expansion.
+      // Other quoted data, comments and simple heredoc bodies remain opaque.
+      if (/[\x01-\x03]/u.test(contents)) fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
       let plain = "";
       const heredocs = [];
       for (let index = 0; index < contents.length;) {
@@ -222,17 +225,28 @@ configure_path() {
           continue;
         }
         if (["\x27", "\"", "`"].includes(character)) {
-          plain += "Q";
+          // Dollar-prefixed quotes need expansion rules; mark active command
+          // positions for manual placement rather than decoding their value.
+          if (character !== "\x60" && plain.endsWith("$")) plain = plain.slice(0, -1) + "\x03";
+          const start = index + 1;
           index++;
           while (index < contents.length) {
-            if (contents[index] === character) { index++; break; }
+            if (contents[index] === character) break;
             if (character !== "\x27" && contents[index] === "\\") index++;
             index++;
           }
+          let value = contents.slice(start, index);
+          // Only double quotes remove backslash-newline before literal words.
+          if (character === "\"") value = value.replace(/\\\n/gu, "");
+          // Mark quotes so a quoted zsh repeat count remains unsupported.
+          plain += character !== "\x60" && /^[A-Za-z0-9_-]*$/u.test(value)
+            ? "\x01" + value + "\x02" : "Q";
+          index++;
           continue;
         }
         if (character === "\\") {
-          plain += contents[index + 1] === "\n" ? "" : "Q";
+          const value = contents[index + 1] ?? "";
+          plain += value === "\n" ? "" : /^[A-Za-z0-9_-]$/u.test(value) ? "\x01" + value + "\x02" : "Q";
           index += 2;
           continue;
         }
@@ -282,12 +296,13 @@ configure_path() {
         return " ";
       });
       const zshPrefixes = process.argv[8] === "zsh" ? ["noglob", "nocorrect", "-", "repeat"] : [];
+      const literalWord = (word) => word.replace(/[\x01\x02]/gu, "");
       for (const statement of plain.split(/[\n;&|{})]+/u)) {
         const words = statement.trim().split(/\s+/u);
         let unsupportedPrefix = false;
-        while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(words[0] ?? "")
-          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin", ...zshPrefixes].includes(words[0])) {
-          const prefix = words.shift();
+        while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(literalWord(words[0] ?? ""))
+          || ["if", "then", "elif", "else", "while", "until", "do", "!", "time", "command", "builtin", ...zshPrefixes].includes(literalWord(words[0] ?? ""))) {
+          const prefix = literalWord(words.shift());
           if (prefix === "repeat") {
             // Only an unquoted decimal count is understood; never evaluate it.
             if (!/^[0-9]+$/u.test(words.shift() ?? "")) { unsupportedPrefix = true; break; }
@@ -296,8 +311,8 @@ configure_path() {
           if (!["time", "command", "builtin"].includes(prefix)) continue;
           // Only these literal wrapper options are understood. Other options
           // retain the existing manual fallback instead of hiding a transfer.
-          while (words[0]?.startsWith("-")) {
-            const option = words.shift();
+          while (literalWord(words[0] ?? "").startsWith("-")) {
+            const option = literalWord(words.shift());
             if (prefix === "command" && /^-[pvV]+$/u.test(option)) {
               if (/[vV]/u.test(option)) { words.length = 0; break; }
               continue;
@@ -313,16 +328,34 @@ configure_path() {
           fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
           break;
         }
-        const command = words.shift();
+        const command = literalWord(words.shift() ?? "");
+        const commandArguments = words.map(literalWord);
+        if (command.includes("\x03") || (command === "shopt" && commandArguments.some((word) => word.includes("\x03")))) {
+          fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
+          break;
+        }
+        if (process.argv[8] === "bash" && command === "shopt" && commandArguments.includes("extglob")) {
+          const options = [];
+          for (const word of commandArguments) {
+            if (!/^-[A-Za-z]+$/u.test(word)) break;
+            options.push(word);
+          }
+          // Parsing with extglob enabled cannot prove reachability after a
+          // literal disablement. Queries do not change the parser option.
+          if (options.some((option) => option.includes("u")) && !options.some((option) => /[pq]/u.test(option))) {
+            fs.writeFileSync(process.argv[7] + ".ambiguous", "manual\n");
+            break;
+          }
+        }
         let transfer = ["return", "exit", "logout"].includes(command);
         if (command === "exec") {
-          while (words.length > 0) {
-            if (words[0] === "--") { words.shift(); break; }
-            if (/^-[cl]+$/u.test(words[0])) words.shift();
-            else if (words[0] === "-a") words.splice(0, 2);
+          while (commandArguments.length > 0) {
+            if (commandArguments[0] === "--") { commandArguments.shift(); break; }
+            if (/^-[cl]+$/u.test(commandArguments[0])) commandArguments.shift();
+            else if (commandArguments[0] === "-a") commandArguments.splice(0, 2);
             else break;
           }
-          transfer = words.length > 0;
+          transfer = commandArguments.length > 0;
         }
         if (transfer) { fs.writeFileSync(process.argv[7], "manual\n"); break; }
       }
@@ -421,7 +454,11 @@ main() {
   [[ "$shell_name" == /* && -f "$shell_name" && -x "$shell_name" ]] \
     || fail 'The selected shell must be an absolute path to an executable Bash or zsh file.'
   case "${shell_name##*/}" in
-    zsh) profile="${ZDOTDIR:-$HOME}/.zshrc" ;;
+    zsh)
+      [[ -z "${ZDOTDIR+x}" || -n "${ZDOTDIR:-}" ]] \
+        || fail 'An exported empty ZDOTDIR needs manual PATH setup. Set an absolute startup directory or unset ZDOTDIR before retrying.'
+      profile="${ZDOTDIR-$HOME}/.zshrc"
+      ;;
     bash)
       profile="$HOME/.bash_profile"
       for candidate in .bash_profile .bash_login .profile; do

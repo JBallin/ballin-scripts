@@ -163,8 +163,10 @@ older version. Rerunning with a compatible PATH Node outside that directory
 removes the fallback links. Alternate spellings and symlink aliases of the
 managed directory are still treated as the fallback. The Ballin command
 directory is appended to preserve existing tool
-priority. For zsh it uses `.zshrc` in an exported `ZDOTDIR`, or in your home
-directory otherwise. For Bash it uses the first existing login profile
+priority. For zsh it uses `.zshrc` in an exported absolute `ZDOTDIR`, or in your
+home directory when `ZDOTDIR` is unset. An exported empty value stops the helper
+before prerequisite changes; set the directory or unset the variable before
+retrying. For Bash it uses the first existing login profile
 (`.bash_profile`, `.bash_login`, or `.profile`), creating `.bash_profile` if
 needed. Custom startup locations or non-login Bash sessions may need manual
 PATH setup. It leaves symlinked startup files and files that fail its syntax
@@ -172,21 +174,28 @@ checks unchanged. It validates
 the absolute executable Bash or zsh path in `$SHELL` and uses that exact shell for
 syntax-only checks to reuse a matching PATH line only as a final standalone
 command. Bash checks enable `extglob` for parsing so profiles that enable it
-themselves can be validated without executing them. If later edits make that
-placement ambiguous, it asks before appending a new line. A recognized unquoted
+themselves can be validated without executing them. A detected literal
+`shopt -u extglob` requires manual placement because syntax-only parsing cannot
+follow that option change; queries such as `shopt -p -u extglob` do not change it.
+zsh checks also use `-f` to disable user startup loading; the shell's system
+`/etc/zshenv` remains outside that option's control. If later edits make PATH
+placement ambiguous, it asks before appending a new line. A recognized literal
 `return`, `exit`, `logout`, or `exec` with an executable
 argument stops automatic PATH setup, including inside a function, conditional,
-or case arm, in a zsh `repeat` body with an unquoted decimal count, and after
+or case arm, with simple quoted or escaped command-name fragments, including
+double-quoted line continuations, in a zsh `repeat` body with an unquoted decimal
+count, and after
 zsh's `noglob`, `nocorrect`, or `-` precommand modifiers.
 The helper leaves the file unchanged and prints the exact PATH line for manual
 placement before following this standard installation guide. This conservative
 check ignores comments, quoted data, and simple heredoc bodies; it does not
 interpret dynamic shell behavior. Arithmetic with nested parentheses, ambiguous
 heredoc forms, ambiguous brace/hash forms, unsupported wrapper options,
-quoted or nondecimal zsh `repeat` counts, and variable file-descriptor
+quoted or nondecimal zsh `repeat` counts, dollar-quoted command spellings, and
+variable file-descriptor
 redirections such as `exec {fd}>file /bin/true` require manual placement.
 Unquoted braces in redirection operands also require manual placement. This
-includes valid zsh `{#` block comments. Startup-file contents are never executed
+includes valid zsh `{#` block comments. The inspected profile is never executed
 by these checks.
 
 The helper uses existing GitHub CLI authentication or requests its normal
