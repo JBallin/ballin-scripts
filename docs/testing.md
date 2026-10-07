@@ -8,6 +8,11 @@ Mocha command in `test:unit`; lint, typechecks and coverage checks remain part
 of `npm test`. The [Mocha configuration](../.mocharc.js) uses two workers when
 Node reports at least four available CPUs and runs serially on smaller hosts.
 
+The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
+executed absolute script paths. It retains `all: true` and every coverage threshold;
+unexecuted included files still count as uncovered. Use the same wrapper when
+reporting saved profiles, and review the compatibility correction when updating c8.
+
 ## Pull request review
 
 The [automatic](../.github/workflows/claude-review.yml),
@@ -143,9 +148,9 @@ run replaces the raw coverage data:
 
 ```shell
 npm run test:coverage
-node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
+node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
 CI=true npm run test:coverage
-node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
+node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
 ```
 
 Compare exact totals in `coverage-summary.json` and file/source-location maps
