@@ -16,5 +16,13 @@ namespace_id = "1001"
   limit = 1_500
   period = 60
 
+[[ratelimits]]
+name = "ANALYTICS_SOURCE_RATE_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 1_000
+  period = 60
+
 [triggers]
 crons = ["17 3 * * *"]
