@@ -165,7 +165,7 @@ case "$name" in
         if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
-        cp "$FAKE_ROOT/fake-tool" "$target" ;;
+        cp "\${FAKE_CORE_INSTALL_SOURCE:-$FAKE_ROOT/fake-tool}" "$target" ;;
       *) exit 97 ;;
     esac ;;
   pkgutil)
@@ -360,6 +360,81 @@ esac
     assert.include(readLog(), 'ballin:backup open');
     assert.notInclude(readLog(), 'sudo:');
   });
+  for (const suffix of ['/', '///', '/cellar/..', ' \t\r\n']) {
+    it(`matches actual core setup for a noncanonical Homebrew prefix ending ${JSON.stringify(suffix)}`, () => {
+      linkFake('brew');
+      const prefix = path.join(root, 'homebrew');
+      const result = run('y\ny\n', { FAKE_BREW_PREFIX: prefix + suffix });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const coreRepo = path.join(root, 'core-repo');
+      fs.mkdirSync(path.join(coreRepo, 'config'), { recursive: true });
+      fs.mkdirSync(path.join(coreRepo, 'bin'));
+      fs.writeFileSync(path.join(coreRepo, 'config/.defaultConfig.json'), '{"backup":{}}\n');
+      fs.writeFileSync(path.join(coreRepo, 'bin/ballin'), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+      const core = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; exec "$TEST_NODE_RUNTIME" "$FAKE_SETUP_SOURCE" setup "$FAKE_CORE_REPO" https://example.test/docs "" refresh'], {
+        encoding: 'utf8', cwd: home, timeout: 12000,
+        env: testChildEnvironment({ HOME: home, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log,
+          TEST_NODE_RUNTIME: process.execPath, FAKE_BREW_PREFIX: prefix + suffix, FAKE_CORE_REPO: coreRepo,
+          FAKE_SETUP_SOURCE: path.resolve(__dirname, '../commands/install_setup.ts') }),
+      });
+      assert.equal(core.status, 0, core.stdout + core.stderr);
+      assert.isTrue(fs.lstatSync(path.join(prefix, 'bin/ballin')).isSymbolicLink());
+      assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(prefix, 'bin') + "'");
+    });
+  }
+  for (const spelling of ['trailing slash', 'dot component', 'parent component']) {
+    for (const withBrew of [false, true]) {
+      it(`matches actual core setup for HOME with ${spelling} and Homebrew ${withBrew ? 'failing' : 'absent'}`, () => {
+        if (withBrew) linkFake('brew');
+        fs.mkdirSync(path.join(home, 'child'));
+        const selectedHome = home + (spelling === 'trailing slash' ? '/' : spelling === 'dot component' ? '/.' : '/child/..');
+        const result = run('y\ny\n', { HOME: selectedHome, FAKE_BREW_FAIL: '1' });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        const coreRepo = path.join(root, 'core-repo');
+        fs.mkdirSync(path.join(coreRepo, 'config'), { recursive: true });
+        fs.mkdirSync(path.join(coreRepo, 'bin'));
+        fs.writeFileSync(path.join(coreRepo, 'config/.defaultConfig.json'), '{"backup":{}}\n');
+        fs.writeFileSync(path.join(coreRepo, 'bin/ballin'), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+        const core = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; exec "$TEST_NODE_RUNTIME" "$FAKE_SETUP_SOURCE" setup "$FAKE_CORE_REPO" https://example.test/docs "" refresh'], {
+          encoding: 'utf8', cwd: home, timeout: 12000,
+          env: testChildEnvironment({ HOME: selectedHome, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log,
+            TEST_NODE_RUNTIME: process.execPath, FAKE_BREW_FAIL: '1', FAKE_CORE_REPO: coreRepo,
+            FAKE_SETUP_SOURCE: path.resolve(__dirname, '../commands/install_setup.ts') }),
+        });
+        assert.equal(core.status, 0, core.stdout + core.stderr);
+        assert.isTrue(fs.lstatSync(path.join(home, '.local/bin/ballin')).isSymbolicLink());
+        assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
+      });
+    }
+  }
+  for (const name of ['git', 'node', 'gh']) {
+    it(`ignores an exported ${name} function while selecting prerequisites for the actual core installer`, () => {
+      linkFake('node', systemNode);
+      const inner = 'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main';
+      const result = spawnSync('/bin/bash', ['-c', [
+        `${name}() { printf "exported-${name}:called\\n" >> "$FAKE_COMMAND_LOG"; return 73; }`,
+        `export -f ${name}`,
+        '/bin/bash -c ' + "'" + inner.replace(/'/g, "'\\''") + "'",
+        'status=$?',
+        `declare -F ${name} >/dev/null && printf 'parent-function-preserved\\n' >> "$FAKE_COMMAND_LOG"`,
+        'exit "$status"',
+      ].join('\n')], {
+        encoding: 'utf8', input: 'home\ny\nn\n', cwd: home, timeout: 12000,
+        env: testChildEnvironment({ HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
+          FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source, FAKE_SYSTEM_NODE: systemNode,
+          TEST_NODE_RUNTIME: process.execPath, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') }),
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'Missing prerequisites:');
+      assert.include(result.stdout, 'Proceed with installation?');
+      assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
+      assert.notInclude(readLog(), `exported-${name}:called`);
+      assert.include(readLog(), 'parent-function-preserved');
+      assert.include(readLog(), 'git:--version');
+      assert.notInclude(readLog(), 'git:clone');
+      assert.notInclude(readLog(), 'ballin:');
+    });
+  }
   for (const existingProfile of [false, true]) {
     it(`stops before profile, auth, install or backup for an empty Homebrew prefix (existing profile: ${existingProfile})`, () => {
       linkFake('brew');
@@ -386,6 +461,18 @@ esac
       assert.include(readLog(), 'ballin:backup open');
     });
   }
+  it('rejects a whitespace-only Homebrew prefix before changing a profile or authenticating', () => {
+    linkFake('brew');
+    const profile = path.join(home, '.zshrc');
+    fs.writeFileSync(profile, '# Existing settings\n', { mode: 0o640 });
+    const result = run('y\ny\n', { FAKE_BREW_PREFIX: ' \t\r\n' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'Homebrew returned an empty installation prefix');
+    assert.equal(fs.readFileSync(profile, 'utf8'), '# Existing settings\n');
+    assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+    assert.notInclude(readLog(), 'gh:auth status --active');
+    assert.notInclude(readLog(), 'install.sh:');
+  });
   for (const kind of ['absolute', 'relative', 'multihop', 'newline hop', 'managed parent alias']) {
     it(`retains an executable Node alias through ${kind} links and permits independent same-binary manager takeover`, () => {
       linkFake('npm', systemNode);
@@ -453,6 +540,40 @@ esac
       assert.equal(fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin/git')), selectedGit);
       if (installed) assert.notInclude(readLog(), 'xcode-select:--install');
       else assert.include(readLog(), 'xcode-select:--install');
+      assert.include(readLog(), 'ballin:backup open');
+    });
+  }
+  for (const spelling of ['direct', 'directory alias', 'executable alias']) {
+    it(`lets an independent Git replace the managed link through ${spelling}`, () => {
+      assert.equal(run().status, 0);
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      const managedGit = path.join(quickBin, 'git');
+      let entry = quickBin;
+      if (spelling === 'directory alias') {
+        entry = path.join(root, 'git-directory-alias');
+        fs.symlinkSync(quickBin, entry);
+      } else if (spelling === 'executable alias') {
+        entry = path.join(root, 'git-executable-alias');
+        fs.mkdirSync(entry);
+        fs.symlinkSync(path.relative(entry, managedGit), path.join(entry, 'git'));
+      }
+      const externalBin = path.join(root, 'external-git');
+      fs.mkdirSync(externalBin);
+      const externalGit = path.join(externalBin, 'git');
+      fs.writeFileSync(externalGit, '#!/bin/bash\nprintf "external-git:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n[[ "$*" == --version ]]\n', { mode: 0o755 });
+      const before = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
+      const result = run('', { PATH: `${entry}:${quickBin}:${externalBin}:${tools}` });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.readlinkSync(managedGit), externalGit);
+      assert.equal(fs.realpathSync(path.join(entry, 'git')), fs.realpathSync(externalGit));
+      assert.include(readLog(), 'external-git:--version');
+      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
+      // Keep the working managed fallback when no independent Git remains on PATH.
+      fs.unlinkSync(path.join(tools, 'git'));
+      const fallback = run('', { PATH: `${entry}:${quickBin}:${tools}`, FAKE_SYSTEM_GIT: path.join(root, 'missing-system-git') });
+      assert.equal(fallback.status, 0, fallback.stdout + fallback.stderr);
+      assert.equal(fs.readlinkSync(managedGit), externalGit);
+      assert.notInclude(fallback.stdout, 'Missing prerequisites:');
       assert.include(readLog(), 'ballin:backup open');
     });
   }

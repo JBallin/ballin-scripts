@@ -121,7 +121,7 @@ release_node_links() {
 
 find_git() {
   local candidate
-  for candidate in "$(command -v git || true)" "$system_git"; do
+  for candidate in "$(tool_on_path git)" "$quick_bin/git" "$system_git"; do
     if [[ "$candidate" -ef "$system_git" ]] && ! "$system_xcode_select" -p >/dev/null 2>&1; then
       continue
     fi
@@ -355,6 +355,8 @@ main() {
     *) fail "Unsupported Mac architecture: $machine." ;;
   esac
   normalize_process_path
+  # Select executable tools and keep child installers from importing overrides.
+  unset -f git node gh
   quick_root="$HOME/.local/share/ballin-quickstart"
   quick_bin="$quick_root/bin"
   if [[ -e "$quick_root" || -L "$quick_root" ]]; then
@@ -403,10 +405,11 @@ main() {
   fi
   bind_tool gh "$gh_tool"
   bind_tool git "$git_tool"
-  command_bin="$HOME/.local/bin"
+  command_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], ".local", "bin"))' "$HOME")
   if brew_tool=$(type -P brew) && brew_prefix=$("$brew_tool" --prefix 2>/dev/null); then
+    brew_prefix=$("$node_tool" -e 'process.stdout.write(process.argv[1].trimEnd())' "$brew_prefix")
     [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix \`brew --prefix\`, then rerun this quickstart. PATH setup and Ballin installation have not run."
-    command_bin="$brew_prefix/bin"
+    command_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], "bin"))' "$brew_prefix")
   fi
   [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
   export PATH="$quick_bin:$PATH:$command_bin"
