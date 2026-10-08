@@ -84,6 +84,12 @@ fixtures. `backup open` records a fake browser request. No browser opens and no
 GitHub login is needed. The sandbox includes a harmless `.zshrc` so sensitive-source
 review has a concrete source to display.
 
+The sandbox installer copies CLI files from this checkout into the printed
+installed checkout. Before verifying changed behavior, compare the relevant
+installed source files with your checkout (for example, using `cmp`). After source
+edits, exit and start a fresh sandbox; simulated self-update does not refresh
+those copies.
+
 To repeat setup without recreating the checkout, run `reset create` or
 `reset reconnect`, then `ballin backup setup`. Both clear the local backup
 association, sensitive-source choice, automatic-backup choice, and comparison
@@ -148,8 +154,14 @@ Normal exit or EOF cleans up automatically. Start with
 Failed commands, safeguard failures, and interruptions preserve it for debugging.
 Interrupting a running command stops its child process group before the session
 finishes. Preserved sandboxes are inspection artifacts; start a new session to
-run more commands. Remove a preserved or abandoned sandbox with the exact path
-printed by the tool:
+run more commands.
+
+Before exit or cleanup, save the command transcript and selected logs outside
+the sandbox root; cleanup removes everything inside it. Use `--keep` if you need
+time to collect them. Redact sensitive content before sharing, and confirm the
+saved evidence remains after cleanup.
+
+Remove a preserved or abandoned sandbox with the exact path printed by the tool:
 
 ```shell
 npm run sandbox -- --cleanup /path/printed/by/the/tool
