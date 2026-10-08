@@ -20,6 +20,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Select supplemental checks
+        id: supplemental
+        run: node .github/scripts/supplemental-checks.mjs
 
       - name: Check whitespace
         run: git diff --check "$(git hash-object -t tree /dev/null)" HEAD
@@ -40,6 +46,7 @@ jobs:
             | xargs -0 -r shellcheck
 
       - name: Run actionlint
+        if: steps.supplemental.outputs.run != 'false'
         run: docker run --rm -v "${PWD}:/repo:ro" --workdir /repo rhysd/actionlint:1.7.12 -color .github/workflows/*.yml
 
       - name: Set up Node.js
@@ -62,6 +69,7 @@ jobs:
         run: npm run typecheck:analytics-worker
 
       - name: Test Claude preflight with Bash and jq
+        if: steps.supplemental.outputs.run != 'false'
         run: npm run test:claude-preflight
 
       - name: Run unit tests with coverage
