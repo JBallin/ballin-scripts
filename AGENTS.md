@@ -24,7 +24,8 @@
   touched behavior before publication or review. Follow
   [Test runtime and timeouts](docs/testing.md#test-runtime-and-timeouts) for
   focused commands. Rely on PR CI for the complete validation gate before merge;
-  `package.json` defines that gate. Run the full gate locally when it supplies
+  `.github/workflows/ci.yml` defines its checks, and `package.json` defines the
+  Node validation commands. Run complete validation locally when it supplies
   needed evidence unavailable from CI, diagnoses a material concern, or an
   explicit instruction requires it. Report pending CI as incomplete validation.
 - Report validation as passing only after the command completes successfully.
