@@ -134,101 +134,46 @@ that line manually with the displayed command using LF line endings.
 
 ### Quickstart helper
 
-The [quickstart helper](quickstart.md) reuses Git, compatible Node.js, and GitHub CLI, asking before
-installing missing tools or changing your Terminal startup file. Node's
-installer may replace Node.js/npm in `/usr/local` and ask for your Mac password.
+The [quickstart helper](quickstart.md) reuses Git, compatible Node.js, and GitHub
+CLI. It requires macOS 13.5 or newer and zsh or Bash. Homebrew is optional.
 
-The optional beginner quickstart runs `quickstart.sh` before the
-core installer. It requires macOS 13.5 or newer and zsh or Bash, selects the
-GitHub CLI download for the running shell's architecture (including Intel under
-Rosetta). Homebrew is not required.
-The pasted command waits for the helper download to finish successfully before
-running it, leaving Terminal input available for prompts.
-Relative and empty PATH entries are resolved against the current directory for
-the helper and its children, preserving search order through installer directory
-changes. A current directory containing a colon requires absolute PATH entries.
+For missing prerequisites, it asks before starting Apple's Command Line Tools
+installation for Git, installing the latest official Node.js 24 macOS package,
+or downloading GitHub CLI for your shell's architecture. Node's installer may
+replace Node.js/npm in `/usr/local` and request your Mac administrator password.
+Downloads are checked against published SHA-256 checksums; the Node package's
+Apple signature and publisher are checked before requesting admin access.
 
-When prerequisites are missing, the helper asks before starting Apple's Command
-Line Tools installation for Git, installing the latest Node.js 24 macOS package
-with `sudo installer`, or downloading GitHub CLI into
-`~/.local/share/ballin-quickstart/`. Downloads come from
-[Node.js](https://nodejs.org/dist/latest-v24.x/) and
-[GitHub CLI releases](https://github.com/cli/cli/releases); published SHA-256
-checksums are checked before installing or extracting them. The Node package's
-Apple signature and publisher are also checked before requesting admin access.
-Aliases of Apple's Git stub are identified by file identity and are not probed
-until Command Line Tools are available.
+Helper files and managed tool links live in `~/.local/share/ballin-quickstart/`.
+A compatible Node already first on PATH stays under its existing version manager;
+otherwise, the helper selects a fallback. It displays the exact PATH line and
+asks before appending it to your startup file.
 
-The helper normally keeps Git and GitHub CLI links in its own `bin/` directory and shows
-one PATH line before asking to add it to the selected shell startup file. A
-compatible Node that already wins PATH stays under its existing version manager,
-including npm, so later default changes still take effect. Otherwise, the helper
-links its selected fallback Node ahead of PATH and links its npm sibling when
-available. If that Node has no executable npm sibling, the helper removes its
-old npm link so npm follows the remaining PATH. A bound npm sibling is checked
-through the handoff PATH too; npm is not required when no sibling is available.
-Rerunning with a compatible Node that wins PATH removes the fallback links.
-Alternate spellings or symlink aliases of the
-managed directory, and executable symlinks through its Node link, are still
-treated as the fallback. The Ballin command directory is appended to preserve
-existing tool priority. Before startup-file changes or authentication, the helper
-checks that the selected tools work through this PATH. A wrapper that needs its
-original location keeps that invocation when it already wins the remaining PATH;
-otherwise setup stops and asks you to put its directory first before retrying.
-If adding the command directory reveals Homebrew, the helper includes both that
-directory and Homebrew's command directory in the displayed PATH line so the core
-installer and new terminals use the same destination.
-If Homebrew returns a successful but empty prefix, the helper stops before PATH
-setup or Ballin installation. Inspect and fix `brew --prefix`, then retry.
+Select the file your terminal reads: `home` or an absolute directory containing
+`.zshrc` for zsh; `login` or `bashrc` for Bash. Press Enter to skip if unsure.
+Shell completion is a separate optional installer step.
 
-For persistent PATH setup, select the startup file your terminal actually reads:
-choose `home` or an absolute directory containing `.zshrc` for zsh, or `login`
-or `bashrc` for Bash. An exported `ZDOTDIR` is shown as context; an empty value
-is distinct from an unset variable and never implies the home directory.
-Bash login setup uses the first existing `.bash_profile`, `.bash_login`, or
-`.profile`, creating `.bash_profile` only when none exists. Press Enter to skip
-if you are unsure. Completion activation is a separate optional step in the
-core installer; select the same actual startup target there when supported.
+Open a new Terminal afterward, or run the displayed PATH line in your current
+window. **Already present** does not guarantee that a line executes. If `ballin`
+is unavailable, check your startup file and place the line where it executes.
+Skipped, declined, or unsafe edits leave the file untouched and report
+**persistent PATH setup incomplete**. Setup can continue using the helper's
+PATH; edit the file manually or rerun the quickstart to retry.
 
-The helper displays the exact PATH line and asks before appending it. It
-preserves existing bytes and permissions, refuses symlinked or non-regular
-startup targets, and rechecks the inspected file for concurrent changes. Small
-syntax-only checks guard against appending into unfinished syntax, continuations,
-or heredocs. Bash parsing enables `extglob`; zsh uses `-f` to suppress user
-startup loading (system `/etc/zshenv` remains outside that option’s control).
-Unsupported syntax can require manual placement without making the profile
-invalid. The helper never executes your profile or determines whether its
-control flow will reach the line.
+GitHub CLI must authenticate before the core installer runs. The helper reuses
+existing authentication or offers normal browser login. If an exported token
+blocks login, follow GitHub CLI's instructions; the helper does not change
+exported credentials or switch accounts.
 
-An exact existing line is reported as **already present**, even inside a
-conditional or quoted block; this does not verify activation. After an append
-or presence report, open a new Terminal. To use the tools in the current window,
-run the displayed PATH line there. If `ballin` remains unavailable, check which
-startup file your shell reads and place the line where it will execute.
+After installation, it asks whether to run the first backup and open its GitHub
+destination: Enter or `y` accepts both; `n` skips both; end-of-input cancels.
+Normal backup setup prompts still apply. Declining setup leaves Ballin installed
+without capturing or opening a backup. The destination opens only after
+successful capture.
 
-If persistent setup is skipped, declined, or cannot safely append, the helper
-leaves the file untouched and reports **persistent PATH setup incomplete**.
-Installation and the first backup can still proceed with the helper’s
-process-local PATH. Review or edit your startup file manually, or rerun the
-quickstart to retry. Installation, authentication, and backup failures still
-stop their dependent steps.
-
-The helper uses existing GitHub CLI authentication or requests its normal
-browser login flow. If `GH_TOKEN` or `GITHUB_TOKEN` prevents login, GitHub CLI
-names the variable and tells you to clear it. Review and correct or remove your
-exported credential before retrying; the helper does not change it or switch
-accounts. Authentication must succeed before the core installer runs. The helper
-then runs the core installer and asks whether to run the first backup and open
-its GitHub destination. Press Enter or enter `y` to accept both actions, or `n`
-to finish installation without either. End-of-input cancels instead of accepting.
-If accepted, an unconfigured installation receives the normal backup setup
-prompts. Declining that setup leaves Ballin installed without capturing or
-opening a backup. The destination opens only after successful capture.
-Rerunning reuses available tools and revalidates an existing backup.
-
-`ballin uninstall` leaves these prerequisites, helper files, and the confirmed
-PATH line in place. Installation or login cancellation can leave completed
-prerequisite steps in place for a later retry.
+Cancellation can leave completed prerequisite steps for retry. Reruns reuse tools
+and revalidate existing backups. `ballin uninstall` leaves prerequisites, helper
+files, and the confirmed PATH line in place.
 
 ### Core installer
 
