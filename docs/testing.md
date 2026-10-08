@@ -233,6 +233,22 @@ Use `npm run test:unit` for a focused development run, for example:
 npm run test:unit -- --grep 'scenario name'
 ```
 
+For saved-backup inventory changes, get early feedback from existing direct tests:
+
+```shell
+npm run test:unit -- --no-parallel \
+  test/backup_repository.test.ts test/snapshot_definitions.test.ts \
+  --grep 'inventory:|complete inventory|during list|dependent list operations|final list revision check|reads only the requested supported snapshot|classifies only exact'
+```
+
+This selection covers marker validation, authentication, account and revision
+changes, selective snapshot reads, and exact filename classification. Check the
+selected test names when changing these suites; the selection follows their
+titles. For CLI arguments, exits, output, environment handling, or saved-bundle
+inspection, also run `npm run test:unit -- test/backup_list.test.ts`. Bundle
+decoding has its own direct suite, `test/directory_snapshot.test.ts`. The CLI suite
+checks command behavior through real processes.
+
 Keep `npm test` as the complete local gate. A gate passes only when the command
 finishes successfully and all required stages complete; a passing Mocha count
 alone does not establish that coverage checks or later stages passed. A killed,
