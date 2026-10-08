@@ -473,6 +473,101 @@ esac
     assert.notInclude(readLog(), 'gh:auth status --active');
     assert.notInclude(readLog(), 'install.sh:');
   });
+  for (const [name, kind] of [['git', 'broken'], ['node', 'broken'], ['node', 'outdated'], ['gh', 'broken'], ['gh', 'unsupported']]) {
+    it(`uses a later working PATH ${name} past a ${kind} executable in the actual core installer`, () => {
+      const early = path.join(root, 'invalid-first');
+      const later = path.join(root, 'working-later');
+      fs.mkdirSync(early);
+      fs.mkdirSync(later);
+      const invalid = kind === 'outdated' ? 'printf "false\\n"\n'
+        : kind === 'unsupported' ? 'case "$*" in --version) printf "old gh\\n";; "auth status --help") printf "unsupported\\n";; *) exit 97;; esac\n'
+          : 'exit 73\n';
+      fs.writeFileSync(path.join(early, name), '#!/bin/bash\n' + invalid, { mode: 0o755 });
+      linkFake(name, later);
+      if (name === 'node') linkFake('npm', later);
+      const result = run('y\nn\n', {
+        PATH: `${early}:${later}:${tools}`, FAKE_SYSTEM_GIT: path.join(root, 'missing-system-git'),
+        FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh'),
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'Missing prerequisites:');
+      assert.include(result.stdout, 'Proceed with installation?');
+      assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(later, name));
+      if (name === 'node') assert.equal(fs.readlinkSync(path.join(quickBin, 'npm')), path.join(later, 'npm'));
+      for (const forbidden of ['sudo:', 'xcode-select:--install', '/releases/latest', 'git:clone', 'ballin:']) {
+        assert.notInclude(readLog(), forbidden);
+      }
+    });
+  }
+  it('releases the later working PATH Node after an invalid earlier executable is removed', () => {
+    const early = path.join(root, 'invalid-first');
+    fs.mkdirSync(early);
+    fs.writeFileSync(path.join(early, 'node'), '#!/bin/bash\nexit 73\n', { mode: 0o755 });
+    const first = path.join(home, '.nvm/versions/node/v24.12.0/bin');
+    const next = path.join(home, '.nvm/versions/node/v24.21.0/bin');
+    for (const bin of [first, next]) {
+      fs.mkdirSync(bin, { recursive: true });
+      for (const name of ['node', 'npm']) linkFake(name, bin);
+    }
+    const core = { FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') };
+    const installed = run('y\nn\n', { ...core, PATH: `${early}:${first}:${tools}` });
+    assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+    assert.include(installed.stdout, 'Proceed with installation?');
+    const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+    assert.equal(fs.readlinkSync(path.join(quickBin, 'node')), path.join(first, 'node'));
+    const before = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
+    fs.unlinkSync(path.join(early, 'node'));
+    const rerun = run('n\n', { ...core, PATH: `${quickBin}:${early}:${next}:${tools}` });
+    assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+    assert.include(rerun.stdout, 'Proceed with installation?');
+    for (const name of ['node', 'npm']) assert.isFalse(fs.existsSync(path.join(quickBin, name)));
+    assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
+    const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; command -v node; command -v npm'], {
+      encoding: 'utf8', cwd: home,
+      env: testChildEnvironment({ HOME: home, PATH: `${early}:${next}:${tools}` }),
+    });
+    assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+    assert.deepEqual(fresh.stdout.trim().split('\n'), [path.join(next, 'node'), path.join(next, 'npm')]);
+    assert.notInclude(readLog(), 'sudo:');
+  });
+  for (const prefixResult of ['failure', 'empty']) {
+    it(`keeps core Homebrew semantics when the first PATH brew returns ${prefixResult} before a working later brew`, () => {
+      const early = path.join(root, 'first-brew');
+      const later = path.join(root, 'later-brew');
+      fs.mkdirSync(early);
+      fs.mkdirSync(later);
+      fs.writeFileSync(path.join(early, 'brew'), '#!/bin/bash\n'
+        + 'printf "first-brew:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n'
+        + (prefixResult === 'failure' ? 'exit 42\n' : 'printf "\\n"\n'), { mode: 0o755 });
+      linkFake('brew', later);
+      const result = run('y\ny\n', { PATH: `${early}:${later}:${tools}`, FAKE_BREW_PREFIX: later });
+      assert.equal(result.status, prefixResult === 'failure' ? 0 : 1, result.stdout + result.stderr);
+      assert.notMatch(readLog(), /^brew:/m);
+      if (prefixResult === 'empty') {
+        assert.include(result.stderr, 'Homebrew returned an empty installation prefix');
+        assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+        assert.notInclude(readLog(), 'gh:auth status --active');
+        assert.notInclude(readLog(), 'install.sh:');
+        return;
+      }
+      const coreRepo = path.join(root, 'core-repo');
+      fs.mkdirSync(path.join(coreRepo, 'config'), { recursive: true });
+      fs.mkdirSync(path.join(coreRepo, 'bin'));
+      fs.writeFileSync(path.join(coreRepo, 'config/.defaultConfig.json'), '{"backup":{}}\n');
+      fs.writeFileSync(path.join(coreRepo, 'bin/ballin'), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+      const core = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; exec "$TEST_NODE_RUNTIME" "$FAKE_SETUP_SOURCE" setup "$FAKE_CORE_REPO" https://example.test/docs "" refresh'], {
+        encoding: 'utf8', cwd: home, timeout: 12000,
+        env: testChildEnvironment({ HOME: home, PATH: `${early}:${later}:${tools}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log,
+          TEST_NODE_RUNTIME: process.execPath, FAKE_BREW_PREFIX: later, FAKE_CORE_REPO: coreRepo,
+          FAKE_SETUP_SOURCE: path.resolve(__dirname, '../commands/install_setup.ts') }),
+      });
+      assert.equal(core.status, 0, core.stdout + core.stderr);
+      assert.isTrue(fs.lstatSync(path.join(home, '.local/bin/ballin')).isSymbolicLink());
+      assert.notMatch(readLog(), /^brew:/m);
+    });
+  }
   for (const kind of ['absolute', 'relative', 'multihop', 'newline hop', 'managed parent alias']) {
     it(`retains an executable Node alias through ${kind} links and permits independent same-binary manager takeover`, () => {
       linkFake('npm', systemNode);

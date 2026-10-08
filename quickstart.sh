@@ -79,22 +79,20 @@ tool_uses_managed_link() {
 }
 
 tool_on_path() {
-  local name="$1" search_path='' remaining="$PATH" entry separator='' retained=false
+  local name="$1" validate="${2:-true}" remaining="$PATH" entry candidate
   # Ignore our own fallback links so a version manager can take over on rerun.
   # Exclude aliases that need the managed executable link to remain in place.
   while :; do
     entry=${remaining%%:*}
-    if [[ "$entry" != "$quick_bin" && ! "${entry:-.}" -ef "$quick_bin" ]] \
-      && ! tool_uses_managed_link "${entry:-.}/$name" "$name"; then
-      search_path+="$separator$entry"
-      separator=':'
-      retained=true
+    candidate="${entry:-.}/$name"
+    if [[ "$entry" != "$quick_bin" && ! "${entry:-.}" -ef "$quick_bin" && -f "$candidate" && -x "$candidate" ]] \
+      && ! tool_uses_managed_link "$candidate" "$name" && "$validate" "$candidate"; then
+      printf '%s' "$candidate"
+      return
     fi
     [[ "$remaining" == *:* ]] || break
     remaining=${remaining#*:}
   done
-  "$retained" || return 0
-  PATH="$search_path" command -v "$name" || true
 }
 
 find_node() {
@@ -119,25 +117,34 @@ release_node_links() {
   done
 }
 
+git_compatible() {
+  local candidate="$1"
+  if [[ "$candidate" -ef "$system_git" ]] && ! "$system_xcode_select" -p >/dev/null 2>&1; then
+    return 1
+  fi
+  [[ "$candidate" == /* && -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1
+}
+
 find_git() {
   local candidate
-  for candidate in "$(tool_on_path git)" "$quick_bin/git" "$system_git"; do
-    if [[ "$candidate" -ef "$system_git" ]] && ! "$system_xcode_select" -p >/dev/null 2>&1; then
-      continue
-    fi
-    if [[ "$candidate" == /* && -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
+  for candidate in "$(tool_on_path git git_compatible)" "$quick_bin/git" "$system_git"; do
+    if git_compatible "$candidate"; then
       printf '%s' "$candidate"
       return
     fi
   done
 }
 
+gh_compatible() {
+  [[ "$1" == /* && -x "$1" ]] \
+    && "$1" --version >/dev/null 2>&1 \
+    && "$1" auth status --help 2>/dev/null | grep -q -- '--active'
+}
+
 find_gh() {
   local candidate
-  for candidate in "$(tool_on_path gh)" "$quick_bin/gh"; do
-    if [[ "$candidate" == /* && -x "$candidate" ]] \
-      && "$candidate" --version >/dev/null 2>&1 \
-      && "$candidate" auth status --help 2>/dev/null | grep -q -- '--active'; then
+  for candidate in "$(tool_on_path gh gh_compatible)" "$quick_bin/gh"; do
+    if gh_compatible "$candidate"; then
       printf '%s' "$candidate"
       return
     fi
@@ -367,7 +374,7 @@ main() {
     [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $quick_bin."
   fi
   path_node=$(tool_on_path node)
-  node_tool=$(find_node "$path_node")
+  node_tool=$(find_node "$(tool_on_path node node_compatible)")
   gh_tool=$(find_gh)
   git_tool=$(find_git)
   need_git=false; need_node=false; need_gh=false
@@ -397,7 +404,7 @@ main() {
   "$need_node" && install_node
   "$need_gh" && install_gh
   if [[ "$node_tool" == "$path_node" ]]; then
-    # Leave a working PATH Node/npm under its existing version manager.
+    # Release fallbacks only when the selected Node already wins the underlying PATH.
     release_node_links
   else
     bind_tool node "$node_tool"
