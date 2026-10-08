@@ -369,7 +369,7 @@ configure_path() {
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh repo path_node brew_tool brew_prefix destination
+  local os_version major minor machine git_tool need_git need_node need_gh repo path_node brew_tool brew_prefix destination new_quick_root=true
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -393,6 +393,7 @@ main() {
       fail "Refusing to change an unrecognized directory at $quick_root."
     fi
     [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $quick_bin."
+    new_quick_root=false
   fi
   path_node=$(tool_on_path node)
   node_tool=$(find_node "$(tool_on_path node node_compatible)")
@@ -413,7 +414,8 @@ main() {
     confirm 'Install these prerequisites?' || return 0
   fi
   mkdir -p "$quick_bin"
-  printf '1\n' > "$quick_root/.managed"
+  # Existing markers were validated above; leave them untouched on reruns.
+  if "$new_quick_root"; then printf '1\n' > "$quick_root/.managed"; fi
   scratch=$(mktemp -d "${TMPDIR:-/tmp}/ballin-quickstart.XXXXXX")
   if "$need_git"; then
     "$system_xcode_select" --install || fail 'Apple could not start Command Line Tools installation. Finish any pending installation, then run this quickstart again.'

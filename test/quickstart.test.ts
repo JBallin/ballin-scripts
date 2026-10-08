@@ -734,6 +734,58 @@ esac
     assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
     assert.equal(readLog().split('sudo:').length - 1, 1);
   });
+  for (const inheritedFromFirstRun of [false, true]) {
+    it(`preserves a recognized marker on noclobber reruns with initial inheritance ${inheritedFromFirstRun}`, () => {
+      const core = path.resolve(__dirname, '../install.sh');
+      const wrapper = path.join(root, 'core-with-noclobber-probe');
+      const unrelated = path.join(root, 'unrelated');
+      fs.writeFileSync(unrelated, 'Keep this file.\n');
+      fs.writeFileSync(wrapper, '#!/bin/bash\n'
+        + '[[ -o noclobber ]] || exit 97\n'
+        + 'if printf "overwritten" > "$FAKE_ROOT/unrelated"; then exit 98; fi\n'
+        + 'exec /bin/bash "$FAKE_ACTUAL_CORE"\n');
+      const inherited = { SHELLOPTS: 'noclobber', FAKE_CORE_INSTALL_SOURCE: wrapper, FAKE_ACTUAL_CORE: core };
+      const first = run('y\nn\n', inheritedFromFirstRun ? inherited : { FAKE_CORE_INSTALL_SOURCE: core });
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      const marker = path.join(home, '.local/share/ballin-quickstart/.managed');
+      const before = fs.statSync(marker);
+      const profile = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
+      fs.writeFileSync(log, '');
+      const retry = run('n\n', inherited);
+      assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+      assert.include(retry.stdout, 'Proceed with installation?');
+      assert.include(retry.stdout, 'Installation cancelled; no installation changes were made.');
+      assert.include(retry.stderr, 'unrelated: cannot overwrite existing file');
+      assert.equal(fs.readFileSync(unrelated, 'utf8'), 'Keep this file.\n');
+      assert.equal(fs.readFileSync(marker, 'utf8'), '1\n');
+      const after = fs.statSync(marker);
+      for (const key of ['ino', 'mode', 'mtimeMs', 'ctimeMs']) assert.equal(after[key], before[key], key);
+      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), profile);
+      assert.include(readLog(), 'gh:auth status --active --hostname github.com');
+      assert.notInclude(readLog(), 'ballin:');
+    });
+  }
+  for (const kind of ['missing', 'invalid', 'symlink']) {
+    it(`still refuses ${kind} managed markers with inherited noclobber`, () => {
+      const managed = path.join(home, '.local/share/ballin-quickstart');
+      const marker = path.join(managed, '.managed');
+      const unrelated = path.join(root, 'unrelated');
+      fs.mkdirSync(managed, { recursive: true });
+      fs.writeFileSync(unrelated, '1\n');
+      if (kind === 'invalid') fs.writeFileSync(marker, 'unrecognized\n');
+      if (kind === 'symlink') fs.symlinkSync(unrelated, marker);
+      const result = run('', { SHELLOPTS: 'noclobber' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'Refusing to change an unrecognized directory');
+      assert.isFalse(fs.existsSync(path.join(managed, 'bin')));
+      assert.equal(fs.readFileSync(unrelated, 'utf8'), '1\n');
+      if (kind === 'missing') assert.isFalse(fs.existsSync(marker));
+      if (kind === 'invalid') assert.equal(fs.readFileSync(marker, 'utf8'), 'unrecognized\n');
+      if (kind === 'symlink') assert.isTrue(fs.lstatSync(marker).isSymbolicLink());
+      assert.notInclude(readLog(), 'gh:auth status --active');
+      assert.notInclude(readLog(), 'install.sh:');
+    });
+  }
   it('keeps links and one PATH line usable when rerun through the new PATH', () => {
     assert.equal(run('y\ny\ny\n', { FAKE_OLD_NODE: '1' }).status, 0);
     const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
