@@ -24,6 +24,7 @@ type ScheduledController = {
 type Env = {
   ANALYTICS_DB: D1Database;
   ANALYTICS_RATE_LIMITER: RateLimit;
+  ANALYTICS_SOURCE_RATE_LIMITER: RateLimit;
   INSTALL_ID_HASH_SECRET: string;
 };
 
@@ -359,9 +360,9 @@ const storeBehaviorEvent = async (env: Env, event: BehaviorAnalyticsEvent): Prom
   await env.ANALYTICS_DB.batch(statements);
 };
 
-const rateLimitEventRequest = async (env: Env, keys: string[]): Promise<Response | null> => {
+const rateLimitEventRequest = async (limiter: RateLimit, keys: string[]): Promise<Response | null> => {
   for (const key of keys) {
-    const { success } = await env.ANALYTICS_RATE_LIMITER.limit({ key });
+    const { success } = await limiter.limit({ key });
     if (!success) {
       return emptyResponse(429);
     }
@@ -376,15 +377,20 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
     return jsonResponse(400, { error: 'content-type must be application/json' });
   }
-  if (!env.INSTALL_ID_HASH_SECRET || !env.ANALYTICS_RATE_LIMITER) {
+  if (!env.INSTALL_ID_HASH_SECRET || !env.ANALYTICS_RATE_LIMITER || !env.ANALYTICS_SOURCE_RATE_LIMITER) {
     return jsonResponse(500, { error: 'analytics backend is not configured' });
   }
   if (contentLengthExceedsLimit(request)) {
     return jsonResponse(400, { error: 'request body is too large' });
   }
-  const rateLimitedResponse = await rateLimitEventRequest(env, [
-    globalEventRateLimitKey,
+  const sourceRateLimitedResponse = await rateLimitEventRequest(env.ANALYTICS_SOURCE_RATE_LIMITER, [
     sourceRateLimitKey(request),
+  ]);
+  if (sourceRateLimitedResponse) {
+    return sourceRateLimitedResponse;
+  }
+  const rateLimitedResponse = await rateLimitEventRequest(env.ANALYTICS_RATE_LIMITER, [
+    globalEventRateLimitKey,
   ]);
   if (rateLimitedResponse) {
     return rateLimitedResponse;
@@ -407,7 +413,7 @@ const handleEventRequest = async (request: Request, env: Env): Promise<Response>
   }
 
   const installIdHash = await hashInstallId(event.installId, env.INSTALL_ID_HASH_SECRET);
-  const installRateLimitedResponse = await rateLimitEventRequest(env, [
+  const installRateLimitedResponse = await rateLimitEventRequest(env.ANALYTICS_RATE_LIMITER, [
     installRateLimitKey(installIdHash),
   ]);
   if (installRateLimitedResponse) {

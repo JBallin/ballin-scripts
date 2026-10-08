@@ -19,7 +19,8 @@ https://ballin-scripts-analytics.jballin.workers.dev/v1/events
 ```
 
 The Worker has a D1 binding, scheduled retention cleanup, an
-`INSTALL_ID_HASH_SECRET`, and an `ANALYTICS_RATE_LIMITER` binding for
+`INSTALL_ID_HASH_SECRET`, and `ANALYTICS_RATE_LIMITER` and
+`ANALYTICS_SOURCE_RATE_LIMITER` bindings for
 `POST /v1/events`.
 Worker and deployment input changes deploy from `main` through the `Deploy
 Analytics Worker` GitHub Actions workflow. The
@@ -33,8 +34,8 @@ the exact automatic-trigger and deployment-time validation contract.
 - D1 can count active installs from daily buckets and server-hashed install IDs.
 - The CLI does not need a runtime analytics SDK.
 - Retention is controlled by the Worker and D1 schema.
-- The deployment can stay tiny: one Worker, one D1 database, one rate-limit
-  binding, and one hash secret.
+- The deployment can stay tiny: one Worker, one D1 database, two rate-limit
+  bindings, and one hash secret.
 
 ## Alternatives Considered
 
@@ -161,9 +162,16 @@ tool as the report.
 
 The Worker accepts public client events and relies on layered abuse controls
 instead of a client-shipped secret. It rejects oversized payloads and unsupported
-fields, validates dates and low-cardinality values, applies global/source rate
-limits before parsing, and applies an installation-HMAC rate limit before D1
-writes. All schemas share those rate-limit budgets. Schema-v1 ingestion stores
+fields, validates dates and low-cardinality values, applies source admission
+before global admission and parsing, and applies an installation-HMAC rate limit
+before D1 writes. All schemas share those budgets. The separate source binding
+allows 1,000 requests per minute; the existing global/installation binding remains
+at 1,500. The namespaces must differ, and a missing binding fails closed. Clients
+sharing an IP share the source allowance, so saturation can drop optional events
+across installations. The policy is not calibrated from production traffic, and
+Cloudflare's location-local, permissive counters do not guarantee an exact global
+reserve. CLI command outcomes remain independent of analytics delivery.
+Schema-v1 ingestion stores
 the HMAC-derived installation ID only in the separate `install_days` activity
 table. The `command_events_daily` and `version_events_daily` aggregates retain
 no installation identity or install-to-command association. Schema-v2/v3 behavioral
@@ -181,6 +189,8 @@ described in the [Worker setup guide](../analytics-worker/README.md#production-s
 - copy `analytics-worker/wrangler.toml.example` to ignored local
   `analytics-worker/wrangler.toml`
 - set the D1 database ID in local `analytics-worker/wrangler.toml`
+- preserve both distinct limiter namespaces and their 1,000/1,500 limits from
+  the example; existing configs need the new source binding before deployment
 - set `INSTALL_ID_HASH_SECRET`
 - create the `analytics-worker-production` GitHub deployment environment with a
   `main` branch rule and environment secrets `CLOUDFLARE_API_TOKEN`,
@@ -202,7 +212,8 @@ publishing until the remote migration is applied and the deploy workflow succeed
 from `main`.
 The deployment check verifies Cloudflare binding metadata without exposing
 secret values. It cannot verify the hash secret's value, D1 schema or migration
-state, resource reachability, or runtime rate-limit behavior.
+state, resource reachability, limiter namespaces or budgets, or runtime rate-limit
+behavior. Check the example-derived configuration separately before deployment.
 
 ## Behavioral Analytics Rollout
 
