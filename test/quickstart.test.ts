@@ -475,6 +475,67 @@ esac
     assert.notInclude(readLog(), 'gh:auth status --active');
     assert.notInclude(readLog(), 'install.sh:');
   });
+  for (const name of ['node', 'git', 'gh']) {
+    for (const regular of [false, true]) {
+      it(`handles a managed ${name} fallback rerun with a ${regular ? 'regular file' : 'symlink'} slot`, () => {
+        assert.equal(run().status, 0);
+        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+        const target = path.join(quickBin, name);
+        const fallback = path.join(root, 'fallback');
+        fs.mkdirSync(fallback);
+        const executable = path.join(fallback, name);
+        fs.copyFileSync(path.join(root, 'fake-tool'), executable);
+        fs.chmodSync(executable, 0o755);
+        fs.rmSync(target, { force: true });
+        if (regular) fs.copyFileSync(executable, target);
+        else fs.symlinkSync(executable, target);
+        fs.unlinkSync(path.join(tools, name));
+        const before = fs.lstatSync(target);
+        const profile = fs.readFileSync(path.join(home, '.zshrc'));
+        fs.writeFileSync(log, '');
+
+        const result = run();
+
+        assert.equal(result.status, regular ? 1 : 0, result.stdout + result.stderr);
+        assert.equal(fs.lstatSync(target).ino, before.ino);
+        assert.equal(fs.lstatSync(target).mode, before.mode);
+        assert.deepEqual(fs.readFileSync(target), fs.readFileSync(executable));
+        assert.deepEqual(fs.readFileSync(path.join(home, '.zshrc')), profile);
+        if (regular) {
+          assert.include(result.stderr, `Refusing to replace an existing file at ${target}.`);
+          for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) {
+            assert.notInclude(readLog(), forbidden);
+          }
+        } else {
+          assert.equal(fs.readlinkSync(target), executable);
+          assert.include(readLog(), 'ballin:backup open');
+        }
+      });
+    }
+  }
+  for (const kind of ['file', 'directory']) {
+    for (const self of [true, false]) {
+      it(`refuses a managed ${kind} conflict when binding ${self ? 'the same' : 'another'} path`, () => {
+        const quickBin = path.join(root, 'binding slots');
+        fs.mkdirSync(quickBin);
+        const target = path.join(quickBin, 'npm');
+        if (kind === 'directory') fs.mkdirSync(target);
+        const content = kind === 'directory' ? path.join(target, 'sentinel') : target;
+        fs.writeFileSync(content, 'preserve this content\n');
+        const before = fs.lstatSync(target);
+        const result = spawnSync('/bin/bash', ['-c',
+          'source "$1"; quick_bin="$2"; bind_tool npm "$3"', 'fixture', source, quickBin,
+          self ? target : path.join(tools, 'node')], {
+          encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: tools }),
+        });
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, `Refusing to replace an existing file at ${target}.`);
+        assert.equal(fs.lstatSync(target).ino, before.ino);
+        assert.equal(fs.lstatSync(target).mode, before.mode);
+        assert.equal(fs.readFileSync(content, 'utf8'), 'preserve this content\n');
+      });
+    }
+  }
   for (const [name, kind] of [['git', 'broken'], ['node', 'broken'], ['node', 'outdated'], ['gh', 'broken'], ['gh', 'unsupported']]) {
     it(`uses a later working PATH ${name} past a ${kind} executable in the actual core installer`, () => {
       const early = path.join(root, 'invalid-first');

@@ -175,10 +175,10 @@ find_gh() {
 
 bind_tool() {
   local target="$quick_bin/$1"
-  [[ "$target" != "$2" ]] || return 0
   if [[ -e "$target" && ! -L "$target" ]]; then
     fail "Refusing to replace an existing file at $target."
   fi
+  [[ "$target" != "$2" ]] || return 0
   if [[ -L "$target" ]] && { [[ "$(readlink "$target")" == "$2" ]] || [[ "$target" -ef "$2" ]]; }; then return; fi
   ln -sfn "$2" "$target"
 }
