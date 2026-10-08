@@ -142,8 +142,17 @@ The endpoint accepts public client telemetry. Valid events can be spoofed, so
 aggregate analytics are directional and not security-trustworthy. The Worker
 limits abuse with strict schema validation, low-cardinality fields, body-size and
 date-skew checks, server-side install ID hashing, and Cloudflare Workers rate
-limits. All schemas share the global, source, and installation rate-limit keys;
-missing rate-limit or hash-secret configuration fails closed. Request source
+limits. All schemas share the global, source, and installation rate-limit keys.
+Source admission runs first through `ANALYTICS_SOURCE_RATE_LIMITER`, configured
+for 1,000 requests per minute in its own namespace. Only admitted requests charge
+the global key through `ANALYTICS_RATE_LIMITER`; global and installation limits
+remain 1,500 per minute. Missing either limiter or the hash secret fails closed.
+These values are a best-effort policy, not calibrated production capacity or a
+guaranteed reservation for another source. Cloudflare counters apply per location
+and may be permissive; clients sharing an IP also share the source allowance
+across installations and all schemas. Additional events may be dropped without
+affecting CLI outcomes. See the [Cloudflare rate-limit binding documentation](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/).
+Request source
 metadata is used only as a transient rate-limit key and is
 not stored, queried, logged, or reported by the application. Older clients may
 still send `X-Ballin-Analytics-Token`; the Worker ignores that legacy header.
@@ -172,7 +181,10 @@ followed by Wrangler arguments for other maintenance commands.
    npm run wrangler -- d1 create ballin-scripts-analytics
    ```
 
-3. Fill in the database ID in `wrangler.toml`.
+3. Fill in the database ID in `wrangler.toml`. Preserve both limiter bindings:
+   namespace `1001` for global/installation limits and distinct namespace `1002`
+   for the lower source limit. Existing local configs need the new source binding
+   before deploying this Worker; it does not fall back to the global limiter.
 4. Set the hash secret:
 
    ```shell
@@ -216,7 +228,7 @@ applied manually. It then creates an ignored runner-local `wrangler.toml` from
 to inspect every Worker version receiving production traffic and fails unless
 each version exposes
 `ANALYTICS_DB` as a D1 binding,
-`ANALYTICS_RATE_LIMITER` as a rate-limit binding, and
+`ANALYTICS_RATE_LIMITER` and `ANALYTICS_SOURCE_RATE_LIMITER` as rate-limit bindings, and
 `INSTALL_ID_HASH_SECRET` as a secret-text binding. The check uses structured
 Wrangler deployment and version metadata; it does not parse deploy output or
 make unrelated Wrangler warnings fatal.
@@ -225,7 +237,9 @@ The workflow does not set or rotate `INSTALL_ID_HASH_SECRET`. Cloudflare exposes
 the secret binding name and type without exposing its value, so deployment
 verification can confirm that the secret is attached but cannot confirm that
 its value is correct. Binding metadata likewise does not prove D1 schema or
-migration state, database reachability, or runtime rate-limit behavior.
+migration state, database reachability, limiter namespaces or budgets, or runtime
+rate-limit behavior. Inspect the configuration to confirm separate namespaces
+and the 1,000/1,500 limits before an authorized deployment.
 
 Keep the Cloudflare values as environment secrets rather than repository
 secrets. The workflow can also be run manually from GitHub Actions, but

@@ -1240,6 +1240,44 @@ process.stdout.write(JSON.stringify({ result }));
     assert.notProperty(options.headers, 'x-ballin-analytics-token');
   });
 
+  it('preserves command exit outcomes when optional sends are accepted or refused', async () => {
+    setAnalyticsConfig({ enabled: 'true' });
+    writeInstallId();
+    const originalRequest = https.request;
+    const previousExitCode = process.exitCode;
+    let responseStatus = 204;
+    let resumed = 0;
+    let sends = 0;
+    https.request = (_options: RequestOptions, callback: (response: IncomingMessage) => void): ClientRequest => {
+      sends += 1;
+      const request = new EventEmitter() as ClientRequest;
+      const response = new EventEmitter() as IncomingMessage;
+      response.statusCode = responseStatus;
+      response.resume = () => { resumed += 1; return response; };
+      callback(response);
+      request.setTimeout = () => request;
+      request.destroy = () => request;
+      request.end = (() => { response.emit('end'); return request; }) as ClientRequest['end'];
+      return request;
+    };
+    try {
+      for (const status of [204, 429, 500]) {
+        responseStatus = status;
+        for (const commandExit of [0, 7]) {
+          await runWithCommandAnalytics('ballin', () => { process.exitCode = commandExit; }, {
+            env: {}, endpoint: 'https://analytics.example.test/v1/events',
+            installIdPath: testInstallIdPath, osVersionOptions: fixedOsVersionOptions,
+          });
+          assert.equal(process.exitCode, commandExit);
+        }
+      }
+    } finally {
+      https.request = originalRequest;
+      process.exitCode = previousExitCode;
+    }
+    assert.equal(sends, 6); assert.equal(resumed, 6);
+  });
+
   it('returns immediately when no analytics endpoint is configured', async () => {
     const originalRequest = https.request;
     let requestCalled = false;
