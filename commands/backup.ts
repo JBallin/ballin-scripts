@@ -7,6 +7,8 @@ const { terminalEmphasis } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
+import type { BackupFailureEvidence } from './backup_outcome.ts';
+const { observeBackupFailure, observeRepositoryFailure } = require('./backup_outcome.ts');
 const {
   configPath,
   fetchConfig,
@@ -39,7 +41,7 @@ const {
   normalizeSnapshotInput,
   observeSnapshotSources,
 } = require('./backup_snapshots.ts');
-const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError } = require('./recursive_snapshot.ts');
+const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitError, SnapshotCwdError } = require('./recursive_snapshot.ts');
 const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember } = require('./directory_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
@@ -183,7 +185,7 @@ const removeTransportFile = (file: string): void => {
   }
 };
 
-const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boolean => {
+const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string, evidence: BackupFailureEvidence): boolean => {
   const outputFd = fs.openSync(inputFile, 'w');
   const stderrFile = makeTempFile('ballin-backup-stderr-');
   const stderrFd = fs.openSync(stderrFile, 'w');
@@ -194,6 +196,7 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string): boo
       env: snapshot.env,
       stdio: ['ignore', outputFd, stderrFd],
     });
+    if (result.status !== 0 || result.error) observeBackupFailure(evidence, 'unknown');
   } finally {
     fs.closeSync(outputFd);
     fs.closeSync(stderrFd);
@@ -306,7 +309,7 @@ const removeStagedSnapshots = (stagedSnapshots: StagedSnapshot[]): boolean => {
   return removed;
 };
 
-const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes?: number): SnapshotCaptureResult => {
+const captureAvailableSnapshot = (source: AvailableSnapshotObservation, evidence: BackupFailureEvidence, maxBytes?: number): SnapshotCaptureResult => {
   const snapshot = maxBytes === undefined ? source.collector : {
     ...source.collector, args: [...(source.collector.args ?? []), '--max-bytes', String(maxBytes)],
   };
@@ -315,16 +318,17 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes
   try {
     const createdInputFile = makeTempFile('ballin-backup-input-');
     inputFile = createdInputFile;
-    if (captureSnapshotInput(snapshot, createdInputFile)) {
+    if (captureSnapshotInput(snapshot, createdInputFile, evidence)) {
       normalizeSnapshotInput(createdInputFile);
       if (maxBytes !== undefined) requireWithinLimit('bytes', fs.statSync(createdInputFile).size, maxBytes);
       captured = true;
     }
   } catch (error) {
+    observeBackupFailure(evidence, 'local_state');
     writeStderrLine(`ballin backup: unable to stage ${snapshot.fileName}${errorMessage(error)}`);
   } finally {
     if (!captured && inputFile) {
-      try { removeTempFile(inputFile); } catch { reportTemporaryCleanupFailure(); }
+      try { removeTempFile(inputFile); } catch { observeBackupFailure(evidence, 'local_state'); reportTemporaryCleanupFailure(); }
     }
   }
 
@@ -335,9 +339,10 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, maxBytes
   return { status: 'captured', localFile: inputFile };
 };
 
-const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapshot[] | null => {
+const stageSnapshots = (observations: SnapshotSourceObservation[], evidence: BackupFailureEvidence): StagedSnapshot[] | null => {
   const failure = observations.find((source) => source.status === 'discovery-failed' && (source.reason === 'source-limit-exceeded' || configurationSnapshotGroups.has(source.definition.name)));
   if (failure && failure.status === 'discovery-failed') {
+    observeBackupFailure(evidence, ['source-limit-exceeded', 'source-access-failed'].includes(failure.reason) ? 'local_state' : 'unknown');
     const diagnostic = failure.reason === 'source-limit-exceeded'
       ? `recursive source exceeds the supported snapshot limits; ${failure.error?.message ?? 'capture limit exceeded'}`
       : `selected ${failure.definition.category === 'claude' ? 'Claude Code' : 'Codex'} source could not be discovered completely`;
@@ -347,12 +352,13 @@ const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapsh
   const capturedBytes = { codex: 0, claude: 0 };
   const collection = collectSnapshotObservations(observations, (source: AvailableSnapshotObservation) => {
     const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(source.definition.name);
-    const result = captureAvailableSnapshot(source, group ? snapshotByteLimit - capturedBytes[group] : undefined);
+    const result = captureAvailableSnapshot(source, evidence, group ? snapshotByteLimit - capturedBytes[group] : undefined);
     if (group && result.status === 'captured') {
       try {
         capturedBytes[group] += fs.statSync(result.localFile).size;
         requireWithinLimit('bytes', capturedBytes[group], snapshotByteLimit);
       } catch {
+        observeBackupFailure(evidence, 'local_state');
         try { removeTempFile(result.localFile); } catch { reportTemporaryCleanupFailure(); }
         writeStderrLine(`ballin backup: unable to verify the bounded capture for ${source.definition.name}`);
         return { status: 'collector-failed' as const };
@@ -367,7 +373,7 @@ const stageSnapshots = (observations: SnapshotSourceObservation[]): StagedSnapsh
   ));
 
   if (collection.some(({ status }: SnapshotCollectionObservation) => status === 'collector-failed')) {
-    if (!removeStagedSnapshots(stagedSnapshots)) reportTemporaryCleanupFailure();
+    if (!removeStagedSnapshots(stagedSnapshots)) { observeBackupFailure(evidence, 'local_state'); reportTemporaryCleanupFailure(); }
     return null;
   }
   return stagedSnapshots;
@@ -502,16 +508,22 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
 
 const runRepositoryBackup = (
   destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string,
+  evidence: BackupFailureEvidence,
 ): boolean => {
-  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive));
-  if (!staged) return false;
+  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive), evidence);
+  if (!staged) {
+    if (!evidence.category) observeBackupFailure(evidence, 'unknown');
+    return false;
+  }
   const remote = new Map<string, RemoteSnapshot>();
   let completed: EvaluatedSnapshot[] | undefined;
   let publishedCommitUrl: string | undefined;
+  let localWork = false;
   try {
     const read: RepositoryRead = requireRepositoryRead(inspectRepository(destination));
     const unexpected = unexpectedRepositoryEntries(read);
     if (unexpected) writeStderrLine(`ballin backup: retaining ${unexpected} unexpected repository entries`);
+    localWork = true;
     for (const { snapshot } of staged) {
       const bytes = read.snapshots.get(snapshot.fileName);
       if (bytes === undefined) remote.set(snapshot.fileName, { exists: false, file: null });
@@ -523,7 +535,10 @@ const runRepositoryBackup = (
     }
     const cacheDir = repositoryCacheDirectory(cacheRoot, destination);
     const evaluation = evaluateSnapshots(cacheDir, staged, remote);
-    if (evaluation.conflicts.length) { reportConflicts(evaluation.conflicts, 'repository'); return false; }
+    if (evaluation.conflicts.length) {
+      observeBackupFailure(evidence, 'reconciliation');
+      reportConflicts(evaluation.conflicts, 'repository'); return false;
+    }
     const changed = evaluation.evaluated.filter(({ shouldUpload }) => shouldUpload);
     const stagedConfigurationBytes = { codex: 0, claude: 0 };
     for (const { snapshot, localFile } of staged) {
@@ -550,13 +565,16 @@ const runRepositoryBackup = (
       const count = [...configurationSnapshotGroups.values()].filter((category: string) => category === group).length;
       requireWithinLimit('bytes', encodedBytes[group], 4 * Math.ceil(snapshotByteLimit / 3) + 4 * (count - 1));
     }
+    localWork = false;
     const published = publishRepositorySnapshots(read, changes);
     if (changes.size) publishedCommitUrl = published.commitUrl;
+    localWork = true;
     let promoted = false;
     try { promoted = promoteCaches(cacheDir, evaluation.evaluated); } catch {
       writeStderrLine('ballin backup: unable to finish private cache staging cleanup');
     }
     if (!promoted) {
+      observeBackupFailure(evidence, 'local_state');
       writeStderrLine(changes.size
         ? 'ballin backup: repository publication confirmed, but local cache promotion is incomplete'
         : 'ballin backup: repository state confirmed unchanged, but local cache promotion is incomplete');
@@ -565,6 +583,8 @@ const runRepositoryBackup = (
     }
     completed = evaluation.evaluated;
   } catch (error) {
+    if (localWork) observeBackupFailure(evidence, 'local_state');
+    else observeRepositoryFailure(evidence, error);
     if (error instanceof SnapshotLimitError) {
       writeStderrLine(`ballin backup: ${(error as Error).message} Repository and cache contents were not changed.`);
       return false;
@@ -576,6 +596,7 @@ const runRepositoryBackup = (
     const remoteRemoved = removeRemoteSnapshots(remote);
     const stagedRemoved = removeStagedSnapshots(staged);
     if (!remoteRemoved || !stagedRemoved) {
+      observeBackupFailure(evidence, 'local_state');
       writeStderrLine('ballin backup: private temporary-file cleanup is incomplete; completed remote and cache effects are retained');
       completed = undefined;
     }
@@ -589,28 +610,32 @@ const runRepositoryBackup = (
   return true;
 };
 
-const runRealBackup = (homeDir: string, backupCacheDir: string): number => {
+const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: BackupFailureEvidence): number => {
   const { config, exitStatus } = backupConfig();
-  if (!config) return exitStatus;
+  if (!config) { observeBackupFailure(evidence, 'local_state'); return exitStatus; }
 
   if (!homeDir) {
+    observeBackupFailure(evidence, 'local_state');
     writeStderrLine('ballin backup: HOME is not set; unable to collect backup sources safely');
     return 1;
   }
 
   if (config.includeSensitive === null) {
+    observeBackupFailure(evidence, 'local_state');
     writeStderrLine('ballin backup: invalid `backup.includeSensitive`; expected true or false');
     return 1;
   }
-  if (!secureExistingBackupCache(backupCacheDir)) return 1;
+  if (!secureExistingBackupCache(backupCacheDir)) { observeBackupFailure(evidence, 'local_state'); return 1; }
   try {
     const previous = previousBackupSuccessLine(backupCacheDir, config.repository);
     if (previous) writeStdoutLine(previous);
     const includeSensitive = config.includeSensitive;
     return withTemporaryStatus('Backing up...', () => (
-      runRepositoryBackup(config.repository, includeSensitive, homeDir, backupCacheDir) ? 0 : 1
+      runRepositoryBackup(config.repository, includeSensitive, homeDir, backupCacheDir, evidence) ? 0 : 1
     ));
   } catch (error) {
+    if (error instanceof SnapshotCwdError) observeBackupFailure(evidence, 'local_state');
+    else observeRepositoryFailure(evidence, error);
     writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
     return 1;
   }
@@ -703,13 +728,17 @@ function runBackupCommand(args = process.argv.slice(2)): void {
 
   if (!command) {
     let status: 'success' | 'failure' = 'failure';
+    const evidence: BackupFailureEvidence = {};
     try {
-      const exitStatus = runRealBackup(homeDir, backupCacheDir);
+      const exitStatus = runRealBackup(homeDir, backupCacheDir, evidence);
       status = exitStatus === 0 ? 'success' : 'failure';
       if (exitStatus !== 0) process.exitCode = exitStatus;
     } finally {
       try {
-        void recordBehavioralAnalyticsEvent({ event: 'backup.run', status });
+        void recordBehavioralAnalyticsEvent({
+          event: 'backup.run', status,
+          ...(status === 'failure' ? { failureCategory: evidence.category ?? 'unknown' } : {}),
+        });
       } catch {
         // Analytics must not replace the operation's result or original error.
       }
