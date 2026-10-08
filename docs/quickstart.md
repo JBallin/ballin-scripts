@@ -10,4 +10,4 @@ bash -c 's=$(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts
 
 Follow the prompts to complete setup and create your first private backup.
 
-Recommended reading: [installation details](installation.md#quickstart-helper) · [backup sources and privacy](backup-sources.md).
+Optional reading: [installation details](installation.md#quickstart-helper) · [backup sources and privacy](backup-sources.md).

@@ -19,7 +19,8 @@ alongside other tools.
 
 ## Installation
 
-**👉 Want guided setup? Follow the [quickstart guide](docs/quickstart.md).**
+> [!TIP]
+> **🚀 Want guided setup? Follow the [quickstart guide](docs/quickstart.md).**
 
 Start with Git and Node.js 24.12 or newer on your `PATH`. Homebrew is optional;
 backups also require [GitHub CLI](https://cli.github.com/) authenticated to your

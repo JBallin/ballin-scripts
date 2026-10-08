@@ -134,11 +134,11 @@ that line manually with the displayed command using LF line endings.
 
 ### Quickstart helper
 
-The helper reuses Git, compatible Node.js, and GitHub CLI, asking before
+The [quickstart helper](quickstart.md) reuses Git, compatible Node.js, and GitHub CLI, asking before
 installing missing tools or changing your Terminal startup file. Node's
 installer may replace Node.js/npm in `/usr/local` and ask for your Mac password.
 
-The optional [beginner quickstart](quickstart.md) runs `quickstart.sh` before the
+The optional beginner quickstart runs `quickstart.sh` before the
 core installer. It requires macOS 13.5 or newer and zsh or Bash, selects the
 GitHub CLI download for the running shell's architecture (including Intel under
 Rosetta). Homebrew is not required.
