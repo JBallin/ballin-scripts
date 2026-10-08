@@ -61,12 +61,12 @@ node_compatible() {
   [[ -x "$1" ]] && [[ "$("$1" -p 'const [major, minor] = process.versions.node.split(".").map(Number); major > 24 || (major === 24 && minor >= 12)' 2>/dev/null)" == true ]]
 }
 
-node_uses_managed_link() {
-  local candidate="$1" target hops=0
+tool_uses_managed_link() {
+  local candidate="$1" name="$2" target hops=0
   # Follow executable links, not just the PATH directory. Equal final binaries
   # can still be independently reachable through a version manager.
   while :; do
-    if [[ "${candidate##*/}" == node && "${candidate%/*}" -ef "$quick_bin" ]]; then return 0; fi
+    if [[ "${candidate##*/}" == "$name" && "${candidate%/*}" -ef "$quick_bin" ]]; then return 0; fi
     [[ -L "$candidate" ]] || return 1
     (( hops += 1 ))
     (( hops <= 40 )) || return 0
@@ -78,14 +78,14 @@ node_uses_managed_link() {
   done
 }
 
-node_on_path() {
-  local search_path='' remaining="$PATH" entry separator='' retained=false
+tool_on_path() {
+  local name="$1" search_path='' remaining="$PATH" entry separator='' retained=false
   # Ignore our own fallback links so a version manager can take over on rerun.
   # Exclude aliases that need the managed executable link to remain in place.
   while :; do
     entry=${remaining%%:*}
     if [[ "$entry" != "$quick_bin" && ! "${entry:-.}" -ef "$quick_bin" ]] \
-      && ! node_uses_managed_link "${entry:-.}/node"; then
+      && ! tool_uses_managed_link "${entry:-.}/$name" "$name"; then
       search_path+="$separator$entry"
       separator=':'
       retained=true
@@ -94,7 +94,7 @@ node_on_path() {
     remaining=${remaining#*:}
   done
   "$retained" || return 0
-  PATH="$search_path" command -v node || true
+  PATH="$search_path" command -v "$name" || true
 }
 
 find_node() {
@@ -134,7 +134,7 @@ find_git() {
 
 find_gh() {
   local candidate
-  for candidate in "$(command -v gh || true)" "$quick_bin/gh"; do
+  for candidate in "$(tool_on_path gh)" "$quick_bin/gh"; do
     if [[ "$candidate" == /* && -x "$candidate" ]] \
       && "$candidate" --version >/dev/null 2>&1 \
       && "$candidate" auth status --help 2>/dev/null | grep -q -- '--active'; then
@@ -364,7 +364,7 @@ main() {
     fi
     [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $quick_bin."
   fi
-  path_node=$(node_on_path)
+  path_node=$(tool_on_path node)
   node_tool=$(find_node "$path_node")
   gh_tool=$(find_gh)
   git_tool=$(find_git)

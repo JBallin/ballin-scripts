@@ -528,6 +528,74 @@ esac
     assert.notInclude(result.stdout, 'Use these tools');
     assert.notInclude(readLog(), 'ballin:backup setup');
   });
+  for (const spelling of ['direct', 'directory alias', 'executable alias', 'newline alias']) {
+    it(`lets an independent GitHub CLI replace a downloaded fallback through ${spelling}`, () => {
+      fs.unlinkSync(path.join(tools, 'gh'));
+      const first = run('y\ny\ny\n');
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      const managedGh = path.join(quickBin, 'gh');
+      const archiveGh = fs.readlinkSync(managedGh);
+      const before = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
+      let entry = quickBin;
+      if (spelling === 'directory alias') {
+        entry = path.join(root, 'managed-alias');
+        fs.symlinkSync(quickBin, entry);
+      } else if (spelling === 'executable alias' || spelling === 'newline alias') {
+        entry = path.join(root, 'executable-alias');
+        fs.mkdirSync(entry);
+        if (spelling === 'newline alias') {
+          fs.symlinkSync(managedGh, path.join(entry, 'current-gh\n'));
+          fs.symlinkSync('./current-gh\n', path.join(entry, 'gh'));
+        } else fs.symlinkSync(path.relative(entry, managedGh), path.join(entry, 'gh'));
+      }
+      const fallback = run('', { PATH: `${entry}:${quickBin}:${tools}` });
+      assert.equal(fallback.status, 0, fallback.stdout + fallback.stderr);
+      assert.equal(fs.readlinkSync(managedGh), archiveGh);
+      const managerBin = path.join(root, 'external-gh/bin');
+      fs.mkdirSync(managerBin, { recursive: true });
+      const externalGh = path.join(managerBin, 'gh');
+      fs.writeFileSync(externalGh, fs.readFileSync(path.join(root, 'fake-tool'), 'utf8').replace(
+        'name="${0##*/}"', 'name="${0##*/}"\nprintf "external-gh:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"',
+      ), { mode: 0o755 });
+      const result = run('', { PATH: `${entry}:${quickBin}:${managerBin}:${tools}` });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.readlinkSync(managedGh), externalGh);
+      assert.equal(fs.realpathSync(path.join(entry, 'gh')), fs.realpathSync(externalGh));
+      assert.include(readLog(), 'external-gh:auth status --active --hostname github.com');
+      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
+      assert.equal(readLog().split('/releases/latest -o').length - 1, 1);
+      assert.isTrue(fs.existsSync(archiveGh));
+      const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; gh --version'], {
+        encoding: 'utf8', cwd: home,
+        env: testChildEnvironment({ HOME: home, PATH: `${managerBin}:${tools}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+      });
+      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+      assert.include(readLog(), 'external-gh:--version');
+      assert.include(readLog(), 'ballin:backup open');
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
+  for (const kind of ['broken', 'unsupported']) {
+    it(`retains the downloaded GitHub CLI when the external candidate is ${kind}`, () => {
+      fs.unlinkSync(path.join(tools, 'gh'));
+      assert.equal(run('y\ny\ny\n').status, 0);
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      const archiveGh = fs.readlinkSync(path.join(quickBin, 'gh'));
+      const managerBin = path.join(root, 'external-gh/bin');
+      fs.mkdirSync(managerBin, { recursive: true });
+      fs.writeFileSync(path.join(managerBin, 'gh'), '#!/bin/bash\n'
+        + 'printf "external-gh:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n'
+        + (kind === 'broken' ? 'exit 1\n' : 'case "$*" in --version) printf "fixture old gh\\n";; "auth status --help") printf "missing capability\\n";; *) exit 97;; esac\n'), { mode: 0o755 });
+      const result = run('', { PATH: `${quickBin}:${managerBin}:${tools}` });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(readLog(), 'external-gh:--version');
+      assert.notInclude(readLog(), 'external-gh:auth status --active');
+      assert.equal(fs.readlinkSync(path.join(quickBin, 'gh')), archiveGh);
+      assert.equal(readLog().split('/releases/latest -o').length - 1, 1);
+      assert.include(readLog(), 'ballin:backup open');
+    });
+  }
   for (const spelling of ['trailing slash', 'directory symlink', 'parent segment']) {
     it('preserves managed Node fallbacks through a PATH ' + spelling, () => {
       linkFake('npm', systemNode);
