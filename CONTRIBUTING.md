@@ -33,8 +33,8 @@ $ git push --set-upstream fork "$BRANCH_NAME"
 ```
 
 For faster focused testing and the additional hosted CI checks, see
-[Testing and coverage](docs/testing.md). Agent instructions and more repo
-context live in [AGENTS.md](AGENTS.md).
+[Testing and coverage](docs/testing.md). Agent operational instructions live in
+[AGENTS.md](AGENTS.md).
 
 For deeper user and maintainer documentation, see the
 [documentation index](docs/README.md).
