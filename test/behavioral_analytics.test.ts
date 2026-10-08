@@ -65,11 +65,37 @@ describe('behavioral analytics client', () => {
           osVersionOptions: { platform: () => { throw new Error('Behavior must not collect runtime data'); } },
         }));
         assert.deepEqual(payloads.at(-1), {
-          schemaVersion: 2, installId, dateBucket: '2026-09-18', event, status,
+          schemaVersion: event === 'backup.run' ? 3 : 2, installId, dateBucket: '2026-09-18', event, status,
+          ...(event === 'backup.run' && status === 'failure' ? { failureCategory: 'unknown' } : {}),
         });
       }
     }
     assert.lengthOf(payloads, 6);
+  });
+
+  it('sends allowlisted backup failure categories with no sensitive diagnostics', async () => {
+    for (const failureCategory of ['transport', 'authentication', 'reconciliation', 'local_state', 'unknown']) {
+      await recordBehavioralAnalyticsEvent({ ...input, status: 'failure', failureCategory,
+        error: 'DUMMY_SECRET_ERROR', path: '/private/DUMMY_PATH', source: 'DUMMY_SOURCE', config: 'DUMMY_CONFIG',
+      }, runtime());
+      assert.deepEqual(payloads.at(-1), {
+        schemaVersion: 3, installId, dateBucket: '2026-09-18', event: 'backup.run', status: 'failure', failureCategory,
+      });
+    }
+    for (const failureCategory of [null, '', 'DUMMY_SECRET_ERROR', 'TRANSPORT', 'unclassified']) {
+      await recordBehavioralAnalyticsEvent({ ...input, status: 'failure', failureCategory }, runtime());
+    }
+    for (const event of ['update.backup', 'update.self-update']) {
+      await recordBehavioralAnalyticsEvent({ ...input, event, status: 'failure', failureCategory: 'transport' }, runtime());
+    }
+    await recordBehavioralAnalyticsEvent({ ...input, failureCategory: 'transport' }, runtime());
+    assert.lengthOf(payloads, 5);
+    assert.notInclude(JSON.stringify(payloads), 'DUMMY');
+    for (const env of [{ BALLIN_NO_ANALYTICS: '1' }, { CI: 'true' }]) {
+      await recordBehavioralAnalyticsEvent({ ...input, status: 'failure', failureCategory: 'authentication' }, runtime({ env }));
+    }
+    await recordBehavioralAnalyticsEvent({ ...input, status: 'failure', failureCategory: 'transport' }, runtime({ analyticsConfig: { enabled: 'false' } }));
+    assert.lengthOf(payloads, 5);
   });
 
   it('captures terminal date and eligibility before deferring transmission', async () => {
@@ -188,7 +214,7 @@ describe('behavioral analytics client', () => {
     }, runtime({ sender: (payload: Payload) => new Promise<void>((resolve) => {
       payloads.push(payload);
       releases.push(resolve);
-      if (payload.schemaVersion === 2) assert.deepEqual(stages, ['self-update', 'readiness', 'backup']);
+      if (payload.schemaVersion !== 1) assert.deepEqual(stages, ['self-update', 'readiness', 'backup']);
     }) })).then(() => { settled = true; });
     await Promise.resolve();
     assert.lengthOf(payloads, 3);
@@ -201,7 +227,7 @@ describe('behavioral analytics client', () => {
     await done;
     assert.isTrue(settled);
     assert.equal(process.exitCode, 7);
-    assert.deepEqual(payloads.filter((payload) => payload.schemaVersion === 2).map(({ event, status }) => ({ event, status })), [
+    assert.deepEqual(payloads.filter((payload) => payload.schemaVersion !== 1).map(({ event, status }) => ({ event, status })), [
       { event: 'update.self-update', status: 'success' }, { event: 'update.backup', status: 'success' },
     ]);
     assert.equal(payloads.find((payload) => payload.schemaVersion === 1)?.status, 'failure');
@@ -212,7 +238,7 @@ describe('behavioral analytics client', () => {
       void recordBehavioralAnalyticsEvent(input);
     }, runtime({ env: { BALLIN_NO_COMMAND_ANALYTICS: '1' } }));
     assert.lengthOf(payloads, 1);
-    assert.equal(payloads[0].schemaVersion, 2);
+    assert.equal(payloads[0].schemaVersion, 3);
     // Outside the synchronous command scope, the harness hard opt-out applies again.
     await recordBehavioralAnalyticsEvent(input);
     assert.lengthOf(payloads, 1);
@@ -249,10 +275,10 @@ describe('behavioral analytics client', () => {
       return request;
     };
     const startedAt = Date.now();
-    await recordBehavioralAnalyticsEvent(input, runtime({ sender: undefined, timeoutMs: 5 }));
+    await recordBehavioralAnalyticsEvent({ ...input, status: 'failure', failureCategory: 'transport' }, runtime({ sender: undefined, timeoutMs: 5 }));
     assert.isTrue(destroyed);
     assert.isBelow(Date.now() - startedAt, 1000);
-    assert.deepEqual(payloads, [{ schemaVersion: 2, installId, dateBucket: '2026-09-18', event: 'backup.run', status: 'success' }]);
+    assert.deepEqual(payloads, [{ schemaVersion: 3, installId, dateBucket: '2026-09-18', event: 'backup.run', status: 'failure', failureCategory: 'transport' }]);
   });
 
   it('ignores response-stream errors without changing the command exit status', async () => {

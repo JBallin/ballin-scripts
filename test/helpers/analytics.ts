@@ -8,6 +8,7 @@ type CapturedAnalyticsEvent = {
   command?: string;
   event?: string;
   status: string;
+  failureCategory?: string;
 };
 
 const fixtureInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';

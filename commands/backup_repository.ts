@@ -35,6 +35,8 @@ class RepositoryError extends Error {
   readonly problem: RepositoryProblem;
   completedStage?: 'repository-created';
   cleanupFailed?: boolean;
+  reconciliationFailed?: boolean;
+  publicationConfirmed?: boolean;
   constructor(problem: RepositoryProblem) {
     super(repositoryMessages[problem]);
     this.problem = problem;
@@ -70,7 +72,7 @@ type ManagedBranchRulesetOutcome =
   | { status: 'ambiguous'; reason: 'unconfirmed' | 'mismatch' | 'duplicate' };
 type RepositoryInspection =
   | { status: 'complete'; read: RepositoryRead }
-  | { status: 'incomplete'; problem: RepositoryProblem; inspected?: RepositoryRead };
+  | { status: 'incomplete'; problem: RepositoryProblem; inspected?: RepositoryRead; cleanupFailed?: boolean };
 type RepositoryInfo = { destination: RepositoryDestination; login: string; revision: Revision };
 type ApiResult = { ok: boolean; body: Record<string, unknown>; items?: unknown[]; problem?: RepositoryProblem; cleanupFailed?: boolean };
 // Reduce private provider output to a fixed classification; never retain or display raw stderr.
@@ -158,13 +160,21 @@ const api = (endpoint: string, payload: unknown, options: RepositoryOptions, all
 };
 const query = (document: string, variables: Record<string, unknown>, options: RepositoryOptions): Record<string, unknown> => {
   const result = api('graphql', { query: document, variables }, options);
-  if (!result.ok || result.body.errors) throw new RepositoryError(result.problem ?? 'unavailable');
+  if (!result.ok || result.body.errors) {
+    const error = new RepositoryError(result.problem ?? 'unavailable');
+    error.cleanupFailed = result.cleanupFailed;
+    throw error;
+  }
   requireCleanTransport(result);
   return object(result.body.data);
 };
 const readRepositoryAccount = (options: RepositoryOptions = {}): Account => {
   const result = api('user', undefined, options);
-  if (!result.ok) throw new RepositoryError(result.problem ?? 'request');
+  if (!result.ok) {
+    const error = new RepositoryError(result.problem ?? 'request');
+    error.cleanupFailed = result.cleanupFailed;
+    throw error;
+  }
   if (result.body.type !== 'User') throw new RepositoryError('identity');
   const login = identifier(result.body.login);
   if (!/^[A-Za-z0-9-]+$/u.test(login)) throw new RepositoryError('invalid-data');
@@ -248,7 +258,11 @@ const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')
   .update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[] => {
   const result = api(`repos/${info.login}/${info.destination.name}/git/trees/${info.revision.tree}?recursive=1`, undefined, options);
-  if (!result.ok) throw new RepositoryError(result.problem ?? 'incomplete');
+  if (!result.ok) {
+    const error = new RepositoryError(result.problem ?? 'incomplete');
+    error.cleanupFailed = result.cleanupFailed;
+    throw error;
+  }
   requireCleanTransport(result);
   const data = result.body;
   if (data.truncated !== false) throw new RepositoryError('incomplete');
@@ -269,7 +283,11 @@ const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[
 };
 const readBlob = (info: RepositoryInfo, entry: Entry, options: RepositoryOptions): Buffer => {
   const result = api(`repos/${info.login}/${info.destination.name}/git/blobs/${entry.sha}`, undefined, options);
-  if (!result.ok) throw new RepositoryError(result.problem ?? 'incomplete');
+  if (!result.ok) {
+    const error = new RepositoryError(result.problem ?? 'incomplete');
+    error.cleanupFailed = result.cleanupFailed;
+    throw error;
+  }
   requireCleanTransport(result);
   const data = result.body;
   if (data.sha !== entry.sha || data.size !== entry.size || data.encoding !== 'base64'
@@ -318,16 +336,22 @@ const inspect = (
     assertCurrent(inspected, options);
     return { status: 'complete', read: inspected };
   } catch (error) {
-    return { status: 'incomplete', inspected, problem: error instanceof RepositoryError ? error.problem : 'local-io' };
+    return { status: 'incomplete', inspected, problem: error instanceof RepositoryError ? error.problem : 'local-io',
+      cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
   }
 };
 const inspectRepository = (destination: RepositoryDestination, options: RepositoryOptions = {}): RepositoryInspection => {
   try { return inspect(destination, readRepositoryAccount(options), options, false); } catch (error) {
-    return { status: 'incomplete', problem: error instanceof RepositoryError ? error.problem : 'local-io' };
+    return { status: 'incomplete', problem: error instanceof RepositoryError ? error.problem : 'local-io',
+      cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
   }
 };
 const requireRepositoryRead = (inspection: RepositoryInspection): RepositoryRead => {
-  if (inspection.status !== 'complete') throw new RepositoryError(inspection.problem);
+  if (inspection.status !== 'complete') {
+    const error = new RepositoryError(inspection.problem);
+    error.cleanupFailed = inspection.cleanupFailed;
+    throw error;
+  }
   return inspection.read;
 };
 const inspectRepositoryMaintenance = (
@@ -585,7 +609,12 @@ const publish = (
   const data = isConfigObject(result.body.data) ? result.body.data as Record<string, unknown> : {};
   if (Array.isArray(errors) && errors.length && errors.every((error) => (
     isConfigObject(error) && ['FORBIDDEN', 'NOT_FOUND', 'STALE_DATA', 'UNPROCESSABLE'].includes(error.type as string)
-  )) && !data.createCommitOnBranch) throw new RepositoryError('rejected');
+  )) && !data.createCommitOnBranch) {
+    const failure = new RepositoryError('rejected');
+    failure.reconciliationFailed = errors.every((error) => error.type === 'STALE_DATA');
+    failure.cleanupFailed = result.cleanupFailed || Boolean(transportFailure);
+    throw failure;
+  }
   // A missing response/commit ID is not evidence of failure: confirm state once, never retry the mutation.
   const mutation = isConfigObject(data.createCommitOnBranch) ? data.createCommitOnBranch as Record<string, unknown> : {};
   const returnedCommit = isConfigObject(mutation.commit) ? (mutation.commit as Record<string, unknown>).oid : undefined;
@@ -604,6 +633,7 @@ const publish = (
   ) throw new RepositoryError('uncertain');
   if (result.cleanupFailed || transportFailure) {
     writeStderrLine('ballin backup: repository publication confirmed, but transport cleanup is incomplete; cache contents were not advanced');
+    if (transportFailure) transportFailure.publicationConfirmed = true;
     throw transportFailure ?? new RepositoryError('cleanup');
   }
   return after;
