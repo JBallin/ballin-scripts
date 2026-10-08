@@ -356,8 +356,19 @@ interruptions, mixed versions, and UTC date boundaries prevent matching events.
 They cannot establish exact direct-backup volume, execution coverage, unique-install
 adoption, feature retention, or user percentages.
 
-Reports are directional maintenance signals. Because ingestion is public client
-telemetry, aggregate counts are not security-trustworthy.
+The default output keeps the shared telemetry caveat above the tables, the
+parent/child overlap warning beside behavioral outcomes, and the legacy/unknown
+distinction beside category coverage. Extended interpretation lives in the
+[behavioral guide](../docs/analytics-backend.md#interpreting-behavioral-outcomes)
+and [category guide](../docs/analytics-backend.md#backup-failure-categories).
+Observed opt-in, best-effort public telemetry is incomplete and directional,
+not security-trustworthy; it does not establish root causes or population
+adoption/failure rates.
+
+For empty ranges, active-install dates remain zero-filled and the other sections
+report no observed events or failures. Category coverage prints `0/0 (0.0%)`;
+this means no observed backup failures, not measured zero population risk.
+The caveats and interpretation reference remain visible.
 
 On a machine where this repository has not been configured for Worker access,
 create the ignored local config first:
