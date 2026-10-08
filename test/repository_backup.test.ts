@@ -133,6 +133,47 @@ describe('repository backup lifecycle', function() {
   };
   const statusClock = (time: number) => `Date.now = () => ${time};`;
 
+  const sizedFile = (file: string, size: number, newline = true): void => {
+    const fd = fs.openSync(file, 'w');
+    try {
+      fs.ftruncateSync(fd, size);
+      if (newline) fs.writeSync(fd, Buffer.from('\n'), 0, 1, size - 1);
+    } finally { fs.closeSync(fd); }
+  };
+  it('refuses oversized ordinary staging before normalization, remote reads or publication', () => {
+    const limit = 32 * 1024 * 1024;
+    sizedFile(path.join(home, '.zshrc'), limit + 1);
+    const before = state().head, result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, 'unable to stage zshrc.sh');
+    assert.equal(state().head, before); assert.lengthOf(state().requests, 0);
+    assert.isFalse(fs.existsSync(cache)); assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('rechecks the ordinary stored-size limit after final-newline normalization', () => {
+    sizedFile(path.join(home, '.zshrc'), 32 * 1024 * 1024, false);
+    const result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, 'unable to stage zshrc.sh');
+    assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('refuses a staged set above 64 MiB before any remote inspection', () => {
+    for (const name of ['.zshrc', '.bashrc', '.vimrc']) sizedFile(path.join(home, name), 22 * 1024 * 1024);
+    const result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, '64 MiB per full snapshot set');
+    assert.lengthOf(state().requests, 0); assert.isFalse(fs.existsSync(cache));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('refuses an oversized compared ordinary cache without publication or cache promotion', () => {
+    source(); seedCache('zshrc.sh', 'prior'); seedSuccess();
+    saveState(fixtureState({ 'zshrc.sh': 'saved\n' }));
+    sizedFile(path.join(cache, 'zshrc.sh'), 32 * 1024 * 1024 + 1);
+    const before = state().head, result = run();
+    assert.equal(result.status, 1); assert.include(result.stderr, 'Repository and cache contents were not changed');
+    assert.equal(state().head, before); assert.lengthOf(publications(), 0);
+    assert.equal(fs.statSync(path.join(cache, 'zshrc.sh')).size, 32 * 1024 * 1024 + 1);
+    assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+
   it('aborts before collection or remote effects when Codex cwd restoration fails', () => {
     const codex = fs.realpathSync(home) + '/.codex';
     fs.mkdirSync(path.join(codex, 'skills'), { recursive: true });
@@ -1107,7 +1148,7 @@ describe('repository backup lifecycle', function() {
       assert.equal(cached('codex_config.toml'), content);
     });
 
-    it('retains old absent Codex data without imposing a remote aggregate quota', () => {
+    it('retains old absent Codex data beyond the local capture allowance', () => {
       const retained = 'r'.repeat(12 * mib - 1) + '\n';
       const content = 'n'.repeat(12 * mib - 1) + '\n';
       saveState(fixtureState({ 'codex_AGENTS.md': retained }));
@@ -2119,6 +2160,32 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1);
     });
 
+    for (const cleanupFailed of [false, true]) {
+      it(`records aggregate staging overflow as local state (${cleanupFailed})`, () => {
+        for (const name of ['.zshrc', '.bashrc', '.vimrc']) fs.writeFileSync(path.join(home, name), 'local\n');
+        // Real oversized-file cases already cover the limit; keep these telemetry fixtures small.
+        const stagedSizes = `
+          const stageFs = require('fs'); const originalStat = stageFs.statSync;
+          stageFs.statSync = function(file, ...args) {
+            const result = originalStat.call(this, file, ...args);
+            if (String(file).includes('ballin-backup-input-')) result.size = 22 * 1024 * 1024;
+            return result;
+          };
+        `;
+        const result = observedRun(stagedSizes + (cleanupFailed
+          ? cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-input-')") : ''));
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, '64 MiB per full snapshot set');
+        assert.include(result.stderr, 'Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub.');
+        assert.include(result.stderr, 'Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits');
+        assert.isBelow(result.stderr.indexOf('Use ballin backup open'), result.stderr.indexOf('Details:'));
+        assertOutcome('failure', 'local_state');
+        assert.lengthOf(state().requests, 0);
+        assert.isFalse(fs.existsSync(cache));
+        assert.equal(fs.readdirSync(path.join(root, 'tmp')).length > 0, cleanupFailed);
+      });
+    }
+
     it('keeps excluded-source and unavailable-tool handling successful without source events', () => {
       const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
       source(); saveState(fixtureState({ 'zshrc.sh': 'retained private source\n', pipx: 'retained unavailable tool\n' }));
@@ -2159,6 +2226,21 @@ describe('repository backup lifecycle', function() {
         assertOutcome('failure', category);
         assert.notInclude(JSON.stringify(capture.readEvents()), 'DUMMY_PRIVATE');
         assert.lengthOf(publications(), 0);
+      });
+    }
+
+    for (const target of ['/git/trees/', '/git/blobs/']) {
+      it(`keeps bounded ${target} read failure and cleanup evidence unknown`, () => {
+        source(); const value = state();
+        value.faults.transport = { target, response: {
+          status: 1, stdout: '{}', stderr: 'error connecting to api.github.com\n', signal: null,
+        } };
+        saveState(value);
+        const result = observedRun(transportCleanupFailure(target));
+        assertTransportCleanupFailed(result);
+        assertOutcome('failure', 'unknown');
+        assert.lengthOf(publications(), 0);
+        assert.isUndefined(cached());
       });
     }
 
@@ -2273,6 +2355,30 @@ describe('repository backup lifecycle', function() {
       assert.equal(remote('zshrc.sh'), 'local\n');
       assertOutcome('failure', 'local_state');
     });
+
+    for (const cleanupFailed of [false, true]) {
+      it(`preserves confirmed publication response overflow evidence (${cleanupFailed})`, () => {
+        source();
+        const overflow = `
+          const helpers = require(${JSON.stringify(path.join(repoRoot, 'commands', 'commandHelpers.ts'))});
+          const runSync = helpers.runCommand;
+          helpers.runCommand = function(command, args, options) {
+            const result = runSync.apply(this, arguments);
+            return command === 'gh' && String(options?.input).includes('mutation BallinPublish')
+              ? { ...result, error: Object.assign(new Error('DUMMY_PRIVATE_OVERFLOW'), { code: 'ENOBUFS' }) } : result;
+          };
+        `;
+        const result = observedRun(overflow + (cleanupFailed ? transportCleanupFailure('BallinPublish') : ''));
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, 'repository publication confirmed, but transport limits were exceeded');
+        assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_OVERFLOW');
+        if (cleanupFailed) assertTransportCleanupFailed(result);
+        assert.equal(remote('zshrc.sh'), 'local\n');
+        assert.lengthOf(publications(), 1);
+        assert.isUndefined(cached());
+        assertOutcome('failure', cleanupFailed ? 'local_state' : 'unknown');
+      });
+    }
 
     for (const [reason, category] of [
       ['source-limit-exceeded', 'local_state'], ['source-access-failed', 'local_state'],

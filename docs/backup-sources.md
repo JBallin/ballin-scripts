@@ -136,8 +136,7 @@ recursive source. Both skill archives count toward the combined limit, even
 when their roots overlap. Exceeding a limit stops the whole backup before
 publication or cache promotion. Ballin does not truncate files or selectively omit content to fit. Reduce the supported authoring-tree
 size or turn off sensitive sources before retrying. Existing remote snapshots
-remain retained; these limits do not bound repository size or total memory
-used to inspect historical remote content.
+remain retained.
 
 Ballin does not select authentication files, sessions/history, caches, logs,
 worktrees, databases, memory/runtime state, or separate trust stores. The entire
