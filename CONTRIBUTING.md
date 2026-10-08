@@ -28,13 +28,13 @@ $ git checkout -b "$BRANCH_NAME"
 $ nvm use # If you use nvm
 $ npm ci
 # MAKE CHANGES
-# RUN TARGETED LOCAL CHECKS FOR YOUR CHANGES
+$ npm test # Comprehensive local Node checks
 $ git push --set-upstream fork "$BRANCH_NAME"
 ```
 
-Follow [Test runtime and timeouts](docs/testing.md#test-runtime-and-timeouts)
-for focused commands and validation exceptions. Complete PR CI must pass before
-merge. For more repo context, see [AGENTS.md](AGENTS.md).
+For faster focused testing and the additional hosted CI checks, see
+[Testing and coverage](docs/testing.md). Agent instructions and more repo
+context live in [AGENTS.md](AGENTS.md).
 
 For deeper user and maintainer documentation, see the
 [documentation index](docs/README.md).

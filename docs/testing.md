@@ -2,14 +2,12 @@
 
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
-Run commands from the repository root. Use targeted local checks for changed
-behavior before publication or review; see
-[Test runtime and timeouts](#test-runtime-and-timeouts) for focused commands.
-Rely on PR CI for the complete validation gate before merge. The
-[CI workflow](../.github/workflows/ci.yml) defines all its checks, including
-shell and workflow validation. CI calls the same lint, typecheck and coverage
-scripts as `npm test` in separate steps; keep both definitions aligned when
-changing validation.
+Run commands from the repository root. `npm test` runs comprehensive local Node
+checks: lint, both typechecks, and tests with coverage. For faster feedback, use
+the focused commands in [Test runtime and timeouts](#test-runtime-and-timeouts).
+CI runs the same Node scripts in separate steps and adds checks defined in the
+[CI workflow](../.github/workflows/ci.yml), including shell and workflow
+validation. Keep the shared Node script definitions aligned when changing them.
 Both paths use the shared Mocha command in `test:unit`. The
 [Mocha configuration](../.mocharc.js) uses two workers when Node reports at least
 four available CPUs and runs serially on smaller hosts.
@@ -267,7 +265,8 @@ Use `npm run test:unit` for a focused development run, for example:
 npm run test:unit -- --grep 'scenario name'
 ```
 
-For saved-backup inventory changes, get early feedback from existing direct tests:
+For example, when changing saved-backup inventory, start with these existing
+direct tests:
 
 ```shell
 npm run test:unit -- --no-parallel \
@@ -283,18 +282,9 @@ inspection, also run `npm run test:unit -- test/backup_list.test.ts`. Bundle
 decoding has its own direct suite, `test/directory_snapshot.test.ts`. The CLI suite
 checks command behavior through real processes.
 
-Run complete validation locally when it supplies needed evidence unavailable
-from CI, diagnoses a material concern, or an explicit instruction requires it.
-`npm test` runs the Node checks; the CI workflow defines the additional checks.
-Use `npm run test:coverage` for coverage alone. Otherwise, rely on PR CI for the
-complete gate before merge and report pending CI as incomplete validation.
-For docs-only changes, skip local validation and rely on CI for automated checks.
-A gate passes only when the command finishes successfully and all required
-stages complete; a passing Mocha count
-alone does not establish that coverage checks or later stages passed. A killed,
-interrupted, tool-expired, or disconnected command without a confirmed exit
-status is incomplete. Record the command, last completed stage, and diagnostic
-output. Distinguish that interruption from Mocha reporting a test timeout.
+Use `npm run test:coverage` for coverage alone. A passing Mocha count does not
+establish that coverage checks or later stages passed. For agent validation
+sequencing, see [Local commands](../AGENTS.md#local-commands).
 
 Before adding timeout headroom, remove unnecessary waits and accumulated work.
 Give each independent matrix combination its own `it` with the same assertions,
