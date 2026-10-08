@@ -282,9 +282,10 @@ inspection, also run `npm run test:unit -- test/backup_list.test.ts`. Bundle
 decoding has its own direct suite, `test/directory_snapshot.test.ts`. The CLI suite
 checks command behavior through real processes.
 
-To run tests with coverage, use `npm run test:coverage`. A passing Mocha count
-does not establish that coverage checks or later stages passed. For agent
-validation sequencing, see [Local commands](../AGENTS.md#local-commands).
+To run tests with coverage, use `npm run test:coverage`. Even if every test
+passes, the command can still fail because coverage is below the required
+minimum. Check the command’s final result. For agent validation sequencing, see
+[Local commands](../AGENTS.md#local-commands).
 
 Before adding timeout headroom, remove unnecessary waits and accumulated work.
 Give each independent matrix combination its own `it` with the same assertions,

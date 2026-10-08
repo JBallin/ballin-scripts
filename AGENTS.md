@@ -27,7 +27,8 @@
   `.github/workflows/ci.yml` defines its checks, and `package.json` defines the
   Node validation commands. Run complete validation locally when it supplies
   needed evidence unavailable from CI, diagnoses a material concern, or an
-  explicit instruction requires it. Report pending CI as incomplete validation.
+  explicit instruction requires it. If required CI is still running, report it
+  as pending.
 - Report validation as passing only after the command completes successfully.
   A killed, interrupted, tool-expired, or disconnected run without a confirmed
   exit status is incomplete, even if its output includes passing tests.
