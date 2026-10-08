@@ -239,11 +239,8 @@ status is incomplete. Record the command, last completed stage, and diagnostic
 output. Distinguish that interruption from Mocha reporting a test timeout.
 
 Before adding timeout headroom, remove unnecessary waits and accumulated work.
-Give each independent matrix combination its own `it` with the same assertions.
-In [PR #438](https://github.com/JBallin/ballin-scripts/pull/438), three help tests
-each bundled twelve independent CLI scenarios and exceeded the default two-second
-timeout in Linux CI. That is evidence about the test boundary and process cost,
-not evidence of intermittent flakiness or a reason to increase the global limit.
+Give each independent matrix combination its own `it` with the same assertions,
+so repeated CLI startup does not consume one case's default two-second budget.
 
 Keep a focused override when one coherent integration workflow legitimately
 needs more time. Existing Mocha allowances apply to each test or hook in their
@@ -261,9 +258,8 @@ choices from the behavior and guards in each case.
 | Native Tab-completion cases | 20s | Isolated interactive shell and terminal subprocesses |
 | Onboarding sandbox and walkthroughs | 300s | Outer allowance for multi-step command and process-group cleanup guards |
 
-Recent Linux integration evidence includes a 2.122s installer case and a 7.137s
-repository lifecycle case, supporting scoped headroom rather than a larger
-default. Automated onboarding commands have a 120s child limit; interactive QA
+Process-heavy integration workflows can need scoped headroom beyond the default.
+Automated onboarding commands have a 120s child limit; interactive QA
 test wrappers have a 240s limit. They check shutdown and preserve ambiguous live
 session state. These are guard budgets, not expected runtimes. Any adjustment
 must account for nested command limits and cleanup, as well as measured case
@@ -280,76 +276,29 @@ same checkout when estimating whole-suite instrumentation overhead. Focused
 results cannot establish whole-suite overhead, and macOS and Linux timings are
 not interchangeable.
 
-A separate October 2, 2026 whole-suite pair used Node 24.21.0 on macOS arm64
-and the frozen PR #438 head `8476f23`, including its split help matrix. Unit
-execution took 222.34s; coverage took 241.09s, an observed 18.74s (8.43%)
-overhead relative to unit execution. Both commands exited successfully with
-1,486 passing tests and no pending tests. Coverage retained the configured gate
-and reported 99.49% statements and lines, 97.27% branches and 100% functions.
-This is one serial pair, not an estimate of timing variance or a comparison
-between the earlier fixture patch and this later source tree.
+Measured results identify repeated CLI launches and fixture startup as major
+runtime contributors. In one serial whole-suite comparison on macOS arm64 with
+Node 24.21.0, coverage instrumentation added about 8% to unit execution time.
+That single pair does not characterize timing variance.
 
-The October 2, 2026 fixture-startup comparison used Node 24.21.0 on macOS arm64,
-baseline `3c924f9`, and the helper change delivered in
-[PR #437](https://github.com/JBallin/ballin-scripts/pull/437):
+Repeated complete-gate comparisons on four-CPU Ubuntu runners with Node 24.21.0,
+Mocha 11.7.6 and c8 12.0.0 showed median wall-time reductions of about 17–20%
+with two workers. Statement/function outcomes and effective V8 covered/uncovered
+intervals matched serial execution; branch-map geometry varied.
+Coverage thresholds and Mocha timeouts were preserved. These measurements support
+the shared configuration's two-worker setting on hosts with at least four
+available CPUs.
 
-| Command and selection | Before | After | Observations |
-| --- | --- | --- | --- |
-| Unit, nine representative scenarios | 12.00s | 9.08s | Median of three alternating pairs |
-| Coverage, the same nine scenarios | 12.57s | 9.77s | Median of three alternating pairs |
-| Complete `npm test`, 1,427 tests | 272.44s | 238.30s | One pair |
+The configuration retains serial execution below four available CPUs to limit
+contention between subprocess-heavy suites. Serial checks passed with two-CPU
+affinity on Node 24.21.0 and a two-CPU quota on Node 24.15.0; each is a single
+smoke check. Node supplies the CPU estimate through `os.availableParallelism()`.
 
-The full pair saved 34.14s while preserving production coverage source maps and
-covered/uncovered outcomes. It is one observation, not a runtime guarantee.
-Repository lifecycle cases contributed at least 153s of the baseline's printed
-test time, compared with about 35s for legacy backup; printed durations omit
-fast cases and setup. Lint and both typechecks added about 2.1s to the optimized
-local gate.
-
-Linux CI on baseline `3c924f9` spent 476s in coverage within a 510s job. Merged
-commit `1cb157a` passed 1,443 tests and spent 383s in coverage within a 408s job.
-That merged tree includes other changes, so these runs are not a controlled
-before/after estimate of the optimization. Use exact run provenance before
-attributing differences to a patch or resource contention.
-
-The October 5, 2026 [Linux comparison](https://github.com/JBallin/ballin-scripts/actions/runs/37362898477)
-ran six complete gates on one four-CPU Ubuntu runner at frozen commit `c587fa6`,
-with Node 24.21.0, Mocha 11.7.6 and c8 12.0.0. Adjacent pairs alternated order:
-
-| Pair | Serial | Two workers | Reduction |
-| --- | --- | --- | --- |
-| 1 | 727.46s | 597.46s | 17.87% |
-| 2 | 713.72s | 590.49s | 17.27% |
-| 3 | 716.61s | 582.39s | 18.73% |
-
-All six passed 1,694 tests with no timeout, interruption or fixture leak. The
-median paired reduction was 17.87%; CPU time increased 5.52–5.85%. Queue and
-evidence capture time are excluded. Statement/function outcomes and effective
-V8 covered/uncovered intervals matched across all 36 production files; branch
-map geometry differed in two files. Coverage thresholds and Mocha timeouts are
-unchanged. These repeated results support two workers on the measured four-CPU
-host. The shared configuration retains serial execution below four available CPUs
-to limit contention between subprocess-heavy suites. Node supplies the CPU estimate
-through `os.availableParallelism()`. Runtime varies with machine load and later
-source changes. Use focused selection for feedback and retain the single complete
-final gate.
-
-A later [two-CPU affinity check](https://github.com/JBallin/ballin-scripts/actions/runs/37420139731)
-at `c9f0a9c` passed serially with 1,842 tests in 735.05s. The two-worker gate
-then failed with one default two-second timeout in the update destination-type
-test, which performs four CLI launches. Collection stopped after that failure;
-the attempt produced no valid speedup comparison. It used Node 24.21.0 and
-affinity control, so it does not reproduce the earlier Node 24.15 quota report.
-
-The October 7, 2026 [corrected qualification](https://github.com/JBallin/ballin-scripts/actions/runs/37645821911)
-at `2951bb1` passed six complete gates with 2,001 tests each and unchanged
-coverage thresholds. Two four-CPU serial/two-worker pairs reduced gate time by
-19.20% and 20.16%, with a 19.68% median and equivalent statement/function
-outcomes and effective V8 coverage across 40 production files. The two-CPU
-affinity case on Node 24.21.0 and the two-CPU quota case on Node 24.15.0 each
-passed serially; these are single smoke checks. The slower two-worker gate left
-443.73 seconds within the ordinary 20-minute budget. Setup and later source
-changes still require verification in ordinary CI.
+Benchmark reductions describe command wall time and exclude runner queue, setup
+and evidence capture. Machine load, platform, runtime and source changes can alter
+timing and coverage geometry. Use focused selection for feedback, retain the
+single complete final gate, and verify that the full CI job fits its 20-minute
+budget.
 
 ## Runtime and platform limits
 
@@ -362,13 +311,6 @@ imports, leaving its temporary link intact while cleanup removes another owned
 link. The separate `ENOENT` fixture actually removes its link before throwing,
 preserving its disappearance-race contract. Both run without contacting real
 user state.
-
-The September 30 discrepancy in PR #411 came from the old chmod-based uninstall
-test skipping under root. CI's merge commit and the PR head had identical trees;
-CI ran the test and covered the incomplete owned-link cleanup/reporting path.
-Replacing only that fixture restores the missing coverage under the original
-local Node version, without changing production code, analytics isolation,
-coverage scope, or thresholds.
 
 The nested-update analytics fixture injects a fixed clock so machine load cannot
 move its event across the one-second duration boundary and add a covered V8
