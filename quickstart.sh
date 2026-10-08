@@ -183,6 +183,33 @@ bind_tool() {
   ln -sfn "$2" "$target"
 }
 
+# Qualify the invocation children will actually use, not just discovery's path.
+qualify_tool() {
+  local name="$1" selected="$2" validate="$3" resolved
+  resolved=$(type -P "$name")
+  if "$validate" "$resolved"; then return; fi
+  # A wrapper may need its original $0 to locate sibling resources. Release
+  # only our link when the original tool already wins the retained PATH.
+  if [[ "$selected" == "$(tool_on_path "$name")" ]]; then
+    if [[ "$name" == node ]]; then release_tool_links node npm
+    else release_tool_links "$name"; fi
+    resolved=$(type -P "$name")
+    if [[ "$resolved" == "$selected" ]] && "$validate" "$resolved"; then return; fi
+  fi
+  fail "Selected $name cannot run through the final PATH. Put its original directory first on PATH, then rerun this quickstart. PATH setup and authentication have not run."
+}
+
+select_command_bin() {
+  local brew_tool brew_prefix
+  command_bin="$local_bin"
+  if brew_tool=$(type -P brew) && brew_prefix=$("$brew_tool" --prefix 2>/dev/null); then
+    brew_prefix=$("$node_tool" -e 'process.stdout.write(process.argv[1].trimEnd())' "$brew_prefix")
+    [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix \`brew --prefix\`, then rerun this quickstart. PATH setup and Ballin installation have not run."
+    command_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], "bin"))' "$brew_prefix")
+  fi
+  [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
+}
+
 install_node() {
   local package version minor
   download 'https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
@@ -263,7 +290,7 @@ profile_unchanged() {
 configure_path() {
   local escaped command_escaped line choice candidate original
   escaped=${quick_bin//\'/\'\\\'\'}
-  command_escaped=${command_bin//\'/\'\\\'\'}
+  command_escaped=${command_path//\'/\'\\\'\'}
   line="export PATH='$escaped':\$PATH:'$command_escaped'"
   printf '\nPATH line (also run this in your current Bash/zsh Terminal to use these tools there):\n%s\n' "$line"
   printf 'If ballin is unavailable in a new Terminal, review the startup file your shell reads and the placement of the line.\n'
@@ -370,7 +397,7 @@ configure_path() {
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh repo path_node brew_tool brew_prefix destination new_quick_root=true
+  local os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination new_quick_root=true
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -440,14 +467,20 @@ main() {
   fi
   bind_tool gh "$gh_tool"
   bind_tool git "$git_tool"
-  command_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], ".local", "bin"))' "$HOME")
-  if brew_tool=$(type -P brew) && brew_prefix=$("$brew_tool" --prefix 2>/dev/null); then
-    brew_prefix=$("$node_tool" -e 'process.stdout.write(process.argv[1].trimEnd())' "$brew_prefix")
-    [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix \`brew --prefix\`, then rerun this quickstart. PATH setup and Ballin installation have not run."
-    command_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], "bin"))' "$brew_prefix")
-  fi
-  [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
+  local_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], ".local", "bin"))' "$HOME")
+  select_command_bin
+  command_path="$command_bin"
   export PATH="$quick_bin:$PATH:$command_bin"
+  qualify_tool node "$node_tool" node_compatible
+  qualify_tool git "$git_tool" git_compatible
+  qualify_tool gh "$gh_tool" gh_compatible
+  # The added command directory can expose Homebrew. Keep that directory so
+  # the core installer and fresh shells discover the same brew executable.
+  select_command_bin
+  if [[ "$command_path" != "$command_bin" ]]; then
+    command_path+=":$command_bin"
+    export PATH="$PATH:$command_bin"
+  fi
   configure_path
   "$gh_tool" auth status --active --hostname github.com \
     || "$gh_tool" auth login --hostname github.com --git-protocol https --web

@@ -230,6 +230,97 @@ esac
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
   });
   for (const name of ['node', 'git', 'gh']) {
+    for (const shadowed of [false, true]) {
+      it(`qualifies sibling-relative ${name} wrappers at the final handoff (shadowed: ${shadowed})`, () => {
+        const wrapperDir = path.join(root, 'wrapper tools');
+        fs.mkdirSync(wrapperDir);
+        const wrapper = path.join(wrapperDir, name);
+        fs.writeFileSync(wrapper, '#!/bin/bash\nexec "${0%/*}/support/' + name + '" "$@"\n', { mode: 0o755 });
+        fs.mkdirSync(path.join(wrapperDir, 'support'));
+        linkFake(name, path.join(wrapperDir, 'support'));
+        const original = fs.readFileSync(wrapper);
+        const wrapperMode = fs.statSync(wrapper).mode;
+        const early = path.join(root, 'early');
+        fs.mkdirSync(early);
+        if (shadowed) fs.writeFileSync(path.join(early, name), '#!/bin/bash\nexit 73\n', { mode: 0o755 });
+        const result = run('y\ny\n', {
+          PATH: `${early}:${wrapperDir}:${tools}`, FAKE_CHECK_INSTALL_CWD: '1',
+          FAKE_SYSTEM_GIT: path.join(root, 'absent-system-git'),
+        });
+        assert.equal(result.status, shadowed ? 1 : 0, result.stdout + result.stderr);
+        assert.deepEqual(fs.readFileSync(wrapper), original);
+        if (shadowed) {
+          assert.include(result.stderr, 'cannot run through the final PATH');
+          assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+          for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+        } else {
+          assert.include(readLog(), 'fixture:changed-cwd-tools-ready');
+          assert.include(readLog(), 'ballin:backup open');
+          const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc" && node -p fixture && git --version && gh --version'], {
+            encoding: 'utf8', cwd: root,
+            env: testChildEnvironment({ HOME: home, PATH: `${wrapperDir}:${tools}`, FAKE_ROOT: root,
+              FAKE_COMMAND_LOG: log, TEST_NODE_RUNTIME: process.execPath }),
+          });
+          assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+        }
+        const profile = path.join(home, '.zshrc');
+        const beforeRetry = fs.existsSync(profile) ? fs.readFileSync(profile, 'utf8') : null;
+        const retry = run(shadowed ? 'y\ny\n' : '', {
+          PATH: `${wrapperDir}:${tools}`, FAKE_CHECK_INSTALL_CWD: '1',
+          FAKE_SYSTEM_GIT: path.join(root, 'absent-system-git'),
+        });
+        assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+        assert.include(readLog(), 'ballin:backup open');
+        if (beforeRetry !== null) assert.equal(fs.readFileSync(profile, 'utf8'), beforeRetry);
+        assert.deepEqual(fs.readFileSync(wrapper), original);
+        assert.equal(fs.statSync(wrapper).mode, wrapperMode);
+      });
+    }
+  }
+  for (const prefix of ['', 'relative-prefix', '/invalid:prefix', '/invalid\nprefix']) {
+    it(`rejects a newly exposed Homebrew prefix ${JSON.stringify(prefix)} before profile or auth`, () => {
+      const localBin = path.join(home, '.local/bin');
+      fs.mkdirSync(localBin, { recursive: true });
+      linkFake('brew', localBin);
+      const profile = path.join(home, '.zshrc');
+      fs.writeFileSync(profile, '# Existing settings\n', { mode: 0o640 });
+      const before = fs.statSync(profile);
+      const result = run('', { FAKE_BREW_PREFIX: prefix });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(fs.readFileSync(profile, 'utf8'), '# Existing settings\n');
+      assert.equal(fs.statSync(profile).ino, before.ino);
+      assert.equal(fs.statSync(profile).mode, before.mode);
+      for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+    });
+  }
+  it('keeps newly exposed Homebrew stable through the core handoff and fresh shells', () => {
+    const localBin = path.join(home, '.local/bin');
+    const prefix = path.join(root, 'homebrew');
+    fs.mkdirSync(localBin, { recursive: true });
+    linkFake('brew', localBin);
+    const coreRepo = path.join(root, 'core-repo');
+    fs.mkdirSync(path.join(coreRepo, 'config'), { recursive: true });
+    fs.mkdirSync(path.join(coreRepo, 'bin'));
+    fs.writeFileSync(path.join(coreRepo, 'config/.defaultConfig.json'), '{"backup":{}}\n');
+    fs.writeFileSync(path.join(coreRepo, 'bin/ballin'), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+    const core = path.join(root, 'core-handoff');
+    fs.writeFileSync(core, '#!/bin/bash\nexec "$TEST_NODE_RUNTIME" "$FAKE_SETUP_SOURCE" setup "$FAKE_CORE_REPO" https://example.test/docs "" refresh\n');
+    const overrides = { FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: core, FAKE_CORE_REPO: coreRepo,
+      FAKE_SETUP_SOURCE: path.resolve(__dirname, '../commands/install_setup.ts') };
+    const result = run('y\n', overrides);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.isTrue(fs.lstatSync(path.join(prefix, 'bin/ballin')).isSymbolicLink());
+    fs.unlinkSync(path.join(coreRepo, 'ballin.config.json'));
+    const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; bash "$FAKE_CORE_INSTALL_SOURCE"'], {
+      encoding: 'utf8', cwd: root,
+      env: testChildEnvironment({ HOME: home, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log,
+        TEST_NODE_RUNTIME: process.execPath, ...overrides }),
+    });
+    assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+    assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), localBin + ':' + path.join(prefix, 'bin'));
+    for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:backup']) assert.notInclude(readLog(), forbidden);
+  });
+  for (const name of ['node', 'git', 'gh']) {
     for (const spelling of ['relative-tools', '.', '']) {
       it('reuses ' + name + ' from a relative PATH entry ' + JSON.stringify(spelling) + ' across installer cwd changes', () => {
         const relativeBin = spelling === 'relative-tools' ? path.join(home, spelling) : home;

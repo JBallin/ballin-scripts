@@ -159,7 +159,7 @@ Apple signature and publisher are also checked before requesting admin access.
 Aliases of Apple's Git stub are identified by file identity and are not probed
 until Command Line Tools are available.
 
-The helper keeps Git and GitHub CLI links in its own `bin/` directory and shows
+The helper normally keeps Git and GitHub CLI links in its own `bin/` directory and shows
 one PATH line before asking to add it to the selected shell startup file. A
 compatible Node that already wins PATH stays under its existing version manager,
 including npm, so later default changes still take effect. Otherwise, the helper
@@ -170,7 +170,13 @@ Node that wins PATH removes the fallback links.
 Alternate spellings or symlink aliases of the
 managed directory, and executable symlinks through its Node link, are still
 treated as the fallback. The Ballin command directory is appended to preserve
-existing tool priority.
+existing tool priority. Before startup-file changes or authentication, the helper
+checks that the selected tools work through this PATH. A wrapper that needs its
+original location keeps that invocation when it already wins the remaining PATH;
+otherwise setup stops and asks you to put its directory first before retrying.
+If adding the command directory reveals Homebrew, the helper includes both that
+directory and Homebrew's command directory in the displayed PATH line so the core
+installer and new terminals use the same destination.
 If Homebrew returns a successful but empty prefix, the helper stops before PATH
 setup or Ballin installation. Inspect and fix `brew --prefix`, then retry.
 
