@@ -402,7 +402,7 @@ configure_path() {
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true
+  local managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -428,6 +428,12 @@ main() {
     [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $quick_bin."
     new_quick_root=false
   fi
+  # Refuse managed-slot conflicts before discovery can execute them.
+  for managed_tool in node npm git gh; do
+    if [[ -e "$quick_bin/$managed_tool" && ! -L "$quick_bin/$managed_tool" ]]; then
+      fail "Refusing to replace an existing file at $quick_bin/$managed_tool."
+    fi
+  done
   path_node=$(tool_on_path node)
   node_tool=$(find_node "$(tool_on_path node node_compatible)")
   gh_tool=$(find_gh)

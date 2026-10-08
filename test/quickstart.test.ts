@@ -234,6 +234,52 @@ esac
     for (const unexpected of ['sudo:', 'xcode-select:--install', 'releases/latest', 'ballin:update', 'brew:']) assert.notInclude(readLog(), unexpected);
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
   });
+  for (const name of ['node', 'npm', 'git', 'gh']) {
+    for (const kind of ['executable', 'file', 'directory']) {
+      it(`rejects managed ${name} ${kind} in slot preflight before tool probes`, () => {
+        assert.equal(run().status, 0);
+        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+        const target = path.join(quickBin, name);
+        fs.rmSync(target, { force: true });
+        if (kind === 'directory') fs.mkdirSync(target);
+        const content = kind === 'directory' ? path.join(target, 'keep') : target;
+        const bytes = '#!/bin/bash\nprintf "executed\\n" > "$FAKE_ROOT/conflict-ran"\nexit 1\n';
+        fs.writeFileSync(content, bytes, { mode: kind === 'executable' ? 0o755 : 0o640 });
+        const before = fs.lstatSync(target);
+        const profile = fs.readFileSync(path.join(home, '.zshrc'));
+        if (name !== 'npm') fs.unlinkSync(path.join(tools, name));
+        fs.writeFileSync(log, '');
+
+        const result = run();
+
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, `Refusing to replace an existing file at ${target}.`);
+        assert.isFalse(fs.existsSync(path.join(root, 'conflict-ran')));
+        assert.equal(fs.lstatSync(target).ino, before.ino);
+        assert.equal(fs.lstatSync(target).mode, before.mode);
+        assert.equal(fs.readFileSync(content, 'utf8'), bytes);
+        assert.deepEqual(fs.readFileSync(path.join(home, '.zshrc')), profile);
+        for (const forbidden of ['node:', 'npm:', 'git:', 'gh:', 'curl:', 'sudo:', 'install.sh:', 'ballin:']) {
+          assert.notInclude(readLog(), forbidden);
+        }
+      });
+    }
+    it(`allows a dangling managed ${name} symlink through slot preflight on rerun`, () => {
+      assert.equal(run().status, 0);
+      const target = path.join(home, '.local/share/ballin-quickstart/bin', name);
+      fs.rmSync(target, { force: true });
+      const missing = path.join(root, 'missing-' + name);
+      fs.symlinkSync(missing, target);
+      fs.writeFileSync(log, '');
+
+      const result = run();
+
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.isFalse(fs.existsSync(missing));
+      assert.notInclude(result.stderr, 'Refusing to replace');
+      assert.include(readLog(), 'ballin:backup open');
+    });
+  }
   for (const name of ['node', 'git', 'gh']) {
     for (const shadowed of [false, true]) {
       it(`qualifies sibling-relative ${name} wrappers at the final handoff (shadowed: ${shadowed})`, () => {
