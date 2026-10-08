@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
 describe('beginner quickstart bootstrap', function() {
@@ -28,7 +28,7 @@ describe('beginner quickstart bootstrap', function() {
       }),
     });
   };
-  const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}, cwd = home, beforeMain = '') => {
+  const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}, cwd = home, beforeMain = '', backupInput = 'y\n') => {
     const shell = overrides.SHELL ?? '/bin/zsh';
     const target = overrides.FAKE_PROFILE_TARGET ?? (shell.endsWith('bash') ? 'login' : overrides.ZDOTDIR ?? 'home');
     const selection = fs.existsSync(shell) && ['bash', 'zsh'].includes(path.basename(shell)) ? target + '\n' : '';
@@ -48,7 +48,7 @@ ${beforeMain}
 trap cleanup EXIT
 main
 `], {
-    encoding: 'utf8', input: answers.join('\n'), cwd, timeout: 12000,
+    encoding: 'utf8', input: answers.join('\n') + backupInput, cwd, timeout: 12000,
     env: testChildEnvironment({
       HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
       FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source,
@@ -202,7 +202,8 @@ case "$name" in
     case "$*" in
       'backup setup')
         printf 'Native backup setup prompt: '; IFS= read -r answer
-        [[ "$answer" == y ]] || exit 1
+        [[ "\${FAKE_SETUP_FAIL:-0}" != 1 ]] || exit 1
+        [[ "$answer" == y ]] || exit 0
         printf '{"backup":{"repository":true}}\\n' > "$HOME/.ballin-scripts/ballin.config.json" ;;
       backup)
         [[ "\${FAKE_BACKUP_FAIL:-0}" != 1 ]] || exit 1
@@ -333,7 +334,7 @@ esac
         'export -f brew',
         '/bin/bash -c \'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main\'',
       ].join('\n')], {
-        encoding: 'utf8', input: 'home\ny\ny\n', cwd: home, timeout: 12000,
+        encoding: 'utf8', input: 'home\ny\ny\n\n', cwd: home, timeout: 12000,
         env: testChildEnvironment({
           HOME: home, PATH: `${brewTools}:${tools}`, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
           FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source, FAKE_SYSTEM_NODE: systemNode,
@@ -933,13 +934,93 @@ esac
     assert.notInclude(readLog(), 'sudo:');
     assert.notInclude(readLog(), '/node-v24.11.0.pkg -o');
   });
-  it('offers setup only for an existing unconfigured installation', () => {
-    assert.equal(run('y\ny\n', { FAKE_SKIP_BACKUP: '1' }).status, 1);
-    assert.notInclude(readLog(), 'ballin:backup setup');
-    const result = run('y\n');
+  for (const answer of ['\n', 'y\n', 'Y\n']) {
+    it(`captures and opens after first-backup acceptance ${JSON.stringify(answer)}`, () => {
+      const result = run('y\ny\n', {}, home, '', answer);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Run your first backup and open its GitHub destination? [Y/n]');
+      assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+    });
+  }
+  for (const configured of [true, false]) {
+    for (const answer of ['n\n', 'N\n']) {
+      it(`finishes installation without backup or open after ${answer.trim()} with configured backup ${configured}`, () => {
+        const result = run('y\ny\n', { FAKE_SKIP_BACKUP: configured ? '0' : '1' }, home, '', answer);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.isTrue(fs.existsSync(path.join(home, '.ballin-scripts/bin/ballin')));
+        assert.isTrue(fs.existsSync(path.join(home, '.ballin-scripts/ballin.config.json')));
+        assert.notInclude(readLog(), 'ballin:');
+        assert.notInclude(result.stderr, 'not configured');
+      });
+    }
+  }
+  for (const input of ['', 'y', 'maybe\n']) {
+    it(`does not accept first-backup input ending at EOF ${JSON.stringify(input)}`, () => {
+      const result = run('y\ny\n', {}, home, '', input);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'First backup cancelled; Ballin remains installed.');
+      assert.notInclude(readLog(), 'ballin:');
+    });
+  }
+  it('repeats the first-backup prompt for an invalid answer without accepting it', () => {
+    const result = run('y\ny\n', {}, home, '', 'maybe\nn\n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(readLog().split('ballin:backup setup').length - 1, 1);
-    assert.include(readLog(), 'ballin:backup\nballin:backup open');
+    assert.include(result.stdout, 'Please enter y or n.');
+    assert.equal(result.stdout.split('Run your first backup and open its GitHub destination?').length - 1, 2);
+    assert.notInclude(readLog(), 'ballin:');
+  });
+  it('stops after SIGINT at the first-backup prompt without capture or open', async () => {
+    const child = spawn('/bin/bash', ['-c', 'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; trap "exit 130" INT; main'], {
+      cwd: home,
+      env: testChildEnvironment({ HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
+        FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source,
+        FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath }),
+    });
+    let output = '';
+    let interrupted = false;
+    child.stdout.on('data', (data: Buffer) => {
+      output += data.toString();
+      if (!interrupted && output.includes('Run your first backup and open its GitHub destination? [Y/n]')) {
+        interrupted = true;
+        child.kill('SIGINT');
+      }
+    });
+    child.stderr.on('data', (data: Buffer) => { output += data.toString(); });
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 8000);
+    child.stdin.write('home\ny\ny\n');
+    try {
+      const status = await new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', (code: number | null) => resolve(code));
+      });
+      assert.isTrue(interrupted, output);
+      assert.equal(status, 130, output);
+      assert.notInclude(readLog(), 'ballin:');
+    } finally { clearTimeout(timeout); }
+  });
+  for (const existing of [false, true]) {
+    for (const setupAnswer of ['y\n', 'n\n']) {
+      it(`preserves normal backup setup ${setupAnswer.trim()} after first-backup acceptance for ${existing ? 'existing' : 'fresh'} unconfigured installs`, () => {
+        if (existing) assert.equal(run('y\ny\n', { FAKE_SKIP_BACKUP: '1' }, home, '', 'n\n').status, 0);
+        fs.writeFileSync(log, '');
+        const result = run(existing ? '' : 'y\ny\n', { FAKE_SKIP_BACKUP: '1' }, home, '', '\n' + setupAnswer);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(readLog().split('ballin:backup setup').length - 1, 1);
+        if (setupAnswer === 'y\n') assert.include(readLog(), 'ballin:backup\nballin:backup open');
+        else {
+          assert.notInclude(readLog(), 'ballin:backup\n');
+          assert.notInclude(readLog(), 'ballin:backup open');
+          assert.notInclude(result.stderr, 'not configured');
+        }
+      });
+    }
+  }
+  it('stops capture and open when accepted backup setup fails', () => {
+    const result = run('y\ny\n', { FAKE_SKIP_BACKUP: '1', FAKE_SETUP_FAIL: '1' }, home, '', '\ny\n');
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(readLog(), 'ballin:backup setup');
+    assert.notInclude(readLog(), 'ballin:backup\n');
+    assert.notInclude(readLog(), 'ballin:backup open');
   });
   for (const flag of ['FAKE_DOWNLOAD_FAIL', 'FAKE_INSTALL_FAIL', 'FAKE_BACKUP_FAIL']) {
     it(`never opens a browser after ${flag}`, () => {
@@ -1267,6 +1348,53 @@ confirm() {
 describe('quickstart with the real guarded onboarding sandbox', function() {
   this.timeout(120000);
   const { createSandbox, cleanupSandbox, runSandbox, sandboxEnvironment } = require('./helpers/onboarding.ts');
+  for (const choice of ['skip', 'setup-declined', 'capture', 'setup-cancelled', 'eof']) {
+    it(`preserves core setup confirmations after its default decline and first-backup choice ${choice}`, () => {
+      const sandbox = createSandbox({ quickstart: true });
+      try {
+        const answers = {
+          skip: 'n\n',
+          'setup-declined': '\nn\n',
+          capture: '\ny\ncreate\n\nn\ny\nn\n',
+          'setup-cancelled': '\ny\ncreate\n\nn\nn\n',
+          eof: '',
+        }[choice];
+        const result = runSandbox(sandbox, ['quickstart'], 'login\ny\ny\nn\nlogin\nn\n\n' + answers);
+        assert.equal(result.status, ['setup-cancelled', 'eof'].includes(choice) ? 1 : 0, result.stdout + result.stderr);
+        assert.include(result.stdout, 'Run your first backup and open its GitHub destination? [Y/n]');
+        assert.include(result.stdout, 'Backup setup skipped.');
+        const setupCount = result.stdout.split('Set up optional private backups now? [y/N]').length - 1;
+        assert.equal(setupCount, ['skip', 'eof'].includes(choice) ? 1 : 2, result.stdout);
+        assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
+        const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
+        const state = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
+        const publishes = state.requests.filter((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish'));
+        const opens = state.requests.filter((request: { endpoint?: string }) => request.endpoint === 'open');
+        if (choice === 'capture') {
+          assert.include(result.stdout, 'Selected GitHub.com account:');
+          assert.include(result.stdout, 'Confirm this destination and source selection? [y/N]');
+          assert.equal(config.backup.includeSensitive, 'false');
+          assert.equal(config.update.backup, 'false');
+          assert.deepEqual(publishes.map((request: { payload: { variables: { input: { message: { headline: string } } } } }) =>
+            request.payload.variables.input.message.headline), ['Initialize Ballin backup', 'Update Ballin backup']);
+          assert.lengthOf(opens, 1);
+          assert.isAbove(state.requests.indexOf(opens[0]), state.requests.indexOf(publishes[1]));
+          const retry = runSandbox(sandbox, ['quickstart'], 'login\nn\n');
+          assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+          const after = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
+          assert.lengthOf(after.requests.filter((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish')), 2);
+          assert.lengthOf(after.requests.filter((request: { endpoint?: string }) => request.endpoint === 'open'), 1);
+        } else {
+          assert.isUndefined(config.backup.repository);
+          assert.isEmpty(publishes);
+          assert.isEmpty(opens);
+          assert.notInclude(result.stderr, 'backup is not configured');
+          if (choice === 'setup-cancelled') assert.include(result.stdout, 'Backup setup cancelled;');
+          if (choice === 'eof') assert.include(result.stderr, 'First backup cancelled; Ballin remains installed.');
+        }
+      } finally { cleanupSandbox(sandbox.root); }
+    });
+  }
   it('keeps network, child-command, download, and mode restrictions in quickstart sandbox mode', () => {
     const sandbox = createSandbox({ quickstart: true });
     try {
@@ -1291,7 +1419,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
     try {
       const profile = path.join(sandbox.home, '.bash_profile');
       fs.writeFileSync(profile, '# Synthetic Bash login settings\n', { mode: 0o640 });
-      const result = runSandbox(sandbox, ['quickstart'], 'login\ny\ny\nn\nlogin\ny\ny\ncreate\n\ny\ny\nn\n');
+      const result = runSandbox(sandbox, ['quickstart'], 'login\ny\ny\nn\nlogin\ny\ny\ncreate\n\ny\ny\nn\n\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, `PATH line added to ${profile}; open a new Terminal.`);
       assert.include(result.stdout, 'Shell completion enabled.');
@@ -1318,7 +1446,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.include(fresh.stdout, '.local/share/ballin-quickstart/bin/git');
       assert.include(fresh.stdout, '.local/share/ballin-quickstart/bin/gh');
       assert.include(fresh.stdout, 'complete -F _ballin_completion ballin');
-      const retry = runSandbox(sandbox, ['quickstart'], 'login\n');
+      const retry = runSandbox(sandbox, ['quickstart'], 'login\n\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
       assert.include(retry.stdout, 'PATH line already present');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);

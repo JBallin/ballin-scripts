@@ -204,10 +204,13 @@ browser login flow. If `GH_TOKEN` or `GITHUB_TOKEN` prevents login, GitHub CLI
 names the variable and tells you to clear it. Review and correct or remove your
 exported credential before retrying; the helper does not change it or switch
 accounts. Authentication must succeed before the core installer runs. The helper
-then runs the core installer, captures a backup, and opens it only after a
-successful capture.
-Rerunning reuses available tools and revalidates an existing backup; an
-unconfigured existing installation is offered backup setup once.
+then runs the core installer and asks whether to run the first backup and open
+its GitHub destination. Press Enter or enter `y` to accept both actions, or `n`
+to finish installation without either. End-of-input cancels instead of accepting.
+If accepted, an unconfigured installation receives the normal backup setup
+prompts. Declining that setup leaves Ballin installed without capturing or
+opening a backup. The destination opens only after successful capture.
+Rerunning reuses available tools and revalidates an existing backup.
 
 `ballin uninstall` leaves these prerequisites, helper files, and the confirmed
 PATH line in place. Installation or login cancellation can leave completed

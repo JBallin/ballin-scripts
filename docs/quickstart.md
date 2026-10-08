@@ -25,5 +25,7 @@ GitHub and authorized accounts can read the contents.
 [Review the source list](backup-sources.md) before choosing **yes**;
 choose **no** if unsure.
 
-After setup, the helper captures your first backup and opens its private GitHub
-page only if the backup succeeds. Inspect the saved files there.
+After setup, press Enter to run your first backup and open its GitHub destination,
+or enter `n` to finish without either action. If backup setup is still needed,
+follow its prompts. The page opens only after a successful backup; inspect the
+saved files there.

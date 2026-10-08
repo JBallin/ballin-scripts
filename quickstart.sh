@@ -26,6 +26,27 @@ confirm() {
   [[ "$answer" == y || "$answer" == Y ]]
 }
 
+confirm_first_backup() {
+  local answer
+  while :; do
+    printf '\nRun your first backup and open its GitHub destination? [Y/n] '
+    IFS= read -r answer || fail 'First backup cancelled; Ballin remains installed.'
+    case "$answer" in
+      ''|y|Y) return 0 ;;
+      n|N) return 1 ;;
+      *) printf 'Please enter y or n.\n' ;;
+    esac
+  done
+}
+
+backup_destination_kind() {
+  "$node_tool" -e '
+    const root = process.argv[1];
+    const config = JSON.parse(require("fs").readFileSync(root + "/ballin.config.json", "utf8"));
+    process.stdout.write(require(root + "/commands/backup_config.ts").configuredBackupDestination(config).kind);
+  ' "$1"
+}
+
 download() {
   local options=(-fsSL)
   [[ "${3:-}" != progress ]] || options=(-fL --progress-bar)
@@ -348,7 +369,7 @@ configure_path() {
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh fresh repo path_node brew_tool brew_prefix
+  local os_version major minor machine git_tool need_git need_node need_gh repo path_node brew_tool brew_prefix destination
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -424,17 +445,15 @@ main() {
   "$gh_tool" auth status --active --hostname github.com \
     || "$gh_tool" auth login --hostname github.com --git-protocol https --web
   repo="$HOME/.ballin-scripts"
-  fresh=false
-  [[ -d "$repo" && -f "$repo/ballin.config.json" ]] || fresh=true
   download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh' "$scratch/install.sh"
   bash "$scratch/install.sh"
   [[ -x "$repo/bin/ballin" ]] || return 0
-  if [[ "$fresh" == false ]] && [[ "$("$node_tool" -e '
-    const root = process.argv[1];
-    const config = JSON.parse(require("fs").readFileSync(root + "/ballin.config.json", "utf8"));
-    process.stdout.write(require(root + "/commands/backup_config.ts").configuredBackupDestination(config).kind);
-  ' "$repo")" == unconfigured ]]; then
+  confirm_first_backup || return 0
+  destination=$(backup_destination_kind "$repo")
+  if [[ "$destination" == unconfigured ]]; then
     "$repo/bin/ballin" backup setup
+    destination=$(backup_destination_kind "$repo")
+    [[ "$destination" != unconfigured ]] || return 0
   fi
   "$repo/bin/ballin" backup && "$repo/bin/ballin" backup open
 }
