@@ -409,7 +409,7 @@ main() {
     "$need_node" && printf ' Node.js 24 and npm (official macOS package);'
     "$need_gh" && printf ' GitHub CLI (official release);'
     printf '\n'
-    "$need_node" && printf 'The Node.js package writes to /usr/local and may replace existing Node.js/npm there.\n'
+    "$need_node" && printf 'The Node.js package writes to /usr/local and may replace existing Node.js/npm there. Installation may ask for your Mac password.\n'
     "$need_gh" && printf 'GitHub CLI will be installed in %s.\n' "$quick_root"
     confirm 'Install these prerequisites?' || return 0
   fi

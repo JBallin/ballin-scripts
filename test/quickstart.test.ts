@@ -1016,6 +1016,29 @@ esac
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
   }
+  for (const needsNode of [true, false]) {
+    it(`shows the password notice before consent only when Node installation is needed: ${needsNode}`, () => {
+      fs.unlinkSync(path.join(tools, 'gh'));
+      const result = run('n\n', { FAKE_OLD_NODE: needsNode ? '1' : '0' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const consent = result.stdout.indexOf('Install these prerequisites?');
+      assert.isAtLeast(consent, 0);
+      const notice = 'Installation may ask for your Mac password.';
+      if (needsNode) {
+        const warning = result.stdout.indexOf(notice);
+        assert.isAtLeast(warning, 0);
+        assert.isBelow(warning, consent);
+        assert.include(result.stdout, 'may replace existing Node.js/npm there.');
+      } else {
+        assert.notInclude(result.stdout, notice);
+      }
+      for (const forbidden of ['sudo:', 'xcode-select:--install', 'curl:', 'auth status', 'install.sh:', 'ballin:']) {
+        assert.notInclude(readLog(), forbidden);
+      }
+      assert.isFalse(fs.existsSync(path.join(home, '.local')));
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
   it('reuses compatible system Node when an older Node shadows it', () => {
     linkFake('node', systemNode);
     const result = run('y\ny\n', { FAKE_OLD_NODE: '1' });

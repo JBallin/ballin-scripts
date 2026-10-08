@@ -134,10 +134,14 @@ that line manually with the displayed command using LF line endings.
 
 ### Quickstart helper
 
+The helper reuses Git, compatible Node.js, and GitHub CLI, asking before
+installing missing tools or changing your Terminal startup file. Node's
+installer may replace Node.js/npm in `/usr/local` and ask for your Mac password.
+
 The optional [beginner quickstart](quickstart.md) runs `quickstart.sh` before the
 core installer. It requires macOS 13.5 or newer and zsh or Bash, selects the
 GitHub CLI download for the running shell's architecture (including Intel under
-Rosetta), and reuses compatible installed tools. Homebrew is not required.
+Rosetta). Homebrew is not required.
 The pasted command waits for the helper download to finish successfully before
 running it, leaving Terminal input available for prompts.
 Relative and empty PATH entries are resolved against the current directory for
@@ -147,8 +151,7 @@ changes. A current directory containing a colon requires absolute PATH entries.
 When prerequisites are missing, the helper asks before starting Apple's Command
 Line Tools installation for Git, installing the latest Node.js 24 macOS package
 with `sudo installer`, or downloading GitHub CLI into
-`~/.local/share/ballin-quickstart/`. The Node package writes to `/usr/local` and
-may replace an existing Node.js/npm installation there. Downloads come from
+`~/.local/share/ballin-quickstart/`. Downloads come from
 [Node.js](https://nodejs.org/dist/latest-v24.x/) and
 [GitHub CLI releases](https://github.com/cli/cli/releases); published SHA-256
 checksums are checked before installing or extracting them. The Node package's
