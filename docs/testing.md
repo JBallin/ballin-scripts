@@ -257,7 +257,8 @@ choices from the behavior and guards in each case.
 | Selected installer, analytics, backup and update cases | 5s | Coherent process workflows, concurrent repair, or bounded sender failures |
 | Update interruption cases | 8s | Readiness handshake and a separate 5s child-process watchdog |
 | Repository lifecycle and nested-update backup | 15s | Multiple real CLI and fixture processes within one workflow |
-| Native Tab-completion cases | 20s | Isolated interactive shell and terminal subprocesses |
+| Local snapshot budget cases | 30s | Capture size, recursive entry limits, and cache comparisons |
+| Selected shell completion cases | 10s, 20s, 30s or 60s | Isolated shell and terminal subprocesses across completion scenarios |
 | Onboarding sandbox and walkthroughs | 300s | Outer allowance for multi-step command and process-group cleanup guards |
 
 Process-heavy integration workflows can need scoped headroom beyond the default.
