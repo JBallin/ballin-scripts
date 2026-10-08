@@ -24,6 +24,8 @@ process.once('exit', cleanup);
 
 exports.mochaHooks = {
   afterAll() {
+    // Reused parallel workers keep their isolated config until process exit.
+    if (process.env.MOCHA_WORKER_ID !== undefined) return;
     cleanup();
     process.removeListener('exit', cleanup);
     restoreEnvironment();

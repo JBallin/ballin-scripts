@@ -5,7 +5,8 @@
 ## What will analytics share?
 
 If you opt in, Ballin reports top-level command usage and results, real backup
-results, and automatic backup and self-update results during `ballin update`.
+results (including coarse categories for failed backups), and automatic backup
+and self-update results during `ballin update`.
 Backup contents, destination identities, and configuration values are not sent.
 Reports use a random installation ID stored locally. See
 [what is sent](#what-is-sent) for payload fields,
@@ -112,23 +113,33 @@ Setup, read, open, disconnect, help, invalid arguments, and other paths that do
 not execute a real backup send no behavioral event. Direct doctor and self-update
 send no behavioral event either.
 
-The schema-v2 payload contains exactly these five fields:
+Real backup outcomes use schema v3. Failed backups include one coarse category:
+`transport`, `authentication`, `reconciliation`, `local_state`, or `unknown`.
+Successful backups omit the category. Ballin sends a category only after
+readback, recovery, and cleanup; it uses `unknown` for ambiguous or competing
+failures. A recovered publication remains successful, while required cache or
+cleanup failure makes the operation fail. Categories suggest investigations;
+they do not identify a specific bug or prove a root cause.
+
+For example, a failed backup can send:
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "installId": "826f9faa-9995-4f66-a01b-73b4f7aebdf1",
   "dateBucket": "2026-09-19",
   "event": "backup.run",
-  "status": "success"
+  "status": "failure",
+  "failureCategory": "transport"
 }
 ```
 
-Only the three event names above and `success` / `failure` are allowed.
+Automatic-update parent outcomes retain schema v2 with the same five base
+fields, without `failureCategory`. Older backup outcomes also used v2.
 `dateBucket` is the UTC date of the terminal outcome, not a precise timestamp.
 Behavioral sends require an existing valid install ID and do not create one.
-They contain no command name, duration, app/runtime/OS version, caller, backup
-status details, or other dimensions.
+They contain no command name, duration, app/runtime/OS version, caller, raw
+error, source name, destination, or configuration values.
 
 An automatic backup can send both child `backup.run` and parent `update.backup`;
 these intentionally answer different questions. They cannot be matched or
@@ -160,8 +171,9 @@ to measure install activity. Command and runtime counts are stored separately
 without installation IDs.
 
 Behavioral storage contains only UTC date, event name, terminal status, and
-count. Neither raw nor hashed installation identity is retained with these
-outcomes, and they do not add to command, runtime, or observed-install counts.
+count, plus separate daily backup failure category counts. Neither raw nor hashed
+installation identity is retained with these outcomes, and they do not add to
+command, runtime, or observed-install counts.
 They cannot establish unique-install adoption, first/repeat backup, feature
 retention, or user percentages.
 
