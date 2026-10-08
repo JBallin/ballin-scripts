@@ -121,7 +121,7 @@ describe('analytics D1 report', () => {
     });
 
     assert.include(output, 'Analytics report (2026-06-01 to 2026-06-03)');
-    assert.include(output, 'Caveat: analytics are public client telemetry; aggregate counts are directional and not security-trustworthy.');
+    assert.include(output, 'Caveat: observed opt-in, best-effort public telemetry is incomplete, directional and not security-trustworthy.');
     assert.include(output, '2026-06-02  0');
     assert.include(output, 'ballin update  5      3        1        1        20.0%');
     assert.include(output, '2026-06-01  1.0.0        24          26.6           5');
@@ -131,11 +131,11 @@ describe('analytics D1 report', () => {
     assert.match(behaviorSection, /update\.self-update\s+4\s+4\s+0\s+0\.0%/);
     assert.notInclude(behaviorSection, 'unknown');
     assert.notMatch(behaviorSection, /^total\s/mu);
-    assert.include(behaviorSection, 'backup.run and update.backup intentionally overlap: do not sum or subtract them, or divide by command counts');
-    assert.include(behaviorSection, 'Independent delivery loss, interruption, mixed client versions and adjacent UTC dates prevent matching');
-    assert.include(behaviorSection, 'launch failure may produce only a parent stage outcome');
-    assert.include(behaviorSection, 'not unique-install adoption, first/repeat backup, retention or user percentages');
-    assert.include(behaviorSection, 'Selective participation and spoofable public events');
+    assert.include(behaviorSection, 'Parent/child backup outcomes overlap (backup.run and update.backup); do not sum as unique backups, subtract for direct volume, or divide by command counts for exact coverage.');
+    assert.include(output, 'Counts do not establish root causes, population adoption or failure rates.');
+    assert.include(output, 'Guide: docs/analytics-backend.md');
+    assert.equal(output.match(/best-effort/g)?.length, 1);
+    assert.notInclude(output, 'Independent delivery loss');
   });
 
   it('prints clear empty states for sparse aggregate data', () => {
@@ -154,6 +154,27 @@ describe('analytics D1 report', () => {
     assert.include(output, 'No command events found for this range.');
     assert.include(output, 'No runtime/version events found for this range.');
     assert.include(output, 'No behavioral outcomes found for this range.');
+    assert.include(output, 'No backup failures found for this range.');
+    assert.include(output, 'Category-schema coverage: 0/0 (0.0%); identified-family coverage: 0/0 (0.0%).');
+    assert.include(output, 'observed opt-in, best-effort public telemetry is incomplete');
+    assert.include(output, 'Counts do not establish root causes, population adoption or failure rates.');
+    assert.include(output, 'do not sum as unique backups');
+    assert.include(output, 'legacy_uncategorized: older outcomes without categories; unknown: new outcomes without reliable single-family evidence.');
+    assert.include(output, 'Guide: docs/analytics-backend.md');
+  });
+
+  it('retains every failure category and both coverage measures in the compact view', () => {
+    const categories = ['transport', 'authentication', 'reconciliation', 'local_state', 'unknown', 'legacy_uncategorized'];
+    const output = renderReport({
+      activeInstalls: [], behaviorOutcomes: [], commandStatus: [], runtimeTrends: [],
+      backupFailures: categories.map((category, index) => ({ category, failures: index + 1 })),
+    }, { database: defaultDatabase, from: '2026-06-01', to: '2026-06-01' });
+    const categorySection = output.split('Backup failure categories (backup.run only)\n')[1]
+      .split('\nRuntime/version trends')[0];
+    categories.forEach((category, index) => {
+      assert.match(categorySection, new RegExp(`^${category}\\s+${index + 1}$`, 'mu'));
+    });
+    assert.include(categorySection, 'Category-schema coverage: 15/21 (71.4%); identified-family coverage: 10/21 (47.6%).');
   });
 
   it('normalizes malformed aggregate values without misreporting failures', () => {
@@ -234,7 +255,7 @@ describe('analytics D1 report', () => {
       ]);
       const report = generateReport(options, (sql: string) => database.prepare(sql).all());
       assert.include(report, 'Category-schema coverage: 6/10 (60.0%); identified-family coverage: 4/10 (40.0%).');
-      assert.include(report, 'unknown means a new outcome lacked reliable single-family evidence');
+      assert.include(report, 'unknown: new outcomes without reliable single-family evidence');
       const legacyOptions = { ...options, from: '2026-07-01', to: '2026-07-02' };
       assert.deepEqual(database.prepare(loadReportQueries(legacyOptions).backupFailures).all(), []);
       database.exec("INSERT INTO behavior_events_daily VALUES ('2026-07-01', 'backup.run', 'failure', 5)");

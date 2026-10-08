@@ -53,7 +53,11 @@ const usage = [
   '',
   'Prints a read-only production D1 report from the existing analytics aggregates.',
 ].join('\n');
-const publicTelemetryCaveat = 'Caveat: analytics are public client telemetry; aggregate counts are directional and not security-trustworthy.';
+const publicTelemetryCaveat = [
+  'Caveat: observed opt-in, best-effort public telemetry is incomplete, directional and not security-trustworthy.',
+  'Counts do not establish root causes, population adoption or failure rates.',
+  'Guide: docs/analytics-backend.md (Interpreting Behavioral Outcomes; Backup Failure Categories).',
+].join('\n');
 
 const dateBucket = (date: Date): string => date.toISOString().slice(0, 10);
 
@@ -379,9 +383,7 @@ const formatBehaviorOutcomes = (rows: D1Row[]): string => {
   return [
     'Behavioral outcomes',
     outcomes,
-    'backup.run and update.backup intentionally overlap: do not sum or subtract them, or divide by command counts, to infer backup volume or exact execution coverage.',
-    'Independent delivery loss, interruption, mixed client versions and adjacent UTC dates prevent matching; launch failure may produce only a parent stage outcome.',
-    'These are observed operations, not unique-install adoption, first/repeat backup, retention or user percentages. Selective participation and spoofable public events limit interpretation.',
+    'Parent/child backup outcomes overlap (backup.run and update.backup); do not sum as unique backups, subtract for direct volume, or divide by command counts for exact coverage.',
   ].join('\n');
 };
 
@@ -397,8 +399,7 @@ const formatBackupFailures = (rows: D1Row[]): string => {
     rows.length ? table(['category', 'failures'], rows.map((row) => [stringValue(row.category), String(numberValue(row.failures))]))
       : 'No backup failures found for this range.',
     `Category-schema coverage: ${versioned}/${total} (${percentage(versioned)}); identified-family coverage: ${known}/${total} (${percentage(known)}).`,
-    'legacy_uncategorized means older outcomes had no category; unknown means a new outcome lacked reliable single-family evidence.',
-    'These families suggest investigations, not root causes or complete population failure rates; opt-outs, interruptions and lost sends remain blind spots.',
+    'legacy_uncategorized: older outcomes without categories; unknown: new outcomes without reliable single-family evidence.',
   ].join('\n');
 };
 
