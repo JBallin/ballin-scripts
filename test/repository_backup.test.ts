@@ -2330,6 +2330,30 @@ describe('repository backup lifecycle', function() {
       assertOutcome('failure', 'local_state');
     });
 
+    for (const cleanupFailed of [false, true]) {
+      it(`preserves confirmed publication response overflow evidence (${cleanupFailed})`, () => {
+        source();
+        const overflow = `
+          const helpers = require(${JSON.stringify(path.join(repoRoot, 'commands', 'commandHelpers.ts'))});
+          const runSync = helpers.runCommand;
+          helpers.runCommand = function(command, args, options) {
+            const result = runSync.apply(this, arguments);
+            return command === 'gh' && String(options?.input).includes('mutation BallinPublish')
+              ? { ...result, error: Object.assign(new Error('DUMMY_PRIVATE_OVERFLOW'), { code: 'ENOBUFS' }) } : result;
+          };
+        `;
+        const result = observedRun(overflow + (cleanupFailed ? transportCleanupFailure('BallinPublish') : ''));
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, 'repository publication confirmed, but transport limits were exceeded');
+        assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_OVERFLOW');
+        if (cleanupFailed) assertTransportCleanupFailed(result);
+        assert.equal(remote('zshrc.sh'), 'local\n');
+        assert.lengthOf(publications(), 1);
+        assert.isUndefined(cached());
+        assertOutcome('failure', cleanupFailed ? 'local_state' : 'unknown');
+      });
+    }
+
     for (const [reason, category] of [
       ['source-limit-exceeded', 'local_state'], ['source-access-failed', 'local_state'],
       ['prerequisite-command-failed', 'unknown'],

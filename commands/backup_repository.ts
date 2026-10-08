@@ -698,13 +698,13 @@ const publish = (
       name !== repositoryReadmeFileName && !after.snapshots.get(name)?.equals(bytes)
     ))
   ) throw new RepositoryError('uncertain');
+  if (transportFailure) transportFailure.publicationConfirmed = true;
   if (transportFailure?.problem === 'resource-limit') {
     writeStderrLine('ballin backup: repository publication confirmed, but transport limits were exceeded; cache contents were not advanced');
     throw transportFailure;
   }
   if (result.cleanupFailed || transportFailure) {
     writeStderrLine('ballin backup: repository publication confirmed, but transport cleanup is incomplete; cache contents were not advanced');
-    if (transportFailure) transportFailure.publicationConfirmed = true;
     throw transportFailure ?? new RepositoryError('cleanup');
   }
   return after;
