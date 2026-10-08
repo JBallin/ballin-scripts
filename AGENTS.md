@@ -20,8 +20,17 @@
 
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
-- Run `npm test` after changes to code, config, scripts, or tests. Treat
-  `package.json` as the source of truth for what that gate includes.
+- For code, config, script, or test changes, run targeted local checks for the
+  touched behavior before publication or review. For code changes, include
+  `npm run lint` and the relevant typechecks (`npm run typecheck` and/or
+  `npm run typecheck:analytics-worker`) alongside focused tests. Follow
+  [Test runtime and timeouts](docs/testing.md#test-runtime-and-timeouts) for
+  focused commands. Rely on PR CI for the complete validation gate before merge;
+  `.github/workflows/ci.yml` defines its checks, and `package.json` defines the
+  Node validation commands. Run complete validation locally when it supplies
+  needed evidence unavailable from CI, diagnoses a material concern, or an
+  explicit instruction requires it. If required CI is still running, report it
+  as pending.
 - Report validation as passing only after the command completes successfully.
   A killed, interrupted, tool-expired, or disconnected run without a confirmed
   exit status is incomplete, even if its output includes passing tests.
@@ -29,6 +38,9 @@
   retain the command, last completed stage, and failure or interruption evidence.
 - Add focused validation when a touched risk is not covered by `npm test`;
   `.github/workflows/ci.yml` defines the additional shell and workflow checks.
+  Run extra workflow/preflight checks only for related changes. For pin-only
+  edits, prefer portable caller-contract tests locally and rely on CI for
+  tool-dependent checks; see [Pull request review](docs/testing.md#pull-request-review).
 - When changing shared validation commands, prerequisites, package metadata, or
   CI setup, review materially affected non-PR automation consumers and update
   their trigger, setup, and validation contracts as needed.
