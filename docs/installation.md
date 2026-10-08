@@ -138,6 +138,8 @@ The optional [beginner quickstart](quickstart.md) runs `quickstart.sh` before th
 core installer. It requires macOS 13.5 or newer and zsh or Bash, selects the
 GitHub CLI download for the running shell's architecture (including Intel under
 Rosetta), and reuses compatible installed tools. Homebrew is not required.
+The pasted command waits for the helper download to finish successfully before
+running it, leaving Terminal input available for prompts.
 Relative and empty PATH entries are resolved against the current directory for
 the helper and its children, preserving search order through installer directory
 changes. A current directory containing a colon requires absolute PATH entries.

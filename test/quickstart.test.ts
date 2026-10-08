@@ -160,8 +160,8 @@ case "$name" in
         cp "$FAKE_ROOT/gh.zip" "$target"; if [[ "\${FAKE_CORRUPT_GH:-0}" == 1 ]]; then printf 'corruption' >> "$target"; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)
         if [[ "$FAKE_QUICK_DOWNLOAD" == empty ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi
-        if [[ -n "$target" ]]; then cp "$FAKE_ROOT/quickstart-entrypoint" "$target"
-        else cat "$FAKE_ROOT/quickstart-entrypoint"; fi
+        if [[ -n "$target" && "$target" != - ]]; then cp "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}" "$target"
+        else cat "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}"; fi
         if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
@@ -1118,29 +1118,62 @@ esac
     assert.equal(run('y\nn\n').status, 0);
     assert.notInclude(readLog(), 'ballin:');
   });
+  it('keeps the bootstrap Node.js release line aligned with .nvmrc', () => {
+    const selectedMajor = fs.readFileSync(path.resolve(__dirname, '../.nvmrc'), 'utf8').trim();
+    assert.match(selectedMajor, /^[1-9][0-9]*$/, 'Select a deliberate Node.js major');
+    const bootstrapMajor = fs.readFileSync(source, 'utf8').match(/https:\/\/nodejs\.org\/dist\/latest-v([0-9]+)\.x\/SHASUMS256\.txt/)?.[1];
+    assert.equal(bootstrapMajor, selectedMajor);
+  });
   for (const shell of ['bash', 'zsh']) {
-    for (const failure of ['empty', 'partial', 'helper', 'mktemp', 'none']) {
+    for (const failure of ['empty', 'partial', 'helper', 'eof', 'none']) {
       it('preserves the copied command status, stdin and cleanup in ' + shell + ' after ' + failure, () => {
-        if (failure === 'mktemp') {
-          fs.unlinkSync(path.join(tools, 'mktemp'));
-          fs.writeFileSync(path.join(tools, 'mktemp'), '#!/bin/bash\nexit 73\n', { mode: 0o755 });
-        }
-        const result = runCopiedCommand(shell, 'device-code\n', {
+        const result = runCopiedCommand(shell, failure === 'eof' ? '' : 'device-code\n', {
           FAKE_QUICK_DOWNLOAD: ['empty', 'partial'].includes(failure) ? failure : 'success',
           FAKE_QUICKSTART_EXIT: failure === 'helper' ? '7' : '0',
         });
-        const expected = ['empty', 'partial'].includes(failure) ? 22 : failure === 'helper' ? 7 : failure === 'mktemp' ? 73 : 0;
+        const expected = ['empty', 'partial'].includes(failure) ? 22 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
         assert.equal(result.status, expected, result.stdout + result.stderr);
-        const executed = ['helper', 'none'].includes(failure);
+        const executed = ['helper', 'eof', 'none'].includes(failure);
         assert.equal(fs.existsSync(path.join(root, 'entrypoint-ran')), executed);
         if (executed) {
           assert.include(result.stdout, 'Native fixture prompt:');
-          assert.include(readLog(), 'downloaded-quickstart:stdin-preserved');
+          if (failure !== 'eof') assert.include(readLog(), 'downloaded-quickstart:stdin-preserved');
         } else assert.notInclude(readLog(), 'downloaded-quickstart:started');
         if (['empty', 'partial'].includes(failure)) assert.include(result.stderr, 'Fixture curl failure');
         assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
         assert.isEmpty(fs.readdirSync(home));
         for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
+      });
+    }
+    it(`preserves the actual quickstart entry guard in the copied ${shell} command`, () => {
+      const result = runCopiedCommand(shell, '', { FAKE_QUICK_SOURCE: source, FAKE_OS: 'fixture-unsupported' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'This quickstart is for macOS.');
+      assert.include(readLog(), 'uname:-s');
+      for (const forbidden of ['auth status', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+      assert.isEmpty(fs.readdirSync(home));
+    });
+    it(`does not execute a partial copied-command download with inherited options in ${shell}`, () => {
+      const result = runCopiedCommand(shell, 'device-code\n', {
+        FAKE_QUICK_DOWNLOAD: 'partial', s: 'inherited value',
+        SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail',
+      });
+      assert.equal(result.status, 22, result.stdout + result.stderr);
+      assert.notInclude(readLog(), 'downloaded-quickstart:started');
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      assert.isEmpty(fs.readdirSync(home));
+    });
+    for (const inherited of ['none', 'exported buffer', 'shell options']) {
+      it(`buffers a large copied-command download in ${shell} with ${inherited}`, () => {
+        const payload = path.join(root, 'quickstart-entrypoint');
+        fs.appendFileSync(payload, '# Large valid script content.\n'.repeat(120000));
+        const overrides = inherited === 'exported buffer' ? { s: 'inherited value' }
+          : inherited === 'shell options' ? { SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail' } : {};
+        const result = runCopiedCommand(shell, 'device-code\n', overrides);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.include(readLog(), 'downloaded-quickstart:stdin-preserved');
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        assert.isEmpty(fs.readdirSync(home));
       });
     }
   }

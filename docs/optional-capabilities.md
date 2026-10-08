@@ -93,9 +93,10 @@ With this option, Homebrew manages Node.js updates along with your other formula
 The `update.nvm` setting does not apply.
 
 You can also use the macOS `.pkg` installer from the
-[official Node.js website](https://nodejs.org/en/download). Install newer Node.js
-versions yourself; `update.nvm` does not update this installation. Review the
-[Node package's local effects](installation.md#quickstart-helper) before installing.
+[official Node.js website](https://nodejs.org/en/download). It writes to
+`/usr/local` and may replace Node.js/npm already installed there. Install updates
+to this standalone installation yourself; `update.nvm` applies only to nvm-managed
+Node.js.
 
 ## Mac App Store apps
 
