@@ -461,19 +461,16 @@ to fit. An oversized full set can prevent backup, reconnect, and readiness
 checks; owners can inspect the existing repository in GitHub and choose a new
 destination without removing the old repository or its history.
 
-Repository API stdout and stderr use bounded subprocess pipes. Request deadlines
-start at 30 seconds and add one second per 128 KiB of serialized input and
-bounded response allowance above a combined 2 MiB, capped at 15 minutes per
-request. Small control requests retain the 30-second deadline. This budget uses
-total elapsed time, so very slow transfers can still time out. Ordinary responses
-are limited to 1 MiB; tree responses to
-8 MiB and 100,000 entries. Each inspection permits at most 16 MiB of metadata
+Repository API stdout and stderr use bounded subprocess pipes. Requests use
+size-aware total deadlines, from 30 seconds for small control requests to a
+maximum of 15 minutes. Larger stalled requests can wait longer; very slow
+transfers can still time out. Ordinary responses are limited to 1 MiB; tree
+responses to 8 MiB and 100,000 entries. Each inspection permits at most 16 MiB of metadata
 responses and 128 MiB of total captured responses. Blob-response allowances
 derive from checked stored size, canonical Base64 expansion, line wrapping and
 bounded JSON overhead, up to 48 MiB. Overflow terminates the request and refuses
 the partial response before JSON parsing. Native subprocess limits may overshoot
-slightly while stopping a producer; these are byte budgets, not exact process
-memory ceilings.
+slightly while stopping a producer.
 
 Before hashing additions or allocating outer Base64, publication overlays
 changed sizes onto all retained current entries and checks the same 32/64 MiB

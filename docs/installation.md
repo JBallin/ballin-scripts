@@ -323,16 +323,6 @@ already unconfigured.
 
 ## Health and recovery
 
-Normal repository reads support up to 32 MiB per stored snapshot and 64 MiB per
-full current snapshot set. Oversized saved data is retained, but normal backup,
-reconnect, or readiness checks may refuse it. `ballin backup list` and
-`ballin backup open` validate the destination without downloading snapshots,
-so they remain available when snapshot contents exceed these limits. They still
-require readable, supported metadata. In GitHub, review the selected repository
-and download individual raw files deliberately; Ballin does not restore or
-execute them. You can choose a new backup destination while retaining the old
-repository and its history.
-
 `ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
 Configured repositories are checked for authentication, expected private identity,
 supported layout, and coherent readability. This is readiness only: it does not
@@ -361,6 +351,12 @@ raw bundle without `--list` or `--file` and pass the selected entry’s JSON-dec
 
 `--file` prints the original bytes, including binary content and line endings.
 These commands inspect saved content without restoring files or executing them.
+
+If Ballin reports a backup size or transport limit, stored data and history stay
+intact. Use `ballin backup open`, or inspect the selected repository directly in
+GitHub. You can choose a new destination while retaining the old repository. See
+[repository resource limits](backup-design.md#normal-repository-resource-limits)
+for details.
 
 For local history inspection, clone your backup repository with Git:
 

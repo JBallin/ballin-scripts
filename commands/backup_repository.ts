@@ -15,7 +15,7 @@ import type { SpawnSyncOptions } from 'child_process';
 type RepositoryProblem = 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
-  'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub.',
+  'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
   'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
   authentication: 'GitHub.com authentication is required; check the effective gh account and environment token.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',

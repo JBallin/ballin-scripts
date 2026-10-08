@@ -2176,6 +2176,9 @@ describe('repository backup lifecycle', function() {
           ? cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-input-')") : ''));
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assert.include(result.stderr, '64 MiB per full snapshot set');
+        assert.include(result.stderr, 'Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub.');
+        assert.include(result.stderr, 'Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits');
+        assert.isBelow(result.stderr.indexOf('Use ballin backup open'), result.stderr.indexOf('Details:'));
         assertOutcome('failure', 'local_state');
         assert.lengthOf(state().requests, 0);
         assert.isFalse(fs.existsSync(cache));
