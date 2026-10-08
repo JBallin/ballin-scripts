@@ -1,0 +1,169 @@
+{
+  "run": "https://github.com/JBallin/ballin-scripts/actions/runs/37620539133",
+  "cells": [
+    {
+      "cell": "01-v2415-ts",
+      "source": {
+        "path": "/evidence/cells/01-v2415-ts/fixture/backup_cache.ts",
+        "sha256": "68c8a46a2790b995c5c1a9ba510e1983714c56d93d27ca11cb2ac48278a0d4e5",
+        "bytes": 578,
+        "utf16Length": 578
+      },
+      "rawFilename": "coverage-8-1791375784819-0.json",
+      "rawSha256": "5746ecefb9003a72ef45e8587c7e6d9b73afe18c2c1d99299a0e7d509e585a27",
+      "scripts": [
+        {
+          "scriptId": "121",
+          "url": "/evidence/cells/01-v2415-ts/fixture/backup_cache.ts",
+          "functions": [
+            {
+              "functionName": "",
+              "ranges": [
+                {
+                  "startOffset": 0,
+                  "endOffset": 645,
+                  "count": 1
+                }
+              ],
+              "isBlockCoverage": true
+            },
+            {
+              "functionName": "repositoryCacheDirectory",
+              "ranges": [
+                {
+                  "startOffset": 310,
+                  "endOffset": 528,
+                  "count": 2
+                }
+              ],
+              "isBlockCoverage": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell": "02-v2415-cjs",
+      "source": {
+        "path": "/evidence/cells/02-v2415-cjs/fixture/backup_cache.cjs",
+        "sha256": "29e582f301288ec9cc14eeb7dcf6c377b97d26feae9e3c89cab05564b0624d0e",
+        "bytes": 487,
+        "utf16Length": 487
+      },
+      "rawFilename": "coverage-37-1791375785054-0.json",
+      "rawSha256": "cf0b1a79c29e7bfb6f783086b8b5eed8e946914642f4f35abf277434b76b455a",
+      "scripts": [
+        {
+          "scriptId": "119",
+          "url": "file:///evidence/cells/02-v2415-cjs/fixture/backup_cache.cjs",
+          "functions": [
+            {
+              "functionName": "",
+              "ranges": [
+                {
+                  "startOffset": 0,
+                  "endOffset": 487,
+                  "count": 1
+                }
+              ],
+              "isBlockCoverage": true
+            },
+            {
+              "functionName": "repositoryCacheDirectory",
+              "ranges": [
+                {
+                  "startOffset": 258,
+                  "endOffset": 437,
+                  "count": 2
+                }
+              ],
+              "isBlockCoverage": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell": "03-v2421-ts",
+      "source": {
+        "path": "/evidence/cells/03-v2421-ts/fixture/backup_cache.ts",
+        "sha256": "68c8a46a2790b995c5c1a9ba510e1983714c56d93d27ca11cb2ac48278a0d4e5",
+        "bytes": 578,
+        "utf16Length": 578
+      },
+      "rawFilename": "coverage-65-1791375785340-0.json",
+      "rawSha256": "968348541486f578ae45e12898965e720853abcf125d6b53935c3297f3e6ee92",
+      "scripts": [
+        {
+          "scriptId": "124",
+          "url": "file:///evidence/cells/03-v2421-ts/fixture/backup_cache.ts",
+          "functions": [
+            {
+              "functionName": "",
+              "ranges": [
+                {
+                  "startOffset": 0,
+                  "endOffset": 652,
+                  "count": 1
+                }
+              ],
+              "isBlockCoverage": true
+            },
+            {
+              "functionName": "repositoryCacheDirectory",
+              "ranges": [
+                {
+                  "startOffset": 310,
+                  "endOffset": 528,
+                  "count": 2
+                }
+              ],
+              "isBlockCoverage": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell": "04-v2421-cjs",
+      "source": {
+        "path": "/evidence/cells/04-v2421-cjs/fixture/backup_cache.cjs",
+        "sha256": "29e582f301288ec9cc14eeb7dcf6c377b97d26feae9e3c89cab05564b0624d0e",
+        "bytes": 487,
+        "utf16Length": 487
+      },
+      "rawFilename": "coverage-93-1791375785579-0.json",
+      "rawSha256": "e31c7038bc9f8925e8653bd50616e3f11e5721d1327d262963a6f55d859dbf22",
+      "scripts": [
+        {
+          "scriptId": "122",
+          "url": "file:///evidence/cells/04-v2421-cjs/fixture/backup_cache.cjs",
+          "functions": [
+            {
+              "functionName": "",
+              "ranges": [
+                {
+                  "startOffset": 0,
+                  "endOffset": 487,
+                  "count": 1
+                }
+              ],
+              "isBlockCoverage": true
+            },
+            {
+              "functionName": "repositoryCacheDirectory",
+              "ranges": [
+                {
+                  "startOffset": 258,
+                  "endOffset": 437,
+                  "count": 2
+                }
+              ],
+              "isBlockCoverage": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
