@@ -2,10 +2,12 @@
 
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
-Run commands from the repository root. Use `npm test` for the complete local
-gate, or `npm run test:coverage` for coverage alone. CI calls the same lint,
-typecheck and coverage scripts in separate steps. Its sequence duplicates the
-local `test` script; keep both definitions aligned when changing validation.
+Run commands from the repository root. Use targeted local checks for changed
+behavior before publication or review; see
+[Test runtime and timeouts](#test-runtime-and-timeouts) for focused commands.
+Rely on PR CI for the complete validation gate before
+merge. CI calls the same lint, typecheck and coverage scripts as `npm test` in
+separate steps; keep both definitions aligned when changing validation.
 Both paths use the shared Mocha command in `test:unit`. The
 [Mocha configuration](../.mocharc.js) uses two workers when Node reports at least
 four available CPUs and runs serially on smaller hosts.
@@ -249,8 +251,13 @@ inspection, also run `npm run test:unit -- test/backup_list.test.ts`. Bundle
 decoding has its own direct suite, `test/directory_snapshot.test.ts`. The CLI suite
 checks command behavior through real processes.
 
-Keep `npm test` as the complete local gate. A gate passes only when the command
-finishes successfully and all required stages complete; a passing Mocha count
+Run `npm test` locally when it supplies needed evidence unavailable from CI,
+diagnoses a material concern, or an explicit instruction requires it. Use
+`npm run test:coverage` for coverage alone. Otherwise, rely on PR CI for the
+complete gate before merge and report pending CI as incomplete validation.
+For docs-only changes, skip local validation and rely on CI for automated checks.
+A gate passes only when the command finishes successfully and all required
+stages complete; a passing Mocha count
 alone does not establish that coverage checks or later stages passed. A killed,
 interrupted, tool-expired, or disconnected command without a confirmed exit
 status is incomplete. Record the command, last completed stage, and diagnostic

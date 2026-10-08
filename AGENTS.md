@@ -20,8 +20,13 @@
 
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
-- Run `npm test` after changes to code, config, scripts, or tests. Treat
-  `package.json` as the source of truth for what that gate includes.
+- For code, config, script, or test changes, run targeted local checks for the
+  touched behavior before publication or review. Follow
+  [Test runtime and timeouts](docs/testing.md#test-runtime-and-timeouts) for
+  focused commands. Rely on PR CI for the complete validation gate before merge;
+  `package.json` defines that gate. Run the full gate locally when it supplies
+  needed evidence unavailable from CI, diagnoses a material concern, or an
+  explicit instruction requires it. Report pending CI as incomplete validation.
 - Report validation as passing only after the command completes successfully.
   A killed, interrupted, tool-expired, or disconnected run without a confirmed
   exit status is incomplete, even if its output includes passing tests.
