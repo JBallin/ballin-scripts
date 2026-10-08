@@ -21,7 +21,9 @@
 - Use the Node.js version from `.nvmrc`.
 - Install dependencies with `npm ci`.
 - For code, config, script, or test changes, run targeted local checks for the
-  touched behavior before publication or review. Follow
+  touched behavior before publication or review. For code changes, include
+  `npm run lint` and the relevant typechecks (`npm run typecheck` and/or
+  `npm run typecheck:analytics-worker`) alongside focused tests. Follow
   [Test runtime and timeouts](docs/testing.md#test-runtime-and-timeouts) for
   focused commands. Rely on PR CI for the complete validation gate before merge;
   `.github/workflows/ci.yml` defines its checks, and `package.json` defines the
