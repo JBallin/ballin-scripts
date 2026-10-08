@@ -32,7 +32,7 @@ jobs:
       - name: Install shell tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes shellcheck zsh
+          sudo apt-get install --yes shellcheck zsh jq coreutils
 
       - name: Run ShellCheck
         run: |
@@ -60,6 +60,9 @@ jobs:
 
       - name: Typecheck analytics worker
         run: npm run typecheck:analytics-worker
+
+      - name: Test Claude preflight with Bash and jq
+        run: npm run test:claude-preflight
 
       - name: Run unit tests with coverage
         id: coverage
