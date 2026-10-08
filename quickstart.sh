@@ -7,6 +7,7 @@ system_node_bin='/usr/local/bin'
 system_git='/usr/bin/git'
 system_xcode_select='/usr/bin/xcode-select'
 system_pkgutil='/usr/sbin/pkgutil'
+system_sudo='/usr/bin/sudo'
 scratch=''
 profile_temp=''
 
@@ -231,7 +232,7 @@ install_node() {
     || fail 'The Node.js package signature could not be verified.'
   grep -Fq 'Developer ID Installer: Node.js Foundation (HX7739G8FX)' "$scratch/node-signature.txt" \
     || fail 'The Node.js package has an unexpected publisher; it was not installed.'
-  sudo /usr/sbin/installer -pkg "$scratch/$package" -target /
+  "$system_sudo" /usr/sbin/installer -pkg "$scratch/$package" -target /
   node_compatible "$system_node_bin/node" || fail 'Node.js installation did not provide a working Node.js 24.12 or newer.'
   node_tool="$system_node_bin/node"
 }

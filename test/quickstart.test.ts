@@ -45,6 +45,7 @@ system_node_bin="$FAKE_SYSTEM_NODE"
 system_git="\${FAKE_SYSTEM_GIT:-$FAKE_ROOT/tools/git}"
 system_xcode_select="\${FAKE_SYSTEM_XCODE_SELECT:-$FAKE_ROOT/tools/xcode-select}"
 system_pkgutil="\${FAKE_SYSTEM_PKGUTIL:-$FAKE_ROOT/tools/pkgutil}"
+system_sudo="\${FAKE_SYSTEM_SUDO:-$FAKE_ROOT/tools/sudo}"
 ${beforeMain}
 trap cleanup EXIT
 main
@@ -1242,6 +1243,38 @@ esac
       assert.isFalse(fs.existsSync(path.join(home, '.local')));
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
+  }
+  for (const shadow of ['function', 'PATH']) {
+    for (const outcome of ['success', 'decline', 'failure']) {
+      it(`uses system sudo with a ${shadow} shadow and prerequisite ${outcome}`, () => {
+        const systemTools = path.join(root, 'system tools');
+        const shadowTools = path.join(root, 'shadow tools');
+        fs.mkdirSync(systemTools);
+        fs.mkdirSync(shadowTools);
+        linkFake('sudo', systemTools);
+        const intercept = 'printf "shadow-sudo\\n" >> "$FAKE_COMMAND_LOG"; return 73;';
+        if (shadow === 'PATH') fs.writeFileSync(path.join(shadowTools, 'sudo'),
+          '#!/bin/bash\nprintf "shadow-sudo\\n" >> "$FAKE_COMMAND_LOG"\nexit 73\n', { mode: 0o755 });
+        const result = run(outcome === 'decline' ? 'n\n' : 'y\ny\ny\n', {
+          PATH: `${shadowTools}:${tools}`, FAKE_OLD_NODE: '1',
+          FAKE_SYSTEM_SUDO: path.join(systemTools, 'sudo'),
+          FAKE_SUDO_FAIL: outcome === 'failure' ? '1' : '0',
+        }, home, shadow === 'function' ? `sudo() { ${intercept} }; export -f sudo` : '');
+        assert.equal(result.status, outcome === 'failure' ? 1 : 0, result.stdout + result.stderr);
+        assert.notInclude(readLog(), 'shadow-sudo');
+        if (outcome === 'decline') {
+          assert.notInclude(readLog(), 'sudo:');
+          assert.notInclude(readLog(), 'pkgutil:');
+          assert.isFalse(fs.existsSync(path.join(home, '.local')));
+        } else {
+          assert.equal(readLog().split('sudo:/usr/sbin/installer -pkg').length - 1, 1);
+          assert.isAbove(readLog().indexOf('sudo:/usr/sbin/installer -pkg'), readLog().indexOf('pkgutil:--check-signature'));
+        }
+        if (outcome === 'success') assert.include(readLog(), 'ballin:backup open');
+        else for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      });
+    }
   }
   for (const signature of ['valid', 'invalid', 'wrong publisher']) {
     it(`verifies Node package signatures (${signature}) with system pkgutil absent from PATH`, () => {
