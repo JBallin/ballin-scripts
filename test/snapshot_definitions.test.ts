@@ -580,7 +580,7 @@ describe('backup snapshot definitions', () => {
     fs.writeFileSync(unterminatedFile, 'value');
     fs.writeFileSync(completeFile, 'value\n\n');
 
-    [emptyFile, unterminatedFile, completeFile].forEach(normalizeSnapshotInput);
+    [emptyFile, unterminatedFile, completeFile].forEach((inputFile) => normalizeSnapshotInput(inputFile));
 
     assert.equal(fs.readFileSync(emptyFile, 'utf8'), 'empty\n');
     assert.equal(fs.readFileSync(unterminatedFile, 'utf8'), 'value\n');

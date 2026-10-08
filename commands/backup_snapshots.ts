@@ -710,13 +710,14 @@ const collectSnapshotObservations = (
     : { status: 'collector-failed', source };
 });
 
-const normalizeSnapshotInput = (inputFile: string): void => {
+const normalizeSnapshotInput = (inputFile: string, maxBytes?: number): void => {
   if (fs.statSync(inputFile).size === 0) {
     fs.writeFileSync(inputFile, emptySnapshotContent);
     return;
   }
 
-  const content = fs.readFileSync(inputFile);
+  const content = maxBytes === undefined ? fs.readFileSync(inputFile)
+    : require('./recursive_snapshot.ts').readBoundedFile(inputFile, maxBytes).bytes;
   if (content.at(-1) !== 10) {
     fs.appendFileSync(inputFile, '\n');
   }
