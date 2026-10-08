@@ -5,6 +5,7 @@ umask 077
 
 system_node_bin='/usr/local/bin'
 system_git='/usr/bin/git'
+system_xcode_select='/usr/bin/xcode-select'
 scratch=''
 profile_temp=''
 
@@ -121,7 +122,7 @@ release_node_links() {
 find_git() {
   local candidate
   for candidate in "$(command -v git || true)" "$system_git"; do
-    if [[ "$candidate" -ef "$system_git" ]] && ! xcode-select -p >/dev/null 2>&1; then
+    if [[ "$candidate" -ef "$system_git" ]] && ! "$system_xcode_select" -p >/dev/null 2>&1; then
       continue
     fi
     if [[ "$candidate" == /* && -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
@@ -222,9 +223,9 @@ profile_unchanged() {
       if (!parent.isDirectory() || parent.dev !== before.parent.dev || parent.ino !== before.parent.ino) process.exit(1);
       let current = null;
       try { current = fs.lstatSync(file); } catch (error) { if (error.code !== "ENOENT") throw error; }
-      const keys = ["dev", "ino", "mode", "size", "mtimeMs", "ctimeMs"];
+      const keys = ["dev", "ino", "mode", "nlink", "size", "mtimeMs", "ctimeMs"];
       if (before.file === null) process.exit(current === null ? 0 : 1);
-      if (!current?.isFile() || keys.some(key => current[key] !== before.file[key])
+      if (!current?.isFile() || current.nlink !== 1 || keys.some(key => current[key] !== before.file[key])
         || !fs.readFileSync(file).equals(fs.readFileSync(snapshot))) process.exit(1);
     } catch { process.exit(1); }
   ' "$profile" "$scratch/profile-original" "$scratch/profile-metadata"
@@ -284,6 +285,7 @@ configure_path() {
       try {
         stat = fs.fstatSync(fd);
         if (!stat.isFile()) throw new Error("Startup file is not a regular file");
+        if (stat.nlink !== 1) throw new Error("Startup file has multiple hard links");
         contents = fs.readFileSync(fd);
       } finally { fs.closeSync(fd); }
     } catch (error) { if (error.code !== "ENOENT") throw error; }
@@ -339,7 +341,7 @@ configure_path() {
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh fresh repo path_node brew_prefix
+  local os_version major minor machine git_tool need_git need_node need_gh fresh repo path_node brew_tool brew_prefix
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -384,7 +386,7 @@ main() {
   printf '1\n' > "$quick_root/.managed"
   scratch=$(mktemp -d "${TMPDIR:-/tmp}/ballin-quickstart.XXXXXX")
   if "$need_git"; then
-    xcode-select --install || fail 'Apple could not start Command Line Tools installation. Finish any pending installation, then run this quickstart again.'
+    "$system_xcode_select" --install || fail 'Apple could not start Command Line Tools installation. Finish any pending installation, then run this quickstart again.'
     printf 'Finish the macOS installation, then press Return here: '
     IFS= read -r _ || fail 'Git setup did not complete.'
     git_tool=$(find_git)
@@ -402,7 +404,7 @@ main() {
   bind_tool gh "$gh_tool"
   bind_tool git "$git_tool"
   command_bin="$HOME/.local/bin"
-  if command -v brew >/dev/null 2>&1 && brew_prefix=$(brew --prefix 2>/dev/null); then
+  if brew_tool=$(type -P brew) && brew_prefix=$("$brew_tool" --prefix 2>/dev/null); then
     [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix \`brew --prefix\`, then rerun this quickstart. PATH setup and Ballin installation have not run."
     command_bin="$brew_prefix/bin"
   fi

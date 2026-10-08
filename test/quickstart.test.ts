@@ -28,7 +28,7 @@ describe('beginner quickstart bootstrap', function() {
       }),
     });
   };
-  const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}, cwd = home) => {
+  const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}, cwd = home, beforeMain = '') => {
     const shell = overrides.SHELL ?? '/bin/zsh';
     const target = overrides.FAKE_PROFILE_TARGET ?? (shell.endsWith('bash') ? 'login' : overrides.ZDOTDIR ?? 'home');
     const selection = fs.existsSync(shell) && ['bash', 'zsh'].includes(path.basename(shell)) ? target + '\n' : '';
@@ -43,6 +43,8 @@ describe('beginner quickstart bootstrap', function() {
 source "$FAKE_SOURCE"
 system_node_bin="$FAKE_SYSTEM_NODE"
 system_git="\${FAKE_SYSTEM_GIT:-$FAKE_ROOT/tools/git}"
+system_xcode_select="\${FAKE_SYSTEM_XCODE_SELECT:-$FAKE_ROOT/tools/xcode-select}"
+${beforeMain}
 trap cleanup EXIT
 main
 `], {
@@ -290,6 +292,64 @@ esac
     assert.notInclude(readLog(), 'xcode-select:--install');
     assert.include(readLog(), 'ballin:backup open');
   });
+  for (const scenario of ['ready', 'install', 'decline', 'failure']) {
+    it(`ignores a PATH-shadowed xcode-select when system Command Line Tools are ${scenario}`, () => {
+      const systemTools = path.join(root, 'system-tools');
+      fs.mkdirSync(systemTools);
+      linkFake('xcode-select', systemTools);
+      fs.unlinkSync(path.join(tools, 'xcode-select'));
+      fs.writeFileSync(path.join(tools, 'xcode-select'), '#!/bin/bash\nprintf "shadow-xcode:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\nexit 77\n', { mode: 0o755 });
+      const result = run(scenario === 'decline' ? 'n\n' : scenario === 'ready' ? 'y\ny\n' : 'y\n\ny\ny\n', {
+        FAKE_SYSTEM_XCODE_SELECT: path.join(systemTools, 'xcode-select'),
+        FAKE_GIT: scenario === 'ready' ? 'ready' : 'missing',
+        FAKE_XCODE_FAIL: scenario === 'failure' ? '1' : '0',
+      });
+      assert.equal(result.status, scenario === 'failure' ? 1 : 0, result.stdout + result.stderr);
+      assert.notInclude(readLog(), 'shadow-xcode:');
+      assert.include(readLog(), 'xcode-select:-p');
+      if (scenario === 'ready' || scenario === 'decline') assert.notInclude(readLog(), 'xcode-select:--install');
+      else assert.include(readLog(), 'xcode-select:--install');
+      if (scenario === 'ready' || scenario === 'install') {
+        assert.include(readLog(), 'git:--version');
+        assert.include(readLog(), 'ballin:backup open');
+      } else {
+        for (const forbidden of ['git:--version', 'gh:auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
+      }
+      if (scenario === 'ready') assert.notInclude(result.stdout, 'Missing prerequisites:');
+      else assert.include(result.stdout, 'Install these prerequisites?');
+      if (scenario === 'failure') assert.include(result.stderr, 'Finish any pending installation, then run this quickstart again.');
+      if (scenario === 'decline') assert.isFalse(fs.existsSync(path.join(home, '.local')));
+    });
+  }
+  for (const executableBrew of [false, true]) {
+    it(`ignores an exported Homebrew function with executable Homebrew ${executableBrew ? 'present' : 'absent'}`, () => {
+      const brewTools = path.join(root, 'Homebrew tools');
+      fs.mkdirSync(brewTools);
+      if (executableBrew) linkFake('brew', brewTools);
+      const executablePrefix = path.join(root, 'real-brew');
+      const functionPrefix = path.join(root, 'function-brew');
+      const result = spawnSync('/bin/bash', ['-c', [
+        'brew() { printf "function-brew:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"; printf "%s\\n" "$FAKE_FUNCTION_BREW_PREFIX"; }',
+        'export -f brew',
+        '/bin/bash -c \'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main\'',
+      ].join('\n')], {
+        encoding: 'utf8', input: 'home\ny\ny\n', cwd: home, timeout: 12000,
+        env: testChildEnvironment({
+          HOME: home, PATH: `${brewTools}:${tools}`, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
+          FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source, FAKE_SYSTEM_NODE: systemNode,
+          TEST_NODE_RUNTIME: process.execPath, FAKE_BREW_PREFIX: executablePrefix, FAKE_FUNCTION_BREW_PREFIX: functionPrefix,
+        }),
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(readLog(), 'function-brew:');
+      assert.equal(readLog().includes('brew:--prefix'), executableBrew);
+      const profile = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
+      assert.include(profile, ":$PATH:'" + (executableBrew ? path.join(executablePrefix, 'bin') : path.join(home, '.local/bin')) + "'");
+      assert.notInclude(profile, functionPrefix);
+      assert.include(readLog(), 'ballin:backup open');
+      assert.notInclude(readLog(), 'sudo:');
+    });
+  }
   it('keeps the local command directory when optional Homebrew prefix lookup fails', () => {
     linkFake('brew');
     const result = run('y\ny\n', { FAKE_BREW_FAIL: '1' });
@@ -638,6 +698,27 @@ esac
   const pathLine = () => `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
   for (const shell of ['bash', 'zsh']) {
     const profileName = shell === 'bash' ? '.bash_profile' : '.zshrc';
+    it(`preserves hard-linked ${shell} startup aliases while continuing the first backup`, () => {
+      const profile = path.join(home, profileName);
+      const alias = path.join(home, 'dotfiles-startup');
+      const contents = '# Shared startup settings\n';
+      fs.writeFileSync(profile, contents, { mode: 0o640 });
+      fs.linkSync(profile, alias);
+      const before = fs.statSync(profile);
+      const result = run('y\ny\n', { SHELL: '/bin/' + shell });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'Persistent PATH setup incomplete');
+      assert.notInclude(result.stdout, 'Add this PATH line?');
+      for (const file of [profile, alias]) {
+        const after = fs.statSync(file);
+        assert.equal(after.ino, before.ino);
+        assert.equal(after.nlink, 2);
+        assert.equal(after.mode & 0o777, 0o640);
+        assert.equal(fs.readFileSync(file, 'utf8'), contents);
+      }
+      assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+      assert.notInclude(fs.readdirSync(home).join('\n'), '.ballin-quickstart.');
+    });
     it(`appends to normal custom ${shell} profiles without executing or interpreting commands`, () => {
       const profile = path.join(home, profileName);
       const sentinel = path.join(root, 'profile-executed');
@@ -819,7 +900,33 @@ esac
       if (kind === 'dangling-symlink') assert.isTrue(fs.lstatSync(profile).isSymbolicLink());
     });
   }
-  for (const mutation of ['bytes', 'inode', 'mode', 'symlink']) {
+  it('preserves a startup hard link added during PATH consent', () => {
+    const profile = path.join(home, '.zshrc');
+    const alias = path.join(home, 'dotfiles-startup');
+    const contents = '# Original settings\n';
+    fs.writeFileSync(profile, contents, { mode: 0o640 });
+    const before = fs.statSync(profile);
+    const result = run('y\ny\n', {}, home, `
+original_confirm=$(declare -f confirm)
+eval "\${original_confirm/confirm ()/original_confirm ()}"
+confirm() {
+  original_confirm "$@" || return
+  if [[ "$1" == 'Add this PATH line?' ]]; then ln "$HOME/.zshrc" "$HOME/dotfiles-startup"; fi
+}
+`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Add this PATH line?');
+    assert.include(result.stderr, 'The startup file changed during setup.');
+    for (const file of [profile, alias]) {
+      const after = fs.statSync(file);
+      assert.equal(after.ino, before.ino);
+      assert.equal(after.nlink, 2);
+      assert.equal(after.mode & 0o777, 0o640);
+      assert.equal(fs.readFileSync(file, 'utf8'), contents);
+    }
+    assert.include(readLog(), 'ballin:backup open');
+  });
+  for (const mutation of ['bytes', 'inode', 'mode', 'symlink', 'hard-link']) {
     it(`refuses a concurrent ${mutation} change after inspection`, () => {
       const profile = path.join(home, '.zshrc');
       const contents = '# Original settings\n';
@@ -830,6 +937,7 @@ esac
         inode: '/bin/cp "$2" "$2.replacement"; /bin/mv "$2.replacement" "$2"',
         mode: '/bin/chmod 600 "$2"',
         symlink: '/bin/mv "$2" "$2.target"; /bin/ln -s "$2.target" "$2"',
+        'hard-link': '/bin/ln "$2" "$2.alias"',
       }[mutation];
       fs.writeFileSync(path.join(tools, 'cp'), '#!/bin/bash\nif [[ "$1" == -p && "$2" == "$HOME/.zshrc" ]]; then ' + action + '; fi\nexec /bin/cp "$@"\n', { mode: 0o755 });
       const result = run('y\ny\n');
@@ -838,6 +946,12 @@ esac
       assert.notInclude(fs.readFileSync(profile, 'utf8'), 'export PATH=');
       assert.include(readLog(), 'ballin:backup open');
       assert.notInclude(fs.readdirSync(home).join('\n'), '.ballin-quickstart.');
+      if (mutation === 'hard-link') {
+        assert.equal(fs.statSync(profile).ino, fs.statSync(profile + '.alias').ino);
+        assert.equal(fs.statSync(profile).nlink, 2);
+        assert.equal(fs.readFileSync(profile + '.alias', 'utf8'), contents);
+        assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+      }
     });
   }
   it('does not claim presence when the file changes after its literal-line inspection', () => {
