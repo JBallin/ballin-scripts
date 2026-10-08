@@ -30,6 +30,24 @@ refresh existing presentation without running Claude. For a fresh review of an
 open, non-draft, same-repository PR, a human owner, member, or collaborator can
 post `/claude-review` as the entire top-level or inline PR comment.
 
+Run `npm run test:unit -- test/claude_workflows.test.ts` for the portable offline
+caller contracts, also included in `npm test`. They parse YAML and compare the
+approved eligibility expressions, events, permissions, secrets, runtime pins,
+execution keys, and manual preflight wiring/script. An inventory checks every
+YAML workflow for runtime or Claude credential references. These checks guard
+configuration changes; they do not evaluate GitHub Actions expressions or claim
+behavior for alternative expressions. Formatting and YAML comments may change
+without changing the parsed contract. Shared runtime behavior stays tested in
+the runtime repository.
+
+CI additionally runs `npm run test:claude-preflight` with Bash, `jq`, and GNU
+`timeout` declared as prerequisites. That bounded test executes the workflow's
+actual preflight script in a temporary directory with a stub `gh` and fixture
+responses, covering eligible/ineligible PRs, malformed data, wrong PR identity,
+and command failure. It makes no network or model calls. This separate CI test
+is excluded from portable `npm test`; invoking it directly requires those tools
+and fails if they are missing.
+
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
 Closing the PR or converting it to a draft does not cancel an accepted request.
@@ -65,6 +83,12 @@ a fake personal GitHub account and repository, sharing the automated walkthrough
 fixtures. `backup open` records a fake browser request. No browser opens and no
 GitHub login is needed. The sandbox includes a harmless `.zshrc` so sensitive-source
 review has a concrete source to display.
+
+The sandbox installer copies CLI files from this checkout into the printed
+installed checkout. Before verifying changed behavior, compare the relevant
+installed source files with your checkout (for example, using `cmp`). After source
+edits, exit and start a fresh sandbox; simulated self-update does not refresh
+those copies.
 
 To repeat setup without recreating the checkout, run `reset create` or
 `reset reconnect`, then `ballin backup setup`. Both clear the local backup
@@ -130,8 +154,14 @@ Normal exit or EOF cleans up automatically. Start with
 Failed commands, safeguard failures, and interruptions preserve it for debugging.
 Interrupting a running command stops its child process group before the session
 finishes. Preserved sandboxes are inspection artifacts; start a new session to
-run more commands. Remove a preserved or abandoned sandbox with the exact path
-printed by the tool:
+run more commands.
+
+Before exit or cleanup, save the command transcript and selected logs outside
+the sandbox root; cleanup removes everything inside it. Use `--keep` if you need
+time to collect them. Redact sensitive content before sharing, and confirm the
+saved evidence remains after cleanup.
+
+Remove a preserved or abandoned sandbox with the exact path printed by the tool:
 
 ```shell
 npm run sandbox -- --cleanup /path/printed/by/the/tool
@@ -257,7 +287,8 @@ choices from the behavior and guards in each case.
 | Selected installer, analytics, backup and update cases | 5s | Coherent process workflows, concurrent repair, or bounded sender failures |
 | Update interruption cases | 8s | Readiness handshake and a separate 5s child-process watchdog |
 | Repository lifecycle and nested-update backup | 15s | Multiple real CLI and fixture processes within one workflow |
-| Native Tab-completion cases | 20s | Isolated interactive shell and terminal subprocesses |
+| Local snapshot budget cases | 30s | Capture size, recursive entry limits, and cache comparisons |
+| Selected shell completion cases | 10s, 20s, 30s or 60s | Isolated shell and terminal subprocesses across completion scenarios |
 | Onboarding sandbox and walkthroughs | 300s | Outer allowance for multi-step command and process-group cleanup guards |
 
 Process-heavy integration workflows can need scoped headroom beyond the default.
