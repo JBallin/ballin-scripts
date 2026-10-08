@@ -43,8 +43,12 @@
 
 ## Testing and safety
 
-- Consider `npm run sandbox` when changed installer prompts, CLI flows or output,
-  or backup setup/reset scenarios need an interactive fixture walkthrough.
+- For new or changed interactive user flows, assess `npm run sandbox` walkthrough
+  coverage and extend it when useful beyond existing isolated tests. Exercise
+  relevant supported flows, including proportionate failure, retry, and
+  cancellation cases; report existing coverage, limits, or blockers when a
+  walkthrough is unavailable. Internal-only changes do not require an
+  interactive path, and walkthroughs do not require duplicating the full suite.
   Follow [Interactive QA sandbox](docs/testing.md#interactive-qa-sandbox) for
   usage and safeguards. It supplements `npm test` and automated regression
   coverage. Its controlled tools and services do not verify live network access,
