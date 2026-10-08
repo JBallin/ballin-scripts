@@ -125,6 +125,24 @@ describe('repository backup resource limits', function() {
     };
     assert.equal(readRepositoryAccount(options).id, state.ownerId);
   });
+  it('allows a bounded slow snapshot transfer without retrying publication', () => {
+    const before = read(), bytes = Buffer.alloc(3 * 1024 * 1024, 120);
+    const original = options.runCommand!;
+    options.runCommand = (command, args, opts) => {
+      const result = original(command, args, opts);
+      const wireBytes = Buffer.byteLength(String(opts.input ?? '')) + Buffer.byteLength(result.stdout ?? '');
+      // Advance a virtual 128 KiB/s transfer with five seconds of connection overhead.
+      const elapsedMs = 5000 + Math.ceil(wireBytes / (128 * 1024) * 1000);
+      assert.isAtMost(opts.timeout ?? 0, 15 * 60 * 1000);
+      return elapsedMs > (opts.timeout ?? 0)
+        ? { ...result, status: null, signal: 'SIGKILL',
+          error: Object.assign(new Error('DUMMY_PRIVATE_TIMEOUT'), { code: 'ETIMEDOUT' }) }
+        : result;
+    };
+    const after = publishRepositorySnapshots(before, new Map([['zshrc.sh', bytes]]), options);
+    assert.isTrue(after.snapshots.get('zshrc.sh')!.equals(bytes));
+    assert.lengthOf(publications(), 1);
+  });
   it('terminates a real isolated fake gh producing excessive output', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-repository-output-test-'));
     try {

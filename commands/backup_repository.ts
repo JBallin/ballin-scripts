@@ -57,6 +57,8 @@ const inspectionResponseByteLimit = 128 * 1024 * 1024;
 const inspectionMetadataByteLimit = 16 * 1024 * 1024;
 const requestByteLimit = 96 * 1024 * 1024;
 const repositoryRequestTimeoutMs = 30_000;
+const repositoryMaxRequestTimeoutMs = 15 * 60 * 1000;
+const repositoryTransferBytesPerSecond = 128 * 1024;
 type ResponseBudget = { remaining: number; metadataRemaining: number };
 const responseBudgets = new WeakMap<RepositoryOptions, ResponseBudget>();
 const inspectionOptions = (options: RepositoryOptions): RepositoryOptions => {
@@ -155,7 +157,11 @@ const api = (
       metadata ? budget?.metadataRemaining ?? responseLimit : responseLimit);
     if (maxBuffer <= 0) throw new RepositoryError('resource-limit');
     const input = payload === undefined ? undefined : JSON.stringify(payload);
-    if (input !== undefined && Buffer.byteLength(input) > requestByteLimit) throw new RepositoryError('resource-limit');
+    const inputBytes = input === undefined ? 0 : Buffer.byteLength(input);
+    if (inputBytes > requestByteLimit) throw new RepositoryError('resource-limit');
+    const transferBytes = Math.max(0, inputBytes + maxBuffer - 2 * metadataResponseByteLimit);
+    const timeout = Math.min(repositoryMaxRequestTimeoutMs, repositoryRequestTimeoutMs
+      + Math.ceil(transferBytes / repositoryTransferBytesPerSecond) * 1000);
     output = makeTempFile('ballin-repository-');
     const fd = fs.openSync(output, 'wx', 0o600);
     let result;
@@ -167,7 +173,7 @@ const api = (
         env: { ...(options.env ?? process.env), GH_HOST: 'github.com', GH_DEBUG: '', DEBUG: '' },
         input,
         stdio: [payload === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
-        maxBuffer, timeout: repositoryRequestTimeoutMs, killSignal: 'SIGKILL',
+        maxBuffer, timeout, killSignal: 'SIGKILL',
       });
     } finally { fs.closeSync(fd); }
     // Native maxBuffer stops excess output; fixture runners need the same check.

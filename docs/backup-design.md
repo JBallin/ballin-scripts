@@ -461,8 +461,12 @@ to fit. An oversized full set can prevent backup, reconnect, and readiness
 checks; owners can inspect the existing repository in GitHub and choose a new
 destination without removing the old repository or its history.
 
-Repository API stdout and stderr use bounded subprocess pipes and a 30-second
-request timeout. Ordinary responses are limited to 1 MiB; tree responses to
+Repository API stdout and stderr use bounded subprocess pipes. Request deadlines
+start at 30 seconds and add one second per 128 KiB of serialized input and
+bounded response allowance above a combined 2 MiB, capped at 15 minutes per
+request. Small control requests retain the 30-second deadline. This budget uses
+total elapsed time, so very slow transfers can still time out. Ordinary responses
+are limited to 1 MiB; tree responses to
 8 MiB and 100,000 entries. Each inspection permits at most 16 MiB of metadata
 responses and 128 MiB of total captured responses. Blob-response allowances
 derive from checked stored size, canonical Base64 expansion, line wrapping and

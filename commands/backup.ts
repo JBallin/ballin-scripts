@@ -382,6 +382,7 @@ const stageSnapshots = (observations: SnapshotSourceObservation[], evidence: Bac
   try {
     requireRepositorySnapshotSizes(stagedSnapshots.map(({ localFile }: StagedSnapshot) => fs.statSync(localFile).size));
   } catch {
+    observeBackupFailure(evidence, 'local_state');
     writeStderrLine(`ballin backup: ${repositoryMessages['resource-limit']} No snapshots were published.`);
     if (!removeStagedSnapshots(stagedSnapshots)) reportTemporaryCleanupFailure();
     return null;

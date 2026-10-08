@@ -2160,6 +2160,29 @@ describe('repository backup lifecycle', function() {
       assert.lengthOf(publications(), 1);
     });
 
+    for (const cleanupFailed of [false, true]) {
+      it(`records aggregate staging overflow as local state (${cleanupFailed})`, () => {
+        for (const name of ['.zshrc', '.bashrc', '.vimrc']) fs.writeFileSync(path.join(home, name), 'local\n');
+        // Real oversized-file cases already cover the limit; keep these telemetry fixtures small.
+        const stagedSizes = `
+          const stageFs = require('fs'); const originalStat = stageFs.statSync;
+          stageFs.statSync = function(file, ...args) {
+            const result = originalStat.call(this, file, ...args);
+            if (String(file).includes('ballin-backup-input-')) result.size = 22 * 1024 * 1024;
+            return result;
+          };
+        `;
+        const result = observedRun(stagedSizes + (cleanupFailed
+          ? cacheFailure('rmSync', "String(args[0]).includes('ballin-backup-input-')") : ''));
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stderr, '64 MiB per full snapshot set');
+        assertOutcome('failure', 'local_state');
+        assert.lengthOf(state().requests, 0);
+        assert.isFalse(fs.existsSync(cache));
+        assert.equal(fs.readdirSync(path.join(root, 'tmp')).length > 0, cleanupFailed);
+      });
+    }
+
     it('keeps excluded-source and unavailable-tool handling successful without source events', () => {
       const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
       source(); saveState(fixtureState({ 'zshrc.sh': 'retained private source\n', pipx: 'retained unavailable tool\n' }));
