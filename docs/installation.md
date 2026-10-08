@@ -165,8 +165,9 @@ compatible Node that already wins PATH stays under its existing version manager,
 including npm, so later default changes still take effect. Otherwise, the helper
 links its selected fallback Node ahead of PATH and links its npm sibling when
 available. If that Node has no executable npm sibling, the helper removes its
-old npm link so npm follows the remaining PATH. Rerunning with a compatible
-Node that wins PATH removes the fallback links.
+old npm link so npm follows the remaining PATH. A bound npm sibling is checked
+through the handoff PATH too; npm is not required when no sibling is available.
+Rerunning with a compatible Node that wins PATH removes the fallback links.
 Alternate spellings or symlink aliases of the
 managed directory, and executable symlinks through its Node link, are still
 treated as the fallback. The Ballin command directory is appended to preserve

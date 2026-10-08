@@ -117,6 +117,9 @@ case "$name" in
       "$TEST_NODE_RUNTIME" "$@"
       printf '# Changed while validating\\n' > "$3"
     else exec "$TEST_NODE_RUNTIME" "$@"; fi ;;
+  npm)
+    [[ "$*" == --version ]] || exit 97
+    printf '11.0.0\\n' ;;
   gh)
     case "$*" in
       --version) printf 'gh version fixture\\n' ;;
@@ -208,6 +211,7 @@ case "$name" in
         printf '{"backup":{"repository":true}}\\n' > "$HOME/.ballin-scripts/ballin.config.json" ;;
       backup)
         [[ "\${FAKE_BACKUP_FAIL:-0}" != 1 ]] || exit 1
+        if [[ "\${FAKE_CHECK_NPM_COLLECTOR:-0}" == 1 ]]; then npm list -g --depth=0 >/dev/null; fi
         if ! grep -q '"repository":true' "$HOME/.ballin-scripts/ballin.config.json"; then printf 'Backup is not configured\\n' >&2; exit 1; fi ;;
       'backup open') ;;
       *) exit 97 ;;
@@ -276,6 +280,53 @@ esac
         assert.equal(fs.statSync(wrapper).mode, wrapperMode);
       });
     }
+  }
+  for (const placement of ['reachable', 'outside PATH', 'shadowed']) {
+    it(`qualifies the paired npm wrapper when its original invocation is ${placement}`, () => {
+      linkFake('node', systemNode);
+      const npm = path.join(systemNode, 'npm');
+      fs.mkdirSync(path.join(systemNode, 'support'));
+      fs.writeFileSync(npm, '#!/bin/bash\nexec "${0%/*}/support/npm" "$@"\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(systemNode, 'support/npm'), '#!/bin/bash\n'
+        + 'case "$*" in --version|"list -g --depth=0") ;; *) exit 97;; esac\n'
+        + 'printf "paired-npm:%s:node=%s\\n" "$*" "$(command -v node)" >> "$FAKE_COMMAND_LOG"\n', { mode: 0o755 });
+      const original = fs.readFileSync(npm);
+      const originalMode = fs.statSync(npm).mode;
+      const other = path.join(root, 'independent-npm');
+      fs.mkdirSync(other);
+      fs.writeFileSync(path.join(other, 'npm'), '#!/bin/bash\nprintf "wrong-npm\\n" >> "$FAKE_COMMAND_LOG"\n', { mode: 0o755 });
+      const profile = path.join(home, '.zshrc');
+      fs.writeFileSync(profile, '# Existing profile\n', { mode: 0o640 });
+      const before = fs.statSync(profile);
+      const fixturePath = placement === 'outside PATH' ? tools
+        : [tools, ...(placement === 'shadowed' ? [other] : []), systemNode].join(':');
+      const result = run('y\ny\n', { PATH: fixturePath, FAKE_OLD_NODE: '1', FAKE_CHECK_NPM_COLLECTOR: '1' });
+      assert.equal(result.status, placement === 'reachable' ? 0 : 1, result.stdout + result.stderr);
+      if (placement !== 'reachable') {
+        assert.include(result.stderr, 'Selected npm cannot run through the final PATH');
+        assert.equal(fs.readFileSync(profile, 'utf8'), '# Existing profile\n');
+        assert.equal(fs.statSync(profile).ino, before.ino);
+        assert.equal(fs.statSync(profile).mode, before.mode);
+        for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'wrong-npm']) assert.notInclude(readLog(), forbidden);
+      }
+      const retry = run(placement === 'reachable' ? '' : 'y\ny\n', {
+        PATH: `${tools}:${systemNode}`, FAKE_OLD_NODE: '1', FAKE_CHECK_NPM_COLLECTOR: '1',
+      });
+      assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+      assert.equal(fs.readlinkSync(path.join(quickBin, 'node')), path.join(systemNode, 'node'));
+      assert.isFalse(fs.existsSync(path.join(quickBin, 'npm')));
+      assert.include(readLog(), `paired-npm:list -g --depth=0:node=${path.join(quickBin, 'node')}`);
+      assert.include(readLog(), 'ballin:backup open');
+      assert.notInclude(readLog(), 'wrong-npm');
+      assert.deepEqual(fs.readFileSync(npm), original);
+      assert.equal(fs.statSync(npm).mode, originalMode);
+      const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc" && npm list -g --depth=0'], {
+        encoding: 'utf8', cwd: root,
+        env: testChildEnvironment({ HOME: home, PATH: `${tools}:${systemNode}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+      });
+      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+    });
   }
   for (const prefix of ['', 'relative-prefix', '/invalid:prefix', '/invalid\nprefix']) {
     it(`rejects a newly exposed Homebrew prefix ${JSON.stringify(prefix)} before profile or auth`, () => {

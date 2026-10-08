@@ -157,6 +157,10 @@ find_git() {
   done
 }
 
+npm_compatible() {
+  [[ -x "$1" ]] && "$1" --version >/dev/null 2>&1
+}
+
 gh_compatible() {
   [[ "$1" == /* && -x "$1" ]] \
     && "$1" --version >/dev/null 2>&1 \
@@ -397,7 +401,7 @@ configure_path() {
 }
 
 main() {
-  local os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination new_quick_root=true
+  local os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -460,7 +464,8 @@ main() {
   else
     bind_tool node "$node_tool"
     if [[ -x "${node_tool%/*}/npm" ]]; then
-      bind_tool npm "${node_tool%/*}/npm"
+      npm_tool="${node_tool%/*}/npm"
+      bind_tool npm "$npm_tool"
     else
       release_tool_links npm
     fi
@@ -472,6 +477,7 @@ main() {
   command_path="$command_bin"
   export PATH="$quick_bin:$PATH:$command_bin"
   qualify_tool node "$node_tool" node_compatible
+  [[ -z "$npm_tool" ]] || qualify_tool npm "$npm_tool" npm_compatible
   qualify_tool git "$git_tool" git_compatible
   qualify_tool gh "$gh_tool" gh_compatible
   # The added command directory can expose Homebrew. Keep that directory so
