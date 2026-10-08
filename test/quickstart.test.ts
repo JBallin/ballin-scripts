@@ -44,6 +44,7 @@ source "$FAKE_SOURCE"
 system_node_bin="$FAKE_SYSTEM_NODE"
 system_git="\${FAKE_SYSTEM_GIT:-$FAKE_ROOT/tools/git}"
 system_xcode_select="\${FAKE_SYSTEM_XCODE_SELECT:-$FAKE_ROOT/tools/xcode-select}"
+system_pkgutil="\${FAKE_SYSTEM_PKGUTIL:-$FAKE_ROOT/tools/pkgutil}"
 ${beforeMain}
 trap cleanup EXIT
 main
@@ -1036,6 +1037,33 @@ esac
         assert.notInclude(readLog(), forbidden);
       }
       assert.isFalse(fs.existsSync(path.join(home, '.local')));
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
+  for (const signature of ['valid', 'invalid', 'wrong publisher']) {
+    it(`verifies Node package signatures (${signature}) with system pkgutil absent from PATH`, () => {
+      const systemTools = path.join(root, 'system tools');
+      fs.mkdirSync(systemTools);
+      linkFake('pkgutil', systemTools);
+      fs.unlinkSync(path.join(tools, 'pkgutil'));
+      const result = run('y\ny\ny\n', {
+        FAKE_OLD_NODE: '1', FAKE_SYSTEM_PKGUTIL: path.join(systemTools, 'pkgutil'),
+        FAKE_SIGNATURE_FAIL: signature === 'invalid' ? '1' : '0',
+        FAKE_BAD_PUBLISHER: signature === 'wrong publisher' ? '1' : '0',
+      });
+      assert.equal(result.status, signature === 'valid' ? 0 : 1, result.stdout + result.stderr);
+      const signatureCheck = readLog().indexOf('pkgutil:--check-signature');
+      assert.isAtLeast(signatureCheck, 0);
+      if (signature === 'valid') {
+        assert.isAbove(readLog().indexOf('sudo:/usr/sbin/installer -pkg'), signatureCheck);
+        assert.include(readLog(), 'ballin:backup open');
+      } else {
+        assert.include(result.stderr, signature === 'invalid'
+          ? 'The Node.js package signature could not be verified.'
+          : 'The Node.js package has an unexpected publisher; it was not installed.');
+        assert.notInclude(readLog(), 'sudo:');
+        assert.notInclude(readLog(), 'install.sh:');
+      }
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
   }

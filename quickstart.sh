@@ -6,6 +6,7 @@ umask 077
 system_node_bin='/usr/local/bin'
 system_git='/usr/bin/git'
 system_xcode_select='/usr/bin/xcode-select'
+system_pkgutil='/usr/sbin/pkgutil'
 scratch=''
 profile_temp=''
 
@@ -195,7 +196,7 @@ install_node() {
   printf 'Downloading Node.js %s...\n' "$version"
   download "https://nodejs.org/dist/$version/$package" "$scratch/$package" progress
   checksum "$scratch/node-checksums.txt" "$package"
-  pkgutil --check-signature "$scratch/$package" > "$scratch/node-signature.txt" \
+  "$system_pkgutil" --check-signature "$scratch/$package" > "$scratch/node-signature.txt" \
     || fail 'The Node.js package signature could not be verified.'
   grep -Fq 'Developer ID Installer: Node.js Foundation (HX7739G8FX)' "$scratch/node-signature.txt" \
     || fail 'The Node.js package has an unexpected publisher; it was not installed.'
