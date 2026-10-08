@@ -126,9 +126,9 @@ find_node() {
   done
 }
 
-release_node_links() {
+release_tool_links() {
   local name target
-  for name in node npm; do
+  for name in "$@"; do
     target="$quick_bin/$name"
     if [[ -L "$target" ]]; then
       rm -f -- "$target"
@@ -428,10 +428,14 @@ main() {
   "$need_gh" && install_gh
   if [[ "$node_tool" == "$path_node" ]]; then
     # Release fallbacks only when the selected Node already wins the underlying PATH.
-    release_node_links
+    release_tool_links node npm
   else
     bind_tool node "$node_tool"
-    if [[ -x "${node_tool%/*}/npm" ]]; then bind_tool npm "${node_tool%/*}/npm"; fi
+    if [[ -x "${node_tool%/*}/npm" ]]; then
+      bind_tool npm "${node_tool%/*}/npm"
+    else
+      release_tool_links npm
+    fi
   fi
   bind_tool gh "$gh_tool"
   bind_tool git "$git_tool"

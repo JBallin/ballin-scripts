@@ -565,6 +565,76 @@ esac
     assert.deepEqual(fresh.stdout.trim().split('\n'), [path.join(next, 'node'), path.join(next, 'npm')]);
     assert.notInclude(readLog(), 'sudo:');
   });
+  for (const shell of ['bash', 'zsh']) {
+    for (const scenario of ['live link', 'dangling link', 'absent link', 'non-executable sibling', 'replacement sibling']) {
+      it(`reconciles the managed npm fallback on a ${shell} rerun with ${scenario}`, () => {
+        const early = path.join(root, 'invalid-first');
+        const first = path.join(root, 'first-node');
+        const next = path.join(root, 'next-node');
+        const npmBin = path.join(root, 'independent-npm');
+        for (const dir of [early, first, next, npmBin]) fs.mkdirSync(dir);
+        fs.writeFileSync(path.join(early, 'node'), '#!/bin/bash\nexit 73\n', { mode: 0o755 });
+        linkFake('node', first);
+        fs.copyFileSync(path.join(root, 'fake-tool'), path.join(next, 'node'));
+        const npmContents = '#!/bin/bash\nexit 0\n';
+        for (const dir of [first, npmBin]) fs.writeFileSync(path.join(dir, 'npm'), npmContents, { mode: 0o755 });
+        const core = { SHELL: '/bin/' + shell, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') };
+        const installed = run('y\nn\n', { ...core, PATH: `${early}:${first}:${npmBin}:${tools}` });
+        assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+        const managedNpm = path.join(quickBin, 'npm');
+        assert.equal(fs.readlinkSync(managedNpm), path.join(first, 'npm'));
+        if (scenario === 'dangling link') fs.unlinkSync(path.join(first, 'npm'));
+        if (scenario === 'absent link') fs.unlinkSync(managedNpm);
+        if (scenario.includes('sibling')) {
+          fs.writeFileSync(path.join(next, 'npm'), npmContents, { mode: scenario === 'replacement sibling' ? 0o755 : 0o644 });
+        }
+        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+        const before = fs.readFileSync(profile, 'utf8');
+        fs.writeFileSync(log, '');
+        const rerun = run('n\n', { ...core, PATH: `${quickBin}:${early}:${next}:${npmBin}:${tools}` });
+        assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+        assert.equal(fs.readlinkSync(path.join(quickBin, 'node')), path.join(next, 'node'));
+        if (scenario === 'replacement sibling') assert.equal(fs.readlinkSync(managedNpm), path.join(next, 'npm'));
+        else assert.notInclude(fs.readdirSync(quickBin), 'npm', 'Remove even a dangling link');
+        assert.equal(fs.readFileSync(profile, 'utf8'), before);
+        if (scenario !== 'dangling link') assert.equal(fs.readFileSync(path.join(first, 'npm'), 'utf8'), npmContents);
+        assert.equal(fs.readFileSync(path.join(npmBin, 'npm'), 'utf8'), npmContents);
+        if (scenario.includes('sibling')) assert.equal(fs.readFileSync(path.join(next, 'npm'), 'utf8'), npmContents);
+        const fresh = spawnSync('/bin/' + shell, ['-f', '-c', 'source "$FAKE_PROFILE"; command -v node; command -v npm'], {
+          encoding: 'utf8', cwd: home,
+          env: testChildEnvironment({ HOME: home, PATH: `${early}:${next}:${npmBin}:${tools}`, FAKE_PROFILE: profile }),
+        });
+        assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+        assert.deepEqual(fresh.stdout.trim().split('\n'), [path.join(quickBin, 'node'),
+          scenario === 'replacement sibling' ? managedNpm : path.join(npmBin, 'npm')]);
+        for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:']) assert.notInclude(readLog(), forbidden);
+      });
+    }
+  }
+  for (const kind of ['file', 'directory']) {
+    it(`refuses to remove a non-symlink npm ${kind} while rebinding Node`, () => {
+      const early = path.join(root, 'invalid-first');
+      fs.mkdirSync(early);
+      fs.writeFileSync(path.join(early, 'node'), '#!/bin/bash\nexit 73\n', { mode: 0o755 });
+      const core = { FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh'), PATH: `${early}:${tools}` };
+      const first = run('y\nn\n', core);
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      const target = path.join(home, '.local/share/ballin-quickstart/bin/npm');
+      if (kind === 'directory') fs.mkdirSync(target);
+      const protectedFile = kind === 'file' ? target : path.join(target, 'keep');
+      fs.writeFileSync(protectedFile, 'Do not remove.\n', { mode: 0o640 });
+      const before = fs.statSync(protectedFile);
+      fs.writeFileSync(log, '');
+      const rerun = run('n\n', core);
+      assert.equal(rerun.status, 1, rerun.stdout + rerun.stderr);
+      assert.include(rerun.stderr, `Refusing to replace an existing file at ${target}`);
+      assert.equal(fs.readFileSync(protectedFile, 'utf8'), 'Do not remove.\n');
+      const after = fs.statSync(protectedFile);
+      for (const key of ['ino', 'mode', 'mtimeMs']) assert.equal(after[key], before[key], key);
+      for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+    });
+  }
   for (const prefixResult of ['failure', 'empty']) {
     it(`keeps core Homebrew semantics when the first PATH brew returns ${prefixResult} before a working later brew`, () => {
       const early = path.join(root, 'first-brew');
