@@ -35,6 +35,9 @@
   retain the command, last completed stage, and failure or interruption evidence.
 - Add focused validation when a touched risk is not covered by `npm test`;
   `.github/workflows/ci.yml` defines the additional shell and workflow checks.
+  Run extra workflow/preflight checks only for related changes. For pin-only
+  edits, prefer portable caller-contract tests locally and rely on CI for
+  tool-dependent checks; see [Pull request review](docs/testing.md#pull-request-review).
 - When changing shared validation commands, prerequisites, package metadata, or
   CI setup, review materially affected non-PR automation consumers and update
   their trigger, setup, and validation contracts as needed.
