@@ -119,6 +119,20 @@ describe('supplemental CI selection', () => {
           GITHUB_SHA: docs, GITHUB_OUTPUT: output }, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
       assert.equal(fs.readFileSync(output, 'utf8'), 'run=false\n');
+      // Exercise exact-SHA base recovery against a real shallow repository.
+      const shallow = path.join(root, 'shallow');
+      git(['clone', '-q', '--depth=1', pathToFileURL(root).href, shallow]);
+      const calls: string[][] = [];
+      const shallowGit: Git = (args) => {
+        calls.push(args);
+        return execFileSync('/usr/bin/git', args, { cwd: shallow, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      };
+      assert.isTrue(selectChecks('push', { before: first }, docs, shallowGit));
+      assert.deepInclude(calls, ['fetch', '--no-tags', '--depth=1', 'origin', first]);
+      // Recovery of an unrelated comparison can still safely skip checks.
+      calls.length = 0;
+      assert.isFalse(selectChecks('push', { before: deletion }, docs, shallowGit));
+      assert.deepInclude(calls, ['fetch', '--no-tags', '--depth=1', 'origin', deletion]);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
