@@ -72,6 +72,7 @@ jobs:
         id: coverage_diagnostics
         if: >-
           ${{ !cancelled() &&
+            hashFiles('coverage/tmp/coverage-*.json') != '' &&
             (steps.coverage.outcome == 'failure' ||
               (github.event_name == 'workflow_dispatch' &&
                 steps.coverage.outcome == 'success')) }}
@@ -93,7 +94,7 @@ jobs:
             mocha: require('mocha/package.json').version,
           }, null, 2) + '\n');
           NODE
-          node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
+          node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
 
       - name: Upload coverage comparison evidence
         if: >-
@@ -112,7 +113,10 @@ jobs:
           retention-days: 7
 
       - name: Upload raw V8 coverage evidence
-        if: ${{ !cancelled() && steps.coverage.outcome == 'failure' }}
+        if: >-
+          ${{ !cancelled() &&
+            hashFiles('coverage/tmp/coverage-*.json') != '' &&
+            steps.coverage.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
         with:
           name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}

@@ -642,6 +642,7 @@ exit 2
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
       'Ballin can report command usage and results, backup results, and automatic backup/self-update results during ballin update.\n'
+      + 'Failed backups include a coarse failure category when supported; raw errors are not sent.\n'
       + 'Backup contents, destination identities and configuration values are not sent.\n'
       + 'Reports include a random install ID stored locally.\n'
       + 'https://example.test/analytics',

@@ -33,17 +33,20 @@ type CommandAnalyticsPayload = {
 
 type BehavioralEvent = 'backup.run' | 'update.backup' | 'update.self-update';
 type BehavioralStatus = 'success' | 'failure';
+import type { BackupFailureCategory } from './backup_outcome.ts';
 type BehavioralAnalyticsPayload = {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   installId: string;
   dateBucket: string;
   event: BehavioralEvent;
   status: BehavioralStatus;
+  failureCategory?: BackupFailureCategory;
 };
 type AnalyticsPayload = CommandAnalyticsPayload | BehavioralAnalyticsPayload;
 type BehavioralRecordInput = {
   event: BehavioralEvent;
   status: BehavioralStatus;
+  failureCategory?: BackupFailureCategory;
   now?: Date;
 };
 
@@ -115,6 +118,7 @@ const allowedCommands = new Set([
 const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedBehavioralEvents = new Set(['backup.run', 'update.backup', 'update.self-update']);
 const allowedBehavioralStatuses = new Set(['success', 'failure']);
+const allowedBackupFailureCategories = new Set(['transport', 'authentication', 'reconciliation', 'local_state', 'unknown']);
 const pendingBehavioralSends = new Set<Promise<void>>();
 let currentAnalyticsRuntime: AnalyticsRuntime | undefined;
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
@@ -123,6 +127,7 @@ const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
   'Ballin can report command usage and results, backup results, and automatic backup/self-update results during ballin update.\n'
+  + 'Failed backups include a coarse failure category when supported; raw errors are not sent.\n'
   + 'Backup contents, destination identities and configuration values are not sent.\n'
   + 'Reports include a random install ID stored locally.\n'
   + docsUrl
@@ -524,6 +529,9 @@ const recordBehavioralAnalyticsEvent = (
       || !allowedBehavioralEvents.has(input.event)
       || !allowedBehavioralStatuses.has(input.status)) return Promise.resolve();
 
+    if (input.failureCategory !== undefined && (input.event !== 'backup.run'
+      || input.status !== 'failure' || !allowedBackupFailureCategories.has(input.failureCategory))) return Promise.resolve();
+
     const analytics = runtime.analyticsConfig ?? readAnalyticsConfig().analytics;
     if (analytics.enabled !== 'true') return Promise.resolve();
     const installId = runtime.installId === undefined
@@ -533,11 +541,13 @@ const recordBehavioralAnalyticsEvent = (
 
     // Capture the terminal outcome now; later synchronous stages may cross UTC midnight.
     const payload: BehavioralAnalyticsPayload = {
-      schemaVersion: 2,
+      schemaVersion: input.event === 'backup.run' ? 3 : 2,
       installId,
       dateBucket: dateBucket(input.now ?? new Date()),
       event: input.event,
       status: input.status,
+      ...(input.event === 'backup.run' && input.status === 'failure'
+        ? { failureCategory: input.failureCategory ?? 'unknown' } : {}),
     };
     const sender = runtime.sender ?? sendAnalyticsPayload;
     const options = {

@@ -3,8 +3,17 @@
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
 Run commands from the repository root. Use `npm test` for the complete local
-gate, or `npm run test:coverage` for coverage alone. CI runs the same coverage
-command once.
+gate, or `npm run test:coverage` for coverage alone. CI calls the same lint,
+typecheck and coverage scripts in separate steps. Its sequence duplicates the
+local `test` script; keep both definitions aligned when changing validation.
+Both paths use the shared Mocha command in `test:unit`. The
+[Mocha configuration](../.mocharc.js) uses two workers when Node reports at least
+four available CPUs and runs serially on smaller hosts.
+
+The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
+executed absolute script paths. It retains `all: true` and every coverage threshold;
+unexecuted included files still count as uncovered. Use the same wrapper when
+reporting saved profiles, and review the compatibility correction when updating c8.
 
 ## Pull request review
 
@@ -172,6 +181,11 @@ Neither command needs an analytics opt-out or `CI=true` in your shell.
 suppression, Ballin overrides, and test fixture selectors before production
 imports. Production commands still suppress analytics in CI.
 
+Each parallel worker owns a separate config and retains it until process exit,
+so reused workers and cached config modules see the same path. Normal process
+exit removes the config. Tests must restore their own temporary environment
+and module overrides.
+
 Analytics-enabled tests use explicit environments, temporary install IDs, and
 injected senders or mocked HTTPS requests. Installer, config, and public CLI
 fixtures use complete child environments through the
@@ -202,9 +216,9 @@ run replaces the raw coverage data:
 
 ```shell
 npm run test:coverage
-node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
+node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
 CI=true npm run test:coverage
-node node_modules/c8/bin/c8.js report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
+node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
 ```
 
 Compare exact totals in `coverage-summary.json` and file/source-location maps
@@ -217,8 +231,9 @@ Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
 
-When the coverage gate fails, CI attempts to retain exact reports and runtime,
-commit, tree, and lockfile metadata in a compact artifact for seven days. A
+When the coverage step fails after producing raw V8 coverage, CI attempts to
+retain exact reports and runtime, commit, tree, and lockfile metadata in a compact
+artifact for seven days. Failures before coverage starts skip these diagnostics. A
 separate failure-only artifact upload retains the raw V8 data when available,
 even if compact report generation fails. An intentional successful
 `workflow_dispatch` run retains only the compact evidence. Ordinary successful
@@ -244,11 +259,8 @@ status is incomplete. Record the command, last completed stage, and diagnostic
 output. Distinguish that interruption from Mocha reporting a test timeout.
 
 Before adding timeout headroom, remove unnecessary waits and accumulated work.
-Give each independent matrix combination its own `it` with the same assertions.
-In [PR #438](https://github.com/JBallin/ballin-scripts/pull/438), three help tests
-each bundled twelve independent CLI scenarios and exceeded the default two-second
-timeout in Linux CI. That is evidence about the test boundary and process cost,
-not evidence of intermittent flakiness or a reason to increase the global limit.
+Give each independent matrix combination its own `it` with the same assertions,
+so repeated CLI startup does not consume one case's default two-second budget.
 
 Keep a focused override when one coherent integration workflow legitimately
 needs more time. Existing Mocha allowances apply to each test or hook in their
@@ -266,9 +278,8 @@ choices from the behavior and guards in each case.
 | Native Tab-completion cases | 20s | Isolated interactive shell and terminal subprocesses |
 | Onboarding sandbox and walkthroughs | 300s | Outer allowance for multi-step command and process-group cleanup guards |
 
-Recent Linux integration evidence includes a 2.122s installer case and a 7.137s
-repository lifecycle case, supporting scoped headroom rather than a larger
-default. Automated onboarding commands have a 120s child limit; interactive QA
+Process-heavy integration workflows can need scoped headroom beyond the default.
+Automated onboarding commands have a 120s child limit; interactive QA
 test wrappers have a 240s limit. They check shutdown and preserve ambiguous live
 session state. These are guard budgets, not expected runtimes. Any adjustment
 must account for nested command limits and cleanup, as well as measured case
@@ -285,44 +296,29 @@ same checkout when estimating whole-suite instrumentation overhead. Focused
 results cannot establish whole-suite overhead, and macOS and Linux timings are
 not interchangeable.
 
-A separate October 2, 2026 whole-suite pair used Node 24.21.0 on macOS arm64
-and the frozen PR #438 head `8476f23`, including its split help matrix. Unit
-execution took 222.34s; coverage took 241.09s, an observed 18.74s (8.43%)
-overhead relative to unit execution. Both commands exited successfully with
-1,486 passing tests and no pending tests. Coverage retained the configured gate
-and reported 99.49% statements and lines, 97.27% branches and 100% functions.
-This is one serial pair, not an estimate of timing variance or a comparison
-between the earlier fixture patch and this later source tree.
+Measured results identify repeated CLI launches and fixture startup as major
+runtime contributors. In one serial whole-suite comparison at `8476f23` on
+macOS arm64 with Node 24.21.0, coverage instrumentation added about 8% to unit
+execution time. That single pair does not characterize timing variance.
 
-The October 2, 2026 fixture-startup comparison used Node 24.21.0 on macOS arm64,
-baseline `3c924f9`, and the helper change delivered in
-[PR #437](https://github.com/JBallin/ballin-scripts/pull/437):
+Historical complete-gate comparisons at `c587fa6` and `2951bb1` on four-CPU Ubuntu
+runners with Node 24.21.0, Mocha 11.7.6 and c8 12.0.0 showed median wall-time
+reductions of about 17–20% with two workers. Statement/function outcomes and
+effective V8 covered/uncovered intervals matched serial execution; branch-map
+geometry varied. Coverage thresholds and Mocha timeouts were preserved. These
+measurements support the shared configuration's two-worker setting on hosts with
+at least four available CPUs.
 
-| Command and selection | Before | After | Observations |
-| --- | --- | --- | --- |
-| Unit, nine representative scenarios | 12.00s | 9.08s | Median of three alternating pairs |
-| Coverage, the same nine scenarios | 12.57s | 9.77s | Median of three alternating pairs |
-| Complete `npm test`, 1,427 tests | 272.44s | 238.30s | One pair |
+The configuration retains serial execution below four available CPUs to limit
+contention between subprocess-heavy suites. Serial checks passed with two-CPU
+affinity on Node 24.21.0 and a two-CPU quota on Node 24.15.0; each is a single
+smoke check. Node supplies the CPU estimate through `os.availableParallelism()`.
 
-The full pair saved 34.14s while preserving production coverage source maps and
-covered/uncovered outcomes. It is one observation, not a runtime guarantee.
-Repository lifecycle cases contributed at least 153s of the baseline's printed
-test time, compared with about 35s for legacy backup; printed durations omit
-fast cases and setup. Lint and both typechecks added about 2.1s to the optimized
-local gate.
-
-Linux CI on baseline `3c924f9` spent 476s in coverage within a 510s job. Merged
-commit `1cb157a` passed 1,443 tests and spent 383s in coverage within a 408s job.
-That merged tree includes other changes, so these runs are not a controlled
-before/after estimate of the optimization. Use exact run provenance before
-attributing differences to a patch or resource contention.
-
-Retain serial execution and the single complete gate. Mocha's parallel workers
-load required setup once per worker and can run multiple files, while the current
-root `afterAll` removes its config and restores the environment after a file.
-Worker reuse would need a compatible fixture lifecycle before enabling parallel
-mode. Splitting suites adds maintenance cost without a demonstrated additional
-benefit; use focused selection for feedback and retain complete final validation.
+Benchmark reductions describe command wall time and exclude runner queue, setup
+and evidence capture. Machine load, platform, runtime and source changes can alter
+timing and coverage geometry. Use focused selection for feedback, retain the
+single complete final gate, and verify that the full CI job fits its 20-minute
+budget.
 
 ## Runtime and platform limits
 
@@ -335,13 +331,6 @@ imports, leaving its temporary link intact while cleanup removes another owned
 link. The separate `ENOENT` fixture actually removes its link before throwing,
 preserving its disappearance-race contract. Both run without contacting real
 user state.
-
-The September 30 discrepancy in PR #411 came from the old chmod-based uninstall
-test skipping under root. CI's merge commit and the PR head had identical trees;
-CI ran the test and covered the incomplete owned-link cleanup/reporting path.
-Replacing only that fixture restores the missing coverage under the original
-local Node version, without changing production code, analytics isolation,
-coverage scope, or thresholds.
 
 The nested-update analytics fixture injects a fixed clock so machine load cannot
 move its event across the one-second duration boundary and add a covered V8
