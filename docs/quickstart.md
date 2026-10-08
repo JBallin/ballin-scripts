@@ -1,7 +1,6 @@
 # Your first Ballin backup
 
-You’ll need macOS 13.5 or newer and a [GitHub account](https://github.com/signup).
-Before starting, review [backup sources and privacy](backup-sources.md).
+You’ll need a [GitHub account](https://github.com/signup).
 
 Open Terminal and paste:
 
@@ -13,7 +12,8 @@ The helper reuses Git, compatible Node.js, and GitHub CLI, asking before
 installing missing tools or changing your Terminal startup file. Node's
 installer may replace Node.js/npm in `/usr/local` and ask for your Mac password.
 
-Follow the prompts to create your first private backup. When its GitHub page
-opens, inspect the saved files.
+After following the prompts to create your first private backup, GitHub opens so you can browse your saved files.
 
 For setup help and recovery, see [installation details](installation.md#quickstart-helper).
+
+Recommended reading (optional): [backup sources and privacy](backup-sources.md).
