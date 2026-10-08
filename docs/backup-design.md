@@ -545,8 +545,10 @@ path replacement through writable ancestors.
 `test/backup_repository.test.ts` exercises protocol and publication semantics;
 `test/repository_backup.test.ts` uses a stateful fake GitHub service for public
 CLI lifecycle, consent, ruleset reconciliation and failure recovery. Installer
-walkthroughs, doctor fixtures, and the required `npm test` use temporary roots and complete
-child environments. Never manually smoke-test real user backup state.
+walkthroughs, doctor fixtures, and automated tests use temporary roots and complete
+child environments. Follow [Test runtime and timeouts](testing.md#test-runtime-and-timeouts)
+for focused local checks and complete CI validation. Never manually smoke-test
+real user backup state.
 
 Automated tests prove the exact policy request and Ballin's surrounding behavior;
 they do not prove GitHub's live enforcement. Separately authorized disposable
