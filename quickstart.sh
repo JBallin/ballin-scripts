@@ -159,7 +159,7 @@ find_git() {
 gh_compatible() {
   [[ "$1" == /* && -x "$1" ]] \
     && "$1" --version >/dev/null 2>&1 \
-    && "$1" auth status --help 2>/dev/null | grep -q -- '--active'
+    && "$1" auth status --help 2>/dev/null | grep -- '--active' >/dev/null
 }
 
 find_gh() {

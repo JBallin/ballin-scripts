@@ -502,6 +502,38 @@ esac
       }
     });
   }
+  for (const helpExit of [0, 42]) {
+    it(`drains streamed GitHub CLI help and respects producer exit ${helpExit}`, () => {
+      const early = path.join(root, 'streamed-help');
+      fs.mkdirSync(early);
+      const candidate = path.join(early, 'gh');
+      fs.writeFileSync(candidate, '#!/bin/bash\n'
+        + 'printf "streamed-gh:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n'
+        + 'if [[ "$*" == "auth status --help" ]]; then exec "$TEST_NODE_RUNTIME" "$FAKE_ROOT/streamed-help.cjs"; fi\n'
+        + 'exec "$FAKE_ROOT/tools/gh" "$@"\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(root, 'streamed-help.cjs'),
+        'process.stdout.on("error", error => { if (error.code === "EPIPE") process.exit(141); throw error; });\n'
+        + 'process.stdout.write("--active\\n");\n'
+        // Exceed the pipe buffer so accepting the flag must still drain the producer.
+        + 'process.stdout.write("Additional help.\\n".repeat(65536), () => {\n'
+        + `  process.exitCode = ${helpExit};\n`
+        + '});\n');
+      const result = run('y\nn\n', {
+        PATH: `${early}:${tools}`, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh'),
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'Missing prerequisites:');
+      assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
+      const selected = fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin/gh'));
+      assert.equal(selected, helpExit === 0 ? candidate : path.join(tools, 'gh'));
+      assert.include(readLog(), 'streamed-gh:auth status --help');
+      if (helpExit === 0) assert.include(readLog(), 'streamed-gh:auth status --active --hostname github.com');
+      else assert.notInclude(readLog(), 'streamed-gh:auth status --active');
+      for (const forbidden of ['sudo:', 'xcode-select:--install', '/releases/latest', 'git:clone', 'ballin:']) {
+        assert.notInclude(readLog(), forbidden);
+      }
+    });
+  }
   it('releases the later working PATH Node after an invalid earlier executable is removed', () => {
     const early = path.join(root, 'invalid-first');
     fs.mkdirSync(early);
