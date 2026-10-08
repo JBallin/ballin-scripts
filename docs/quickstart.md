@@ -23,7 +23,7 @@ GitHub and authorized accounts can read the contents.
 [Review the source list](backup-sources.md) before choosing **yes**;
 choose **no** if unsure.
 
-When asked to run your first backup, press Enter to run your first backup and open its private
-GitHub destination; enter `n` to skip both. Inspect the saved files on GitHub.
+At the first-backup prompt, press Enter to back up and open its private GitHub
+destination; enter `n` to skip both. Inspect the saved files on GitHub.
 
 For setup help and recovery, see [installation details](installation.md#quickstart-helper).
