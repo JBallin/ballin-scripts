@@ -3,10 +3,12 @@
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
 Run commands from the repository root. Use `npm test` for the complete local
-and CI gate, or `npm run test:coverage` for coverage alone. Both use the shared
-Mocha command in `test:unit`; lint, typechecks and coverage checks remain part
-of `npm test`. The [Mocha configuration](../.mocharc.js) uses two workers when
-Node reports at least four available CPUs and runs serially on smaller hosts.
+gate, or `npm run test:coverage` for coverage alone. CI calls the same lint,
+typecheck and coverage scripts in separate steps. Its sequence duplicates the
+local `test` script; keep both definitions aligned when changing validation.
+Both paths use the shared Mocha command in `test:unit`. The
+[Mocha configuration](../.mocharc.js) uses two workers when Node reports at least
+four available CPUs and runs serially on smaller hosts.
 
 The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;
@@ -211,7 +213,7 @@ Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
 
-When the complete gate fails after producing raw V8 coverage, CI attempts to
+When the coverage step fails after producing raw V8 coverage, CI attempts to
 retain exact reports and runtime, commit, tree, and lockfile metadata in a compact
 artifact for seven days. Failures before coverage starts skip these diagnostics. A
 separate failure-only artifact upload retains the raw V8 data when available,
@@ -277,17 +279,17 @@ results cannot establish whole-suite overhead, and macOS and Linux timings are
 not interchangeable.
 
 Measured results identify repeated CLI launches and fixture startup as major
-runtime contributors. In one serial whole-suite comparison on macOS arm64 with
-Node 24.21.0, coverage instrumentation added about 8% to unit execution time.
-That single pair does not characterize timing variance.
+runtime contributors. In one serial whole-suite comparison at `8476f23` on
+macOS arm64 with Node 24.21.0, coverage instrumentation added about 8% to unit
+execution time. That single pair does not characterize timing variance.
 
-Repeated complete-gate comparisons on four-CPU Ubuntu runners with Node 24.21.0,
-Mocha 11.7.6 and c8 12.0.0 showed median wall-time reductions of about 17–20%
-with two workers. Statement/function outcomes and effective V8 covered/uncovered
-intervals matched serial execution; branch-map geometry varied.
-Coverage thresholds and Mocha timeouts were preserved. These measurements support
-the shared configuration's two-worker setting on hosts with at least four
-available CPUs.
+Historical complete-gate comparisons at `c587fa6` and `2951bb1` on four-CPU Ubuntu
+runners with Node 24.21.0, Mocha 11.7.6 and c8 12.0.0 showed median wall-time
+reductions of about 17–20% with two workers. Statement/function outcomes and
+effective V8 covered/uncovered intervals matched serial execution; branch-map
+geometry varied. Coverage thresholds and Mocha timeouts were preserved. These
+measurements support the shared configuration's two-worker setting on hosts with
+at least four available CPUs.
 
 The configuration retains serial execution below four available CPUs to limit
 contention between subprocess-heavy suites. Serial checks passed with two-CPU
