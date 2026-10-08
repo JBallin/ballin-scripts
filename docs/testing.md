@@ -30,6 +30,24 @@ refresh existing presentation without running Claude. For a fresh review of an
 open, non-draft, same-repository PR, a human owner, member, or collaborator can
 post `/claude-review` as the entire top-level or inline PR comment.
 
+Run `npm run test:unit -- test/claude_workflows.test.ts` for the portable offline
+caller contracts, also included in `npm test`. They parse YAML and compare the
+approved eligibility expressions, events, permissions, secrets, runtime pins,
+execution keys, and manual preflight wiring/script. An inventory checks every
+YAML workflow for runtime or Claude credential references. These checks guard
+configuration changes; they do not evaluate GitHub Actions expressions or claim
+behavior for alternative expressions. Formatting and YAML comments may change
+without changing the parsed contract. Shared runtime behavior stays tested in
+the runtime repository.
+
+CI additionally runs `npm run test:claude-preflight` with Bash, `jq`, and GNU
+`timeout` declared as prerequisites. That bounded test executes the workflow's
+actual preflight script in a temporary directory with a stub `gh` and fixture
+responses, covering eligible/ineligible PRs, malformed data, wrong PR identity,
+and command failure. It makes no network or model calls. This separate CI test
+is excluded from portable `npm test`; invoking it directly requires those tools
+and fails if they are missing.
+
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
 Closing the PR or converting it to a draft does not cancel an accepted request.
