@@ -328,6 +328,58 @@ esac
       });
     }
   }
+  for (const placement of ['original PATH', 'local bin', 'discovered Homebrew bin']) {
+    for (const state of ['missing', 'non-executable', 'working', 'broken']) {
+      it(`validates exposed npm ${state} in ${placement} while Node wins PATH`, () => {
+        const localBin = path.join(home, '.local/bin');
+        const brewPrefix = path.join(root, 'brew');
+        const npmBin = placement === 'original PATH' ? tools : placement === 'local bin'
+          ? localBin : path.join(brewPrefix, 'bin');
+        fs.mkdirSync(npmBin, { recursive: true });
+        if (placement === 'discovered Homebrew bin') {
+          fs.mkdirSync(localBin, { recursive: true });
+          linkFake('brew', localBin);
+        }
+        const npm = path.join(npmBin, 'npm');
+        const bytes = '#!/bin/bash\n'
+          + 'printf "exposed-npm:%s:node=%s\\n" "$*" "$(command -v node)" >> "$FAKE_COMMAND_LOG"\n'
+          + '[[ "${FAKE_BROKEN_NPM:-0}" != 1 ]] || exit 73\n';
+        if (state !== 'missing') fs.writeFileSync(npm, bytes, { mode: state === 'non-executable' ? 0o644 : 0o755 });
+        const profile = path.join(home, '.zshrc');
+        fs.writeFileSync(profile, '# Existing settings\n', { mode: 0o640 });
+        const before = fs.statSync(profile);
+        const overrides = { FAKE_BREW_PREFIX: brewPrefix, FAKE_BROKEN_NPM: state === 'broken' ? '1' : '0',
+          FAKE_CHECK_NPM_COLLECTOR: ['missing', 'non-executable'].includes(state) ? '0' : '1' };
+
+        const result = run('y\ny\n', overrides);
+
+        assert.equal(result.status, state === 'broken' ? 1 : 0, result.stdout + result.stderr);
+        if (state === 'broken') {
+          assert.include(result.stderr, `npm cannot run through the final PATH: ${npm}.`);
+          assert.equal(fs.readFileSync(profile, 'utf8'), '# Existing settings\n');
+          assert.equal(fs.statSync(profile).ino, before.ino);
+          assert.equal(fs.statSync(profile).mode, before.mode);
+          for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
+          fs.writeFileSync(log, '');
+          const retry = run('y\ny\n', { ...overrides, FAKE_BROKEN_NPM: '0' });
+          assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+        }
+        assert.include(readLog(), 'ballin:backup open');
+        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+        for (const tool of ['node', 'npm']) assert.isFalse(fs.existsSync(path.join(quickBin, tool)));
+        if (state === 'working' || state === 'broken') {
+          assert.include(readLog(), `exposed-npm:--version:node=${path.join(tools, 'node')}`);
+          assert.include(readLog(), `exposed-npm:list -g --depth=0:node=${path.join(tools, 'node')}`);
+          assert.equal(fs.readFileSync(npm, 'utf8'), bytes);
+          assert.isFalse(fs.lstatSync(npm).isSymbolicLink());
+        } else assert.notInclude(readLog(), 'exposed-npm:');
+        if (state === 'non-executable') {
+          assert.equal(fs.readFileSync(npm, 'utf8'), bytes);
+          assert.equal(fs.statSync(npm).mode & 0o777, 0o644);
+        }
+      });
+    }
+  }
   for (const placement of ['reachable', 'outside PATH', 'shadowed']) {
     it(`qualifies the paired npm wrapper when its original invocation is ${placement}`, () => {
       linkFake('node', systemNode);

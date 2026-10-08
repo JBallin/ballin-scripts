@@ -402,7 +402,7 @@ configure_path() {
 }
 
 main() {
-  local managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true
+  local exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -493,6 +493,9 @@ main() {
   if [[ "$command_path" != "$command_bin" ]]; then
     command_path+=":$command_bin"
     export PATH="$PATH:$command_bin"
+  fi
+  if exposed_npm=$(type -P npm) && [[ -f "$exposed_npm" && -x "$exposed_npm" ]]; then
+    npm_compatible "$exposed_npm" || fail "npm cannot run through the final PATH: $exposed_npm. Fix or remove this broken command, then rerun this quickstart. PATH setup and authentication have not run."
   fi
   configure_path
   "$gh_tool" auth status --active --hostname github.com \
