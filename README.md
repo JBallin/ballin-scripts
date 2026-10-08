@@ -24,7 +24,7 @@ backups also require [GitHub CLI](https://cli.github.com/) authenticated to your
 personal GitHub.com account. See [Node.js setup](docs/optional-capabilities.md#nodejs)
 if you need a supported runtime.
 
-For guided installation and your first backup, see the [quickstart guide](docs/quickstart.md).
+To install missing tools and create your first backup, follow the [quickstart guide](docs/quickstart.md).
 
 Review the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh),
 then run:
