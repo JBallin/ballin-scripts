@@ -2,10 +2,12 @@
 
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
-Run commands from the repository root. Use `npm test` for the complete local
-gate, or `npm run test:coverage` for coverage alone. CI calls the same lint,
-typecheck and coverage scripts in separate steps. Its sequence duplicates the
-local `test` script; keep both definitions aligned when changing validation.
+Run commands from the repository root. `npm test` runs comprehensive local Node
+checks: lint, both typechecks, and tests with coverage. For faster feedback, use
+the focused commands in [Test runtime and timeouts](#test-runtime-and-timeouts).
+CI runs the same Node scripts in separate steps and adds checks defined in the
+[CI workflow](../.github/workflows/ci.yml), including shell and workflow
+validation. Keep the shared Node script definitions aligned when changing them.
 Both paths use the shared Mocha command in `test:unit`. The
 [Mocha configuration](../.mocharc.js) uses two workers when Node reports at least
 four available CPUs and runs serially on smaller hosts.
@@ -263,12 +265,27 @@ Use `npm run test:unit` for a focused development run, for example:
 npm run test:unit -- --grep 'scenario name'
 ```
 
-Keep `npm test` as the complete local gate. A gate passes only when the command
-finishes successfully and all required stages complete; a passing Mocha count
-alone does not establish that coverage checks or later stages passed. A killed,
-interrupted, tool-expired, or disconnected command without a confirmed exit
-status is incomplete. Record the command, last completed stage, and diagnostic
-output. Distinguish that interruption from Mocha reporting a test timeout.
+For example, when changing saved-backup inventory, start with these existing
+direct tests:
+
+```shell
+npm run test:unit -- --no-parallel \
+  test/backup_repository.test.ts test/snapshot_definitions.test.ts \
+  --grep 'inventory:|complete inventory|during list|dependent list operations|final list revision check|reads only the requested supported snapshot|classifies only exact'
+```
+
+This selection covers marker validation, authentication, account and revision
+changes, selective snapshot reads, and exact filename classification. Check the
+selected test names when changing these suites; the selection follows their
+titles. For CLI arguments, exits, output, environment handling, or saved-bundle
+inspection, also run `npm run test:unit -- test/backup_list.test.ts`. Bundle
+decoding has its own direct suite, `test/directory_snapshot.test.ts`. The CLI suite
+checks command behavior through real processes.
+
+To run tests with coverage, use `npm run test:coverage`. Even if every test
+passes, the command can still fail because coverage is below the required
+minimum. Check the command’s final result. For agent validation sequencing, see
+[Local commands](../AGENTS.md#local-commands).
 
 Before adding timeout headroom, remove unnecessary waits and accumulated work.
 Give each independent matrix combination its own `it` with the same assertions,
