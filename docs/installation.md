@@ -352,12 +352,6 @@ raw bundle without `--list` or `--file` and pass the selected entry’s JSON-dec
 `--file` prints the original bytes, including binary content and line endings.
 These commands inspect saved content without restoring files or executing them.
 
-If Ballin reports a backup size or transport limit, stored data and history stay
-intact. Use `ballin backup open`, or inspect the selected repository directly in
-GitHub. You can choose a new destination while retaining the old repository. See
-[repository resource limits](backup-design.md#normal-repository-resource-limits)
-for details.
-
 For local history inspection, clone your backup repository with Git:
 
 ```shell
