@@ -9,9 +9,9 @@
     "analytics:report": "node analytics-worker/report.ts",
     "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "typecheck:analytics-worker": "node node_modules/@typescript/native/bin/tsc --noEmit --strict --target ES2023 --module ESNext --lib ES2023,WebWorker --ignoreConfig analytics-worker/src/index.ts",
-    "test:unit": "mocha",
+    "test:unit": "mocha --parallel",
     "sandbox": "node test/qa_sandbox.ts",
-    "test:coverage": "c8 npm run test:unit",
+    "test:coverage": "node test/coverage.ts npm run test:unit",
     "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage"
   },
   "engines": {
