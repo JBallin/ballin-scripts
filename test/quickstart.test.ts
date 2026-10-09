@@ -2253,7 +2253,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           assert.equal(config.backup.includeSensitive, 'false');
           assert.equal(config.update.backup, 'false');
           assert.deepEqual(publishes.map((request: { payload: { variables: { input: { message: { headline: string } } } } }) =>
-            request.payload.variables.input.message.headline), ['Initialize Ballin backup', 'Update Ballin backup']);
+            request.payload.variables.input.message.headline), ['Initialize backup', 'Update: update preferences']);
           assert.lengthOf(opens, 1);
           assert.isAbove(state.requests.indexOf(opens[0]), state.requests.indexOf(publishes[1]));
           const retry = runSandbox(sandbox, ['quickstart'], 'login\nn\n');

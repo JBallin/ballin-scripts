@@ -275,7 +275,7 @@ describe('private repository transport', () => {
     );
     assert.equal(publications().length, 1);
     const input = publications()[0].payload?.variables?.input as Record<string, unknown>;
-    assert.deepEqual(input.message, { headline: 'Initialize Ballin backup' });
+    assert.deepEqual(input.message, { headline: 'Initialize backup' });
     assert.notProperty(input.fileChanges, 'deletions');
     const additions = (input.fileChanges as { additions: { path: string; contents: string }[] }).additions;
     assert.deepEqual(additions.map(({ path }) => path), ['.ballin-backup.json', 'README.md']);
@@ -764,10 +764,45 @@ describe('private repository transport', () => {
       (input.fileChanges as { additions: { path: string }[] }).additions.map(({ path }) => path).sort(),
       ['gitconfig', 'zshrc.sh'],
     );
+    assert.deepEqual(input.message, { headline: 'Update: Zsh settings, Git config' });
     assert.equal(input.expectedHeadOid, before.revision.head);
     assert.deepEqual(input.branch, { id: 'REF_R_fixture_main' });
     assert.equal(Buffer.from(state.commits[state.head].files['README.md'], 'base64').toString(), 'User presentation\n');
     assert.equal(rulesetRequests().length, 0);
+  });
+  it('derives messages only from published paths, including new and emptied snapshots', () => {
+    const additions = new Map([
+      ['codex_config.toml', Buffer.from('DUMMY_PRIVATE_CONFIG')],
+      ['codex_skills.bundle.json', Buffer.from('DUMMY_PRIVATE_SKILL_PATH_AND_CONTENT')],
+      ['zshrc.sh', Buffer.alloc(0)],
+    ]);
+    publishRepositorySnapshots(read(), additions, options);
+    const message = (publications()[0].payload?.variables?.input as { message: unknown }).message;
+    assert.deepEqual(message, { headline: 'Update: Zsh settings, Codex config, Codex skills' });
+    assert.notInclude(JSON.stringify(message), 'DUMMY_PRIVATE');
+    assert.equal(Buffer.from(state.commits[state.head].files['zshrc.sh'], 'base64').length, 0);
+    state.requests = [];
+    publishRepositorySnapshots(read(), new Map([...additions].toReversed().map(([name]) => [name, Buffer.from('OTHER_SECRET')])), options);
+    assert.deepEqual((publications()[0].payload?.variables?.input as { message: unknown }).message, message);
+  });
+  it('sends the full source list in the mutation body when its subject is shortened', () => {
+    publishRepositorySnapshots(read(), new Map([
+      ['vsI_extensions', Buffer.from('PRIVATE_CONTENT')],
+      ['vsI_keybindings', Buffer.from('PRIVATE_CONTENT')],
+      ['vsI_settings', Buffer.from('PRIVATE_CONTENT')],
+    ]), options);
+    assert.deepEqual((publications()[0].payload?.variables?.input as { message: unknown }).message, {
+      headline: 'Update: VS Code Insiders settings, VS Code Insiders keybindings, +1 more',
+      body: 'Changed sources:\n- VS Code Insiders settings (vsI_settings)\n'
+        + '- VS Code Insiders keybindings (vsI_keybindings)\n- VS Code Insiders extensions (vsI_extensions)',
+    });
+  });
+  it('keeps Update and the source label for empty captured output represented by the empty marker', () => {
+    publishRepositorySnapshots(read(), new Map([['zshrc.sh', Buffer.from('empty\n')]]), options);
+    assert.deepEqual((publications()[0].payload?.variables?.input as { message: unknown }).message, {
+      headline: 'Update: Zsh settings',
+    });
+    assert.equal(Buffer.from(state.commits[state.head].files['zshrc.sh'], 'base64').toString(), 'empty\n');
   });
   it('does not publish a true no-op', () => {
     const before = read();
