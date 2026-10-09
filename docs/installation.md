@@ -137,6 +137,8 @@ that line manually with the displayed command using LF line endings.
 The [quickstart helper](quickstart.md) reuses Git, compatible Node.js, and GitHub
 CLI. It requires macOS 13.5 or newer and zsh or Bash. Homebrew is optional.
 
+[View the setup script](../quickstart.sh).
+
 For missing prerequisites, it asks before starting Apple's Command Line Tools
 installation for Git, installing the latest official Node.js 24 macOS package,
 or downloading GitHub CLI for your shell's architecture. Node's installer may
