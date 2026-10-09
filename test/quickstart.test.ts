@@ -55,6 +55,7 @@ main
       HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
       FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source,
       FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath, ...overrides,
+      FAKE_PRIVILEGED_HELPER: path.join(__dirname, 'helpers/quickstart_privileged.ts'),
     }),
   });
   };
@@ -145,12 +146,13 @@ case "$name" in
       *) exit 97 ;;
     esac ;;
   curl)
+    if [[ "\${FAKE_REQUIRE_CURL_Q:-0}" == 1 && "$1" != -q ]]; then exit 96; fi
     url=''; target=''
     while [[ $# -gt 0 ]]; do
       case "$1" in
         -o) target="$2"; shift 2 ;;
         --proto|--proto-redir) shift 2 ;;
-        -fsSL|-fL|--progress-bar|--tlsv1.2) shift ;;
+        -q|-fsSL|-fL|--progress-bar|--tlsv1.2) shift ;;
         https://*) url="$1"; shift ;;
         *) exit 97 ;;
       esac
@@ -179,9 +181,7 @@ case "$name" in
     if [[ "\${FAKE_BAD_PUBLISHER:-0}" == 1 ]]; then printf 'Unexpected publisher\\n'
     else printf 'Developer ID Installer: Node.js Foundation (HX7739G8FX)\\n'; fi ;;
   sudo)
-    [[ "$1" == /usr/sbin/installer && "$2" == -pkg && "$3" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/node-v24.21.0.pkg && "$4" == -target && "$5" == / && $# == 5 ]] || exit 97
-    [[ "\${FAKE_SUDO_FAIL:-0}" != 1 ]] || exit 1
-    cp "$FAKE_ROOT/fake-tool" "$FAKE_SYSTEM_NODE/node" ;;
+    exec "$TEST_NODE_RUNTIME" "$FAKE_PRIVILEGED_HELPER" "$@" ;;
   ditto)
     [[ "$1" == -x && "$2" == -k && "$3" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/gh_2.102.0_macOS_*.zip && "$4" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/gh-extract && $# == 4 ]] || exit 97
     folder="\${3##*/}"; folder="\${folder%.zip}"
@@ -223,6 +223,207 @@ esac
     for (const name of ['uname', 'sw_vers', 'git', 'xcode-select', 'node', 'gh', 'curl', 'pkgutil', 'sudo', 'ditto']) linkFake(name);
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  for (const mode of ['launcher', 'normal', 'progress']) {
+    it(`disables curl configuration as the first argument for ${mode} downloads`, () => {
+      const result = mode === 'launcher' ? runCopiedCommand('bash', 'device-code\n', { FAKE_REQUIRE_CURL_Q: '1' })
+        : run(mode === 'progress' ? 'y\ny\ny\n' : 'y\ny\n', { FAKE_REQUIRE_CURL_Q: '1', FAKE_OLD_NODE: mode === 'progress' ? '1' : '0' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      for (const line of readLog().split('\n').filter((line) => line.startsWith('curl:'))) assert.match(line, /^curl:-q /u);
+    });
+  }
+  it('rejects a Node package swapped before privileged staging', () => {
+    const result = run('y\ny\ny\n', { FAKE_OLD_NODE: '1', FAKE_SWAP_NODE: 'before-stage' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.isFalse(fs.existsSync(path.join(root, 'installed.pkg')));
+    for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
+    assert.include(result.stderr, 'staged Node.js package checksum');
+    assert.isEmpty(fs.readdirSync(path.join(root, 'privileged-parent')));
+  });
+  for (const swap of ['after-stage', 'after-signature', 'manifest-before-stage', 'manifest-after-stage', 'manifest-only']) {
+    it(`keeps the captured digest and staged Node package through ${swap}`, () => {
+      const original = fs.readFileSync(path.join(root, 'node.pkg'));
+      const result = run('y\ny\ny\n', { FAKE_OLD_NODE: '1', FAKE_SWAP_NODE: swap });
+      const rejects = swap === 'manifest-before-stage';
+      assert.equal(result.status, rejects ? 1 : 0, result.stdout + result.stderr);
+      assert.equal(fs.readFileSync(path.join(root, 'captured-digest'), 'utf8'), crypto.createHash('sha256').update(original).digest('hex'));
+      if (rejects) {
+        assert.isFalse(fs.existsSync(path.join(root, 'installed.pkg')));
+        assert.notInclude(readLog(), 'privileged-pkgutil:');
+        assert.include(result.stderr, 'staged Node.js package checksum');
+      } else {
+        assert.deepEqual(fs.readFileSync(path.join(root, 'installed.pkg')), original);
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'stage-metadata.json'), 'utf8')), { mode: 0o600, nlink: 1, parentMode: 0o700 });
+        const ordered = ['pkgutil:--check-signature', 'sudo:/usr/bin/env', 'privileged-mktemp:', 'privileged-cat:',
+          'privileged-shasum:', 'privileged-pkgutil:', 'privileged-grep:', 'privileged-installer:', 'privileged-rm:'];
+        for (let index = 1; index < ordered.length; index++) assert.isAbove(readLog().indexOf(ordered[index]), readLog().indexOf(ordered[index - 1]));
+        assert.include(readLog(), 'ballin:backup open');
+      }
+      assert.isEmpty(fs.readdirSync(path.join(root, 'privileged-parent')));
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
+  for (const [failure, status, next] of [
+    ['FAKE_STAGE_FAIL', 71, 'cat'], ['FAKE_COPY_FAIL', 72, 'shasum'], ['FAKE_STAGED_HASH_FAIL', 73, 'pkgutil'],
+    ['FAKE_STAGED_SIGNATURE_FAIL', 1, 'grep'], ['FAKE_STAGED_BAD_PUBLISHER', 1, 'installer'],
+    ['FAKE_STAGED_GREP_FAIL', 1, 'installer'], ['FAKE_STAGED_INSTALL_FAIL', 64, ''],
+    ['FAKE_CANCEL_SUDO', 130, 'mktemp'], ['FAKE_STAGE_CANCEL', 143, 'shasum'],
+  ] as const) {
+    it(`fails closed and cleans Node staging after ${failure}`, () => {
+      const result = run('y\ny\ny\n', { FAKE_OLD_NODE: '1', [failure]: '1' });
+      assert.equal(result.status, status, result.stdout + result.stderr);
+      if (next) assert.notInclude(readLog(), `privileged-${next}:`);
+      for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
+      assert.isFalse(fs.existsSync(path.join(root, 'installed.pkg')));
+      if (failure !== 'FAKE_CANCEL_SUDO') assert.isEmpty(fs.readdirSync(path.join(root, 'privileged-parent')));
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
+  }
+  for (const installerFails of [false, true]) {
+    it(`preserves Node operation status on cleanup failure with installer failure ${installerFails}`, () => {
+      const result = run('y\ny\ny\n', { FAKE_OLD_NODE: '1', FAKE_STAGE_CLEANUP_FAIL: '1', FAKE_STAGED_INSTALL_FAIL: installerFails ? '1' : '0' });
+      assert.equal(result.status, installerFails ? 64 : 1, result.stdout + result.stderr);
+      assert.include(readLog(), 'privileged-rm:');
+      for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
+    });
+  }
+  it('clears inherited shell startup and runtime settings at the privileged Node boundary', () => {
+    const startup = path.join(root, 'injected-startup');
+    fs.writeFileSync(startup, 'printf "injected-startup\\n" >> "$FAKE_COMMAND_LOG"\nexit 77\n');
+    const result = run('y\ny\ny\n', { FAKE_OLD_NODE: '1' }, home, `
+fixture_sudo() (
+  export BASH_ENV="$FAKE_ROOT/injected-startup" ENV="$FAKE_ROOT/injected-startup" PERL5OPT=-MDoesNotExist
+  "$TEST_NODE_RUNTIME" "$FAKE_PRIVILEGED_HELPER" "$@"
+)
+system_sudo=fixture_sudo
+`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notInclude(readLog(), 'injected-startup');
+    assert.isTrue(fs.existsSync(path.join(root, 'installed.pkg')));
+  });
+  for (const kind of ['copy', 'hard link', 'other checkout']) {
+    it(`rejects an earlier ballin ${kind} before PATH persistence without executing it`, () => {
+      const intended = path.join(home, '.ballin-scripts/bin/ballin');
+      const conflict = path.join(tools, 'ballin');
+      fs.mkdirSync(path.dirname(intended), { recursive: true });
+      fs.writeFileSync(intended, '#!/bin/bash\nprintf "conflict-ran\\n" >> "$FAKE_COMMAND_LOG"\n', { mode: 0o755 });
+      if (kind === 'hard link') fs.linkSync(intended, conflict);
+      else if (kind === 'copy') fs.copyFileSync(intended, conflict);
+      else {
+        const other = path.join(root, 'other-checkout/bin/ballin');
+        fs.mkdirSync(path.dirname(other), { recursive: true });
+        fs.copyFileSync(intended, other);
+        fs.symlinkSync(other, conflict);
+      }
+      const before = fs.readFileSync(conflict);
+      const result = run();
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, `Another ballin command would take precedence: ${conflict}.`);
+      assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+      assert.deepEqual(fs.readFileSync(conflict), before);
+      for (const forbidden of ['conflict-ran', 'auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
+    });
+  }
+  for (const kind of ['absolute symlink', 'relative symlink chain', 'checkout directory alias', 'PATH directory alias']) {
+    it(`accepts the intended ballin pathname through an earlier ${kind}`, () => {
+      const bin = path.join(home, '.ballin-scripts/bin');
+      const intended = path.join(bin, 'ballin');
+      fs.mkdirSync(bin, { recursive: true });
+      fs.copyFileSync(path.join(root, 'fake-tool'), intended);
+      let entry = tools;
+      if (kind === 'checkout directory alias') {
+        entry = path.join(root, 'checkout-bin');
+        fs.symlinkSync(bin, entry);
+      } else {
+        if (kind === 'relative symlink chain') {
+          fs.symlinkSync('../home/.ballin-scripts/bin/ballin', path.join(tools, 'ballin-chain'));
+          fs.symlinkSync('./ballin-chain', path.join(tools, 'ballin'));
+        } else fs.symlinkSync(intended, path.join(tools, 'ballin'));
+        if (kind === 'PATH directory alias') {
+          entry = path.join(root, 'tools-alias');
+          fs.symlinkSync(tools, entry);
+        }
+      }
+      const result = run('y\ny\n', { PATH: `${entry}:${tools}` });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(readLog(), 'ballin:backup open');
+      assert.isFalse(readLog().split('gh:auth status --active')[0].includes('ballin:'));
+      assert.equal(fs.realpathSync(path.join(entry, 'ballin')), fs.realpathSync(intended));
+    });
+  }
+  for (const kind of ['file', 'hard link', 'wrong symlink', 'directory alias', 'missing entry']) {
+    it(`allows the replaceable ballin destination ${kind} ahead of a later conflict`, () => {
+      const commandBin = path.join(home, '.local/bin');
+      fs.mkdirSync(commandBin, { recursive: true });
+      const conflict = path.join(tools, 'ballin');
+      fs.writeFileSync(conflict, '#!/bin/bash\nprintf "conflict-ran\\n" >> "$FAKE_COMMAND_LOG"\n', { mode: 0o755 });
+      const destination = path.join(commandBin, 'ballin');
+      let entry = commandBin;
+      if (kind === 'hard link') fs.linkSync(conflict, destination);
+      else if (kind === 'wrong symlink') fs.symlinkSync(conflict, destination);
+      else if (kind !== 'missing entry') fs.copyFileSync(conflict, destination);
+      if (kind === 'directory alias') {
+        entry = path.join(root, 'command-bin-alias');
+        fs.symlinkSync(commandBin, entry);
+      }
+      const result = run('y\ny\n', { PATH: `${entry}:${tools}` });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(readLog(), 'conflict-ran');
+      const core = spawnSync(process.execPath, [path.resolve(__dirname, '../commands/install_setup.ts'), 'symlink-binaries', path.join(home, '.ballin-scripts'), commandBin], {
+        encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: tools }),
+      });
+      assert.equal(core.status, 0, core.stdout + core.stderr);
+      const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; command -v ballin; ballin backup'], {
+        encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: `${entry}:${tools}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+      });
+      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+      assert.equal(fresh.stdout.trim(), path.join(entry, 'ballin'));
+      assert.equal(fs.realpathSync(destination), fs.realpathSync(path.join(home, '.ballin-scripts/bin/ballin')));
+      assert.notInclude(readLog(), 'conflict-ran');
+    });
+  }
+  for (const kind of ['non-executable', 'directory', 'dangling link', 'non-directory PATH entry']) {
+    it(`ignores a ballin ${kind} that cannot win command lookup`, () => {
+      let entry = tools;
+      const candidate = path.join(tools, 'ballin');
+      if (kind === 'non-executable') fs.writeFileSync(candidate, 'not executable\n', { mode: 0o644 });
+      else if (kind === 'directory') fs.mkdirSync(candidate);
+      else if (kind === 'dangling link') fs.symlinkSync(path.join(root, 'absent'), candidate);
+      else { entry = path.join(root, 'file'); fs.writeFileSync(entry, 'not a directory\n'); }
+      const result = run('y\ny\n', { PATH: `${entry}:${tools}` });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(readLog(), 'ballin:backup open');
+    });
+  }
+  it('checks ballin after Homebrew reconciliation without changing Node or npm priority', () => {
+    const commandBin = path.join(home, '.local/bin');
+    const brewPrefix = path.join(root, 'brew-prefix');
+    fs.mkdirSync(commandBin, { recursive: true });
+    fs.mkdirSync(path.join(brewPrefix, 'bin'), { recursive: true });
+    linkFake('brew', commandBin);
+    linkFake('npm');
+    for (const name of ['node', 'npm', 'ballin']) fs.writeFileSync(path.join(commandBin, name),
+      '#!/bin/bash\nprintf "conflict-ran\\n" >> "$FAKE_COMMAND_LOG"\nexit 77\n', { mode: 0o755 });
+    const result = run('y\ny\n', { FAKE_BREW_PREFIX: brewPrefix });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, `Another ballin command would take precedence: ${path.join(commandBin, 'ballin')}.`);
+    assert.notInclude(readLog(), 'conflict-ran');
+    assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+    assert.notInclude(readLog(), 'auth status --active');
+    fs.unlinkSync(path.join(commandBin, 'ballin'));
+    const retry = run('y\ny\n', { FAKE_BREW_PREFIX: brewPrefix });
+    assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+    const core = spawnSync(process.execPath, [path.resolve(__dirname, '../commands/install_setup.ts'), 'symlink-binaries', path.join(home, '.ballin-scripts'), path.join(brewPrefix, 'bin')], {
+      encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: tools }),
+    });
+    assert.equal(core.status, 0, core.stdout + core.stderr);
+    const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; command -v node npm ballin; ballin backup'], {
+      encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+    });
+    assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+    assert.deepEqual(fresh.stdout.trim().split('\n'), [path.join(tools, 'node'), path.join(tools, 'npm'), path.join(brewPrefix, 'bin/ballin')]);
+    assert.notInclude(readLog(), 'conflict-ran');
+  });
 
   it('reuses working tools, preserves native stdin, and opens only after capture', () => {
     assert.isFalse(fs.existsSync(path.join(tools, 'npm')));
@@ -442,6 +643,70 @@ esac
       assert.equal(fs.statSync(profile).mode, before.mode);
       for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
     });
+  }
+  for (const brewPlacement of ['initial PATH', 'newly exposed', 'absent']) {
+    for (const declineFirst of [false, true]) {
+      it(`keeps one PATH line across four fresh-shell reruns with Homebrew ${brewPlacement} (decline first: ${declineFirst})`, () => {
+        const localBin = path.join(home, '.local/bin');
+        const prefix = path.join(root, 'homebrew');
+        fs.mkdirSync(localBin, { recursive: true });
+        if (brewPlacement !== 'absent') linkFake('brew', brewPlacement === 'initial PATH' ? tools : localBin);
+        const coreRepo = path.join(root, 'core-repo');
+        fs.mkdirSync(path.join(coreRepo, 'config'), { recursive: true });
+        fs.mkdirSync(path.join(coreRepo, 'bin'));
+        fs.writeFileSync(path.join(coreRepo, 'config/.defaultConfig.json'), '{"backup":{}}\n');
+        fs.writeFileSync(path.join(coreRepo, 'bin/ballin'), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+        const core = path.join(root, 'core-handoff');
+        fs.writeFileSync(core, '#!/bin/bash\nexec "$TEST_NODE_RUNTIME" "$FAKE_SETUP_SOURCE" setup "$FAKE_CORE_REPO" https://example.test/docs "" refresh\n');
+        const overrides = { FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: core, FAKE_CORE_REPO: coreRepo,
+          FAKE_SETUP_SOURCE: path.resolve(__dirname, '../commands/install_setup.ts') };
+        const profile = path.join(home, '.zshrc');
+        fs.writeFileSync(profile, '# Existing settings\n', { mode: 0o640 });
+        const before = fs.statSync(profile);
+        const destination = path.join(brewPlacement === 'absent' ? localBin : path.join(prefix, 'bin'), 'ballin');
+        let fixturePath = tools;
+        let expectedProfile = '';
+        let expectedFresh: string[] = [];
+        for (let index = 0; index < 4 + Number(declineFirst); index++) {
+          const declined = declineFirst && index === 0;
+          const result = run(declined ? 'n\n' : 'y\n', { ...overrides, PATH: fixturePath });
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assert.equal(fs.realpathSync(destination), fs.realpathSync(path.join(coreRepo, 'bin/ballin')));
+          fs.unlinkSync(path.join(coreRepo, 'ballin.config.json'));
+          const contents = fs.readFileSync(profile, 'utf8');
+          if (declined) {
+            assert.equal(contents, '# Existing settings\n');
+            assert.equal(fs.statSync(profile).ino, before.ino);
+            assert.equal(fs.statSync(profile).mode, before.mode);
+            assert.include(result.stderr, 'Persistent PATH setup incomplete');
+          } else {
+            assert.lengthOf(contents.split('\n').filter((line: string) => line.startsWith('export PATH=')), 1);
+            if (expectedProfile) {
+              assert.equal(contents, expectedProfile);
+              assert.include(result.stdout, 'PATH line already present');
+              assert.notInclude(result.stdout, 'Add this PATH line');
+            } else {
+              expectedProfile = contents;
+              assert.include(result.stdout, 'PATH line added');
+            }
+          }
+          const fresh = spawnSync('/bin/zsh', ['-f', '-c',
+            'source "$HOME/.zshrc"; printf "%s\\n" "$PATH"; for tool in node git gh brew ballin; do command -v "$tool" || true; done'], {
+            encoding: 'utf8', cwd: home,
+            env: testChildEnvironment({ HOME: home, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log, ...overrides }),
+          });
+          assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+          const freshState = fresh.stdout.trim().split('\n');
+          fixturePath = freshState[0];
+          if (!declined) {
+            if (expectedFresh.length) assert.deepEqual(freshState, expectedFresh);
+            else expectedFresh = freshState;
+            assert.equal(freshState.at(-1), destination);
+          }
+        }
+        for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:backup']) assert.notInclude(readLog(), forbidden);
+      });
+    }
   }
   it('keeps newly exposed Homebrew stable through the core handoff and fresh shells', () => {
     const localBin = path.join(home, '.local/bin');
@@ -1313,7 +1578,7 @@ esac
       assert.include(readLog(), 'xcode-select:--install');
       assert.notInclude(readLog(), 'brew:');
       assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
-      assert.include(readLog(), 'sudo:/usr/sbin/installer -pkg');
+      assert.include(readLog(), 'sudo:/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c');
       assert.include(readLog(), `gh_2.102.0_macOS_${arch === 'arm64' ? 'arm64' : 'amd64'}.zip`);
       assert.include(readLog(), 'ballin:backup open');
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
@@ -1365,8 +1630,8 @@ esac
           assert.notInclude(readLog(), 'pkgutil:');
           assert.isFalse(fs.existsSync(path.join(home, '.local')));
         } else {
-          assert.equal(readLog().split('sudo:/usr/sbin/installer -pkg').length - 1, 1);
-          assert.isAbove(readLog().indexOf('sudo:/usr/sbin/installer -pkg'), readLog().indexOf('pkgutil:--check-signature'));
+          assert.equal(readLog().split('sudo:/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c').length - 1, 1);
+          assert.isAbove(readLog().indexOf('sudo:/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c'), readLog().indexOf('pkgutil:--check-signature'));
         }
         if (outcome === 'success') assert.include(readLog(), 'ballin:backup open');
         else for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
@@ -1389,7 +1654,7 @@ esac
       const signatureCheck = readLog().indexOf('pkgutil:--check-signature');
       assert.isAtLeast(signatureCheck, 0);
       if (signature === 'valid') {
-        assert.isAbove(readLog().indexOf('sudo:/usr/sbin/installer -pkg'), signatureCheck);
+        assert.isAbove(readLog().indexOf('sudo:/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c'), signatureCheck);
         assert.include(readLog(), 'ballin:backup open');
       } else {
         assert.include(result.stderr, signature === 'invalid'

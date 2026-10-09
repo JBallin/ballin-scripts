@@ -52,7 +52,7 @@ backup_destination_kind() {
 download() {
   local options=(-fsSL)
   [[ "${3:-}" != progress ]] || options=(-fL --progress-bar)
-  curl "${options[@]}" --proto '=https' --proto-redir '=https' --tlsv1.2 "$1" -o "$2"
+  curl -q "${options[@]}" --proto '=https' --proto-redir '=https' --tlsv1.2 "$1" -o "$2"
 }
 
 checksum() {
@@ -61,6 +61,7 @@ checksum() {
   [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || fail 'The official download checksum is missing or ambiguous.'
   actual=$(shasum -a 256 "$scratch/$2")
   [[ "${actual%% *}" == "$expected" ]] || fail "Checksum verification failed for $2; nothing from that download was installed."
+  printf '%s' "$expected"
 }
 
 normalize_process_path() {
@@ -215,8 +216,46 @@ select_command_bin() {
   [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
 }
 
+check_ballin_command() {
+  local problem
+  if ! problem=$("$node_tool" -e '
+    const fs = require("fs"), path = require("path");
+    const directory = file => {
+      try { return fs.realpathSync(file); }
+      catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        return path.join(directory(path.dirname(file)), path.basename(file));
+      }
+    };
+    // Compare pathnames, not inodes: a hard link survives checkout replacement.
+    const entry = file => path.join(directory(path.dirname(file)), path.basename(file));
+    try {
+      const destination = entry(process.argv[1]), intended = entry(process.argv[2]);
+      for (const folder of process.env.PATH.split(path.delimiter)) {
+        const candidate = folder + "/ballin";
+        try {
+          if (entry(candidate) === destination) break; // The installer replaces this entry.
+          if (!fs.statSync(candidate).isFile()) continue;
+          fs.accessSync(candidate, fs.constants.X_OK);
+        } catch (error) {
+          if (["ENOENT", "ENOTDIR", "EACCES", "ELOOP"].includes(error.code)) continue;
+          throw error;
+        }
+        if (fs.realpathSync(candidate) === intended) break;
+        process.stdout.write("Another ballin command would take precedence: " + candidate + ". Move or remove it, then rerun this quickstart.");
+        process.exit(1);
+      }
+    } catch {
+      process.stdout.write("Unable to inspect ballin commands on PATH. Review your PATH, then rerun this quickstart.");
+      process.exit(1);
+    }
+  ' "$command_bin/ballin" "$HOME/.ballin-scripts/bin/ballin"); then
+    fail "$problem PATH setup and authentication have not run."
+  fi
+}
+
 install_node() {
-  local package version minor
+  local package version minor expected
   download 'https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
   package=$(awk '$2 ~ /^node-v24[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
   [[ "$package" =~ ^node-v24\.[0-9]+\.[0-9]+\.pkg$ ]] || fail 'Unable to identify the official Node.js 24 macOS package.'
@@ -227,12 +266,39 @@ install_node() {
   (( 10#$minor >= 12 )) || fail 'The official Node.js package is older than the required 24.12; it was not installed.'
   printf 'Downloading Node.js %s...\n' "$version"
   download "https://nodejs.org/dist/$version/$package" "$scratch/$package" progress
-  checksum "$scratch/node-checksums.txt" "$package"
+  expected=$(checksum "$scratch/node-checksums.txt" "$package")
   "$system_pkgutil" --check-signature "$scratch/$package" > "$scratch/node-signature.txt" \
     || fail 'The Node.js package signature could not be verified.'
   grep -Fq 'Developer ID Installer: Node.js Foundation (HX7739G8FX)' "$scratch/node-signature.txt" \
     || fail 'The Node.js package has an unexpected publisher; it was not installed.'
-  "$system_sudo" /usr/sbin/installer -pkg "$scratch/$package" -target /
+  # Capture the digest before sudo. Only the private staged copy is verified
+  # and installed across the privilege boundary; never reread the manifest.
+  # shellcheck disable=SC2016 # Expand only in the clean privileged shell.
+  "$system_sudo" /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c '
+    set -euo pipefail
+    umask 077
+    stage=$(/usr/bin/mktemp -d /private/var/root/ballin-node.XXXXXX)
+    cleanup_stage() {
+      local status=$?
+      /bin/rm -rf -- "$stage" || { [[ "$status" != 0 ]] || status=1; }
+      exit "$status"
+    }
+    trap cleanup_stage EXIT
+    trap "exit 130" INT
+    trap "exit 143" TERM
+    /bin/cat "$1" > "$stage/node.pkg"
+    actual=$(/usr/bin/shasum -a 256 "$stage/node.pkg")
+    [[ "$2" =~ ^[0-9a-f]{64}$ && "${actual%% *}" == "$2" ]] || {
+      printf "Quickstart: The staged Node.js package checksum could not be verified.\n" >&2; exit 1;
+    }
+    /usr/sbin/pkgutil --check-signature "$stage/node.pkg" > "$stage/signature.txt" || {
+      printf "Quickstart: The staged Node.js package signature could not be verified.\n" >&2; exit 1;
+    }
+    /usr/bin/grep -Fq "Developer ID Installer: Node.js Foundation (HX7739G8FX)" "$stage/signature.txt" || {
+      printf "Quickstart: The staged Node.js package has an unexpected publisher.\n" >&2; exit 1;
+    }
+    /usr/sbin/installer -pkg "$stage/node.pkg" -target /
+  ' ballin-node-install "$scratch/$package" "$expected"
   node_compatible "$system_node_bin/node" || fail 'Node.js installation did not provide a working Node.js 24.12 or newer.'
   node_tool="$system_node_bin/node"
 }
@@ -256,7 +322,7 @@ install_gh() {
   printf 'Downloading GitHub CLI %s...\n' "$version"
   download "https://github.com/cli/cli/releases/download/v$version/gh_${version}_checksums.txt" "$scratch/gh-checksums.txt"
   download "https://github.com/cli/cli/releases/download/v$version/$archive" "$scratch/$archive" progress
-  checksum "$scratch/gh-checksums.txt" "$archive"
+  checksum "$scratch/gh-checksums.txt" "$archive" >/dev/null
   mkdir "$scratch/gh-extract"
   ditto -x -k "$scratch/$archive" "$scratch/gh-extract"
   [[ -f "$scratch/gh-extract/$directory/bin/gh" && ! -L "$scratch/gh-extract/$directory/bin/gh" ]] \
@@ -494,9 +560,13 @@ main() {
     command_path+=":$command_bin"
     export PATH="$PATH:$command_bin"
   fi
+  if [[ "$command_bin" != "$local_bin" && ":$PATH:" == *":$local_bin:"* ]]; then
+    command_path="$local_bin:$command_bin"
+  fi
   if exposed_npm=$(type -P npm) && [[ -f "$exposed_npm" && -x "$exposed_npm" ]]; then
     npm_compatible "$exposed_npm" || fail "npm cannot run through the final PATH: $exposed_npm. Fix or remove this broken command, then rerun this quickstart. PATH setup and authentication have not run."
   fi
+  check_ballin_command
   configure_path
   "$gh_tool" auth status --active --hostname github.com \
     || "$gh_tool" auth login --hostname github.com --git-protocol https --web
