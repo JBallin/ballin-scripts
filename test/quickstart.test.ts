@@ -28,7 +28,7 @@ describe('beginner quickstart bootstrap', function() {
       }),
     });
   };
-  const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}, cwd = home, beforeMain = '', backupInput = 'y\n') => {
+  const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}, cwd = home, beforeMain = '', backupInput = 'y\n', afterMain = '') => {
     const shell = overrides.SHELL ?? '/bin/zsh';
     const target = overrides.FAKE_PROFILE_TARGET ?? (shell.endsWith('bash') ? 'login' : overrides.ZDOTDIR ?? 'home');
     const selection = fs.existsSync(shell) && ['bash', 'zsh'].includes(path.basename(shell)) ? target + '\n' : '';
@@ -49,6 +49,7 @@ system_sudo="\${FAKE_SYSTEM_SUDO:-$FAKE_ROOT/tools/sudo}"
 ${beforeMain}
 trap cleanup EXIT
 main
+${afterMain}
 `], {
     encoding: 'utf8', input: answers.join('\n') + backupInput, cwd, timeout: 12000,
     env: testChildEnvironment({
@@ -914,6 +915,45 @@ system_sudo=fixture_sudo
         assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), ":$PATH:'" + path.join(home, '.local/bin') + "'");
       });
     }
+  }
+  for (const override of ['git', 'node', 'PATH']) {
+    it(`does not reload inherited BASH_ENV ${override} overrides in the actual core installer`, () => {
+      const startup = path.join(root, 'injected-startup');
+      const startupTools = path.join(root, 'startup-tools');
+      fs.mkdirSync(startupTools);
+      fs.writeFileSync(path.join(startupTools, 'git'), '#!/bin/sh\nexit 73\n', { mode: 0o755 });
+      fs.writeFileSync(startup, 'printf "bash-env-loaded\\n" >> "$FAKE_COMMAND_LOG"\n'
+        + 'case "$0" in */install.sh) printf "core-startup-reloaded\\n" >> "$FAKE_COMMAND_LOG" ;; esac\n'
+        + (override === 'PATH' ? 'export PATH="$FAKE_STARTUP_TOOLS:$PATH"\n'
+          : `${override}() { return 73; }\n`));
+      const core = path.join(root, 'core-with-environment-probe');
+      // Execute the real installer body after recording its inherited environment.
+      fs.writeFileSync(core, '"$TEST_NODE_RUNTIME" -e \'require("fs").writeFileSync(process.env.FAKE_CORE_ENV, JSON.stringify(process.env))\'\n'
+        + fs.readFileSync(path.resolve(__dirname, '../install.sh'), 'utf8'));
+      const retained = { HOME: home, GH_TOKEN: 'fixture-token', GH_CONFIG_DIR: path.join(home, 'gh-config'),
+        HTTPS_PROXY: 'https://proxy.example.invalid:8443', CUSTOM_SETTING: 'keep this value' };
+      const result = run('y\nn\n', {
+        ...retained, BASH_ENV: startup, FAKE_STARTUP_TOOLS: startupTools, FAKE_CORE_INSTALL_SOURCE: core,
+        FAKE_CORE_ENV: path.join(root, 'core-env.json'), FAKE_PARENT_ENV: path.join(root, 'parent-env.json'),
+      }, home, '', 'y\n', '"$TEST_NODE_RUNTIME" -e \'require("fs").writeFileSync(process.env.FAKE_PARENT_ENV, JSON.stringify(process.env))\'');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(readLog(), 'bash-env-loaded');
+      assert.notInclude(readLog(), 'core-startup-reloaded');
+      assert.notInclude(result.stdout, 'Missing prerequisites:');
+      assert.include(result.stdout, 'Proceed with installation?');
+      assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
+      const childEnv = JSON.parse(fs.readFileSync(path.join(root, 'core-env.json'), 'utf8'));
+      const parentEnv = JSON.parse(fs.readFileSync(path.join(root, 'parent-env.json'), 'utf8'));
+      assert.equal(childEnv.BASH_ENV, '');
+      assert.equal(parentEnv.BASH_ENV, startup);
+      assert.equal(childEnv.PATH, parentEnv.PATH);
+      assert.isTrue(childEnv.PATH.startsWith(path.join(home, '.local/share/ballin-quickstart/bin') + ':'));
+      for (const [key, value] of Object.entries(retained)) assert.equal(childEnv[key], value, key);
+      assert.notInclude(readLog(), 'git:clone');
+      assert.notInclude(readLog(), 'ballin:');
+      assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
   }
   for (const name of ['git', 'node', 'gh']) {
     it(`ignores an exported ${name} function while selecting prerequisites for the actual core installer`, () => {

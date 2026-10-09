@@ -572,7 +572,8 @@ main() {
     || "$gh_tool" auth login --hostname github.com --git-protocol https --web
   repo="$HOME/.ballin-scripts"
   download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh' "$scratch/install.sh"
-  bash "$scratch/install.sh"
+  # Keep startup hooks from replacing the tools qualified above.
+  BASH_ENV='' bash "$scratch/install.sh"
   [[ -x "$repo/bin/ballin" ]] || return 0
   confirm_first_backup || return 0
   destination=$(backup_destination_kind "$repo")
