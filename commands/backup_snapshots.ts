@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const backupScope = require('./backup_scope.json') as typeof import('./backup_scope.json');
 const {
   runCommand,
 } = require('./commandHelpers.ts');
@@ -136,7 +137,7 @@ type ToolDiscovery =
   | { status: 'discovery-failed'; error: Error };
 
 const emptySnapshotContent = 'empty\n';
-const configSnapshotFileName = 'ballin_config';
+const configSnapshotFileName = backupScope.preferences.name;
 const repositoryMarkerFileName = '.ballin-backup.json';
 const repositoryReadmeFileName = 'README.md';
 
@@ -290,7 +291,7 @@ const shellCommandSnapshot = (
   options: {
     environment?: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
     suppressStderrOnSuccess?: boolean;
-  } = {},
+  },
 ): SnapshotDefinition => ({
   name,
   category,
@@ -326,7 +327,7 @@ const shellCommandSnapshot = (
 });
 
 const editorRoot = (homeDir: string, application: string): string => (
-  path.join(homeDir, 'Library', 'Application Support', application, 'User')
+  path.join(homeDir, ...backupScope.roots.editor, application, backupScope.roots.editorUser)
 );
 
 const editorFileSnapshot = (
@@ -442,12 +443,12 @@ const brewEnvironment = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
 });
 
 const bashCompletionsSnapshot = (): SnapshotDefinition => ({
-  name: 'bash_completions',
+  name: backupScope.bashCompletions.name,
   category: 'bash-completions',
   inclusionGroup: 'inventory',
   prerequisites: [{ kind: 'directory', name: 'active Homebrew bash completion directory' }],
   discover: ({ env }) => {
-    const override = env.BALLIN_BACKUP_BASH_COMPLETION_DIR ?? '';
+    const override = env[backupScope.bashCompletions.environment] ?? '';
     let completionDirectory = override;
     let toolPath: string | undefined;
 
@@ -483,7 +484,7 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
           signal: prefixResult.signal,
         };
       }
-      completionDirectory = path.join(prefix, 'etc', 'bash_completion.d');
+      completionDirectory = path.join(prefix, ...backupScope.bashCompletions.path);
     }
 
     const source = {
@@ -494,7 +495,7 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
       inspectPath(completionDirectory, 'directory'),
       source,
       {
-        fileName: 'bash_completions',
+        fileName: backupScope.bashCompletions.name,
         command: 'ls',
         args: [completionDirectory],
         env,
@@ -508,7 +509,7 @@ const portableConfigSnapshot = (): SnapshotDefinition => {
     'ballin',
     'preferences',
     configSnapshotFileName,
-    path.join('.ballin-scripts', 'ballin.config.json'),
+    path.join(...backupScope.preferences.path),
   );
   return {
     ...definition,
@@ -530,12 +531,12 @@ const portableConfigSnapshot = (): SnapshotDefinition => {
 };
 
 const codexRoot = ({ homeDir, env }: SnapshotDiscoveryContext): string => (
-  env.CODEX_HOME ? path.resolve(env.CODEX_HOME) : path.join(homeDir, '.codex')
+  env[backupScope.roots.codexEnvironment] ? path.resolve(env[backupScope.roots.codexEnvironment]!) : path.join(homeDir, backupScope.roots.codex)
 );
 
 // Selected assistant configuration can contain executable and private content.
 // Every source is sensitive; policy selection precedes discovery.
-const configurationSnapshot = (category: 'codex' | 'claude', name: string, relative: string, recursive = false, profiles = false, homeRoot = false, skills = relative === 'skills'): SnapshotDefinition => ({
+const configurationSnapshot = (category: 'codex' | 'claude', name: string, relative: string, recursive: boolean, profiles: boolean, homeRoot: boolean, skills: boolean): SnapshotDefinition => ({
   name,
   directory: recursive,
   category,
@@ -548,7 +549,7 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
     const selection = claude ? { markdownOnly: !skills, claudeSkills: skills, rejectHardlinks: true } : {};
     const directoryMode = claude && skills ? 'claude-skills' : claude ? 'markdown' : profiles ? 'profiles' : skills ? 'skills' : 'directory';
     const logicalRoot = claude
-      ? context.env.CLAUDE_CONFIG_DIR ? path.resolve(context.env.CLAUDE_CONFIG_DIR) : path.join(context.homeDir, '.claude')
+      ? context.env[backupScope.roots.claudeEnvironment] ? path.resolve(context.env[backupScope.roots.claudeEnvironment]!) : path.join(context.homeDir, backupScope.roots.claude)
       : homeRoot ? context.homeDir : codexRoot(context);
     let root = logicalRoot;
     let sourcePath = path.join(root, relative);
@@ -593,74 +594,33 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
   },
 });
 
-// This is the snapshot source allowlist. Keep additions synchronized with the
-// inclusion and sensitivity review in docs/backup-sources.md.
-const snapshotDefinitions: readonly SnapshotDefinition[] = [
-  fileSnapshot('shell', 'sensitive', 'bash_profile.sh', '.bash_profile'),
-  fileSnapshot('shell', 'sensitive', 'bashrc.sh', '.bashrc'),
-  fileSnapshot('shell', 'sensitive', 'profile.sh', '.profile'),
-  fileSnapshot('shell', 'sensitive', 'zprofile.sh', '.zprofile'),
-  fileSnapshot('shell', 'sensitive', 'zshrc.sh', '.zshrc'),
-  bashCompletionsSnapshot(),
-  shellCommandSnapshot('homebrew', 'inventory', 'brew_list', 'brew', 'brew list --formula', {
-    environment: brewEnvironment,
-  }),
-  shellCommandSnapshot('homebrew', 'inventory', 'brew_leaves', 'brew', 'brew leaves', {
-    environment: brewEnvironment,
-  }),
-  shellCommandSnapshot('homebrew', 'inventory', 'brew_cask', 'brew', 'brew list --cask', {
-    environment: brewEnvironment,
-  }),
-  shellCommandSnapshot('homebrew', 'inventory', 'brew_services', 'brew', 'brew services list', {
-    environment: brewEnvironment,
-    suppressStderrOnSuccess: true,
-  }),
-  shellCommandSnapshot('homebrew', 'inventory', 'Brewfile', 'brew', 'brew bundle dump --file=-', {
-    environment: brewEnvironment,
-  }),
-  fileSnapshot('git', 'sensitive', 'gitignore_global', '.gitignore_global'),
-  fileSnapshot('git', 'sensitive', 'gitconfig', '.gitconfig'),
-  shellCommandSnapshot('npm', 'inventory', 'npm_global', 'npm', 'npm list -g --depth=0'),
-  shellCommandSnapshot('python', 'sensitive', 'pipx', 'pipx', 'pipx list --json', {
-    environment: (env) => ({ ...env, PIPX_DISABLE_SHARED_LIBS_AUTO_UPGRADE: '1' }),
-    suppressStderrOnSuccess: true,
-  }),
-  shellCommandSnapshot(
-    'python',
-    'inventory',
-    'uv_tools',
-    'uv',
-    'uv tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config',
-    { suppressStderrOnSuccess: true },
-  ),
-  shellCommandSnapshot('python', 'inventory', 'pyenv_versions', 'pyenv', 'pyenv versions --bare'),
-  fileSnapshot('node', 'sensitive', 'nvmrc', '.nvmrc'),
-  editorFileSnapshot('vscode', 'vs_settings', 'Code', 'settings.json'),
-  editorFileSnapshot('vscode', 'vs_keybindings', 'Code', 'keybindings.json'),
-  editorExtensionsSnapshot('vscode', 'vs_extensions', 'Code', 'code'),
-  editorFileSnapshot('vscode-insiders', 'vsI_settings', 'Code - Insiders', 'settings.json'),
-  editorFileSnapshot('vscode-insiders', 'vsI_keybindings', 'Code - Insiders', 'keybindings.json'),
-  editorExtensionsSnapshot('vscode-insiders', 'vsI_extensions', 'Code - Insiders', 'code-insiders'),
-  fileSnapshot('editor', 'sensitive', 'vimrc', '.vimrc'),
-  fileSnapshot('editor', 'sensitive', 'nanorc', '.nanorc'),
-  configurationSnapshot('codex', 'codex_AGENTS.md', 'AGENTS.md'),
-  configurationSnapshot('codex', 'codex_AGENTS.override.md', 'AGENTS.override.md'),
-  configurationSnapshot('codex', 'codex_config.toml', 'config.toml'),
-  configurationSnapshot('codex', 'codex_profiles.bundle.json', '.', true, true),
-  configurationSnapshot('codex', 'codex_hooks.json', 'hooks.json'),
-  configurationSnapshot('codex', 'codex_skills.bundle.json', 'skills', true),
-  configurationSnapshot('codex', 'codex_user_skills.bundle.json', '.agents/skills', true, false, true, true),
-  configurationSnapshot('codex', 'codex_rules.bundle.json', 'rules', true),
-  configurationSnapshot('codex', 'codex_agents.bundle.json', 'agents', true),
-  configurationSnapshot('codex', 'codex_marketplace.json', '.agents/plugins/marketplace.json', false, false, true),
-  configurationSnapshot('claude', 'claude_instructions', 'CLAUDE.md'),
-  configurationSnapshot('claude', 'claude_rules.bundle.json', 'rules', true, false, false, false),
-  configurationSnapshot('claude', 'claude_agents.bundle.json', 'agents', true, false, false, false),
-  configurationSnapshot('claude', 'claude_commands.bundle.json', 'commands', true, false, false, false),
-  configurationSnapshot('claude', 'claude_skills.bundle.json', 'skills', true),
-  portableConfigSnapshot(),
-  shellCommandSnapshot('mas', 'inventory', 'mas', 'mas', 'mas list'),
-];
+// The data catalog owns source and collection scope; capture internals stay here.
+type SnapshotSpec =
+  | ['file', ...Parameters<typeof fileSnapshot>]
+  | ['command', category: SnapshotCategory, group: SnapshotInclusionGroup, name: string, tool: string, command: string]
+  | ['editor-file', ...Parameters<typeof editorFileSnapshot>]
+  | ['editor-extensions', ...Parameters<typeof editorExtensionsSnapshot>]
+  | ['configuration', ...Parameters<typeof configurationSnapshot>]
+  | ['bash-completions']
+  | ['preferences'];
+const snapshotDefinitions: readonly SnapshotDefinition[] = (backupScope.sources as SnapshotSpec[]).map((spec) => {
+  switch (spec[0]) {
+    case 'file': return fileSnapshot(...spec.slice(1) as Parameters<typeof fileSnapshot>);
+    case 'command': {
+      const [, category, group, name, tool, command] = spec;
+      const environment = category === 'homebrew' ? brewEnvironment
+        : name === 'pipx' ? (env: NodeJS.ProcessEnv) => ({ ...env, PIPX_DISABLE_SHARED_LIBS_AUTO_UPGRADE: '1' }) : undefined;
+      return shellCommandSnapshot(category, group, name, tool, command, {
+        environment, suppressStderrOnSuccess: ['brew_services', 'pipx', 'uv_tools'].includes(name) || undefined,
+      });
+    }
+    case 'editor-file': return editorFileSnapshot(...spec.slice(1) as Parameters<typeof editorFileSnapshot>);
+    case 'editor-extensions': return editorExtensionsSnapshot(...spec.slice(1) as Parameters<typeof editorExtensionsSnapshot>);
+    case 'configuration': return configurationSnapshot(...spec.slice(1) as Parameters<typeof configurationSnapshot>);
+    case 'bash-completions': return bashCompletionsSnapshot();
+    case 'preferences': return portableConfigSnapshot();
+  }
+});
 
 const currentSnapshotFileNames = new Set(snapshotDefinitions.map(({ name }) => name));
 const directorySnapshotFileNames = new Set(snapshotDefinitions.filter(({ directory }) => directory).map(({ name }) => name));

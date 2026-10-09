@@ -62,21 +62,28 @@ case "$1" in
       printf '%s\\n' "\${FAKE_SHALLOW:-false}"
       exit "\${FAKE_SHALLOW_STATUS:-0}"
     fi
-    if [ "$2" = '--verify' ] && [ "$3" = 'HEAD:commands/backup_snapshots.ts' ]; then
-      if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
-        if [ "\${FAKE_SOURCE_POST_STATUS:-0}" != '0' ]; then exit "$FAKE_SOURCE_POST_STATUS"; fi
-        if [ "\${FAKE_SOURCE_CHANGED:-0}" = '1' ]; then
-          printf '%s\\n' bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-          exit 0
-        fi
-      elif [ "\${FAKE_SOURCE_PRE_STATUS:-0}" != '0' ]; then exit "$FAKE_SOURCE_PRE_STATUS"; fi
-      printf '%s\\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-      exit 0
-    fi
     if [ "$FAKE_GIT_MERGE_IN_PROGRESS" = '1' ]; then
       exit 0
     fi
     exit 1
+    ;;
+  show)
+    if [ "$2" != 'HEAD:commands/backup_scope.json' ]; then exit 2; fi
+    if [ -n "$FAKE_REAL_GIT" ]; then
+      if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
+        "$FAKE_REAL_GIT" show HEAD:commands/backup_scope.json
+      else
+        "$FAKE_REAL_GIT" show "$FAKE_REAL_BEFORE:commands/backup_scope.json"
+      fi
+      exit $?
+    fi
+    if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then
+      if [ "\${FAKE_SOURCE_POST_STATUS:-0}" != 0 ]; then exit "$FAKE_SOURCE_POST_STATUS"; fi
+      cat "$FAKE_SCOPE_AFTER"
+    else
+      if [ "\${FAKE_SOURCE_PRE_STATUS:-0}" != 0 ]; then exit "$FAKE_SOURCE_PRE_STATUS"; fi
+      cat "$FAKE_SCOPE_BEFORE"
+    fi
     ;;
   config)
     if [ "$FAKE_PROMISOR" = 1 ]; then printf 'remote.origin.promisor true\\n'; exit 0; fi
@@ -176,6 +183,8 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       FAKE_GIT_FIRST_CHECKOUT_STATUS: '0',
       FAKE_GIT_RETRY_CHECKOUT_STATUS: '0',
       FAKE_SETUP_STATUS: '0',
+      FAKE_SCOPE_BEFORE: path.join(testDir, 'before-scope.json'),
+      FAKE_SCOPE_AFTER: path.join(testDir, 'after-scope.json'),
       ...env,
     },
   });
@@ -183,7 +192,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
   const commandLog = (includeSourceChecks = false) => (
     fs.existsSync(commandLogPath)
       ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter((line: string) => line
-        && (includeSourceChecks || !line.endsWith('|git:rev-parse --verify HEAD:commands/backup_snapshots.ts'))
+        && (includeSourceChecks || !line.endsWith('|git:show HEAD:commands/backup_scope.json'))
         && !line.endsWith('|git:rev-parse --verify HEAD')
         && !/\|git:(rev-parse --short=7|rev-parse --is-shallow-repository|config --get-regexp|merge-base --is-ancestor|rev-list --count)/u.test(line))
       : []
@@ -207,6 +216,9 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
     installGitStub();
     installSetupStub();
+    const scope = fs.readFileSync(path.join(__dirname, '../commands/backup_scope.json'), 'utf8');
+    fs.writeFileSync(path.join(testDir, 'before-scope.json'), scope);
+    fs.writeFileSync(path.join(testDir, 'after-scope.json'), scope);
   });
 
   afterEach(() => {
@@ -387,30 +399,216 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.notInclude(result.stdout, 'Updating...');
   });
 
-  it('discloses changed backup definitions after successful refresh without executing them', () => {
-    const result = runSelfUpdate({ FAKE_SOURCE_CHANGED: '1' });
+  const reviewLine = 'Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n';
+  const changedLine = 'Supported backup sources or collection scope changed.\n';
+  const unavailableLine = 'Unable to compare backup sources and collection scope across this update.\n';
+  const consentLine = 'Your sensitive-source opt-in remains enabled across updates and covers current and future supported sources.\n';
+  const changeScope = (change: (scope: typeof import('../commands/backup_scope.json')) => void) => {
+    const scope = JSON.parse(fs.readFileSync(path.join(testDir, 'after-scope.json'), 'utf8'));
+    change(scope);
+    fs.writeFileSync(path.join(testDir, 'after-scope.json'), JSON.stringify(scope));
+  };
+  const saveConsent = (includeSensitive?: unknown) => {
+    const contents = JSON.stringify({ backup: { includeSensitive } });
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), contents);
+    return contents;
+  };
+
+  it('ignores implementation-only snapshot edits, including bounded input normalization', () => {
+    // Snapshot implementation is deliberately outside the Git read boundary.
+    fs.writeFileSync(path.join(repoDir, 'commands/backup_snapshots.ts'), 'throw new Error("must not execute snapshot source");');
+    const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Backup source definitions may have changed.');
-    assert.include(result.stdout, 'Sensitive-source opt-in covers current and future supported sources.\nReview:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n');
-    assert.equal(commandLog(true).filter((line: string) => line.includes('HEAD:commands/backup_snapshots.ts')).length, 2);
-    assert.isBelow(result.stdout.indexOf('Ballin updated.'), result.stdout.indexOf('Backup source definitions'));
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
+    assert.notInclude(commandLog(true).join('\n'), 'backup_snapshots.ts');
+    assert.lengthOf(commandLog(true).filter((line: string) => line.includes('show HEAD:commands/backup_scope.json')), 2);
+    assert.isTrue(fs.readFileSync(path.join(testDir, 'local-git.log'), 'utf8').split('\n')
+      .filter((line: string) => line.startsWith('show ')).every((line: string) => line.endsWith('|1')));
   });
 
-  ['FAKE_SOURCE_PRE_STATUS', 'FAKE_SOURCE_POST_STATUS'].forEach((setting) => {
-    it(`keeps a successful update successful when the ${setting} comparison is unavailable`, () => {
-      const result = runSelfUpdate({ [setting]: '1' });
+  for (const change of ['implementation', 'source', 'collection', 'legacy'] as const) {
+    it(`compares real local Git data for a ${change} update`, () => {
+      const realGit = commandPath('git');
+      assert.exists(realGit);
+      const git = (...args: string[]) => {
+        const result = spawnSync(realGit, args, {
+          cwd: repoDir, encoding: 'utf8',
+          env: { HOME: homeDir, PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        return result.stdout.trim();
+      };
+      git('init', '--quiet');
+      const scopePath = path.join(repoDir, 'commands/backup_scope.json');
+      if (change !== 'legacy') fs.copyFileSync(path.join(testDir, 'before-scope.json'), scopePath);
+      const implementation = path.join(repoDir, 'commands/backup_snapshots.ts');
+      fs.writeFileSync(implementation, 'function normalizeSnapshotInput(inputFile) { return readFile(inputFile); }');
+      git('add', 'commands');
+      const commit = () => git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'Fixture revision');
+      commit();
+      const before = git('rev-parse', 'HEAD');
+      if (change === 'source') changeScope((scope) => { scope.sources[0][4] = '.new-profile'; });
+      if (change === 'collection') changeScope((scope) => { scope.recursive.markdownSuffix = '.txt'; });
+      fs.copyFileSync(path.join(testDir, 'after-scope.json'), scopePath);
+      fs.writeFileSync(implementation, 'function normalizeSnapshotInput(inputFile, maxBytes) { return readBoundedFile(inputFile, maxBytes); }');
+      git('add', 'commands');
+      commit();
+      saveConsent(true);
+      const result = runSelfUpdate({ FAKE_REAL_GIT: realGit, FAKE_REAL_BEFORE: before });
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'Ballin updated.');
-      assert.include(result.stdout, 'Backup source definitions may have changed.');
+      assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + (change === 'implementation' ? ''
+        : (change === 'legacy' ? unavailableLine : changedLine) + consentLine + reviewLine));
+    });
+  }
+
+  it('ignores formatting, object-key order, catalog order and selection-set order', () => {
+    changeScope((scope) => {
+      scope.sources.reverse();
+      scope.portableUpdateKeys.reverse();
+      scope.recursive.excludedNames.reverse();
+      scope.recursive.claudeSyncBookkeeping.reverse();
+    });
+    const scope = JSON.parse(fs.readFileSync(path.join(testDir, 'after-scope.json'), 'utf8'));
+    fs.writeFileSync(path.join(testDir, 'after-scope.json'), JSON.stringify(Object.fromEntries(Object.entries(scope).reverse())));
+    const result = runSelfUpdate();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
+  });
+
+  for (const [name, change] of [
+    ['added source', (scope) => { scope.sources.push(['file', 'shell', 'sensitive', 'new.sh', '.new']); }],
+    ['removed source', (scope) => { scope.sources.pop(); }],
+    ['source path', (scope) => { scope.sources[0][4] = '.another-profile'; }],
+    ['collector command', (scope) => { scope.sources[6][5] = 'brew list --cask'; }],
+    ['inclusion group', (scope) => { scope.sources[0][2] = 'inventory'; }],
+    ['recursive scope', (scope) => { scope.recursive.markdownSuffix = '.txt'; }],
+    ['synced skill origin', (scope) => { scope.recursive.claudeSyncedOrigin = 'default'; }],
+    ['portable preferences', (scope) => { scope.portableUpdateKeys.push('another-key'); }],
+    ['collection policy', (scope) => { scope.collectionPolicy += 1; }],
+  ] as [string, (scope: typeof import('../commands/backup_scope.json')) => void][]) {
+    it(`discloses changed ${name} after successful refresh`, () => {
+      changeScope(change);
+      const result = runSelfUpdate();
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + changedLine + reviewLine);
       assert.equal(result.stderr, '');
     });
+  }
+
+  for (const consent of [true, 'true', false, 'false', undefined, null, 'invalid', 1]) {
+    it(`only reminds explicitly opted-in users: ${JSON.stringify(consent)}`, () => {
+      const contents = saveConsent(consent);
+      changeScope((scope) => { scope.sources.pop(); });
+      const result = runSelfUpdate();
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + changedLine
+        + ([true, 'true'].includes(consent as boolean | string) ? consentLine : '') + reviewLine);
+      assert.equal(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'), contents);
+    });
+  }
+
+  it('does not remind opted-in users when scope is unchanged', () => {
+    saveConsent(true);
+    const result = runSelfUpdate();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
   });
 
-  it('does not disclose possible source changes when refresh failed', () => {
-    const result = runSelfUpdate({ FAKE_SOURCE_CHANGED: '1', FAKE_SETUP_STATUS: '7' });
+  for (const setting of ['FAKE_SOURCE_PRE_STATUS', 'FAKE_SOURCE_POST_STATUS']) {
+    for (const consent of [true, false]) {
+      it(`reports an unavailable ${setting} comparison with consent ${consent}`, () => {
+        saveConsent(consent);
+        const result = runSelfUpdate({ [setting]: '1' });
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + unavailableLine + (consent ? consentLine : '') + reviewLine);
+        assert.equal(result.stderr, '');
+      });
+    }
+  }
+
+  for (const contents of ['', 'invalid JSON', 'null', '{}', '{"collectionPolicy":0}', '{"collectionPolicy":1,"sources":[]}']) {
+    it(`reports unavailable comparison for invalid scope data: ${contents}`, () => {
+      fs.writeFileSync(path.join(testDir, 'after-scope.json'), contents);
+      const result = runSelfUpdate();
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + unavailableLine + reviewLine);
+    });
+  }
+
+  const requiredScopeFields = [
+    'collectionPolicy', 'sources', 'portableUpdateKeys', 'roots', 'recursive', 'preferences', 'bashCompletions',
+    ...['editor', 'editorUser', 'codex', 'claude', 'codexEnvironment', 'claudeEnvironment'].map((key) => `roots.${key}`),
+    ...['excludedNames', 'skillsExcludedRoot', 'skillsExcludedSidecar', 'profilesPattern', 'markdownSuffix',
+      'claudeSyncRoot', 'claudeSyncBookkeeping', 'claudeExcludedRoots', 'claudeExcludedRootPrefix',
+      'claudePluginMarker', 'claudeSkillMarker', 'claudeSyncedOrigin'].map((key) => `recursive.${key}`),
+    'preferences.name', 'preferences.path', 'bashCompletions.name', 'bashCompletions.path', 'bashCompletions.environment',
+  ];
+  const malformedScopeFields: [string, unknown][] = [
+    ...requiredScopeFields.map((key): [string, unknown] => [key, undefined]),
+    ['roots', []], ['roots.editor', []], ['roots.codex', false],
+    ['recursive.excludedNames', [1]], ['recursive.markdownSuffix', 1],
+    ['recursive.skillsExcludedSidecar', ['agents']], ['recursive.profilesPattern', '('],
+    ['preferences.path', 'not-an-array'], ['bashCompletions.environment', ''],
+    ['portableUpdateKeys', [null]], ['sources', {}], ['sources.0', null],
+    ['sources.0', ['file', 'shell']], ['sources.0.0', 'unknown-kind'],
+    ...[0, 6, 18, 20].map((index): [string, unknown] => [`sources.${index}.1`, 'unknown-category']),
+    ['sources.0.1', 'toString'],
+    ['sources.0.2', 'unknown-group'], ['sources.0.4', false],
+    ['sources.6', ['command', 'homebrew', 'inventory', 'brew', 'brew', 'brew list', 'extra']],
+    ['sources.18', ['editor-file', 'vscode', 'settings', 'Code']],
+    ['sources.20.4', null], ['sources.26.1', 'unknown-assistant'], ['sources.26.4', 'false'],
+    ['sources.5', ['bash-completions', 'extra']], ['sources.41', ['preferences', 'extra']],
+  ];
+  for (const [field, replacement] of malformedScopeFields) {
+    for (const side of ['before', 'after', 'both'] as const) {
+      it(`reports unavailable ${side} scope for ${field}=${JSON.stringify(replacement)}`, () => {
+        const scope = JSON.parse(fs.readFileSync(path.join(testDir, 'before-scope.json'), 'utf8')) as Record<string, unknown>;
+        const keys = field.split('.');
+        let target = scope;
+        for (const key of keys.slice(0, -1)) target = target[key] as Record<string, unknown>;
+        const key = keys.at(-1)!;
+        if (replacement === undefined) delete target[key];
+        else target[key] = replacement;
+        for (const selected of side === 'both' ? ['before', 'after'] : [side]) {
+          fs.writeFileSync(path.join(testDir, `${selected}-scope.json`), JSON.stringify(scope));
+        }
+        const result = runSelfUpdate();
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + unavailableLine + reviewLine);
+        assert.equal(result.stderr, '');
+      });
+    }
+  }
+
+  it('keeps successful updates successful with malformed consent config', () => {
+    changeScope((scope) => { scope.sources.pop(); });
+    fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), 'invalid JSON');
+    const result = runSelfUpdate();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + changedLine + reviewLine);
+  });
+
+  it('ignores comparison process exceptions without changing update success', () => {
+    const preload = path.join(testDir, 'scope-metadata.cjs');
+    fs.writeFileSync(preload, `
+      const child = require('child_process'); const original = child.spawnSync;
+      child.spawnSync = function(command, args, ...rest) {
+        if (command === 'git' && args[0] === 'show') throw new Error('fixture metadata failure');
+        return original.call(this, command, args, ...rest);
+      };
+    `);
+    const result = runSelfUpdate({ NODE_OPTIONS: `--require=${preload}` });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, updateLine + 'Ballin updated.\n' + unavailableLine + reviewLine);
+  });
+
+  it('does not disclose scope changes or consent when refresh failed', () => {
+    saveConsent(true);
+    changeScope((scope) => { scope.sources.pop(); });
+    const result = runSelfUpdate({ FAKE_SETUP_STATUS: '7' });
     assert.equal(result.status, 7);
-    assert.notInclude(result.stdout, 'Backup source definitions');
-    assert.equal(commandLog(true).filter((line: string) => line.includes('HEAD:commands/backup_snapshots.ts')).length, 1);
+    assert.equal(result.stdout, updateLine);
+    assert.lengthOf(commandLog(true).filter((line: string) => line.includes('show HEAD:commands/backup_scope.json')), 1);
   });
 
   it('fetches, merges, then runs the setup from the installed repository', () => {

@@ -1,0 +1,108 @@
+{
+  "collectionPolicy": 1,
+  "roots": {
+    "editor": [
+      "Library",
+      "Application Support"
+    ],
+    "editorUser": "User",
+    "codex": ".codex",
+    "claude": ".claude",
+    "codexEnvironment": "CODEX_HOME",
+    "claudeEnvironment": "CLAUDE_CONFIG_DIR"
+  },
+  "recursive": {
+    "excludedNames": [
+      ".git",
+      ".DS_Store"
+    ],
+    "skillsExcludedRoot": ".system",
+    "skillsExcludedSidecar": [
+      "agents",
+      "openai.yaml"
+    ],
+    "profilesPattern": "^.+\\.config\\.toml$",
+    "markdownSuffix": ".md",
+    "claudeSyncRoot": "synced",
+    "claudeSyncBookkeeping": [
+      "manifest.json",
+      ".staging",
+      ".last-complete-round",
+      ".trash"
+    ],
+    "claudeExcludedRoots": [
+      "anthropic-skills"
+    ],
+    "claudeExcludedRootPrefix": "anthropic-skills:",
+    "claudePluginMarker": ".claude-plugin",
+    "claudeSkillMarker": "SKILL.md",
+    "claudeSyncedOrigin": "plugin"
+  },
+  "portableUpdateKeys": [
+    "cleanup",
+    "selfUpdate",
+    "softwareupdate",
+    "npm",
+    "nvm"
+  ],
+  "sources": [
+    ["file", "shell", "sensitive", "bash_profile.sh", ".bash_profile"],
+    ["file", "shell", "sensitive", "bashrc.sh", ".bashrc"],
+    ["file", "shell", "sensitive", "profile.sh", ".profile"],
+    ["file", "shell", "sensitive", "zprofile.sh", ".zprofile"],
+    ["file", "shell", "sensitive", "zshrc.sh", ".zshrc"],
+    ["bash-completions"],
+    ["command", "homebrew", "inventory", "brew_list", "brew", "brew list --formula"],
+    ["command", "homebrew", "inventory", "brew_leaves", "brew", "brew leaves"],
+    ["command", "homebrew", "inventory", "brew_cask", "brew", "brew list --cask"],
+    ["command", "homebrew", "inventory", "brew_services", "brew", "brew services list"],
+    ["command", "homebrew", "inventory", "Brewfile", "brew", "brew bundle dump --file=-"],
+    ["file", "git", "sensitive", "gitignore_global", ".gitignore_global"],
+    ["file", "git", "sensitive", "gitconfig", ".gitconfig"],
+    ["command", "npm", "inventory", "npm_global", "npm", "npm list -g --depth=0"],
+    ["command", "python", "sensitive", "pipx", "pipx", "pipx list --json"],
+    ["command", "python", "inventory", "uv_tools", "uv", "uv tool list --show-version-specifiers --show-with --show-extras --no-progress --color never --no-config"],
+    ["command", "python", "inventory", "pyenv_versions", "pyenv", "pyenv versions --bare"],
+    ["file", "node", "sensitive", "nvmrc", ".nvmrc"],
+    ["editor-file", "vscode", "vs_settings", "Code", "settings.json"],
+    ["editor-file", "vscode", "vs_keybindings", "Code", "keybindings.json"],
+    ["editor-extensions", "vscode", "vs_extensions", "Code", "code"],
+    ["editor-file", "vscode-insiders", "vsI_settings", "Code - Insiders", "settings.json"],
+    ["editor-file", "vscode-insiders", "vsI_keybindings", "Code - Insiders", "keybindings.json"],
+    ["editor-extensions", "vscode-insiders", "vsI_extensions", "Code - Insiders", "code-insiders"],
+    ["file", "editor", "sensitive", "vimrc", ".vimrc"],
+    ["file", "editor", "sensitive", "nanorc", ".nanorc"],
+    ["configuration", "codex", "codex_AGENTS.md", "AGENTS.md", false, false, false, false],
+    ["configuration", "codex", "codex_AGENTS.override.md", "AGENTS.override.md", false, false, false, false],
+    ["configuration", "codex", "codex_config.toml", "config.toml", false, false, false, false],
+    ["configuration", "codex", "codex_profiles.bundle.json", ".", true, true, false, false],
+    ["configuration", "codex", "codex_hooks.json", "hooks.json", false, false, false, false],
+    ["configuration", "codex", "codex_skills.bundle.json", "skills", true, false, false, true],
+    ["configuration", "codex", "codex_user_skills.bundle.json", ".agents/skills", true, false, true, true],
+    ["configuration", "codex", "codex_rules.bundle.json", "rules", true, false, false, false],
+    ["configuration", "codex", "codex_agents.bundle.json", "agents", true, false, false, false],
+    ["configuration", "codex", "codex_marketplace.json", ".agents/plugins/marketplace.json", false, false, true, false],
+    ["configuration", "claude", "claude_instructions", "CLAUDE.md", false, false, false, false],
+    ["configuration", "claude", "claude_rules.bundle.json", "rules", true, false, false, false],
+    ["configuration", "claude", "claude_agents.bundle.json", "agents", true, false, false, false],
+    ["configuration", "claude", "claude_commands.bundle.json", "commands", true, false, false, false],
+    ["configuration", "claude", "claude_skills.bundle.json", "skills", true, false, false, true],
+    ["preferences"],
+    ["command", "mas", "inventory", "mas", "mas", "mas list"]
+  ],
+  "preferences": {
+    "name": "ballin_config",
+    "path": [
+      ".ballin-scripts",
+      "ballin.config.json"
+    ]
+  },
+  "bashCompletions": {
+    "name": "bash_completions",
+    "path": [
+      "etc",
+      "bash_completion.d"
+    ],
+    "environment": "BALLIN_BACKUP_BASH_COMPLETION_DIR"
+  }
+}

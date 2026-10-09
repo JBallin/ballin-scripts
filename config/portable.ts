@@ -5,9 +5,7 @@ type ConfigObject = Record<string, unknown>;
 class PortableConfigError extends Error {}
 
 // These permissions are intentionally independent of each other and of defaults.
-const exportedUpdateKeys = [
-  'cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm',
-] as const;
+const { portableUpdateKeys: exportedUpdateKeys } = require('../commands/backup_scope.json') as typeof import('../commands/backup_scope.json');
 const restoredUpdateKeys = [
   'cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm',
 ] as const;
