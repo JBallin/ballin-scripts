@@ -34,6 +34,9 @@ New and replacement installations start with these sensitive sources off and
 make their own choice; approval is never recovered from a backup. Configured
 setup retains established local consent; fresh reconnect requires its own
 review. Source changes are documented here and in release/update guidance.
+Self-update reports changes to supported sources or collection scope, or says when it cannot
+compare them. If sensitive sources are enabled, the notice reminds you that your
+opt-in persists across updates and covers future supported sources.
 
 Ballin previews logical paths and resolved targets for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as

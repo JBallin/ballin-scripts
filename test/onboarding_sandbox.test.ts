@@ -28,6 +28,28 @@ describe('onboarding sandbox', function() {
     const result = runSandbox(sandbox, ['install'], 'y\nn\ny\ncreate\n\ny\ny\ny\n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
+  it('limits the backup scope read to the sandbox catalog and exact Git operation', () => {
+    const install = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
+    assert.equal(install.status, 0, install.stdout + install.stderr);
+    const read = (args = ['show', 'HEAD:commands/backup_scope.json'], cwd = sandbox.repo) => (
+      spawnSync(path.join(sandbox.tools, 'git'), args, {
+        env: sandboxEnvironment(sandbox), cwd, encoding: 'utf8', timeout: 10000,
+      })
+    );
+    const catalog = path.join(sandbox.repo, 'commands/backup_scope.json');
+    const original = fs.readFileSync(catalog, 'utf8');
+    assert.equal(read().stdout, original);
+    assert.equal(read(['show', 'main:commands/backup_scope.json']).status, 2);
+    assert.equal(read(undefined, sandbox.home).status, 2);
+    fs.unlinkSync(catalog);
+    fs.symlinkSync(path.join(sandbox.source, 'commands/backup_scope.json'), catalog);
+    assert.equal(read().status, 2);
+    fs.unlinkSync(catalog);
+    fs.mkdirSync(catalog);
+    assert.equal(read().status, 2);
+    fs.rmdirSync(catalog);
+    fs.writeFileSync(catalog, original);
+  });
   it('allowlists scenarios, preserves state on clear, and resets faults separately', () => {
     assert.throws(() => selectScenario(sandbox, 'arbitrary'), /Unknown sandbox scenario/u);
     for (const name of Object.keys(scenarios).filter((name) => name !== 'conflict')) {

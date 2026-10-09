@@ -1,4 +1,4 @@
-# Your first Ballin backup
+# Quickstart: Your first Ballin backup
 
 You’ll need a [GitHub account](https://github.com/signup).
 

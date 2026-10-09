@@ -354,6 +354,21 @@ setup.
 Repository capture selects sources from the canonical definitions described
 below.
 
+`commands/backup_scope.json` owns the source catalog, source roots, recursive
+selection rules, and exported preference keys consumed by the collectors.
+Self-update compares this data locally from Git before and after a successful
+refresh, ignoring formatting and the order of sources and selection sets. Capture internals are outside
+that comparison. Missing or unreadable scope data produces an explicit
+comparison-unavailable notice, without failing the update. It never executes
+source code to establish scope.
+
+Keep source additions synchronized with the inclusion/sensitivity review in
+[Backup sources](backup-sources.md). Change the catalog or selection data for
+scope changes it can express. Increment `collectionPolicy` for a semantic
+collection change outside those declarations, such as new traversal or selection
+semantics. Do not increment it for implementation fixes that preserve the
+supported sources and selection policy, including bounded reading.
+
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
 30 sensitive sources, and one projected preferences snapshot.

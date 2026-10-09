@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { recursive: scope } = require('./backup_scope.json') as typeof import('./backup_scope.json');
 const { isUtf8 } = require('node:buffer');
 
 type RecursiveEntry = { path: string; executable: boolean; content: string };
@@ -10,7 +11,7 @@ type SnapshotLimits = { maxBytes?: number; maxEntries?: number };
 type RecursiveSelection = { markdownOnly?: boolean; rejectHardlinks?: boolean; claudeSkills?: boolean };
 const snapshotByteLimit = 16 * 1024 * 1024;
 const recursiveEntryLimit = 8192;
-const claudeSyncBookkeeping = new Set(['manifest.json', '.staging', '.last-complete-round', '.trash']);
+const claudeSyncBookkeeping = new Set(scope.claudeSyncBookkeeping);
 const claudeManifestByteLimit = 1024 * 1024;
 class SnapshotLimitError extends Error {
   constructor(kind: 'bytes' | 'entries', actual: number, limit: number) {
@@ -167,7 +168,7 @@ const syncedPluginNames = (maxBytes: number, maxRecords: number): { names: Set<s
       if (!record || typeof record.name !== 'string' || !record.name || /[\\/]/u.test(record.name)
         || record.name === '.' || record.name === '..' || seen.has(record.name)) throw new Error('Ambiguous manifest name');
       seen.add(record.name);
-      if (record.source === 'plugin') names.add(record.name);
+      if (record.source === scope.claudeSyncedOrigin) names.add(record.name);
     }
     return { names, bytes: bytes.length, records: manifest.skills.length };
   } catch {
@@ -191,7 +192,7 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
     inDirectory(root, relative, () => {
       // Synced roots are synced/<collection>/<skill>; collection names are opaque.
       const parts = relative.split(path.sep);
-      const synced = selection.claudeSkills && parts[0].toLowerCase() === 'synced';
+      const synced = selection.claudeSkills && parts[0].toLowerCase() === scope.claudeSyncRoot;
       const syncContainer = synced && parts.length < 3;
       let plugins: Set<string> | undefined;
       if (synced && parts.length === 2) {
@@ -211,8 +212,8 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
         if (stat.isDirectory() && !profilesOnly) pending.push(entry);
         else if (stat.isFile()) {
           if (selection.claudeSkills && (!relative || syncContainer)) return;
-          if (selection.markdownOnly && !name.endsWith('.md')) return;
-          if (skills && !selection.claudeSkills && parts.length === 2 && parts[1] === 'agents' && name === 'openai.yaml') return;
+          if (selection.markdownOnly && !name.endsWith(scope.markdownSuffix)) return;
+          if (skills && !selection.claudeSkills && parts.length === 2 && parts[1] === scope.skillsExcludedSidecar[0] && name === scope.skillsExcludedSidecar[1]) return;
           requireSingleLink(stat, selection.rejectHardlinks ?? false);
           if (reviewReadability) readableFileStat(name, selection.rejectHardlinks);
           files.push(entry);
@@ -229,14 +230,14 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
             // Legacy downloads shared the personal root; do not infer ownership
             // or read their manifest to decide which folders to capture.
             if (reserved === 'manifest.json') throw new SnapshotSourceTypeError('Legacy Claude skills manifest');
-            if (name.startsWith('.') || reserved === 'anthropic-skills' || reserved.startsWith('anthropic-skills:')) continue;
+            if (name.startsWith('.') || scope.claudeExcludedRoots.includes(reserved) || reserved.startsWith(scope.claudeExcludedRootPrefix)) continue;
           }
           // Sync containers hold collections and packages, not authoring files.
           // Keep their lifecycle state outside capture.
           if (syncContainer && claudeSyncBookkeeping.has(name.toLowerCase())) continue;
           if (plugins && !plugins.has(name)) continue;
-          if (profilesOnly && !/^.+\.config\.toml$/u.test(name)) continue;
-          if (name === '.git' || name === '.DS_Store' || (skills && !relative && name === '.system')) continue;
+          if (profilesOnly && !new RegExp(scope.profilesPattern, 'u').test(name)) continue;
+          if (scope.excludedNames.includes(name) || (skills && !relative && name === scope.skillsExcludedRoot)) continue;
           if (skillFolder) candidates.push(name);
           else visitEntry(name);
         }
@@ -244,8 +245,8 @@ const walkFiles = (root: string, profilesOnly: boolean, skills: boolean, limits:
       if (skillFolder) {
         // Enumerated spelling enforces exact SKILL.md even on case-insensitive
         // filesystems. Plugin markers exclude the complete candidate payload.
-        if (candidates.some((name) => name.toLowerCase() === '.claude-plugin')
-          || !candidates.includes('SKILL.md') || !fs.lstatSync('SKILL.md').isFile()) return;
+        if (candidates.some((name) => name.toLowerCase() === scope.claudePluginMarker)
+          || !candidates.includes(scope.claudeSkillMarker) || !fs.lstatSync(scope.claudeSkillMarker).isFile()) return;
         // Direct archive roots must never combine distinct source packages,
         // even when their files or contents happen to be identical.
         const name = synced ? parts[2] : relative;
@@ -312,7 +313,7 @@ const encodeDirectoryEntry = (relative: string, executable: boolean, bytes: Buff
 
 const snapshotMemberPath = (relative: string, claudeSkills = false): string => {
   const parts = relative.split(path.sep);
-  return (claudeSkills && parts[0].toLowerCase() === 'synced' ? parts.slice(2) : parts).join('/');
+  return (claudeSkills && parts[0].toLowerCase() === scope.claudeSyncRoot ? parts.slice(2) : parts).join('/');
 };
 
 const recursiveSnapshot = (root: string, profilesOnly = false, skills = false, limits: SnapshotLimits = {}, selection: RecursiveSelection = {}): string => {

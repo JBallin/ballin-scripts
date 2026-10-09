@@ -72,9 +72,8 @@ describe('first-run onboarding walkthroughs', function() {
     const backupResult = runInstalled(['backup']);
     assert.equal(updateResult.status, 0, updateResult.stderr);
     assert.equal(selfUpdateResult.status, 0, selfUpdateResult.stderr);
-    assert.equal(selfUpdateResult.stdout, 'Updating Ballin...\nBallin updated.\n'
-      + 'Backup source definitions may have changed. Sensitive-source opt-in covers current and future supported sources.\n'
-      + 'Review:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n');
+    assert.equal(selfUpdateResult.stdout, 'Updating Ballin...\nBallin updated.\n');
+    assert.lengthOf(commandLog().match(/^git:show HEAD:commands\/backup_scope\.json$/gmu) ?? [], 2);
     assert.equal(backupResult.status, 1);
     assert.include(backupResult.stderr, "run `ballin backup setup` to enable it");
     assert.notInclude(commandLog(), 'gh:');

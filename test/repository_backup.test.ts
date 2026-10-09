@@ -1640,7 +1640,7 @@ describe('repository backup lifecycle', function() {
       fs.copyFileSync(path.join(repoRoot, 'bin', 'ballin'), path.join(checkout, 'bin', 'ballin'));
       fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}
         const args = process.argv.slice(2); const exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);
-        if (exact(['rev-parse', '--verify', 'HEAD:commands/backup_snapshots.ts'])) process.stdout.write('a'.repeat(40) + '\\n');
+        if (exact(['show', 'HEAD:commands/backup_scope.json'])) process.stdout.write(${JSON.stringify(fs.readFileSync(path.join(repoRoot, 'commands/backup_scope.json'), 'utf8'))});
         else if (exact(['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'])) process.stderr.write(${JSON.stringify(diagnostic)});
         else if (!exact(['checkout', 'main']) && !exact(['merge', 'origin/main'])) process.exitCode = 2;
       `, { mode: 0o755 });
