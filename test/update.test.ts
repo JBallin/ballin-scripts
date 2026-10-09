@@ -971,20 +971,22 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     assert.deepEqual(commandLog(), []);
   });
 
-  it('uses raw destination types when an enabled backup stage validates config', () => {
-    fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
-    const update = {
-      cleanup: 'false',
-      nvm: 'false',
-      npm: 'false',
-      softwareupdate: 'false',
-      selfUpdate: 'false',
-      backup: 'true',
-    };
-
-    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
+  [
+    { name: 'numeric', id: 42 },
+    { name: 'array', id: ['unexpected-id'] },
+    { name: 'object', id: { value: 'unexpected-id' } },
+  ].forEach(({ name, id }) => {
+    it(`rejects a raw ${name} destination ID when an enabled backup stage validates config`, () => {
+      fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
       writeConfig({
-        update,
+        update: {
+          cleanup: 'false',
+          nvm: 'false',
+          npm: 'false',
+          softwareupdate: 'false',
+          selfUpdate: 'false',
+          backup: 'true',
+        },
         backup: { id, host: 'example.test' },
         analytics: { enabled: 'false' },
       });
@@ -994,10 +996,21 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
       assert.equal(result.status, 1);
       assert.include(result.stderr, 'invalid or conflicting destination configuration');
       assert.include(result.stderr, '`ballin backup disconnect`, then `ballin backup setup`');
+      assert.deepEqual(commandLog(), []);
     });
+  });
 
+  it('rejects a raw object destination host when an enabled backup stage validates config', () => {
+    fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
     writeConfig({
-      update,
+      update: {
+        cleanup: 'false',
+        nvm: 'false',
+        npm: 'false',
+        softwareupdate: 'false',
+        selfUpdate: 'false',
+        backup: 'true',
+      },
       backup: { id: 'test-gist-id', host: { value: 'unexpected-host' } },
       analytics: { enabled: 'false' },
     });

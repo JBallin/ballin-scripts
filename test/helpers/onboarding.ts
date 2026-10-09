@@ -8,12 +8,13 @@ const { fixtureState, installRepositoryFixture } = require('./repository.ts');
 import type { FixtureState } from './repository.ts';
 
 type Sandbox = {
-  root: string; home: string; tools: string; bin: string; repo: string; remote: string;
+  quickstart: boolean; root: string; home: string; tools: string; bin: string; repo: string; remote: string;
   log: string; scratch: string; source: string; guard: string; expected: Map<string, string>; links: Map<string, string>;
 };
 const markerName = '.ballin-onboarding-sandbox.json';
 const source = path.resolve(__dirname, '../..');
 const systemTools = ['bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'rm', 'tail'];
+const quickstartSystemTools = ['awk', 'chmod', 'grep', 'ln', 'mv', 'readlink', 'shasum'];
 const sandboxCommandTimeout = 120000;
 const sandboxSuiteTimeout = 300000;
 const existsWithoutFollowingLinks = (file: string): boolean => {
@@ -46,6 +47,23 @@ const recordSession = (sandbox: Sandbox, groups: number[], launchPending = false
 const validateSandbox = (sandbox: Sandbox): void => {
   validateRoot(sandbox.root);
   activeScenario(sandbox);
+  if (JSON.parse(fs.readFileSync(path.join(sandbox.root, markerName), 'utf8')).quickstart !== sandbox.quickstart) {
+    throw new Error('Sandbox mode was changed');
+  }
+  if (sandbox.quickstart) {
+    const managed = path.join(sandbox.home, '.local/share/ballin-quickstart');
+    if (existsWithoutFollowingLinks(managed)) {
+      if (fs.realpathSync(managed) !== managed || !fs.lstatSync(managed).isDirectory()
+        || fs.lstatSync(path.join(managed, '.managed')).isSymbolicLink()
+        || fs.readFileSync(path.join(managed, '.managed'), 'utf8') !== '1\n') throw new Error('Quickstart directory was changed');
+      const bin = path.join(managed, 'bin');
+      if (fs.realpathSync(bin) !== bin || fs.readdirSync(bin).sort().join(',') !== 'gh,git') throw new Error('Unexpected quickstart command');
+      for (const name of ['git', 'gh']) {
+        if (!fs.lstatSync(path.join(bin, name)).isSymbolicLink()
+          || fs.readlinkSync(path.join(bin, name)) !== path.join(sandbox.tools, name)) throw new Error('Quickstart tool was changed');
+      }
+    }
+  }
   for (const directory of [sandbox.home, sandbox.tools, sandbox.bin, sandbox.scratch, sandbox.remote]) {
     if (fs.realpathSync(directory) !== directory) throw new Error('Sandbox directory was replaced');
   }
@@ -53,7 +71,7 @@ const validateSandbox = (sandbox: Sandbox): void => {
     || fs.realpathSync(sandbox.repo) !== sandbox.repo)) throw new Error('Sandbox checkout was replaced');
   const state = path.join(sandbox.remote, 'repository.json');
   if (existsWithoutFollowingLinks(state) && fs.lstatSync(state).isSymbolicLink()) throw new Error('Sandbox remote state was replaced');
-  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, 'node', 'git', 'gh', 'softwareupdate'].sort().join(',')
+  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, ...(sandbox.quickstart ? [...quickstartSystemTools, 'uname', 'sw_vers', 'curl'] : []), 'node', 'git', 'gh', 'softwareupdate'].sort().join(',')
     || fs.readdirSync(sandbox.bin).some((name: string) => name !== 'ballin')) throw new Error('Unexpected sandbox command');
   for (const [file, contents] of sandbox.expected) {
     if (fs.readFileSync(file, 'utf8') !== contents || fs.lstatSync(file).isSymbolicLink()) {
@@ -72,7 +90,11 @@ const validateSandbox = (sandbox: Sandbox): void => {
 const sandboxEnvironment = (sandbox: Sandbox): NodeJS.ProcessEnv => {
   validateSandbox(sandbox);
   return {
-    HOME: sandbox.home, PATH: [sandbox.tools, sandbox.bin].join(path.delimiter),
+    HOME: sandbox.home, PATH: sandbox.quickstart
+      ? (fs.existsSync(path.join(sandbox.home, '.local/share/ballin-quickstart/.managed'))
+        ? [path.join(sandbox.home, '.local/share/ballin-quickstart/bin'), sandbox.tools, sandbox.bin].join(path.delimiter) : sandbox.tools)
+      : [sandbox.tools, sandbox.bin].join(path.delimiter),
+    ...(sandbox.quickstart ? { SHELL: '/bin/bash' } : {}),
     TMPDIR: sandbox.scratch, PWD: sandbox.home,
     GH_CONFIG_DIR: path.join(sandbox.home, '.config/gh'), XDG_CONFIG_HOME: path.join(sandbox.home, '.config'),
     BALLIN_NO_ANALYTICS: '1', BALLIN_QA_ROOT: sandbox.root,
@@ -120,19 +142,19 @@ const cleanupSandbox = (root: string): void => {
   }
   fs.rmSync(root, { recursive: true });
 };
-const createSandbox = (): Sandbox => {
+const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-onboarding-')));
   const sandbox: Sandbox = {
-    root, source, home: path.join(root, 'home'), tools: path.join(root, 'tools'),
+    quickstart: options.quickstart ?? false, root, source, home: path.join(root, 'home'), tools: path.join(root, 'tools'),
     bin: path.join(root, 'home/.local/bin'), repo: path.join(root, 'home/.ballin-scripts'),
     remote: path.join(root, 'remote'), log: path.join(root, 'commands.log'), scratch: path.join(root, 'tmp'),
     guard: path.join(root, 'guard.ts'), expected: new Map(), links: new Map(),
   };
   try {
     fs.writeFileSync(scenarioPath(sandbox), JSON.stringify({ name: 'none' }));
-    fs.writeFileSync(path.join(root, markerName), JSON.stringify({ version: 1, root }));
+    fs.writeFileSync(path.join(root, markerName), JSON.stringify({ version: 1, root, quickstart: sandbox.quickstart }));
     [sandbox.home, sandbox.tools, sandbox.bin, sandbox.remote, sandbox.scratch].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
-    for (const name of systemTools) {
+    for (const name of [...systemTools, ...(sandbox.quickstart ? quickstartSystemTools : [])]) {
       const target = ['/bin', '/usr/bin'].map((directory) => path.join(directory, name)).find((file) => fs.existsSync(file));
       if (!target) throw new Error(`Required system tool is unavailable: ${name}`);
       fs.accessSync(target, fs.constants.X_OK);
@@ -147,6 +169,29 @@ const createSandbox = (): Sandbox => {
     installRepositoryFixture(sandbox.tools, path.join(sandbox.remote, 'repository.json'), true);
     const softwareUpdate = path.join(sandbox.tools, 'softwareupdate');
     fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); const scenario = JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name;\n  if (scenario === 'update-failure') { process.stderr.write('Simulated sandbox macOS update failure\\n'); process.exitCode = 1; }\n  else if (scenario === 'update-interrupt') { fs.writeFileSync(${JSON.stringify(path.join(sandbox.root, 'update-stage.ready'))}, 'ready'); process.stdout.write('Sandbox update stage ready for interruption\\n'); setInterval(() => {}, 1000); }\n  else process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
+    if (sandbox.quickstart) {
+      // Explicit test-only mode: downloads resolve only to the local installer,
+      // prerequisites are fixture tools, and completion uses its existing TTY seam.
+      const gh = path.join(sandbox.tools, 'gh');
+      const originalGh = fs.readFileSync(gh, 'utf8').split('\n').slice(1).join('\n');
+      fs.writeFileSync(gh, '#!/usr/bin/env node\nconst args = process.argv.slice(2).join(" ");\n'
+        + 'if (args === "--version") console.log("gh fixture");\n'
+        + 'else if (args === "auth status --help") console.log("--active");\n'
+        + 'else if (args === "auth status --active --hostname github.com") process.exit(0);\n'
+        + 'else {\n' + originalGh + '\n}\n');
+      for (const [name, body] of Object.entries({
+        uname: 'if (process.argv[2] === "-s") console.log("Darwin"); else if (process.argv[2] === "-m") console.log("arm64"); else process.exit(97);',
+        sw_vers: 'if (process.argv.slice(2).join(" ") !== "-productVersion") process.exit(97); console.log("13.5");',
+        curl: `const fs = require('fs'); const args = process.argv.slice(2);\n`
+          + `if (JSON.stringify(args.slice(0, -1)) !== JSON.stringify(['-q', '-fsSL', '--proto', '=https', '--proto-redir', '=https', '--tlsv1.2', 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh', '-o'])) process.exit(97);\n`
+          + `const target = args.at(-1); if (!target.startsWith(${JSON.stringify(sandbox.scratch + '/ballin-quickstart.')})) process.exit(97);\n`
+          + `fs.copyFileSync(${JSON.stringify(path.join(source, 'install.sh'))}, target);`,
+      })) {
+        const file = path.join(sandbox.tools, name);
+        fs.writeFileSync(file, '#!/usr/bin/env node\n' + body + '\n', { mode: 0o755 });
+        sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
+      }
+    }
     for (const file of [git, path.join(sandbox.tools, 'gh'), softwareUpdate, sandbox.guard]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
     fs.writeFileSync(path.join(sandbox.home, '.zshrc'), '# Harmless onboarding QA fixture\nexport BALLIN_QA_EXAMPLE=1\n');
     resetRemote(sandbox);
@@ -158,10 +203,14 @@ const createSandbox = (): Sandbox => {
 };
 const runSandbox = (sandbox: Sandbox, args: string[], input?: string, timeout = sandboxCommandTimeout) => {
   const env = sandboxEnvironment(sandbox);
+  if (args[0] === 'quickstart') {
+    if (!sandbox.quickstart) throw new Error('Quickstart requires its explicit sandbox mode');
+    env.PATH = sandbox.tools;
+  }
   recordSession(sandbox, [], true);
   const result = spawnSync(
-    args[0] === 'install' ? path.join(source, 'install.sh') : path.join(sandbox.bin, 'ballin'),
-    args[0] === 'install' ? [] : args,
+    args[0] === 'quickstart' ? path.join(source, 'quickstart.sh') : args[0] === 'install' ? path.join(source, 'install.sh') : path.join(sandbox.bin, 'ballin'),
+    ['install', 'quickstart'].includes(args[0]) ? [] : args,
     { cwd: sandbox.home, env, input, encoding: 'utf8', timeout, detached: true },
   );
   if (result.pid) {

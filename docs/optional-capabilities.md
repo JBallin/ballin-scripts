@@ -53,8 +53,8 @@ the config file's permissions and its parent directory before retrying.
 
 ## Node.js
 
-Node.js is required by Ballin; install it using whichever method fits
-your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
+Node.js 24.12 or newer is required by Ballin; install it using whichever method
+fits your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
 with the latest Node.js long-term support (LTS) release. It supports switching
 versions, project-specific `.nvmrc` files, and a user-local installation.
 
@@ -91,6 +91,12 @@ brew install node
 
 With this option, Homebrew manages Node.js updates along with your other formulae.
 The `update.nvm` setting does not apply.
+
+You can also use the macOS `.pkg` installer from the
+[official Node.js website](https://nodejs.org/en/download). It writes to
+`/usr/local` and may replace Node.js/npm already installed there. Install updates
+to this standalone installation yourself; `update.nvm` applies only to nvm-managed
+Node.js.
 
 ## Mac App Store apps
 

@@ -132,6 +132,53 @@ that line manually with the displayed command using LF line endings.
 
 ## Local effects
 
+### Quickstart helper
+
+The [quickstart helper](quickstart.md) reuses Git, compatible Node.js, and GitHub
+CLI. It requires macOS 13.5 or newer and zsh or Bash. Homebrew is optional.
+
+[View the setup script](../quickstart.sh).
+
+For missing prerequisites, it asks before starting Apple's Command Line Tools
+installation for Git, installing the latest official Node.js 24 macOS package,
+or downloading GitHub CLI for your shell's architecture. Node's installer may
+replace Node.js/npm in `/usr/local` and request your Mac administrator password.
+Downloads are checked against published SHA-256 checksums; the Node package's
+Apple signature and publisher are checked before requesting admin access.
+
+Helper files and managed tool links live in `~/.local/share/ballin-quickstart/`.
+A compatible Node already first on PATH stays under its existing version manager;
+otherwise, the helper selects a fallback. It displays the exact PATH line and
+asks before appending it to your startup file.
+
+Select the file your terminal reads: `home` or an absolute directory containing
+`.zshrc` for zsh; `login` or `bashrc` for Bash. Press Enter to skip if unsure.
+Shell completion is a separate optional installer step.
+
+Open a new Terminal afterward, or run the displayed PATH line in your current
+window. **Already present** does not guarantee that a line executes. If `ballin`
+is unavailable, check your startup file and place the line where it executes.
+Skipped, declined, or unsafe edits leave the file untouched and report
+**persistent PATH setup incomplete**. Setup can continue using the helper's
+PATH; edit the file manually or rerun the quickstart to retry.
+
+GitHub CLI must authenticate before the core installer runs. The helper reuses
+existing authentication or offers normal browser login. If an exported token
+blocks login, follow GitHub CLI's instructions; the helper does not change
+exported credentials or switch accounts.
+
+After installation, it asks whether to run the first backup and open its GitHub
+destination: Enter or `y` accepts both; `n` skips both; end-of-input cancels.
+Normal backup setup prompts still apply. Declining setup leaves Ballin installed
+without capturing or opening a backup. The destination opens only after
+successful capture.
+
+Cancellation can leave completed prerequisite steps for retry. Reruns reuse tools
+and revalidate existing backups. `ballin uninstall` leaves prerequisites, helper
+files, and the confirmed PATH line in place.
+
+### Core installer
+
 The installer can create or change:
 
 - `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Rerunning the
