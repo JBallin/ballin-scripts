@@ -1,5 +1,6 @@
 const fs = require('fs');
 const crypto = require('crypto');
+const { backupCommitMessage } = require('./backup_commit_message.ts');
 const { repositoryCacheDirectory } = require('./backup_cache.ts');
 const { makeTempFile, removeTempFile, runCommand, writeStderrLine } = require('./commandHelpers.ts');
 const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
@@ -669,7 +670,7 @@ const publish = (
     }`,
     variables: { input: {
       branch: { id: before.revision.branchId }, expectedHeadOid: before.revision.head,
-      message: { headline: initialize ? 'Initialize Ballin backup' : 'Update Ballin backup' },
+      message: initialize ? { headline: 'Initialize backup' } : backupCommitMessage(additions.keys()),
       fileChanges: {
         additions: [...additions].map(([name, bytes]) => ({ path: name, contents: bytes.toString('base64') })),
       },
