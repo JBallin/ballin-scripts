@@ -6,8 +6,8 @@ describe('backup commit messages', () => {
   it('describes one source without a redundant body', () => {
     assert.deepEqual(backupCommitMessage(['codex_config.toml']), { headline: 'Update: Codex config' });
   });
-  it('uses stable catalog order and deduplicates paths', () => {
-    const expected = { headline: 'Update: Zsh settings, Git config' };
+  it('uses alphabetical filenames and deduplicates paths', () => {
+    const expected = { headline: 'Update: Git config, Zsh settings' };
     assert.deepEqual(backupCommitMessage(['gitconfig', 'zshrc.sh', 'gitconfig']), expected);
     assert.deepEqual(backupCommitMessage(['zshrc.sh', 'gitconfig']), expected);
   });
@@ -18,16 +18,32 @@ describe('backup commit messages', () => {
   });
   it('shortens by subject length and includes the complete list only then', () => {
     assert.deepEqual(backupCommitMessage(['vsI_settings', 'vsI_keybindings', 'vsI_extensions']), {
-      headline: 'Update: VS Code Insiders settings, VS Code Insiders keybindings, +1 more',
-      body: 'Changed sources:\n- VS Code Insiders settings (vsI_settings)\n'
-        + '- VS Code Insiders keybindings (vsI_keybindings)\n- VS Code Insiders extensions (vsI_extensions)',
+      headline: 'Update: VS Code Insiders extensions, +2 more',
+      body: 'Changed sources:\n- VS Code Insiders extensions (vsI_extensions)\n'
+        + '- VS Code Insiders keybindings (vsI_keybindings)\n- VS Code Insiders settings (vsI_settings)',
     });
   });
   it('uses a compact count when only one source is omitted', () => {
     assert.deepEqual(backupCommitMessage(['bash_profile.sh', 'vsI_settings', 'vsI_keybindings']), {
-      headline: 'Update: Bash profile, VS Code Insiders settings, +1 more',
+      headline: 'Update: Bash profile, VS Code Insiders keybindings, +1 more',
       body: 'Changed sources:\n- Bash profile (bash_profile.sh)\n'
-        + '- VS Code Insiders settings (vsI_settings)\n- VS Code Insiders keybindings (vsI_keybindings)',
+        + '- VS Code Insiders keybindings (vsI_keybindings)\n- VS Code Insiders settings (vsI_settings)',
+    });
+  });
+  it('counts multiple omitted sources and keeps the complete body in filename order', () => {
+    assert.deepEqual(backupCommitMessage(['vsI_extensions', 'vsI_keybindings', 'vsI_settings', 'bash_profile.sh']), {
+      headline: 'Update: Bash profile, VS Code Insiders extensions, +2 more',
+      body: 'Changed sources:\n- Bash profile (bash_profile.sh)\n'
+        + '- VS Code Insiders extensions (vsI_extensions)\n- VS Code Insiders keybindings (vsI_keybindings)\n'
+        + '- VS Code Insiders settings (vsI_settings)',
+    });
+  });
+  it('sorts canonical filenames rather than labels and keeps Brewfile with brew snapshots', () => {
+    assert.deepEqual(backupCommitMessage(['brew_list', 'Brewfile', 'bashrc.sh', 'bash_profile.sh']), {
+      headline: 'Update: Bash profile, Bash settings, Brewfile, Homebrew formulae',
+    });
+    assert.deepEqual(backupCommitMessage(['vs_settings', 'vsI_settings']), {
+      headline: 'Update: VS Code settings, VS Code Insiders settings',
     });
   });
   it('includes subjects of exactly 72 characters without a body', () => {

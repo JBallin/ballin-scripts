@@ -764,7 +764,7 @@ describe('private repository transport', () => {
       (input.fileChanges as { additions: { path: string }[] }).additions.map(({ path }) => path).sort(),
       ['gitconfig', 'zshrc.sh'],
     );
-    assert.deepEqual(input.message, { headline: 'Update: Zsh settings, Git config' });
+    assert.deepEqual(input.message, { headline: 'Update: Git config, Zsh settings' });
     assert.equal(input.expectedHeadOid, before.revision.head);
     assert.deepEqual(input.branch, { id: 'REF_R_fixture_main' });
     assert.equal(Buffer.from(state.commits[state.head].files['README.md'], 'base64').toString(), 'User presentation\n');
@@ -778,7 +778,7 @@ describe('private repository transport', () => {
     ]);
     publishRepositorySnapshots(read(), additions, options);
     const message = (publications()[0].payload?.variables?.input as { message: unknown }).message;
-    assert.deepEqual(message, { headline: 'Update: Zsh settings, Codex config, Codex skills' });
+    assert.deepEqual(message, { headline: 'Update: Codex config, Codex skills, Zsh settings' });
     assert.notInclude(JSON.stringify(message), 'DUMMY_PRIVATE');
     assert.equal(Buffer.from(state.commits[state.head].files['zshrc.sh'], 'base64').length, 0);
     state.requests = [];
@@ -792,9 +792,9 @@ describe('private repository transport', () => {
       ['vsI_settings', Buffer.from('PRIVATE_CONTENT')],
     ]), options);
     assert.deepEqual((publications()[0].payload?.variables?.input as { message: unknown }).message, {
-      headline: 'Update: VS Code Insiders settings, VS Code Insiders keybindings, +1 more',
-      body: 'Changed sources:\n- VS Code Insiders settings (vsI_settings)\n'
-        + '- VS Code Insiders keybindings (vsI_keybindings)\n- VS Code Insiders extensions (vsI_extensions)',
+      headline: 'Update: VS Code Insiders extensions, +2 more',
+      body: 'Changed sources:\n- VS Code Insiders extensions (vsI_extensions)\n'
+        + '- VS Code Insiders keybindings (vsI_keybindings)\n- VS Code Insiders settings (vsI_settings)',
     });
   });
   it('keeps Update and the source label for empty captured output represented by the empty marker', () => {

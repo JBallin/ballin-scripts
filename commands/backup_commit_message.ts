@@ -1,4 +1,5 @@
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
+const { compareBackupFileNames } = require('./backup_file_names.ts');
 import type { SnapshotDefinition } from './backup_snapshots.ts';
 
 // Presentation labels refer only to canonical backup paths, never source contents,
@@ -52,10 +53,11 @@ const subjectLimit = 72;
 
 const backupCommitMessage = (changedPaths: Iterable<string>): { headline: string; body?: string } => {
   const changed = new Set(changedPaths);
-  // Catalog order is stable across input order, additions, and removed sources.
+  // Match backup displays' filename order across input order, additions, and removed sources.
   // Unknown paths receive generic copy rather than exposing arbitrary filenames.
   const sources = (snapshotDefinitions as readonly SnapshotDefinition[])
     .filter(({ name }) => changed.delete(name))
+    .toSorted((left, right) => compareBackupFileNames(left.name, right.name))
     .map(({ name }) => ({ name, description: sourceDescriptions.get(name) ?? 'backup source' }));
   const descriptions = sources.map(({ description }) => description);
   if (changed.size) descriptions.push('other sources');

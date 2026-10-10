@@ -248,8 +248,9 @@ mutation addressed by branch node ID, with `expectedHeadOid` equal to the
 inspected revision. Only changed canonical additions are sent; routine backup
 never sends deletions. A true no-op skips the mutation. Initialization uses
 `Initialize backup`. Snapshot commits use `Update:` followed by comma-separated
-source labels in catalog order. Labels come from canonical backup paths, without
-inspecting contents or local source paths. Subjects fit within 72 characters,
+source labels in the same alphabetical filename order as backup displays
+(case-insensitive, with `Brewfile` sorted as `brew`). Labels come from canonical
+backup paths, without inspecting contents or local source paths. Subjects fit within 72 characters,
 shortening with `+N more` when needed. Only shortened subjects include a complete
 source list in the body. Payloads travel through
 stdin/private files, inherited API debugging is suppressed, and errors are
