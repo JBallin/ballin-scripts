@@ -1961,22 +1961,21 @@ system_sudo=fixture_sudo
       assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
       assert.notInclude(fs.readdirSync(home).join('\n'), '.ballin-quickstart.');
     });
-    it(`appends to normal custom ${shell} profiles without executing or interpreting commands`, () => {
-      const profile = path.join(home, profileName);
-      const sentinel = path.join(root, 'profile-executed');
-      // These remain true observations about runtime reachability. The new
-      // contract installs literal text and deliberately makes no active claim.
-      const forms = [
-        "'return'", '"ret\\\nurn"', 'exec /bin/true', 'logout',
-        'function custom() { return; }\nif false; then exit; fi',
-        'case "$TERM" in dumb) return ;; esac',
-        '(( value = (1 << 2) ))', 'exec {fd}>file', 'exec >foo{bar}',
-        "cat <<'END'\nreturn\nEND", 'command -q return',
-        ...(shell === 'bash'
-          ? ['shopt -s extglob\nshopt -u extglob\ncase foo in +(foo)) :;; esac']
-          : ['repeat "1" return', 'nocorrect noglob exec /bin/true', '{# comment\n:\n}']),
-      ];
-      for (const form of forms) {
+    // Each literal profile form has its own initial-run/retry workflow and fixture.
+    const forms = [
+      "'return'", '"ret\\\nurn"', 'exec /bin/true', 'logout',
+      'function custom() { return; }\nif false; then exit; fi',
+      'case "$TERM" in dumb) return ;; esac',
+      '(( value = (1 << 2) ))', 'exec {fd}>file', 'exec >foo{bar}',
+      "cat <<'END'\nreturn\nEND", 'command -q return',
+      ...(shell === 'bash'
+        ? ['shopt -s extglob\nshopt -u extglob\ncase foo in +(foo)) :;; esac']
+        : ['repeat "1" return', 'nocorrect noglob exec /bin/true', '{# comment\n:\n}']),
+    ];
+    for (const form of forms) {
+      it(`appends to normal custom ${shell} profiles without executing or interpreting commands: ${JSON.stringify(form)}`, () => {
+        const profile = path.join(home, profileName);
+        const sentinel = path.join(root, 'profile-executed');
         const contents = `touch '${sentinel}'\n${form}\n`;
         fs.writeFileSync(profile, contents, { mode: 0o640 });
         const result = run('y\ny\n', { SHELL: '/bin/' + shell });
@@ -1993,9 +1992,9 @@ system_sudo=fixture_sudo
         assert.include(retry.stdout, 'Its activation was not checked.');
         assert.notInclude(retry.stdout, 'Add this PATH line?');
         assert.equal(fs.readFileSync(profile, 'utf8'), contents + '\n' + pathLine() + '\n');
-      }
-      assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
-    });
+        assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+      });
+    }
     it(`reports literal presence in ${shell} even inside inactive or unfinished constructs`, () => {
       const profile = path.join(home, profileName);
       for (const contents of [
@@ -2253,7 +2252,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           assert.equal(config.backup.includeSensitive, 'false');
           assert.equal(config.update.backup, 'false');
           assert.deepEqual(publishes.map((request: { payload: { variables: { input: { message: { headline: string } } } } }) =>
-            request.payload.variables.input.message.headline), ['Initialize Ballin backup', 'Update Ballin backup']);
+            request.payload.variables.input.message.headline), ['Initialize backup', 'Update: update preferences']);
           assert.lengthOf(opens, 1);
           assert.isAbove(state.requests.indexOf(opens[0]), state.requests.indexOf(publishes[1]));
           const retry = runSandbox(sandbox, ['quickstart'], 'login\nn\n');
