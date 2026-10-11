@@ -4,7 +4,8 @@
 
 Ballin can be installed for maintenance without configuring backups. Git and a
 supported Node.js version are the only prerequisites for the installer. Backups
-and integrations such as Homebrew are optional.
+and integrations such as Homebrew are optional. Ballin has no runtime npm
+dependencies.
 
 ## What will installation change?
 
