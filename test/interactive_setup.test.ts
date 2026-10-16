@@ -88,6 +88,31 @@ describe('interactive setup with delayed terminal answers', function() {
     }
   });
 
+  it('waits for an explicit name after a transferred-owner suggestion and still requires final consent', () => {
+    sandbox = createSandbox();
+    const installed = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
+    assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+    const configPath = path.join(sandbox.repo, 'ballin.config.json'); const before = fs.readFileSync(configPath, 'utf8');
+    const remotePath = path.join(sandbox.remote, 'repository.json'); const remote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+    remote.faults.candidate = 'redirect'; remote.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } };
+    fs.writeFileSync(remotePath, JSON.stringify(remote));
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
+      { prompt: 'Set up optional private backups now? [y/N] ', answer: 'y' },
+      { prompt: 'Reconnect to an existing backup or create a new one? [reconnect/create] ', answer: 'create' },
+      { prompt: 'Repository name: ', answer: 'fresh-name' },
+      { prompt: 'Review sensitive sources for inclusion? [y/N] ', answer: 'n' },
+      { prompt: 'Confirm this destination and source selection? [y/N] ', answer: 'n' },
+    ]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Candidate backup: https://github.com/fixture-user/fresh-name');
+    assert.include(result.stdout, 'Backup setup cancelled;'); assert.notInclude(result.stdout, 'Available suggestion:');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    const after = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+    assert.equal(after.head, remote.head); assert.equal(after.exists, remote.exists);
+    assert.isTrue(after.requests.every((request: { method: string }) => request.method === 'GET'));
+    assert.isFalse(fs.existsSync(path.join(sandbox.repo, '.backup-cache')));
+  });
+
   it('waits at the automatic-backup prompt after direct setup initializes its destination', () => {
     sandbox = createSandbox();
     const installed = runSandbox(sandbox, ['install'], 'y\nn\nn\n');

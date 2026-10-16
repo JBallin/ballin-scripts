@@ -2094,6 +2094,112 @@ describe('repository backup lifecycle', function() {
     assert.equal(run(['setup'], 'y\nreconnect\n\n').status, 1);
     assert.isNull(config().backup.repository); assert.lengthOf(mutations(), 0);
   });
+  for (const consent of ['n\n', '']) {
+    it(`allows explicit name entry after a transferred-owner suggestion redirect, with final consent ${JSON.stringify(consent)}`, () => {
+      unconfigured(); const value = state(); value.faults.candidate = 'redirect';
+      value.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } }; saveState(value);
+      seedCache('zshrc.sh', 'unchanged\n'); const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['setup'], `y\ncreate\nfresh-name\nn\n${consent}`);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Enter a repository name to check.');
+      assert.include(result.stdout, 'Repository name: ');
+      assert.include(result.stdout, 'Candidate backup: https://github.com/fixture-user/fresh-name');
+      assert.include(result.stdout, 'Confirm this destination and source selection?');
+      assert.include(result.stdout, 'Backup setup cancelled;');
+      assert.notInclude(result.stdout, 'Available suggestion:');
+      assert.notInclude(result.stdout, 'Private backup created:');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before); assert.equal(cached(), 'unchanged\n');
+      assert.equal(state().head, value.head); assert.isEmpty(mutations());
+      assert.deepEqual(state().requests.map(({ endpoint, method }) => ({ endpoint, method })), [
+        { endpoint: 'user', method: 'GET' },
+        { endpoint: 'repos/fixture-user/ballin-backups', method: 'GET' },
+        { endpoint: 'repos/fixture-user/fresh-name', method: 'GET' },
+      ]);
+    });
+  }
+  for (const explicit of [false, true]) {
+    it(`rejects a selected transferred-owner destination with ${explicit ? 'an explicit argument' : 'interactive entry'}`, () => {
+      unconfigured(); const value = state(); value.faults.candidate = 'redirect';
+      value.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } }; saveState(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(explicit ? ['setup', 'ballin-backups'] : ['setup'], `y\ncreate\n${explicit ? '' : 'ballin-backups\n'}n\ny\n`);
+      assert.equal(result.status, 1); assert.include(result.stdout, 'personal owner does not match');
+      if (!explicit) assert.include(result.stdout, 'Repository name: ');
+      assert.notInclude(result.stdout, 'Confirm this destination'); assert.isEmpty(mutations());
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.isTrue(state().requests.every(request => request.method === 'GET'));
+    });
+  }
+  it('bypasses suggestion discovery for an explicit available name despite a transferred default', () => {
+    unconfigured(); const value = state(); value.faults.candidate = 'redirect';
+    value.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } }; saveState(value);
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run(['setup', 'fresh-name'], 'y\ncreate\nn\nn\n');
+    assert.equal(result.status, 1); assert.include(result.stdout, 'Candidate backup: https://github.com/fixture-user/fresh-name');
+    assert.include(result.stdout, 'Confirm this destination'); assert.notInclude(result.stdout, 'Enter a repository name to check.');
+    assert.notInclude(result.stdout, 'Repository name'); assert.isEmpty(mutations());
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.deepEqual(state().requests.map(request => request.endpoint), ['user', 'repos/fixture-user/fresh-name']);
+  });
+  for (const lookup of ['default', 'suffix']) {
+    it(`allows explicit entry after a failed ${lookup} suggestion lookup without advertising availability`, () => {
+      unconfigured(); const value = state(); value.exists = false;
+      if (lookup === 'suffix') value.faults.occupiedNames = ['ballin-backups'];
+      value.faults.transport = { target: `repos/fixture-user/${lookup === 'default' ? 'ballin-backups' : 'ballin-backups-2'}`,
+        response: { status: 1, signal: null, stdout: '{"status":"503"}', stderr: 'dummy-private-provider-error' } }; saveState(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['setup'], 'y\ncreate\nfresh-name\nn\nn\n');
+      assert.equal(result.status, 1); assert.include(result.stdout, 'Unable to suggest an available name.');
+      assert.include(result.stdout, 'Candidate backup: https://github.com/fixture-user/fresh-name');
+      assert.include(result.stdout, 'Confirm this destination'); assert.notInclude(result.stdout, 'Available suggestion:');
+      assert.notInclude(result.stdout + result.stderr, 'dummy-private-provider-error');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before); assert.isEmpty(mutations());
+      assert.isTrue(state().requests.every(request => request.method === 'GET'));
+    });
+  }
+  it('cancels explicit name entry after suggestion failure without lookup or writes for another destination', () => {
+    unconfigured(); const value = state(); value.faults.candidate = 'denied'; saveState(value);
+    const before = fs.readFileSync(configPath, 'utf8'); const result = run(['setup'], 'y\ncreate\n');
+    assert.equal(result.status, 1); assert.include(result.stdout, 'Repository name: ');
+    assert.include(result.stdout, 'Backup setup cancelled;'); assert.notInclude(result.stdout, 'Confirm this destination');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before); assert.isEmpty(mutations());
+    assert.deepEqual(state().requests.map(request => request.endpoint), ['user', 'repos/fixture-user/ballin-backups']);
+  });
+  for (const fault of ['redirect', 'denied']) {
+    it(`stops suggestion discovery after ${fault} metadata also has a cleanup failure`, () => {
+      unconfigured(); const value = state(); value.faults.candidate = fault;
+      value.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } }; saveState(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['setup'], 'y\ncreate\nfresh-name\nn\nn\n', {}, transportCleanupFailure('repos/fixture-user/ballin-backups'));
+      assertTransportCleanupFailed(result); assert.notInclude(result.stdout, 'Repository name');
+      assert.notInclude(result.stdout, 'Candidate backup'); assert.isEmpty(mutations());
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    });
+  }
+  for (const failure of ['unexpected', 'local-io']) {
+    it(`does not recover suggestion discovery from ${failure} failures`, () => {
+      unconfigured(); const before = fs.readFileSync(configPath, 'utf8');
+      const preload = `const repository = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_repository.ts'))});
+        repository.candidateRepository = () => { throw ${failure === 'unexpected' ? "new Error('DUMMY_PRIVATE_FAILURE')" : "new repository.RepositoryError('local-io')"}; };`;
+      const result = run(['setup'], 'y\ncreate\nfresh-name\nn\nn\n', {}, preload);
+      assert.equal(result.status, 1); assert.notInclude(result.stdout, 'Repository name');
+      assert.notInclude(result.stdout, 'Confirm this destination'); assert.isEmpty(mutations());
+      assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_FAILURE');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    });
+  }
+  it('permits explicit entry when the bounded suggestion search has no missing name', function() {
+    this.timeout(20000);
+    unconfigured(); const value = state(); value.exists = false;
+    value.faults.occupiedNames = Array.from({ length: 100 }, (_, index) => index ? `ballin-backups-${index + 1}` : 'ballin-backups'); saveState(value);
+    const before = fs.readFileSync(configPath, 'utf8');
+    const result = run(['setup'], 'y\ncreate\nfresh-name\nn\nn\n');
+    assert.equal(result.status, 1); assert.include(result.stdout, 'Repository name: ');
+    assert.include(result.stdout, 'Candidate backup: https://github.com/fixture-user/fresh-name');
+    assert.include(result.stdout, 'Confirm this destination'); assert.notInclude(result.stdout, 'Available suggestion:');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before); assert.isEmpty(mutations());
+    assert.lengthOf(state().requests, 102); // Account, 100 suggestions, and the chosen name only.
+  });
   for (const selected of ['', 'my-explicit-backup']) {
     it(`offers a checked available name and preserves explicit input: ${JSON.stringify(selected)}`, () => {
       unconfigured(); const value = state(); value.exists = false;

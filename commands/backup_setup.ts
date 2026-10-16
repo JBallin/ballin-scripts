@@ -13,7 +13,7 @@ const { configSnapshotFileName } = require('./backup_snapshots.ts');
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 const {
   readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead, inspectRepositoryMaintenance,
-  createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, repositoryMessages,
+  createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, repositoryMessages, RepositoryError: RepositoryLookupError,
   sameRepositoryRevision, unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryRead, RepositoryMaintenance, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
@@ -134,22 +134,34 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     writeStdoutLine();
     const choice = readPromptLine('Reconnect to an existing backup or create a new one? [reconnect/create] ');
     if (choice.eof || !['reconnect', 'create'].includes(choice.text)) return cancelled();
-    let suggested = 'ballin-backups';
-    let found = choice.text === 'create' && repositoryName === undefined
-      ? candidateRepository(suggested, account) : undefined;
-    // Only suggest names checked as missing. Never reuse a collision or a redirect.
-    for (let suffix = 2; found && suffix <= 100; suffix += 1) {
-      suggested = `ballin-backups-${suffix}`;
-      found = candidateRepository(suggested, account);
+    let suggested: string | undefined = 'ballin-backups';
+    let found;
+    if (choice.text === 'create' && repositoryName === undefined) {
+      try {
+        found = candidateRepository(suggested, account);
+        // Only suggest names checked as missing. Never reuse a collision or a redirect.
+        for (let suffix = 2; found && suffix <= 100; suffix += 1) {
+          suggested = `ballin-backups-${suffix}`;
+          found = candidateRepository(suggested, account);
+        }
+        if (found) suggested = undefined;
+      } catch (error) {
+        // Remote lookup failures are advisory here; local/cleanup and unexpected failures remain fatal.
+        const failure = error as RepositoryError;
+        if (!(error instanceof RepositoryLookupError) || !['authentication', 'connection', 'timeout', 'request',
+          'unavailable', 'identity', 'invalid-data', 'resource-limit'].includes(failure.problem) || failure.cleanupFailed) throw error;
+        writeStdoutLine(repositoryMessages[failure.problem]);
+        suggested = undefined;
+      }
+      if (suggested === undefined) writeStdoutLine('Unable to suggest an available name. Enter a repository name to check.');
+      else if (suggested !== 'ballin-backups') writeStdoutLine(`ballin-backups is already in use. Available suggestion: ${suggested}.`);
     }
-    if (found) { writeStdoutLine('Unable to find an available suggested name. Rerun with a repository name of your choice.'); return false; }
-    if (suggested !== 'ballin-backups') writeStdoutLine(`ballin-backups is already in use. Available suggestion: ${suggested}.`);
     let name: string;
     while (true) {
       const nameLine = repositoryName === undefined
-        ? readPromptLine(`Repository name [${suggested}]: `) : { text: repositoryName, eof: false };
+        ? readPromptLine(suggested === undefined ? 'Repository name: ' : `Repository name [${suggested}]: `) : { text: repositoryName, eof: false };
       if (nameLine.eof) return cancelled();
-      name = nameLine.text || suggested;
+      name = nameLine.text || suggested || '';
       if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
       found = candidateRepository(name, account);
       if (choice.text !== 'create' || !found || found.redirected) break;
