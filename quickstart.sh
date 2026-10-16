@@ -32,7 +32,7 @@ confirm() {
 confirm_first_backup() {
   local answer
   while :; do
-    printf '\nRun your first backup and open its GitHub destination? [Y/n] '
+    printf '\nRun a backup now and open its GitHub destination? [Y/n] '
     IFS= read -r answer || fail 'First backup cancelled; Ballin remains installed.'
     case "$answer" in
       ''|y|Y) return 0 ;;
@@ -396,8 +396,8 @@ profile_has_path() {
 }
 
 path_ready() {
-  printf 'PATH setup already present in %s. Its activation was not checked.\n' "$profile"
-  printf 'Continue setup here; open a new Terminal afterward. If tools are unavailable, check which startup file your terminal reads and where its PATH entries execute.\n'
+  printf 'PATH entry already present; activation not verified.\n'
+  printf 'Continue setup here; open a new Terminal afterward.\n'
 }
 
 check_existing_path() {
@@ -657,6 +657,7 @@ main() {
   repo="$HOME/.ballin-scripts"
   download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh' "$scratch/install.sh"
   # Keep startup hooks from replacing the tools qualified above.
+  printf '\n'
   BALLIN_SKIP_BACKUP_SETUP="$skip_backup_setup" BASH_ENV='' bash "$scratch/install.sh"
   [[ -x "$repo/bin/ballin" ]] || return 0
   [[ "$skip_backup_setup" == 0 ]] || return 0
@@ -667,7 +668,9 @@ main() {
     destination=$(backup_destination_kind "$repo")
     [[ "$destination" != unconfigured ]] || return 0
   fi
-  "$repo/bin/ballin" backup && "$repo/bin/ballin" backup open
+  "$repo/bin/ballin" backup
+  printf '\n'
+  "$repo/bin/ballin" backup open
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
