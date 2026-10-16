@@ -152,9 +152,8 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     write(target.line);
     const answer = prompt('Enable shell completion? [y/N] ');
     if (answer.eof || !['y', 'Y'].includes(answer.text)) {
-      write('Shell completion: No.'); fallback(); return;
+      fallback(); return;
     }
-    write(`Shell completion: Yes (${target.profile}).`);
     const appended = appendActivation(target);
     write(appended ? 'Shell completion enabled. Continue setup here; open a new terminal afterward.'
       : 'Shell completion is already enabled. Continue setup here; open a new terminal afterward.');

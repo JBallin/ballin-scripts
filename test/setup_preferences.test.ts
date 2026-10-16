@@ -169,9 +169,10 @@ fs.readFileSync = (file, ...args) => {
       assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `Analytics: ${enabled ? 'Yes' : 'No'}.`);
-      assert.include(result.stdout, `Automatic backup: ${enabled ? 'Yes' : 'No'}.`);
-      assert.include(result.stdout, `Sensitive sources: ${enabled ? 'Included' : 'Excluded'}.`);
+      assert.include(result.stdout, `Usage analytics: ${enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` unchanged at \`${enabled}\`).`);
+      assert.include(result.stdout, `Automatic backup during updates: ${enabled ? 'enabled' : 'disabled'} (\`update.backup\` unchanged at \`${enabled}\`).`);
+      assert.include(result.stdout, `Sensitive sources in backups: ${enabled ? 'included' : 'excluded'} (\`backup.includeSensitive\` unchanged at \`${enabled}\`).`);
+      for (const key of ['backup.includeSensitive', 'update.backup', 'analytics.enabled']) assert.lengthOf(result.stdout.split('`' + key + '` unchanged at'), 2);
       assert.deepEqual(readConfig(), initial);
       assert.include(result.stdout, 'preference review complete');
       if (enabled) {
@@ -188,7 +189,10 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(config.backup.includeSensitive, String(!enabled));
       assert.equal(config.update.backup, String(!enabled));
       assert.equal(config.analytics.enabled, String(!enabled));
-      assert.include(result.stdout, `Sensitive sources: ${!enabled ? 'Included' : 'Excluded'}.`);
+      assert.include(result.stdout, `Automatic backup during updates: ${!enabled ? 'enabled' : 'disabled'} (\`update.backup\` set to \`${!enabled}\`).`);
+      assert.include(result.stdout, `Usage analytics: ${!enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` set to \`${!enabled}\`).`);
+      for (const key of ['backup.includeSensitive', 'update.backup', 'analytics.enabled']) assert.lengthOf(result.stdout.split('`' + key + '` set to'), 2);
+      assert.include(result.stdout, `Sensitive sources in backups: ${!enabled ? 'included' : 'excluded'} (\`backup.includeSensitive\` set to \`${!enabled}\`).`);
     });
   });
 
@@ -223,6 +227,7 @@ fs.readFileSync = (file, ...args) => {
       const result = run(input);
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, 'Preference review cancelled');
+      assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup|analytics.enabled)` (?:set to|unchanged at)/u);
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.notInclude(result.stdout, 'Automatically run');
       assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
@@ -492,6 +497,7 @@ fs.readFileSync = (file, ...args) => {
         })
         : run('y\ny\n', ['setup'], { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
       assert.equal(result.status, 1);
+      assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup)` (?:set to|unchanged at)/u);
       if (choice === 'automatic') assert.include(result.stdout, 'Unable to save the automatic-backup preference');
       assert.equal(readConfig().backup.includeSensitive, 'false');
       assert.equal(readConfig().update.backup, 'false');
@@ -504,6 +510,7 @@ fs.readFileSync = (file, ...args) => {
     const result = run('y\n');
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(readConfig().analytics.enabled, 'false');
   });
 

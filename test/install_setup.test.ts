@@ -692,6 +692,11 @@ exit 2
       assert.include(result.stdout, analyticsPrompt);
       assert.notInclude(result.stdout, 'Usage analytics are currently');
       assert.equal(readRepoConfig().analytics.enabled, String(enabled));
+      if (response === null) assert.notInclude(result.stdout, 'Usage analytics:');
+      else {
+        assert.lengthOf(result.stdout.split('Usage analytics:'), 2);
+        assert.include(result.stdout, `Usage analytics: ${enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` ${enabled ? 'set to' : 'unchanged at'} \`${enabled}\`).`);
+      }
       assert.equal(fs.existsSync(installIdPath()), enabled);
       assert.notInclude(commandLog(), 'gh:');
     });
@@ -745,6 +750,8 @@ process.exitCode = configureAnalyticsPreference({
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.include(result.stdout, analyticsPromptFor(enabled === 'true'));
         assert.equal(readRepoConfig().analytics.enabled, enabled);
+        if (eof) assert.notInclude(result.stdout, 'Usage analytics:');
+        else assert.include(result.stdout, `Usage analytics: ${enabled === 'true' ? 'enabled' : 'disabled'} (\`analytics.enabled\` unchanged at \`${enabled}\`).`);
       });
     });
   });
@@ -794,6 +801,7 @@ fs.writeFileSync = function(file, contents, ...args) {
       result.stdout,
       'Unable to save the analytics preference; the existing local setting is unchanged.',
     );
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -823,6 +831,7 @@ fs.renameSync = function(source, destination) {
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -847,6 +856,7 @@ fs.writeFileSync(${JSON.stringify(configPath)} + '.' + process.pid + '.analytics
     const stagingFiles = fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp'));
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -886,6 +896,7 @@ fs.rmSync = function(target, ...args) {
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -1071,8 +1082,8 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'current permissions');
     assert.include(result.stdout, 'backup setup can continue normally');
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
-    assert.include(result.stdout, 'Sensitive sources: Excluded.\n');
-    assert.isBelow(result.stdout.indexOf('Sensitive sources: Excluded.'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
+    assert.include(result.stdout, 'Sensitive sources in backups: excluded (`backup.includeSensitive` set to `false`).\n', result.stdout);
+    assert.isBelow(result.stdout.indexOf('Sensitive sources in backups: excluded (`backup.includeSensitive` set to `false`).'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
     assert.notInclude(result.stdout, 'before retrying `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());

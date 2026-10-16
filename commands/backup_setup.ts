@@ -1,5 +1,6 @@
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
+const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { lastBackupSuccessLine } = require('./backup_status.ts');
 const { validatedBackupSummary } = require('./backup_summary.ts');
 const {
@@ -117,11 +118,13 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         const enabled = selectAutomaticUpdateBackup({ defaultEnabled: automatic, cancelOnEof: true });
         if (enabled === null) return cancelReview();
         // Commit both reviewed choices together; cancellation never saves a partial review.
+        const previousSensitive = candidate.backup.includeSensitive;
+        const previousAutomatic = candidate.update.backup;
         candidate.backup.includeSensitive = String(included);
         candidate.update.backup = String(enabled);
         if (!saveBackupConfig(configPath, candidate)) return false;
-        writeStdoutLine(`Sensitive sources: ${included ? 'Included' : 'Excluded'}.`);
-        writeStdoutLine(`Automatic backup: ${enabled ? 'Yes' : 'No'}.`);
+        writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previousSensitive));
+        writeStdoutLine(savedPreferenceLine('update.backup', enabled, previousAutomatic));
         writeStdoutLine('Backup settings review complete.');
         return true;
       };
@@ -206,6 +209,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(`The remote backup remains available at ${recoveryUrl}; local linkage was not saved.`);
       return false;
     }
+    const previousSensitive = candidate.backup?.includeSensitive;
     candidate.backup = { ...candidate.backup, repository: read.destination, id: null, includeSensitive: String(includeSensitive) };
     if (!saveBackupConfig(configPath, candidate)) {
       writeStdoutLine(`Reconnect to the existing backup at ${recoveryUrl}; do not create a duplicate.`);
@@ -213,7 +217,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     linkageSaved = true;
     writeStdoutLine(`Private backup ${previous ? 'reconnected' : 'created'}: ${recoveryUrl}`);
-    writeStdoutLine(`Sensitive sources: ${includeSensitive ? 'Included' : 'Excluded'}.`);
+    writeStdoutLine(savedPreferenceLine('backup.includeSensitive', includeSensitive, previousSensitive));
     if (!offerAutomaticUpdateBackup(configPath)) return false;
     writeStdoutLine('Backup setup complete.');
     return true;

@@ -1,6 +1,6 @@
 # Quickstart: Your first Ballin backup
 
-For backups, you’ll need a [GitHub account](https://github.com/signup).
+You’ll need a [GitHub account](https://github.com/signup).
 
 Open Terminal and paste:
 

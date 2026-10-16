@@ -163,10 +163,12 @@ Shell completion is a separate optional installer step.
 
 Continue all setup prompts in the same window. Open a new Terminal afterward,
 or run the displayed PATH line in your original window. Reruns recognize the
-helper line and common equivalent literal PATH exports in the default startup
-file without repeating directory or edit prompts. **Already present** does not
-guarantee that a line executes. If `ballin`
-is unavailable, check your startup file and place the line where it executes.
+exact helper line in the default startup file without repeating directory or
+edit prompts. Other references to the setup directories require manual PATH
+review; the helper leaves the selected file unchanged rather than interpreting
+shell code or adding possibly duplicate entries. **Already present** does not
+guarantee that a line executes. If `ballin` is unavailable, check your startup
+file and place the line where it executes.
 Skipped, declined, or unsafe edits leave the file untouched and report
 **persistent PATH setup incomplete**. Setup can continue using the helper's
 PATH; edit the file manually or rerun the quickstart to retry.

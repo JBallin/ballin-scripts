@@ -38,7 +38,7 @@ describe('beginner quickstart bootstrap', function() {
     try {
       const stat = fs.lstatSync(defaultProfile);
       const contents = stat.isFile() && stat.nlink === 1 ? fs.readFileSync(defaultProfile, 'utf8') : '';
-      // These fixtures use the helper line; equivalent-export cases use a dedicated direct runner below.
+      // These fixtures use the helper line; other directory references use a direct runner below.
       const expectedCommand = overrides.FAKE_BREW_PREFIX ? path.join(overrides.FAKE_BREW_PREFIX, 'bin') : path.join(home, '.local/bin');
       existingPath = contents.includes(`export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'`) && contents.includes(expectedCommand);
     } catch { /* A missing or unsafe startup file still receives selection. */ }
@@ -1972,34 +1972,53 @@ system_sudo=fixture_sudo
       assert.notInclude(retry.stdout, 'Directory containing'); assert.notInclude(retry.stdout, 'Add this PATH line');
     });
   }
-  for (const value of ['export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH:$HOME/.local/bin"',
-    'export PATH="${HOME}/.local/share/ballin-quickstart/bin:${PATH}"\nexport PATH="${HOME}/.local/bin:$PATH"']) {
-    it(`recognizes equivalent PATH exports without executing startup code: ${value}`, () => {
+  for (const value of [
+    'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH:$HOME/.local/bin"',
+    '# Existing path: ~/.local/bin',
+    'export PATH="${HOME}/.local/bin:$PATH"',
+    'export PATH="$HOME"/.local/bin:$PATH',
+    'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH"\r',
+  ]) {
+    it(`requests manual PATH review for directory references without executing startup code: ${value}`, () => {
       const profile = path.join(home, '.zshrc');
       const contents = `touch "${root}/startup-ran"\n${value}\n`;
       fs.writeFileSync(profile, contents);
-      const result = runPathSetup(''); assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'PATH setup already present');
-      assert.notInclude(result.stdout, 'Directory containing'); assert.notInclude(result.stdout, 'Add this PATH line');
+      const result = runPathSetup('\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'already mentions a setup directory');
+      assert.include(result.stderr, 'Review its PATH entries before deciding whether to add');
+      assert.notInclude(result.stdout, 'PATH setup already present'); assert.notInclude(result.stdout, 'Add this PATH line');
+      assert.include(result.stderr, pathLine());
       assert.equal(fs.readFileSync(profile, 'utf8'), contents); assert.isFalse(fs.existsSync(path.join(root, 'startup-ran')));
     });
   }
-  it('recognizes an equivalent Bash rc PATH on reruns without file or edit prompts', () => {
+  for (const suffix of ['/', '/.']) {
+    it(`requests manual review of home-relative references with HOME ending in ${suffix}`, () => {
+      const profile = path.join(home, '.zshrc');
+      const contents = 'export PATH="$HOME/.local/bin:$PATH"\n'; fs.writeFileSync(profile, contents);
+      const result = runPathSetup('\ny\n', { HOME: home + suffix });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'already mentions a setup directory');
+      assert.notInclude(result.stdout, 'Add this PATH line');
+      assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+    });
+  }
+  it('requires review of a referenced Bash rc directory while preserving startup selection', () => {
     const profile = path.join(home, '.bashrc');
     const contents = 'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH:$HOME/.local/bin"\n';
     fs.writeFileSync(profile, contents);
-    const result = runPathSetup('', { SHELL: '/bin/bash' });
+    const result = runPathSetup('bashrc\ny\n', { SHELL: '/bin/bash' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, `PATH setup already present in ${profile}`);
-    assert.notInclude(result.stdout, 'Which Bash startup file'); assert.notInclude(result.stdout, 'Add this PATH line');
+    assert.include(result.stdout, 'Which Bash startup file'); assert.include(result.stderr, 'already mentions a setup directory');
+    assert.notInclude(result.stdout, 'PATH setup already present'); assert.notInclude(result.stdout, 'Add this PATH line');
     assert.equal(fs.readFileSync(profile, 'utf8'), contents);
   });
-  it('does not mistake a CRLF equivalent export for completed PATH setup', () => {
-    const profile = path.join(home, '.zshrc');
-    fs.writeFileSync(profile, 'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH:$HOME/.local/bin"\r\n');
-    const result = runPathSetup('\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.notInclude(result.stdout, 'already present'); assert.include(result.stdout, 'PATH line added');
-    assert.isTrue(fs.readFileSync(profile, 'utf8').endsWith(pathLine() + '\n'));
+  it('permits an explicit custom target when the default directory needs manual review', () => {
+    fs.writeFileSync(path.join(home, '.zshrc'), '# ~/.local/bin requires review\n');
+    const directory = path.join(home, 'custom-startup'); fs.mkdirSync(directory);
+    const result = runPathSetup(directory + '\ny\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(path.join(directory, '.zshrc'), 'utf8'), pathLine() + '\n');
+    assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), '# ~/.local/bin requires review\n');
   });
   it('accepts a custom exported ZDOTDIR default, explicit home override, and skip', () => {
     const directory = path.join(home, 'zsh'); fs.mkdirSync(directory);

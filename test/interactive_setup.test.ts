@@ -51,7 +51,7 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.isUndefined(result.error, result.stderr);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Shell completion enabled.');
-      assert.include(result.stdout, 'Analytics: No.');
+      assert.include(result.stdout, 'Usage analytics: disabled (`analytics.enabled` unchanged at `false`).');
       assert.include(result.stdout, 'Continue setup here; open a new Terminal afterward.');
       assert.include(result.stdout, 'Backup setup complete.');
       assert.notInclude(result.stdout, 'Unable to prepare backup configuration.');
@@ -96,7 +96,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Creating and initializing private backup...');
-    assert.include(result.stdout, 'Automatic backup: Yes.');
+    assert.include(result.stdout, 'Automatic backup during updates: enabled (`update.backup` set to `true`).');
     assert.include(result.stdout, 'Backup setup complete.');
     assertInitializedOnly();
   });

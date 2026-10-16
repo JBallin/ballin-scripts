@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { createConfigStore, stringify } = require('../config/store.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
+const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 import type { SnapshotDefinition } from './backup_snapshots.ts';
@@ -46,9 +47,11 @@ const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBacku
   if (enabled === null) return 'cancelled';
   const preference = String(enabled);
   let saved = false;
+  let previous: unknown;
   if (createConfigStore({ configPath }).readLeafValue('update.backup') !== undefined) {
     try {
       const config = readSetupConfigContext(configPath);
+      previous = config.update.backup;
       config.update.backup = preference;
       saved = saveBackupConfig(configPath, config);
     } catch { /* Preserve existing local choices when preference persistence fails. */ }
@@ -59,7 +62,7 @@ const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBacku
       : `Backup destination saved, but the automatic-backup preference was not saved. Set \`update.backup\` to ${preference} in \`ballin.config.json\`.`);
     return 'failed';
   }
-  writeStdoutLine(`Automatic backup: ${enabled ? 'Yes' : 'No'}.`);
+  writeStdoutLine(savedPreferenceLine('update.backup', enabled, previous));
   return 'confirmed';
 };
 const offerAutomaticUpdateBackup = (configPath: string): boolean => (

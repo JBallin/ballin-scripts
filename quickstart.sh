@@ -21,13 +21,12 @@ cleanup() {
   [ -z "$scratch" ] || rm -rf -- "$scratch"
 }
 
+# Standalone downloads share this small presentation contract; reads stay native.
 confirm() {
   local answer
   printf '%s [y/N] ' "$1"
   IFS= read -r answer || return 1
-  if [[ "$answer" == y || "$answer" == Y ]]; then printf 'Selected: Yes.\n'; return 0; fi
-  printf 'Selected: No.\n'
-  return 1
+  [[ "$answer" == y || "$answer" == Y ]]
 }
 
 confirm_first_backup() {
@@ -36,8 +35,8 @@ confirm_first_backup() {
     printf '\nRun your first backup and open its GitHub destination? [Y/n] '
     IFS= read -r answer || fail 'First backup cancelled; Ballin remains installed.'
     case "$answer" in
-      ''|y|Y) printf 'First backup: Yes.\n'; return 0 ;;
-      n|N) printf 'First backup: No.\n'; return 1 ;;
+      ''|y|Y) return 0 ;;
+      n|N) return 1 ;;
       *) printf 'Please enter y or n.\n' ;;
     esac
   done
@@ -361,9 +360,8 @@ profile_unchanged() {
   ' "$profile" "$scratch/profile-original" "$scratch/profile-metadata"
 }
 
-# Recognize common literal PATH exports without sourcing arbitrary startup code.
+# Recognize our exact line; other directory references need manual review.
 profile_has_path() {
-  # shellcheck disable=SC2016 # Dollar signs belong to the JavaScript PATH parser.
   "$node_tool" -e '
     const fs = require("fs"), path = require("path");
     const [file, exact, quick, commands, home, snapshot, metadata] = process.argv.slice(1);
@@ -379,36 +377,19 @@ profile_has_path() {
         text = contents.toString("utf8");
       } finally { fs.closeSync(fd); }
       const lines = text.split("\n");
-      const present = () => {
+      const exactLine = lines.includes(exact);
+      const directories = [quick, ".local/share/ballin-quickstart/bin", ...commands.split(":")];
+      // Literal suffixes cover common HOME/tilde spellings without interpreting shell code.
+      for (const directory of commands.split(":")) {
+        const relative = path.relative(home, directory);
+        if (relative && relative !== ".." && !relative.startsWith("../") && !path.isAbsolute(relative)) directories.push(relative);
+      }
+      const referenced = directories.some(directory => directory && text.includes(directory));
+      if (exactLine || referenced) {
         fs.writeFileSync(snapshot, contents);
         fs.writeFileSync(metadata, JSON.stringify({ parent, file: stat }));
-        process.exit(0);
-      };
-      if (lines.includes(exact)) present();
-      const directories = new Set();
-      for (const line of lines) {
-        if (line.includes("\r")) continue;
-        const match = line.match(/^\s*export\s+PATH=(.*?)\s*$/u);
-        if (!match) continue;
-        let value = "", quote = "", invalid = false;
-        const input = match[1];
-        for (let i = 0; i < input.length; i++) {
-          const ch = input[i];
-          if (ch === String.fromCharCode(39) && quote !== "double") { quote = quote ? "" : "single"; continue; }
-          if (ch === "\"" && quote !== "single") { quote = quote ? "" : "double"; continue; }
-          if (ch === "$" && quote !== "single") {
-            const variable = input.slice(i).match(/^\$(?:\{(HOME|PATH)\}|(HOME|PATH)\b)/u);
-            if (!variable) { invalid = true; break; }
-            value += (variable[1] ?? variable[2]) === "HOME" ? home : "<PATH>";
-            i += variable[0].length - 1;
-          } else if (quote !== "single" && ("`\\;|&<>()".includes(ch) || (!quote && /\s/u.test(ch)))) {
-            invalid = true; break;
-          } else value += ch;
-        }
-        if (invalid || quote || !value.split(":").includes("<PATH>")) continue;
-        value.split(":").filter(entry => entry.startsWith("/")).forEach(entry => directories.add(path.normalize(entry)));
+        process.exit(exactLine ? 0 : 2);
       }
-      if ([quick, ...commands.split(":")].every(entry => directories.has(path.normalize(entry)))) present();
       process.exit(1);
     } catch { process.exit(1); }
   ' "$1" "$line" "$quick_bin" "$command_path" "$HOME" "$scratch/profile-original" "$scratch/profile-metadata" 2>/dev/null
@@ -420,12 +401,20 @@ path_ready() {
 }
 
 check_existing_path() {
-  profile_has_path "$profile" || return 1
+  local status=0
+  profile_has_path "$profile" || status=$?
+  [[ "$status" == 0 || "$status" == 2 ]] || return 1
+  # Before selection, only the exact managed line can skip the location prompt.
+  [[ "$status" != 2 || "${1:-}" == selected ]] || return 1
   if ! profile_unchanged; then
     path_incomplete 'The startup file changed during setup. Review it before retrying.'
     return 0
   fi
-  path_ready
+  if [[ "$status" == 2 ]]; then
+    path_incomplete "$profile already mentions a setup directory. Review its PATH entries before deciding whether to add the command below."
+  else
+    path_ready
+  fi
 }
 
 configure_path() {
@@ -510,7 +499,7 @@ configure_path() {
   fi
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
   # Literal presence is not evidence that the shell executes this line.
-  if check_existing_path; then return; fi
+  if check_existing_path selected; then return; fi
   # Small append-boundary checks: syntax must parse, a trailing backslash must
   # be inert (for example in a comment), and EOF must expose an invalid token.
   if ! "${syntax_check[@]}" "$original" >/dev/null 2>&1; then
@@ -653,10 +642,10 @@ main() {
   if ! "$gh_tool" auth status --active --hostname github.com >/dev/null 2>&1; then
     printf '\nGitHub CLI sign-in is needed for backups.\n'
     printf 'Sign in now? [Y/n] '
-    if ! IFS= read -r login_choice; then login_choice=n; fi
+    IFS= read -r login_choice || login_choice=n
     case "$login_choice" in
       ''|y|Y)
-        printf 'GitHub CLI sign-in: Yes. Follow the GitHub CLI prompts below.\n'
+        printf 'Follow the GitHub CLI prompts below.\n'
         printf 'The Git authentication question only configures Git credentials; either answer continues CLI sign-in.\n'
         printf 'Use the device code in a browser, including an already signed-in browser on another computer. No passkey needs copying.\n'
         "$gh_tool" auth login --hostname github.com --git-protocol https --web ;;

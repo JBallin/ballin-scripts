@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const https = require('https');
 const os = require('os');
 const path = require('path');
+const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { fetchConfig } = require('../config/index.ts');
 const { createConfigStore } = require('../config/store.ts');
 const { readCommandOutput, readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
@@ -275,7 +276,7 @@ const writeLocalInstallId = (installId: string, installIdPath = installIdPathFor
   }
 };
 
-const writeAnalyticsPreference = (configPath: string, enabled: boolean): boolean => {
+const writeAnalyticsPreference = (configPath: string, enabled: boolean): { previous: unknown } | null => {
   const temporary = `${configPath}.${process.pid}.analytics.tmp`;
   let created = false;
   try {
@@ -283,13 +284,15 @@ const writeAnalyticsPreference = (configPath: string, enabled: boolean): boolean
     const fd = fs.openSync(temporary, 'wx', 0o600);
     created = true;
     try { fs.writeFileSync(fd, config); } finally { fs.closeSync(fd); }
-    if (!createConfigStore({ configPath: temporary }).writeLeafValue('analytics.enabled', String(enabled))) {
-      return false;
+    const store = createConfigStore({ configPath: temporary });
+    const previous = store.readLeafValue('analytics.enabled');
+    if (!store.writeLeafValue('analytics.enabled', String(enabled))) {
+      return null;
     }
     fs.renameSync(temporary, configPath);
-    return true;
+    return { previous };
   } catch {
-    return false;
+    return null;
   } finally {
     if (created) {
       try { fs.rmSync(temporary, { force: true }); } catch { /* Best-effort private staging cleanup. */ }
@@ -317,8 +320,9 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
   const enabled = response.text === ''
     ? defaultEnabled
     : response.text === 'y' || response.text === 'Y';
-  if (writeAnalyticsPreference(options.configPath, enabled)) {
-    writeStdoutLine(`Analytics: ${enabled ? 'Yes' : 'No'}.`);
+  const saved = writeAnalyticsPreference(options.configPath, enabled);
+  if (saved) {
+    writeStdoutLine(savedPreferenceLine('analytics.enabled', enabled, saved.previous));
     return true;
   }
   writeStdoutLine('\nUnable to save the analytics preference; the existing local setting is unchanged.');
