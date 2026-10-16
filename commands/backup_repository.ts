@@ -277,9 +277,10 @@ const readInfo = (
 const candidateRepository = (name: string, account: Account, options: RepositoryOptions = {}): (RepositoryDestination & { redirected?: true }) | null => {
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   const result = api(`repos/${account.login}/${name}`, undefined, options);
+  // Advisory callers may recover from lookup errors, but cleanup failures remain fatal.
+  requireCleanTransport(result);
   if (!result.ok) {
     if (!result.problem && String(result.body.status) === '404') {
-      requireCleanTransport(result);
       return null; // Absence is ambiguous; only explicit creation may follow.
     }
     throw new RepositoryError(result.problem ?? 'unavailable');
@@ -291,7 +292,6 @@ const candidateRepository = (name: string, account: Account, options: Repository
     name, branch: identifier(result.body.default_branch),
   };
   if (!validRepositoryName(result.body.name)) throw new RepositoryError('invalid-data');
-  requireCleanTransport(result);
   // Keep the stable identity available for configured-backup revalidation.
   if ((result.body.name as string).toLowerCase() !== name.toLowerCase()) return { ...destination, redirected: true };
   return destination;

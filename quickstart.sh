@@ -21,6 +21,7 @@ cleanup() {
   [ -z "$scratch" ] || rm -rf -- "$scratch"
 }
 
+# Standalone downloads share this small presentation contract; reads stay native.
 confirm() {
   local answer
   printf '%s [y/N] ' "$1"
@@ -336,7 +337,8 @@ install_gh() {
 
 path_incomplete() {
   printf '\nPersistent PATH setup incomplete: %s\n' "$1" >&2
-  printf 'The startup file was left unchanged. First-backup setup can continue with the helper PATH.\n' >&2
+  printf 'The startup file was left unchanged. Setup can continue with the helper PATH.\n' >&2
+  printf 'Manual PATH command:\n%s\n' "${line:-}" >&2
   printf 'Review your shell startup and PATH setup, or rerun this quickstart to retry.\n' >&2
 }
 
@@ -358,37 +360,105 @@ profile_unchanged() {
   ' "$profile" "$scratch/profile-original" "$scratch/profile-metadata"
 }
 
+# Recognize our exact line; other directory references need manual review.
+profile_has_path() {
+  "$node_tool" -e '
+    const fs = require("fs"), path = require("path");
+    const [file, exact, quick, commands, home, snapshot, metadata] = process.argv.slice(1);
+    try {
+      const parent = fs.lstatSync(path.dirname(file));
+      if (!parent.isDirectory()) process.exit(1);
+      const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      let text, contents, stat;
+      try {
+        stat = fs.fstatSync(fd);
+        if (!stat.isFile() || stat.nlink !== 1) process.exit(1);
+        contents = fs.readFileSync(fd);
+        text = contents.toString("utf8");
+      } finally { fs.closeSync(fd); }
+      const lines = text.split("\n");
+      const exactLine = lines.includes(exact);
+      const directories = [quick, ".local/share/ballin-quickstart/bin", ...commands.split(":")];
+      // Literal suffixes cover common HOME/tilde spellings without interpreting shell code.
+      for (const directory of commands.split(":")) {
+        const relative = path.relative(home, directory);
+        if (relative && relative !== ".." && !relative.startsWith("../") && !path.isAbsolute(relative)) directories.push(relative);
+      }
+      const referenced = directories.some(directory => directory && text.includes(directory));
+      if (exactLine || referenced) {
+        fs.writeFileSync(snapshot, contents);
+        fs.writeFileSync(metadata, JSON.stringify({ parent, file: stat }));
+        process.exit(exactLine ? 0 : 2);
+      }
+      process.exit(1);
+    } catch { process.exit(1); }
+  ' "$1" "$line" "$quick_bin" "$command_path" "$HOME" "$scratch/profile-original" "$scratch/profile-metadata" 2>/dev/null
+}
+
+path_ready() {
+  printf 'PATH setup already present in %s. Its activation was not checked.\n' "$profile"
+  printf 'Continue setup here; open a new Terminal afterward. If tools are unavailable, check which startup file your terminal reads and where its PATH entries execute.\n'
+}
+
+check_existing_path() {
+  local status=0
+  profile_has_path "$profile" || status=$?
+  [[ "$status" == 0 || "$status" == 2 ]] || return 1
+  # Before selection, only the exact managed line can skip the location prompt.
+  [[ "$status" != 2 || "${1:-}" == selected ]] || return 1
+  if ! profile_unchanged; then
+    path_incomplete 'The startup file changed during setup. Review it before retrying.'
+    return 0
+  fi
+  if [[ "$status" == 2 ]]; then
+    path_incomplete "$profile already mentions a setup directory. Review its PATH entries before deciding whether to add the command below."
+  else
+    path_ready
+  fi
+}
+
 configure_path() {
-  local escaped command_escaped line choice candidate original
+  local escaped command_escaped line choice candidate original default_directory login_profile
   escaped=${quick_bin//\'/\'\\\'\'}
   command_escaped=${command_path//\'/\'\\\'\'}
   line="export PATH='$escaped':\$PATH:'$command_escaped'"
-  printf '\nPATH line (also run this in your current Bash/zsh Terminal to use these tools there):\n%s\n' "$line"
-  printf 'If ballin is unavailable in a new Terminal, review the startup file your shell reads and the placement of the line.\n'
+  printf '\nTools are ready for this setup. Shell PATH settings apply to future terminals.\n'
   profile_shell=${SHELL:-}
   if [[ "$profile_shell" != /* || ! -f "$profile_shell" || ! -x "$profile_shell" ]]; then
     path_incomplete 'Select an executable Bash or zsh in SHELL before retrying.'; return
   fi
   case "${profile_shell##*/}" in
     zsh)
-      if [[ -n "${ZDOTDIR+x}" ]]; then printf 'Exported ZDOTDIR: "%s" (an empty value does not mean home).\n' "$ZDOTDIR"; fi
-      printf 'Which directory contains the .zshrc your terminal reads? [home or absolute directory; Enter to skip] '
-      IFS= read -r choice || choice=''
+      default_directory="${ZDOTDIR-$HOME}"
+      if [[ "$default_directory" == /* ]]; then
+        profile="${default_directory%/}/.zshrc"
+        if check_existing_path; then return; fi
+        printf 'Directory containing your .zshrc [Enter=%s; absolute directory or skip]: ' "$default_directory"
+      else
+        printf 'ZDOTDIR is empty or relative. Enter the absolute directory containing your .zshrc, or skip: '
+      fi
+      if ! IFS= read -r choice; then path_incomplete 'PATH setup skipped.'; return; fi
+      [[ "$choice" != skip ]] || { path_incomplete 'PATH setup skipped.'; return; }
+      [[ -n "$choice" ]] || choice="$default_directory"
       [[ "$choice" != home ]] || choice="$HOME"
       if [[ "$choice" != /* ]]; then path_incomplete 'No absolute zsh startup directory selected.'; return; fi
       profile="${choice%/}/.zshrc"
       ;;
     bash)
+      profile="$HOME/.bash_profile"
+      for candidate in .bash_profile .bash_login .profile; do
+        if [[ -e "$HOME/$candidate" || -L "$HOME/$candidate" ]]; then profile="$HOME/$candidate"; break; fi
+      done
+      if check_existing_path; then return; fi
+      login_profile="$profile"
+      profile="$HOME/.bashrc"
+      if check_existing_path; then return; fi
+      profile="$login_profile"
       printf 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] '
       IFS= read -r choice || choice=''
       case "$choice" in
         bashrc) profile="$HOME/.bashrc" ;;
-        login)
-          profile="$HOME/.bash_profile"
-          for candidate in .bash_profile .bash_login .profile; do
-            if [[ -e "$HOME/$candidate" || -L "$HOME/$candidate" ]]; then profile="$HOME/$candidate"; break; fi
-          done
-          ;;
+        login) ;; # First existing login file selected above.
         *) path_incomplete 'No Bash startup file selected.'; return ;;
       esac
       ;;
@@ -419,7 +489,6 @@ configure_path() {
     fs.writeFileSync(snapshot, contents);
     fs.writeFileSync(metadata, JSON.stringify({ parent, file: stat }));
     const text = contents.toString("utf8");
-    if (text.split("\n").includes(line)) fs.writeFileSync(check + ".present", "");
     const trailing = text.match(/(\\+)(?:\r?\n)?$/u)?.[1];
     if (trailing && trailing.length % 2 !== 0) {
       fs.writeFileSync(check + ".continuation", text.replace(/\r?\n$/u, "") + " )\n");
@@ -430,10 +499,7 @@ configure_path() {
   fi
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
   # Literal presence is not evidence that the shell executes this line.
-  if [[ -f "$scratch/profile-boundary.present" ]]; then
-    printf 'PATH line already present in %s; open a new Terminal. Its activation was not checked.\n' "$profile"
-    return
-  fi
+  if check_existing_path selected; then return; fi
   # Small append-boundary checks: syntax must parse, a trailing backslash must
   # be inert (for example in a comment), and EOF must expose an invalid token.
   if ! "${syntax_check[@]}" "$original" >/dev/null 2>&1; then
@@ -457,14 +523,18 @@ configure_path() {
       path_incomplete 'The startup file changed or could not be copied.'; return
     fi
   fi
-  if ! printf '\n%s\n' "$line" >> "$profile_temp" \
+  if [[ -s "$original" ]] && ! printf '\n' >> "$profile_temp"; then
+    path_incomplete 'The proposed append could not be written.'; return
+  fi
+  if ! printf '%s\n' "$line" >> "$profile_temp" \
     || ! "${syntax_check[@]}" "$profile_temp" >/dev/null 2>&1; then
     path_incomplete 'The proposed append could not be checked.'; return
   fi
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
   if ! mv "$profile_temp" "$profile"; then path_incomplete 'The startup file could not be replaced.'; return; fi
   profile_temp=''
-  printf 'PATH line added to %s; open a new Terminal.\n' "$profile"
+  printf 'PATH line added to %s. Continue setup here; open a new Terminal afterward.\n' "$profile"
+  printf 'In your original Terminal, you can also run the PATH command shown above after setup.\n'
 }
 
 main() {
@@ -568,13 +638,28 @@ main() {
   fi
   check_ballin_command
   configure_path
-  "$gh_tool" auth status --active --hostname github.com \
-    || "$gh_tool" auth login --hostname github.com --git-protocol https --web
+  skip_backup_setup=0
+  if ! "$gh_tool" auth status --active --hostname github.com >/dev/null 2>&1; then
+    printf '\nGitHub CLI sign-in is needed for backups.\n'
+    printf 'Sign in now? [Y/n] '
+    IFS= read -r login_choice || login_choice=n
+    case "$login_choice" in
+      ''|y|Y)
+        printf 'Follow the GitHub CLI prompts below.\n'
+        printf 'The Git authentication question only configures Git credentials; either answer continues CLI sign-in.\n'
+        printf 'Use the device code in a browser, including an already signed-in browser on another computer. No passkey needs copying.\n'
+        "$gh_tool" auth login --hostname github.com --git-protocol https --web ;;
+      *)
+        printf 'GitHub CLI sign-in: Skipped. Installing Ballin for maintenance; backup setup is deferred.\n'
+        skip_backup_setup=1 ;;
+    esac
+  fi
   repo="$HOME/.ballin-scripts"
   download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh' "$scratch/install.sh"
   # Keep startup hooks from replacing the tools qualified above.
-  BASH_ENV='' bash "$scratch/install.sh"
+  BALLIN_SKIP_BACKUP_SETUP="$skip_backup_setup" BASH_ENV='' bash "$scratch/install.sh"
   [[ -x "$repo/bin/ballin" ]] || return 0
+  [[ "$skip_backup_setup" == 0 ]] || return 0
   confirm_first_backup || return 0
   destination=$(backup_destination_kind "$repo")
   if [[ "$destination" == unconfigured ]]; then

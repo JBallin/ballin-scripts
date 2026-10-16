@@ -36,10 +36,12 @@ const completionTarget = (
   const shell = path.basename(env.SHELL);
   let profile: string;
   if (shell === 'zsh') {
-    const hint = env.ZDOTDIR ? ` Exported ZDOTDIR: ${env.ZDOTDIR}.` : '';
-    const choice = prompt(`Which directory contains the .zshrc your terminal reads?${hint} [home or absolute directory; Enter to skip] `);
-    if (choice.eof) return null;
-    const directory = choice.text === 'home' ? home : choice.text;
+    const defaultDirectory = env.ZDOTDIR ?? home;
+    const choice = prompt(path.isAbsolute(defaultDirectory)
+      ? `Directory containing your .zshrc [Enter=${defaultDirectory}; absolute directory or skip]: `
+      : 'ZDOTDIR is empty or relative. Enter the absolute directory containing your .zshrc, or skip: ');
+    if (choice.eof || choice.text === 'skip') return null;
+    const directory = choice.text === 'home' ? home : choice.text || defaultDirectory;
     if (!path.isAbsolute(directory)) return null;
     profile = path.join(directory, '.zshrc');
   } else if (shell === 'bash') {
@@ -122,15 +124,39 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
   const prompt = options.prompt ?? readPromptLine;
   try {
-    const target = completionTarget(options.env ?? process.env, prompt);
+    const env = options.env ?? process.env;
+    const directory = env.ZDOTDIR ?? env.HOME;
+    // A normal zsh rerun needs no directory or edit prompts when already configured.
+    if (env.HOME && path.isAbsolute(env.HOME) && env.SHELL && path.isAbsolute(env.SHELL)
+      && path.basename(env.SHELL) === 'zsh' && directory && path.isAbsolute(directory)) {
+      const profile = path.join(directory, '.zshrc');
+      let enabled = false;
+      try {
+        inspectProfile(profile);
+        const fd = fs.openSync(profile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+        try {
+          if (fs.fstatSync(fd).isFile()) {
+            const lines = fs.readFileSync(fd, 'utf8').split('\n');
+            enabled = lines.includes(activationLine('zsh')) && !lines.includes(`${activationLine('zsh')}\r`);
+          }
+        } finally { fs.closeSync(fd); }
+      } catch { /* Uncertain profiles still use the normal selection and inspection path. */ }
+      if (enabled) {
+        write('Shell completion is already enabled. Continue setup here; new terminals will load it.');
+        return;
+      }
+    }
+    const target = completionTarget(env, prompt);
     if (!target) { fallback(true); return; }
     write(`\nShell completion for ${target.shell}: append to ${target.profile}`);
     write(target.line);
     const answer = prompt('Enable shell completion? [y/N] ');
-    if (answer.eof || !['y', 'Y'].includes(answer.text)) { fallback(); return; }
+    if (answer.eof || !['y', 'Y'].includes(answer.text)) {
+      fallback(); return;
+    }
     const appended = appendActivation(target);
-    write(appended ? 'Shell completion enabled. Open a new terminal or reload this startup file.'
-      : 'Shell completion is already enabled. Open a new terminal or reload this startup file.');
+    write(appended ? 'Shell completion enabled. Continue setup here; open a new terminal afterward.'
+      : 'Shell completion is already enabled. Continue setup here; open a new terminal afterward.');
   } catch (error) {
     if (error instanceof CompletionProfileError) write(error.message);
     write('Shell completion setup could not finish. Ballin remains installed.');

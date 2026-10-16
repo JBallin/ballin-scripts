@@ -177,7 +177,7 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
       fs.writeFileSync(gh, '#!/usr/bin/env node\nconst args = process.argv.slice(2).join(" ");\n'
         + 'if (args === "--version") console.log("gh fixture");\n'
         + 'else if (args === "auth status --help") console.log("--active");\n'
-        + 'else if (args === "auth status --active --hostname github.com") process.exit(0);\n'
+        + `else if (args === "auth status --active --hostname github.com") process.exit(JSON.parse(require('fs').readFileSync(${JSON.stringify(path.join(sandbox.remote, 'repository.json'))}, 'utf8')).faults.auth ? 1 : 0);\n`
         + 'else {\n' + originalGh + '\n}\n');
       for (const [name, body] of Object.entries({
         uname: 'if (process.argv[2] === "-s") console.log("Darwin"); else if (process.argv[2] === "-m") console.log("arm64"); else process.exit(97);',

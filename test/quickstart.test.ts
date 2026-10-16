@@ -31,7 +31,18 @@ describe('beginner quickstart bootstrap', function() {
   const run = (input = 'y\ny\n', overrides: NodeJS.ProcessEnv = {}, cwd = home, beforeMain = '', backupInput = 'y\n', afterMain = '') => {
     const shell = overrides.SHELL ?? '/bin/zsh';
     const target = overrides.FAKE_PROFILE_TARGET ?? (shell.endsWith('bash') ? 'login' : overrides.ZDOTDIR ?? 'home');
-    const selection = fs.existsSync(shell) && ['bash', 'zsh'].includes(path.basename(shell)) ? target + '\n' : '';
+    const defaultProfile = shell.endsWith('bash')
+      ? ['.bash_profile', '.bash_login', '.profile'].map((name) => path.join(home, name)).find((file) => fs.existsSync(file)) ?? path.join(home, '.bash_profile')
+      : path.join(overrides.ZDOTDIR ?? home, '.zshrc');
+    let existingPath = false;
+    try {
+      const stat = fs.lstatSync(defaultProfile);
+      const contents = stat.isFile() && stat.nlink === 1 ? fs.readFileSync(defaultProfile, 'utf8') : '';
+      // These fixtures use the helper line; other directory references use a direct runner below.
+      const expectedCommand = overrides.FAKE_BREW_PREFIX ? path.join(overrides.FAKE_BREW_PREFIX, 'bin') : path.join(home, '.local/bin');
+      existingPath = contents.includes(`export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'`) && contents.includes(expectedCommand);
+    } catch { /* A missing or unsafe startup file still receives selection. */ }
+    const selection = !existingPath && fs.existsSync(shell) && ['bash', 'zsh'].includes(path.basename(shell)) ? target + '\n' : '';
     const missingGit = overrides.FAKE_GIT === 'missing';
     const missingNode = overrides.FAKE_OLD_NODE === '1' && !fs.existsSync(path.join(systemNode, 'node'))
       && !fs.existsSync(path.join(home, '.local/share/ballin-quickstart/bin/node'));
@@ -196,7 +207,7 @@ case "$name" in
     fi
     repo="$HOME/.ballin-scripts"
     if [[ ! -f "$repo/ballin.config.json" ]]; then
-      printf 'Native installation prompt: '; IFS= read -r answer
+      printf 'Native installation prompt: '; IFS= read -r answer || answer=''
       [[ "$answer" == y ]] || exit 0
       mkdir -p "$repo/bin" "$repo/commands"
       if [[ "\${FAKE_SKIP_BACKUP:-0}" == 1 ]]; then printf '{"backup":{}}\\n' > "$repo/ballin.config.json"
@@ -684,7 +695,7 @@ system_sudo=fixture_sudo
             assert.lengthOf(contents.split('\n').filter((line: string) => line.startsWith('export PATH=')), 1);
             if (expectedProfile) {
               assert.equal(contents, expectedProfile);
-              assert.include(result.stdout, 'PATH line already present');
+              assert.include(result.stdout, 'PATH setup already present');
               assert.notInclude(result.stdout, 'Add this PATH line');
             } else {
               expectedProfile = contents;
@@ -1714,7 +1725,7 @@ system_sudo=fixture_sudo
     assert.equal(fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin/node')), path.join(systemNode, 'node'));
   });
   it('passes stdin to native browser login', () => {
-    const result = run('y\ndevice-code\ny\n', { FAKE_AUTH: 'missing' });
+    const result = run('y\ny\ndevice-code\ny\n', { FAKE_AUTH: 'missing' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Native login prompt:');
     assert.include(readLog(), 'gh:auth login --hostname github.com --git-protocol https --web');
@@ -1938,6 +1949,96 @@ system_sudo=fixture_sudo
     }
   }
   const pathLine = () => `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
+  const runPathSetup = (input: string, overrides: NodeJS.ProcessEnv = {}) => spawnSync('/bin/bash', ['-c', `
+    source "$FAKE_SOURCE"
+    node_tool="$TEST_NODE_RUNTIME"
+    quick_bin="$HOME/.local/share/ballin-quickstart/bin"
+    command_path="$HOME/.local/bin"
+    scratch=$(mktemp -d "$TMPDIR/path-only.XXXXXX")
+    trap cleanup EXIT
+    configure_path
+  `], { encoding: 'utf8', input, cwd: home, env: testChildEnvironment({
+    HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
+    FAKE_SOURCE: source, TEST_NODE_RUNTIME: process.execPath, ...overrides,
+  }) });
+  for (const initial of ['', '# Existing settings\n', '# No final newline']) {
+    it(`accepts Enter for home and preserves correct PATH separation: ${JSON.stringify(initial)}`, () => {
+      const profile = path.join(home, '.zshrc'); fs.writeFileSync(profile, initial);
+      const result = runPathSetup('\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, `PATH setup for ${profile}`);
+      assert.equal(fs.readFileSync(profile, 'utf8'), initial + (initial ? '\n' : '') + pathLine() + '\n');
+      const retry = runPathSetup(''); assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+      assert.include(retry.stdout, 'PATH setup already present');
+      assert.notInclude(retry.stdout, 'Directory containing'); assert.notInclude(retry.stdout, 'Add this PATH line');
+    });
+  }
+  for (const value of [
+    'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH:$HOME/.local/bin"',
+    '# Existing path: ~/.local/bin',
+    'export PATH="${HOME}/.local/bin:$PATH"',
+    'export PATH="$HOME"/.local/bin:$PATH',
+    'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH"\r',
+  ]) {
+    it(`requests manual PATH review for directory references without executing startup code: ${value}`, () => {
+      const profile = path.join(home, '.zshrc');
+      const contents = `touch "${root}/startup-ran"\n${value}\n`;
+      fs.writeFileSync(profile, contents);
+      const result = runPathSetup('\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'already mentions a setup directory');
+      assert.include(result.stderr, 'Review its PATH entries before deciding whether to add');
+      assert.notInclude(result.stdout, 'PATH setup already present'); assert.notInclude(result.stdout, 'Add this PATH line');
+      assert.include(result.stderr, pathLine());
+      assert.equal(fs.readFileSync(profile, 'utf8'), contents); assert.isFalse(fs.existsSync(path.join(root, 'startup-ran')));
+    });
+  }
+  for (const suffix of ['/', '/.']) {
+    it(`requests manual review of home-relative references with HOME ending in ${suffix}`, () => {
+      const profile = path.join(home, '.zshrc');
+      const contents = 'export PATH="$HOME/.local/bin:$PATH"\n'; fs.writeFileSync(profile, contents);
+      const result = runPathSetup('\ny\n', { HOME: home + suffix });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'already mentions a setup directory');
+      assert.notInclude(result.stdout, 'Add this PATH line');
+      assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+    });
+  }
+  it('requires review of a referenced Bash rc directory while preserving startup selection', () => {
+    const profile = path.join(home, '.bashrc');
+    const contents = 'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH:$HOME/.local/bin"\n';
+    fs.writeFileSync(profile, contents);
+    const result = runPathSetup('bashrc\ny\n', { SHELL: '/bin/bash' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Which Bash startup file'); assert.include(result.stderr, 'already mentions a setup directory');
+    assert.notInclude(result.stdout, 'PATH setup already present'); assert.notInclude(result.stdout, 'Add this PATH line');
+    assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+  });
+  it('permits an explicit custom target when the default directory needs manual review', () => {
+    fs.writeFileSync(path.join(home, '.zshrc'), '# ~/.local/bin requires review\n');
+    const directory = path.join(home, 'custom-startup'); fs.mkdirSync(directory);
+    const result = runPathSetup(directory + '\ny\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(path.join(directory, '.zshrc'), 'utf8'), pathLine() + '\n');
+    assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), '# ~/.local/bin requires review\n');
+  });
+  it('accepts a custom exported ZDOTDIR default, explicit home override, and skip', () => {
+    const directory = path.join(home, 'zsh'); fs.mkdirSync(directory);
+    const selected = runPathSetup('\ny\n', { ZDOTDIR: directory }); assert.equal(selected.status, 0, selected.stderr);
+    assert.include(selected.stdout, `PATH setup for ${directory}/.zshrc`);
+    assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+    const skipped = runPathSetup('skip\n'); assert.equal(skipped.status, 0, skipped.stderr);
+    assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+    const homeSelected = runPathSetup('home\ny\n', { ZDOTDIR: path.join(home, 'missing') });
+    assert.equal(homeSelected.status, 0, homeSelected.stderr); assert.isTrue(fs.existsSync(path.join(home, '.zshrc')));
+  });
+  for (const input of ['n\n', '']) {
+    it(`skips sign-in explicitly or on EOF without login or first-backup effects: ${JSON.stringify(input)}`, () => {
+      const result = runPathSetup('\ny\n'); assert.equal(result.status, 0, result.stderr);
+      const installed = run(input ? 'n\ny\n' : '', { FAKE_AUTH: 'missing' }, home, '', '');
+      assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+      assert.include(installed.stdout, 'GitHub CLI sign-in: Skipped');
+      assert.notInclude(readLog(), 'gh:auth login'); assert.notInclude(readLog(), 'ballin:backup');
+    });
+  }
   for (const shell of ['bash', 'zsh']) {
     const profileName = shell === 'bash' ? '.bash_profile' : '.zshrc';
     it(`preserves hard-linked ${shell} startup aliases while continuing the first backup`, () => {
@@ -1982,9 +2083,9 @@ system_sudo=fixture_sudo
         assert.equal(result.status, 0, form + result.stdout + result.stderr);
         assert.equal(fs.readFileSync(profile, 'utf8'), contents + '\n' + pathLine() + '\n');
         assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
-        assert.include(result.stdout, `PATH line added to ${profile}; open a new Terminal.`);
-        assert.include(result.stdout, 'also run this in your current Bash/zsh Terminal');
-        assert.include(result.stdout, 'If ballin is unavailable in a new Terminal');
+        assert.include(result.stdout, `PATH line added to ${profile}. Continue setup here; open a new Terminal afterward.`);
+        assert.include(result.stdout, 'In your original Terminal, you can also run the PATH command shown above');
+        assert.include(result.stdout, 'Shell PATH settings apply to future terminals.');
         assert.isFalse(fs.existsSync(sentinel));
         const retry = run('', { SHELL: '/bin/' + shell });
         assert.equal(retry.status, 0, retry.stdout + retry.stderr);
@@ -2102,7 +2203,7 @@ system_sudo=fixture_sudo
     const profile = path.join(home, '.zshrc');
     const skipped = run('y\n', { ZDOTDIR: '' });
     assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
-    assert.include(skipped.stdout, 'an empty value does not mean home');
+    assert.include(skipped.stdout, 'ZDOTDIR is empty or relative.');
     assert.include(skipped.stderr, 'Persistent PATH setup incomplete');
     assert.isFalse(fs.existsSync(profile));
     const directory = path.join(home, 'actual-zsh');
@@ -2117,7 +2218,7 @@ system_sudo=fixture_sudo
       const result = run('y\n', { SHELL: selectedShell });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'Persistent PATH setup incomplete');
-      assert.include(result.stdout, pathLine());
+      assert.include(result.stderr, pathLine());
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
       assert.include(readLog(), 'ballin:backup open');
     });
@@ -2297,9 +2398,9 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       fs.writeFileSync(profile, '# Synthetic Bash login settings\n', { mode: 0o640 });
       const result = runSandbox(sandbox, ['quickstart'], 'login\ny\ny\nn\nlogin\ny\ny\ncreate\n\ny\ny\nn\n\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, `PATH line added to ${profile}; open a new Terminal.`);
+      assert.include(result.stdout, `PATH line added to ${profile}. Continue setup here; open a new Terminal afterward.`);
       assert.include(result.stdout, 'Shell completion enabled.');
-      assert.include(result.stdout, 'Ballin backup is optional.');
+      assert.include(result.stdout, 'Optional backups use a private GitHub repository');
       assert.include(result.stdout, 'create');
       assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
       const contents = fs.readFileSync(profile, 'utf8');
@@ -2324,7 +2425,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.include(fresh.stdout, 'complete -F _ballin_completion ballin');
       const retry = runSandbox(sandbox, ['quickstart'], 'login\n\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-      assert.include(retry.stdout, 'PATH line already present');
+      assert.include(retry.stdout, 'PATH setup already present');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       const managedGit = path.join(sandbox.home, '.local/share/ballin-quickstart/bin/git');
       fs.unlinkSync(managedGit);

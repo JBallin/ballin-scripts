@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const https = require('https');
 const os = require('os');
 const path = require('path');
+const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { fetchConfig } = require('../config/index.ts');
 const { createConfigStore } = require('../config/store.ts');
 const { readCommandOutput, readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
@@ -126,10 +127,7 @@ const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
-  'Ballin can report command usage and results, backup results, and automatic backup/self-update results during ballin update.\n'
-  + 'Failed backups include a coarse failure category when supported; raw errors are not sent.\n'
-  + 'Backup contents, destination identities and configuration values are not sent.\n'
-  + 'Reports include a random install ID stored locally.\n'
+  'Share command and backup results with a random install ID. No backup contents, destination identities, configuration values, or raw errors are sent.\n'
   + docsUrl
 );
 const analyticsPromptFor = (defaultEnabled = false): string => (
@@ -278,7 +276,7 @@ const writeLocalInstallId = (installId: string, installIdPath = installIdPathFor
   }
 };
 
-const writeAnalyticsPreference = (configPath: string, enabled: boolean): boolean => {
+const writeAnalyticsPreference = (configPath: string, enabled: boolean): { previous: unknown } | null => {
   const temporary = `${configPath}.${process.pid}.analytics.tmp`;
   let created = false;
   try {
@@ -286,13 +284,15 @@ const writeAnalyticsPreference = (configPath: string, enabled: boolean): boolean
     const fd = fs.openSync(temporary, 'wx', 0o600);
     created = true;
     try { fs.writeFileSync(fd, config); } finally { fs.closeSync(fd); }
-    if (!createConfigStore({ configPath: temporary }).writeLeafValue('analytics.enabled', String(enabled))) {
-      return false;
+    const store = createConfigStore({ configPath: temporary });
+    const previous = store.readLeafValue('analytics.enabled');
+    if (!store.writeLeafValue('analytics.enabled', String(enabled))) {
+      return null;
     }
     fs.renameSync(temporary, configPath);
-    return true;
+    return { previous };
   } catch {
-    return false;
+    return null;
   } finally {
     if (created) {
       try { fs.rmSync(temporary, { force: true }); } catch { /* Best-effort private staging cleanup. */ }
@@ -320,7 +320,9 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
   const enabled = response.text === ''
     ? defaultEnabled
     : response.text === 'y' || response.text === 'Y';
-  if (writeAnalyticsPreference(options.configPath, enabled)) {
+  const saved = writeAnalyticsPreference(options.configPath, enabled);
+  if (saved) {
+    writeStdoutLine(savedPreferenceLine('analytics.enabled', enabled, saved.previous));
     return true;
   }
   writeStdoutLine('\nUnable to save the analytics preference; the existing local setting is unchanged.');

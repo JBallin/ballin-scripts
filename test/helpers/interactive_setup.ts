@@ -52,8 +52,8 @@ const driver = [
   '  print -u2 -r -- "TRANSCRIPT_BEGIN${transcript}TRANSCRIPT_END"',
   '  return 124',
   '}',
-  'supervisor=\'[[ -t 0 && -t 1 && -t 2 ]] || exit 78; printf "\\nSTART:%s:%s\\n" "$INTERACTIVE_MARKER" "$$"; "$@"; result=$?; printf "\\nEXIT:%s:%s\\n" "$INTERACTIVE_MARKER" "$result"; exit "$result"\'',
-  'zpty -b setup exec "${(q)shell_path}" -d -f -c "${(q)supervisor}" supervisor "${(q)fixture_command[@]}" || exit 73',
+  'supervisor=\'[[ -t 0 && -t 1 && -t 2 ]] || exit 78; "$INTERACTIVE_STTY" cols "$INTERACTIVE_COLUMNS" rows 24 "$INTERACTIVE_ECHO" || exit 79; printf "\\nSTART:%s:%s\\n" "$INTERACTIVE_MARKER" "$$"; "$@"; result=$?; printf "\\nEXIT:%s:%s\\n" "$INTERACTIVE_MARKER" "$result"; exit "$result"\'',
+  'zpty -b -e setup exec "${(q)shell_path}" -d -f -c "${(q)supervisor}" supervisor "${(q)fixture_command[@]}" || exit 73',
   'created=1',
   'await_output "START:$marker:" 1 || exit $?',
   'child_pid="${pending%%[^0-9]*}"',
@@ -80,10 +80,14 @@ const driver = [
   'exit "$exit_status"',
 ].join('\n');
 
-const runInteractiveSetup = (sandbox: Sandbox, command: string[], answers: PromptAnswer[], profileShell?: 'bash' | 'zsh') => {
+const runInteractiveSetup = (sandbox: Sandbox, command: string[], answers: PromptAnswer[], profileShell?: 'bash' | 'zsh', options: { columns?: number; echo?: boolean; term?: string } = {}) => {
   const shell = findShell('zsh');
   const marker = randomUUID();
-  const env = { ...sandboxEnvironment(sandbox), INTERACTIVE_MARKER: marker, TERM: 'xterm' };
+  const stty = ['/bin/stty', '/usr/bin/stty'].find((file) => fs.existsSync(file));
+  if (!stty) throw new Error('PTY regression requires stty');
+  const env = { ...sandboxEnvironment(sandbox), INTERACTIVE_MARKER: marker,
+    INTERACTIVE_STTY: stty, INTERACTIVE_COLUMNS: String(options.columns ?? 120),
+    INTERACTIVE_ECHO: options.echo === false ? '-echo' : 'echo', TERM: options.term ?? 'xterm' };
   if (profileShell) env.SHELL = findShell(profileShell);
   recordSession(sandbox, [], true);
   const result = spawnSync(shell, [

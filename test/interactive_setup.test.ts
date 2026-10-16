@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createSandbox, cleanupSandbox, runSandbox, sandboxSuiteTimeout } = require('./helpers/onboarding.ts');
+const { selectScenario } = require('./helpers/sandbox_scenarios.ts');
 const { runInteractiveSetup } = require('./helpers/interactive_setup.ts');
 import type { Sandbox } from './helpers/onboarding.ts';
 
@@ -13,7 +14,7 @@ describe('interactive setup with delayed terminal answers', function() {
     { prompt: 'Set up optional private backups now? [y/N] ', answer: 'y' },
     { prompt: 'Reconnect to an existing backup or create a new one? [reconnect/create] ', answer: 'create' },
     { prompt: 'Repository name [ballin-backups]: ', answer: 'interactive-test' },
-    { prompt: 'Include sensitive sources? [y/N] ', answer: 'y' },
+    { prompt: 'Review sensitive sources for inclusion? [y/N] ', answer: 'y' },
     { prompt: 'Confirm this destination and source selection? [y/N] ', answer: 'y' },
     { prompt: 'Automatically run `ballin backup` as part of `ballin update`? [y/N] ', answer: 'y' },
   ];
@@ -36,7 +37,7 @@ describe('interactive setup with delayed terminal answers', function() {
       sandbox = createSandbox({ quickstart: true });
       const startup = shell === 'bash'
         ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-        : { prompt: 'Which directory contains the .zshrc your terminal reads? [home or absolute directory; Enter to skip] ', answer: 'home' };
+        : { prompt: `Directory containing your .zshrc [Enter=${sandbox.home}; absolute directory or skip]: `, answer: '' };
       const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
         startup,
         { prompt: 'Add this PATH line? [y/N] ', answer: 'y' },
@@ -50,6 +51,8 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.isUndefined(result.error, result.stderr);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Shell completion enabled.');
+      assert.include(result.stdout, 'Usage analytics: disabled (`analytics.enabled` unchanged at `false`).');
+      assert.include(result.stdout, 'Continue setup here; open a new Terminal afterward.');
       assert.include(result.stdout, 'Backup setup complete.');
       assert.notInclude(result.stdout, 'Unable to prepare backup configuration.');
       assert.notInclude(result.stdout, 'Shell completion setup could not finish.');
@@ -60,6 +63,56 @@ describe('interactive setup with delayed terminal answers', function() {
     });
   }
 
+  it('skips GitHub sign-in and backup prompts while completing maintenance installation', () => {
+    sandbox = createSandbox({ quickstart: true }); selectScenario(sandbox, 'auth');
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+      { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
+      { prompt: 'Add this PATH line? [y/N] ', answer: 'y' },
+      { prompt: 'Sign in now? [Y/n] ', answer: 'n' },
+      { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
+      { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
+      { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: '' },
+    ], 'bash');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'GitHub CLI sign-in: Skipped.');
+    assert.include(result.stdout, 'Backup setup deferred.');
+    assert.notInclude(result.stdout, 'Set up optional private backups now?');
+    assert.notInclude(result.stdout, 'Run your first backup');
+    const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
+    assert.notProperty(config.backup, 'repository'); assert.equal(config.update.backup, 'false');
+    assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
+    const remote = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
+    assert.isEmpty(remote.requests);
+    for (const name of ['install_setup.ts', 'backup_setup.ts', 'backup_preferences.ts', 'completion_setup.ts', 'analytics.ts']) {
+      assert.deepEqual(fs.readFileSync(path.join(sandbox.repo, 'commands', name)), fs.readFileSync(path.join(sandbox.source, 'commands', name)));
+    }
+  });
+
+  it('waits for an explicit name after a transferred-owner suggestion and still requires final consent', () => {
+    sandbox = createSandbox();
+    const installed = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
+    assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+    const configPath = path.join(sandbox.repo, 'ballin.config.json'); const before = fs.readFileSync(configPath, 'utf8');
+    const remotePath = path.join(sandbox.remote, 'repository.json'); const remote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+    remote.faults.candidate = 'redirect'; remote.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } };
+    fs.writeFileSync(remotePath, JSON.stringify(remote));
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
+      { prompt: 'Set up optional private backups now? [y/N] ', answer: 'y' },
+      { prompt: 'Reconnect to an existing backup or create a new one? [reconnect/create] ', answer: 'create' },
+      { prompt: 'Repository name: ', answer: 'fresh-name' },
+      { prompt: 'Review sensitive sources for inclusion? [y/N] ', answer: 'n' },
+      { prompt: 'Confirm this destination and source selection? [y/N] ', answer: 'n' },
+    ]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Candidate backup: https://github.com/fixture-user/fresh-name');
+    assert.include(result.stdout, 'Backup setup cancelled;'); assert.notInclude(result.stdout, 'Available suggestion:');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    const after = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+    assert.equal(after.head, remote.head); assert.equal(after.exists, remote.exists);
+    assert.isTrue(after.requests.every((request: { method: string }) => request.method === 'GET'));
+    assert.isFalse(fs.existsSync(path.join(sandbox.repo, '.backup-cache')));
+  });
+
   it('waits at the automatic-backup prompt after direct setup initializes its destination', () => {
     sandbox = createSandbox();
     const installed = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
@@ -68,7 +121,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Creating and initializing private backup...');
-    assert.include(result.stdout, '"update.backup" set to: "true"');
+    assert.include(result.stdout, 'Automatic backup during updates: enabled (`update.backup` set to `true`).');
     assert.include(result.stdout, 'Backup setup complete.');
     assertInitializedOnly();
   });

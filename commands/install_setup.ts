@@ -259,7 +259,9 @@ const setup = (
   const backupConfigured = destination.kind === 'repository' || destination.kind === 'legacy-gist';
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
-  if (mode === 'fresh' || backupConfigured || backupInvalid) {
+  if (process.env.BALLIN_SKIP_BACKUP_SETUP === '1') {
+    writeStdoutLine('Backup setup deferred. After GitHub CLI sign-in, run `ballin backup setup`.');
+  } else if (mode === 'fresh' || backupConfigured || backupInvalid) {
     let backupSetupCancelled = false;
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
       originalConfig, onCancelled: () => { backupSetupCancelled = true; },

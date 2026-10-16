@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
@@ -46,9 +47,10 @@ const runSetupCommand = (): void => {
       if (included === null) { cancelSetup(); return; }
       if (included === undefined) { process.exitCode = 1; return; }
       const current = readSetupConfigContext(configPath);
+      const previous = current.backup.includeSensitive;
       current.backup.includeSensitive = String(included);
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
-      writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(included))}`);
+      writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previous));
     } else {
       writeStdoutLine('No backup is configured. Run `ballin backup setup` to choose a destination.');
     }
