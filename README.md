@@ -44,7 +44,6 @@ see [using saved state on another Mac](#using-saved-state-on-another-mac).
 
 Review [Installation and removal](docs/installation.md) for local effects,
 network interactions, backup authentication, troubleshooting, and removal.
-For checkout failures, follow the [recovery guidance](docs/installation.md#health-and-recovery).
 
 ## Example output
 
