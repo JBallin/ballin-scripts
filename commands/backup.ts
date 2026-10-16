@@ -6,6 +6,7 @@ const { isBackupCommandName } = require('./backup_commands.ts') as {
 const { terminalEmphasis } = require('./terminalStyle.ts');
 const { compareBackupFileNames } = require('./backup_file_names.ts');
 const fs = require('fs');
+const tty = require('tty');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
 import type { BackupFailureEvidence } from './backup_outcome.ts';
@@ -88,7 +89,7 @@ type BackupConfigResult = {
 
 const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 
-const interactiveReadHint = (): boolean => Boolean(process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY);
+const interactiveReadHint = (): boolean => Boolean(tty.isatty(0) && process.stdout.isTTY && process.stderr.isTTY);
 const writeDirectoryReadHint = (option: string): void => {
   if (interactiveReadHint()) writeStderrLine(`${option === '--list' ? 'List' : 'Read'} saved files with \`ballin backup read <bundle> ${option}\`.`);
 };

@@ -74,6 +74,12 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     if (fault.auth) return reply({ message: 'dummy-secret-error', status: '401' }, 1);
     return reply(fault.user ?? { node_id: state.ownerId, login: state.login, type: 'User' });
   }
+  if (method === 'GET' && endpoint.startsWith(`repos/${state.login}/`)) {
+    const name = endpoint.slice(`repos/${state.login}/`.length);
+    if ((fault.occupiedNames as string[] | undefined)?.includes(name)) {
+      return reply({ node_id: `R_occupied_${name}`, name, default_branch: 'main', owner: { node_id: state.ownerId, type: 'User' } });
+    }
+  }
   if (endpoint === 'user/repos') {
     if (state.exists || fault.create === 'reject') return reply({ status: '422' }, 1);
     state.exists = true;

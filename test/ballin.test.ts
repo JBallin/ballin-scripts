@@ -105,19 +105,29 @@ describe('ballin', () => {
     const preload = path.join(tempDir, 'interactive.cjs');
     fs.writeFileSync(preload, `
       const fs = require('fs');
+      const nonTTY = process.env.BALLIN_TEST_NON_TTY;
+      const columns = Number(process.env.BALLIN_TEST_COLUMNS);
       const write = fs.writeSync;
       const writes = [];
       fs.writeSync = (...args) => { writes.push(args[1]); return write(...args); };
-      for (const name of ['stdin', 'stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
-      Object.defineProperty(process.stderr, 'columns', { value: ${columns} });
-      const readiness = require(${JSON.stringify(require.resolve('../commands/setup_readiness.ts'))});
+      // These are pipe-backed child fixtures. Mock the fd probe without creating
+      // Node's stdin stream, and reject accidental stdin initialization.
+      Object.defineProperty(process, 'stdin', { get() { throw Error('doctor must not initialize process.stdin'); } });
+      require('tty').isatty = (fd) => fd === 0 && nonTTY !== 'stdin';
+      for (const name of ['stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== nonTTY });
+      Object.defineProperty(process.stderr, 'columns', { value: columns });
+      const readiness = require(process.env.BALLIN_TEST_READINESS_MODULE);
       const collect = readiness.collectSetupReadiness;
       readiness.collectSetupReadiness = (options) => {
-        if (${JSON.stringify(!nonTTY && columns > 'Checking readiness...'.length)} && !process.env.NO_COLOR && process.env.TERM !== 'dumb' && writes[0] !== 'Checking readiness...') throw Error('progress did not precede readiness');
+        if (!nonTTY && columns > 'Checking readiness...'.length && !process.env.NO_COLOR && process.env.TERM !== 'dumb' && writes[0] !== 'Checking readiness...') throw Error('progress did not precede readiness');
         return collect(options);
       };
     `);
-    return { NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '' };
+    return {
+      NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '',
+      BALLIN_TEST_NON_TTY: nonTTY ?? '', BALLIN_TEST_COLUMNS: String(columns),
+      BALLIN_TEST_READINESS_MODULE: require.resolve('../commands/setup_readiness.ts'),
+    };
   };
 
   beforeEach(() => {

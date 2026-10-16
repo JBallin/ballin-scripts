@@ -18,8 +18,10 @@ if (quickstart && process.env.PATH !== path.join(root, 'tools')) {
       || fs.readlinkSync(path.join(bin, name)) !== path.join(root, 'tools', name)) fail();
   }
 }
-// The production completion appender already supports this isolated TTY seam.
-if (quickstart) process.stdin.isTTY = true;
+// Piped walkthroughs need a terminal-detection seam; real PTYs use real detection.
+// Do not construct process.stdin: its stream changes synchronous fd 0 reads.
+const tty = require('tty');
+if (quickstart && !tty.isatty(0)) tty.isatty = (fd: number) => fd === 0;
 
 const deny = (): never => fail();
 require('net').Socket.prototype.connect = deny;

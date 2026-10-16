@@ -280,3 +280,10 @@ do not. An unchanged run creates no repository commit just to record activity.
 If saving the time fails, Ballin reports an advisory while preserving backup
 success and the prior record. This time does not prove that every source was
 captured, that the repository matches your Mac now, or that the backup is fresh.
+
+## If a private backup link shows 404
+
+A private “View changes” link can show 404 when your browser is signed out of
+GitHub or the signed-in account lacks repository access. GitHub CLI authentication
+and browser sign-in are separate; open the link in a browser signed in to an
+account with access.

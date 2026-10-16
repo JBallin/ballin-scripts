@@ -64,6 +64,30 @@ describe('optional completion setup', () => {
     assert.include(offer(['y']), 'could not finish');
     assert.isFalse(fs.existsSync(env.ZDOTDIR));
   });
+  it('reports existing completion without directory or edit prompts', () => {
+    fs.writeFileSync(path.join(home, '.zshrc'), `${activationLine('zsh')}\n`);
+    const prompts: string[] = [];
+    assert.include(offer([], true, (text) => prompts.push(text)), 'already enabled');
+    assert.isEmpty(prompts);
+  });
+  it('permits a home override when the exported default directory cannot be inspected', () => {
+    env.ZDOTDIR = path.join(home, 'missing');
+    const output: string[] = []; const answers = ['home', 'y'];
+    offerCompletionSetup('guide', { env, interactive: true, write: (text: string) => output.push(text),
+      prompt: () => ({ text: answers.shift()!, eof: false }),
+    });
+    assert.include(output.join('\n'), 'Shell completion enabled.');
+    assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
+    assert.isFalse(fs.existsSync(env.ZDOTDIR));
+  });
+  it('does not hide a malformed CRLF activation on a rerun with a valid activation too', () => {
+    const profile = path.join(home, '.zshrc');
+    const contents = `${activationLine('zsh')}\n${activationLine('zsh')}\r\n`;
+    fs.writeFileSync(profile, contents);
+    const output = offer(['y']);
+    assert.include(output, 'trailing carriage return'); assert.notInclude(output, 'already enabled');
+    assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+  });
   it('falls back for missing, relative, or unsupported shell/home evidence', () => {
     for (const overrides of [{ HOME: '' }, { HOME: 'relative' }, { SHELL: '' }, { SHELL: 'zsh' }, { SHELL: '/bin/fish' }]) {
       assert.isNull(completionTarget({ ...env, ...overrides }, response('')));
@@ -104,8 +128,8 @@ describe('optional completion setup', () => {
     assert.include(output.join('\n'), 'guide#shell-completion');
   });
   it('uses real default prompting and environment only inside an isolated child', () => {
-    const script = `process.stdin.isTTY = true; require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'completion_setup.ts'))}).offerCompletionSetup('guide');`;
-    const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', input: 'home\ny\n', env: testChildEnvironment(env) });
+    const script = 'require("tty").isatty = (fd) => fd === 0; require(process.argv[1]).offerCompletionSetup("guide");';
+    const result = spawnSync(process.execPath, ['-e', script, path.join(__dirname, '..', 'commands', 'completion_setup.ts')], { encoding: 'utf8', input: 'home\ny\n', env: testChildEnvironment(env) });
     assert.strictEqual(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Enable shell completion? [y/N]');
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
@@ -156,15 +180,16 @@ describe('optional completion setup', () => {
     }
   });
 
-  it('requires explicit zsh directory selection without reading or sourcing .zshenv', () => {
+  it('defaults zsh to home without sourcing .zshenv and accepts custom selection', () => {
     const directory = path.join(home, 'custom-zsh');
     fs.mkdirSync(directory);
     fs.writeFileSync(path.join(home, '.zshenv'), `ZDOTDIR=${directory}\nprintf touched > "${home}/startup-ran"\n`);
-    assert.isNull(completionTarget(env, response('')));
+    assert.strictEqual(completionTarget(env, response('')).profile, path.join(home, '.zshrc'));
+    assert.isNull(completionTarget(env, response('skip')));
     assert.isNull(completionTarget(env, () => ({ text: 'home', eof: true })));
     assert.strictEqual(completionTarget(env, response(directory)).profile, path.join(directory, '.zshrc'));
-    const script = `process.stdin.isTTY = true; require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'completion_setup.ts'))}).offerCompletionSetup('guide');`;
-    const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', input: `${directory}\ny\n`, env: testChildEnvironment(env) });
+    const script = 'require("tty").isatty = (fd) => fd === 0; require(process.argv[1]).offerCompletionSetup("guide");';
+    const result = spawnSync(process.execPath, ['-e', script, path.join(__dirname, '..', 'commands', 'completion_setup.ts')], { encoding: 'utf8', input: `${directory}\ny\n`, env: testChildEnvironment(env) });
     assert.strictEqual(result.status, 0, result.stderr);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     assert.isFalse(fs.existsSync(path.join(home, 'startup-ran')));

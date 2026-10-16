@@ -5,6 +5,7 @@ const {
   commandExists,
   isDirectory,
   readCommandOutput,
+  readPromptLine,
   reportSpawnError,
   runCommand,
   runNodeScript,
@@ -12,6 +13,43 @@ const {
 } = require('../commands/commandHelpers.ts');
 
 describe('command helpers', () => {
+  for (const code of ['EAGAIN', 'EBADF', 'secret-token', undefined, 123]) {
+    it(`preserves prompt read failures with only a recognized system code: ${code}`, () => {
+      const originalRead = fs.readSync;
+      const stdoutWrite = process.stdout.write;
+      const stderrWrite = process.stderr.write;
+      const failure = Object.assign(new Error('credential content must stay private'), { code });
+      let stdout = ''; let stderr = '';
+      fs.readSync = () => { throw failure; };
+      process.stdout.write = ((text: string) => { stdout += text; return true; }) as typeof process.stdout.write;
+      process.stderr.write = ((text: string) => { stderr += text; return true; }) as typeof process.stderr.write;
+      try {
+        assert.throws(() => readPromptLine('Answer: '), failure);
+      } finally {
+        fs.readSync = originalRead;
+        process.stdout.write = stdoutWrite;
+        process.stderr.write = stderrWrite;
+      }
+      assert.equal(stdout, 'Answer: ');
+      assert.equal(stderr, `Unable to read prompt input (stdin read: ${['EAGAIN', 'EBADF'].includes(String(code)) ? code : 'unknown'}).\n`);
+      assert.notInclude(stdout + stderr, 'credential content');
+      assert.notInclude(stdout + stderr, 'secret-token');
+    });
+  }
+  it('preserves the input error when stderr is unavailable', () => {
+    const read = fs.readSync;
+    const stderrWrite = process.stderr.write;
+    const stdoutWrite = process.stdout.write;
+    const failure = Object.assign(new Error('input failed'), { code: 'EBADF' });
+    fs.readSync = () => { throw failure; };
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    process.stderr.write = () => { throw new Error('stderr unavailable'); };
+    try { assert.throws(() => readPromptLine('Answer: '), failure); } finally {
+      fs.readSync = read;
+      process.stderr.write = stderrWrite;
+      process.stdout.write = stdoutWrite;
+    }
+  });
   it('enforces string encoding and direct execution at runtime', () => {
     const result = runCommand(process.execPath, [
       '-e',

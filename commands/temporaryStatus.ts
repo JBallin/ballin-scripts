@@ -1,4 +1,5 @@
 const fs = require('fs');
+const tty = require('tty');
 
 let active: { text: string; visible: boolean; finish: () => void } | undefined;
 const write = (text: string): void => {
@@ -8,7 +9,7 @@ const write = (text: string): void => {
 // A static line remains visible while synchronous work blocks the event loop.
 const clearTemporaryStatus = (): void => { active?.finish(); };
 const canShowStatus = (text: string): boolean => Boolean(
-  process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY
+  tty.isatty(0) && process.stdout.isTTY && process.stderr.isTTY
   && process.env.TERM !== 'dumb' && !process.env.NO_COLOR
   && !(process.stderr.columns > 0 && process.stderr.columns <= text.length),
 );

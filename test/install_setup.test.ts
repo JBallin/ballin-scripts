@@ -641,10 +641,7 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'Ballin can report command usage and results, backup results, and automatic backup/self-update results during ballin update.\n'
-      + 'Failed backups include a coarse failure category when supported; raw errors are not sent.\n'
-      + 'Backup contents, destination identities and configuration values are not sent.\n'
-      + 'Reports include a random install ID stored locally.\n'
+      'Share command and backup results with a random install ID. No backup contents, destination identities, configuration values, or raw errors are sent.\n'
       + 'https://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
@@ -695,6 +692,11 @@ exit 2
       assert.include(result.stdout, analyticsPrompt);
       assert.notInclude(result.stdout, 'Usage analytics are currently');
       assert.equal(readRepoConfig().analytics.enabled, String(enabled));
+      if (response === null) assert.notInclude(result.stdout, 'Usage analytics:');
+      else {
+        assert.lengthOf(result.stdout.split('Usage analytics:'), 2);
+        assert.include(result.stdout, `Usage analytics: ${enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` ${enabled ? 'set to' : 'unchanged at'} \`${enabled}\`).`);
+      }
       assert.equal(fs.existsSync(installIdPath()), enabled);
       assert.notInclude(commandLog(), 'gh:');
     });
@@ -748,6 +750,8 @@ process.exitCode = configureAnalyticsPreference({
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.include(result.stdout, analyticsPromptFor(enabled === 'true'));
         assert.equal(readRepoConfig().analytics.enabled, enabled);
+        if (eof) assert.notInclude(result.stdout, 'Usage analytics:');
+        else assert.include(result.stdout, `Usage analytics: ${enabled === 'true' ? 'enabled' : 'disabled'} (\`analytics.enabled\` unchanged at \`${enabled}\`).`);
       });
     });
   });
@@ -797,6 +801,7 @@ fs.writeFileSync = function(file, contents, ...args) {
       result.stdout,
       'Unable to save the analytics preference; the existing local setting is unchanged.',
     );
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -826,6 +831,7 @@ fs.renameSync = function(source, destination) {
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -850,6 +856,7 @@ fs.writeFileSync(${JSON.stringify(configPath)} + '.' + process.pid + '.analytics
     const stagingFiles = fs.readdirSync(repoDir).filter((name: string) => name.endsWith('.analytics.tmp'));
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -889,6 +896,7 @@ fs.rmSync = function(target, ...args) {
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Unable to save the analytics preference');
+    assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -975,8 +983,8 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
     assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#shell-completion`));
-    assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository.\nGitHub and anyone authorized to access the repository can read its contents.');
-    assert.include(result.stdout, `${docsUrl}#shell-completion\n\nBallin backup is optional.`);
+    assert.include(result.stdout, 'Optional backups use a private GitHub repository readable by GitHub and anyone with access.');
+    assert.include(result.stdout, `${docsUrl}#shell-completion\n\nOptional backups use a private GitHub repository`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.equal(result.stdout.match(/😎 ballin!/gu)?.length, 1);
@@ -994,16 +1002,16 @@ require('https').request = () => {
     it(`separates completion guidance from backup setup (completion enabled: ${enableCompletion})`, () => {
       installConfigSources();
       const preloadPath = path.join(testDir, 'interactive-completion.cjs');
-      fs.writeFileSync(preloadPath, 'process.stdin.isTTY = true;\n');
+      fs.writeFileSync(preloadPath, 'require("tty").isatty = (fd) => fd === 0;\n');
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
         encoding: 'utf8', input: `n\nhome\n${enableCompletion ? 'y' : 'n'}\nn\n`,
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const completionResult = enableCompletion
-        ? 'Shell completion enabled. Open a new terminal or reload this startup file.'
+        ? 'Shell completion enabled. Continue setup here; open a new terminal afterward.'
         : `${docsUrl}#shell-completion`;
-      assert.include(result.stdout, `${completionResult}\n\nBallin backup is optional.`);
+      assert.include(result.stdout, `${completionResult}\n\nOptional backups use a private GitHub repository`);
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
       assert.equal(readRepoConfig().update.backup, 'false');
       assert.notInclude(commandLog(), 'gh:');
@@ -1018,14 +1026,14 @@ require('https').request = () => {
       const profile = path.join(home, '.zshrc');
       fs.mkdirSync(profile); // A nonregular startup file is never replaced.
       const preloadPath = path.join(testDir, 'interactive-completion.cjs');
-      fs.writeFileSync(preloadPath, 'process.stdin.isTTY = true;\n');
+      fs.writeFileSync(preloadPath, 'require("tty").isatty = (fd) => fd === 0;\n');
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
         encoding: 'utf8', input: backupFails ? 'n\nhome\ny\n' : 'n\nhome\nn\n',
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Shell completion setup could not finish. Ballin remains installed.');
-      assert.include(result.stdout, `${docsUrl}#shell-completion\n\nBallin backup is optional.`);
+      assert.include(result.stdout, `${docsUrl}#shell-completion\n\nOptional backups use a private GitHub repository`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1074,8 +1082,8 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'current permissions');
     assert.include(result.stdout, 'backup setup can continue normally');
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
-    assert.include(result.stdout, '"backup.includeSensitive" set to: "false"\n');
-    assert.isBelow(result.stdout.indexOf('"backup.includeSensitive" set to: "false"'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
+    assert.include(result.stdout, 'Sensitive sources in backups: excluded (`backup.includeSensitive` set to `false`).\n', result.stdout);
+    assert.isBelow(result.stdout.indexOf('Sensitive sources in backups: excluded (`backup.includeSensitive` set to `false`).'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
     assert.notInclude(result.stdout, 'before retrying `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
