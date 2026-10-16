@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const tty = require('tty');
 const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
 
 class CompletionProfileError extends Error {}
@@ -118,7 +119,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     if (needsContext) write('\nEnable shell completion later:');
     write(`${docsUrl}#shell-completion`);
   };
-  if (!(options.interactive ?? process.stdin.isTTY)) { fallback(true); return; }
+  if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
   const prompt = options.prompt ?? readPromptLine;
   try {
     const target = completionTarget(options.env ?? process.env, prompt);

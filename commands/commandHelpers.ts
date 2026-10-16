@@ -102,9 +102,21 @@ const readPromptLine = (prompt: string): PromptLine => {
   process.stdout.write(prompt);
   const bytes: number[] = [];
   const byte = Buffer.alloc(1);
-  while (fs.readSync(0, byte, 0, 1, null) !== 0) {
-    if (byte[0] === 10) return { text: Buffer.from(bytes).toString('utf8'), eof: false };
-    if (byte[0] !== 13) bytes.push(byte[0]);
+  // Keep fd 0 synchronous: constructing process.stdin can make empty reads fail
+  // with EAGAIN. Terminal eligibility checks must use tty.isatty(0) instead.
+  try {
+    while (fs.readSync(0, byte, 0, 1, null) !== 0) {
+      if (byte[0] === 10) return { text: Buffer.from(bytes).toString('utf8'), eof: false };
+      if (byte[0] !== 13) bytes.push(byte[0]);
+    }
+  } catch (error) {
+    // Do not expose arbitrary error messages, paths, or prompt answers.
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    const knownCode = typeof code === 'string' && Object.hasOwn(os.constants.errno, code) ? code : 'unknown';
+    try { writeStderrLine(`Unable to read prompt input (stdin read: ${knownCode}).`); } catch {
+      // An unavailable diagnostic stream must not replace the input failure.
+    }
+    throw error;
   }
   return { text: Buffer.from(bytes).toString('utf8'), eof: true };
 };

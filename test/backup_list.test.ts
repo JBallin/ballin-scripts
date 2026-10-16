@@ -182,7 +182,7 @@ describe('saved backup discovery', function() {
       { path: 'rule.md', executable: false, encoding: 'utf8', content: ['synthetic\r\n', 'last'] },
     ] });
     save(fixtureState({ 'codex_rules.bundle.json': archive }));
-    const tty = "for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', {value:true});";
+    const tty = "require('tty').isatty = (fd) => fd === 0; for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', {value:true});";
     const raw = run(['read', 'codex_rules.bundle.json'], {}, tty);
     assert.equal(raw.status, 0, raw.stderr); assert.equal(raw.stdout, archive);
     assert.include(raw.stderr, 'backup read <bundle> --list'); assert.notInclude(raw.stderr, '--file');
@@ -199,7 +199,7 @@ describe('saved backup discovery', function() {
       { path: 'rule.md', executable: false, encoding: 'base64', content: 'YQ==' },
     ] });
     for (const redirected of ['stdin', 'stdout', 'stderr']) {
-      const tty = `for (const stream of ['stdin','stdout','stderr']) Object.defineProperty(process[stream], 'isTTY', {value:stream!==${JSON.stringify(redirected)}});`;
+      const tty = `require('tty').isatty = (fd) => fd === 0 && ${JSON.stringify(redirected)} !== 'stdin'; for (const stream of ['stdout','stderr']) Object.defineProperty(process[stream], 'isTTY', {value:stream!==${JSON.stringify(redirected)}});`;
       save(fixtureState({ 'codex_rules.bundle.json': archive }));
       for (const options of [[], ['--list']]) {
         const result = run(['read', 'codex_rules.bundle.json', ...options], {}, tty);
@@ -207,7 +207,7 @@ describe('saved backup discovery', function() {
         assert.equal(result.stdout, options.length ? 'rule.md\n' : archive);
       }
     }
-    const tty = "for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', {value:true});";
+    const tty = "require('tty').isatty = (fd) => fd === 0; for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', {value:true});";
     for (const [name, content] of [['gitconfig', archive], ['codex_rules.bundle.json', 'malformed raw archive']]) {
       save(fixtureState({ [name]: content }));
       const result = run(['read', name], {}, tty); assert.equal(result.status, 0, result.stderr);

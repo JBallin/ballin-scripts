@@ -47,8 +47,10 @@ ballin backup setup
 If backup setup fails, Ballin remains installed and usable for maintenance.
 Follow the reported recovery instructions before running `ballin backup setup`
 again. If GitHub may already have created the repository,
-inspect the reported repository before retrying. If initialization succeeded,
-reconnect to it instead of creating another one.
+inspect the reported repository before retrying. If initialization succeeded but
+local linkage was not saved, reconnect to it instead of creating another one.
+If Ballin reports that the destination is saved locally, keep that linkage and
+run `ballin setup` to review the remaining preferences.
 
 Self-updates report completion after a successful refresh. They check the
 configured backup destination without reading saved snapshot contents.

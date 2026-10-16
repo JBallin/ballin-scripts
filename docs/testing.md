@@ -187,6 +187,17 @@ and commands; it is a guard against accidental effects from trusted repository
 code, **not an OS sandbox for hostile code**. Do not add host tools to its PATH,
 remove its preload, or use it to run untrusted code.
 
+`test/interactive_setup.test.ts` drives quickstart and direct backup setup in a
+real zsh PTY, answering only after each prompt appears and leaving input empty
+briefly before replying. Preloaded pipe input and mocked terminal flags cannot
+establish that a prompt actually waits. In particular, constructing
+`process.stdin` can make subsequent synchronous reads fail with `EAGAIN`; use
+`tty.isatty(0)` for terminal detection without constructing that stream.
+The PTY tests use the running Node executable and host OS with the guarded fake
+GitHub service. Quickstart's OS/tool-discovery stubs do not emulate macOS kernel
+or terminal behavior. A clean macOS VM retest is still needed for real
+prerequisites, authentication, shell activation, and the full published journey.
+
 ## Test environment and analytics safety
 
 Neither command needs an analytics opt-out or `CI=true` in your shell.
