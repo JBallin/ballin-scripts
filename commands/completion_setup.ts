@@ -155,8 +155,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       fallback(); return;
     }
     const appended = appendActivation(target);
-    write(appended ? 'Shell completion enabled.'
-      : 'Shell completion is already enabled.');
+    write(appended ? 'Shell completion enabled.' : 'Shell completion is already enabled.');
   } catch (error) {
     if (error instanceof CompletionProfileError) write(error.message);
     write('Shell completion setup could not finish. Ballin remains installed.');

@@ -34,10 +34,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 A fresh install checks Git and Node.js, prints its plan, and asks for `y/N`
 before making installation changes. It then offers
 [usage analytics](analytics.md#what-will-analytics-share), disabled by default.
-Refreshes preserve existing choices without repeating onboarding. After successful
-installation, open a new Terminal to run `ballin`. Quickstart shows this guidance
-after optional backup and browser steps; if persistent PATH setup is incomplete,
-follow its manual PATH and retry instructions first.
+Refreshes preserve existing choices without repeating onboarding.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run

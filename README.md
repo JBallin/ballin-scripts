@@ -38,7 +38,6 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 The installer shows its plan and asks before a fresh installation. It offers
 optional usage analytics (disabled by default), shell completion, and backup
 setup. You can skip backups or configure them later with `ballin backup setup`.
-After successful installation, open a new Terminal to run `ballin`.
 Installation does not run updates or capture snapshots. For a new backup
 destination, run `ballin backup` for your first capture; for an existing backup,
 see [using saved state on another Mac](#using-saved-state-on-another-mac).
