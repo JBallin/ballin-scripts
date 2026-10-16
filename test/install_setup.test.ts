@@ -994,7 +994,7 @@ require('https').request = () => {
     it(`separates completion guidance from backup setup (completion enabled: ${enableCompletion})`, () => {
       installConfigSources();
       const preloadPath = path.join(testDir, 'interactive-completion.cjs');
-      fs.writeFileSync(preloadPath, 'process.stdin.isTTY = true;\n');
+      fs.writeFileSync(preloadPath, 'require("tty").isatty = (fd) => fd === 0;\n');
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
         encoding: 'utf8', input: `n\nhome\n${enableCompletion ? 'y' : 'n'}\nn\n`,
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
@@ -1018,7 +1018,7 @@ require('https').request = () => {
       const profile = path.join(home, '.zshrc');
       fs.mkdirSync(profile); // A nonregular startup file is never replaced.
       const preloadPath = path.join(testDir, 'interactive-completion.cjs');
-      fs.writeFileSync(preloadPath, 'process.stdin.isTTY = true;\n');
+      fs.writeFileSync(preloadPath, 'require("tty").isatty = (fd) => fd === 0;\n');
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
         encoding: 'utf8', input: backupFails ? 'n\nhome\ny\n' : 'n\nhome\nn\n',
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),

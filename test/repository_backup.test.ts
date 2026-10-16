@@ -1510,7 +1510,8 @@ describe('repository backup lifecycle', function() {
   });
 
   const browserOrderingPreload = (tty = false, diagnostic = false): string => `
-    for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: ${tty} });
+    require('tty').isatty = (fd) => fd === 0 && ${tty};
+    for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: ${tty} });
     Object.defineProperty(process.stderr, 'columns', { value: 80 });
     const fs = require('fs'); const write = process.stdout.write; const errorWrite = process.stderr.write; const writeSync = fs.writeSync;
     let output = '', feedback = '', combined = '', validated = false;
@@ -1615,7 +1616,8 @@ describe('repository backup lifecycle', function() {
   }
 
   const progressPreload = (nonTTY?: 'stdin' | 'stdout' | 'stderr', columns = 80): string => `
-    for (const name of ['stdin', 'stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
+    require('tty').isatty = (fd) => fd === 0 && ${JSON.stringify(nonTTY ?? '')} !== 'stdin';
+    for (const name of ['stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
     Object.defineProperty(process.stderr, 'columns', { value: ${columns} });
     const fs = require('fs'); const write = fs.writeSync; const child = require('child_process'); const spawn = child.spawnSync;
     let status = '';
@@ -1976,6 +1978,37 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.include(result.stdout, 'preference was not saved');
     assert.equal(config().backup.includeSensitive, 'false');
     assertSavedSensitiveChoice(result, 'false');
+  });
+  it('reports saved linkage after a prompt read fails following remote initialization', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const preload = `const fs = require('fs');
+      const write = process.stdout.write; let automaticPrompt = false;
+      process.stdout.write = function(text, ...args) {
+        if (String(text).includes('Automatically run')) automaticPrompt = true;
+        return write.call(this, text, ...args);
+      };
+      const read = fs.readSync;
+      fs.readSync = function(fd, ...args) {
+        if (fd === 0 && automaticPrompt) throw Object.assign(new Error('fixture secret must not be printed'), {code:'EAGAIN'});
+        return read.call(this, fd, ...args);
+      };`;
+    const result = run(['setup'], 'y\ncreate\n\nn\ny\n', {}, preload);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'Unable to read prompt input (stdin read: EAGAIN).');
+    assert.include(result.stdout, 'The backup destination is saved locally');
+    assert.include(result.stdout, 'run `ballin setup`');
+    assert.include(result.stdout, 'Do not create a duplicate.');
+    assert.notInclude(result.stdout, 'local linkage was not saved');
+    assert.notInclude(result.stdout, 'Reconnect to this repository');
+    assert.notInclude(result.stdout, 'Backup setup complete.');
+    assert.notInclude(result.stdout + result.stderr, 'fixture secret');
+    assert.deepEqual(config().backup.repository, fixtureDestination);
+    assert.equal(config().backup.includeSensitive, 'false');
+    assert.equal(config().update.backup, 'false');
+    assert.isTrue(state().exists);
+    assert.lengthOf(mutations().filter((request) => request.endpoint === 'user/repos'), 1);
+    assert.lengthOf(publications(), 1); // Initialization only, no snapshot capture.
+    assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
   });
   it('retains atomic destination persistence if a later automatic-backup write is interrupted', () => {
     unconfigured(); const preload = `const fs=require('fs'); const original=fs.writeFileSync; let saves=0;

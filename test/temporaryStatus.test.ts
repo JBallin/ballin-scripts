@@ -1,4 +1,5 @@
 const fs = require('fs');
+const tty = require('tty');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 const { withTemporaryStatus, clearTemporaryStatus } = require('../commands/temporaryStatus.ts');
@@ -9,7 +10,9 @@ describe('temporary terminal status', () => {
   beforeEach(() => {
     output = '';
     const write = fs.writeSync;
-    const streams = [process.stdin, process.stdout, process.stderr];
+    const isatty = tty.isatty;
+    tty.isatty = (fd: number) => fd === 0;
+    const streams = [process.stdout, process.stderr];
     const columns = Object.getOwnPropertyDescriptor(process.stderr, 'columns');
     const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'));
     const env = { TERM: process.env.TERM, NO_COLOR: process.env.NO_COLOR };
@@ -18,7 +21,7 @@ describe('temporary terminal status', () => {
     Object.defineProperty(process.stderr, 'columns', { configurable: true, value: 80 });
     fs.writeSync = (fd: number, text: string) => { assert.equal(fd, 2); output += text; return text.length; };
     restore = () => {
-      clearTemporaryStatus(); fs.writeSync = write;
+      clearTemporaryStatus(); fs.writeSync = write; tty.isatty = isatty;
       if (columns) Object.defineProperty(process.stderr, 'columns', columns); else Reflect.deleteProperty(process.stderr, 'columns');
       streams.forEach((stream, index) => {
         if (descriptors[index]) Object.defineProperty(stream, 'isTTY', descriptors[index]);
@@ -57,7 +60,8 @@ describe('temporary terminal status', () => {
   });
   it('preserves an inherited diagnostic without a trailing newline', () => {
     const result = spawnSync(process.execPath, ['-e', `
-      for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+      require('tty').isatty = (fd) => fd === 0;
+      for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
       require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))}).withTemporaryStatus('Working...', () => {
         require(${JSON.stringify(require.resolve('../commands/commandHelpers.ts'))}).runCommand(process.execPath, ['-e', 'process.stderr.write("fixture diagnostic")'], { stdio: 'inherit' });
       });
@@ -72,13 +76,15 @@ describe('temporary terminal status', () => {
     it(`leaves output unchanged in ${mode} mode`, () => {
       if (mode === 'dumb') process.env.TERM = 'dumb';
       else if (mode === 'NO_COLOR') process.env.NO_COLOR = '1';
-      else Object.defineProperty({ stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }[mode], 'isTTY', { configurable: true, value: false });
+      else if (mode === 'stdin') tty.isatty = () => false;
+      else Object.defineProperty({ stdout: process.stdout, stderr: process.stderr }[mode], 'isTTY', { configurable: true, value: false });
       assert.equal(withTemporaryStatus('Working...', () => 7), 7); assert.equal(output, '');
     });
     it(`can show plain immediate feedback in ${mode} mode`, () => {
       if (mode === 'dumb') process.env.TERM = 'dumb';
       else if (mode === 'NO_COLOR') process.env.NO_COLOR = '1';
-      else Object.defineProperty({ stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }[mode], 'isTTY', { configurable: true, value: false });
+      else if (mode === 'stdin') tty.isatty = () => false;
+      else Object.defineProperty({ stdout: process.stdout, stderr: process.stderr }[mode], 'isTTY', { configurable: true, value: false });
       assert.throws(() => withTemporaryStatus('Opening...', () => {
         assert.equal(output, 'Opening...\n'); throw new Error('fixture operation failure');
       }, true), 'fixture operation failure');
@@ -88,7 +94,8 @@ describe('temporary terminal status', () => {
   for (const signal of ['SIGINT', 'SIGTERM']) {
     it(`preserves native ${signal} during synchronous child work`, () => {
       const script = `
-        for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+        require('tty').isatty = (fd) => fd === 0;
+        for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
         const { spawn, spawnSync } = require('child_process');
         spawn(process.execPath, ['-e', 'setTimeout(() => process.kill(' + process.pid + ', ${JSON.stringify(signal)}), 50)'], { stdio: 'ignore' });
         require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))}).withTemporaryStatus('Working...', () => {
@@ -104,7 +111,8 @@ describe('temporary terminal status', () => {
   it('preserves native group interruption of synchronous child work', async () => {
     const { spawn } = require('child_process');
     const child = spawn(process.execPath, ['-e', `
-      for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+      require('tty').isatty = (fd) => fd === 0;
+      for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
       require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))}).withTemporaryStatus('Working...', () => {
         require('child_process').spawnSync(process.execPath, ['-e', 'process.stdout.write("ready"); setInterval(() => {}, 1000)'], { stdio: ['ignore', 'inherit', 'ignore'] });
       });
@@ -131,7 +139,8 @@ describe('temporary terminal status', () => {
   });
   it('clears on explicit process exit', () => {
     const result = spawnSync(process.execPath, ['-e', `
-      for (const stream of [process.stdin, process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+      require('tty').isatty = (fd) => fd === 0;
+      for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
       require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))}).withTemporaryStatus('Working...', () => process.exit(3));
     `], { encoding: 'utf8', env: testChildEnvironment({ TERM: 'xterm' }) });
     assert.equal(result.status, 3); assert.equal(result.stderr, 'Working...\r\x1b[2K');

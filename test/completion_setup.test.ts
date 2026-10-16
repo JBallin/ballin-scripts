@@ -104,8 +104,8 @@ describe('optional completion setup', () => {
     assert.include(output.join('\n'), 'guide#shell-completion');
   });
   it('uses real default prompting and environment only inside an isolated child', () => {
-    const script = `process.stdin.isTTY = true; require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'completion_setup.ts'))}).offerCompletionSetup('guide');`;
-    const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', input: 'home\ny\n', env: testChildEnvironment(env) });
+    const script = 'require("tty").isatty = (fd) => fd === 0; require(process.argv[1]).offerCompletionSetup("guide");';
+    const result = spawnSync(process.execPath, ['-e', script, path.join(__dirname, '..', 'commands', 'completion_setup.ts')], { encoding: 'utf8', input: 'home\ny\n', env: testChildEnvironment(env) });
     assert.strictEqual(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Enable shell completion? [y/N]');
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
@@ -163,8 +163,8 @@ describe('optional completion setup', () => {
     assert.isNull(completionTarget(env, response('')));
     assert.isNull(completionTarget(env, () => ({ text: 'home', eof: true })));
     assert.strictEqual(completionTarget(env, response(directory)).profile, path.join(directory, '.zshrc'));
-    const script = `process.stdin.isTTY = true; require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'completion_setup.ts'))}).offerCompletionSetup('guide');`;
-    const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', input: `${directory}\ny\n`, env: testChildEnvironment(env) });
+    const script = 'require("tty").isatty = (fd) => fd === 0; require(process.argv[1]).offerCompletionSetup("guide");';
+    const result = spawnSync(process.execPath, ['-e', script, path.join(__dirname, '..', 'commands', 'completion_setup.ts')], { encoding: 'utf8', input: `${directory}\ny\n`, env: testChildEnvironment(env) });
     assert.strictEqual(result.status, 0, result.stderr);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     assert.isFalse(fs.existsSync(path.join(home, 'startup-ran')));

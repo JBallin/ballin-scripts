@@ -56,6 +56,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   let recoveryUrl: string | undefined;
   let remoteMayExist = false;
   let remoteInitialized = false;
+  let linkageSaved = false;
   try {
     let candidate = readSetupConfigContext(configPath);
     const configured = configuredBackupDestination(candidate);
@@ -194,6 +195,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(`Reconnect to the existing backup at ${recoveryUrl}; do not create a duplicate.`);
       return false;
     }
+    linkageSaved = true;
     writeStdoutLine(`Private backup ${previous ? 'reconnected' : 'created'}: ${recoveryUrl}`);
     writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(includeSensitive))}`);
     if (!offerAutomaticUpdateBackup(configPath)) return false;
@@ -203,7 +205,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     writeStdoutLine(error instanceof PortableConfigError ? (error as Error).message
       : repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to prepare backup configuration.');
     if (remoteMayExist && recoveryUrl) {
-      writeStdoutLine(remoteInitialized
+      writeStdoutLine(linkageSaved
+        ? `The backup destination is saved locally and remains available at ${recoveryUrl}. Setup is incomplete; run \`ballin setup\` to review the remaining preferences. Do not create a duplicate.`
+        : remoteInitialized
         ? `The initialized backup remains available at ${recoveryUrl}; local linkage was not saved. Reconnect to this repository; do not create a duplicate.`
         : (error as RepositoryError).completedStage === 'repository-created'
         ? `Repository creation completed at ${recoveryUrl}; initialization is unconfirmed. Inspect it deliberately before reconnecting.`
