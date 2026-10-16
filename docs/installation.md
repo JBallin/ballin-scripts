@@ -86,7 +86,7 @@ they exist in your backup.
 
 ### Startup files and manual activation
 
-For the usual zsh setup, choose `home` during installation to use `~/.zshrc`.
+For the usual zsh setup, press Enter during installation to use `~/.zshrc`.
 To enable completion later, add this line near the end of that file:
 
 ```zsh
@@ -98,11 +98,13 @@ Open a new terminal or run `source ~/.zshrc`. Once this line is present,
 open a new terminal to use the updated command list.
 
 If you use `ZDOTDIR`, use the `.zshrc` in that directory instead. During fresh
-setup, enter its absolute directory path rather than `home`; for manual setup,
-add the line there and reload that file. An exported `ZDOTDIR` is only a hint:
-the installer cannot see an unexported value and does not run startup files to
-discover it. If you are unsure which directory your terminal uses, press Enter
-to skip automatic setup.
+setup, an absolute exported `ZDOTDIR` becomes the default directory. Otherwise,
+enter the absolute directory your terminal uses. Empty or relative exported
+values require an explicit absolute directory. For manual setup, add the line
+there and reload that file. The installer cannot see an unexported value set
+by `.zshenv` and does not execute startup files to discover it. Enter `skip`
+if you are unsure. An existing activation in the default zsh file is reported
+without another directory or edit prompt.
 
 For Bash, choose `login` if your terminal reads login startup files, or `bashrc`
 if it reads `~/.bashrc`. Login selection uses the first existing file in Bash's
@@ -154,19 +156,28 @@ A compatible Node already first on PATH stays under its existing version manager
 otherwise, the helper selects a fallback. It displays the exact PATH line and
 asks before appending it to your startup file.
 
-Select the file your terminal reads: `home` or an absolute directory containing
-`.zshrc` for zsh; `login` or `bashrc` for Bash. Press Enter to skip if unsure.
+For zsh, Enter selects home, or an absolute exported `ZDOTDIR` when present.
+Enter a different absolute directory if your terminal uses one, or `skip` to
+leave it unchanged. For Bash, select `login` or `bashrc`; Enter skips.
 Shell completion is a separate optional installer step.
 
-Open a new Terminal afterward, or run the displayed PATH line in your current
-window. **Already present** does not guarantee that a line executes. If `ballin`
+Continue all setup prompts in the same window. Open a new Terminal afterward,
+or run the displayed PATH line in your original window. Reruns recognize the
+helper line and common equivalent literal PATH exports in the default startup
+file without repeating directory or edit prompts. **Already present** does not
+guarantee that a line executes. If `ballin`
 is unavailable, check your startup file and place the line where it executes.
 Skipped, declined, or unsafe edits leave the file untouched and report
 **persistent PATH setup incomplete**. Setup can continue using the helper's
 PATH; edit the file manually or rerun the quickstart to retry.
 
-GitHub CLI must authenticate before the core installer runs. The helper reuses
-existing authentication or offers normal browser login. If an exported token
+The helper reuses GitHub CLI authentication or offers to launch browser sign-in.
+Choose No to install Ballin for maintenance and defer backup setup. Later, sign
+in with `gh auth login --hostname github.com`, then run `ballin backup setup`.
+During sign-in, “Authenticate Git” controls Git credential configuration; No
+still continues GitHub CLI sign-in. Either answer can lead to device-code login.
+You can enter that code in an already signed-in browser on another computer;
+you do not need to copy a passkey. If an exported token
 blocks login, follow GitHub CLI's instructions; the helper does not change
 exported credentials or switch accounts.
 
@@ -251,15 +262,18 @@ New setup offers distinct **create** and **reconnect** choices and defaults to
 Backups belong to the authenticated personal GitHub.com account. Setup shows
 that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
-collision requires an explicit different name or reconnect choice.
+collision offers a checked available suggestion such as `ballin-backups-2`.
+Accept it or enter another name; setup never silently reconnects to the existing
+repository. A name can become unavailable before creation; follow the reported
+error rather than assuming a backup was created.
 New repositories start with Issues, Wiki, Projects, and pull requests disabled.
 Disabling pull requests requires Administration (write) on the effective GitHub
 credential; creation permission alone may be insufficient. If that step fails,
 setup reports the created repository for inspection without saving local linkage.
 Reconnect leaves existing feature settings unchanged.
 
-Fresh create or reconnect setup asks whether to include sensitive sources,
-with No as the default. Review
+Fresh create or reconnect setup asks whether to review sensitive sources for
+inclusion, with No as the default. Final confirmation saves the selection. Review
 [what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
 baseline, sensitive-source scope, and privacy limitations.
 

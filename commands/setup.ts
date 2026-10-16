@@ -48,7 +48,7 @@ const runSetupCommand = (): void => {
       const current = readSetupConfigContext(configPath);
       current.backup.includeSensitive = String(included);
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
-      writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(included))}`);
+      writeStdoutLine(`Sensitive sources: ${included ? 'Included' : 'Excluded'}.`);
     } else {
       writeStdoutLine('No backup is configured. Run `ballin backup setup` to choose a destination.');
     }

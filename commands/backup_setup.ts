@@ -69,8 +69,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return false;
     }
     if (configured.kind === 'unconfigured') {
-      writeStdoutLine('Ballin backup is optional. Backups are stored in a private GitHub repository.');
-      writeStdoutLine('GitHub and anyone authorized to access the repository can read its contents.');
+      writeStdoutLine('Optional backups use a private GitHub repository readable by GitHub and anyone with access.');
       writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
       writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
       const start = readPromptLine('Set up optional private backups now? [y/N] ');
@@ -121,8 +120,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         candidate.backup.includeSensitive = String(included);
         candidate.update.backup = String(enabled);
         if (!saveBackupConfig(configPath, candidate)) return false;
-        writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(included))}`);
-        writeStdoutLine(`"update.backup" set to: ${JSON.stringify(String(enabled))}`);
+        writeStdoutLine(`Sensitive sources: ${included ? 'Included' : 'Excluded'}.`);
+        writeStdoutLine(`Automatic backup: ${enabled ? 'Yes' : 'No'}.`);
         writeStdoutLine('Backup settings review complete.');
         return true;
       };
@@ -132,13 +131,30 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     writeStdoutLine();
     const choice = readPromptLine('Reconnect to an existing backup or create a new one? [reconnect/create] ');
     if (choice.eof || !['reconnect', 'create'].includes(choice.text)) return cancelled();
-    const nameLine = repositoryName === undefined ? readPromptLine('Repository name [ballin-backups]: ') : { text: repositoryName, eof: false };
-    if (nameLine.eof) return cancelled();
-    const name = nameLine.text || 'ballin-backups';
-    if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
+    let suggested = 'ballin-backups';
+    let found = choice.text === 'create' && repositoryName === undefined
+      ? candidateRepository(suggested, account) : undefined;
+    // Only suggest names checked as missing. Never reuse a collision or a redirect.
+    for (let suffix = 2; found && suffix <= 100; suffix += 1) {
+      suggested = `ballin-backups-${suffix}`;
+      found = candidateRepository(suggested, account);
+    }
+    if (found) { writeStdoutLine('Unable to find an available suggested name. Rerun with a repository name of your choice.'); return false; }
+    if (suggested !== 'ballin-backups') writeStdoutLine(`ballin-backups is already in use. Available suggestion: ${suggested}.`);
+    let name: string;
+    while (true) {
+      const nameLine = repositoryName === undefined
+        ? readPromptLine(`Repository name [${suggested}]: `) : { text: repositoryName, eof: false };
+      if (nameLine.eof) return cancelled();
+      name = nameLine.text || suggested;
+      if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
+      found = candidateRepository(name, account);
+      if (choice.text !== 'create' || !found || found.redirected) break;
+      writeStdoutLine('That repository name is already in use. Choose another name; use Reconnect for an existing backup.');
+      if (repositoryName !== undefined) return false;
+    }
     recoveryUrl = `https://github.com/${account.login}/${name}`;
     writeStdoutLine(`\nSelected GitHub.com account: ${account.login}\nCandidate backup: ${recoveryUrl}`);
-    const found = candidateRepository(name, account);
     let previous: RepositoryRead | undefined;
     if (choice.text === 'reconnect') {
       if (!found || found.redirected) { writeStdoutLine(repositoryMessages.unavailable); return false; }
@@ -197,7 +213,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     linkageSaved = true;
     writeStdoutLine(`Private backup ${previous ? 'reconnected' : 'created'}: ${recoveryUrl}`);
-    writeStdoutLine(`"backup.includeSensitive" set to: ${JSON.stringify(String(includeSensitive))}`);
+    writeStdoutLine(`Sensitive sources: ${includeSensitive ? 'Included' : 'Excluded'}.`);
     if (!offerAutomaticUpdateBackup(configPath)) return false;
     writeStdoutLine('Backup setup complete.');
     return true;

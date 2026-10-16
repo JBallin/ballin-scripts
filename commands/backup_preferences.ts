@@ -59,7 +59,7 @@ const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBacku
       : `Backup destination saved, but the automatic-backup preference was not saved. Set \`update.backup\` to ${preference} in \`ballin.config.json\`.`);
     return 'failed';
   }
-  writeStdoutLine(`"update.backup" set to: ${JSON.stringify(preference)}`);
+  writeStdoutLine(`Automatic backup: ${enabled ? 'Yes' : 'No'}.`);
   return 'confirmed';
 };
 const offerAutomaticUpdateBackup = (configPath: string): boolean => (
@@ -123,18 +123,16 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   available.forEach((line) => writeStdoutLine(`  ${line}`));
   if (absent.length) writeStdoutLine(`Sources not found now: ${absent.length}.`);
   if (unavailable.length) writeStdoutLine(`Unavailable now: ${unavailable.join(', ')}`);
-  writeStdoutLine('Ballin checks local paths and availability, reading synced Claude skill manifests to select plugin packages.');
-  writeStdoutLine('This preview does not read selected file contents or create backup snapshots.');
+  writeStdoutLine('This review checks source locations, not selected file contents.');
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('\nSensitive sources may contain credentials or other private information.');
-  writeStdoutLine('Ballin does not scan or redact them.');
-  writeStdoutLine('Your choice also covers future supported sources.');
-  writeStdoutLine('Synced Claude skills include plugin-origin packages only; defaults and other origins are excluded.');
+  writeStdoutLine('Ballin does not scan or redact them. Your choice also covers future supported sources.');
+  writeStdoutLine('Review paths now; final confirmation saves inclusion or exclusion for future backups.');
   writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
-  const sensitive = readPromptLine(`Include sensitive sources? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
+  const sensitive = readPromptLine(`Review sensitive sources for inclusion? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
   if (sensitive.eof) return null;
   const includeSensitive = sensitive.text === '' ? defaultIncluded : /^[yY]$/u.test(sensitive.text);
   if (includeSensitive) {
@@ -142,7 +140,7 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
     if (!reviewSensitiveSources(process.env.HOME, process.env)) return undefined;
   }
   writeStdoutLine(`\nSelected: inventory and filtered preferences; sensitive sources ${includeSensitive ? 'included' : 'excluded'}.`);
-  writeStdoutLine('Excluding sources does not remove saved files or history.');
+  if (!includeSensitive) writeStdoutLine('Excluding sources does not remove saved files or history.');
   return includeSensitive;
 };
 

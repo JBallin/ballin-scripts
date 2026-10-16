@@ -641,10 +641,7 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'Ballin can report command usage and results, backup results, and automatic backup/self-update results during ballin update.\n'
-      + 'Failed backups include a coarse failure category when supported; raw errors are not sent.\n'
-      + 'Backup contents, destination identities and configuration values are not sent.\n'
-      + 'Reports include a random install ID stored locally.\n'
+      'Share command and backup results with a random install ID. No backup contents, destination identities, configuration values, or raw errors are sent.\n'
       + 'https://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
@@ -975,8 +972,8 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
     assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#shell-completion`));
-    assert.include(result.stdout, 'Ballin backup is optional. Backups are stored in a private GitHub repository.\nGitHub and anyone authorized to access the repository can read its contents.');
-    assert.include(result.stdout, `${docsUrl}#shell-completion\n\nBallin backup is optional.`);
+    assert.include(result.stdout, 'Optional backups use a private GitHub repository readable by GitHub and anyone with access.');
+    assert.include(result.stdout, `${docsUrl}#shell-completion\n\nOptional backups use a private GitHub repository`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped. Run `ballin backup setup`');
     assert.equal(result.stdout.match(/😎 ballin!/gu)?.length, 1);
@@ -1001,9 +998,9 @@ require('https').request = () => {
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const completionResult = enableCompletion
-        ? 'Shell completion enabled. Open a new terminal or reload this startup file.'
+        ? 'Shell completion enabled. Continue setup here; open a new terminal afterward.'
         : `${docsUrl}#shell-completion`;
-      assert.include(result.stdout, `${completionResult}\n\nBallin backup is optional.`);
+      assert.include(result.stdout, `${completionResult}\n\nOptional backups use a private GitHub repository`);
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
       assert.equal(readRepoConfig().update.backup, 'false');
       assert.notInclude(commandLog(), 'gh:');
@@ -1025,7 +1022,7 @@ require('https').request = () => {
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Shell completion setup could not finish. Ballin remains installed.');
-      assert.include(result.stdout, `${docsUrl}#shell-completion\n\nBallin backup is optional.`);
+      assert.include(result.stdout, `${docsUrl}#shell-completion\n\nOptional backups use a private GitHub repository`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1074,8 +1071,8 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'current permissions');
     assert.include(result.stdout, 'backup setup can continue normally');
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
-    assert.include(result.stdout, '"backup.includeSensitive" set to: "false"\n');
-    assert.isBelow(result.stdout.indexOf('"backup.includeSensitive" set to: "false"'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
+    assert.include(result.stdout, 'Sensitive sources: Excluded.\n');
+    assert.isBelow(result.stdout.indexOf('Sensitive sources: Excluded.'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
     assert.notInclude(result.stdout, 'before retrying `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
