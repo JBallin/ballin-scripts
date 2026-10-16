@@ -5,6 +5,7 @@ const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
+const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
 
 type RunInstallOptions = {
@@ -38,6 +39,8 @@ describe('install', () => {
     fs.mkdirSync(path.join(repoDir, 'commands'), { recursive: true });
     fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
+    fs.mkdirSync(path.join(repoDir, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(repoDir, 'test', 'inspect.ts'), `require('fs').writeFileSync(${JSON.stringify(path.join(homeDir, 'inspection-ran'))}, 'ran');`);
     if (repoUpdate) {
       fs.writeFileSync(path.join(repoDir, 'commands', 'repo_update.ts'), '');
     }
@@ -60,6 +63,7 @@ case "$1" in
     mkdir -p "$HOME/.ballin-scripts/commands" "$HOME/.ballin-scripts/bin"
     : > "$HOME/.ballin-scripts/commands/repo_update.ts"
     : > "$HOME/.ballin-scripts/commands/install_setup.ts"
+    if [ "$FAKE_GIT_CLONE_STATUS" != 0 ]; then printf '%s\\n' "\${FAKE_GIT_ERROR:-}" >&2; fi
     exit "$FAKE_GIT_CLONE_STATUS"
     ;;
   fetch)
@@ -89,17 +93,26 @@ esac
   const installNodeStub = () => {
     writeExecutable('node', `#!/usr/bin/env bash
 if [ "$1" = '-p' ]; then
-  printf '%s\\n' "$FAKE_NODE_SUPPORTED"
-  exit 0
+  printf 'probe\\n' >> "$FAKE_NODE_PROBE_LOG"
+  if [ "\${FAKE_NODE_RAW_OUTPUT+x}" = x ]; then
+    printf '%s\\n' "$FAKE_NODE_RAW_OUTPUT"
+  else
+    "$TEST_NODE_RUNTIME" -e 'Object.defineProperty(process.versions, "node", { value: process.env.FAKE_NODE_VERSION }); console.log(eval(process.argv[1]));' "$2"
+  fi
+  exit "$FAKE_NODE_PROBE_STATUS"
 fi
 case "$1" in
   "$HOME/.ballin-scripts/commands/repo_update.ts")
     printf 'node:repo_update %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+    if [ "$FAKE_REPO_UPDATE_STATUS" != 0 ]; then printf '%s\\n' "\${FAKE_REPO_UPDATE_ERROR:-}" >&2; fi
     exit "$FAKE_REPO_UPDATE_STATUS"
     ;;
   "$HOME/.ballin-scripts/commands/install_setup.ts")
     printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
     exit "$FAKE_SETUP_STATUS"
+    ;;
+  "$HOME/.ballin-scripts/test/inspect.ts")
+    exec "$TEST_NODE_RUNTIME" "$@"
     ;;
   *)
     printf 'unexpected node command: %s\\n' "$*" >&2
@@ -128,7 +141,10 @@ esac
       FAKE_GIT_FETCH_STATUS: '0',
       FAKE_GIT_CHECKOUT_STATUS: '0',
       FAKE_GIT_MERGE_STATUS: '0',
-      FAKE_NODE_SUPPORTED: 'true',
+      FAKE_NODE_VERSION: '24.12.0',
+      FAKE_NODE_PROBE_STATUS: '0',
+      FAKE_NODE_PROBE_LOG: path.join(homeDir, 'node-probes'),
+      TEST_NODE_RUNTIME: process.execPath,
       FAKE_REPO_UPDATE_STATUS: '0',
       FAKE_SETUP_STATUS: '0',
       ...env,
@@ -150,6 +166,7 @@ esac
   });
 
   afterEach(() => {
+    assert.isFalse(fs.existsSync(path.join(homeDir, 'inspection-ran')));
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
@@ -159,6 +176,8 @@ esac
     const result = runInstall();
 
     assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, troubleshootingUrl);
+    assert.notInclude(result.stdout, 'Detected Node.js');
     assert.include(result.stdout, "🏀 let's ball...");
     assert.include(result.stdout, 'Installation plan');
     assert.include(result.stdout, `Clone Ballin into ${repoDir} and create its config there.`);
@@ -183,6 +202,8 @@ esac
     const result = runInstall({ input: 'n\n' });
 
     assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, troubleshootingUrl);
+    assert.notInclude(result.stdout, 'Detected Node.js');
     assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
     assert.deepEqual(commandLog(), []);
     assert.isFalse(fs.existsSync(repoDir));
@@ -194,6 +215,8 @@ esac
     const result = runInstall({ input: '' });
 
     assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, troubleshootingUrl);
+    assert.notInclude(result.stdout, 'Detected Node.js');
     assert.include(result.stdout, 'Installation cancelled; no installation changes were made.');
     assert.deepEqual(commandLog(), []);
     assert.isFalse(fs.existsSync(repoDir));
@@ -206,6 +229,8 @@ esac
     const result = runInstall();
 
     assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, troubleshootingUrl);
+    assert.notInclude(result.stdout, 'Detected Node.js');
     assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), [
       `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
@@ -244,6 +269,8 @@ esac
     const result = runInstall();
 
     assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, troubleshootingUrl);
+    assert.notInclude(result.stdout, 'Detected Node.js');
     assert.deepEqual(commandLog(), [
       'git:fetch origin +main:refs/remotes/origin/main',
       'git:checkout main',
@@ -261,6 +288,8 @@ esac
     assert.equal(result.status, 1);
     assert.include(result.stdout, `Unable to update ${repoDir} before setup`);
     assert.include(result.stdout, `Update or delete ${repoDir}`);
+    assert.equal(result.stdout.split(troubleshootingUrl).length - 1, 1);
+    assert.isBelow(result.stdout.indexOf('Unable to update'), result.stdout.indexOf(troubleshootingUrl));
     assert.deepEqual(commandLog(), [
       'git:fetch origin +main:refs/remotes/origin/main',
       'git:checkout main',
@@ -276,6 +305,7 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js 24.12 or newer is required');
+    assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install a supported version with nvm');
     assert.include(result.stdout, 'docs/optional-capabilities.md#nodejs');
     assert.include(result.stdout, 'brew install node');
@@ -292,6 +322,7 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Git is required before install can continue');
+    assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install Git, then run this installer again');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -307,6 +338,7 @@ esac
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Git is required before install can continue');
+    assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install Git, then run this installer again');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -317,10 +349,11 @@ esac
   it('stops with guidance when Node.js is below the supported version', () => {
     installBaseCommands();
 
-    const result = runInstall({ env: { FAKE_NODE_SUPPORTED: 'false' } });
+    const result = runInstall({ env: { FAKE_NODE_VERSION: '24.11.9' } });
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Node.js 24.12 or newer is required');
+    assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install a supported version with nvm');
     assert.include(result.stdout, 'docs/optional-capabilities.md#nodejs');
     assert.include(result.stdout, 'brew install node');
@@ -330,6 +363,74 @@ esac
     assert.isFalse(fs.existsSync(repoDir));
   });
 
+  it('accepts a newer Node major without extra diagnostic output or probes', () => {
+    installBaseCommands();
+    const result = runInstall({ env: { FAKE_NODE_VERSION: '25.0.0' }, input: 'n\n' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, 'Detected Node.js');
+    assert.notInclude(result.stdout, troubleshootingUrl);
+    assert.equal(fs.readFileSync(path.join(homeDir, 'node-probes'), 'utf8'), 'probe\n');
+    assert.deepEqual(commandLog(), []);
+  });
+
+  for (const version of ['22.14.0', '24.11.9', '24.11.0-pre']) {
+    it(`shows the detected incompatible Node.js ${version} using one probe`, () => {
+      installBaseCommands();
+      const result = runInstall({ env: { FAKE_NODE_VERSION: version } });
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, `Node.js 24.12 or newer is required. Detected Node.js ${version}.`);
+      assert.include(result.stdout, 'Install a supported version with nvm');
+      assert.notInclude(result.stdout, troubleshootingUrl);
+      assert.equal(result.stderr, '');
+      assert.deepEqual(commandLog(), []);
+      assert.equal(fs.readFileSync(path.join(homeDir, 'node-probes'), 'utf8'), 'probe\n');
+      assert.isFalse(fs.existsSync(repoDir));
+    });
+  }
+
+  for (const [label, env] of [
+    ['malformed runtime', { FAKE_NODE_VERSION: 'DUMMY_PRIVATE_SECRET' }],
+    ['malformed supported-looking runtime', { FAKE_NODE_VERSION: '24.12.invalid' }],
+    ['boolean-looking runtime', { FAKE_NODE_VERSION: 'true' }],
+    ['empty output', { FAKE_NODE_RAW_OUTPUT: '' }],
+    ['malformed output', { FAKE_NODE_RAW_OUTPUT: 'DUMMY_PRIVATE_SECRET' }],
+    ['multiline output', { FAKE_NODE_RAW_OUTPUT: '22.14.0\nDUMMY_PRIVATE_SECRET' }],
+    ['failed version probe', { FAKE_NODE_RAW_OUTPUT: '22.14.0', FAKE_NODE_PROBE_STATUS: '7' }],
+    ['failed supported probe', { FAKE_NODE_RAW_OUTPUT: 'true', FAKE_NODE_PROBE_STATUS: '7' }],
+  ] as [string, NodeJS.ProcessEnv][]) {
+    it(`keeps prerequisite guidance without inventing a version for ${label}`, () => {
+      installBaseCommands();
+      const result = runInstall({ env });
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, 'Node.js 24.12 or newer is required.\n');
+      assert.notInclude(result.stdout, 'Detected Node.js');
+      assert.notInclude(result.stdout, troubleshootingUrl);
+      assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_SECRET');
+      assert.equal(result.stderr, '');
+      assert.deepEqual(commandLog(), []);
+      assert.equal(fs.readFileSync(path.join(homeDir, 'node-probes'), 'utf8'), 'probe\n');
+      assert.isFalse(fs.existsSync(repoDir));
+    });
+  }
+
+  for (const [label, current, env, message] of [
+    ['clone failure', false, { FAKE_GIT_CLONE_STATUS: '17', FAKE_GIT_ERROR: 'fixture Git failure' }, 'Unable to prepare'],
+    ['typed update failure', true, { FAKE_REPO_UPDATE_STATUS: '19', FAKE_REPO_UPDATE_ERROR: 'fixture update failure' }, 'Unable to update'],
+    ['missing typed setup', true, {}, 'Unable to update'],
+  ] as [string, boolean, NodeJS.ProcessEnv, string][]) {
+    it(`links checkout troubleshooting once after ${label} without running the helper`, () => {
+      installBaseCommands();
+      if (current) writeCurrentCheckout({ installSetup: label !== 'missing typed setup' });
+      const result = runInstall({ env });
+      assert.equal(result.status, 1);
+      assert.include(result.stdout, message);
+      assert.equal(result.stdout.split(troubleshootingUrl).length - 1, 1);
+      assert.isBelow(result.stdout.indexOf(message), result.stdout.indexOf(troubleshootingUrl));
+      assert.equal(result.stderr, env.FAKE_GIT_ERROR ? `${env.FAKE_GIT_ERROR}\n` : env.FAKE_REPO_UPDATE_ERROR ? `${env.FAKE_REPO_UPDATE_ERROR}\n` : '');
+      assert.isFalse(commandLog().some((line: string) => line.startsWith('node:install_setup')));
+    });
+  }
+
   it('returns the typed setup status when setup fails', () => {
     installBaseCommands();
     writeCurrentCheckout();
@@ -337,6 +438,8 @@ esac
     const result = runInstall({ env: { FAKE_SETUP_STATUS: '27' } });
 
     assert.equal(result.status, 27);
+    assert.notInclude(result.stdout, troubleshootingUrl);
+    assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
       setupCommand(),
