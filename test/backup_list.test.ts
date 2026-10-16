@@ -199,10 +199,10 @@ describe('saved backup discovery', function() {
       { path: 'rule.md', executable: false, encoding: 'base64', content: 'YQ==' },
     ] });
     for (const redirected of ['stdin', 'stdout', 'stderr']) {
-      const tty = `require('tty').isatty = (fd) => fd === 0 && ${JSON.stringify(redirected)} !== 'stdin'; for (const stream of ['stdout','stderr']) Object.defineProperty(process[stream], 'isTTY', {value:stream!==${JSON.stringify(redirected)}});`;
+      const tty = "const redirected = process.env.BALLIN_TEST_REDIRECTED_STREAM; require('tty').isatty = (fd) => fd === 0 && redirected !== 'stdin'; for (const stream of ['stdout','stderr']) Object.defineProperty(process[stream], 'isTTY', {value:stream!==redirected});";
       save(fixtureState({ 'codex_rules.bundle.json': archive }));
       for (const options of [[], ['--list']]) {
-        const result = run(['read', 'codex_rules.bundle.json', ...options], {}, tty);
+        const result = run(['read', 'codex_rules.bundle.json', ...options], { BALLIN_TEST_REDIRECTED_STREAM: redirected }, tty);
         assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, '');
         assert.equal(result.stdout, options.length ? 'rule.md\n' : archive);
       }
