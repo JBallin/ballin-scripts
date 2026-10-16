@@ -128,5 +128,5 @@ fi
 
 # Quickstart owns the final guidance after its optional backup/browser work.
 if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then
-  printf '\nOpen a new Terminal to run `ballin`.\n'
+  printf "\nOpen a new Terminal to run \`ballin\`.\n"
 fi

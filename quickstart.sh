@@ -666,7 +666,7 @@ main() {
     fi
   fi
   if "$path_setup_complete"; then
-    printf '\nOpen a new Terminal to run `ballin`.\n'
+    printf "\nOpen a new Terminal to run \`ballin\`.\n"
   fi
 }
 
