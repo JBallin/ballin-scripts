@@ -120,7 +120,18 @@ describe('inspection with real Git', () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-inspect-git-'));
     home = path.join(root, 'home'); checkout = path.join(root, 'selected'); bin = path.join(root, 'bin');
     fs.mkdirSync(home); fs.mkdirSync(bin);
-    // Stub only version tools; Git itself is the installed executable.
+    // Use the installed Git implementation with fixture-owned system config.
+    // The helper deliberately removes inherited GIT_CONFIG_NOSYSTEM, so setting
+    // that in the child environment alone cannot isolate a runner's system filters.
+    const lookup = spawnSync('/bin/sh', ['-c', 'command -v git'], {
+      encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: process.env.PATH }),
+    });
+    assert.equal(lookup.status, 0, lookup.stderr);
+    assert.isTrue(path.isAbsolute(lookup.stdout.trim()));
+    fs.writeFileSync(path.join(bin, 'real-git-path'), lookup.stdout.trim() + '\n');
+    fs.writeFileSync(path.join(bin, 'system.config'), '');
+    fs.writeFileSync(path.join(bin, 'git'), '#!/bin/sh\ntask_bin=${0%/*}\nIFS= read -r task_git < "$task_bin/real-git-path"\nGIT_CONFIG_SYSTEM="$task_bin/system.config" GIT_CONFIG_NOSYSTEM=0 exec "$task_git" "$@"\n', { mode: 0o755 });
+    // Other tools only report fixture versions; their real implementations are not run.
     for (const [name, output] of [['npm', '11.19.0'], ['gh', 'gh version 2.80.0'], ['sw_vers', '26.0.1']]) {
       fs.writeFileSync(path.join(bin, name), `#!/bin/sh\nprintf '%s\\n' '${output}'\n`, { mode: 0o755 });
     }
@@ -154,7 +165,7 @@ describe('inspection with real Git', () => {
     // Positive control: ordinary Git is redirected by these inherited variables.
     assert.equal(git(['rev-parse', 'HEAD'], checkout, hostile), otherHead);
     const report = run(hostile);
-    assert.equal(report.installedCommit, expected); assert.equal(report.workingTree, 'dirty'); assert.isNull(report.workingTreeReason);
+    assert.equal(report.installedCommit, expected); assert.isNull(report.workingTreeReason, JSON.stringify(report)); assert.equal(report.workingTree, 'dirty');
     assert.deepEqual(fs.readFileSync(path.join(other, '.git', 'index')), otherIndex);
     assert.isFalse(report.backup.includeSensitive === 'true');
   });
@@ -169,21 +180,22 @@ describe('inspection with real Git', () => {
     const snapshot = () => fs.readdirSync(root).sort().map((name: string) => [name, fs.statSync(path.join(root, name)).isFile() ? fs.readFileSync(path.join(root, name), 'base64') : null]);
     const before = snapshot();
     const report = run(hostile);
-    assert.equal(report.workingTree, 'clean'); assert.equal(report.installedCommit, expected);
+    assert.isNull(report.workingTreeReason, JSON.stringify(report)); assert.equal(report.workingTree, 'clean'); assert.equal(report.installedCommit, expected);
     // Do not invoke another ordinary Git after the guarded operation when checking traces.
     assert.deepEqual(snapshot(), before);
   });
-  for (const kind of ['clean', 'process']) {
-    it(`declines status with a marker-producing ${kind} filter and preserves the index`, () => {
+  for (const [kind, scope] of [['clean', 'global'], ['process', 'local'], ['clean', 'system']]) {
+    it(`declines status with a marker-producing ${scope} ${kind} filter and preserves the index`, () => {
       fs.writeFileSync(path.join(checkout, '.gitattributes'), 'tracked filter=fixture\n');
       const marker = path.join(root, kind + '.marker');
       const filter = kind === 'clean' ? 'printf x > ../clean.marker; cat' : 'printf x > ../process.marker; exit 1';
-      // Include the clean filter through global config; process is repository-local.
-      if (kind === 'clean') {
+      // Cover included global, repository-local, and system filter definitions.
+      if (scope === 'global') {
         const included = path.join(home, 'included.config');
         git(['config', '--file', included, 'filter.fixture.clean', filter]);
         git(['config', '--global', 'include.path', included]);
-      } else git(['config', 'filter.fixture.process', filter]);
+      } else if (scope === 'system') git(['config', '--file', path.join(bin, 'system.config'), 'filter.fixture.clean', filter]);
+      else git(['config', 'filter.fixture.process', filter]);
       fs.writeFileSync(path.join(checkout, 'tracked'), 'modified\n');
       const report = run();
       assert.match(report.installedCommit, /^[a-f0-9]{40}$/u);
