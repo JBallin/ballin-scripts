@@ -58,9 +58,9 @@ describe('plain prompt input contracts', function() {
       const result = runInteractiveSetup(sandbox, ['/bin/bash', script], typeahead
         ? [{ prompt: 'Default no? [y/N] ', answer: '\n\ny\nn' }]
         : [{ prompt: 'Default no? [y/N] ', answer: '' },
-          { prompt: 'Run your first backup and open its GitHub destination? [Y/n] ', answer: '' },
+          { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: '' },
           { prompt: 'Explicit yes? [y/N] ', answer: 'Y' },
-          { prompt: 'Run your first backup and open its GitHub destination? [Y/n] ', answer: 'N' }]);
+          { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'N' }]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'KEEP THIS ROW'); assert.include(result.stdout, 'DONE');
       assert.notInclude(result.stdout, '\x1b'); assert.notMatch(result.stdout, /(?:Selected|First backup): (?:Yes|No)/u);
