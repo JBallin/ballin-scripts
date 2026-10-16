@@ -219,6 +219,10 @@ c8's `NODE_V8_COVERAGE` without inheriting unrelated shell state or
 `NODE_OPTIONS`. Node also propagates the coverage variable to existing
 complete-environment fixtures, so those children remain measured.
 
+Verify subprocess isolation at the final tool boundary, including user and system
+configuration read from disk. Account for intended environment overrides that
+intermediate layers remove.
+
 Mocking HTTPS alone does not isolate analytics payload collection. The enabled
 CLI fixture also selects macOS and stubs its version command before production
 imports, exercising the default reader on every host. Separate analytics tests
@@ -275,6 +279,11 @@ Use `npm run test:unit` for a focused development run, for example:
 ```shell
 npm run test:unit -- --grep 'scenario name'
 ```
+
+When a shared helper changes, include focused tests for materially affected
+callers as well as its direct tests. Trace caller behavior and review fixture
+and mocking contracts against the change; literal-text searches alone can miss
+indirect callers or dynamically constructed mocks.
 
 For example, when changing saved-backup inventory, start with these existing
 direct tests:
