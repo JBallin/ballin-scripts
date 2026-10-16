@@ -11,6 +11,7 @@ setup_mode='refresh'
 print_stale_checkout_guidance() {
   printf '\n⚠️  ERROR: Unable to update %s before setup.\n' "$repo_dir"
   printf 'Update or delete %s, then run this installer again.\n' "$repo_dir"
+  printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
 }
 
 ############################### CHECK PREREQUISITES ############################
@@ -33,11 +34,25 @@ if [ ! -x "$(command -v node)" ]; then
   printf "\nInstall a supported version with nvm or \`brew install node\`, then run this installer again.\n"
   printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
   exit 1
-elif [ "$(node -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null)" != 'true' ]; then
-  printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
-  printf "\nInstall a supported version with nvm or \`brew install node\`, then run this installer again.\n"
-  printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
-  exit 1
+else
+  node_check=$(node -p "
+    const version = process.versions.node;
+    const [major, minor] = version.split('.').map(Number);
+    const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number);
+    /^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$/.test(version)
+      ? (major > requiredMajor || (major === requiredMajor && minor >= requiredMinor) ? 'true' : version)
+      : ''
+  " 2>/dev/null) || node_check=''
+  if [ "$node_check" != 'true' ]; then
+    printf '\n⚠️  ERROR: Node.js %s or newer is required.' "$required_node_version"
+    if [[ "$node_check" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+      printf ' Detected Node.js %s.' "$node_check"
+    fi
+    printf '\n'
+    printf "\nInstall a supported version with nvm or \`brew install node\`, then run this installer again.\n"
+    printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
+    exit 1
+  fi
 fi
 
 if [ "$repo_existed" = false ]; then
@@ -66,6 +81,7 @@ if ! (
   fi
 ); then
   printf '\n⚠️  ERROR: Unable to prepare %s\n' "$repo_dir"
+  printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
   exit 1
 fi
 

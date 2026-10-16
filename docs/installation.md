@@ -389,6 +389,13 @@ already unconfigured.
 
 ## Health and recovery
 
+If the installer reports an unsupported Node.js version, switch to a supported
+runtime and retry. It includes the detected version when the runtime probe can
+identify it. Checkout preparation or update failures link here; review the
+reported error before retrying. A failed or incomplete checkout may not
+contain a usable inspection helper. Do not run helper code from a checkout you
+do not trust.
+
 `ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
 Configured repositories are checked for authentication, expected private identity,
 supported layout, and coherent readability. This is readiness only: it does not
@@ -411,7 +418,7 @@ repository identity or access, backup contents or freshness, or complete system
 health. Some results may be unavailable; if Git filters are configured, it
 declines to check working-tree status rather than execute them. It requires a
 compatible Node.js runtime (24.12 or newer) and the installed checkout at the
-default path above.
+default path above, including the helper file.
 
 Use `ballin backup list` to find supported snapshots saved in the configured
 backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
