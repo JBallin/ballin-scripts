@@ -377,6 +377,24 @@ supported layout, and coherent readability. This is readiness only: it does not
 collect, repair cache permissions, probe writes, or establish backup freshness,
 coverage, or successful publication.
 
+For a compact local snapshot when troubleshooting the installed checkout, run
+its read-only inspection helper:
+
+```shell
+node "$HOME/.ballin-scripts/test/inspect.ts"
+```
+
+It reports runtime versions, the installed commit, working-tree status, and
+selected backup configuration flags without printing destination identifiers
+or config contents. Review the output before sharing it. This is narrower than
+`ballin doctor`, which checks Ballin's overall managed-environment health and,
+when configured, remote backup readability. The helper does not verify remote
+repository identity or access, backup contents or freshness, or complete system
+health. Some results may be unavailable; if Git filters are configured, it
+declines to check working-tree status rather than execute them. It requires a
+compatible Node.js runtime (24.12 or newer) and the installed checkout at the
+default path above.
+
 Use `ballin backup list` to find supported snapshots saved in the configured
 backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
 to inspect the backup in your browser, including retired snapshots and unexpected
