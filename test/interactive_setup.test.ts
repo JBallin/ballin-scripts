@@ -46,7 +46,7 @@ describe('interactive setup with delayed terminal answers', function() {
         startup,
         { prompt: 'Enable shell completion? [y/N] ', answer: 'y' },
         ...backupAnswers,
-        { prompt: 'Run your first backup and open its GitHub destination? [Y/n] ', answer: 'n' },
+        { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
       assert.equal(result.status, 0, result.stdout + result.stderr);

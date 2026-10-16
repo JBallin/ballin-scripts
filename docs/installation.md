@@ -183,7 +183,7 @@ you do not need to copy a passkey. If an exported token
 blocks login, follow GitHub CLI's instructions; the helper does not change
 exported credentials or switch accounts.
 
-After installation, it asks whether to run the first backup and open its GitHub
+After installation, it asks whether to run a backup now and open its GitHub
 destination: Enter or `y` accepts both; `n` skips both; end-of-input cancels.
 Normal backup setup prompts still apply. Declining setup leaves Ballin installed
 without capturing or opening a backup. The destination opens only after

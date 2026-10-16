@@ -695,7 +695,7 @@ system_sudo=fixture_sudo
             assert.lengthOf(contents.split('\n').filter((line: string) => line.startsWith('export PATH=')), 1);
             if (expectedProfile) {
               assert.equal(contents, expectedProfile);
-              assert.include(result.stdout, 'PATH setup already present');
+              assert.include(result.stdout, 'PATH entry already present; activation not verified.');
               assert.notInclude(result.stdout, 'Add this PATH line');
             } else {
               expectedProfile = contents;
@@ -1793,7 +1793,7 @@ system_sudo=fixture_sudo
     it(`captures and opens after first-backup acceptance ${JSON.stringify(answer)}`, () => {
       const result = run('y\ny\n', {}, home, '', answer);
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Run your first backup and open its GitHub destination? [Y/n]');
+      assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
       assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
     });
   }
@@ -1821,7 +1821,7 @@ system_sudo=fixture_sudo
     const result = run('y\ny\n', {}, home, '', 'maybe\nn\n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Please enter y or n.');
-    assert.equal(result.stdout.split('Run your first backup and open its GitHub destination?').length - 1, 2);
+    assert.equal(result.stdout.split('Run a backup now and open its GitHub destination?').length - 1, 2);
     assert.notInclude(readLog(), 'ballin:');
   });
   it('stops after SIGINT at the first-backup prompt without capture or open', async () => {
@@ -1835,7 +1835,7 @@ system_sudo=fixture_sudo
     let interrupted = false;
     child.stdout.on('data', (data: Buffer) => {
       output += data.toString();
-      if (!interrupted && output.includes('Run your first backup and open its GitHub destination? [Y/n]')) {
+      if (!interrupted && output.includes('Run a backup now and open its GitHub destination? [Y/n]')) {
         interrupted = true;
         child.kill('SIGINT');
       }
@@ -1968,7 +1968,7 @@ system_sudo=fixture_sudo
       assert.include(result.stdout, `PATH setup for ${profile}`);
       assert.equal(fs.readFileSync(profile, 'utf8'), initial + (initial ? '\n' : '') + pathLine() + '\n');
       const retry = runPathSetup(''); assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-      assert.include(retry.stdout, 'PATH setup already present');
+      assert.include(retry.stdout, 'PATH entry already present; activation not verified.');
       assert.notInclude(retry.stdout, 'Directory containing'); assert.notInclude(retry.stdout, 'Add this PATH line');
     });
   }
@@ -1986,7 +1986,7 @@ system_sudo=fixture_sudo
       const result = runPathSetup('\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'already mentions a setup directory');
       assert.include(result.stderr, 'Review its PATH entries before deciding whether to add');
-      assert.notInclude(result.stdout, 'PATH setup already present'); assert.notInclude(result.stdout, 'Add this PATH line');
+      assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
       assert.include(result.stderr, pathLine());
       assert.equal(fs.readFileSync(profile, 'utf8'), contents); assert.isFalse(fs.existsSync(path.join(root, 'startup-ran')));
     });
@@ -2009,7 +2009,7 @@ system_sudo=fixture_sudo
     const result = runPathSetup('bashrc\ny\n', { SHELL: '/bin/bash' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Which Bash startup file'); assert.include(result.stderr, 'already mentions a setup directory');
-    assert.notInclude(result.stdout, 'PATH setup already present'); assert.notInclude(result.stdout, 'Add this PATH line');
+    assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
     assert.equal(fs.readFileSync(profile, 'utf8'), contents);
   });
   it('permits an explicit custom target when the default directory needs manual review', () => {
@@ -2089,8 +2089,8 @@ system_sudo=fixture_sudo
         assert.isFalse(fs.existsSync(sentinel));
         const retry = run('', { SHELL: '/bin/' + shell });
         assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-        assert.include(retry.stdout, 'already present');
-        assert.include(retry.stdout, 'Its activation was not checked.');
+        assert.include(retry.stdout, 'PATH entry already present; activation not verified.');
+        assert.notInclude(retry.stdout, 'which startup file your terminal reads');
         assert.notInclude(retry.stdout, 'Add this PATH line?');
         assert.equal(fs.readFileSync(profile, 'utf8'), contents + '\n' + pathLine() + '\n');
         assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
@@ -2108,8 +2108,8 @@ system_sudo=fixture_sudo
         fs.writeFileSync(profile, contents);
         const result = run('y\n', { SHELL: '/bin/' + shell });
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.include(result.stdout, 'already present');
-        assert.include(result.stdout, 'Its activation was not checked.');
+        assert.include(result.stdout, 'PATH entry already present; activation not verified.');
+        assert.notInclude(result.stdout, 'which startup file your terminal reads');
         assert.notInclude(result.stdout, 'Add this PATH line?');
         assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       }
@@ -2338,7 +2338,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         }[choice];
         const result = runSandbox(sandbox, ['quickstart'], 'login\ny\ny\nn\nlogin\nn\n\n' + answers);
         assert.equal(result.status, ['setup-cancelled', 'eof'].includes(choice) ? 1 : 0, result.stdout + result.stderr);
-        assert.include(result.stdout, 'Run your first backup and open its GitHub destination? [Y/n]');
+        assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
         assert.include(result.stdout, 'Backup setup skipped.');
         const setupCount = result.stdout.split('Set up optional private backups now? [y/N]').length - 1;
         assert.equal(setupCount, ['skip', 'eof'].includes(choice) ? 1 : 2, result.stdout);
@@ -2348,6 +2348,8 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         const publishes = state.requests.filter((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish'));
         const opens = state.requests.filter((request: { endpoint?: string }) => request.endpoint === 'open');
         if (choice === 'capture') {
+          assert.include(result.stdout, "\n\n🏀 let's ball...\n");
+          assert.include(result.stdout, '\n\nOpened https://github.com/fixture-user/ballin-backups in your browser.\n');
           assert.include(result.stdout, 'Selected GitHub.com account:');
           assert.include(result.stdout, 'Confirm this destination and source selection? [y/N]');
           assert.equal(config.backup.includeSensitive, 'false');
@@ -2425,7 +2427,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.include(fresh.stdout, 'complete -F _ballin_completion ballin');
       const retry = runSandbox(sandbox, ['quickstart'], 'login\n\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-      assert.include(retry.stdout, 'PATH setup already present');
+      assert.include(retry.stdout, 'PATH entry already present; activation not verified.');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       const managedGit = path.join(sandbox.home, '.local/share/ballin-quickstart/bin/git');
       fs.unlinkSync(managedGit);
