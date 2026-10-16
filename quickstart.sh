@@ -363,6 +363,7 @@ profile_unchanged() {
 
 # Recognize common literal PATH exports without sourcing arbitrary startup code.
 profile_has_path() {
+  # shellcheck disable=SC2016 # Dollar signs belong to the JavaScript PATH parser.
   "$node_tool" -e '
     const fs = require("fs"), path = require("path");
     const [file, exact, quick, commands, home, snapshot, metadata] = process.argv.slice(1);
