@@ -200,6 +200,7 @@ case "$name" in
     mkdir -p "$4/$folder/bin"
     cp "$FAKE_ROOT/fake-tool" "$4/$folder/bin/gh" ;;
   install.sh)
+    printf "🏀 let's ball...\\n"
     [[ "\${FAKE_INSTALL_FAIL:-0}" != 1 ]] || exit 1
     if [[ "\${FAKE_CHECK_INSTALL_CWD:-0}" == 1 ]]; then
       (cd "$FAKE_ROOT"; node -p fixture >/dev/null; git --version >/dev/null; gh --version >/dev/null)
@@ -1965,10 +1966,10 @@ system_sudo=fixture_sudo
       const result = run(input, overrides, home, '', backupInput);
       const succeeds = !['install-failed', 'backup-failed', 'open-failed', 'cancelled'].includes(scenario);
       assert.equal(result.status, succeeds ? 0 : 1, result.stdout + result.stderr);
-      const guidance = 'Open a new Terminal to run `ballin`.';
+      const guidance = 'Setup complete! Open a new Terminal to run `ballin`.';
       const expected = succeeds && !['install-declined', 'path-incomplete'].includes(scenario);
       assert.equal(result.stdout.split(guidance).length - 1, expected ? 1 : 0, result.stdout);
-      if (expected) assert.match(result.stdout, /\n\nOpen a new Terminal to run `ballin`\.\n$/u);
+      if (expected) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
       assert.notInclude(result.stdout, 'Tools are ready');
       assert.notInclude(result.stdout, 'Continue setup here');
       if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
@@ -1976,6 +1977,38 @@ system_sudo=fixture_sudo
         assert.include(result.stderr, 'Manual PATH command:');
         assert.include(result.stderr, 'rerun this quickstart to retry');
       }
+    });
+  }
+  for (const preceding of ['quiet', 'prerequisites', 'PATH consent', 'PATH warning', 'authentication', 'sign-in skipped']) {
+    it(`separates installer output only after Quickstart output: ${preceding}`, () => {
+      const installed = run();
+      assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+      const overrides: NodeJS.ProcessEnv = {};
+      let input = '';
+      if (preceding === 'prerequisites') { overrides.FAKE_GIT = 'missing'; input = 'y\n\n'; }
+      if (preceding === 'PATH consent') { fs.unlinkSync(path.join(home, '.zshrc')); input = 'y\n'; }
+      if (preceding === 'PATH warning') overrides.SHELL = '/bin/sh';
+      if (preceding === 'authentication' || preceding === 'sign-in skipped') {
+        overrides.FAKE_AUTH = 'missing';
+        input = preceding === 'authentication' ? 'y\ndevice-code\n' : 'n\n';
+      }
+      // Merge streams so warnings participate in the visible output order.
+      const result = run(input, overrides, home, 'exec 2>&1', 'n\n');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const banner = "🏀 let's ball...\n";
+      if (preceding === 'quiet') assert.isTrue(result.stdout.startsWith(banner), result.stdout);
+      else {
+        const previous = {
+          prerequisites: 'Missing prerequisites:', 'PATH consent': 'Add this PATH line?',
+          'PATH warning': 'Persistent PATH setup incomplete:', authentication: 'Native login prompt:',
+          'sign-in skipped': 'GitHub CLI sign-in: Skipped.',
+        }[preceding];
+        assert.include(result.stdout, previous);
+        assert.isBelow(result.stdout.indexOf(previous), result.stdout.indexOf(banner));
+        const separator = ['prerequisites', 'authentication'].includes(preceding) ? '\n' : '\n\n';
+        assert.include(result.stdout, separator + banner);
+      }
+      assert.equal(result.stdout.split('Setup complete!').length - 1, preceding === 'PATH warning' ? 0 : 1);
     });
   }
   const pathLine = () => `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
@@ -2066,7 +2099,7 @@ system_sudo=fixture_sudo
       const installed = run(input ? 'n\ny\n' : '', { FAKE_AUTH: 'missing' }, home, '', '');
       assert.equal(installed.status, 0, installed.stdout + installed.stderr);
       assert.include(installed.stdout, 'GitHub CLI sign-in: Skipped');
-      assert.equal(installed.stdout.split('Open a new Terminal to run `ballin`.').length - 1, fs.existsSync(path.join(home, '.ballin-scripts/bin/ballin')) ? 1 : 0);
+      assert.equal(installed.stdout.split('Setup complete! Open a new Terminal to run `ballin`.').length - 1, fs.existsSync(path.join(home, '.ballin-scripts/bin/ballin')) ? 1 : 0);
       assert.notInclude(readLog(), 'gh:auth login'); assert.notInclude(readLog(), 'ballin:backup');
     });
   }
@@ -2371,8 +2404,8 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.equal(result.status, ['setup-cancelled', 'eof'].includes(choice) ? 1 : 0, result.stdout + result.stderr);
         assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
         assert.include(result.stdout, 'Backup setup skipped.');
-        assert.equal(result.stdout.split('Open a new Terminal to run `ballin`.').length - 1, result.status === 0 ? 1 : 0);
-        if (result.status === 0) assert.match(result.stdout, /\n\nOpen a new Terminal to run `ballin`\.\n$/u);
+        assert.equal(result.stdout.split('Setup complete! Open a new Terminal to run `ballin`.').length - 1, result.status === 0 ? 1 : 0);
+        if (result.status === 0) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
         const setupCount = result.stdout.split('Set up optional private backups now? [y/N]').length - 1;
         assert.equal(setupCount, ['skip', 'eof'].includes(choice) ? 1 : 2, result.stdout);
         assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
@@ -2393,6 +2426,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           assert.isAbove(state.requests.indexOf(opens[0]), state.requests.indexOf(publishes[1]));
           const retry = runSandbox(sandbox, ['quickstart'], 'login\nn\n');
           assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+          assert.isTrue(retry.stdout.startsWith("🏀 let's ball...\n"), retry.stdout);
           const after = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
           assert.lengthOf(after.requests.filter((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish')), 2);
           assert.lengthOf(after.requests.filter((request: { endpoint?: string }) => request.endpoint === 'open'), 1);
@@ -2435,8 +2469,8 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'PATH line added');
       assert.include(result.stdout, 'Shell completion enabled.');
-      assert.equal(result.stdout.split('Open a new Terminal to run `ballin`.').length - 1, 1);
-      assert.match(result.stdout, /Opened [^\n]+\n\nOpen a new Terminal to run `ballin`\.\n$/u);
+      assert.equal(result.stdout.split('Setup complete! Open a new Terminal to run `ballin`.').length - 1, 1);
+      assert.match(result.stdout, /Opened [^\n]+\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
       assert.include(result.stdout, 'Optional backups use a private GitHub repository');
       assert.include(result.stdout, 'create');
       assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
