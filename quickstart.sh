@@ -33,10 +33,12 @@ confirm_first_backup() {
   local answer
   while :; do
     printf '\nRun a backup now and open its GitHub destination? [Y/n] '
-    IFS= read -r answer || fail 'First backup cancelled; Ballin remains installed.'
+    IFS= read -r answer || fail 'Backup cancelled; Ballin remains installed.'
     case "$answer" in
       ''|y|Y) return 0 ;;
-      n|N) return 1 ;;
+      n|N)
+        if ! "$path_setup_complete"; then printf '\n'; fi
+        return 1 ;;
       *) printf 'Please enter y or n.\n' ;;
     esac
   done
