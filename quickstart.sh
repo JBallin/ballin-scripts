@@ -36,9 +36,7 @@ confirm_first_backup() {
     IFS= read -r answer || fail 'Backup cancelled; Ballin remains installed.'
     case "$answer" in
       ''|y|Y) return 0 ;;
-      n|N)
-        if ! "$path_setup_complete"; then printf '\n'; fi
-        return 1 ;;
+      n|N) return 1 ;;
       *) printf 'Please enter y or n.\n' ;;
     esac
   done
@@ -676,6 +674,8 @@ main() {
   fi
   if "$path_setup_complete"; then
     printf "\nSetup complete! Open a new Terminal to run \`ballin\`.\n"
+  else
+    printf '\nBallin is installed, but PATH setup is incomplete. Follow the PATH instructions above, or rerun Quickstart to retry.\n'
   fi
 }
 

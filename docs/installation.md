@@ -172,6 +172,7 @@ file and place the line where it executes.
 Skipped, declined, or unsafe edits leave the file untouched and report
 **persistent PATH setup incomplete**. Setup can continue using the helper's
 PATH; edit the file manually or rerun the quickstart to retry.
+Quickstart repeats the reminder at the end if PATH setup remains incomplete.
 
 The helper reuses GitHub CLI authentication or offers to launch browser sign-in.
 Choose No to install Ballin for maintenance and defer backup setup. Later, sign

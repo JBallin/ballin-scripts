@@ -22,6 +22,8 @@ alongside other tools.
 > [!TIP]
 > Want guided setup? The interactive [quickstart guide](docs/quickstart.md) reuses
 > compatible tools and helps install missing prerequisites. 🚀
+> If PATH setup is incomplete, follow Quickstart's final reminder before using
+> `ballin`.
 
 Start with Git and Node.js 24.12 or newer on your `PATH`. Homebrew is optional;
 backups also require [GitHub CLI](https://cli.github.com/) authenticated to your
