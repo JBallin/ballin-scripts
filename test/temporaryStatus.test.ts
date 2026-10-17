@@ -3,7 +3,7 @@ const tty = require('tty');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 const { withTemporaryStatus, clearTemporaryStatus } = require('../commands/temporaryStatus.ts');
-const { writeStdoutLine, writeStderrLine, runCommand } = require('../commands/commandHelpers.ts');
+const { writeStdoutLine, writeStderrLine } = require('../commands/commandHelpers.ts');
 
 describe('temporary terminal status', () => {
   let output: string; let restore: () => void;
@@ -50,13 +50,30 @@ describe('temporary terminal status', () => {
     }
   });
   it('clears before inherited child output without redrawing over diagnostics', () => {
-    withTemporaryStatus('Working...', () => {
-      runCommand(process.execPath, ['-e', 'process.stderr.write("fixture diagnostic without newline")'], { stdio: 'inherit' });
-      assert.equal(output, 'Working...\r\x1b[2K');
-      runCommand(process.execPath, ['-e', ''], { stdio: ['ignore', 'pipe', 'inherit'] });
-      assert.equal(output, 'Working...\r\x1b[2K');
-    });
-    assert.equal(output, 'Working...\r\x1b[2K');
+    const result = spawnSync(process.execPath, ['-e', `
+      const assert = require('node:assert/strict');
+      const fs = require('fs');
+      require('tty').isatty = (fd) => fd === 0;
+      for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
+      let output = '';
+      const write = fs.writeSync;
+      fs.writeSync = (fd, text) => { assert.equal(fd, 2); output += text; return write(fd, text); };
+      const check = (child) => {
+        assert.ifError(child.error); assert.equal(child.status, 0); assert.equal(child.signal, null);
+      };
+      const { withTemporaryStatus } = require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))});
+      const { runCommand } = require(${JSON.stringify(require.resolve('../commands/commandHelpers.ts'))});
+      withTemporaryStatus('Working...', () => {
+        check(runCommand(process.execPath, ['-e', 'process.stderr.write("fixture diagnostic without newline")'], { stdio: 'inherit' }));
+        assert.equal(output, 'Working...\\r\\x1b[2K');
+        check(runCommand(process.execPath, ['-e', ''], { stdio: ['ignore', 'pipe', 'inherit'] }));
+        assert.equal(output, 'Working...\\r\\x1b[2K');
+      });
+      assert.equal(output, 'Working...\\r\\x1b[2K');
+    `], { encoding: 'utf8', env: testChildEnvironment({ TERM: 'xterm' }) });
+    assert.isUndefined(result.error); assert.equal(result.status, 0); assert.isNull(result.signal);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'Working...\r\x1b[2Kfixture diagnostic without newline');
   });
   it('preserves an inherited diagnostic without a trailing newline', () => {
     const result = spawnSync(process.execPath, ['-e', `
