@@ -13,6 +13,8 @@ describe('beginner quickstart bootstrap', function() {
   let systemNode: string;
   let log: string;
   const source = path.resolve(__dirname, '../quickstart.sh');
+  const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
+  const terminalGuidance = '\nSetup complete! Open a new Terminal to run `ballin`.\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const linkFake = (name: string, destination = tools): void => fs.symlinkSync(path.join(root, 'fake-tool'), path.join(destination, name));
   const runCopiedCommand = (shell: string, input: string, overrides: NodeJS.ProcessEnv = {}) => {
@@ -1796,6 +1798,7 @@ system_sudo=fixture_sudo
       const result = run('y\ny\n', {}, home, '', answer);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
+      assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + '\n' + terminalGuidance);
       assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
     });
   }
@@ -1808,6 +1811,8 @@ system_sudo=fixture_sudo
         assert.isTrue(fs.existsSync(path.join(home, '.ballin-scripts/ballin.config.json')));
         assert.notInclude(readLog(), 'ballin:');
         assert.notInclude(result.stderr, 'not configured');
+        // Piped answers have no terminal echo; completion supplies the only newline.
+        assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + terminalGuidance);
       });
     }
   }
@@ -1824,6 +1829,8 @@ system_sudo=fixture_sudo
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Please enter y or n.');
     assert.equal(result.stdout.split('Run a backup now and open its GitHub destination?').length - 1, 2);
+    assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)),
+      firstBackupPrompt + 'Please enter y or n.\n' + firstBackupPrompt + terminalGuidance);
     assert.notInclude(readLog(), 'ballin:');
   });
   it('stops after SIGINT at the first-backup prompt without capture or open', async () => {
@@ -1969,7 +1976,9 @@ system_sudo=fixture_sudo
       const guidance = 'Setup complete! Open a new Terminal to run `ballin`.';
       const expected = succeeds && !['install-declined', 'path-incomplete'].includes(scenario);
       assert.equal(result.stdout.split(guidance).length - 1, expected ? 1 : 0, result.stdout);
-      if (expected) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
+      if (scenario === 'backup-declined') {
+        assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + terminalGuidance);
+      } else if (expected) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
       assert.notInclude(result.stdout, 'Tools are ready');
       assert.notInclude(result.stdout, 'Continue setup here');
       if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
@@ -2405,7 +2414,11 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
         assert.include(result.stdout, 'Backup setup skipped.');
         assert.equal(result.stdout.split('Setup complete! Open a new Terminal to run `ballin`.').length - 1, result.status === 0 ? 1 : 0);
-        if (result.status === 0) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
+        if (choice === 'skip') {
+          const prompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
+          assert.equal(result.stdout.slice(result.stdout.indexOf(prompt)),
+            prompt + '\nSetup complete! Open a new Terminal to run `ballin`.\n');
+        } else if (result.status === 0) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
         const setupCount = result.stdout.split('Set up optional private backups now? [y/N]').length - 1;
         assert.equal(setupCount, ['skip', 'eof'].includes(choice) ? 1 : 2, result.stdout);
         assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());

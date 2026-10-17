@@ -36,7 +36,7 @@ confirm_first_backup() {
     IFS= read -r answer || fail 'First backup cancelled; Ballin remains installed.'
     case "$answer" in
       ''|y|Y) return 0 ;;
-      n|N) printf '\n'; return 1 ;;
+      n|N) return 1 ;;
       *) printf 'Please enter y or n.\n' ;;
     esac
   done

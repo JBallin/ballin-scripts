@@ -57,6 +57,7 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.equal(result.stdout.split(terminalGuidance).length - 1, 1);
       assert.isBelow(result.stdout.indexOf('Backup setup complete.'), result.stdout.indexOf(firstBackupPrompt));
       assert.isBelow(result.stdout.indexOf(firstBackupPrompt), result.stdout.indexOf(terminalGuidance));
+      assert.include(result.stdout.replace(/\r\n/gu, '\n'), firstBackupPrompt + 'n\n\n' + terminalGuidance + '\n');
       assert.notInclude(result.stdout, 'Continue setup here');
       assert.notInclude(result.stdout, 'Tools are ready for this setup.');
       assert.notInclude(result.stdout, 'PATH line added');
