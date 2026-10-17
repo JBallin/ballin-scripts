@@ -142,7 +142,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
         } finally { fs.closeSync(fd); }
       } catch { /* Uncertain profiles still use the normal selection and inspection path. */ }
       if (enabled) {
-        write('Shell completion is already enabled. Continue setup here; new terminals will load it.');
+        write('Shell completion is already enabled.');
         return;
       }
     }
@@ -155,8 +155,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       fallback(); return;
     }
     const appended = appendActivation(target);
-    write(appended ? 'Shell completion enabled. Continue setup here; open a new terminal afterward.'
-      : 'Shell completion is already enabled. Continue setup here; open a new terminal afterward.');
+    write(appended ? 'Shell completion enabled.' : 'Shell completion is already enabled.');
   } catch (error) {
     if (error instanceof CompletionProfileError) write(error.message);
     write('Shell completion setup could not finish. Ballin remains installed.');

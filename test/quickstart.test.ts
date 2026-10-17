@@ -213,6 +213,7 @@ case "$name" in
       if [[ "\${FAKE_SKIP_BACKUP:-0}" == 1 ]]; then printf '{"backup":{}}\\n' > "$repo/ballin.config.json"
       else printf '{"backup":{"repository":true}}\\n' > "$repo/ballin.config.json"; fi
     fi
+    printf 'Installed fixture.\\n'
     cp "$FAKE_ROOT/fake-tool" "$repo/bin/ballin"
     printf '%s\\n' 'module.exports = { configuredBackupDestination: c => ({ kind: c.backup.repository ? "repository" : "unconfigured" }) };' > "$repo/commands/backup_config.ts" ;;
   ballin)
@@ -220,13 +221,13 @@ case "$name" in
       'backup setup')
         printf 'Native backup setup prompt: '; IFS= read -r answer
         [[ "\${FAKE_SETUP_FAIL:-0}" != 1 ]] || exit 1
-        [[ "$answer" == y ]] || exit 0
+        [[ "$answer" == y ]] || { printf 'Backup setup skipped.\\n'; exit 0; }
         printf '{"backup":{"repository":true}}\\n' > "$HOME/.ballin-scripts/ballin.config.json" ;;
       backup)
         [[ "\${FAKE_BACKUP_FAIL:-0}" != 1 ]] || exit 1
         if [[ "\${FAKE_CHECK_NPM_COLLECTOR:-0}" == 1 ]]; then npm list -g --depth=0 >/dev/null; fi
         if ! grep -q '"repository":true' "$HOME/.ballin-scripts/ballin.config.json"; then printf 'Backup is not configured\\n' >&2; exit 1; fi ;;
-      'backup open') ;;
+      'backup open') [[ "\${FAKE_OPEN_FAIL:-0}" != 1 ]] || exit 1 ;;
       *) exit 97 ;;
     esac ;;
   *) exit 97 ;;
@@ -695,11 +696,11 @@ system_sudo=fixture_sudo
             assert.lengthOf(contents.split('\n').filter((line: string) => line.startsWith('export PATH=')), 1);
             if (expectedProfile) {
               assert.equal(contents, expectedProfile);
-              assert.include(result.stdout, 'PATH entry already present; activation not verified.');
+              assert.notInclude(result.stdout, 'PATH entry already present');
               assert.notInclude(result.stdout, 'Add this PATH line');
             } else {
               expectedProfile = contents;
-              assert.include(result.stdout, 'PATH line added');
+              assert.notInclude(result.stdout, 'PATH line added');
             }
           }
           const fresh = spawnSync('/bin/zsh', ['-f', '-c',
@@ -1948,6 +1949,35 @@ system_sudo=fixture_sudo
       });
     }
   }
+  for (const scenario of ['capture', 'backup-declined', 'setup-skipped', 'sign-in-skipped', 'install-declined', 'install-failed', 'backup-failed', 'open-failed', 'cancelled', 'path-incomplete']) {
+    it(`prints final terminal guidance only after successful Quickstart: ${scenario}`, () => {
+      const overrides: NodeJS.ProcessEnv = {
+        FAKE_SKIP_BACKUP: scenario === 'setup-skipped' ? '1' : '0',
+        FAKE_AUTH: scenario === 'sign-in-skipped' ? 'missing' : 'ready',
+        FAKE_INSTALL_FAIL: scenario === 'install-failed' ? '1' : '0',
+        FAKE_BACKUP_FAIL: scenario === 'backup-failed' ? '1' : '0',
+        FAKE_OPEN_FAIL: scenario === 'open-failed' ? '1' : '0',
+      };
+      const input = scenario === 'sign-in-skipped' ? 'y\nn\ny\n'
+        : scenario === 'install-declined' ? 'y\nn\n'
+        : scenario === 'path-incomplete' ? 'n\ny\n' : 'y\ny\n';
+      const backupInput = scenario === 'backup-declined' ? 'n\n' : scenario === 'setup-skipped' ? '\nn\n' : scenario === 'cancelled' ? '' : '\n';
+      const result = run(input, overrides, home, '', backupInput);
+      const succeeds = !['install-failed', 'backup-failed', 'open-failed', 'cancelled'].includes(scenario);
+      assert.equal(result.status, succeeds ? 0 : 1, result.stdout + result.stderr);
+      const guidance = 'Open a new Terminal to run `ballin`.';
+      const expected = succeeds && !['install-declined', 'path-incomplete'].includes(scenario);
+      assert.equal(result.stdout.split(guidance).length - 1, expected ? 1 : 0, result.stdout);
+      if (expected) assert.match(result.stdout, /\n\nOpen a new Terminal to run `ballin`\.\n$/u);
+      assert.notInclude(result.stdout, 'Tools are ready');
+      assert.notInclude(result.stdout, 'Continue setup here');
+      if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+      if (scenario === 'path-incomplete') {
+        assert.include(result.stderr, 'Manual PATH command:');
+        assert.include(result.stderr, 'rerun this quickstart to retry');
+      }
+    });
+  }
   const pathLine = () => `export PATH='${path.join(home, '.local/share/ballin-quickstart/bin')}':$PATH:'${path.join(home, '.local/bin')}'`;
   const runPathSetup = (input: string, overrides: NodeJS.ProcessEnv = {}) => spawnSync('/bin/bash', ['-c', `
     source "$FAKE_SOURCE"
@@ -1968,7 +1998,7 @@ system_sudo=fixture_sudo
       assert.include(result.stdout, `PATH setup for ${profile}`);
       assert.equal(fs.readFileSync(profile, 'utf8'), initial + (initial ? '\n' : '') + pathLine() + '\n');
       const retry = runPathSetup(''); assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-      assert.include(retry.stdout, 'PATH entry already present; activation not verified.');
+      assert.notInclude(retry.stdout, 'PATH entry already present');
       assert.notInclude(retry.stdout, 'Directory containing'); assert.notInclude(retry.stdout, 'Add this PATH line');
     });
   }
@@ -2036,6 +2066,7 @@ system_sudo=fixture_sudo
       const installed = run(input ? 'n\ny\n' : '', { FAKE_AUTH: 'missing' }, home, '', '');
       assert.equal(installed.status, 0, installed.stdout + installed.stderr);
       assert.include(installed.stdout, 'GitHub CLI sign-in: Skipped');
+      assert.equal(installed.stdout.split('Open a new Terminal to run `ballin`.').length - 1, fs.existsSync(path.join(home, '.ballin-scripts/bin/ballin')) ? 1 : 0);
       assert.notInclude(readLog(), 'gh:auth login'); assert.notInclude(readLog(), 'ballin:backup');
     });
   }
@@ -2083,13 +2114,13 @@ system_sudo=fixture_sudo
         assert.equal(result.status, 0, form + result.stdout + result.stderr);
         assert.equal(fs.readFileSync(profile, 'utf8'), contents + '\n' + pathLine() + '\n');
         assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
-        assert.include(result.stdout, `PATH line added to ${profile}. Continue setup here; open a new Terminal afterward.`);
-        assert.include(result.stdout, 'In your original Terminal, you can also run the PATH command shown above');
-        assert.include(result.stdout, 'Shell PATH settings apply to future terminals.');
+        assert.notInclude(result.stdout, 'PATH line added');
+        assert.notInclude(result.stdout, 'In your original Terminal');
+        assert.notInclude(result.stdout, 'Tools are ready');
         assert.isFalse(fs.existsSync(sentinel));
         const retry = run('', { SHELL: '/bin/' + shell });
         assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-        assert.include(retry.stdout, 'PATH entry already present; activation not verified.');
+        assert.notInclude(retry.stdout, 'PATH entry already present');
         assert.notInclude(retry.stdout, 'which startup file your terminal reads');
         assert.notInclude(retry.stdout, 'Add this PATH line?');
         assert.equal(fs.readFileSync(profile, 'utf8'), contents + '\n' + pathLine() + '\n');
@@ -2108,7 +2139,7 @@ system_sudo=fixture_sudo
         fs.writeFileSync(profile, contents);
         const result = run('y\n', { SHELL: '/bin/' + shell });
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.include(result.stdout, 'PATH entry already present; activation not verified.');
+        assert.notInclude(result.stdout, 'PATH entry already present');
         assert.notInclude(result.stdout, 'which startup file your terminal reads');
         assert.notInclude(result.stdout, 'Add this PATH line?');
         assert.equal(fs.readFileSync(profile, 'utf8'), contents);
@@ -2170,7 +2201,7 @@ system_sudo=fixture_sudo
     assert.include(readLog(), 'ballin:backup open');
     const retry = run('y\n');
     assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-    assert.include(retry.stdout, 'PATH line added');
+    assert.notInclude(retry.stdout, 'PATH line added');
     const again = run('');
     assert.equal(again.status, 0, again.stdout + again.stderr);
     assert.equal(fs.readFileSync(profile, 'utf8').split(pathLine()).length, 2);
@@ -2340,6 +2371,8 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.equal(result.status, ['setup-cancelled', 'eof'].includes(choice) ? 1 : 0, result.stdout + result.stderr);
         assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
         assert.include(result.stdout, 'Backup setup skipped.');
+        assert.equal(result.stdout.split('Open a new Terminal to run `ballin`.').length - 1, result.status === 0 ? 1 : 0);
+        if (result.status === 0) assert.match(result.stdout, /\n\nOpen a new Terminal to run `ballin`\.\n$/u);
         const setupCount = result.stdout.split('Set up optional private backups now? [y/N]').length - 1;
         assert.equal(setupCount, ['skip', 'eof'].includes(choice) ? 1 : 2, result.stdout);
         assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
@@ -2400,8 +2433,10 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       fs.writeFileSync(profile, '# Synthetic Bash login settings\n', { mode: 0o640 });
       const result = runSandbox(sandbox, ['quickstart'], 'login\ny\ny\nn\nlogin\ny\ny\ncreate\n\ny\ny\nn\n\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, `PATH line added to ${profile}. Continue setup here; open a new Terminal afterward.`);
+      assert.notInclude(result.stdout, 'PATH line added');
       assert.include(result.stdout, 'Shell completion enabled.');
+      assert.equal(result.stdout.split('Open a new Terminal to run `ballin`.').length - 1, 1);
+      assert.match(result.stdout, /Opened [^\n]+\n\nOpen a new Terminal to run `ballin`\.\n$/u);
       assert.include(result.stdout, 'Optional backups use a private GitHub repository');
       assert.include(result.stdout, 'create');
       assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
@@ -2427,7 +2462,8 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.include(fresh.stdout, 'complete -F _ballin_completion ballin');
       const retry = runSandbox(sandbox, ['quickstart'], 'login\n\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-      assert.include(retry.stdout, 'PATH entry already present; activation not verified.');
+      assert.notInclude(retry.stdout, 'PATH entry already present');
+      assert.include(retry.stdout, '\n\nValidated private backup:');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       const managedGit = path.join(sandbox.home, '.local/share/ballin-quickstart/bin/git');
       fs.unlinkSync(managedGit);

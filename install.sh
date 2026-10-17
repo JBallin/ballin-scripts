@@ -107,6 +107,7 @@ if [ "$repo_existed" = true ]; then
 fi
 
 ################################# TYPED SETUP ##################################
+printf '\n'
 if [ ! -f "$repo_dir/commands/install_setup.ts" ]; then
   print_stale_checkout_guidance
   exit 1
@@ -123,4 +124,9 @@ fi
 setup_status=$?
 if [ "$setup_status" -ne 0 ]; then
   exit "$setup_status"
+fi
+
+# Quickstart owns the final guidance after its optional backup/browser work.
+if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then
+  printf "\nOpen a new Terminal to run \`ballin\`.\n"
 fi

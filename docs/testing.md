@@ -11,6 +11,9 @@ validation. Keep the shared Node script definitions aligned when changing them.
 Both paths use the shared Mocha command in `test:unit`. The
 [Mocha configuration](../.mocharc.js) uses two workers when Node reports at least
 four available CPUs and runs serially on smaller hosts.
+For the default full run with two workers, it queues the repository backup
+lifecycle file first to reduce the final-file tail. Explicit Mocha arguments
+and `MOCHA_OPTIONS` retain native selection and ordering; serial runs are unchanged.
 
 The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;

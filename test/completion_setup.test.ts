@@ -34,12 +34,12 @@ describe('optional completion setup', () => {
     offer([]);
     assert.isFalse(fs.existsSync(profile));
   });
-  it('creates only the standard file privately and reports activation/reload', () => {
-    assert.include(offer(['y']), 'Shell completion enabled');
+  it('creates only the standard file privately and reports concise completion status', () => {
+    assert.equal(offer(['y']).split('\n').at(-1), 'Shell completion enabled.');
     const profile = path.join(home, '.zshrc');
     assert.strictEqual(fs.readFileSync(profile, 'utf8'), `${activationLine('zsh')}\n`);
     assert.strictEqual(fs.statSync(profile).mode & 0o777, 0o600);
-    assert.include(offer(['Y']), 'already enabled');
+    assert.equal(offer(['Y']), 'Shell completion is already enabled.');
     assert.strictEqual(fs.readFileSync(profile, 'utf8'), `${activationLine('zsh')}\n`);
   });
   for (const contents of ['', 'export EDITOR=vim', 'export EDITOR=vim\n', 'one\r\ntwo', 'one\r\ntwo\r\n']) {

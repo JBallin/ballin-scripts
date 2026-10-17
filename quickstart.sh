@@ -36,7 +36,7 @@ confirm_first_backup() {
     IFS= read -r answer || fail 'First backup cancelled; Ballin remains installed.'
     case "$answer" in
       ''|y|Y) return 0 ;;
-      n|N) return 1 ;;
+      n|N) printf '\n'; return 1 ;;
       *) printf 'Please enter y or n.\n' ;;
     esac
   done
@@ -336,6 +336,7 @@ install_gh() {
 }
 
 path_incomplete() {
+  path_setup_complete=false
   printf '\nPersistent PATH setup incomplete: %s\n' "$1" >&2
   printf 'The startup file was left unchanged. Setup can continue with the helper PATH.\n' >&2
   printf 'Manual PATH command:\n%s\n' "${line:-}" >&2
@@ -395,11 +396,6 @@ profile_has_path() {
   ' "$1" "$line" "$quick_bin" "$command_path" "$HOME" "$scratch/profile-original" "$scratch/profile-metadata" 2>/dev/null
 }
 
-path_ready() {
-  printf 'PATH entry already present; activation not verified.\n'
-  printf 'Continue setup here; open a new Terminal afterward.\n'
-}
-
 check_existing_path() {
   local status=0
   profile_has_path "$profile" || status=$?
@@ -412,9 +408,8 @@ check_existing_path() {
   fi
   if [[ "$status" == 2 ]]; then
     path_incomplete "$profile already mentions a setup directory. Review its PATH entries before deciding whether to add the command below."
-  else
-    path_ready
   fi
+  return 0
 }
 
 configure_path() {
@@ -422,7 +417,6 @@ configure_path() {
   escaped=${quick_bin//\'/\'\\\'\'}
   command_escaped=${command_path//\'/\'\\\'\'}
   line="export PATH='$escaped':\$PATH:'$command_escaped'"
-  printf '\nTools are ready for this setup. Shell PATH settings apply to future terminals.\n'
   profile_shell=${SHELL:-}
   if [[ "$profile_shell" != /* || ! -f "$profile_shell" || ! -x "$profile_shell" ]]; then
     path_incomplete 'Select an executable Bash or zsh in SHELL before retrying.'; return
@@ -533,12 +527,11 @@ configure_path() {
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
   if ! mv "$profile_temp" "$profile"; then path_incomplete 'The startup file could not be replaced.'; return; fi
   profile_temp=''
-  printf 'PATH line added to %s. Continue setup here; open a new Terminal afterward.\n' "$profile"
-  printf 'In your original Terminal, you can also run the PATH command shown above after setup.\n'
+  printf '\n'
 }
 
 main() {
-  local exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true
+  local exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -658,19 +651,23 @@ main() {
   download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh' "$scratch/install.sh"
   # Keep startup hooks from replacing the tools qualified above.
   printf '\n'
-  BALLIN_SKIP_BACKUP_SETUP="$skip_backup_setup" BASH_ENV='' bash "$scratch/install.sh"
+  BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_SKIP_BACKUP_SETUP="$skip_backup_setup" BASH_ENV='' bash "$scratch/install.sh"
   [[ -x "$repo/bin/ballin" ]] || return 0
-  [[ "$skip_backup_setup" == 0 ]] || return 0
-  confirm_first_backup || return 0
-  destination=$(backup_destination_kind "$repo")
-  if [[ "$destination" == unconfigured ]]; then
-    "$repo/bin/ballin" backup setup
+  if [[ "$skip_backup_setup" == 0 ]] && confirm_first_backup; then
     destination=$(backup_destination_kind "$repo")
-    [[ "$destination" != unconfigured ]] || return 0
+    if [[ "$destination" == unconfigured ]]; then
+      "$repo/bin/ballin" backup setup
+      destination=$(backup_destination_kind "$repo")
+    fi
+    if [[ "$destination" != unconfigured ]]; then
+      "$repo/bin/ballin" backup
+      printf '\n'
+      "$repo/bin/ballin" backup open
+    fi
   fi
-  "$repo/bin/ballin" backup
-  printf '\n'
-  "$repo/bin/ballin" backup open
+  if "$path_setup_complete"; then
+    printf "\nOpen a new Terminal to run \`ballin\`.\n"
+  fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

@@ -170,6 +170,29 @@ esac
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
+  for (const scenario of ['standalone', 'embedded', 'failure', 'declined', 'eof']) {
+    it(`ends installer output with terminal guidance only on standalone success: ${scenario}`, () => {
+      installBaseCommands();
+      const result = runInstall({
+        env: { BALLIN_DEFER_TERMINAL_GUIDANCE: scenario === 'embedded' ? '1' : '0', FAKE_SETUP_STATUS: scenario === 'failure' ? '7' : '0' },
+        input: scenario === 'declined' ? 'n\n' : scenario === 'eof' ? '' : 'y\n',
+      });
+      assert.equal(result.status, scenario === 'failure' ? 7 : 0, result.stdout + result.stderr);
+      const guidance = 'Open a new Terminal to run `ballin`.';
+      assert.equal(result.stdout.split(guidance).length - 1, scenario === 'standalone' ? 1 : 0);
+      if (scenario === 'standalone') assert.match(result.stdout, /\n\nOpen a new Terminal to run `ballin`\.\n$/u);
+    });
+  }
+  it('separates checkout/update output from the compact typed setup summary', () => {
+    installBaseCommands(); writeCurrentCheckout();
+    const node = path.join(toolDir, 'node');
+    fs.writeFileSync(node, fs.readFileSync(node, 'utf8').replace('exit "$FAKE_SETUP_STATUS"',
+      'printf "Validated private backup: https://github.com/fixture-user/ballin-backups\\nSensitive sources: excluded\\nAutomatic backup during update: disabled\\n"; exit "$FAKE_SETUP_STATUS"'));
+    const result = runInstall();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, '\n\nValidated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n');
+  });
+
   it('clones a missing checkout and delegates fresh setup to typed code', () => {
     installBaseCommands();
 

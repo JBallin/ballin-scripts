@@ -52,7 +52,14 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Shell completion enabled.');
       assert.include(result.stdout, 'Usage analytics: disabled (`analytics.enabled` unchanged at `false`).');
-      assert.include(result.stdout, 'Continue setup here; open a new Terminal afterward.');
+      const terminalGuidance = 'Open a new Terminal to run `ballin`.';
+      const firstBackupPrompt = 'Run a backup now and open its GitHub destination? [Y/n] ';
+      assert.equal(result.stdout.split(terminalGuidance).length - 1, 1);
+      assert.isBelow(result.stdout.indexOf('Backup setup complete.'), result.stdout.indexOf(firstBackupPrompt));
+      assert.isBelow(result.stdout.indexOf(firstBackupPrompt), result.stdout.indexOf(terminalGuidance));
+      assert.notInclude(result.stdout, 'Continue setup here');
+      assert.notInclude(result.stdout, 'Tools are ready for this setup.');
+      assert.notInclude(result.stdout, 'PATH line added');
       assert.include(result.stdout, 'Backup setup complete.');
       assert.notInclude(result.stdout, 'Unable to prepare backup configuration.');
       assert.notInclude(result.stdout, 'Shell completion setup could not finish.');

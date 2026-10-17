@@ -11,6 +11,10 @@ import type { FixtureState } from './helpers/repository.ts';
 import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
 const repoRoot = path.join(__dirname, '..');
+const readableBackupTime = (time: string): string => new Intl.DateTimeFormat('en-US', {
+  year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'longOffset',
+}).format(new Date(time.trim()));
+
 describe('repository backup lifecycle', function() {
   this.timeout(15000);
   let root: string; let home: string; let bin: string; let checkout: string;
@@ -379,7 +383,7 @@ describe('repository backup lifecycle', function() {
     saveState(fixtureState({ 'zshrc.sh': 'local\n' })); seedSuccess();
     const recorded = fs.readFileSync(statusFile(), 'utf8');
     const validated = run(['setup']); ok(validated);
-    assert.include(validated.stdout, `on this installation: ${recorded.trim()}`);
+    assert.include(validated.stdout, `on this installation: ${readableBackupTime(recorded)}`);
     ok(run(['read', 'zshrc.sh'])); ok(run(['open']));
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
     ok(run(['disconnect'])); assert.isFalse(fs.existsSync(cacheRoot));
@@ -406,7 +410,7 @@ describe('repository backup lifecycle', function() {
             });
           `;
           const result = run(['setup'], '', {}, noPromptsOrDiscovery); ok(result);
-          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${priorSuccess}\nReview backup settings? [y/N] `);
+          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${readableBackupTime(priorSuccess)}\n\nReview backup settings? [y/N] `);
           assert.equal(fs.readFileSync(configPath, 'utf8'), configBytes);
           assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
           assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
@@ -525,7 +529,7 @@ describe('repository backup lifecycle', function() {
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const result = runSetup(mode); ok(result);
       assert.equal(result.stdout, mode === 'refresh'
-        ? `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: ${priorSuccess}`
+        ? `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: ${readableBackupTime(priorSuccess)}\n`
         : '');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
@@ -647,7 +651,7 @@ describe('repository backup lifecycle', function() {
     commitFixture(value, { ...value.commits[value.head].files, 'zshrc.sh': Buffer.from('later remote bytes\n').toString('base64') });
     saveState(value);
     const setup = run(['setup']); ok(setup);
-    assert.include(setup.stdout, `on this installation: ${recorded.trim()}`);
+    assert.include(setup.stdout, `on this installation: ${readableBackupTime(recorded)}`);
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), recorded);
     assert.equal(config().backup.repository.name, 'renamed');
     assert.equal(publications().length, 1);
