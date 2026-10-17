@@ -80,12 +80,15 @@ describe('destination-scoped local last-success status', () => {
   it('formats the full local date and distinguishes repeated daylight-saving hours', () => {
     withEnvironment({ TZ: 'America/Los_Angeles' }, () => {
       seed('2025-11-02T08:30:00.000Z\n');
+      assert.equal(lastBackupSuccessLine(root, fixtureDestination), previousBackupSuccessLine(root, fixtureDestination).replace('Last successful backup:', 'Last recorded successful backup on this installation:'));
       assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Last successful backup: Nov 2, 2025, 1:30:00 AM GMT-07:00');
       seed('2025-11-02T09:30:00.000Z\n');
+      assert.equal(lastBackupSuccessLine(root, fixtureDestination), previousBackupSuccessLine(root, fixtureDestination).replace('Last successful backup:', 'Last recorded successful backup on this installation:'));
       assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Last successful backup: Nov 2, 2025, 1:30:00 AM GMT-08:00');
     });
     withEnvironment({ TZ: 'Asia/Kolkata' }, () => {
       seed('2020-01-01T00:00:00.000Z\n');
+      assert.equal(lastBackupSuccessLine(root, fixtureDestination), previousBackupSuccessLine(root, fixtureDestination).replace('Last successful backup:', 'Last recorded successful backup on this installation:'));
       assert.equal(previousBackupSuccessLine(root, fixtureDestination), 'Last successful backup: Jan 1, 2020, 5:30:00 AM GMT+05:30');
     });
   });
@@ -93,6 +96,7 @@ describe('destination-scoped local last-success status', () => {
     for (const text of ['invalid\n', '2020-01-01T00:00:00Z\n', '2099-01-01T00:00:00.000Z\n']) {
       seed(text);
       assert.isNull(previousBackupSuccessLine(root, fixtureDestination));
+      assert.equal(lastBackupSuccessLine(root, fixtureDestination), 'Last recorded successful backup on this installation: unavailable');
       assert.equal(fs.readFileSync(file, 'utf8'), text);
     }
   });

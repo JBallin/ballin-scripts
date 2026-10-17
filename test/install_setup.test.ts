@@ -1009,7 +1009,7 @@ require('https').request = () => {
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const completionResult = enableCompletion
-        ? 'Shell completion enabled. Continue setup here; open a new terminal afterward.'
+        ? 'Shell completion enabled.'
         : `${docsUrl}#shell-completion`;
       assert.include(result.stdout, `${completionResult}\n\nOptional backups use a private GitHub repository`);
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
