@@ -17,6 +17,31 @@ executed absolute script paths. It retains `all: true` and every coverage thresh
 unexecuted included files still count as uncovered. Use the same wrapper when
 reporting saved profiles, and review the compatibility correction when updating c8.
 
+## CI action dependencies
+
+The [CI workflow](../.github/workflows/ci.yml) pins external actions to full commit
+SHAs, with release-version comments for readability. This keeps action revisions
+reviewable and prevents a moved upstream tag from changing the code CI runs.
+The current actions bundle their JavaScript and declare no nested action calls,
+so direct SHA pins keep maintenance simple without adopting GitHub's
+[workflow lockfile preview](https://docs.github.com/en/actions/concepts/security/workflow-dependency-lockfiles).
+
+Check upstream releases monthly and when a security advisory affects a CI action:
+
+1. Review the official action repository's release notes and changes. Confirm the
+   release tag resolves to a commit in that repository, and review changes to
+   inputs, permissions, runner requirements, and nested action dependencies.
+2. Update the full SHA and version comment together. Keep both `upload-artifact`
+   steps on the same revision. Preserve the existing Node version policy,
+   workflow triggers, permissions, test and coverage gates, diagnostic conditions,
+   and artifact retention.
+3. Run `git diff --check` and the portable workflow contracts described below,
+   then open a PR and require ordinary CI to pass before merging.
+
+These pins cover the referenced action revisions. They do not verify repository
+identity or lock future nested action references, runtime downloads, runner
+images, or packages. Reassess nested dependencies when updating an action.
+
 ## Pull request review
 
 The [automatic](../.github/workflows/claude-review.yml),
