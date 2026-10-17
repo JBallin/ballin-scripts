@@ -57,6 +57,7 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.equal(result.stdout.split(terminalGuidance).length - 1, 1);
       assert.isBelow(result.stdout.indexOf('Backup setup complete.'), result.stdout.indexOf(firstBackupPrompt));
       assert.isBelow(result.stdout.indexOf(firstBackupPrompt), result.stdout.indexOf(terminalGuidance));
+      assert.include(result.stdout.replace(/\r\n/gu, '\n'), firstBackupPrompt + 'n\n\n' + terminalGuidance + '\n');
       assert.notInclude(result.stdout, 'Continue setup here');
       assert.notInclude(result.stdout, 'Tools are ready for this setup.');
       assert.notInclude(result.stdout, 'PATH line added');
@@ -68,6 +69,42 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.equal(JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8')).analytics.enabled, 'false');
       assertInitializedOnly();
     });
+  }
+
+  for (const shell of ['bash', 'zsh'] as const) {
+    for (const acceptBackup of [false, true]) {
+      it(`ends with the PATH reminder after backup ${acceptBackup ? 'acceptance' : 'decline'} (${shell})`, () => {
+        sandbox = createSandbox({ quickstart: true });
+        const startup = shell === 'bash'
+          ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
+          : { prompt: `Directory containing your .zshrc [Enter=${sandbox.home}; absolute directory or skip]: `, answer: '' };
+        const backupSetup = { prompt: 'Set up optional private backups now? [y/N] ', answer: 'n' };
+        const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+          startup,
+          { prompt: 'Add this PATH line? [y/N] ', answer: 'n' },
+          { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
+          { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
+          startup,
+          { prompt: 'Enable shell completion? [y/N] ', answer: 'n' },
+          backupSetup,
+          { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: acceptBackup ? '' : 'n' },
+          ...(acceptBackup ? [backupSetup] : []),
+        ], shell, { columns: 200 });
+        assert.isUndefined(result.error, result.stderr);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        const output = result.stdout.replace(/\r\n/gu, '\n');
+        const reminder = 'Ballin is installed, but PATH setup is incomplete. Follow the PATH instructions above, or rerun Quickstart to retry.';
+        const preceding = acceptBackup ? 'Backup setup skipped. Run `ballin backup setup` when you are ready.\n'
+          : 'Run a backup now and open its GitHub destination? [Y/n] n\n';
+        assert.include(output, preceding + '\n' + reminder + '\n', output);
+        assert.equal(output.split(reminder).length - 1, 1);
+        assert.notInclude(output, 'Setup complete! Open a new Terminal to run `ballin`.');
+        const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
+        assert.notProperty(config.backup, 'repository');
+        assert.isEmpty(JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8')).requests);
+        assert.isFalse(fs.existsSync(path.join(sandbox.repo, '.backup-cache')));
+      });
+    }
   }
 
   it('skips GitHub sign-in and backup prompts while completing maintenance installation', () => {

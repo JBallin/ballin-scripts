@@ -13,6 +13,9 @@ describe('beginner quickstart bootstrap', function() {
   let systemNode: string;
   let log: string;
   const source = path.resolve(__dirname, '../quickstart.sh');
+  const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
+  const terminalGuidance = '\nSetup complete! Open a new Terminal to run `ballin`.\n';
+  const incompletePathGuidance = '\nBallin is installed, but PATH setup is incomplete. Follow the PATH instructions above, or rerun Quickstart to retry.\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const linkFake = (name: string, destination = tools): void => fs.symlinkSync(path.join(root, 'fake-tool'), path.join(destination, name));
   const runCopiedCommand = (shell: string, input: string, overrides: NodeJS.ProcessEnv = {}) => {
@@ -1791,41 +1794,57 @@ system_sudo=fixture_sudo
     assert.notInclude(readLog(), 'sudo:');
     assert.notInclude(readLog(), '/node-v24.11.0.pkg -o');
   });
-  for (const answer of ['\n', 'y\n', 'Y\n']) {
-    it(`captures and opens after first-backup acceptance ${JSON.stringify(answer)}`, () => {
-      const result = run('y\ny\n', {}, home, '', answer);
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
-      assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
-    });
-  }
-  for (const configured of [true, false]) {
-    for (const answer of ['n\n', 'N\n']) {
-      it(`finishes installation without backup or open after ${answer.trim()} with configured backup ${configured}`, () => {
-        const result = run('y\ny\n', { FAKE_SKIP_BACKUP: configured ? '0' : '1' }, home, '', answer);
+  for (const pathComplete of [true, false]) {
+    for (const answer of ['\n', 'y\n', 'Y\n']) {
+      it(`captures and opens after first-backup acceptance ${JSON.stringify(answer)} with PATH complete ${pathComplete}`, () => {
+        const result = run(pathComplete ? 'y\ny\n' : 'n\ny\n', {}, home, '', answer);
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.isTrue(fs.existsSync(path.join(home, '.ballin-scripts/bin/ballin')));
-        assert.isTrue(fs.existsSync(path.join(home, '.ballin-scripts/ballin.config.json')));
-        assert.notInclude(readLog(), 'ballin:');
-        assert.notInclude(result.stderr, 'not configured');
+        assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
+        assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + '\n' + (pathComplete ? terminalGuidance : incompletePathGuidance));
+        assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
       });
+    }
+  }
+  for (const pathComplete of [true, false]) {
+    for (const configured of [true, false]) {
+      for (const answer of ['n\n', 'N\n']) {
+        it(`finishes installation without backup or open after ${answer.trim()} with configured backup ${configured} and PATH complete ${pathComplete}`, () => {
+          const result = run(pathComplete ? 'y\ny\n' : 'n\ny\n', { FAKE_SKIP_BACKUP: configured ? '0' : '1' }, home, '', answer);
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assert.isTrue(fs.existsSync(path.join(home, '.ballin-scripts/bin/ballin')));
+          assert.isTrue(fs.existsSync(path.join(home, '.ballin-scripts/ballin.config.json')));
+          assert.notInclude(readLog(), 'ballin:');
+          assert.notInclude(result.stderr, 'not configured');
+          // Piped answers have no echo; the final message supplies the newline.
+          assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + (pathComplete ? terminalGuidance : incompletePathGuidance));
+          if (!pathComplete) {
+            assert.notInclude(result.stdout, terminalGuidance);
+            assert.include(result.stderr, 'Persistent PATH setup incomplete');
+            assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+          }
+        });
+      }
     }
   }
   for (const input of ['', 'y', 'maybe\n']) {
     it(`does not accept first-backup input ending at EOF ${JSON.stringify(input)}`, () => {
       const result = run('y\ny\n', {}, home, '', input);
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stderr, 'First backup cancelled; Ballin remains installed.');
+      assert.equal(result.stderr, '\nQuickstart: Backup cancelled; Ballin remains installed.\n');
       assert.notInclude(readLog(), 'ballin:');
     });
   }
-  it('repeats the first-backup prompt for an invalid answer without accepting it', () => {
-    const result = run('y\ny\n', {}, home, '', 'maybe\nn\n');
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'Please enter y or n.');
-    assert.equal(result.stdout.split('Run a backup now and open its GitHub destination?').length - 1, 2);
-    assert.notInclude(readLog(), 'ballin:');
-  });
+  for (const pathComplete of [true, false]) {
+    it(`repeats the first-backup prompt for an invalid answer without accepting it with PATH complete ${pathComplete}`, () => {
+      const result = run(pathComplete ? 'y\ny\n' : 'n\ny\n', {}, home, '', 'maybe\nn\n');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Please enter y or n.');
+      assert.equal(result.stdout.split('Run a backup now and open its GitHub destination?').length - 1, 2);
+      assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)),
+        firstBackupPrompt + 'Please enter y or n.\n' + firstBackupPrompt + (pathComplete ? terminalGuidance : incompletePathGuidance));
+      assert.notInclude(readLog(), 'ballin:');
+    });
+  }
   it('stops after SIGINT at the first-backup prompt without capture or open', async () => {
     const child = spawn('/bin/bash', ['-c', 'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; trap "exit 130" INT; main'], {
       cwd: home,
@@ -1950,7 +1969,7 @@ system_sudo=fixture_sudo
       });
     }
   }
-  for (const scenario of ['capture', 'backup-declined', 'setup-skipped', 'sign-in-skipped', 'install-declined', 'install-failed', 'backup-failed', 'open-failed', 'cancelled', 'path-incomplete']) {
+  for (const scenario of ['capture', 'backup-declined', 'setup-skipped', 'sign-in-skipped', 'install-declined', 'install-failed', 'backup-failed', 'open-failed', 'cancelled', 'path-incomplete', 'path-incomplete-cancelled']) {
     it(`prints final terminal guidance only after successful Quickstart: ${scenario}`, () => {
       const overrides: NodeJS.ProcessEnv = {
         FAKE_SKIP_BACKUP: scenario === 'setup-skipped' ? '1' : '0',
@@ -1961,19 +1980,23 @@ system_sudo=fixture_sudo
       };
       const input = scenario === 'sign-in-skipped' ? 'y\nn\ny\n'
         : scenario === 'install-declined' ? 'y\nn\n'
-        : scenario === 'path-incomplete' ? 'n\ny\n' : 'y\ny\n';
-      const backupInput = scenario === 'backup-declined' ? 'n\n' : scenario === 'setup-skipped' ? '\nn\n' : scenario === 'cancelled' ? '' : '\n';
+        : scenario.startsWith('path-incomplete') ? 'n\ny\n' : 'y\ny\n';
+      const backupInput = scenario === 'backup-declined' ? 'n\n' : scenario === 'setup-skipped' ? '\nn\n' : ['cancelled', 'path-incomplete-cancelled'].includes(scenario) ? '' : '\n';
       const result = run(input, overrides, home, '', backupInput);
-      const succeeds = !['install-failed', 'backup-failed', 'open-failed', 'cancelled'].includes(scenario);
+      const succeeds = !['install-failed', 'backup-failed', 'open-failed', 'cancelled', 'path-incomplete-cancelled'].includes(scenario);
       assert.equal(result.status, succeeds ? 0 : 1, result.stdout + result.stderr);
       const guidance = 'Setup complete! Open a new Terminal to run `ballin`.';
       const expected = succeeds && !['install-declined', 'path-incomplete'].includes(scenario);
       assert.equal(result.stdout.split(guidance).length - 1, expected ? 1 : 0, result.stdout);
-      if (expected) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
+      assert.equal(result.stdout.split(incompletePathGuidance).length - 1, scenario === 'path-incomplete' ? 1 : 0, result.stdout);
+      if (scenario === 'backup-declined') {
+        assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + terminalGuidance);
+      } else if (expected) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
       assert.notInclude(result.stdout, 'Tools are ready');
       assert.notInclude(result.stdout, 'Continue setup here');
       if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
       if (scenario === 'path-incomplete') {
+        assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + '\n' + incompletePathGuidance);
         assert.include(result.stderr, 'Manual PATH command:');
         assert.include(result.stderr, 'rerun this quickstart to retry');
       }
@@ -2376,6 +2399,8 @@ confirm() {
       assert.include(result.stderr, 'Persistent PATH setup incomplete');
       assert.notInclude(readLog(), 'ballin:backup open');
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+      assert.notInclude(result.stdout, terminalGuidance);
+      assert.notInclude(result.stdout, incompletePathGuidance);
     });
   }
   it('rejects unsupported platforms before changing home files', () => {
@@ -2405,7 +2430,11 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.include(result.stdout, 'Run a backup now and open its GitHub destination? [Y/n]');
         assert.include(result.stdout, 'Backup setup skipped.');
         assert.equal(result.stdout.split('Setup complete! Open a new Terminal to run `ballin`.').length - 1, result.status === 0 ? 1 : 0);
-        if (result.status === 0) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
+        if (choice === 'skip') {
+          const prompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
+          assert.equal(result.stdout.slice(result.stdout.indexOf(prompt)),
+            prompt + '\nSetup complete! Open a new Terminal to run `ballin`.\n');
+        } else if (result.status === 0) assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
         const setupCount = result.stdout.split('Set up optional private backups now? [y/N]').length - 1;
         assert.equal(setupCount, ['skip', 'eof'].includes(choice) ? 1 : 2, result.stdout);
         assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
@@ -2436,7 +2465,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           assert.isEmpty(opens);
           assert.notInclude(result.stderr, 'backup is not configured');
           if (choice === 'setup-cancelled') assert.include(result.stdout, 'Backup setup cancelled;');
-          if (choice === 'eof') assert.include(result.stderr, 'First backup cancelled; Ballin remains installed.');
+          if (choice === 'eof') assert.include(result.stderr, '\nQuickstart: Backup cancelled; Ballin remains installed.\n');
         }
       } finally { cleanupSandbox(sandbox.root); }
     });
