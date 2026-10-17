@@ -178,9 +178,9 @@ esac
         input: scenario === 'declined' ? 'n\n' : scenario === 'eof' ? '' : 'y\n',
       });
       assert.equal(result.status, scenario === 'failure' ? 7 : 0, result.stdout + result.stderr);
-      const guidance = 'Open a new Terminal to run `ballin`.';
+      const guidance = 'Setup complete! Open a new Terminal to run `ballin`.';
       assert.equal(result.stdout.split(guidance).length - 1, scenario === 'standalone' ? 1 : 0);
-      if (scenario === 'standalone') assert.match(result.stdout, /\n\nOpen a new Terminal to run `ballin`\.\n$/u);
+      if (scenario === 'standalone') assert.match(result.stdout, /\n\nSetup complete! Open a new Terminal to run `ballin`\.\n$/u);
     });
   }
   it('separates checkout/update output from the compact typed setup summary', () => {
@@ -192,6 +192,23 @@ esac
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, '\n\nValidated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n');
   });
+
+  for (const existing of [false, true]) {
+    it(`keeps the banner before Git output and separates typed setup (${existing ? 'update' : 'clone'})`, () => {
+      installBaseCommands();
+      if (existing) writeCurrentCheckout();
+      const tool = path.join(toolDir, existing ? 'node' : 'git');
+      const marker = existing ? '    exit "$FAKE_REPO_UPDATE_STATUS"' : '    exit "$FAKE_GIT_CLONE_STATUS"';
+      fs.writeFileSync(tool, fs.readFileSync(tool, 'utf8').replace(marker, '    printf \'Git output fixture.\\n\'\n' + marker));
+      const node = path.join(toolDir, 'node');
+      fs.writeFileSync(node, fs.readFileSync(node, 'utf8').replace('    exit "$FAKE_SETUP_STATUS"', '    printf \'Typed setup fixture.\\n\'\n    exit "$FAKE_SETUP_STATUS"'));
+      const result = runInstall();
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.isTrue(result.stdout.startsWith("🏀 let's ball...\n"), result.stdout);
+      assert.include(result.stdout, 'Git output fixture.\n\nTyped setup fixture.\n\nSetup complete! Open a new Terminal to run `ballin`.\n');
+      assert.equal(result.stdout.split('Setup complete!').length - 1, 1);
+    });
+  }
 
   it('clones a missing checkout and delegates fresh setup to typed code', () => {
     installBaseCommands();
