@@ -23,7 +23,11 @@ if [ ! -f "$repo_dir/ballin.config.json" ]; then
   setup_mode='fresh'
 fi
 
-if ! command -v git >/dev/null 2>&1 || ! git --version >/dev/null 2>&1; then
+prerequisite_status=0
+if command -v git >/dev/null 2>&1; then git --version >/dev/null 2>&1 || prerequisite_status=$?
+else prerequisite_status=127; fi
+[[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
+if [ "$prerequisite_status" -ne 0 ]; then
   printf '\n⚠️  ERROR: Git is required before install can continue.\n'
   printf '\nInstall Git, then run this installer again.\n'
   exit 1
@@ -42,7 +46,8 @@ else
     /^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$/.test(version)
       ? (major > requiredMajor || (major === requiredMajor && minor >= requiredMinor) ? 'true' : version)
       : ''
-  " 2>/dev/null) || node_check=''
+  " 2>/dev/null) || { prerequisite_status=$?; node_check=''; }
+  [[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
   if [ "$node_check" != 'true' ]; then
     printf '\n⚠️  ERROR: Node.js %s or newer is required.' "$required_node_version"
     if [[ "$node_check" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then

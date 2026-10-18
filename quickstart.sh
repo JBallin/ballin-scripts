@@ -112,8 +112,21 @@ normalize_process_path() {
   export PATH="$result"
 }
 
+stop_if_interrupted() {
+  [[ "$1" != 130 && "$1" != 143 ]] || exit "$1"
+}
+probe_tool() {
+  local status=0
+  "$@" || status=$?
+  stop_if_interrupted "$status"
+  return "$status"
+}
 node_compatible() {
-  [[ -x "$1" ]] && [[ "$("$1" -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null)" == true ]]
+  local answer status=0
+  [[ -x "$1" ]] || return 1
+  answer=$(probe_tool "$1" -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null) || status=$?
+  stop_if_interrupted "$status"
+  [[ "$status" == 0 && "$answer" == true ]]
 }
 
 tool_uses_managed_link() {
@@ -174,15 +187,16 @@ release_tool_links() {
 
 git_compatible() {
   local candidate="$1"
-  if [[ "$candidate" -ef "$system_git" ]] && ! "$system_xcode_select" -p >/dev/null 2>&1; then
+  if [[ "$candidate" -ef "$system_git" ]] && ! probe_tool "$system_xcode_select" -p >/dev/null 2>&1; then
     return 1
   fi
-  [[ "$candidate" == /* && -x "$candidate" ]] && "$candidate" --version >/dev/null 2>&1
+  [[ "$candidate" == /* && -x "$candidate" ]] && probe_tool "$candidate" --version >/dev/null 2>&1
 }
 
 find_git() {
-  local candidate
-  for candidate in "$(tool_on_path git git_compatible)" "$quick_bin/git" "$system_git"; do
+  local candidate path_candidate
+  path_candidate=$(tool_on_path git git_compatible) || return $?
+  for candidate in "$path_candidate" "$quick_bin/git" "$system_git"; do
     if git_compatible "$candidate"; then
       printf '%s' "$candidate"
       return
@@ -191,18 +205,23 @@ find_git() {
 }
 
 npm_compatible() {
-  [[ -x "$1" ]] && "$1" --version >/dev/null 2>&1
+  [[ -x "$1" ]] && probe_tool "$1" --version >/dev/null 2>&1
 }
 
 gh_compatible() {
-  [[ "$1" == /* && -x "$1" ]] \
-    && "$1" --version >/dev/null 2>&1 \
-    && "$1" auth status --help 2>/dev/null | grep -- '--active' >/dev/null
+  [[ "$1" == /* && -x "$1" ]] || return 1
+  probe_tool "$1" --version >/dev/null 2>&1 || return 1
+  local statuses status
+  if probe_tool "$1" auth status --help 2>/dev/null | grep -- '--active' >/dev/null; then return 0
+  else statuses=("${PIPESTATUS[@]}"); fi
+  for status in "${statuses[@]}"; do stop_if_interrupted "$status"; done
+  return 1
 }
 
 find_gh() {
-  local candidate
-  for candidate in "$(tool_on_path gh gh_compatible)" "$quick_bin/gh"; do
+  local candidate path_candidate
+  path_candidate=$(tool_on_path gh gh_compatible) || return $?
+  for candidate in "$path_candidate" "$quick_bin/gh"; do
     if gh_compatible "$candidate"; then
       printf '%s' "$candidate"
       return
@@ -303,7 +322,7 @@ find_suitable_brew() {
   [[ "$prefix" == "${candidate%/bin/brew}" && "$cellar" == "$prefix/Cellar" && -d "$cellar" && -w "$prefix" ]] || return 0
   [[ -f "$prefix/Library/Homebrew/brew.sh" || -f "$prefix/Homebrew/Library/Homebrew/brew.sh" ]] || return 0
   # Homebrew itself requires Apple's developer tools; do not bootstrap them through brew.
-  "$system_xcode_select" -p >/dev/null 2>&1 || return 0
+  probe_tool "$system_xcode_select" -p >/dev/null 2>&1 || return 0
   brew_tool=$candidate; brew_prefix=$prefix; brew_cellar=$cellar
 }
 
@@ -806,7 +825,7 @@ main() {
     install_brew_tools
   else
   if "$need_git"; then
-    "$system_xcode_select" --install || fail 'Apple could not start Command Line Tools installation. Finish any pending installation, then run this quickstart again.'
+    probe_tool "$system_xcode_select" --install || fail 'Apple could not start Command Line Tools installation. Finish any pending installation, then run this quickstart again.'
     printf 'Finish the macOS installation, then press Return here: '
     read_prompt_answer || fail 'Git setup did not complete.'
     git_tool=$(find_git)

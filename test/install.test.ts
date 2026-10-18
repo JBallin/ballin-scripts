@@ -336,6 +336,19 @@ esac
     ]);
   });
 
+  for (const status of [130, 143]) {
+    for (const tool of ['git', 'node']) {
+      it(`preserves prerequisite ${tool} interruption ${status} before installation consent`, () => {
+        installBaseCommands();
+        const result = runInstall({ env: tool === 'git' ? { FAKE_GIT_VERSION_STATUS: String(status) } : { FAKE_NODE_PROBE_STATUS: String(status) } });
+        assert.equal(result.status, status, result.stdout + result.stderr);
+        assert.notInclude(result.stdout, 'Install Ballin in');
+        assert.notInclude(result.stdout, 'is required');
+        assert.deepEqual(commandLog(), []);
+        assert.isFalse(fs.existsSync(repoDir));
+      });
+    }
+  }
   it('stops with guidance when Node.js is unavailable', () => {
     linkCommand('bash');
     installGitStub();

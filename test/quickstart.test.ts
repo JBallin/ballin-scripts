@@ -524,6 +524,21 @@ system_sudo=fixture_sudo
     assert.notInclude(readLog(), 'conflict-ran');
   });
 
+  for (const signal of ['INT', 'TERM']) {
+    for (const tool of ['node', 'git', 'gh', 'gh-help', 'gh-help-consumer', 'npm']) {
+      it(`stops on child SIG${signal} from ${tool} qualification without offering installation or continuing setup`, () => {
+        const executable = path.join(tools, tool === 'gh-help' ? 'gh' : tool === 'gh-help-consumer' ? 'grep' : tool);
+        fs.rmSync(executable, { force: true });
+        fs.writeFileSync(executable, `#!/bin/bash\n${tool === 'gh-help' ? 'if [[ "$*" == --version ]]; then exit 0; fi\n' : ''}kill -${signal} $$\n`, { mode: 0o755 });
+        const result = run('yes\nyes\n');
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.notInclude(result.stdout, 'Install ');
+        assert.notInclude(result.stderr, 'needs manual attention');
+        assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+        for (const forbidden of ['auth status --active', 'auth login', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+      });
+    }
+  }
   it('reuses working tools, preserves native stdin, and opens only after capture', () => {
     assert.isFalse(fs.existsSync(path.join(tools, 'npm')));
     const result = run();
