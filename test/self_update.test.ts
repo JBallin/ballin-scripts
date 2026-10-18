@@ -42,6 +42,11 @@ describe('ballin self-update', () => {
     writeExecutable('git', `#!/usr/bin/env bash
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
 printf '%s|%s\\n' "$*" "$GIT_NO_LAZY_FETCH" >> "$BALLIN_UPDATE_TEST_LOCAL_GIT_LOG"
+if [ "$*" = "$FAKE_LOCAL_GIT_INTERRUPT_ARGS" ]; then
+  phase=before
+  if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then phase=after; fi
+  if [ "$phase" = "$FAKE_LOCAL_GIT_INTERRUPT_PHASE" ]; then kill -"$FAKE_LOCAL_GIT_SIGNAL" $$; fi
+fi
 case "$1" in
   rev-parse)
     if [ "$2" = '--verify' ] && [ "$3" = 'HEAD' ]; then
@@ -276,6 +281,42 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     });
   });
   const revisions = { FAKE_HEAD_BEFORE: 'a'.repeat(40), FAKE_HEAD_AFTER: 'b'.repeat(40) };
+  for (const signal of ['INT', 'TERM']) {
+    for (const [phase, query] of [
+      ['before', 'show HEAD:commands/backup_scope.json'],
+      ['before', 'rev-parse --verify HEAD'],
+      ['after', 'show HEAD:commands/backup_scope.json'],
+      ['after', 'rev-parse --verify HEAD'],
+      ['after', `rev-parse --short=7 --verify ${revisions.FAKE_HEAD_BEFORE}`],
+      ['after', 'rev-parse --is-shallow-repository'],
+      ['after', 'config --get-regexp ^(extensions\\.partialclone|remote\\..*\\.promisor)$'],
+      ['after', `merge-base --is-ancestor ${revisions.FAKE_HEAD_BEFORE} ${revisions.FAKE_HEAD_AFTER}`],
+      ['after', `rev-list --count ${revisions.FAKE_HEAD_BEFORE}..${revisions.FAKE_HEAD_AFTER}`],
+    ]) {
+      it(`stops on child SIG${signal} during ${phase}-update local Git ${query}`, () => {
+        const result = runSelfUpdate({
+          ...revisions, FAKE_LOCAL_GIT_INTERRUPT_PHASE: phase,
+          FAKE_LOCAL_GIT_INTERRUPT_ARGS: query, FAKE_LOCAL_GIT_SIGNAL: signal,
+        });
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stderr, '');
+        assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stdout, 'Unable to compare');
+        const calls = fs.readFileSync(commandLogPath, 'utf8').trim().split('\n');
+        assert.equal(calls.at(-1), `${repoDir}|git:${query}`);
+        if (phase === 'before') {
+          assert.notInclude(result.stdout, 'Ballin updated');
+          assert.notMatch(calls.join('\n'), /git:(fetch|checkout|merge|stash)|install_setup:/u);
+          assert.isFalse(fs.existsSync(mergeCountPath));
+          assert.isFalse(fs.existsSync(checkoutCountPath));
+        } else {
+          // Completed update/setup effects remain; interruption cannot start later work.
+          assert.include(calls, setupLog());
+          assert.equal(fs.readFileSync(mergeCountPath, 'utf8'), '1\n');
+        }
+      });
+    }
+  }
   it('reports an unchanged installed revision after still completing setup', () => {
     const result = runSelfUpdate({ ...revisions, FAKE_HEAD_AFTER: revisions.FAKE_HEAD_BEFORE });
     assert.equal(result.status, 0, result.stderr);

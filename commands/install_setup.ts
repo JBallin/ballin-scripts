@@ -16,6 +16,7 @@ const {
   configuredBackupDestination,
 } = require('./backup_config.ts');
 const {
+  CommandInterrupted,
   commandExists,
   readCommandOutput,
   runNodeScript,
@@ -304,7 +305,11 @@ const runInstallSetupCli = (): void => {
   if (command === 'setup' && repoDir && option) {
     const mode = process.argv[6] === 'fresh' ? 'fresh'
       : process.argv[6] === 'self-update' ? 'self-update' : 'refresh';
-    process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1;
+    try { process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1; } catch (error) {
+      if (!(error instanceof CommandInterrupted)) throw error;
+      process.exitCode = (error as { status: number }).status;
+      writeStdoutLine((error as Error).message);
+    }
     return;
   }
 

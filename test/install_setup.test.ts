@@ -454,6 +454,43 @@ describe('install setup', () => {
     assert.include(symlinkResult.stdout, `Unable to create ${blockedBinDir}`);
   });
 
+  for (const mode of ['fresh', 'refresh', 'self-update']) {
+    for (const signal of ['INT', 'TERM']) {
+      it(`preserves child SIG${signal} from gh in the ${mode} setup CLI`, () => {
+        installConfigSources();
+        const configPath = path.join(repoDir, 'ballin.config.json');
+        const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8'));
+        config.backup.repository = require('./helpers/repository.ts').fixtureDestination;
+        config.backup.includeSensitive = 'false';
+        fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
+        const previousConfig = fs.readFileSync(configPath);
+        const cachePath = path.join(repoDir, '.backup-cache', 'prior-comparison');
+        fs.mkdirSync(path.dirname(cachePath));
+        fs.writeFileSync(cachePath, 'earlier cache\n');
+        writeExecutable('gh', `#!/bin/sh
+printf '%s\\n' "$*" >> '${commandLogPath}'
+kill -${signal} $$
+`);
+        const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
+          encoding: 'utf8', input: 'n\n', env: childEnvironment(),
+        });
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stderr, '');
+        assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stdout, 'Unable to configure backup');
+        assert.notInclude(result.stdout, 'Validated private backup');
+        assert.notInclude(result.stdout, '😎');
+        const calls = commandLog().trim().split('\n');
+        assert.lengthOf(calls, 1);
+        assert.match(calls[0], /^api /u);
+        assert.deepEqual(fs.readFileSync(configPath), previousConfig);
+        assert.equal(fs.readFileSync(cachePath, 'utf8'), 'earlier cache\n');
+        // The earlier completed installation step is preserved, not rolled back.
+        assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+      });
+    }
+  }
+
   it('replaces existing command symlinks', () => {
     fs.mkdirSync(binDir, { recursive: true });
     fs.symlinkSync(path.join(testDir, 'old-ballin'), path.join(binDir, 'ballin'));
