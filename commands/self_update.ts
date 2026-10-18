@@ -154,7 +154,7 @@ const refreshInstalledBallin = (): void => {
     return;
   }
 
-  process.exitCode = runVisibleCommand(process.execPath, [
+  const setupStatus = runVisibleCommand(process.execPath, [
     'commands/install_setup.ts',
     'setup',
     repoDir,
@@ -165,6 +165,8 @@ const refreshInstalledBallin = (): void => {
     cwd: repoDir,
     env: commandEnv(repoDir),
   });
+  requireUninterrupted({ status: setupStatus });
+  process.exitCode = setupStatus;
   if (process.exitCode === 0) {
     writeStdoutLine(updateResult(repoDir, previousRevision));
     const currentSources = installedScope(repoDir);
