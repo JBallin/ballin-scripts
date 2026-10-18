@@ -523,7 +523,7 @@ describe('interactive onboarding QA lifecycle', function() {
     const result = run('y\nn\nn\nballin backup setup\ny\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\ny\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'Proceed with installation?');
+    assert.include(result.stdout, 'and make the ballin command available? [y/N]');
     assert.include(result.stdout, 'Fake repository: fixture-user/ballin-backups');
     assert.include(result.stdout, 'Preserved sandbox:');
     const state = JSON.parse(fs.readFileSync(path.join(root, 'remote/repository.json'), 'utf8'));
@@ -533,8 +533,8 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.equal(cleanup.status, 0, cleanup.stderr);
     assert.isFalse(fs.existsSync(root));
   });
-  it('cleans normal exit and EOF without waiting for more input', () => {
-    for (const input of ['n\nexit\n', '']) {
+  it('cleans normal exit and menu EOF without waiting for more input', () => {
+    for (const input of ['n\nexit\n', 'n\n']) {
       const result = run(input);
       const root = findRoot(result.stdout);
       assert.equal(result.status, 0, result.stderr);
@@ -546,7 +546,7 @@ describe('interactive onboarding QA lifecycle', function() {
     const result = run('n\nballin backup\ninspect\ninstall\ny\nn\nn\nballin doctor --verbose\nexit\n');
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'Installation cancelled');
+    assert.include(result.stdout, 'Ballin installation cancelled.');
     assert.include(result.stdout, 'Ballin is not installed in this sandbox. Run install, then retry this command.');
     assert.include(result.stdout, 'Fake repository: (not created)');
     assert.include(result.stdout, 'Ballin doctor');
@@ -562,12 +562,21 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.isTrue(fs.existsSync(root));
     assert.include(result.stdout, 'sandbox will be preserved');
   });
-  it('preserves an EOF-cancelled setup without creating a fake destination', () => {
-    const result = run('y\nn\nn\nballin backup setup\ny\ncreate\n\n');
+  it('preserves required-install EOF failure for inspection', () => {
+    const result = run('');
+    const root = findRoot(result.stdout);
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stderr, 'No answer received. Ballin installation stopped before installing Ballin.');
+    assert.include(result.stdout, 'Preserved sandbox:');
+    assert.isFalse(fs.existsSync(path.join(root, 'home/.ballin-scripts')));
+  });
+  it('explicitly preserves optional EOF cancellation without creating a fake destination', () => {
+    const result = run('y\nn\nn\nballin backup setup\ny\ncreate\n\n', ['--keep']);
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Backup setup cancelled');
     assert.include(result.stdout, 'Preserved sandbox:');
+    assert.notInclude(result.stdout, 'Command exited 1');
     const state = JSON.parse(fs.readFileSync(path.join(root, 'remote/repository.json'), 'utf8'));
     assert.isFalse(state.exists);
     assert.isFalse(state.requests.some((request: { endpoint: string }) => request.endpoint === 'user/repos'));
@@ -578,7 +587,7 @@ describe('interactive onboarding QA lifecycle', function() {
     let signalled = false;
     child.stdout.on('data', (bytes: Buffer) => {
       output += bytes.toString();
-      if (!signalled && output.includes('Proceed with installation?')) {
+      if (!signalled && output.includes('and make the ballin command available? [y/N]')) {
         signalled = true;
         child.kill('SIGINT');
       }
@@ -614,7 +623,7 @@ describe('interactive onboarding QA lifecycle', function() {
         wrapper.stdout.on('data', (bytes: Buffer) => {
           output += bytes.toString();
           if (output.includes('QA_EXITED')) finish(new Error('Fixture QA exited before installer prompt'));
-          if (output.includes('Proceed with installation?')) finish();
+          if (output.includes('and make the ballin command available? [y/N]')) finish();
         });
       });
       root = findRoot(output);
