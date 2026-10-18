@@ -605,7 +605,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=false
   else
-    path_incomplete "$profile already mentions a setup directory. Review its PATH entries before deciding whether to add the command below."
+    path_incomplete "$profile already mentions a setup directory. Review its PATH entries before changing PATH. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
   fi
   return 0
 }

@@ -2164,7 +2164,9 @@ system_sudo=fixture_sudo
       fs.writeFileSync(profile, contents);
       const result = runPathSetup('home\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'already mentions a setup directory');
-      assert.include(result.stderr, 'Review its PATH entries before deciding whether to add');
+      assert.include(result.stderr, 'Review its PATH entries before changing PATH.');
+      assert.include(result.stderr, 'Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
+      assert.notInclude(result.stderr, 'command below');
       assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
       assert.notInclude(result.stderr, pathLine());
       assert.equal(fs.readFileSync(profile, 'utf8'), contents); assert.isFalse(fs.existsSync(path.join(root, 'startup-ran')));
