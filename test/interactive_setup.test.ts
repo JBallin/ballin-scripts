@@ -64,7 +64,7 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.notInclude(result.stdout, 'PATH line added');
       assert.notInclude(result.stdout, 'Backup setup complete.');
       assert.notInclude(result.stdout, 'Unable to prepare backup configuration.');
-      assert.notInclude(result.stdout, 'Shell completion setup could not finish.');
+      assert.notInclude(result.stdout, 'Tab completion setup could not finish.');
       assert.include(fs.readFileSync(path.join(sandbox.home, shell === 'bash' ? '.bash_profile' : '.zshrc'), 'utf8'),
         shell === 'bash' ? 'completions/ballin.bash' : 'completions/_ballin');
       assert.equal(JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8')).analytics.enabled, 'false');
