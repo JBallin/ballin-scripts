@@ -306,7 +306,7 @@ const setup = (
   let backupSetupSucceeded = true;
   if (process.env.BALLIN_SKIP_BACKUP_SETUP === '1' || process.env.BALLIN_BACKUP_CHOICE === 'no' || promptInputState() !== 'open') {
     // A prior complete No or input end must not reopen optional onboarding.
-  } else if (mode === 'fresh' || backupConfigured || backupInvalid) {
+  } else if (mode === 'fresh' || process.env.BALLIN_BACKUP_CHOICE === 'yes' || backupConfigured || backupInvalid) {
     let backupSetupCancelled = false;
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
       presentation: mode === 'self-update' ? 'standalone' : 'installation',

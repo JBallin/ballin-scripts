@@ -50,7 +50,7 @@ describe('repository backup lifecycle', function() {
       }),
     });
   };
-  const runSetup = (mode = 'self-update', env: NodeJS.ProcessEnv = {}, preload = '') => {
+  const runSetup = (mode = 'self-update', env: NodeJS.ProcessEnv = {}, preload = '', input = '') => {
     const installedBin = path.join(home, '.local', 'bin');
     fs.mkdirSync(installedBin, { recursive: true });
     fs.mkdirSync(path.join(checkout, 'bin'), { recursive: true });
@@ -62,7 +62,7 @@ describe('repository backup lifecycle', function() {
       path.join(repoRoot, 'commands', 'install_setup.ts'), 'setup', checkout,
       'https://example.test/docs', '', mode,
     ], {
-      encoding: 'utf8', input: '', cwd: checkout, env: testChildEnvironment({
+      encoding: 'utf8', input, cwd: checkout, env: testChildEnvironment({
         HOME: home, PATH: `${bin}${path.delimiter}${installedBin}`, TMPDIR: path.join(root, 'tmp'),
         BALLIN_TEST_CONFIG_PATH: configPath, ...env,
       }),
@@ -538,6 +538,68 @@ describe('repository backup lifecycle', function() {
       assert.equal(fs.readlinkSync(path.join(home, '.local', 'bin', 'ballin')), path.join(checkout, 'bin', 'ballin'));
     });
   }
+  for (const confirmation of ['yes', 'no', 'eof']) {
+    it(`refresh backup consent honors early Yes and final ${confirmation} on an unconfigured install`, () => {
+      unconfigured(); seedCache('zshrc.sh', 'prior comparison\n'); seedSuccess(); source();
+      const before = fs.readFileSync(configPath); const previous = state();
+      previous.exists = false; saveState(previous);
+      const resultFile = path.join(root, 'installation-result');
+      fs.writeFileSync(resultFile, 'pending\n', { mode: 0o600 });
+      const input = 'create\n\nno\n' + (confirmation === 'eof' ? '' : `${confirmation}\nno\n`);
+      const result = runSetup('refresh', { BALLIN_BACKUP_CHOICE: 'yes', BALLIN_SETUP_RESULT_FILE: resultFile }, '', input);
+      ok(result);
+      assert.lengthOf(result.stdout.match(/Reconnect to an existing backup or create a new one\?/gu) ?? [], 1);
+      assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
+      assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]');
+      if (confirmation === 'yes') {
+        assert.deepEqual(config().backup.repository, fixtureDestination);
+        assert.equal(config().backup.includeSensitive, 'false');
+        assert.equal(config().update.backup, 'false');
+        assert.lengthOf(state().requests.filter(r => r.endpoint === 'user/repos'), 1);
+        assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups');
+        assert.equal(fs.readFileSync(resultFile, 'utf8'), 'complete configured open\n');
+        assert.isUndefined(cached()); assert.isFalse(fs.existsSync(statusFile()));
+      } else {
+        assert.deepEqual(fs.readFileSync(configPath), before);
+        assert.isFalse(state().exists); assert.equal(state().head, previous.head); assert.lengthOf(mutations(), 0);
+        assert.equal(cached(), 'prior comparison\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.equal(fs.readFileSync(resultFile, 'utf8'), `complete skipped ${confirmation === 'eof' ? 'ended' : 'open'}\n`);
+        assert.include(result.stdout, 'Backup setup cancelled.');
+        assert.notInclude(result.stdout, 'Automatically run');
+      }
+    });
+  }
+  for (const scenario of ['early No', 'plain maintenance', 'explicit defer', 'prior EOF']) {
+    it(`refresh backup consent does not reopen optional setup after ${scenario}`, () => {
+      unconfigured(); seedCache('zshrc.sh', 'prior comparison\n'); seedSuccess();
+      const before = fs.readFileSync(configPath); const head = state().head;
+      const resultFile = path.join(root, 'installation-result');
+      fs.writeFileSync(resultFile, 'pending\n', { mode: 0o600 });
+      const env: NodeJS.ProcessEnv = { BALLIN_SETUP_RESULT_FILE: resultFile };
+      if (scenario !== 'plain maintenance') env.BALLIN_BACKUP_CHOICE = scenario === 'early No' ? 'no' : 'yes';
+      if (scenario === 'explicit defer') env.BALLIN_SKIP_BACKUP_SETUP = '1';
+      const preload = scenario === 'prior EOF'
+        ? `require(${JSON.stringify(path.join(repoRoot, 'commands/commandHelpers.ts'))}).readPromptLine('');` : '';
+      const result = runSetup('refresh', env, preload, scenario === 'prior EOF' ? '' : 'create\n\nno\nyes\nno\n');
+      ok(result);
+      assert.notInclude(result.stdout, 'Reconnect to an existing backup');
+      assert.lengthOf(state().requests, 0); assert.equal(state().head, head);
+      assert.deepEqual(fs.readFileSync(configPath), before);
+      assert.equal(cached(), 'prior comparison\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.equal(fs.readFileSync(resultFile, 'utf8'), `complete skipped ${scenario === 'prior EOF' ? 'ended' : 'open'}\n`);
+    });
+  }
+  it('refresh backup consent retains configured destination validation with early Yes', () => {
+    seedCache('zshrc.sh', 'prior comparison\n'); seedSuccess();
+    const before = fs.readFileSync(configPath); const head = state().head;
+    const result = runSetup('refresh', { BALLIN_BACKUP_CHOICE: 'yes' }, '', 'create\n\nno\nyes\n');
+    ok(result);
+    assert.include(result.stdout, 'Validated private backup:');
+    assert.notInclude(result.stdout, 'Reconnect to an existing backup');
+    assert.deepEqual(fs.readFileSync(configPath), before);
+    assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+    assert.equal(cached(), 'prior comparison\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+  });
   it('keeps optional branch-protection warnings during self-update validation', () => {
     const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
     const before = config(); seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess();

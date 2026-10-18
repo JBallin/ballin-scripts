@@ -2540,6 +2540,36 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       } finally { cleanupSandbox(sandbox.root); }
     });
   }
+  for (const configure of [true, false]) {
+    it(`honors early Yes when rerunning guarded Quickstart after maintenance-only setup (configure: ${configure})`, () => {
+      const sandbox = createSandbox({ quickstart: true });
+      try {
+        const maintenance = runSandbox(sandbox, ['quickstart'], 'no\nlogin\nyes\nyes\nno\nlogin\nno\n');
+        assert.equal(maintenance.status, 0, maintenance.stdout + maintenance.stderr);
+        const configPath = path.join(sandbox.repo, 'ballin.config.json');
+        const previousConfig = fs.readFileSync(configPath, 'utf8');
+        assert.isUndefined(JSON.parse(previousConfig).backup.repository);
+        const result = runSandbox(sandbox, ['quickstart'], `yes\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.lengthOf(result.stdout.match(/Reconnect to an existing backup or create a new one\?/gu) ?? [], 1);
+        assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
+        assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]', result.stdout + result.stderr);
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const remote = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
+        assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'open').length, 0);
+        if (configure) {
+          assert.isObject(config.backup.repository); assert.isTrue(remote.exists);
+          assert.include(result.stdout, 'Run a backup now and open');
+          assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 1);
+        } else {
+          assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+          assert.isFalse(remote.exists);
+          assert.notInclude(result.stdout, 'Run a backup now and open');
+          assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 0);
+        }
+      } finally { cleanupSandbox(sandbox.root); }
+    });
+  }
   it('keeps network, child-command, download, and mode restrictions in quickstart sandbox mode', () => {
     const sandbox = createSandbox({ quickstart: true });
     try {
