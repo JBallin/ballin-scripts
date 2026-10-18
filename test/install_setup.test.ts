@@ -456,6 +456,32 @@ describe('install setup', () => {
 
   for (const mode of ['fresh', 'refresh', 'self-update']) {
     for (const signal of ['INT', 'TERM']) {
+      it(`stops before setup effects on child SIG${signal} from brew prefix in ${mode} mode`, () => {
+        installConfigSources();
+        const target = path.join(binDir, 'ballin');
+        fs.writeFileSync(target, 'prior command\n');
+        writeExecutable('brew', `#!/bin/sh
+printf 'brew:%s\\n' "$*" >> '${commandLogPath}'
+kill -${signal} $$
+`);
+        const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
+          encoding: 'utf8', input: 'n\n', env: childEnvironment(),
+        });
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stderr, '');
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.equal(commandLog(), 'brew:--prefix\n');
+        assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+        assert.isFalse(fs.existsSync(path.join(repoDir, '.analytics')));
+        assert.isFalse(fs.existsSync(path.join(repoDir, '.backup-cache')));
+        assert.isTrue(fs.lstatSync(target).isFile());
+        assert.equal(fs.readFileSync(target, 'utf8'), 'prior command\n');
+      });
+    }
+  }
+
+  for (const mode of ['fresh', 'refresh', 'self-update']) {
+    for (const signal of ['INT', 'TERM']) {
       it(`preserves child SIG${signal} from gh in the ${mode} setup CLI`, () => {
         installConfigSources();
         const configPath = path.join(repoDir, 'ballin.config.json');
