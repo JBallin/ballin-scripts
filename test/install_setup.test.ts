@@ -1155,7 +1155,8 @@ require('https').request = () => {
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Shell completion setup could not finish. Ballin remains installed.');
+      assert.include(result.stdout, 'Tab completion setup could not finish. Ballin remains installed.');
+      assert.notInclude(result.stdout, 'Tab completion skipped.');
       assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
