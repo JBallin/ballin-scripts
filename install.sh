@@ -107,6 +107,8 @@ write_install_cancelled() {
 }
 # Report only command entries that this installation would actually replace.
 # Directories and unsafe link targets never gain replacement permission.
+# The JavaScript diagnostics contain literal command hints.
+# shellcheck disable=SC2016
 if command_preflight=$(node -e '
   const fs = require("fs"), path = require("path"), cp = require("child_process");
   let directory = path.join(process.env.HOME, ".local", "bin");
@@ -143,7 +145,7 @@ if [ "$repo_existed" = false ]; then
       printf '\nNo answer received. Ballin installation stopped before installing Ballin.\n' >&2
       exit 1
     fi
-    printf 'Ballin installation cancelled. Rerun the installer when you’re ready.\n'
+    printf "Ballin installation cancelled. Rerun the installer when you’re ready.\n"
     write_install_cancelled || exit 1
     exit 0
   fi

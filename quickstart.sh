@@ -277,7 +277,7 @@ original_path_sufficient() {
     const [original, commands, ...tools] = process.argv.slice(1);
     const entries = original.split(":");
     const same = (a, b) => { try { return fs.realpathSync(a) === fs.realpathSync(b); } catch { return a === b; } };
-    // Compare the preserved entry search, never Quickstart’s temporary PATH.
+    // Compare the preserved entry search, never the temporary Quickstart PATH.
     if (!entries.some(entry => same(entry, commands))) process.exit(1);
     for (const selected of tools.filter(Boolean)) {
       const name = selected.split("/").at(-1);
@@ -302,7 +302,7 @@ tools_need_helper() {
 
 find_suitable_brew() {
   local candidate prefix cellar
-  brew_tool=''; brew_prefix=''; brew_cellar=''
+  brew_tool=''; brew_prefix=''
   candidate=$(type -P brew) || return 0
   # Only normal native installations. Unknown/custom/Rosetta installations use direct routes.
   case "$machine:$candidate" in "arm64:$system_brew_arm/bin/brew"|"x86_64:$system_brew_intel/bin/brew") ;; *) return 0 ;; esac
@@ -323,7 +323,7 @@ find_suitable_brew() {
   [[ -f "$prefix/Library/Homebrew/brew.sh" || -f "$prefix/Homebrew/Library/Homebrew/brew.sh" ]] || return 0
   # Homebrew itself requires Apple's developer tools; do not bootstrap them through brew.
   probe_tool "$system_xcode_select" -p >/dev/null 2>&1 || return 0
-  brew_tool=$candidate; brew_prefix=$prefix; brew_cellar=$cellar
+  brew_tool=$candidate; brew_prefix=$prefix
 }
 
 existing_hidden_node() {
@@ -349,7 +349,7 @@ manual_node_guidance() {
   # Match actual known binaries, not manager directories or guessed command names.
   case "$resolved" in
     "$HOME"/.nvm/versions/node/*/bin/node|"${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin/node) owner='nvm (select a supported version in your shell)' ;;
-    /opt/homebrew/Cellar/node/*/bin/node|/usr/local/Cellar/node/*/bin/node) owner='Homebrew (review `brew upgrade node` yourself)' ;;
+    /opt/homebrew/Cellar/node/*/bin/node|/usr/local/Cellar/node/*/bin/node) owner="Homebrew (review \`brew upgrade node\` yourself)" ;;
   esac
   fail "Existing Node.js at $candidate needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
 }
@@ -393,7 +393,7 @@ install_brew_tools() {
     abort "Existing formula needs manual attention" if plan.any?(&:any_version_installed?)
     abort "No compatible dependency bottle" unless plan.all? { |formula| FormulaInstaller.new(formula).pour_bottle? }
     abort "Existing dependents need manual attention" unless plan.flat_map(&:runtime_installed_formula_dependents).empty?
-  ' "${formulas[@]}" || fail 'Homebrew’s installation plan needs manual attention. No selected tools were installed; inspect existing formulae and bottle support before retrying.'
+  ' "${formulas[@]}" || fail "Homebrew’s installation plan needs manual attention. No selected tools were installed; inspect existing formulae and bottle support before retrying."
   brew_checked install --formula "${formulas[@]}" || fail 'Homebrew installation did not finish. Inspect its output and existing tools before retrying; no direct fallback was started.'
   for formula in "${formulas[@]}"; do
     case "$formula" in
@@ -750,8 +750,8 @@ main() {
   fi
   backup_choice=no
   if confirm 'Set up backups to GitHub?' y; then backup_choice=yes
-  elif "$input_ended"; then printf 'Quickstart stopped. Rerun it when you’re ready.\n'; return 0
-  else printf 'Backup setup skipped. Run `ballin backup setup` when you’re ready.\n'; fi
+  elif "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0
+  else printf "Backup setup skipped. Run \`ballin backup setup\` when you’re ready.\n"; fi
   # Refuse managed-slot conflicts before discovery can execute them.
   for managed_tool in node npm git gh; do
     [[ "$managed_tool" != gh || "$backup_choice" == yes ]] || continue
@@ -795,7 +795,7 @@ main() {
     if "$need_node"; then
       local replacement_bin=$system_node_bin replacement_method='the official Node installer'
       if [[ -n "$brew_tool" ]]; then
-        replacement_bin="$brew_prefix/bin"; replacement_method='Homebrew’s Node installer'
+        replacement_bin="$brew_prefix/bin"; replacement_method="Homebrew’s Node installer"
         # The formula's npm post-install can remove this tree. Do not authorize
         # directory replacement through a prerequisite yes/no question.
         if [[ -e "$brew_prefix/lib/node_modules/npm" || -L "$brew_prefix/lib/node_modules/npm" ]]; then
@@ -813,7 +813,7 @@ main() {
     fi
     if ! confirm "Install $prerequisite_names?"; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
-      printf 'Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n'
+      printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
       return 0
     fi
   fi
@@ -874,7 +874,7 @@ main() {
     download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/commands/shell_location.ts' "$scratch/shell_location.ts"
     configure_path
   fi
-  if "$input_ended"; then printf 'Quickstart stopped. Rerun it when you’re ready.\n'; return 0; fi
+  if "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
   if [[ "$backup_choice" == yes ]]; then
     auth_status=0
     "$gh_tool" auth status --active --hostname github.com >/dev/null 2>&1 || auth_status=$?
@@ -908,7 +908,7 @@ main() {
   if "$path_setup_complete"; then
     printf "\n😎 Setup complete! Open a new Terminal to run \`ballin\`.\n"
   else
-    printf '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n'
+    printf "\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
   fi
 }
 
