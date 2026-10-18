@@ -789,7 +789,7 @@ system_sudo=fixture_sudo
         fs.writeFileSync(path.join(coreRepo, 'bin/ballin'), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
         const core = path.join(root, 'core-handoff');
         fs.writeFileSync(core, '#!/bin/bash\nexec "$TEST_NODE_RUNTIME" "$FAKE_SETUP_SOURCE" setup "$FAKE_CORE_REPO" https://example.test/docs "" refresh\n');
-        const overrides = { FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: core, FAKE_CORE_REPO: coreRepo,
+        const overrides = { FAKE_EARLY_ANSWER: 'no\n', FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: core, FAKE_CORE_REPO: coreRepo,
           FAKE_SETUP_SOURCE: path.resolve(__dirname, '../commands/install_setup.ts') };
         const profile = path.join(home, '.zshrc');
         fs.writeFileSync(profile, '# Existing settings\n', { mode: 0o640 });
@@ -835,7 +835,7 @@ system_sudo=fixture_sudo
             assert.equal(freshState.at(-1), destination);
           }
         }
-        for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:backup']) assert.notInclude(readLog(), forbidden);
+        for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:backup', 'gh:auth', 'gh:api']) assert.notInclude(readLog(), forbidden);
       });
     }
   }
@@ -851,7 +851,7 @@ system_sudo=fixture_sudo
     fs.writeFileSync(path.join(coreRepo, 'bin/ballin'), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
     const core = path.join(root, 'core-handoff');
     fs.writeFileSync(core, '#!/bin/bash\nexec "$TEST_NODE_RUNTIME" "$FAKE_SETUP_SOURCE" setup "$FAKE_CORE_REPO" https://example.test/docs "" refresh\n');
-    const overrides = { FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: core, FAKE_CORE_REPO: coreRepo,
+    const overrides = { FAKE_EARLY_ANSWER: 'no\n', FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: core, FAKE_CORE_REPO: coreRepo,
       FAKE_SETUP_SOURCE: path.resolve(__dirname, '../commands/install_setup.ts') };
     const result = run('y\n', overrides);
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -864,7 +864,7 @@ system_sudo=fixture_sudo
     });
     assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), localBin + ':' + path.join(prefix, 'bin'));
-    for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:backup']) assert.notInclude(readLog(), forbidden);
+    for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:backup', 'gh:auth', 'gh:api']) assert.notInclude(readLog(), forbidden);
   });
   for (const name of ['node', 'git', 'gh']) {
     for (const spelling of ['relative-tools', '.', '']) {
