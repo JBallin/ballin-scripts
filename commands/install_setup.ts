@@ -18,7 +18,8 @@ const {
 const {
   CommandInterrupted,
   commandExists,
-  readCommandOutput,
+  runCommand,
+  requireUninterrupted,
   runNodeScript,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
@@ -191,7 +192,9 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
 
 const resolveBinDir = (): string | null => {
   if (commandExists('brew')) {
-    const brewPrefix = readCommandOutput('brew', ['--prefix']);
+    const result = runCommand('brew', ['--prefix']);
+    requireUninterrupted(result);
+    const brewPrefix = result.status === 0 && !result.error ? result.stdout : null;
     if (brewPrefix !== null) {
       return path.join(brewPrefix.trimEnd(), 'bin');
     }
