@@ -71,15 +71,19 @@ if [ "$repo_existed" = false ]; then
 fi
 
 ################################## CLONE REPO ##################################
-if ! (
+if (
   cd "$HOME" || exit
   if [ "$repo_existed" = false ]; then
     echo ''
-    if ! git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts; then
-      exit 1
+    if git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts; then :
+    else
+      exit $?
     fi
   fi
-); then
+); then :
+else
+  prepare_status=$?
+  [[ "$prepare_status" != 130 && "$prepare_status" != 143 ]] || exit "$prepare_status"
   printf '\n⚠️  ERROR: Unable to prepare %s\n' "$repo_dir"
   printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
   exit 1

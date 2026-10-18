@@ -222,6 +222,8 @@ installer does not run `ballin update`, collect snapshots, perform the first
 backup, install optional tools, or change GitHub CLI authentication.
 
 Ctrl-C interrupts the current command; earlier approved changes remain.
+Clone and checkout/update interruptions preserve exit status 130/143. A partial
+checkout may remain; inspect it before retrying.
 An interrupted remote request may already have completed. Inspect the reported
 destination before retrying. Interruption does not roll back completed work or
 guarantee that all descendants stop immediately.

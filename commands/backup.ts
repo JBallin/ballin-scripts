@@ -800,6 +800,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       withTemporaryStatus('Opening...', () => {
         const url = repositoryOpenUrl(config.repository);
         const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
+        requireUninterrupted(result);
         process.exitCode = result.error ? 1 : spawnResultStatus(result);
         if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
         else writeStdoutLine(`Opened ${url} in your browser.`);
