@@ -237,7 +237,7 @@ Quickstart without claiming installation. Required prerequisite/install consent
 EOF is an error; the CLT readiness pause also requires a completed answer and
 an actual readiness check.
 
-Control-C remains an interruption (normally 130), distinct from EOF and No.
+Ctrl-C remains an interruption (normally 130), distinct from EOF and No.
 Pending choices are not saved, later setup actions stop, and earlier approved
 changes remain. There is no rollback or guarantee all descendants stop at once.
 A remote request may have completed: inspect the reported destination before

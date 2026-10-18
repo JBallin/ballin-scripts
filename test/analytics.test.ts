@@ -11,10 +11,13 @@ const {
   ensureAnalyticsInstallId,
   loadAppVersion,
   recordAnalyticsEvent,
+  recordBehavioralAnalyticsEvent,
+  flushPendingAnalytics,
   rethrowCommandError,
   runWithCommandAnalytics,
   sendAnalyticsPayload,
 } = require('../commands/analytics.ts');
+const { CommandInterrupted } = require('../commands/commandHelpers.ts');
 const {
   topLevelCommandNames,
 } = require('../commands/top_level_commands.ts');
@@ -724,6 +727,28 @@ process.stdout.write(JSON.stringify({ result }));
       }), 'unknown', name);
     }
   });
+
+  for (const status of [130, 143]) {
+    it(`cancels this invocation's deferred analytics on interruption ${status} without cancelling unrelated sends`, async () => {
+      const sent: { event?: string }[] = [];
+      const runtime = { analyticsConfig: { enabled: 'true' }, env: {}, installId: fixedInstallId,
+        sender: async (payload: { event?: string }) => { sent.push(payload); } };
+      const previousExitCode = process.exitCode; const write = process.stdout.write;
+      let output = '';
+      process.stdout.write = ((chunk: string) => { output += chunk; return true; }) as typeof process.stdout.write;
+      try {
+        const unrelated = recordBehavioralAnalyticsEvent({ event: 'update.self-update', status: 'success' }, runtime);
+        await runWithCommandAnalytics('ballin backup', () => {
+          void recordBehavioralAnalyticsEvent({ event: 'backup.run', status: 'failure' });
+          throw new CommandInterrupted(status);
+        }, runtime);
+        await flushPendingAnalytics(); await unrelated;
+        assert.equal(process.exitCode, status);
+        assert.equal(output, 'Interrupted. Earlier completed changes remain.\n');
+        assert.deepEqual(sent.map(payload => payload.event), ['update.self-update']);
+      } finally { process.exitCode = previousExitCode; process.stdout.write = write; }
+    });
+  }
 
   it('preserves command behavior when macOS product-version collection throws', async () => {
     const payloads: AnalyticsPayload[] = [];

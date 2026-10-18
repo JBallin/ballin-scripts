@@ -1,4 +1,3 @@
-const { rethrowInterruption } = require('./commandHelpers.ts');
 const fs = require('fs');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
@@ -6,7 +5,7 @@ const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configureAnalyticsPreference } = require('./analytics.ts');
 const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
-const { writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
+const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
 const setupHelp = `Usage:
     ballin setup

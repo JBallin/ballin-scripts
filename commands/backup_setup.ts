@@ -57,6 +57,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     return promptInputState() === 'ended' ? true : false;
   };
   let recoveryUrl: string | undefined;
+  let configuredRecoveryUrl: string | undefined;
   let remoteMayExist = false;
   let remoteInitialized = false;
   let linkageSaved = false;
@@ -97,6 +98,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
           candidate.backup = { ...candidate.backup, repository: read.destination };
           if (!saveBackupConfig(configPath, candidate)) return false;
         }
+        configuredRecoveryUrl = repositoryUrl(read.destination, account);
         reportManagedBranchProtection(ensureManagedBranchRuleset(read), options.presentation === 'installation');
         const showSummary = options.showValidationSummary !== false;
         const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
@@ -234,8 +236,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     if (options.presentation !== 'installation') writeStdoutLine('Backup setup complete.');
     return true;
   } catch (error) {
-    if (error instanceof CommandInterrupted && remoteMayExist && recoveryUrl) {
-      writeStdoutLine(`Remote work may already have completed at ${recoveryUrl}. Inspect it before recovery; do not create a duplicate.`);
+    const interruptedUrl = configuredRecoveryUrl ?? (remoteMayExist ? recoveryUrl : undefined);
+    if (error instanceof CommandInterrupted && interruptedUrl) {
+      writeStdoutLine(`Remote work may already have completed at ${interruptedUrl}. Inspect it before recovery; do not create a duplicate.`);
     }
     rethrowInterruption(error);
     writeStdoutLine(error instanceof PortableConfigError ? (error as Error).message

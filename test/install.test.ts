@@ -277,6 +277,25 @@ esac
     ]);
   });
 
+  for (const typed of [true, false]) {
+    for (const status of [130, 143]) {
+      it(`preserves interrupted updater status ${status} through the ${typed ? 'typed' : 'legacy'} installer route`, () => {
+        installBaseCommands(); writeCurrentCheckout({ repoUpdate: typed });
+        const result = runInstall({ env: typed
+          ? { FAKE_REPO_UPDATE_STATUS: String(status) } : { FAKE_GIT_FETCH_STATUS: String(status) } });
+        assert.equal(result.status, status, result.stdout + result.stderr);
+        assert.notInclude(result.stdout + result.stderr, 'Update or delete');
+        assert.notInclude(result.stdout, 'Setup complete');
+        assert.notInclude(result.stdout, 'Unable to update');
+        const log = fs.readFileSync(commandLogPath, 'utf8');
+        assert.include(log, typed ? 'node:repo_update' : 'git:fetch');
+        for (const later of ['node:install_setup', 'git:checkout', 'git:merge']) assert.notInclude(log, later);
+        assert.equal(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'), '{}\n');
+        assert.isFalse(fs.existsSync(path.join(homeDir, 'inspection-ran')));
+      });
+    }
+  }
+
   it('retries an incomplete cloned checkout with fresh setup when no config was created', () => {
     installBaseCommands();
 

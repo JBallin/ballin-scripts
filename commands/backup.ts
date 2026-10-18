@@ -1,4 +1,3 @@
-const { rethrowInterruption, requireUninterrupted } = require('./commandHelpers.ts');
 const { withTemporaryStatus, clearTemporaryStatus } = require('./temporaryStatus.ts');
 import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
@@ -29,6 +28,8 @@ const {
 } = require('./install_setup.ts');
 const {
   makeTempFile,
+  rethrowInterruption,
+  requireUninterrupted,
   reportSpawnError,
   removeTempFile,
   runCommand,
