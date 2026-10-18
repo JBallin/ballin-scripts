@@ -3,7 +3,7 @@
 Install Ballin for maintenance and updates, with optional private GitHub backups.
 You’ll need a [GitHub account](https://github.com/signup) only for backups.
 
-Open Terminal and paste:
+Open Terminal in zsh or Bash and paste:
 
 ```shell
 BALLIN_SHELL_PID=$$ BALLIN_SHELL_HOME="$HOME" BALLIN_SHELL_CONFIGURED="${SHELL-}" BALLIN_SHELL_ZDOTDIR_SET="${ZDOTDIR+x}" BALLIN_SHELL_ZDOTDIR="${ZDOTDIR-}" bash -c 's=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh -o -) && export -n s && bash /dev/fd/3 3<<<"$s"'

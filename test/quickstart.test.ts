@@ -1766,6 +1766,7 @@ system_sudo=fixture_sudo
       fs.unlinkSync(path.join(tools, 'gh'));
       const result = run('y\n\ny\ny\n', { FAKE_GIT: 'missing', FAKE_ARCH: arch, FAKE_MISSING_NODE: '1' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Install Apple Command Line Tools, Node.js, and GitHub CLI? [y/N]');
       assert.include(readLog(), 'xcode-select:--install');
       assert.notInclude(readLog(), 'brew:');
       assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), "PATH='" + path.join(home, '.local/share/ballin-quickstart/bin') + "':$PATH:'" + path.join(home, '.local/bin') + "'");
@@ -2170,10 +2171,35 @@ system_sudo=fixture_sudo
     trap cleanup EXIT
     tools_need_helper() { return 1; }
     configure_path
-  `], { encoding: 'utf8', input: input.startsWith('\n') ? 'home' + input : input, cwd: home, env: testChildEnvironment({
+  `], { encoding: 'utf8', input: (overrides.SHELL ?? '/bin/zsh') === '/bin/zsh' && input.startsWith('\n') ? 'home' + input : input, cwd: home, env: testChildEnvironment({
     HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
     FAKE_SOURCE: source, FAKE_LOCATION_SOURCE: path.resolve(__dirname, '../commands/shell_location.ts'), TEST_NODE_RUNTIME: process.execPath, ...overrides,
   }) });
+  for (const input of ['\n', '']) {
+    it(`silently skips Bash startup selection on ${input ? 'Enter' : 'EOF'} without editing files`, () => {
+      const profile = path.join(home, '.bash_profile');
+      const contents = `touch "${root}/startup-ran"\n# Existing settings\n`;
+      fs.writeFileSync(profile, contents, { mode: 0o640 });
+      const result = runPathSetup(input, { SHELL: '/bin/bash' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'PATH setup skipped.');
+      assert.notInclude(result.stdout, 'Add Ballin setup');
+      assert.equal(result.stderr, '');
+      assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+      assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
+      assert.isFalse(fs.existsSync(path.join(home, '.bashrc')));
+      assert.isFalse(fs.existsSync(path.join(root, 'startup-ran')));
+    });
+  }
+  it('retains the manual warning for an invalid Bash startup selection', () => {
+    const result = runPathSetup('other\n', { SHELL: '/bin/bash' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stderr, 'No Bash startup file selected.');
+    assert.include(result.stderr, 'The startup file was left unchanged.');
+    assert.include(result.stderr, 'Review your shell startup and PATH setup');
+    assert.notInclude(result.stdout, 'PATH setup skipped.');
+    for (const profile of ['.bash_profile', '.bashrc']) assert.isFalse(fs.existsSync(path.join(home, profile)));
+  });
   for (const initial of ['', '# Existing settings\n', '# No final newline']) {
     it(`accepts Enter for home and preserves correct PATH separation: ${JSON.stringify(initial)}`, () => {
       const profile = path.join(home, '.zshrc'); fs.writeFileSync(profile, initial);

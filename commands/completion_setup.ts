@@ -164,8 +164,8 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
   } catch (error) {
     rethrowInterruption(error);
     if (error instanceof CompletionProfileError) write(error.message);
-    write('Shell completion setup could not finish. Ballin remains installed.');
-    fallback();
+    write('Tab completion setup could not finish. Ballin remains installed.');
+    write(`Manual setup: ${docsUrl}#startup-files-and-manual-activation`);
   }
 };
 

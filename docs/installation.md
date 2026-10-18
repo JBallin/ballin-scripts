@@ -24,8 +24,8 @@ before running it.
 
 ## Install
 
-Run the installer through Bash process substitution so it can read your
-confirmation from standard input:
+In zsh or Bash, run the installer through Bash process substitution so it can read
+your confirmation from standard input:
 
 ```shell
 BALLIN_SHELL_PID=$$ BALLIN_SHELL_HOME="$HOME" BALLIN_SHELL_CONFIGURED="${SHELL-}" BALLIN_SHELL_ZDOTDIR_SET="${ZDOTDIR+x}" BALLIN_SHELL_ZDOTDIR="${ZDOTDIR-}" bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)

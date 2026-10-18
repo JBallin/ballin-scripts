@@ -125,8 +125,10 @@ describe('optional completion setup', () => {
   it('contains filesystem and prompt failures with manual fallback', () => {
     const output: string[] = [];
     offerCompletionSetup('guide', { env, interactive: true, write: (text: string) => output.push(text), prompt: () => { throw new Error('input failed'); } });
-    assert.include(output.join('\n'), 'Ballin remains installed');
-    assert.include(output.join('\n'), 'guide#startup-files-and-manual-activation');
+    assert.deepEqual(output, [
+      'Tab completion setup could not finish. Ballin remains installed.',
+      'Manual setup: guide#startup-files-and-manual-activation',
+    ]);
   });
   it('refuses a hardlink added between inspection and opening the startup file', () => {
     const profile = path.join(home, '.zshrc');

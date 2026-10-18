@@ -668,6 +668,7 @@ configure_path() {
       case "$choice" in
         bashrc) profile="$HOME/.bashrc" ;;
         login) ;; # First existing login file selected above.
+        '') path_setup_complete=false; printf 'PATH setup skipped.\n'; return ;;
         *) path_incomplete 'No Bash startup file selected.'; return ;;
       esac
       ;;
@@ -810,7 +811,10 @@ main() {
     "$need_gh" && prerequisite_list+=('GitHub CLI')
     for (( index=0; index<${#prerequisite_list[@]}; index++ )); do
       if (( index > 0 )); then
-        if (( index == ${#prerequisite_list[@]} - 1 )); then prerequisite_names+=' and '; else prerequisite_names+=', '; fi
+        if (( index == ${#prerequisite_list[@]} - 1 )); then
+          (( ${#prerequisite_list[@]} < 3 )) || prerequisite_names+=','
+          prerequisite_names+=' and '
+        else prerequisite_names+=', '; fi
       fi
       prerequisite_names+=${prerequisite_list[index]}
     done
