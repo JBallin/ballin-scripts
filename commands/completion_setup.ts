@@ -85,7 +85,7 @@ const appendActivation = (target: CompletionTarget): boolean => {
     const contents = fs.readFileSync(fd) as Buffer;
     const lines = contents.toString('utf8').split('\n');
     if (lines.includes(`${target.line}\r`)) {
-      throw new CompletionProfileError(`The completion activation in ${target.profile} has a trailing carriage return. Replace only that activation line manually with the displayed command using LF before reloading this file.`);
+      throw new CompletionProfileError(`The completion activation in ${target.profile} has a trailing carriage return. Replace only that activation line manually with the command below, using LF line endings before reloading this file:\n${target.line}`);
     }
     if (lines.includes(target.line)) return false;
     const trailingBackslashes = contents.toString('utf8').match(/(\\+)(?:\r?\n)?$/u)?.[1];

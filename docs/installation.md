@@ -140,7 +140,8 @@ setup does not make core installation fail. If an append fails, Ballin attempts
 to restore the original bytes; if restoration fails or conflicting changes are
 detected, inspect the file Ballin identifies before reloading it. If Ballin
 reports an existing activation with a trailing carriage return, replace only
-that line manually with the displayed command using LF line endings.
+that line with the activation for your shell in
+[manual activation](#startup-files-and-manual-activation), using LF line endings.
 
 ## Local effects
 

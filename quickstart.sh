@@ -327,7 +327,7 @@ find_suitable_brew() {
 }
 
 existing_hidden_node() {
-  local candidate
+  local candidate fnm_root
   # Manager installation alone proves nothing. Require an actual Node executable.
   for candidate in "$system_brew_arm"/bin/node "$system_node_bin"/node \
     "$system_brew_arm"/Cellar/node*/*/bin/node "$system_brew_intel"/Cellar/node*/*/bin/node \
@@ -337,6 +337,15 @@ existing_hidden_node() {
     "${ASDF_DATA_DIR:-$HOME/.asdf}"/installs/nodejs/*/bin/node "${VOLTA_HOME:-$HOME/.volta}"/tools/image/node/*/bin/node; do
     if [[ -f "$candidate" || -L "$candidate" ]]; then printf '%s' "$candidate"; return; fi
   done
+  # fnm retains these fallback roots when FNM_DIR is unset. An empty root is
+  # not evidence of an installed runtime; require an actual Node file/link.
+  if [[ -z "${FNM_DIR:-}" ]]; then
+    for fnm_root in "$HOME/.fnm" "$HOME/Library/Application Support/fnm"; do
+      for candidate in "$fnm_root"/node-versions/*/installation/bin/node; do
+        if [[ -f "$candidate" || -L "$candidate" ]]; then printf '%s' "$candidate"; return; fi
+      done
+    done
+  fi
 }
 
 manual_node_guidance() {

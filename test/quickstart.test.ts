@@ -307,6 +307,23 @@ esac
     assert.equal(result.status, 1); assert.include(result.stderr, 'Existing Node.js at ' + path.join(tools, 'node'));
     for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
   });
+  for (const fnmRoot of ['.local/share/fnm', '.fnm', 'Library/Application Support/fnm']) {
+    for (const installed of [false, true]) {
+      it(`requires actual Node evidence in inactive fnm root ${fnmRoot} (installed ${installed})`, () => {
+        const directory = path.join(home, fnmRoot, 'node-versions/v24.22.0/installation/bin');
+        fs.mkdirSync(directory, { recursive: true });
+        const node = path.join(directory, 'node');
+        if (installed) fs.writeFileSync(node, '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+        const result = run('no\n', { FAKE_MISSING_NODE: '1', FNM_DIR: undefined });
+        assert.equal(result.status, installed ? 1 : 0, result.stdout + result.stderr);
+        if (installed) {
+          assert.include(result.stderr, `Existing Node.js at ${node} needs manual attention.`);
+          assert.notInclude(result.stdout, 'Install Node.js?');
+        } else assert.include(result.stdout, 'Install Node.js? [y/N]');
+        for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+      });
+    }
+  }
   for (const answer of ['', 'y', 'yes']) {
     it(`requires a completed prerequisite consent before installing on EOF ${JSON.stringify(answer)}`, () => {
       fs.unlinkSync(path.join(tools, 'gh'));

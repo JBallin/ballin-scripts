@@ -86,6 +86,7 @@ describe('optional completion setup', () => {
     fs.writeFileSync(profile, contents);
     const output = offer(['y']);
     assert.include(output, 'trailing carriage return'); assert.notInclude(output, 'already enabled');
+    assert.include(output, `before reloading this file:\n${activationLine('zsh')}`);
     assert.equal(fs.readFileSync(profile, 'utf8'), contents);
   });
   it('falls back for missing, relative, or unsupported shell/home evidence', () => {
@@ -315,7 +316,8 @@ describe('optional completion setup', () => {
       const output = offer(['bashrc', 'y']);
       assert.include(output, `The completion activation in ${profile} has a trailing carriage return`);
       assert.include(output, 'Replace only that activation line manually');
-      assert.include(output, 'using LF before reloading');
+      assert.include(output, `using LF line endings before reloading this file:\n${line}`);
+      assert.notInclude(output, 'the displayed command');
       assert.notInclude(output, 'already enabled');
       assert.notInclude(output, 'Tab completion enabled.');
       assert.strictEqual(fs.readFileSync(profile, 'utf8'), contents);
