@@ -110,6 +110,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
     env: childEnv,
   });
 
+  requireUninterrupted(updateResult);
   if (updateResult.stderr) {
     process.stderr.write(updateResult.stderr);
   }
@@ -292,7 +293,7 @@ const setup = (
   return backupSetupSucceeded;
 };
 
-const runInstallSetupCli = (): void => {
+const runInstallSetupCommand = (): void => {
   const [, , command, repoDir, option] = process.argv;
 
   if (command === 'supports-command') {
@@ -308,11 +309,7 @@ const runInstallSetupCli = (): void => {
   if (command === 'setup' && repoDir && option) {
     const mode = process.argv[6] === 'fresh' ? 'fresh'
       : process.argv[6] === 'self-update' ? 'self-update' : 'refresh';
-    try { process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1; } catch (error) {
-      if (!(error instanceof CommandInterrupted)) throw error;
-      process.exitCode = (error as { status: number }).status;
-      writeStdoutLine((error as Error).message);
-    }
+    process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1;
     return;
   }
 
@@ -334,6 +331,14 @@ const runInstallSetupCli = (): void => {
 
   writeStdoutLine(`Unknown install setup command: ${command}`);
   process.exitCode = 1;
+};
+
+const runInstallSetupCli = (): void => {
+  try { runInstallSetupCommand(); } catch (error) {
+    if (!(error instanceof CommandInterrupted)) throw error;
+    process.exitCode = (error as { status: number }).status;
+    writeStdoutLine((error as Error).message);
+  }
 };
 
 if (require.main === module) {

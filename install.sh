@@ -88,19 +88,25 @@ fi
 ############################ UPDATE EXISTING REPO ##############################
 if [ "$repo_existed" = true ]; then
   if [ -f "$repo_dir/commands/repo_update.ts" ]; then
-    if ! (
+    if (
       cd "$repo_dir" || exit
       node "$repo_dir/commands/repo_update.ts" "$repo_dir"
-    ); then
+    ); then :
+    else
+      update_status=$?
+      [[ "$update_status" != 130 && "$update_status" != 143 ]] || exit "$update_status"
       print_stale_checkout_guidance
       exit 1
     fi
-  elif ! (
+  elif (
     cd "$repo_dir" || exit
     git fetch origin +main:refs/remotes/origin/main \
       && git checkout main \
       && git merge origin/main
-  ); then
+  ); then :
+  else
+    update_status=$?
+    [[ "$update_status" != 130 && "$update_status" != 143 ]] || exit "$update_status"
     print_stale_checkout_guidance
     exit 1
   fi

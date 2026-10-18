@@ -122,6 +122,7 @@ const allowedBehavioralStatuses = new Set(['success', 'failure']);
 const allowedBackupFailureCategories = new Set(['transport', 'authentication', 'reconciliation', 'local_state', 'unknown']);
 const pendingBehavioralSends = new Set<Promise<void>>();
 let currentAnalyticsRuntime: AnalyticsRuntime | undefined;
+let currentBehavioralScope: { cancelled: boolean } | undefined;
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
@@ -558,7 +559,10 @@ const recordBehavioralAnalyticsEvent = (
     };
     // Start network I/O after synchronous commands yield, so later spawnSync work
     // cannot block a running request's timeout or callbacks.
-    const pending = Promise.resolve().then(() => sender(payload, options)).catch(() => {
+    const scope = currentBehavioralScope;
+    const pending = Promise.resolve().then(() => {
+      if (!scope?.cancelled) return sender(payload, options);
+    }).catch(() => {
       // Analytics must never affect command behavior or exit status.
     });
     pendingBehavioralSends.add(pending);
@@ -589,7 +593,10 @@ const runWithCommandAnalytics = (
   const startedAt = nowMs();
   const analyticsRuntime = runtime.preserveLocalState ? preserveLocalAnalyticsState(runtime) : runtime;
   const previousRuntime = currentAnalyticsRuntime;
+  const previousScope = currentBehavioralScope;
+  const scope = { cancelled: false };
   currentAnalyticsRuntime = analyticsRuntime;
+  currentBehavioralScope = scope;
   process.exitCode = undefined;
   try {
     runCommand();
@@ -600,6 +607,7 @@ const runWithCommandAnalytics = (
     }, analyticsRuntime), flushPendingAnalytics()]).then(() => {});
   } catch (error) {
     if (error instanceof CommandInterrupted) {
+      scope.cancelled = true;
       process.exitCode = (error as { status: number }).status;
       writeStdoutLine((error as Error).message);
       return Promise.resolve();
@@ -613,6 +621,7 @@ const runWithCommandAnalytics = (
     });
   } finally {
     currentAnalyticsRuntime = previousRuntime;
+    currentBehavioralScope = previousScope;
   }
 };
 

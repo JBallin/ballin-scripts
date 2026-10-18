@@ -1057,6 +1057,28 @@ exit 2
     ]);
   });
 
+  for (const interruption of ['SIGINT', 'SIGTERM', 130, 143]) {
+    it(`stops after in-process readiness interruption ${interruption} before configured backup`, () => {
+      installHealthyReadinessCommands();
+      const effect = typeof interruption === 'number' ? `process.exit(${interruption});` : `process.kill(process.pid, '${interruption}');`;
+      writeTestExecutable('gh', '#!' + process.execPath + `\n
+        const args = process.argv.slice(2);
+        if (args[0] === 'api') {
+          require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'interrupted readiness\\n');
+          ${effect}
+        } else console.log('gh version fixture');
+      `);
+      const result = runUpdate({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true' });
+      assert.equal(result.status, interruption === 'SIGINT' || interruption === 130 ? 130 : 143, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Checking Ballin readiness');
+      assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.');
+      assert.notInclude(result.stdout, 'Backing up development environment');
+      assert.notInclude(result.stdout, "😎 You're ballin.");
+      assert.deepEqual(commandLog(), ['ballin|,|self-update', 'interrupted readiness']);
+      assert.equal(result.stderr, '');
+    });
+  }
+
   it('records Ballin readiness failures and still runs configured backup', () => {
     const selfUpdatePath = path.join(tempDir, 'self-update-ballin');
     fs.writeFileSync(selfUpdatePath, `#!/usr/bin/env bash

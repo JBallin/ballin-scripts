@@ -159,6 +159,28 @@ describe('install setup', () => {
     assert.equal(commandLog(), '');
   });
 
+  for (const mode of ['configure', 'refresh', 'self-update']) {
+    for (const signal of ['SIGINT', 'SIGTERM']) {
+      it(`preserves migration ${signal} in ${mode} without later setup or child output`, () => {
+        installConfigSources();
+        const configFile = path.join(repoDir, 'ballin.config.json');
+        const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+        fs.writeFileSync(configFile, original);
+        fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'),
+          `process.stdout.write('unfinished migration\\n'); process.stderr.write('unfinished diagnostic\\n'); process.kill(process.pid, '${signal}');\n`);
+        const args = mode === 'configure' ? ['configure', repoDir, docsUrl] : ['setup', repoDir, docsUrl, '', mode];
+        const result = spawnSync(process.execPath, [installSetupPath, ...args], { encoding: 'utf8', env: childEnvironment() });
+        assert.equal(result.status, signal === 'SIGINT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.equal(result.stderr, '');
+        assert.equal(fs.readFileSync(configFile, 'utf8'), original);
+        assert.equal(commandLog(), '');
+        assert.isFalse(fs.existsSync(installIdPath()));
+        assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+      });
+    }
+  }
+
   it('rejects repository setup while a Gist is configured before contacting GitHub or changing config', () => {
     const configFile = path.join(repoDir, 'ballin.config.json');
     const original = '{"backup":{"id":"returning-gist-id","host":"github.example.test"}}\n';
