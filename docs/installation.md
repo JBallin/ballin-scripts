@@ -240,6 +240,8 @@ an actual readiness check.
 Ctrl-C remains an interruption (normally 130), distinct from EOF and No.
 Pending choices are not saved, later setup actions stop, and earlier approved
 changes remain. There is no rollback or guarantee all descendants stop at once.
+Clone and checkout/update interruptions preserve exit status 130/143. A partial
+checkout may remain; inspect it before retrying.
 A remote request may have completed: inspect the reported destination before
 retrying. Standalone `ballin setup` saves each confirmed preference sequentially;
 existing-backup settings review saves its reviewed pair together. EOF cancels

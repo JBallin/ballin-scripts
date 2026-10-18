@@ -1758,6 +1758,42 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.stdout, 'Opened https://github.com/fixture-user/ballin-backups in your browser.\n');
     assert.isTrue(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')).validated);
   });
+  for (const browserResult of [0, 7, 130, 143, 'SIGINT', 'SIGTERM'] as const) {
+    it(`preserves opted-in browser interruption and ordinary telemetry for ${browserResult}`, () => {
+      const capture = createAnalyticsCapture(root);
+      const value = config(); value.analytics.enabled = 'true'; saveConfig(value);
+      seedCache('zshrc.sh', 'cached bytes\n');
+      const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+      const status = typeof browserResult === 'number' ? browserResult : browserResult === 'SIGINT' ? 130 : 143;
+      const interrupted = status === 130 || status === 143;
+      const effect = typeof browserResult === 'number' ? `process.exit(${browserResult});` : `process.kill(process.pid, '${browserResult}');`;
+      const result = run(['open'], '', { ...capture.env,
+        NODE_OPTIONS: `--require ${JSON.stringify(path.join(root, 'preload.cjs'))} ${capture.env.NODE_OPTIONS}`,
+      }, `
+        const child = require('child_process'); const spawn = child.spawnSync;
+        child.spawnSync = function(command, args, options) {
+          if (command === 'gh' && args[0] === 'browse') {
+            require('fs').writeFileSync(${JSON.stringify(path.join(root, 'browse-request-count'))},
+              String(JSON.parse(require('fs').readFileSync(${JSON.stringify(statePath)}, 'utf8')).requests.length));
+            return spawn.call(this, process.execPath, ['-e', ${JSON.stringify(effect)}], options);
+          }
+          return spawn.call(this, command, args, options);
+        };
+      `);
+      assert.equal(result.status, status, result.stdout + result.stderr);
+      const events: CapturedAnalyticsEvent[] = capture.readEvents();
+      assert.deepEqual(events.map(({ command, status }) => ({ command, status })), interrupted ? []
+        : [{ command: 'ballin backup', status: status === 0 ? 'success' : 'failure' }]);
+      if (interrupted) {
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stderr, 'unable to open your browser');
+      } else if (status === 0) assert.include(result.stdout, 'Opened https://github.com/fixture-user/ballin-backups');
+      else assert.include(result.stderr, 'unable to open your browser');
+      assert.equal(state().requests.length, Number(fs.readFileSync(path.join(root, 'browse-request-count'), 'utf8')));
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    });
+  }
   for (const failure of ['spawn', 'signal']) {
     it(`reports browser ${failure} failure without exposing child diagnostics`, () => {
       const result = run(['open'], '', {}, `
@@ -1772,9 +1808,14 @@ describe('repository backup lifecycle', function() {
         };
       `);
       assert.equal(result.status, failure === 'spawn' ? 1 : 143);
-      assert.equal(result.stdout, '');
-      assert.include(result.stderr, 'unable to open your browser'); assert.include(result.stderr, 'manually');
-      assert.include(result.stderr, 'https://github.com/fixture-user/ballin-backups');
+      if (failure === 'signal') {
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stderr, 'unable to open your browser');
+      } else {
+        assert.equal(result.stdout, '');
+        assert.include(result.stderr, 'unable to open your browser'); assert.include(result.stderr, 'manually');
+        assert.include(result.stderr, 'https://github.com/fixture-user/ballin-backups');
+      }
       assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_BROWSER_ERROR');
       assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
     });
