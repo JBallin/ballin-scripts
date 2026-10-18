@@ -358,7 +358,21 @@ manual_node_guidance() {
   # Match actual known binaries, not manager directories or guessed command names.
   case "$resolved" in
     "$HOME"/.nvm/versions/node/*/bin/node|"${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin/node) owner='nvm (select a supported version in your shell)' ;;
-    /opt/homebrew/Cellar/node/*/bin/node|/usr/local/Cellar/node/*/bin/node) owner="Homebrew (review \`brew upgrade node\` yourself)" ;;
+    *)
+      if [[ ! -L "$resolved" && -f "$resolved" ]]; then
+        local directory='' prefix cellar_root
+        directory=$(cd -P -- "${resolved%/*}" 2>/dev/null && pwd -P) || directory=''
+        for prefix in "$system_brew_arm" "$system_brew_intel"; do
+          cellar_root=$(cd -P -- "$prefix" 2>/dev/null && pwd -P) || continue
+          case "$directory/${resolved##*/}" in
+            "$cellar_root"/Cellar/node/*/bin/node)
+              owner="Homebrew (review \`brew upgrade node\` yourself)"
+              break
+              ;;
+          esac
+        done
+      fi
+      ;;
   esac
   fail "Existing Node.js at $candidate needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
 }

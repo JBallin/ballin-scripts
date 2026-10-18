@@ -305,7 +305,41 @@ esac
     fs.writeFileSync(path.join(tools, 'node'), '#!/bin/bash\nprintf false\\n\n', { mode: 0o755 });
     const result = run('', { PATH: tools + ':' + later });
     assert.equal(result.status, 1); assert.include(result.stderr, 'Existing Node.js at ' + path.join(tools, 'node'));
+    assert.include(result.stderr, 'using its existing installation method');
+    assert.notInclude(result.stderr, 'brew upgrade node');
     for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
+  });
+  for (const kind of ['relative', 'absolute', 'broken', 'cyclic']) {
+    it(`gives safe existing-Node guidance for a ${kind} Homebrew link`, () => {
+      const prefix = nativeBrew();
+      const node = path.join(prefix, 'bin/node');
+      const installed = path.join(prefix, 'Cellar/node/22.0.0/bin/node');
+      fs.mkdirSync(path.dirname(installed), { recursive: true });
+      const contents = '#!/bin/bash\nprintf false\\n\n';
+      if (kind !== 'broken') fs.writeFileSync(installed, contents, { mode: 0o755 });
+      const target = kind === 'absolute' ? installed : kind === 'cyclic' ? '../bin/node' : '../Cellar/node/22.0.0/bin/node';
+      fs.symlinkSync(target, node);
+      const result = run('', { PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: '1' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, `Existing Node.js at ${node} needs manual attention.`);
+      if (kind === 'relative' || kind === 'absolute') assert.include(result.stderr, 'Homebrew (review `brew upgrade node` yourself)');
+      else {
+        assert.include(result.stderr, 'using its existing installation method');
+        assert.notInclude(result.stderr, 'brew upgrade node');
+      }
+      assert.equal(fs.readlinkSync(node), target);
+      if (kind !== 'broken') assert.equal(fs.readFileSync(installed, 'utf8'), contents);
+      for (const forbidden of ['native-brew:install', 'native-brew:info', 'native-brew:ruby', 'nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+    });
+  }
+  it('retains existing nvm ownership guidance without switching Node', () => {
+    const node = path.join(home, '.nvm/versions/node/v22.0.0/bin/node');
+    fs.mkdirSync(path.dirname(node), { recursive: true });
+    fs.writeFileSync(node, '#!/bin/bash\nprintf false\\n\n', { mode: 0o755 });
+    const result = run('', { PATH: path.dirname(node) + ':' + tools });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'nvm (select a supported version in your shell)');
+    for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
   });
   for (const fnmRoot of ['.local/share/fnm', '.fnm', 'Library/Application Support/fnm']) {
     for (const installed of [false, true]) {
