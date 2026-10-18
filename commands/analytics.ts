@@ -6,7 +6,7 @@ const path = require('path');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { fetchConfig } = require('../config/index.ts');
 const { createConfigStore } = require('../config/store.ts');
-const { readCommandOutput, readPromptLine, writeStdoutLine, CommandInterrupted } = require('./commandHelpers.ts');
+const { readCommandOutput, readYesNo, writeStdoutLine, CommandInterrupted } = require('./commandHelpers.ts');
 const {
   topLevelCommandNames,
 } = require('./top_level_commands.ts') as {
@@ -105,6 +105,7 @@ type AnalyticsPreferenceOptions = {
   currentEnabled?: boolean;
   onCancelled?: () => void;
   docsUrl?: string;
+  presentation?: 'installation' | 'standalone';
 };
 
 type ConfigObject = { [key: string]: unknown };
@@ -301,28 +302,29 @@ const writeAnalyticsPreference = (configPath: string, enabled: boolean): { previ
 };
 
 const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
-  writeStdoutLine(`\n${analyticsDisclosureFor(options.docsUrl)}`);
+  writeStdoutLine(options.presentation === 'installation'
+    ? `\nAnalytics details: ${options.docsUrl || defaultAnalyticsDocsUrl}`
+    : `\n${analyticsDisclosureFor(options.docsUrl)}`);
   if (options.currentEnabled !== undefined) {
     writeStdoutLine(`Usage analytics are currently ${options.currentEnabled ? 'enabled' : 'disabled'}.`);
   }
   const defaultEnabled = options.defaultEnabled ?? false;
-  let response: { text: string; eof: boolean };
+  let enabled: boolean | null;
   try {
-    response = readPromptLine(analyticsPromptFor(defaultEnabled));
+    enabled = readYesNo(options.presentation === 'installation'
+      ? 'Share usage analytics to help improve Ballin? [y/N] '
+      : analyticsPromptFor(defaultEnabled), defaultEnabled);
   } catch {
     return false;
   }
-  if (response.eof) {
+  if (enabled === null) {
     options.onCancelled?.();
     return true;
   }
 
-  const enabled = response.text === ''
-    ? defaultEnabled
-    : response.text === 'y' || response.text === 'Y';
   const saved = writeAnalyticsPreference(options.configPath, enabled);
   if (saved) {
-    writeStdoutLine(savedPreferenceLine('analytics.enabled', enabled, saved.previous));
+    if (options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('analytics.enabled', enabled, saved.previous));
     return true;
   }
   writeStdoutLine('\nUnable to save the analytics preference; the existing local setting is unchanged.');

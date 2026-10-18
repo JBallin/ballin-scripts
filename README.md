@@ -32,7 +32,7 @@ Review the [install script](https://github.com/JBallin/ballin-scripts/blob/main/
 then run:
 
 ```shell
-bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+BALLIN_SHELL_PID=$$ BALLIN_SHELL_HOME="$HOME" BALLIN_SHELL_CONFIGURED="${SHELL-}" BALLIN_SHELL_ZDOTDIR_SET="${ZDOTDIR+x}" BALLIN_SHELL_ZDOTDIR="${ZDOTDIR-}" bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
 The installer shows its plan and asks before a fresh installation. It offers

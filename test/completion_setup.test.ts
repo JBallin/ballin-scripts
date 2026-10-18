@@ -20,7 +20,7 @@ describe('optional completion setup', () => {
     const choices = env.SHELL === '/bin/zsh' ? [env.ZDOTDIR ?? 'home', ...answers] : answers;
     offerCompletionSetup('https://example.test/install', {
       env, interactive, write: (text: string) => output.push(text),
-      prompt: (prompt: string) => { onPrompt?.(prompt); const text = choices.shift(); return { text: text ?? '', eof: text === undefined }; },
+      prompt: (prompt: string) => { output.push(prompt); onPrompt?.(prompt); const text = choices.shift(); return { text: text ?? '', eof: text === undefined }; },
     });
     return output.join('\n');
   };
@@ -28,18 +28,18 @@ describe('optional completion setup', () => {
     const profile = path.join(home, '.zshrc');
     const output = offer(['']);
     assert.include(output, profile);
-    assert.include(output, activationLine('zsh'));
+    assert.notInclude(output, activationLine('zsh'));
     assert.isFalse(fs.existsSync(profile));
-    assert.include(offer([], false), 'Enable shell completion later:\nhttps://example.test/install#shell-completion');
+    assert.include(offer([], false), 'Tab completion skipped. Enable it later: https://example.test/install#startup-files-and-manual-activation');
     offer([]);
     assert.isFalse(fs.existsSync(profile));
   });
   it('creates only the standard file privately and reports concise completion status', () => {
-    assert.equal(offer(['y']).split('\n').at(-1), 'Shell completion enabled.');
+    assert.equal(offer(['y']).split('\n').at(-1), 'Tab completion enabled.');
     const profile = path.join(home, '.zshrc');
     assert.strictEqual(fs.readFileSync(profile, 'utf8'), `${activationLine('zsh')}\n`);
     assert.strictEqual(fs.statSync(profile).mode & 0o777, 0o600);
-    assert.equal(offer(['Y']), 'Shell completion is already enabled.');
+    assert.include(offer(['Y']), 'Tab completion is already enabled.');
     assert.strictEqual(fs.readFileSync(profile, 'utf8'), `${activationLine('zsh')}\n`);
   });
   for (const contents of ['', 'export EDITOR=vim', 'export EDITOR=vim\n', 'one\r\ntwo', 'one\r\ntwo\r\n']) {
@@ -67,8 +67,8 @@ describe('optional completion setup', () => {
   it('reports existing completion without directory or edit prompts', () => {
     fs.writeFileSync(path.join(home, '.zshrc'), `${activationLine('zsh')}\n`);
     const prompts: string[] = [];
-    assert.include(offer([], true, (text) => prompts.push(text)), 'already enabled');
-    assert.isEmpty(prompts);
+    assert.include(offer(['y'], true, (text) => prompts.push(text)), 'already enabled');
+    assert.lengthOf(prompts, 2); // Plain invocation has no original-shell metadata.
   });
   it('permits a home override when the exported default directory cannot be inspected', () => {
     env.ZDOTDIR = path.join(home, 'missing');
@@ -76,7 +76,7 @@ describe('optional completion setup', () => {
     offerCompletionSetup('guide', { env, interactive: true, write: (text: string) => output.push(text),
       prompt: () => ({ text: answers.shift()!, eof: false }),
     });
-    assert.include(output.join('\n'), 'Shell completion enabled.');
+    assert.include(output.join('\n'), 'Tab completion enabled.');
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
     assert.isFalse(fs.existsSync(env.ZDOTDIR));
   });
@@ -105,7 +105,7 @@ describe('optional completion setup', () => {
     assert.strictEqual(completionTarget(env, response('login')).profile, path.join(home, '.bash_login'));
     fs.writeFileSync(path.join(home, '.bash_profile'), 'profile');
     assert.strictEqual(completionTarget(env, response('login')).profile, path.join(home, '.bash_profile'));
-    assert.include(offer(['login', 'y']), activationLine('bash'));
+    assert.include(offer(['login', 'y']), 'Tab completion enabled.');
     assert.strictEqual(fs.readFileSync(path.join(home, '.profile'), 'utf8'), 'shared shell file');
   });
   it('refuses links, directories, and changes made after confirmation', () => {
@@ -118,20 +118,35 @@ describe('optional completion setup', () => {
     fs.mkdirSync(profile);
     assert.include(offer(['y']), 'could not finish');
     fs.rmdirSync(profile);
-    assert.include(offer(['y'], true, (prompt) => { if (prompt === 'Enable shell completion? [y/N] ') fs.symlinkSync(outside, profile); }), 'could not finish');
+    assert.include(offer(['y'], true, (prompt) => { if (prompt.startsWith('Enable tab completion in ')) fs.symlinkSync(outside, profile); }), 'could not finish');
     assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'keep');
   });
   it('contains filesystem and prompt failures with manual fallback', () => {
     const output: string[] = [];
     offerCompletionSetup('guide', { env, interactive: true, write: (text: string) => output.push(text), prompt: () => { throw new Error('input failed'); } });
     assert.include(output.join('\n'), 'Ballin remains installed');
-    assert.include(output.join('\n'), 'guide#shell-completion');
+    assert.include(output.join('\n'), 'guide#startup-files-and-manual-activation');
+  });
+  it('refuses a hardlink added between inspection and opening the startup file', () => {
+    const profile = path.join(home, '.zshrc');
+    const alias = path.join(home, 'alias');
+    fs.writeFileSync(profile, '# keep\n', { mode: 0o640 });
+    const originalOpen = fs.openSync;
+    fs.openSync = function(file: string, ...args: unknown[]) {
+      if (file === profile && !fs.existsSync(alias)) fs.linkSync(profile, alias);
+      return originalOpen.call(this, file, ...args);
+    };
+    try { assert.throws(() => appendActivation(target()), /Startup file changed/u); }
+    finally { fs.openSync = originalOpen; }
+    assert.equal(fs.readFileSync(profile, 'utf8'), '# keep\n');
+    assert.equal(fs.readFileSync(alias, 'utf8'), '# keep\n');
+    assert.equal(fs.statSync(profile).mode & 0o777, 0o640);
   });
   it('uses real default prompting and environment only inside an isolated child', () => {
     const script = 'require("tty").isatty = (fd) => fd === 0; require(process.argv[1]).offerCompletionSetup("guide");';
     const result = spawnSync(process.execPath, ['-e', script, path.join(__dirname, '..', 'commands', 'completion_setup.ts')], { encoding: 'utf8', input: 'home\ny\n', env: testChildEnvironment(env) });
     assert.strictEqual(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Enable shell completion? [y/N]');
+    assert.include(result.stdout, 'Enable tab completion in ');
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
   });
   it('rejects a startup directory that is a file or link', () => {
@@ -184,7 +199,7 @@ describe('optional completion setup', () => {
     const directory = path.join(home, 'custom-zsh');
     fs.mkdirSync(directory);
     fs.writeFileSync(path.join(home, '.zshenv'), `ZDOTDIR=${directory}\nprintf touched > "${home}/startup-ran"\n`);
-    assert.strictEqual(completionTarget(env, response('')).profile, path.join(home, '.zshrc'));
+    assert.isNull(completionTarget(env, response('')));
     assert.isNull(completionTarget(env, response('skip')));
     assert.isNull(completionTarget(env, () => ({ text: 'home', eof: true })));
     assert.strictEqual(completionTarget(env, response(directory)).profile, path.join(directory, '.zshrc'));
@@ -302,7 +317,7 @@ describe('optional completion setup', () => {
       assert.include(output, 'Replace only that activation line manually');
       assert.include(output, 'using LF before reloading');
       assert.notInclude(output, 'already enabled');
-      assert.notInclude(output, 'Shell completion enabled.');
+      assert.notInclude(output, 'Tab completion enabled.');
       assert.strictEqual(fs.readFileSync(profile, 'utf8'), contents);
     });
   }

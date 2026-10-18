@@ -16,8 +16,12 @@ const {
   configuredBackupDestination,
 } = require('./backup_config.ts');
 const {
+  promptInputState,
+  CommandInterrupted,
+  rethrowInterruption,
   commandExists,
-  readCommandOutput,
+  runCommand,
+  requireUninterrupted,
   runNodeScript,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
@@ -39,6 +43,8 @@ type ConfigureBackupOptions = {
   configPath?: string;
   originalConfig?: Record<string, unknown>;
   onCancelled?: () => void;
+  initialConsent?: boolean;
+  presentation?: 'installation' | 'standalone';
   showValidationSummary?: boolean;
   maintenanceOnly?: boolean;
   reviewExistingSettings?: boolean;
@@ -108,6 +114,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
     env: childEnv,
   });
 
+  requireUninterrupted(updateResult);
   if (updateResult.stderr) {
     process.stderr.write(updateResult.stderr);
   }
@@ -139,7 +146,7 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
     } catch {
       return false;
     }
-    writeStdoutLine("🧠 Created 'ballin.config.json' file in root using default settings");
+    writeStdoutLine("⚙️ Created 'ballin.config.json' file in root using default settings");
     return true;
   }
 
@@ -155,6 +162,8 @@ const configureBackup = (
   if (!originalConfig) return false;
   return configureRepositoryBackup({
     configPath, originalConfig, repositoryName: options.repositoryName, onCancelled: options.onCancelled,
+    initialConsent: options.initialConsent,
+    presentation: options.presentation,
     showValidationSummary: options.showValidationSummary,
     maintenanceOnly: options.maintenanceOnly,
     reviewExistingSettings: options.reviewExistingSettings,
@@ -162,7 +171,19 @@ const configureBackup = (
   });
 };
 
-const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
+const commandTargetSnapshot = (target: string): string => {
+  let stat;
+  try { stat = fs.lstatSync(target); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'null';
+    throw error;
+  }
+  if (!stat.isFile() && !stat.isSymbolicLink()) throw new Error('Unsafe command target');
+  return JSON.stringify({ dev: stat.dev, ino: stat.ino, mode: stat.mode, nlink: stat.nlink,
+    size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs,
+    link: stat.isSymbolicLink() ? fs.readlinkSync(target) : null });
+};
+type CommandPreflight = { directory: string; target: string; snapshot: string };
+const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPreflight): boolean => {
   const sourceBinDir = path.join(repoDir, 'bin');
 
   try {
@@ -176,7 +197,11 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
     for (const binName of fs.readdirSync(sourceBinDir)) {
       const sourcePath = path.join(sourceBinDir, binName);
       const targetPath = path.join(binDir, binName);
-
+      const current = commandTargetSnapshot(targetPath);
+      if (preflight && (preflight.target !== targetPath || preflight.snapshot !== current)) {
+        writeStdoutLine(`Command target changed after review: ${targetPath}. Inspect it before retrying installation.`);
+        return false;
+      }
       fs.rmSync(targetPath, { force: true });
       fs.symlinkSync(sourcePath, targetPath);
     }
@@ -190,9 +215,16 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
 
 const resolveBinDir = (): string | null => {
   if (commandExists('brew')) {
-    const brewPrefix = readCommandOutput('brew', ['--prefix']);
+    const result = runCommand('brew', ['--prefix']);
+    requireUninterrupted(result);
+    const brewPrefix = result.status === 0 && !result.error ? result.stdout : null;
     if (brewPrefix !== null) {
-      return path.join(brewPrefix.trimEnd(), 'bin');
+      const prefix = brewPrefix.trimEnd();
+      if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) {
+        writeStdoutLine('Homebrew returned an invalid installation prefix. Inspect `brew --prefix`, then rerun installation.');
+        return null;
+      }
+      return path.join(prefix, 'bin');
     }
   }
 
@@ -226,10 +258,21 @@ const setup = (
   if (!binDir || !validateBinDirInPath(binDir)) {
     return false;
   }
+  let preflight: CommandPreflight;
+  try {
+    const target = path.join(binDir, 'ballin');
+    preflight = process.env.BALLIN_COMMAND_PREFLIGHT_JSON
+      ? JSON.parse(process.env.BALLIN_COMMAND_PREFLIGHT_JSON)
+      : { directory: binDir, target, snapshot: commandTargetSnapshot(target) };
+    if (preflight.directory !== binDir || preflight.target !== target || typeof preflight.snapshot !== 'string'
+      || preflight.snapshot !== commandTargetSnapshot(target)) throw new Error('Command target changed');
+  } catch {
+    writeStdoutLine('Unable to verify the reviewed command target. Inspect it before retrying installation.');
+    return false;
+  }
 
   const configExisted = fs.existsSync(configPathFor(repoDir));
 
-  if (!configExisted) writeStdoutLine();
   if (!configure(repoDir, docsUrl, configPathFor(repoDir), true)) {
     writeStdoutLine('\n⚠️  ERROR: Unable to create or update ballin.config.json');
     return false;
@@ -240,18 +283,20 @@ const setup = (
       configureAnalyticsPreference({
         configPath: configPathFor(repoDir),
         docsUrl: analyticsDocsUrl,
+        presentation: 'installation',
       });
-    } catch {
+    } catch (error) {
+      rethrowInterruption(error);
       // Analytics setup must never block install.
     }
   }
 
-  if (!symlinkBinaries(repoDir, binDir)) {
+  if (!symlinkBinaries(repoDir, binDir, preflight)) {
     return false;
   }
 
-  if (mode === 'fresh') {
-    offerCompletionSetup(docsUrl);
+  if (mode === 'fresh' && promptInputState() === 'open') {
+    offerCompletionSetup(docsUrl, { presentation: 'installation' });
     writeStdoutLine();
   }
 
@@ -259,20 +304,21 @@ const setup = (
   const backupConfigured = destination.kind === 'repository' || destination.kind === 'legacy-gist';
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
-  if (process.env.BALLIN_SKIP_BACKUP_SETUP === '1') {
-    writeStdoutLine('Backup setup deferred. After GitHub CLI sign-in, run `ballin backup setup`.');
+  if (process.env.BALLIN_SKIP_BACKUP_SETUP === '1' || process.env.BALLIN_BACKUP_CHOICE === 'no' || promptInputState() !== 'open') {
+    // A prior complete No or input end must not reopen optional onboarding.
   } else if (mode === 'fresh' || backupConfigured || backupInvalid) {
     let backupSetupCancelled = false;
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
+      presentation: mode === 'self-update' ? 'standalone' : 'installation',
+      initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',
       originalConfig, onCancelled: () => { backupSetupCancelled = true; },
       showValidationSummary: mode !== 'self-update',
       maintenanceOnly: mode === 'self-update',
     });
-    if (!backupSetupSucceeded) {
-      if (!backupSetupCancelled) writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
-      writeStdoutLine(backupSetupCancelled
-        ? '\nBallin remains installed. Resume optional setup later with `ballin backup setup`.'
-        : '\nBallin remains installed. Follow the backup recovery guidance above before retrying `ballin backup setup`.');
+    if (backupSetupCancelled) backupSetupSucceeded = true;
+    else if (!backupSetupSucceeded) {
+      writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
+      writeStdoutLine('\nBallin remains installed. Follow the backup recovery guidance above before retrying `ballin backup setup`.');
     }
   }
 
@@ -282,8 +328,15 @@ const setup = (
     writeStdoutLine(`\n${docsUrl}#what-will-installation-change`);
   }
 
-  if (backupSetupSucceeded && mode === 'fresh') {
-    writeStdoutLine('\n😎 ballin!');
+  if (backupSetupSucceeded && process.env.BALLIN_SETUP_RESULT_FILE) {
+    const file = process.env.BALLIN_SETUP_RESULT_FILE;
+    const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    try {
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.()) throw new Error('Unsafe installer result file');
+      fs.ftruncateSync(fd, 0);
+      fs.writeFileSync(fd, `complete ${destination.kind === 'repository' ? 'configured' : configuredBackupDestination(readJsonObject(configPathFor(repoDir))).kind === 'repository' ? 'configured' : 'skipped'} ${promptInputState()}\n`);
+    } finally { fs.closeSync(fd); }
   }
   return backupSetupSucceeded;
 };
@@ -304,7 +357,11 @@ const runInstallSetupCli = (): void => {
   if (command === 'setup' && repoDir && option) {
     const mode = process.argv[6] === 'fresh' ? 'fresh'
       : process.argv[6] === 'self-update' ? 'self-update' : 'refresh';
-    process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1;
+    try { process.exitCode = setup(repoDir, option, process.argv[5], mode) ? 0 : 1; } catch (error) {
+      if (!(error instanceof CommandInterrupted)) throw error;
+      process.exitCode = (error as { status: number }).status;
+      writeStdoutLine((error as Error).message);
+    }
     return;
   }
 

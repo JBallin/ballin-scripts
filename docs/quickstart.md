@@ -1,13 +1,17 @@
-# Quickstart: Your first Ballin backup
+# Quickstart: Install Ballin
 
-You’ll need a [GitHub account](https://github.com/signup).
+Install Ballin for maintenance and updates, with optional private GitHub backups.
+You’ll need a [GitHub account](https://github.com/signup) only for backups.
 
 Open Terminal and paste:
 
 ```shell
-bash -c 's=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh -o -) && export -n s && bash /dev/fd/3 3<<<"$s"'
+BALLIN_SHELL_PID=$$ BALLIN_SHELL_HOME="$HOME" BALLIN_SHELL_CONFIGURED="${SHELL-}" BALLIN_SHELL_ZDOTDIR_SET="${ZDOTDIR+x}" BALLIN_SHELL_ZDOTDIR="${ZDOTDIR-}" bash -c 's=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh -o -) && export -n s && bash /dev/fd/3 3<<<"$s"'
 ```
 
-Follow the prompts to complete setup and create your first private backup.
+Choose whether to set up backups, then follow the prompts in the same Terminal.
+Missing prerequisites, startup-file changes, installation, analytics, completion
+and the final backup destination have separate permissions. Open a new Terminal
+after setup.
 
 Optional reading: [installation details](installation.md#quickstart-helper) · [backup sources and privacy](backup-sources.md).

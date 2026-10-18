@@ -1,12 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const tty = require('tty');
-const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
+const { readPromptLine, parseYesNo, writeStdoutLine, rethrowInterruption } = require('./commandHelpers.ts');
+
+const { zshStartupDirectory } = require('./shell_location.ts');
 
 class CompletionProfileError extends Error {}
 
 type CompletionTarget = { shell: 'zsh' | 'bash'; profile: string; line: string };
 type CompletionSetupOptions = {
+  presentation?: 'installation' | 'standalone';
   env?: NodeJS.ProcessEnv;
   interactive?: boolean;
   prompt?: (text: string) => { text: string; eof: boolean };
@@ -21,7 +24,7 @@ const activationLine = (shell: 'zsh' | 'bash'): string => {
 const inspectProfile = (profile: string): void => {
   if (!fs.lstatSync(path.dirname(profile)).isDirectory()) throw new Error('Unsafe startup directory');
   try {
-    if (!fs.lstatSync(profile).isFile()) throw new Error('Unsafe startup file');
+    if (!fs.lstatSync(profile).isFile() || fs.lstatSync(profile).nlink !== 1) throw new Error('Unsafe startup file');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
@@ -36,14 +39,14 @@ const completionTarget = (
   const shell = path.basename(env.SHELL);
   let profile: string;
   if (shell === 'zsh') {
-    const defaultDirectory = env.ZDOTDIR ?? home;
-    const choice = prompt(path.isAbsolute(defaultDirectory)
-      ? `Directory containing your .zshrc [Enter=${defaultDirectory}; absolute directory or skip]: `
-      : 'ZDOTDIR is empty or relative. Enter the absolute directory containing your .zshrc, or skip: ');
-    if (choice.eof || choice.text === 'skip') return null;
-    const directory = choice.text === 'home' ? home : choice.text || defaultDirectory;
-    if (!path.isAbsolute(directory)) return null;
-    profile = path.join(directory, '.zshrc');
+    let directory = zshStartupDirectory(env);
+    if (!directory) {
+      const choice = prompt('Enter the absolute directory containing your .zshrc, or skip: ');
+      if (choice.eof || choice.text === 'skip') return null;
+      directory = choice.text === 'home' ? home : choice.text;
+      if (!directory || !path.isAbsolute(directory)) return null;
+    }
+    profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
   } else if (shell === 'bash') {
     const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ');
     if (choice.eof) return null;
@@ -76,7 +79,7 @@ const appendActivation = (target: CompletionTarget): boolean => {
   try {
     const opened = fs.fstatSync(fd);
     const current = fs.lstatSync(target.profile);
-    if (!opened.isFile() || !current.isFile() || opened.dev !== current.dev || opened.ino !== current.ino) {
+    if (!opened.isFile() || !current.isFile() || opened.nlink !== 1 || current.nlink !== 1 || opened.dev !== current.dev || opened.ino !== current.ino) {
       throw new Error('Startup file changed');
     }
     const contents = fs.readFileSync(fd) as Buffer;
@@ -118,18 +121,18 @@ const appendActivation = (target: CompletionTarget): boolean => {
 const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions = {}): void => {
   const write = options.write ?? writeStdoutLine;
   const fallback = (needsContext = false): void => {
-    if (needsContext) write('\nEnable shell completion later:');
-    write(`${docsUrl}#shell-completion`);
+    if (needsContext) write();
+    write(`Tab completion skipped. Enable it later: ${docsUrl}#startup-files-and-manual-activation`);
   };
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
   const prompt = options.prompt ?? readPromptLine;
   try {
     const env = options.env ?? process.env;
-    const directory = env.ZDOTDIR ?? env.HOME;
+    const directory = zshStartupDirectory(env);
     // A normal zsh rerun needs no directory or edit prompts when already configured.
     if (env.HOME && path.isAbsolute(env.HOME) && env.SHELL && path.isAbsolute(env.SHELL)
       && path.basename(env.SHELL) === 'zsh' && directory && path.isAbsolute(directory)) {
-      const profile = path.join(directory, '.zshrc');
+      const profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
       let enabled = false;
       try {
         inspectProfile(profile);
@@ -142,21 +145,24 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
         } finally { fs.closeSync(fd); }
       } catch { /* Uncertain profiles still use the normal selection and inspection path. */ }
       if (enabled) {
-        write('Shell completion is already enabled.');
+        if (options.presentation !== 'installation') write('Tab completion is already enabled.');
         return;
       }
     }
     const target = completionTarget(env, prompt);
     if (!target) { fallback(true); return; }
-    write(`\nShell completion for ${target.shell}: append to ${target.profile}`);
-    write(target.line);
-    const answer = prompt('Enable shell completion? [y/N] ');
-    if (answer.eof || !['y', 'Y'].includes(answer.text)) {
-      fallback(); return;
+    while (true) {
+      const answer = prompt(`Enable tab completion in ${target.profile}? [y/N] `);
+      if (answer.eof) { fallback(); return; }
+      const enabled = parseYesNo(answer.text, false);
+      if (enabled === false) { fallback(); return; }
+      if (enabled === true) break;
+      write('Please enter yes or no.');
     }
     const appended = appendActivation(target);
-    write(appended ? 'Shell completion enabled.' : 'Shell completion is already enabled.');
+    if (options.presentation !== 'installation') write(appended ? 'Tab completion enabled.' : 'Tab completion is already enabled.');
   } catch (error) {
+    rethrowInterruption(error);
     if (error instanceof CompletionProfileError) write(error.message);
     write('Shell completion setup could not finish. Ballin remains installed.');
     fallback();

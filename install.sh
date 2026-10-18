@@ -31,7 +31,7 @@ fi
 
 if [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
-  printf "\nInstall a supported version with nvm or \`brew install node\`, then run this installer again.\n"
+  printf "\nInstall supported Node.js, then run this installer again.\n"
   printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
   exit 1
 else
@@ -49,37 +49,112 @@ else
       printf ' Detected Node.js %s.' "$node_check"
     fi
     printf '\n'
-    printf "\nInstall a supported version with nvm or \`brew install node\`, then run this installer again.\n"
+    printf "\nUpdate or activate Node.js using your existing installation method, then run this installer again.\n"
     printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
     exit 1
   fi
 fi
 
+# Keep complete answers, EOF and diagnosed read failures distinct. Never echo input.
+input_ended=false
+prompt_error=''
+trap '[ -z "$prompt_error" ] || rm -f -- "$prompt_error"' EXIT
+read_prompt_answer() {
+  local status
+  prompt_error=$(mktemp "${TMPDIR:-/tmp}/ballin-input.XXXXXX") || { printf '\nUnable to prepare prompt input.\n' >&2; exit 1; }
+  if IFS= read -r prompt_answer 2>|"$prompt_error"; then
+    rm -f -- "$prompt_error"; prompt_error=''
+    [[ -t 0 ]] || printf '\n'
+    return 0
+  else status=$?; fi
+  if (( status > 128 )); then exit "$status"; fi
+  if [[ -s "$prompt_error" ]]; then
+    rm -f -- "$prompt_error"; prompt_error=''
+    printf '\nUnable to read prompt input.\n' >&2
+    exit 1
+  fi
+  rm -f -- "$prompt_error"; prompt_error=''
+  [[ -t 0 ]] || printf '\n'
+  prompt_answer=''; input_ended=true; return 1
+}
+confirm() {
+  local default=${2:-n} normalized
+  while :; do
+    if [[ "$default" == y ]]; then printf '%s [Y/n] ' "$1"; else printf '%s [y/N] ' "$1"; fi
+    read_prompt_answer || return 1
+    normalized=$prompt_answer
+    normalized="${normalized#"${normalized%%[![:space:]]*}"}"
+    normalized="${normalized%"${normalized##*[![:space:]]}"}"
+    case "$normalized" in
+      y|Y|[yY][eE][sS]) return 0 ;;
+      n|N|[nN][oO]) return 1 ;;
+      '') [[ "$default" == y ]]; return ;;
+      *) printf 'Please enter yes or no.\n' ;;
+    esac
+  done
+}
+write_install_cancelled() {
+  [[ -n "${BALLIN_SETUP_RESULT_FILE:-}" ]] || return 0
+  node -e '
+    const fs = require("fs"); const fd = fs.openSync(process.argv[1], fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    try { const stat = fs.fstatSync(fd); if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) || stat.uid !== process.getuid()) throw Error("Unsafe installer result file"); fs.ftruncateSync(fd, 0); fs.writeFileSync(fd, "cancelled\n"); } finally { fs.closeSync(fd); }
+  ' "$BALLIN_SETUP_RESULT_FILE"
+}
+# Report only command entries that this installation would actually replace.
+# Directories and unsafe link targets never gain replacement permission.
+if command_preflight=$(node -e '
+  const fs = require("fs"), path = require("path"), cp = require("child_process");
+  let directory = path.join(process.env.HOME, ".local", "bin");
+  const brew = cp.spawnSync("brew", ["--prefix"], { encoding: "utf8" });
+  if (brew.signal === "SIGINT" || brew.status === 130) process.exit(130);
+  if (brew.signal === "SIGTERM" || brew.status === 143) process.exit(143);
+  if (brew.status === 0) {
+    const prefix = brew.stdout.trimEnd();
+    if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) { console.error("Homebrew returned an invalid installation prefix. Inspect `brew --prefix`, then rerun installation."); process.exit(1); }
+    directory = path.join(prefix, "bin");
+  }
+  const source = path.join(process.argv[1], "bin", "ballin");
+  const target = path.join(directory, "ballin");
+  let snapshot = "null";
+  try {
+    const stat = fs.lstatSync(target);
+    if (stat.isDirectory()) throw Error("Refusing to replace a directory at " + target);
+    if (!stat.isFile() && !stat.isSymbolicLink()) throw Error("Refusing to replace an unsafe command entry at " + target);
+    const link = stat.isSymbolicLink() ? fs.readlinkSync(target) : null;
+    snapshot = JSON.stringify({dev:stat.dev, ino:stat.ino, mode:stat.mode, nlink:stat.nlink, size:stat.size, mtimeMs:stat.mtimeMs, ctimeMs:stat.ctimeMs, link});
+    if (!(stat.isSymbolicLink() && path.resolve(path.dirname(target), link) === source)) console.error("Warning: installation will replace the existing command at " + target + (link === null ? "." : " (link target: " + link + ")."));
+  } catch (error) {
+    if (error.code !== "ENOENT") { console.error(error.message); process.exit(1); }
+  }
+  process.stdout.write(JSON.stringify({directory, target, snapshot}));
+' "$repo_dir"); then :
+else
+  exit $?
+fi
 if [ "$repo_existed" = false ]; then
-  printf '\nInstallation plan\n'
-  printf -- '- Clone Ballin into %s and create its config there.\n' "$repo_dir"
-  printf -- '- Link the ballin command from Homebrew\047s bin directory when available, otherwise from %s.\n' "$HOME/.local/bin"
-  printf -- '- An existing non-directory command target may be replaced.\n'
-  printf '%s#what-will-installation-change\n' "$docs_url"
-
-  printf '\nProceed with installation? [y/N] '
-  IFS= read -r install_confirm
-  if [ "$install_confirm" != 'y' ] && [ "$install_confirm" != 'Y' ]; then
-    printf '\nInstallation cancelled; no installation changes were made.\n'
+  printf '\nInstallation details: %s#what-will-installation-change\n' "$docs_url"
+  if ! confirm "Install Ballin in $repo_dir and make the ballin command available?"; then
+    if "$input_ended"; then
+      printf '\nNo answer received. Ballin installation stopped before installing Ballin.\n' >&2
+      exit 1
+    fi
+    printf 'Ballin installation cancelled. Rerun the installer when you’re ready.\n'
+    write_install_cancelled || exit 1
     exit 0
   fi
 fi
 
 ################################## CLONE REPO ##################################
-if ! (
+if (
   cd "$HOME" || exit
   if [ "$repo_existed" = false ]; then
     echo ''
-    if ! git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts; then
-      exit 1
-    fi
+    git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts || exit $?
   fi
-); then
+); then :
+else
+  prepare_status=$?
+  [[ "$prepare_status" != 130 && "$prepare_status" != 143 ]] || exit "$prepare_status"
   printf '\n⚠️  ERROR: Unable to prepare %s\n' "$repo_dir"
   printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
   exit 1
@@ -88,19 +163,25 @@ fi
 ############################ UPDATE EXISTING REPO ##############################
 if [ "$repo_existed" = true ]; then
   if [ -f "$repo_dir/commands/repo_update.ts" ]; then
-    if ! (
+    if (
       cd "$repo_dir" || exit
       node "$repo_dir/commands/repo_update.ts" "$repo_dir"
-    ); then
+    ); then :
+    else
+      update_status=$?
+      [[ "$update_status" != 130 && "$update_status" != 143 ]] || exit "$update_status"
       print_stale_checkout_guidance
       exit 1
     fi
-  elif ! (
+  elif (
     cd "$repo_dir" || exit
     git fetch origin +main:refs/remotes/origin/main \
       && git checkout main \
       && git merge origin/main
-  ); then
+  ); then :
+  else
+    update_status=$?
+    [[ "$update_status" != 130 && "$update_status" != 143 ]] || exit "$update_status"
     print_stale_checkout_guidance
     exit 1
   fi
@@ -119,7 +200,7 @@ fi
 
 (
   cd "$repo_dir" || exit
-  node "$repo_dir/commands/install_setup.ts" setup "$repo_dir" "$docs_url" "$analytics_docs_url" "$setup_mode"
+  BALLIN_COMMAND_PREFLIGHT_JSON="$command_preflight" node "$repo_dir/commands/install_setup.ts" setup "$repo_dir" "$docs_url" "$analytics_docs_url" "$setup_mode"
 )
 setup_status=$?
 if [ "$setup_status" -ne 0 ]; then
@@ -128,5 +209,5 @@ fi
 
 # Quickstart owns the final guidance after its optional backup/browser work.
 if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then
-  printf "\nSetup complete! Open a new Terminal to run \`ballin\`.\n"
+  printf "\n😎 Setup complete! Open a new Terminal to run \`ballin\`.\n"
 fi

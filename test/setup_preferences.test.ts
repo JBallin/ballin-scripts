@@ -96,10 +96,10 @@ fs.readFileSync = (file, ...args) => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, `Sensitive sources available now:\n  pipx: installation metadata\n  zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))}\n`);
     assert.notInclude(result.stdout, ' -> ');
-    assert.include(result.stdout, 'Sources not found now: 24.\n');
-    assert.include(result.stdout, 'Unavailable now: vs_keybindings, vs_settings, vsI_keybindings, vsI_settings\n');
+    assert.notInclude(result.stdout, 'Sources not found now:');
+    assert.notInclude(result.stdout, 'Unavailable now:');
     assert.notInclude(result.stdout, 'Claude');
-    assert.include(result.stdout, 'This review checks source locations, not selected file contents.');
+    assert.include(result.stdout, 'Backup source details:');
     assert.notInclude(result.stdout, 'fixture private content');
   });
 
@@ -124,7 +124,7 @@ fs.readFileSync = (file, ...args) => {
       assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
       if (included) assert.include(result.stdout, `codex_AGENTS.override.md: ${JSON.stringify(override)}\n`);
       else assert.notInclude(result.stdout, 'codex_AGENTS.override.md:');
-      assert.include(result.stdout, 'Your choice also covers future supported sources.');
+      assert.include(result.stdout, 'docs/backup-sources.md#what-will-ballin-back-up');
       assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
     });
   });
@@ -151,8 +151,7 @@ fs.readFileSync = (file, ...args) => {
       assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
       if (included) {
         assert.include(result.stdout, `codex_user_skills.bundle.json: ${JSON.stringify(skills)}\n`);
-        assert.include(result.stdout, 'Sources not found now: 24.\n');
-        assert.isBelow(result.stdout.indexOf(`codex_user_skills.bundle.json: ${JSON.stringify(skills)}`), result.stdout.indexOf('Sources not found now:'));
+        assert.notInclude(result.stdout, 'Sources not found now:');
         assert.notInclude(result.stdout, 'codex_skills.bundle.json');
       } else assert.notInclude(result.stdout, 'codex_user_skills.bundle.json:');
     });
@@ -165,7 +164,7 @@ fs.readFileSync = (file, ...args) => {
       fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
       const result = run('\ny\n\n\n');
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, `Review sensitive sources for inclusion? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `Review files that may contain credentials or private information for backup inclusion? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
@@ -201,7 +200,7 @@ fs.readFileSync = (file, ...args) => {
     writeConfig(initial);
     const result = run('y\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Review sensitive sources');
+    assert.notInclude(result.stdout, 'Review files that may contain');
     assert.notInclude(result.stdout, 'Automatically run');
     assert.include(result.stdout, 'Run `ballin backup setup`');
     assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
@@ -256,11 +255,11 @@ fs.readFileSync = (file, ...args) => {
       });
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
-      assert.equal(readConfig().update.backup, ['y\n', 'Y\n', 'y'].includes(input) ? 'true' : 'false');
+      assert.equal(readConfig().update.backup, ['y\n', 'Y\n', '', 'y'].includes(input) ? 'true' : 'false');
     });
   });
 
-  it('preserves the pending automatic choice on EOF while onboarding still saves false', () => {
+  it('preserves the pending automatic choice on EOF in review and onboarding', () => {
     writeConfig(configFor('repository', true));
     assert.equal(run().status, 0);
     assert.equal(readConfig().update.backup, 'true');
@@ -268,7 +267,7 @@ fs.readFileSync = (file, ...args) => {
       input: '', encoding: 'utf8', env: testChildEnvironment({ HOME: root, BALLIN_TEST_CONFIG_PATH: configPath }),
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(readConfig().update.backup, 'false');
+    assert.equal(readConfig().update.backup, 'true');
   });
 
   ['sensitive', 'automatic'].forEach((choice) => {
@@ -281,7 +280,7 @@ fs.readFileSync = (file, ...args) => {
       let signalled = false;
       child.stdout.on('data', (chunk: Buffer) => {
         output += chunk.toString();
-        const prompt = choice === 'sensitive' ? 'Review sensitive sources' : 'Automatically run';
+        const prompt = choice === 'sensitive' ? 'Review files that may contain' : 'Automatically run';
         if (!signalled && output.includes(prompt)) { signalled = true; child.kill('SIGINT'); }
       });
       if (choice === 'automatic') child.stdin.write('n\ny\n');
@@ -295,6 +294,31 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(readConfig().update.backup, 'true');
       assert.equal(readConfig().analytics.enabled, 'true');
     });
+  });
+
+  for (const defaultValue of [false, true]) {
+    for (const input of ['', 'y', 'no']) {
+      it(`does not write the automatic preference on partial/empty EOF: ${defaultValue}/${JSON.stringify(input)}`, () => {
+        writeConfig(configFor('repository', defaultValue));
+        const before = fs.readFileSync(configPath);
+        const result = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH)`], {
+          input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_NO_ANALYTICS: '1' }),
+        });
+        assert.equal(result.status, 0, result.stderr);
+        assert.isTrue(fs.readFileSync(configPath).equals(before));
+        assert.notInclude(result.stdout, 'set to');
+      });
+    }
+  }
+  it('accepts full words, mixed case and whitespace while reprompting invalid complete answers', () => {
+    writeConfig(configFor('repository', true));
+    const result = run('private invalid answer\n  nO \n YES\n\tno\t\n YeS \n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Please enter yes or no.');
+    assert.notInclude(result.stdout, 'private invalid answer');
+    assert.equal(readConfig().backup.includeSensitive, 'false');
+    assert.equal(readConfig().update.backup, 'false');
+    assert.equal(readConfig().analytics.enabled, 'true');
   });
 
   it('accepts native boolean choices', () => {
@@ -312,14 +336,13 @@ fs.readFileSync = (file, ...args) => {
     writeConfig(initial);
     const result = run('n\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    const disclosure = 'Your choice also covers future supported sources.';
+    const disclosure = 'Backup source details:';
     assert.isAtLeast(result.stdout.indexOf(disclosure), 0);
-    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Review sensitive sources'));
-    assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Review sensitive sources'));
-    const consent = result.stdout.slice(result.stdout.indexOf('Sensitive sources may contain'), result.stdout.indexOf('Review sensitive sources'));
-    assert.include(consent, 'Ballin does not scan or redact them.');
+    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Review files that may contain'));
+    assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Review files that may contain'));
+    const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Review files that may contain'));
     assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
-    assert.isBelow(result.stdout.indexOf('Excluding sources does not remove saved files or history.'), result.stdout.indexOf('Save this sensitive-source choice'));
+    assert.notInclude(result.stdout, 'Excluding sources does not remove');
     assert.deepEqual(Object.keys(readConfig().backup).sort(), Object.keys(initial.backup).sort());
     assert.equal(readConfig().backup.includeSensitive, 'false');
   });

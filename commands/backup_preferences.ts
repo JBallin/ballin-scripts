@@ -4,7 +4,7 @@ const { createConfigStore, stringify } = require('../config/store.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
-const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
+const { readYesNo, writeStdoutLine } = require('./commandHelpers.ts');
 import type { SnapshotDefinition } from './backup_snapshots.ts';
 
 export type PreferenceOutcome = 'confirmed' | 'cancelled' | 'failed';
@@ -33,14 +33,10 @@ const preferenceBoolean = (value: unknown, key: string): boolean => {
   if (value === false || value === 'false') return false;
   throw new Error(`Invalid \`${key}\`; expected true or false.`);
 };
-type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean };
+type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone' };
 const selectAutomaticUpdateBackup = (options: AutomaticBackupOptions = {}): boolean | null => {
   const defaultEnabled = options.defaultEnabled ?? false;
-  const response = readPromptLine(`\n🤔 Automatically run \`ballin backup\` as part of \`ballin update\`? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `);
-  if (response.eof && options.cancelOnEof) return null;
-  // Existing destination onboarding treats empty EOF as no; guided review cancels instead.
-  const answer = response.eof && !response.text ? 'n' : response.text;
-  return answer === '' ? defaultEnabled : answer === 'y' || answer === 'Y';
+  return readYesNo(`\n🔄 Automatically run \`ballin backup\` as part of \`ballin update\`? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
 };
 const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
   const enabled = selectAutomaticUpdateBackup(options);
@@ -62,11 +58,11 @@ const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBacku
       : `Backup destination saved, but the automatic-backup preference was not saved. Set \`update.backup\` to ${preference} in \`ballin.config.json\`.`);
     return 'failed';
   }
-  writeStdoutLine(savedPreferenceLine('update.backup', enabled, previous));
+  if (options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('update.backup', enabled, previous));
   return 'confirmed';
 };
 const offerAutomaticUpdateBackup = (configPath: string): boolean => (
-  reviewAutomaticUpdateBackup(configPath) === 'confirmed'
+  reviewAutomaticUpdateBackup(configPath) !== 'failed'
 );
 
 const displayPath = (value: string): string => JSON.stringify(value);
@@ -124,26 +120,17 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   writeStdoutLine();
   writeStdoutLine(available.length ? 'Sensitive sources available now:' : 'Sensitive sources available now: none.');
   available.forEach((line) => writeStdoutLine(`  ${line}`));
-  if (absent.length) writeStdoutLine(`Sources not found now: ${absent.length}.`);
-  if (unavailable.length) writeStdoutLine(`Unavailable now: ${unavailable.join(', ')}`);
-  writeStdoutLine('This review checks source locations, not selected file contents.');
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('\nSensitive sources may contain credentials or other private information.');
-  writeStdoutLine('Ballin does not scan or redact them. Your choice also covers future supported sources.');
-  writeStdoutLine('Review paths now; final confirmation saves inclusion or exclusion for future backups.');
-  writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
-  const sensitive = readPromptLine(`Review sensitive sources for inclusion? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `);
-  if (sensitive.eof) return null;
-  const includeSensitive = sensitive.text === '' ? defaultIncluded : /^[yY]$/u.test(sensitive.text);
+  writeStdoutLine('\nBackup source details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
+  const includeSensitive = readYesNo(`Review files that may contain credentials or private information for backup inclusion? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `, defaultIncluded);
+  if (includeSensitive === null) return null;
   if (includeSensitive) {
     if (!process.env.HOME) { writeStdoutLine('HOME is required to review sensitive sources.'); return undefined; }
     if (!reviewSensitiveSources(process.env.HOME, process.env)) return undefined;
   }
-  writeStdoutLine(`\nSelected: inventory and filtered preferences; sensitive sources ${includeSensitive ? 'included' : 'excluded'}.`);
-  if (!includeSensitive) writeStdoutLine('Excluding sources does not remove saved files or history.');
   return includeSensitive;
 };
 
@@ -151,8 +138,7 @@ const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null 
   writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
   const included = selectSensitiveSources(defaultIncluded);
   if (included === null || included === undefined) return included;
-  const confirmation = readPromptLine('Save this sensitive-source choice for future backups? [y/N] ');
-  if (confirmation.eof || !/^[yY]$/u.test(confirmation.text)) return null;
+  if (readYesNo('Save this sensitive-source choice for future backups? [y/N] ') !== true) return null;
   return included;
 };
 
