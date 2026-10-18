@@ -2,7 +2,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { backupCommitMessage } = require('./backup_commit_message.ts');
 const { repositoryCacheDirectory } = require('./backup_cache.ts');
-const { makeTempFile, removeTempFile, runCommand, writeStderrLine } = require('./commandHelpers.ts');
+const { makeTempFile, removeTempFile, runCommand, requireUninterrupted, rethrowInterruption, writeStderrLine } = require('./commandHelpers.ts');
 const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
 const {
   classifySnapshotFileName,
@@ -177,6 +177,7 @@ const api = (
         maxBuffer, timeout, killSignal: 'SIGKILL',
       });
     } finally { fs.closeSync(fd); }
+    requireUninterrupted(result);
     // Native maxBuffer stops excess output; fixture runners need the same check.
     if (result.error?.code === 'ENOBUFS') throw new RepositoryError('resource-limit');
     if (fs.statSync(output).size > maxBuffer) throw new RepositoryError('resource-limit');
@@ -200,6 +201,7 @@ const api = (
     const ok = result.status === 0 && !result.error && !result.signal;
     response = { ok, body, items, problem: ok ? undefined : transportProblem(result, body) };
   } catch (error) {
+    rethrowInterruption(error);
     failure = error instanceof RepositoryError ? error : new RepositoryError('local-io');
   } finally {
     if (output) {
@@ -400,6 +402,7 @@ const inspect = (
     assertCurrent(inspected, options);
     return { status: 'complete', read: inspected };
   } catch (error) {
+    rethrowInterruption(error);
     return { status: 'incomplete', inspected, problem: error instanceof RepositoryError ? error.problem : 'local-io',
       cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
   }
@@ -407,6 +410,7 @@ const inspect = (
 const inspectRepository = (destination: RepositoryDestination, options: RepositoryOptions = {}): RepositoryInspection => {
   options = inspectionOptions(options);
   try { return inspect(destination, readRepositoryAccount(options), options, false); } catch (error) {
+    rethrowInterruption(error);
     return { status: 'incomplete', problem: error instanceof RepositoryError ? error.problem : 'local-io',
       cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
   }
@@ -543,6 +547,7 @@ const readManagedBranchRuleset = (
 ): 'match' | 'permission-denied' | 'mismatch' | ProtectionApiOutcome => {
   let detail: ApiResult;
   try { detail = api(`${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
+    rethrowInterruption(error);
     const transportFailure = protectionTransportFailure(error);
     if (transportFailure) throw transportFailure;
     return 'ambiguous';
@@ -561,6 +566,7 @@ const findManagedBranchRuleset = (
   const base = `repos/${account.login}/${read.destination.name}/rulesets`;
   let list: ApiResult;
   try { list = api(`${base}?includes_parents=false&targets=branch&per_page=100`, undefined, options, true); } catch (error) {
+    rethrowInterruption(error);
     const transportFailure = protectionTransportFailure(error);
     if (transportFailure) throw transportFailure;
     return { status: 'ambiguous' };
@@ -608,6 +614,7 @@ const ensureManagedBranchRuleset = (
   let creation: ApiResult = { ok: false, body: {} };
   let mutationFailure: RepositoryError | undefined;
   try { creation = api(endpoint, managedBranchRulesetPayload(read.destination.branch), options); } catch (error) {
+    rethrowInterruption(error);
     mutationFailure = protectionTransportFailure(error);
   }
   if (!mutationFailure && !creation.ok) {
@@ -621,6 +628,7 @@ const ensureManagedBranchRuleset = (
     try { id = rulesetId(creation.body.id); } catch { /* Reconcile the ambiguous response below. */ }
     if (id !== undefined) {
       try { detailResult = readManagedBranchRuleset(endpoint, id, read, account, options); } catch (error) {
+        rethrowInterruption(error);
         mutationFailure = protectionTransportFailure(error);
       }
       if (detailResult === 'match') {
@@ -676,6 +684,7 @@ const publish = (
       },
     } },
   }, options); } catch (error) {
+    rethrowInterruption(error);
     // Confirm possible remote effects, but cleanup failure must remain fatal.
     if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'resource-limit')) transportFailure = error;
   }
@@ -738,6 +747,7 @@ const disableCreatedRepositoryPullRequests = (
       throw new RepositoryError('feature-settings');
     }
   } catch (error) {
+    rethrowInterruption(error);
     const failure = new RepositoryError('feature-settings');
     if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'cleanup')) failure.cleanupFailed = true;
     throw failure;
@@ -767,6 +777,7 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
       [repositoryReadmeFileName, repositoryReadmeBytes()],
     ]), true, options);
   } catch (error) {
+    rethrowInterruption(error);
     const failure = error instanceof RepositoryError ? error : new RepositoryError('uncertain');
     failure.completedStage = 'repository-created';
     throw failure;

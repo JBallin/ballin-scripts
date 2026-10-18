@@ -221,6 +221,11 @@ Private transport and staged config files are removed after setup. The
 installer does not run `ballin update`, collect snapshots, perform the first
 backup, install optional tools, or change GitHub CLI authentication.
 
+Control-C interrupts the current command; earlier approved changes remain.
+An interrupted remote request may already have completed. Inspect the reported
+destination before retrying. Interruption does not roll back completed work or
+guarantee that all descendants stop immediately.
+
 ## Commands and services contacted
 
 The command shown above downloads `install.sh` from GitHub. The installer then:

@@ -86,7 +86,6 @@ describe('private repository transport', () => {
     ['access', { status: 1, stdout: '{"status":403}' }, 'request'],
     ['not-found ambiguity', { status: 1, stdout: '{"status":"404"}' }, 'request'],
     ['ambiguous failure', { status: 1, stderr: 'DUMMY_PRIVATE_ERROR' }, 'request'],
-    ['cancellation', { status: null, signal: 'SIGTERM' }, 'request'],
     ['spawn timeout', { status: null, error: Object.assign(new Error('DUMMY_PRIVATE_ERROR'), { code: 'ETIMEDOUT' }) }, 'timeout'],
     ['spawn DNS', { status: null, error: Object.assign(new Error('DUMMY_PRIVATE_ERROR'), { code: 'EAI_AGAIN' }) }, 'connection'],
   ] as const) {
@@ -98,6 +97,18 @@ describe('private repository transport', () => {
         assert.instanceOf(error, RepositoryError); assert.notInclude(String(error), 'DUMMY_PRIVATE_ERROR');
       }
       assert.throws(() => readRepositorySnapshot(fixtureDestination, 'zshrc.sh', options), RepositoryError);
+      assert.equal(publications().length, 0);
+    });
+  }
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    it(`preserves a child ${signal} without advisory reads or retries`, () => {
+      let calls = 0;
+      options.runCommand = () => { calls += 1; return { status: null, signal, stdout: '', stderr: 'PRIVATE' }; };
+      try { inspectRepository(fixtureDestination, options); assert.fail('expected interrupt'); } catch (error) {
+        assert.equal((error as { status: number }).status, signal === 'SIGINT' ? 130 : 143);
+        assert.notInclude(String(error), 'PRIVATE');
+      }
+      assert.equal(calls, 1);
       assert.equal(publications().length, 0);
     });
   }

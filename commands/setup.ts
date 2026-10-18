@@ -1,3 +1,4 @@
+const { rethrowInterruption } = require('./commandHelpers.ts');
 const fs = require('fs');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
@@ -69,6 +70,7 @@ const runSetupCommand = (): void => {
     writeStdoutLine('Ballin preference review complete.');
     process.exitCode = 0;
   } catch (error) {
+    rethrowInterruption(error);
     writeStderrLine(`ballin setup: ${(error as Error).message}`);
     writeStderrLine(reviewing
       ? 'Unable to complete preference review; unconfirmed choices are unchanged.'

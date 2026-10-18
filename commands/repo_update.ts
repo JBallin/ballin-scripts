@@ -1,6 +1,8 @@
 const {
   isDirectory,
   runCommand,
+  requireUninterrupted,
+  CommandInterrupted,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 
@@ -14,13 +16,15 @@ const commandEnv = (cwd: string): NodeJS.ProcessEnv => ({
   PWD: cwd,
 });
 
-const runGit = (args: string[], cwd: string, stdio: StdioOptions): number | null => (
-  runCommand('git', args, {
+const runGit = (args: string[], cwd: string, stdio: StdioOptions): number | null => {
+  const result = runCommand('git', args, {
     cwd,
     env: commandEnv(cwd),
     stdio,
-  }).status
-);
+  });
+  requireUninterrupted(result);
+  return result.status;
+};
 
 const runGitQuiet = (args: string[], cwd: string): number | null => (
   runGit(args, cwd, 'ignore')
@@ -116,7 +120,11 @@ const runRepoUpdateCli = (): void => {
     return;
   }
 
-  process.exitCode = updateInstalledRepo(repoDir) ? 0 : 1;
+  try { process.exitCode = updateInstalledRepo(repoDir) ? 0 : 1; } catch (error) {
+    if (!(error instanceof CommandInterrupted)) throw error;
+    process.exitCode = (error as { status: number }).status;
+    writeStdoutLine((error as Error).message);
+  }
 };
 
 if (require.main === module) {

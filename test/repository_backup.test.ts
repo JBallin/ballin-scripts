@@ -1240,6 +1240,28 @@ describe('repository backup lifecycle', function() {
     const value = config(); value.update.npm = 'invalid'; saveConfig(value);
     assert.equal(run().status, 1); assert.equal(state().requests.length, 0);
   });
+  for (const signal of ['INT', 'TERM']) {
+    for (const boundary of ['collector', 'prefix discovery']) {
+      it(`stops on child SIG${signal} in ${boundary} without later work or saved-state changes`, () => {
+        source(); fs.writeFileSync(path.join(home, '.bashrc'), 'earlier source\n');
+        seedCache('zshrc.sh', 'prior cache\n'); seedSuccess();
+        const beforeConfig = fs.readFileSync(configPath);
+        const effects = path.join(root, 'children');
+        const command = boundary === 'collector' ? 'cat' : 'brew';
+        fs.rmSync(path.join(bin, command), { force: true });
+        fs.writeFileSync(path.join(bin, command), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${effects}'\n${boundary === 'collector' ? 'if [ "$1" = .bashrc ]; then exec /bin/cat "$@"; fi\n' : ''}kill -${signal} $$\n`, { mode: 0o755 });
+        const result = run();
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.include(result.stdout + result.stderr, 'Interrupted');
+        assert.deepEqual(fs.readFileSync(effects, 'utf8').trim().split('\n'), boundary === 'collector' ? ['.bashrc', '.zshrc'] : ['--prefix']);
+        assert.lengthOf(state().requests, 0);
+        assert.deepEqual(fs.readFileSync(configPath), beforeConfig);
+        assert.equal(cached(), 'prior cache\n');
+        assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+      });
+    }
+  }
   ['true-ish', null, 1, {}].forEach((consent) => {
     it(`rejects invalid consent before discovery: ${JSON.stringify(consent)}`, () => {
       const value = config(); value.backup.includeSensitive = consent; saveConfig(value);

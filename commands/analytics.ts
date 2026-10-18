@@ -6,7 +6,7 @@ const path = require('path');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { fetchConfig } = require('../config/index.ts');
 const { createConfigStore } = require('../config/store.ts');
-const { readCommandOutput, readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
+const { readCommandOutput, readPromptLine, writeStdoutLine, CommandInterrupted } = require('./commandHelpers.ts');
 const {
   topLevelCommandNames,
 } = require('./top_level_commands.ts') as {
@@ -599,6 +599,11 @@ const runWithCommandAnalytics = (
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
     }, analyticsRuntime), flushPendingAnalytics()]).then(() => {});
   } catch (error) {
+    if (error instanceof CommandInterrupted) {
+      process.exitCode = (error as { status: number }).status;
+      writeStdoutLine((error as Error).message);
+      return Promise.resolve();
+    }
     return Promise.allSettled([recordAnalyticsEvent({
       command,
       status: 'failure',
