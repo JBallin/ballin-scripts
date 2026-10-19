@@ -149,10 +149,16 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
         return;
       }
     }
-    const target = completionTarget(env, prompt);
+    let firstQuestion = true;
+    const completionPrompt: typeof prompt = (question: string) => {
+      if (firstQuestion && options.presentation === 'installation') write('');
+      firstQuestion = false;
+      return prompt(question);
+    };
+    const target = completionTarget(env, completionPrompt);
     if (!target) { fallback(true); return; }
     while (true) {
-      const answer = prompt(`Enable tab completion in ${target.profile}? [y/N] `);
+      const answer = completionPrompt(`Enable tab completion in ${target.profile}? [y/N] `);
       if (answer.eof) { fallback(); return; }
       const enabled = parseYesNo(answer.text, false);
       if (enabled === false) { fallback(); return; }

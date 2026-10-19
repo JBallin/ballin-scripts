@@ -42,6 +42,48 @@ describe('optional completion setup', () => {
     assert.include(offer(['Y']), 'Tab completion is already enabled.');
     assert.strictEqual(fs.readFileSync(profile, 'utf8'), `${activationLine('zsh')}\n`);
   });
+  for (const presentation of ['installation', 'standalone']) {
+    for (const eofAt of [-1, 0, 1]) {
+      it(`separates only the first installation completion question (${presentation}, EOF at ${eofAt})`, () => {
+        const events: string[] = [];
+        const answers = ['home', 'n'];
+        let question = 0;
+        offerCompletionSetup('guide', {
+          env, interactive: true, presentation,
+          write: (text = '') => events.push('write:' + text),
+          prompt: (text: string) => {
+            events.push('prompt:' + text);
+            const index = question++;
+            return { text: answers[index], eof: index === eofAt };
+          },
+        });
+        assert.equal(events[0].startsWith('write:'), presentation === 'installation');
+        if (presentation === 'installation') assert.equal(events[0], 'write:');
+        assert.equal(events.filter(event => event === 'write:').length, (presentation === 'installation' ? 1 : 0) + (eofAt === 0 ? 1 : 0));
+        assert.equal(question, eofAt === 0 ? 1 : 2);
+        assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+      });
+    }
+  }
+  for (const alreadyEnabled of [false, true]) {
+    it(`separates a resolved installation completion target only when needed (already enabled: ${alreadyEnabled})`, () => {
+      if (alreadyEnabled) fs.writeFileSync(path.join(home, '.zshrc'), `${activationLine('zsh')}\n`);
+      const modulePath = path.resolve(__dirname, '../commands/completion_setup.ts');
+      const shellPath = path.resolve(__dirname, '../commands/shell_location.ts');
+      const script = 'require(process.argv[1]).zshStartupDirectory = () => process.env.HOME;'
+        + 'require(process.argv[2]).offerCompletionSetup("guide", { presentation: "installation", interactive: true,'
+        + 'prompt: text => { process.stdout.write("QUESTION:" + text); return {text:"n",eof:false}; } });';
+      const result = spawnSync(process.execPath, ['-e', script, shellPath, modulePath], {
+        encoding: 'utf8', env: testChildEnvironment(env),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      if (alreadyEnabled) assert.equal(result.stdout, '');
+      else {
+        assert.isTrue(result.stdout.startsWith(`\nQUESTION:Enable tab completion in ${home}/.zshrc?`));
+        assert.equal(result.stdout.split('QUESTION:').length - 1, 1);
+      }
+    });
+  }
   for (const contents of ['', 'export EDITOR=vim', 'export EDITOR=vim\n', 'one\r\ntwo', 'one\r\ntwo\r\n']) {
     it(`preserves exact original bytes and mode: ${JSON.stringify(contents)}`, () => {
       const profile = path.join(home, '.zshrc');
