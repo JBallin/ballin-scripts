@@ -17,12 +17,17 @@ describe('beginner quickstart bootstrap', function() {
   const terminalGuidance = '\n😎 Setup complete! Open a new Terminal to run `ballin`.\n';
   const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
-  const nativeBrew = (): string => {
-    const prefix = path.join(root, 'native-brew-arm');
+  const nativeBrew = (arch = 'arm'): string => {
+    const prefix = path.join(root, 'native-brew-' + arch);
+    const repository = arch === 'intel' ? path.join(prefix, 'Homebrew') : prefix;
     fs.mkdirSync(path.join(prefix, 'bin'), { recursive: true });
     fs.mkdirSync(path.join(prefix, 'Cellar'));
-    fs.mkdirSync(path.join(prefix, 'Library/Homebrew'), { recursive: true });
-    fs.writeFileSync(path.join(prefix, 'Library/Homebrew/brew.sh'), '# fixture native launcher\n');
+    for (const directory of ['etc', 'include', 'lib', 'opt', 'sbin', 'share', 'var/homebrew/linked', 'var/homebrew/locks']) {
+      fs.mkdirSync(path.join(prefix, directory), { recursive: true });
+    }
+    fs.mkdirSync(path.join(repository, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(repository, 'Library/Homebrew'), { recursive: true });
+    fs.writeFileSync(path.join(repository, 'Library/Homebrew/brew.sh'), '# fixture native launcher\n');
     fs.writeFileSync(path.join(prefix, 'bin/brew'), `#!/bin/bash
 set -euo pipefail
 printf 'native-brew:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
@@ -299,6 +304,54 @@ esac
     assert.equal(result.status, 1); assert.include(result.stderr, 'Homebrew cannot safely install');
     assert.notInclude(readLog(), 'native-brew:install'); assert.notInclude(readLog(), 'nodejs.org');
   });
+  for (const blocked of ['', 'Homebrew', 'Homebrew/.git', 'Cellar', 'bin', 'lib', 'var/homebrew/linked']) {
+    it(`checks existing Intel Homebrew managed locations with an unwritable parent (blocked: ${blocked || 'none'})`, () => {
+      const prefix = nativeBrew('intel');
+      const blockedPath = blocked ? path.join(prefix, blocked) : '';
+      fs.chmodSync(prefix, 0o555);
+      if (blockedPath) fs.chmodSync(blockedPath, 0o555);
+      try {
+        const result = run(blocked ? 'no\n' : 'yes\nyes\ny\n', {
+          FAKE_ARCH: 'x86_64', FAKE_MISSING_NODE: '1', FAKE_NATIVE_PREFIX: prefix,
+          PATH: path.join(prefix, 'bin') + ':' + tools,
+        });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(readLog().includes('native-brew:install --formula node\n'), !blocked);
+        if (!blocked) assert.isTrue(fs.existsSync(path.join(prefix, 'bin/node')));
+        else assert.notInclude(readLog(), 'native-brew:ruby');
+        assert.notInclude(readLog(), 'nodejs.org');
+      } finally {
+        if (blockedPath) fs.chmodSync(blockedPath, 0o755);
+        fs.chmodSync(prefix, 0o755);
+      }
+    });
+  }
+  for (const state of ['compatible', 'incompatible', 'unknown', '130', '143']) {
+    it(`classifies a hidden Homebrew Node as ${state} without installing or switching it`, () => {
+      const prefix = nativeBrew();
+      const installed = path.join(prefix, 'Cellar/node/25.0.0/bin/node');
+      fs.mkdirSync(path.dirname(installed), { recursive: true });
+      const contents = '#!/bin/bash\n' + (state === 'compatible' ? "printf 'true\\n'\n"
+        : state === 'incompatible' ? "printf 'false\\n'\n" : state === 'unknown' ? 'exit 27\n' : `exit ${state}\n`);
+      fs.writeFileSync(installed, contents, { mode: 0o755 });
+      fs.symlinkSync('../Cellar/node/25.0.0/bin/node', path.join(prefix, 'bin/node'));
+      const result = run('', { FAKE_MISSING_NODE: '1' });
+      assert.equal(result.status, ['130', '143'].includes(state) ? Number(state) : 1, result.stdout + result.stderr);
+      if (state === 'compatible') {
+        assert.include(result.stderr, 'is not active on PATH.');
+        assert.include(result.stderr, 'Activate it using its existing installation method');
+        assert.notInclude(result.stderr, 'brew upgrade node');
+      } else if (state === 'incompatible') assert.include(result.stderr, 'Homebrew (review `brew upgrade node` yourself)');
+      else if (state === 'unknown') {
+        assert.include(result.stderr, 'could not be verified.');
+        assert.notInclude(result.stderr, 'brew upgrade node');
+      }
+      assert.equal(fs.readFileSync(installed, 'utf8'), contents);
+      assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
+      for (const forbidden of ['native-brew:install', 'native-brew:info', 'native-brew:ruby', 'nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+      assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+    });
+  }
   it('never skips an incompatible first Node to silently select a later runtime', () => {
     const later = path.join(root, 'later'); fs.mkdirSync(later); linkFake('node', later);
     fs.unlinkSync(path.join(tools, 'node'));
@@ -321,9 +374,12 @@ esac
       fs.symlinkSync(target, node);
       const result = run('', { PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: '1' });
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stderr, `Existing Node.js at ${node} needs manual attention.`);
-      if (kind === 'relative' || kind === 'absolute') assert.include(result.stderr, 'Homebrew (review `brew upgrade node` yourself)');
+      if (kind === 'relative' || kind === 'absolute') {
+        assert.include(result.stderr, `Existing Node.js at ${node} needs manual attention.`);
+        assert.include(result.stderr, 'Homebrew (review `brew upgrade node` yourself)');
+      }
       else {
+        assert.include(result.stderr, `Existing Node.js at ${node} could not be verified.`);
         assert.include(result.stderr, 'using its existing installation method');
         assert.notInclude(result.stderr, 'brew upgrade node');
       }
@@ -1578,6 +1634,43 @@ system_sudo=fixture_sudo
       });
     }
   }
+  for (const spelling of ['direct', 'directory alias', 'executable alias']) {
+    for (const managedFirst of [true, false]) {
+      it(`preserves Node PATH precedence with an older external runtime (${spelling}, managed first: ${managedFirst})`, () => {
+        linkFake('npm', systemNode);
+        const first = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1' });
+        assert.equal(first.status, 0, first.stdout + first.stderr);
+        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
+        let entry = quickBin;
+        if (spelling === 'directory alias') {
+          entry = path.join(root, 'managed-directory-alias');
+          fs.symlinkSync(quickBin, entry);
+        } else if (spelling === 'executable alias') {
+          entry = path.join(root, 'managed-executable-alias'); fs.mkdirSync(entry);
+          fs.symlinkSync(path.relative(entry, path.join(quickBin, 'node')), path.join(entry, 'node'));
+        }
+        const older = path.join(home, '.nvm/versions/node/v18.0.0/bin');
+        fs.mkdirSync(older, { recursive: true });
+        const oldBytes = "#!/bin/bash\nprintf 'false\\n'\n";
+        fs.writeFileSync(path.join(older, 'node'), oldBytes, { mode: 0o755 });
+        const profile = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
+        const links = ['node', 'npm'].map(name => fs.readlinkSync(path.join(quickBin, name)));
+        fs.writeFileSync(log, '');
+        const entries = managedFirst ? [entry, older] : [older, entry];
+        const result = run('', { PATH: [...entries, quickBin, tools].join(':'), FAKE_MISSING_NODE: '1' });
+        assert.equal(result.status, managedFirst ? 0 : 1, result.stdout + result.stderr);
+        if (managedFirst) assert.notInclude(result.stderr, 'needs manual attention');
+        else {
+          assert.include(result.stderr, `Existing Node.js at ${path.join(older, 'node')} needs manual attention`);
+          assert.notInclude(readLog(), 'auth status --active'); assert.notInclude(readLog(), 'install.sh:');
+        }
+        assert.deepEqual(['node', 'npm'].map(name => fs.readlinkSync(path.join(quickBin, name))), links);
+        assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), profile);
+        assert.equal(fs.readFileSync(path.join(older, 'node'), 'utf8'), oldBytes);
+        for (const forbidden of ['sudo:', 'nodejs.org', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
+      });
+    }
+  }
   it('releases managed fallback links when a compatible version manager becomes available on rerun', () => {
     linkFake('npm', systemNode);
     const first = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1' });
@@ -1852,7 +1945,7 @@ system_sudo=fixture_sudo
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
   }
-  it('reuses compatible system Node when an older Node shadows it', () => {
+  it('reuses compatible system Node when Node is missing from PATH', () => {
     linkFake('node', systemNode);
     const result = run('y\ny\n', { FAKE_MISSING_NODE: '1' });
     assert.equal(result.status, 0, result.stdout + result.stderr);

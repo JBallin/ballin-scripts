@@ -123,10 +123,11 @@ probe_tool() {
 }
 node_compatible() {
   local answer status=0
-  [[ -x "$1" ]] || return 1
+  [[ -x "$1" ]] || return 2
   answer=$(probe_tool "$1" -p "const [major, minor] = process.versions.node.split('.').map(Number); const [requiredMajor, requiredMinor] = '$required_node_version'.split('.').map(Number); major > requiredMajor || (major === requiredMajor && minor >= requiredMinor)" 2>/dev/null) || status=$?
   stop_if_interrupted "$status"
-  [[ "$status" == 0 && "$answer" == true ]]
+  [[ "$status" == 0 ]] || return 2
+  case "$answer" in true) return 0 ;; false) return 1 ;; *) return 2 ;; esac
 }
 
 tool_uses_managed_link() {
@@ -301,7 +302,7 @@ tools_need_helper() {
 }
 
 find_suitable_brew() {
-  local candidate prefix cellar
+  local candidate prefix cellar repository location
   brew_tool=''; brew_prefix=''
   candidate=$(type -P brew) || return 0
   # Only normal native installations. Unknown/custom/Rosetta installations use direct routes.
@@ -319,8 +320,17 @@ find_suitable_brew() {
   cellar=$(HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 "$candidate" --cellar 2>/dev/null) || status=$?
   [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
   [[ "$status" == 0 ]] || return 0
-  [[ "$prefix" == "${candidate%/bin/brew}" && "$cellar" == "$prefix/Cellar" && -d "$cellar" && -w "$prefix" ]] || return 0
-  [[ -f "$prefix/Library/Homebrew/brew.sh" || -f "$prefix/Homebrew/Library/Homebrew/brew.sh" ]] || return 0
+  [[ "$prefix" == "${candidate%/bin/brew}" && "$cellar" == "$prefix/Cellar" && -d "$cellar" ]] || return 0
+  if [[ -f "$prefix/Library/Homebrew/brew.sh" ]]; then repository=$prefix
+  elif [[ -f "$prefix/Homebrew/Library/Homebrew/brew.sh" ]]; then repository=$prefix/Homebrew
+  else return 0; fi
+  # Intel's /usr/local parent can be root-owned while Homebrew's own locations
+  # are writable. Missing children need a writable existing ancestor to create them.
+  for location in "$repository" "$repository/.git" "$cellar" \
+    "$prefix"/{bin,etc,include,lib,opt,sbin,share,var/homebrew/linked,var/homebrew/locks}; do
+    while [[ ! -e "$location" && ! -L "$location" ]]; do location=${location%/*}; done
+    [[ -d "$location" && -w "$location" && -x "$location" ]] || return 0
+  done
   # Homebrew itself requires Apple's developer tools; do not bootstrap them through brew.
   probe_tool "$system_xcode_select" -p >/dev/null 2>&1 || return 0
   brew_tool=$candidate; brew_prefix=$prefix
@@ -349,7 +359,12 @@ existing_hidden_node() {
 }
 
 manual_node_guidance() {
-  local candidate=$1 owner='its existing installation method' resolved=$1 target hops=0
+  local candidate=$1 state=${2:-incompatible} owner='its existing installation method' resolved=$1 target hops=0
+  if [[ "$state" == compatible ]]; then
+    fail "Existing compatible Node.js at $candidate is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  elif [[ "$state" == unknown ]]; then
+    fail "Existing Node.js at $candidate could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fi
   while [[ -L "$resolved" && $hops -lt 40 ]]; do
     target=$(readlink "$resolved") || break
     if [[ "$target" == /* ]]; then resolved=$target; else resolved="${resolved%/*}/$target"; fi
@@ -787,11 +802,25 @@ main() {
   if [[ -n "$active_node" ]] && ! node_compatible "$active_node"; then manual_node_guidance "$active_node"; fi
   path_node=$(tool_on_path node)
   find_suitable_brew
-  if [[ -n "$path_node" ]] && ! node_compatible "$path_node"; then manual_node_guidance "$path_node"; fi
+  if [[ -n "$path_node" ]] && ! node_compatible "$path_node"; then
+    if [[ -n "$active_node" ]] && tool_uses_managed_link "$active_node" node; then
+      # The compatible managed runtime actually wins PATH. Keep it while an
+      # older external runtime remains shadowed; do not release its links.
+      path_node=''
+    else manual_node_guidance "$path_node"; fi
+  fi
   node_tool=$(find_node "$path_node")
   if [[ -z "$node_tool" ]]; then
     hidden_node=$(existing_hidden_node)
-    [[ -z "$hidden_node" ]] || manual_node_guidance "$hidden_node"
+    if [[ -n "$hidden_node" ]]; then
+      local hidden_status=0
+      node_compatible "$hidden_node" || hidden_status=$?
+      case "$hidden_status" in
+        0) manual_node_guidance "$hidden_node" compatible ;;
+        1) manual_node_guidance "$hidden_node" incompatible ;;
+        *) manual_node_guidance "$hidden_node" unknown ;;
+      esac
+    fi
   fi
   gh_tool=''
   [[ "$backup_choice" != yes ]] || gh_tool=$(find_gh)

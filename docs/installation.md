@@ -165,6 +165,9 @@ manual attention. Quickstart never upgrades or switches an existing incompatible
 installs nvm, or bootstraps Homebrew. A manager directory alone is not a Node
 installation. Follow the identified installation method, or the
 [Node guidance](optional-capabilities.md#nodejs), then rerun Quickstart.
+For a compatible installed Node outside PATH, activate it or add its bin directory
+to PATH; a new installation or upgrade is unnecessary. If its version cannot be
+verified, inspect that existing installation before retrying.
 
 For genuinely missing tools, a suitable native existing Homebrew installation
 is preferred for Git, Node and GitHub CLI. The Node route uses ordinary
@@ -176,6 +179,9 @@ a failed consented Homebrew preflight/install stops for manual recovery rather
 than silently changing routes. Existing/pinned/unlinked formulae, link conflicts
 and a plan that could change existing Node require manual attention. Homebrew
 can install ordinary dependencies; cleanup and automatic updates are suppressed.
+Suitability checks require writable Homebrew repository, Cellar and installation
+and link locations. An existing Intel installation can qualify when those
+locations are writable even if its `/usr/local` parent is not.
 
 Direct routes are Apple's Command Line Tools for Git, the latest official Node
 24 macOS package and GitHub CLI's architecture-specific archive. Downloads use
@@ -185,9 +191,11 @@ Actual Node/npm replacement risks name affected paths before consent. A failed
 operation can leave completed prerequisite work: inspect its output before retry.
 
 Managed helper files/links live in `~/.local/share/ballin-quickstart/`. Compatible
-Node already first on PATH stays under its current manager. Quickstart preserves
-the entry PATH and its ordered search (including relative/empty entries anchored
-to the entry working directory). If that PATH supplies the selected tools and
+Node already first on PATH stays under its current manager. A compatible managed
+fallback remains usable when an older external Node is shadowed behind it; a
+compatible independent Node can take over without retaining the managed links.
+Quickstart preserves the entry PATH and its ordered search (including
+relative/empty entries anchored to the entry working directory). If that PATH supplies the selected tools and
 command directory, it skips startup inspection/editing. Otherwise it asks before
 adding only the needed helper/command directories. It never sources startup files,
 scans `.zprofile` or performs a final PATH recheck. Existing exact lines prevent
