@@ -76,6 +76,9 @@ describe('private repository transport', () => {
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
   });
   for (const [label, response, problem] of [
+    ['missing gh', { status: null, error: Object.assign(new Error('DUMMY_PRIVATE_ERROR'), { code: 'ENOENT' }) }, 'prerequisite'],
+    ['unconfirmed executable failure', { status: null, error: Object.assign(new Error('DUMMY_PRIVATE_ERROR'), { code: 'EACCES' }) }, 'request'],
+    ['not-found text without spawn evidence', { status: 1, stderr: 'gh: command not found' }, 'request'],
     ['DNS', { status: 1, stderr: 'dial tcp: lookup api.github.com: no such host' }, 'connection'],
     ['connection', { status: 1, stderr: 'dial tcp: connection refused' }, 'connection'],
     ['gh connection diagnostic', { status: 1, stderr: 'error connecting to api.github.com\ncheck your internet connection or https://githubstatus.com' }, 'connection'],
