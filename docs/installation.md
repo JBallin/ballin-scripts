@@ -17,7 +17,8 @@ replaced. Declining makes no installation changes and exits successfully.
 
 Analytics, [shell completion](#shell-completion), and
 [private backups](#optional-backup-setup-and-reconnect) have separate choices.
-Installation does not run updates or collect backup snapshots. See
+The direct installer does not run updates or capture a backup. Quickstart may
+offer to run the first backup after successful destination setup. See
 [local effects](#local-effects) for the affected paths and refresh behavior,
 and [uninstall](#uninstall) for removal. Review the [installer source](../install.sh)
 before running it.
@@ -103,15 +104,14 @@ Open a new Terminal, or reload the startup file you selected. Once this line is 
 open a new terminal to use the updated command list.
 
 If you use a custom `ZDOTDIR`, select the directory containing the `.zshrc` your
-Terminal reads. An unexported setting is unavailable to the installer; empty or
-relative values use the conventional suggestion instead. Setup never runs
-startup files to discover a location. A missing `.zshrc` is normal.
+Terminal reads, even if it differs from the suggestion. Setup never runs startup
+files to discover a location. A missing `.zshrc` is normal.
 Quickstart can reuse the file you selected for PATH when offering completion,
 with separate permission to enable it. Choosing a file alone makes no changes.
 
-An existing exact activation is not appended
-again. To disable completion, remove only Ballin's guarded activation line;
-reload the file or open a new Terminal. Self-update refreshes the completion
+An existing exact activation is not appended again. To disable completion,
+remove only Ballin's guarded activation line; reload the file or open a new
+Terminal. Self-update refreshes the completion
 assets and does not re-enable a removed line.
 
 For Bash, choose `login` if your terminal reads login startup files, or `bashrc`
@@ -160,46 +160,38 @@ Later `ballin backup setup` checks current prerequisites and GitHub access.
 
 Compatible existing Git, Node.js and (when selected) GitHub CLI are reused.
 Node must meet the [package requirement](../package.json), currently >=24.12;
-a newer compatible major is accepted. An incompatible active Node, or an
-unlinked/manager-owned installation that makes a new install ambiguous, requires
-manual attention. Quickstart never upgrades or switches an existing incompatible Node,
-installs nvm, or bootstraps Homebrew. A manager directory alone is not a Node
-installation. Follow the identified installation method, or the
+a newer compatible major is accepted. An incompatible or unverifiable existing
+Node requires manual attention. For a compatible installed Node outside PATH,
+activate it or add its bin directory to PATH instead of installing another copy.
+Follow the reported guidance and your existing installation method, or the
 [Node guidance](optional-capabilities.md#nodejs), then rerun Quickstart.
-For a compatible installed Node outside PATH, activate it or add its bin directory
-to PATH; a new installation or upgrade is unnecessary. If its version cannot be
-verified, inspect that existing installation before retrying.
+Quickstart never automatically upgrades or switches an existing incompatible
+Node, installs nvm, or bootstraps Homebrew.
 
 For genuinely missing tools, a suitable native existing Homebrew installation
 is preferred for Git, Node and GitHub CLI. The Node route uses ordinary
 `brew install node`: Homebrew's **default formula**, which may move to a newer
-compatible major and is not pinned to Node 24 or LTS. Metadata/dependency and
-bottle checks happen only after prerequisite consent. Unknown layouts,
-unsupported architectures and incomplete prerequisites use the direct routes;
-a failed consented Homebrew preflight/install stops for manual recovery rather
-than silently changing routes. Existing/pinned/unlinked formulae, link conflicts
-and a plan that could change existing Node require manual attention. Homebrew
-can install ordinary dependencies; cleanup and automatic updates are suppressed.
-Suitability checks require writable Homebrew repository, Cellar and installation
-and link locations. An existing Intel installation can qualify when those
-locations are writable even if its `/usr/local` parent is not.
+compatible major and is not pinned to Node 24 or LTS. Quickstart asks before
+installing missing tools. If the existing Homebrew installation is unsuitable,
+it offers the direct routes. Once a consented Homebrew operation starts, failure
+stops setup for manual recovery rather than silently changing routes. Existing
+formulae or link conflicts may need manual attention. Homebrew can install
+dependencies; automatic updates and cleanup are suppressed.
 
 Direct routes are Apple's Command Line Tools for Git, the latest official Node
-24 macOS package and GitHub CLI's architecture-specific archive. Downloads use
-published SHA-256 checksums. Node's Apple signature and publisher are checked
-before administrator access; the privileged stage rechecks its private package.
-Actual Node/npm replacement risks name affected paths before consent. A failed
-operation can leave completed prerequisite work: inspect its output before retry.
+24 macOS package and GitHub CLI's architecture-specific archive. Node and GitHub
+CLI downloads use published SHA-256 checksums. The Node package requires
+administrator access and installs commands under `/usr/local/bin`; actual
+Node/npm replacement risks name affected paths before consent. Its signature
+and publisher are checked before administrator access and again before installation.
+A failed operation can leave completed prerequisite work: inspect its output
+before retrying.
 
 Managed helper files/links live in `~/.local/share/ballin-quickstart/`. Compatible
-Node already first on PATH stays under its current manager. A compatible managed
-fallback remains usable when an older external Node is shadowed behind it; a
-compatible independent Node can take over without retaining the managed links.
-Quickstart preserves the entry PATH and its ordered search (including
-relative/empty entries anchored to the entry working directory). If that PATH supplies the selected tools and
-command directory, it skips startup inspection/editing. Otherwise it asks before
-adding only the needed helper/command directories. It never sources startup files,
-scans `.zprofile` or performs a final PATH recheck. Existing exact lines prevent
+Node already first on PATH stays under its current manager. If the original PATH
+supplies the selected tools and command directory, Quickstart skips PATH setup.
+Otherwise it asks before adding only the needed directories. It never
+executes startup files or performs a final PATH recheck. Existing exact lines prevent
 duplicate edits, but are not proof the line executes. Unsafe/ambiguous files and
 write failures retain specific recovery guidance. Declines leave files unchanged.
 
@@ -216,7 +208,8 @@ never reopens setup or offers run-now.
 
 ### Manual PATH setup
 
-Use the startup file your Terminal actually reads: normally the matching Zsh
+If PATH setup was not verified, configure it in the startup file your Terminal
+actually reads: normally the matching Zsh
 `.zshrc` (including custom ZDOTDIR), or the chosen Bash login file/`.bashrc`.
 Add the command directory to PATH: `$(brew --prefix)/bin` when Homebrew is used,
 otherwise `$HOME/.local/bin`. For example, without Homebrew:
@@ -225,37 +218,30 @@ otherwise `$HOME/.local/bin`. For example, without Homebrew:
 export PATH="$PATH:$HOME/.local/bin"
 ```
 
-If selected prerequisite tools need Quickstart's managed links, also prepend
-`$HOME/.local/share/ballin-quickstart/bin`. Keep an existing version manager's
-working Node ahead of fallback links. Open a new Terminal and check
+If selected prerequisite tools need Quickstart's managed links, also add
+`$HOME/.local/share/ballin-quickstart/bin` to PATH. Keep an existing version
+manager's working Node ahead of these fallback links. Open a new Terminal and check
 `command -v node git ballin` (and `gh` for backups), then `ballin --help`.
 Inspect unexpected earlier commands rather than deleting them blindly. Remove
 only the Ballin PATH addition to undo it; prerequisites and other entries remain.
-No/uncertain PATH setup ends with “PATH setup wasn’t verified” and this manual
-link, rather than also claiming successful setup.
 
 ### Answers, input ending and interruption
 
 Ballin yes/no questions accept y/yes and n/no, ignoring case and surrounding
 whitespace. Invalid completed answers repeat the question; Enter uses its shown
 default. Paths, names, menus and native tool prompts keep their own rules.
-An incomplete answer at EOF grants no permission and never saves a silent No.
-Optional EOF ends further Ballin questions, preserves the unanswered setting and
-finishes already authorized core work. Before installation consent, it ends
-Quickstart without claiming installation. Required prerequisite/install consent
-EOF is an error; the CLT readiness pause also requires a completed answer and
-an actual readiness check.
+Unanswered input grants no permission and leaves the unanswered preference
+unchanged. Closing input during optional setup ends further Ballin questions;
+already authorized core work may still finish. Required prerequisite and
+installation prompts need a completed answer to continue; closing input there
+stops setup with an error.
 
-Setup does not roll back earlier approved changes. Before retrying, inspect any
-partial checkout and any reported backup destination: an interrupted remote
-request may already have completed.
+If setup fails or is interrupted, earlier approved changes are not rolled back.
+Before retrying, inspect any partial checkout and any reported backup destination:
+an interrupted remote request may already have completed.
 
-Standalone `ballin setup` saves each confirmed preference sequentially;
-existing-backup settings review saves its reviewed pair together. EOF cancels
-that pending review normally; explicit No retains the command's cancellation
-behavior. Actual read/save/auth/access/cache/protection errors remain visible.
-`ballin uninstall` leaves prerequisites, helper files, startup additions,
-authentication and remote backups in place; see [uninstall](#uninstall).
+See [guided preference review](optional-capabilities.md#guided-preference-review)
+for how confirmed choices are saved when revisiting settings.
 
 ### Core installer
 
@@ -282,15 +268,15 @@ Before creating the command link, setup removes an existing non-directory
 target at `<bin>/ballin`. It refuses to replace a directory.
 
 Private transport and staged config files are removed after setup. The
-installer does not run `ballin update`, collect snapshots, perform the first
-backup, install optional tools, or change GitHub CLI authentication.
+direct installer does not run `ballin update`, capture a backup, install optional
+tools, or change GitHub CLI authentication.
 
 ## Commands and services contacted
 
-The commands above download their scripts from GitHub. Quickstart also downloads
-Ballin's startup-location helper when PATH setup is needed. Its selected
-prerequisite routes contact Apple's Command Line Tools service, Homebrew's
-formula/bottle services, Node.js releases, or GitHub CLI releases. The installer then:
+The linked installation commands download scripts from GitHub. Quickstart's
+selected prerequisite routes may also contact Apple's Command Line Tools service,
+Homebrew's formula/bottle services, Node.js releases, or GitHub CLI releases.
+The core installer then:
 
 - runs local Git and Node.js prerequisite checks;
 - obtains the Ballin checkout from GitHub;
@@ -303,9 +289,10 @@ formula/bottle services, Node.js releases, or GitHub CLI releases. The installer
 - sends no analytics request during installation. Later Ballin commands may send
   analytics as described in [Analytics](analytics.md).
 
-The first `ballin backup` is a separate command. It collects the current
-selected allowlisted sources, reads the destination, and saves changes that pass
-the conflict checks. See [Backup sources and sensitivity](backup-sources.md).
+The direct installer leaves the first backup for you to run with `ballin backup`;
+Quickstart may offer to run it after successful destination setup. A backup
+collects the selected allowlisted sources, reads the destination, and saves changes
+that pass the conflict checks. See [Backup sources and sensitivity](backup-sources.md).
 
 ## Revisiting onboarding choices
 
@@ -542,6 +529,8 @@ does not delete a remote backup, its revision history, or GitHub CLI credentials
 Completion activation lines remain in shell startup files. Their readability
 guard skips the removed asset; you can remove the displayed activation line
 manually if desired.
+
+Prerequisites, Quickstart helper files, and PATH additions remain in place.
 
 When analytics remain enabled, uninstall can send its normal final top-level
 command event using state captured before local deletion.
