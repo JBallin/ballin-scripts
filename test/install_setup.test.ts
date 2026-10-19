@@ -1182,7 +1182,8 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Check gh, service availability, and account access; the cause is unconfirmed.');
+    assert.include(result.stdout, 'GitHub CLI (gh) was not found on PATH.');
+    assert.include(result.stdout, 'https://cli.github.com/');
     assert.notInclude(result.stdout, 'GitHub.com authentication is required');
     assert.include(result.stdout, '\nBallin remains installed. Follow the backup recovery guidance above before retrying `ballin backup setup`.\n');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
