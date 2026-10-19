@@ -799,15 +799,29 @@ main() {
     fi
   done
   active_node=$(type -P node) || active_node=''
-  if [[ -n "$active_node" ]] && ! node_compatible "$active_node"; then manual_node_guidance "$active_node"; fi
+  local active_node_status=0
+  if [[ -n "$active_node" ]]; then
+    node_compatible "$active_node" || active_node_status=$?
+    case "$active_node_status" in
+      1) manual_node_guidance "$active_node" incompatible ;;
+      2) manual_node_guidance "$active_node" unknown ;;
+    esac
+  fi
   path_node=$(tool_on_path node)
   find_suitable_brew
-  if [[ -n "$path_node" ]] && ! node_compatible "$path_node"; then
+  local path_node_status=0
+  [[ -z "$path_node" ]] || node_compatible "$path_node" || path_node_status=$?
+  if [[ "$path_node_status" != 0 ]]; then
     if [[ -n "$active_node" ]] && tool_uses_managed_link "$active_node" node; then
       # The compatible managed runtime actually wins PATH. Keep it while an
       # older external runtime remains shadowed; do not release its links.
       path_node=''
-    else manual_node_guidance "$path_node"; fi
+    else
+      case "$path_node_status" in
+        1) manual_node_guidance "$path_node" incompatible ;;
+        2) manual_node_guidance "$path_node" unknown ;;
+      esac
+    fi
   fi
   node_tool=$(find_node "$path_node")
   if [[ -z "$node_tool" ]]; then

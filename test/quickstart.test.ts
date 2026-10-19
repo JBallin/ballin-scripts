@@ -355,10 +355,10 @@ esac
   it('never skips an incompatible first Node to silently select a later runtime', () => {
     const later = path.join(root, 'later'); fs.mkdirSync(later); linkFake('node', later);
     fs.unlinkSync(path.join(tools, 'node'));
-    fs.writeFileSync(path.join(tools, 'node'), '#!/bin/bash\nprintf false\\n\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(tools, 'node'), "#!/bin/bash\nprintf 'false\\n'\n", { mode: 0o755 });
     const result = run('', { PATH: tools + ':' + later });
     assert.equal(result.status, 1); assert.include(result.stderr, 'Existing Node.js at ' + path.join(tools, 'node'));
-    assert.include(result.stderr, 'using its existing installation method');
+    assert.include(result.stderr, 'Update or select Node using its existing installation method');
     assert.notInclude(result.stderr, 'brew upgrade node');
     for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
   });
@@ -368,7 +368,7 @@ esac
       const node = path.join(prefix, 'bin/node');
       const installed = path.join(prefix, 'Cellar/node/22.0.0/bin/node');
       fs.mkdirSync(path.dirname(installed), { recursive: true });
-      const contents = '#!/bin/bash\nprintf false\\n\n';
+      const contents = "#!/bin/bash\nprintf 'false\\n'\n";
       if (kind !== 'broken') fs.writeFileSync(installed, contents, { mode: 0o755 });
       const target = kind === 'absolute' ? installed : kind === 'cyclic' ? '../bin/node' : '../Cellar/node/22.0.0/bin/node';
       fs.symlinkSync(target, node);
@@ -391,7 +391,7 @@ esac
   it('retains existing nvm ownership guidance without switching Node', () => {
     const node = path.join(home, '.nvm/versions/node/v22.0.0/bin/node');
     fs.mkdirSync(path.dirname(node), { recursive: true });
-    fs.writeFileSync(node, '#!/bin/bash\nprintf false\\n\n', { mode: 0o755 });
+    fs.writeFileSync(node, "#!/bin/bash\nprintf 'false\\n'\n", { mode: 0o755 });
     const result = run('', { PATH: path.dirname(node) + ':' + tools });
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.include(result.stderr, 'nvm (select a supported version in your shell)');
@@ -1370,9 +1370,45 @@ system_sudo=fixture_sudo
       }
     });
   }
+  for (const boundary of ['active', 'PATH revalidation']) {
+    for (const state of ['incompatible', 'failed', 'unavailable', 'empty', 'malformed', '130', '143']) {
+      it(`preserves ${state} Node guidance at ${boundary} before any setup changes`, () => {
+        const prefix = nativeBrew();
+        const candidate = path.join(prefix, 'Cellar/node/25.0.0/bin/node');
+        fs.mkdirSync(path.dirname(candidate), { recursive: true });
+        const firstProbe = boundary === 'PATH revalidation'
+          ? 'if [[ ! -e "$FAKE_ROOT/node-probes" ]]; then touch "$FAKE_ROOT/node-probes"; printf "true\\n"; exit 0; fi\n' : '';
+        const response = state === 'incompatible' ? "printf 'false\\n'\n"
+          : state === 'failed' ? 'exit 73\n' : state === 'unavailable' ? 'exit 126\n' : state === 'empty' ? 'exit 0\n'
+          : state === 'malformed' ? "printf 'v24.22.0\\n'\n" : `exit ${state}\n`;
+        const contents = '#!/bin/bash\n' + firstProbe + response;
+        fs.writeFileSync(candidate, contents, { mode: 0o755 });
+        fs.symlinkSync('../Cellar/node/25.0.0/bin/node', path.join(prefix, 'bin/node'));
+        const result = run('', { PATH: path.join(prefix, 'bin') + ':' + tools });
+        assert.equal(result.status, ['130', '143'].includes(state) ? Number(state) : 1, result.stdout + result.stderr);
+        if (state === 'incompatible') {
+          assert.include(result.stderr, 'Homebrew (review `brew upgrade node` yourself)');
+          assert.include(result.stderr, 'Ballin requires Node.js 24.12 or newer.');
+          assert.notInclude(result.stderr, 'could not be verified');
+        } else if (['failed', 'unavailable', 'empty', 'malformed'].includes(state)) {
+          assert.include(result.stderr, `Existing Node.js at ${path.join(prefix, 'bin/node')} could not be verified.`);
+          assert.include(result.stderr, 'Check it using its existing installation method');
+          for (const unsupported of ['brew upgrade', 'Update or select', 'Ballin requires', 'v24.22.0']) assert.notInclude(result.stderr, unsupported);
+        } else {
+          assert.notInclude(result.stderr, 'could not be verified');
+          assert.notInclude(result.stderr, 'Update or select');
+        }
+        assert.equal(fs.readFileSync(candidate, 'utf8'), contents);
+        assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
+        assert.isFalse(fs.existsSync(path.join(home, '.local')));
+        assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+        for (const forbidden of ['native-brew:install', 'native-brew:info', 'native-brew:ruby', 'nodejs.org', 'auth status', 'install.sh:', 'git:clone', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
+      });
+    }
+  }
   it('requires manual repair of an incompatible first Node before reusing a later compatible manager', () => {
     const early = path.join(root, 'invalid-first'); fs.mkdirSync(early);
-    fs.writeFileSync(path.join(early, 'node'), '#!/bin/bash\nexit 73\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(early, 'node'), "#!/bin/bash\nprintf 'false\\n'\n", { mode: 0o755 });
     const manager = path.join(home, '.nvm/versions/node/v24.22.0/bin'); fs.mkdirSync(manager, { recursive: true });
     for (const name of ['node', 'npm']) linkFake(name, manager);
     const options = { PATH: `${early}:${manager}:${tools}`, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') };
