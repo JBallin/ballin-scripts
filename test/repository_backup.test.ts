@@ -150,6 +150,40 @@ describe('repository backup lifecycle', function() {
   };
   const statusClock = (time: number) => `Date.now = () => ${time};`;
 
+  for (const prerequisite of ['missing gh', 'unauthenticated gh']) {
+    it(`stops later backup enablement with actionable recovery for ${prerequisite}`, () => {
+      const value = config();
+      value.backup.repository = null; value.backup.includeSensitive = 'false'; value.update.backup = 'false';
+      saveConfig(value); source('private local source\n'); seedSuccess(); seedCache('zshrc.sh', 'old comparison\n');
+      if (prerequisite === 'missing gh') fs.unlinkSync(path.join(bin, 'gh'));
+      else { const remoteState = state(); remoteState.faults.auth = true; saveState(remoteState); }
+      const before = fs.readFileSync(configPath);
+      const head = state().head;
+      const result = run(['setup'], 'y\ncreate\nballin-backups\ny\ny\n');
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      if (prerequisite === 'missing gh') {
+        assert.include(result.stdout + result.stderr, 'GitHub CLI (gh) was not found on PATH.');
+        assert.include(result.stdout + result.stderr, 'https://cli.github.com/');
+        assert.include(result.stdout + result.stderr, 'ballin backup setup');
+        assert.lengthOf(state().requests, 0);
+      } else {
+        assert.include(result.stdout + result.stderr, 'authentication is required');
+        assert.include(result.stdout + result.stderr, 'gh auth login --hostname github.com');
+        assert.include(result.stdout + result.stderr, 'then retry.');
+        assert.lengthOf(state().requests, 1);
+        assert.equal(state().requests[0].endpoint, 'user');
+      }
+      assert.notInclude(result.stdout, 'Reconnect to an existing backup');
+      assert.notInclude(result.stdout, 'Backup setup complete.');
+      assert.deepEqual(fs.readFileSync(configPath), before);
+      assert.equal(cached(), 'old comparison\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), 'private local source\n');
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    });
+  }
+
   const sizedFile = (file: string, size: number, newline = true): void => {
     const fd = fs.openSync(file, 'w');
     try {

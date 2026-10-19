@@ -245,13 +245,11 @@ Quickstart without claiming installation. Required prerequisite/install consent
 EOF is an error; the CLT readiness pause also requires a completed answer and
 an actual readiness check.
 
-Ctrl-C remains an interruption (normally 130), distinct from EOF and No.
-Pending choices are not saved, later setup actions stop, and earlier approved
-changes remain. There is no rollback or guarantee all descendants stop at once.
-Clone and checkout/update interruptions preserve exit status 130/143. A partial
-checkout may remain; inspect it before retrying.
-A remote request may have completed: inspect the reported destination before
-retrying. Standalone `ballin setup` saves each confirmed preference sequentially;
+Setup does not roll back earlier approved changes. Before retrying, inspect any
+partial checkout and any reported backup destination: an interrupted remote
+request may already have completed.
+
+Standalone `ballin setup` saves each confirmed preference sequentially;
 existing-backup settings review saves its reviewed pair together. EOF cancels
 that pending review normally; explicit No retains the command's cancellation
 behavior. Actual read/save/auth/access/cache/protection errors remain visible.
@@ -462,7 +460,8 @@ runtime and retry. It includes the detected version when the runtime probe can
 identify it. Checkout preparation or update failures link here; review the
 reported error before retrying. A failed or incomplete checkout may not
 contain a usable inspection helper. Do not run helper code from a checkout you
-do not trust.
+do not trust. Preserve local configuration and any Git stashes before removing
+a checkout.
 
 `ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
 Configured repositories are checked for authentication, expected private identity,

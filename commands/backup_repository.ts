@@ -13,12 +13,13 @@ import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
-type RepositoryProblem = 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
+type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
   'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
   'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
-  authentication: 'GitHub.com authentication is required; check the effective gh account and environment token.',
+  prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
+  authentication: 'GitHub.com authentication is required. Run `gh auth login --hostname github.com`, or check the effective gh account and environment token, then retry.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
   timeout: 'The GitHub.com request timed out. Check the network connection and GitHub service availability, then rerun.',
   request: 'The GitHub.com request could not be completed. Check gh, service availability, and account access; the cause is unconfirmed.',
@@ -113,6 +114,7 @@ const transportProblem = (
   result: ReturnType<NonNullable<RepositoryOptions['runCommand']>>, body: Record<string, unknown>,
 ): RepositoryProblem | undefined => {
   const stderr = result.stderr ?? '';
+  if (result.error?.code === 'ENOENT') return 'prerequisite';
   if (result.error?.code === 'ETIMEDOUT'
     || /(?:i\/o|TLS handshake|connection|request) (?:timeout|timed out)|context deadline exceeded|Client\.Timeout exceeded/iu.test(stderr)) return 'timeout';
   if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH'].includes(result.error?.code ?? '')

@@ -240,12 +240,11 @@ service has stopped or that temporary files have been cleaned up.
 
 If only a child command is interrupted and Ballin remains running, the existing
 failure behavior applies: later stages continue, and the command returns the
-last nonzero stage status. For example, a child terminated by SIGINT contributes
-status 130; a later failure can replace that status.
+last nonzero stage status.
 
 The readiness check after self-update runs inside Ballin. An explicit
 interruption while it checks access to the private backup stops the invocation
-before the backup stage, with status 130 or 143.
+before the backup stage.
 
 To run macOS updates separately, disable that stage in advance:
 

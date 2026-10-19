@@ -42,10 +42,6 @@ Installation does not run updates or capture snapshots. For a new backup
 destination, run `ballin backup` for your first capture; for an existing backup,
 see [using saved state on another Mac](#using-saved-state-on-another-mac).
 
-Ctrl-C stops setup; completed changes remain. Clone and update interruptions
-preserve exit status 130/143. Inspect any partial checkout or reported backup
-destination before retrying; see [recovery guidance](docs/installation.md#health-and-recovery).
-
 Review [Installation and removal](docs/installation.md) for local effects,
 network interactions, backup authentication, troubleshooting, and removal.
 
