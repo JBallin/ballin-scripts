@@ -77,10 +77,12 @@
   completion generation. Run `npm run generate:completions` after changing those
   names; tests check the committed shell assets against generated output.
 - When installer behavior or invocation changes, update its tests and relevant
-  guidance. Update `README.md` when the overview or primary installation
-  instructions change; put operational and recovery detail in
-  `docs/installation.md` or the appropriate detailed guide. Keep related
-  documentation truthful without requiring mechanical edits to both files.
+  guidance. Keep `README.md` concise; update it when user-facing changes would
+  otherwise make its overview, prerequisites, or primary installation instructions
+  materially inaccurate or misleading. Put detailed behavior and operational or
+  recovery guidance in `docs/installation.md` or the appropriate detailed guide.
+  Keep related documentation truthful without requiring mechanical edits to both
+  files.
 - When configuration defaults or schema change, update
   `config/.defaultConfig.json`, relevant validation and consumers, tests, and the
   owning user documentation. Change `config/updateConfig.ts` only when migration
