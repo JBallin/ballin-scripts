@@ -407,7 +407,10 @@ esac
         const result = run('no\n', { FAKE_MISSING_NODE: '1', FNM_DIR: undefined });
         assert.equal(result.status, installed ? 1 : 0, result.stdout + result.stderr);
         if (installed) {
-          assert.include(result.stderr, `Existing Node.js at ${node} needs manual attention.`);
+          assert.include(result.stderr, `Existing Node.js at ${node} could not be verified.`);
+          assert.include(result.stderr, 'Check it using its existing installation method and make a supported Node.js available on PATH');
+          assert.notInclude(result.stderr, 'Update or select Node');
+          assert.equal(fs.readFileSync(node, 'utf8'), '#!/bin/sh\nexit 97\n');
           assert.notInclude(result.stdout, 'Install Node.js?');
         } else assert.include(result.stdout, 'Install Node.js? [y/N]');
         for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
