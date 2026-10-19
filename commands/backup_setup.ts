@@ -10,7 +10,7 @@ const {
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
 const { configuredBackupDestination, isConfigObject, validRepositoryName, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configSnapshotFileName } = require('./backup_snapshots.ts');
-const { readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
+const { readPromptLine, CommandInterrupted, rethrowInterruption, writeStdoutLine } = require('./commandHelpers.ts');
 const {
   readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead, inspectRepositoryMaintenance,
   createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, repositoryMessages, RepositoryError: RepositoryLookupError,
@@ -55,6 +55,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     return false;
   };
   let recoveryUrl: string | undefined;
+  let configuredRecoveryUrl: string | undefined;
   let remoteMayExist = false;
   let remoteInitialized = false;
   let linkageSaved = false;
@@ -96,6 +97,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
           candidate.backup = { ...candidate.backup, repository: read.destination };
           if (!saveBackupConfig(configPath, candidate)) return false;
         }
+        configuredRecoveryUrl = repositoryUrl(read.destination, account);
         reportManagedBranchProtection(ensureManagedBranchRuleset(read));
         const showSummary = options.showValidationSummary !== false;
         const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
@@ -146,6 +148,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         }
         if (found) suggested = undefined;
       } catch (error) {
+        rethrowInterruption(error);
         // Remote lookup failures are advisory here; local/cleanup and unexpected failures remain fatal.
         const failure = error as RepositoryError;
         if (!(error instanceof RepositoryLookupError) || !['authentication', 'connection', 'timeout', 'request',
@@ -234,6 +237,11 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     writeStdoutLine('Backup setup complete.');
     return true;
   } catch (error) {
+    const interruptedUrl = configuredRecoveryUrl ?? (remoteMayExist ? recoveryUrl : undefined);
+    if (error instanceof CommandInterrupted && interruptedUrl) {
+      writeStdoutLine(`Remote work may already have completed at ${interruptedUrl}. Inspect it before recovery; do not create a duplicate.`);
+    }
+    rethrowInterruption(error);
     writeStdoutLine(error instanceof PortableConfigError ? (error as Error).message
       : repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to prepare backup configuration.');
     if (remoteMayExist && recoveryUrl) {

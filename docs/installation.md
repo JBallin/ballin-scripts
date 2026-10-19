@@ -221,6 +221,10 @@ Private transport and staged config files are removed after setup. The
 installer does not run `ballin update`, collect snapshots, perform the first
 backup, install optional tools, or change GitHub CLI authentication.
 
+Setup does not roll back earlier approved changes. Before retrying, inspect any
+partial checkout and any reported backup destination: an interrupted remote
+request may already have completed.
+
 ## Commands and services contacted
 
 The command shown above downloads `install.sh` from GitHub. The installer then:
@@ -394,7 +398,8 @@ runtime and retry. It includes the detected version when the runtime probe can
 identify it. Checkout preparation or update failures link here; review the
 reported error before retrying. A failed or incomplete checkout may not
 contain a usable inspection helper. Do not run helper code from a checkout you
-do not trust.
+do not trust. Preserve local configuration and any Git stashes before removing
+a checkout.
 
 `ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
 Configured repositories are checked for authentication, expected private identity,

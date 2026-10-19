@@ -159,6 +159,28 @@ describe('install setup', () => {
     assert.equal(commandLog(), '');
   });
 
+  for (const mode of ['configure', 'refresh', 'self-update']) {
+    for (const signal of ['SIGINT', 'SIGTERM']) {
+      it(`preserves migration ${signal} in ${mode} without later setup or child output`, () => {
+        installConfigSources();
+        const configFile = path.join(repoDir, 'ballin.config.json');
+        const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+        fs.writeFileSync(configFile, original);
+        fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'),
+          `process.stdout.write('unfinished migration\\n'); process.stderr.write('unfinished diagnostic\\n'); process.kill(process.pid, '${signal}');\n`);
+        const args = mode === 'configure' ? ['configure', repoDir, docsUrl] : ['setup', repoDir, docsUrl, '', mode];
+        const result = spawnSync(process.execPath, [installSetupPath, ...args], { encoding: 'utf8', env: childEnvironment() });
+        assert.equal(result.status, signal === 'SIGINT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.equal(result.stderr, '');
+        assert.equal(fs.readFileSync(configFile, 'utf8'), original);
+        assert.equal(commandLog(), '');
+        assert.isFalse(fs.existsSync(installIdPath()));
+        assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+      });
+    }
+  }
+
   it('rejects repository setup while a Gist is configured before contacting GitHub or changing config', () => {
     const configFile = path.join(repoDir, 'ballin.config.json');
     const original = '{"backup":{"id":"returning-gist-id","host":"github.example.test"}}\n';
@@ -453,6 +475,69 @@ describe('install setup', () => {
     assert.equal(symlinkResult.status, 1);
     assert.include(symlinkResult.stdout, `Unable to create ${blockedBinDir}`);
   });
+
+  for (const mode of ['fresh', 'refresh', 'self-update']) {
+    for (const signal of ['INT', 'TERM']) {
+      it(`stops before setup effects on child SIG${signal} from brew prefix in ${mode} mode`, () => {
+        installConfigSources();
+        const target = path.join(binDir, 'ballin');
+        fs.writeFileSync(target, 'prior command\n');
+        writeExecutable('brew', `#!/bin/sh
+printf 'brew:%s\\n' "$*" >> '${commandLogPath}'
+kill -${signal} $$
+`);
+        const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
+          encoding: 'utf8', input: 'n\n', env: childEnvironment(),
+        });
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stderr, '');
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.equal(commandLog(), 'brew:--prefix\n');
+        assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+        assert.isFalse(fs.existsSync(path.join(repoDir, '.analytics')));
+        assert.isFalse(fs.existsSync(path.join(repoDir, '.backup-cache')));
+        assert.isTrue(fs.lstatSync(target).isFile());
+        assert.equal(fs.readFileSync(target, 'utf8'), 'prior command\n');
+      });
+    }
+  }
+
+  for (const mode of ['fresh', 'refresh', 'self-update']) {
+    for (const signal of ['INT', 'TERM']) {
+      it(`preserves child SIG${signal} from gh in the ${mode} setup CLI`, () => {
+        installConfigSources();
+        const configPath = path.join(repoDir, 'ballin.config.json');
+        const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8'));
+        config.backup.repository = require('./helpers/repository.ts').fixtureDestination;
+        config.backup.includeSensitive = 'false';
+        fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
+        const previousConfig = fs.readFileSync(configPath);
+        const cachePath = path.join(repoDir, '.backup-cache', 'prior-comparison');
+        fs.mkdirSync(path.dirname(cachePath));
+        fs.writeFileSync(cachePath, 'earlier cache\n');
+        writeExecutable('gh', `#!/bin/sh
+printf '%s\\n' "$*" >> '${commandLogPath}'
+kill -${signal} $$
+`);
+        const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
+          encoding: 'utf8', input: 'n\n', env: childEnvironment(),
+        });
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stderr, '');
+        assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stdout, 'Unable to configure backup');
+        assert.notInclude(result.stdout, 'Validated private backup');
+        assert.notInclude(result.stdout, '😎');
+        const calls = commandLog().trim().split('\n');
+        assert.lengthOf(calls, 1);
+        assert.match(calls[0], /^api /u);
+        assert.deepEqual(fs.readFileSync(configPath), previousConfig);
+        assert.equal(fs.readFileSync(cachePath, 'utf8'), 'earlier cache\n');
+        // The earlier completed installation step is preserved, not rolled back.
+        assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+      });
+    }
+  }
 
   it('replaces existing command symlinks', () => {
     fs.mkdirSync(binDir, { recursive: true });
@@ -1057,7 +1142,8 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Check gh, service availability, and account access; the cause is unconfirmed.');
+    assert.include(result.stdout, 'GitHub CLI (gh) was not found on PATH.');
+    assert.include(result.stdout, 'https://cli.github.com/');
     assert.notInclude(result.stdout, 'GitHub.com authentication is required');
     assert.include(result.stdout, '\nBallin remains installed. Follow the backup recovery guidance above before retrying `ballin backup setup`.\n');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');

@@ -517,6 +517,16 @@ describe('backup snapshot definitions', () => {
     });
   });
 
+  for (const signal of ['INT', 'TERM']) {
+    it(`does not classify child SIG${signal} during prefix discovery as an unavailable source`, () => {
+      const binDir = path.join(homeDir, 'bin');
+      fs.mkdirSync(binDir);
+      fs.writeFileSync(path.join(binDir, 'brew'), `#!/bin/sh\nkill -${signal} $$\n`, { mode: 0o755 });
+      try { observation('bash_completions', { PATH: binDir }); assert.fail('expected interruption'); }
+      catch (error) { assert.equal((error as { status: number }).status, signal === 'INT' ? 130 : 143); }
+    });
+  }
+
   it('keeps missing, unsupported, and failed completion directories distinct', () => {
     const missing = path.join(homeDir, 'missing-completions');
     assert.equal(observation('bash_completions', {

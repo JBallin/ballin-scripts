@@ -1,5 +1,7 @@
 const path = require('path');
 const {
+  requireUninterrupted,
+  rethrowInterruption,
   runCommand,
   runVisibleCommand,
   writeStdoutLine,
@@ -13,14 +15,18 @@ const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/instal
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
 const sourcesUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md';
 
-const localGit = (repoDir: string, args: string[]) => runCommand('git', args, {
-  cwd: repoDir, env: { ...commandEnv(repoDir), GIT_NO_LAZY_FETCH: '1' }, stdio: ['ignore', 'pipe', 'ignore'],
-});
+const localGit = (repoDir: string, args: string[]) => {
+  const result = runCommand('git', args, {
+    cwd: repoDir, env: { ...commandEnv(repoDir), GIT_NO_LAZY_FETCH: '1' }, stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  requireUninterrupted(result);
+  return result;
+};
 const localGitOutput = (repoDir: string, args: string[]): string | undefined => {
   try {
     const result = localGit(repoDir, args);
     return result.status === 0 && !result.error && !result.signal ? result.stdout?.trim() : undefined;
-  } catch { return undefined; }
+  } catch (error) { rethrowInterruption(error); return undefined; }
 };
 // Compare data only: never load or execute source from either Git revision.
 const canonicalScope = (value: unknown): string => {
@@ -94,7 +100,7 @@ const installedScope = (repoDir: string): string | undefined => {
       scope.recursive[key as 'excludedNames' | 'claudeSyncBookkeeping' | 'claudeExcludedRoots'].sort();
     }
     return canonicalScope({ ...scope, sources });
-  } catch { return undefined; }
+  } catch (error) { rethrowInterruption(error); return undefined; }
 };
 const sensitiveSourcesEnabled = (repoDir: string): boolean => {
   const { createConfigStore } = require('../config/store.ts');
@@ -118,7 +124,7 @@ const newCommitCount = (repoDir: string, before: string, after: string): number 
     const value = localGitOutput(repoDir, ['rev-list', '--count', `${before}..${after}`]);
     const count = value && /^[1-9]\d*$/u.test(value) ? Number(value) : undefined;
     return Number.isSafeInteger(count) ? count : undefined;
-  } catch { return undefined; }
+  } catch (error) { rethrowInterruption(error); return undefined; }
 };
 const updateResult = (repoDir: string, before: string | undefined): string => {
   try {
@@ -134,7 +140,7 @@ const updateResult = (repoDir: string, before: string | undefined): string => {
     const count = newCommitCount(repoDir, before, after);
     const suffix = count === undefined ? '' : ` (${count} new commit${count === 1 ? '' : 's'})`;
     return `Ballin updated: ${shortBefore} to ${shortAfter}${suffix}.`;
-  } catch { return 'Ballin updated.'; }
+  } catch (error) { rethrowInterruption(error); return 'Ballin updated.'; }
 };
 
 const refreshInstalledBallin = (): void => {
@@ -148,7 +154,7 @@ const refreshInstalledBallin = (): void => {
     return;
   }
 
-  process.exitCode = runVisibleCommand(process.execPath, [
+  const setupStatus = runVisibleCommand(process.execPath, [
     'commands/install_setup.ts',
     'setup',
     repoDir,
@@ -159,6 +165,8 @@ const refreshInstalledBallin = (): void => {
     cwd: repoDir,
     env: commandEnv(repoDir),
   });
+  requireUninterrupted({ status: setupStatus });
+  process.exitCode = setupStatus;
   if (process.exitCode === 0) {
     writeStdoutLine(updateResult(repoDir, previousRevision));
     const currentSources = installedScope(repoDir);

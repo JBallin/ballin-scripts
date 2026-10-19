@@ -121,6 +121,23 @@ const readPromptLine = (prompt: string): PromptLine => {
   return { text: Buffer.from(bytes).toString('utf8'), eof: true };
 };
 
+class CommandInterrupted extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super('Interrupted. Earlier completed changes remain.');
+    this.status = status;
+  }
+}
+const rethrowInterruption = (error: unknown): void => {
+  if (error instanceof CommandInterrupted) throw error;
+};
+const requireUninterrupted = (result: { signal?: string | null; status: number | null; error?: unknown }): void => {
+  if (result.error) return; // Timeouts/resource-limit kills retain their actual error classification.
+  const number = result.signal && ['SIGINT', 'SIGTERM'].includes(result.signal) ? os.constants.signals[result.signal] : undefined;
+  if (typeof number === 'number') throw new CommandInterrupted(128 + number);
+  if (result.status === 130 || result.status === 143) throw new CommandInterrupted(result.status);
+};
+
 const progress = (text: string, leadingNewline = true): void => {
   process.stdout.write(`${leadingNewline ? '\n' : ''}${terminalEmphasis(`==> ${text}`, 'bold')}\n`);
 };
@@ -177,6 +194,9 @@ module.exports = {
   progress,
   readCommandOutput,
   readPromptLine,
+  CommandInterrupted,
+  rethrowInterruption,
+  requireUninterrupted,
   reportSpawnError,
   removeTempFile,
   runCommand,

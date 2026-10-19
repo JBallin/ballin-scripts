@@ -64,6 +64,7 @@ case "$1" in
     : > "$HOME/.ballin-scripts/commands/repo_update.ts"
     : > "$HOME/.ballin-scripts/commands/install_setup.ts"
     if [ "$FAKE_GIT_CLONE_STATUS" != 0 ]; then printf '%s\\n' "\${FAKE_GIT_ERROR:-}" >&2; fi
+    if [ -n "\${FAKE_GIT_CLONE_SIGNAL:-}" ]; then kill -"$FAKE_GIT_CLONE_SIGNAL" "$$"; fi
     exit "$FAKE_GIT_CLONE_STATUS"
     ;;
   fetch)
@@ -278,6 +279,25 @@ esac
     ]);
   });
 
+  for (const typed of [true, false]) {
+    for (const status of [130, 143]) {
+      it(`preserves interrupted updater status ${status} through the ${typed ? 'typed' : 'legacy'} installer route`, () => {
+        installBaseCommands(); writeCurrentCheckout({ repoUpdate: typed });
+        const result = runInstall({ env: typed
+          ? { FAKE_REPO_UPDATE_STATUS: String(status) } : { FAKE_GIT_FETCH_STATUS: String(status) } });
+        assert.equal(result.status, status, result.stdout + result.stderr);
+        assert.notInclude(result.stdout + result.stderr, 'Update or delete');
+        assert.notInclude(result.stdout, 'Setup complete');
+        assert.notInclude(result.stdout, 'Unable to update');
+        const log = fs.readFileSync(commandLogPath, 'utf8');
+        assert.include(log, typed ? 'node:repo_update' : 'git:fetch');
+        for (const later of ['node:install_setup', 'git:checkout', 'git:merge']) assert.notInclude(log, later);
+        assert.equal(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'), '{}\n');
+        assert.isFalse(fs.existsSync(path.join(homeDir, 'inspection-ran')));
+      });
+    }
+  }
+
   it('retries an incomplete cloned checkout with fresh setup when no config was created', () => {
     installBaseCommands();
 
@@ -450,6 +470,26 @@ esac
       assert.deepEqual(commandLog(), []);
       assert.equal(fs.readFileSync(path.join(homeDir, 'node-probes'), 'utf8'), 'probe\n');
       assert.isFalse(fs.existsSync(repoDir));
+    });
+  }
+
+  for (const interruption of ['SIGINT', 'SIGTERM', 130, 143] as const) {
+    it(`preserves fresh clone interruption ${interruption} without setup or ordinary failure guidance`, () => {
+      installBaseCommands();
+      const earlier = path.join(homeDir, 'earlier-approved-change');
+      fs.writeFileSync(earlier, 'keep this change\n');
+      const result = runInstall({ env: {
+        FAKE_GIT_CLONE_SIGNAL: typeof interruption === 'string' ? interruption.slice(3) : undefined,
+        FAKE_GIT_CLONE_STATUS: typeof interruption === 'number' ? String(interruption) : '0',
+      } });
+      assert.equal(result.status, interruption === 'SIGINT' || interruption === 130 ? 130 : 143, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'Unable to prepare');
+      assert.notInclude(result.stdout, troubleshootingUrl);
+      assert.notInclude(result.stdout, 'Setup complete!');
+      assert.deepEqual(commandLog(), ['git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts']);
+      assert.isTrue(fs.existsSync(path.join(repoDir, 'commands', 'install_setup.ts')), 'partial checkout remains');
+      assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+      assert.equal(fs.readFileSync(earlier, 'utf8'), 'keep this change\n');
     });
   }
 

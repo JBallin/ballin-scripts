@@ -71,15 +71,19 @@ if [ "$repo_existed" = false ]; then
 fi
 
 ################################## CLONE REPO ##################################
-if ! (
+if (
   cd "$HOME" || exit
   if [ "$repo_existed" = false ]; then
     echo ''
-    if ! git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts; then
-      exit 1
+    if git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts; then :
+    else
+      exit $?
     fi
   fi
-); then
+); then :
+else
+  prepare_status=$?
+  [[ "$prepare_status" != 130 && "$prepare_status" != 143 ]] || exit "$prepare_status"
   printf '\n⚠️  ERROR: Unable to prepare %s\n' "$repo_dir"
   printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
   exit 1
@@ -88,19 +92,25 @@ fi
 ############################ UPDATE EXISTING REPO ##############################
 if [ "$repo_existed" = true ]; then
   if [ -f "$repo_dir/commands/repo_update.ts" ]; then
-    if ! (
+    if (
       cd "$repo_dir" || exit
       node "$repo_dir/commands/repo_update.ts" "$repo_dir"
-    ); then
+    ); then :
+    else
+      update_status=$?
+      [[ "$update_status" != 130 && "$update_status" != 143 ]] || exit "$update_status"
       print_stale_checkout_guidance
       exit 1
     fi
-  elif ! (
+  elif (
     cd "$repo_dir" || exit
     git fetch origin +main:refs/remotes/origin/main \
       && git checkout main \
       && git merge origin/main
-  ); then
+  ); then :
+  else
+    update_status=$?
+    [[ "$update_status" != 130 && "$update_status" != 143 ]] || exit "$update_status"
     print_stale_checkout_guidance
     exit 1
   fi

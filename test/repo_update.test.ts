@@ -29,6 +29,26 @@ exit 0
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  for (const signal of ['INT', 'TERM']) {
+    for (const interruptedStep of ['fetch', 'checkout', 'merge']) {
+      it(`stops on child SIG${signal} during ${interruptedStep} without recovery mutations`, () => {
+        fs.writeFileSync(path.join(binDir, 'git'), `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_GIT_LOG"
+if [ "$1" = '${interruptedStep}' ]; then kill -${signal} $$; fi
+exit 0
+`, { mode: 0o755 });
+        const result = spawnSync(process.execPath, [repoUpdatePath, installedRepo], {
+          encoding: 'utf8', env: testChildEnvironment({ PATH: binDir, FAKE_GIT_LOG: gitLog }),
+        });
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.include(result.stdout, 'Interrupted');
+        const steps = ['fetch origin +main:refs/remotes/origin/main', 'checkout main', 'merge origin/main'];
+        assert.deepEqual(fs.readFileSync(gitLog, 'utf8').trim().split('\n'), steps.slice(0, ['fetch', 'checkout', 'merge'].indexOf(interruptedStep) + 1));
+        assert.notInclude(result.stdout, 'stashing');
+      });
+    }
+  }
+
   it('prints usage and fails when the repository path is missing', () => {
     const result = spawnSync(process.execPath, [repoUpdatePath], { encoding: 'utf8' });
 

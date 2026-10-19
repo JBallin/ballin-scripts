@@ -104,6 +104,17 @@ describe('repository backup lifecycle', function() {
       return remove(entry, options);
     };
   `;
+  const interruptAfterRemote = (target: string, signal: string): void => {
+    // Let the isolated provider accept and persist the request before losing its response.
+    fs.appendFileSync(path.join(bin, 'gh'), `
+      const value = require('fs').readFileSync(${JSON.stringify(statePath)}, 'utf8');
+      const request = JSON.parse(value).requests.at(-1);
+      const target = ${JSON.stringify(target)};
+      if ((target === 'feature-patch' && request.method === 'PATCH')
+        || (target === 'ruleset-post' && request.endpoint.includes('/rulesets') && request.method === 'POST')
+        || request.endpoint === target || request.payload?.query?.includes(target)) process.kill(process.pid, ${JSON.stringify(signal)});
+    `);
+  };
   const assertTransportCleanupFailed = (result: { status: number; stdout: string; stderr: string }): void => {
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.include(result.stderr, 'Private temporary-file cleanup is incomplete');
@@ -138,6 +149,40 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(statusFile(), priorSuccess, { mode: 0o600 });
   };
   const statusClock = (time: number) => `Date.now = () => ${time};`;
+
+  for (const prerequisite of ['missing gh', 'unauthenticated gh']) {
+    it(`stops later backup enablement with actionable recovery for ${prerequisite}`, () => {
+      const value = config();
+      value.backup.repository = null; value.backup.includeSensitive = 'false'; value.update.backup = 'false';
+      saveConfig(value); source('private local source\n'); seedSuccess(); seedCache('zshrc.sh', 'old comparison\n');
+      if (prerequisite === 'missing gh') fs.unlinkSync(path.join(bin, 'gh'));
+      else { const remoteState = state(); remoteState.faults.auth = true; saveState(remoteState); }
+      const before = fs.readFileSync(configPath);
+      const head = state().head;
+      const result = run(['setup'], 'y\ncreate\nballin-backups\ny\ny\n');
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      if (prerequisite === 'missing gh') {
+        assert.include(result.stdout + result.stderr, 'GitHub CLI (gh) was not found on PATH.');
+        assert.include(result.stdout + result.stderr, 'https://cli.github.com/');
+        assert.include(result.stdout + result.stderr, 'ballin backup setup');
+        assert.lengthOf(state().requests, 0);
+      } else {
+        assert.include(result.stdout + result.stderr, 'authentication is required');
+        assert.include(result.stdout + result.stderr, 'gh auth login --hostname github.com');
+        assert.include(result.stdout + result.stderr, 'then retry.');
+        assert.lengthOf(state().requests, 1);
+        assert.equal(state().requests[0].endpoint, 'user');
+      }
+      assert.notInclude(result.stdout, 'Reconnect to an existing backup');
+      assert.notInclude(result.stdout, 'Backup setup complete.');
+      assert.deepEqual(fs.readFileSync(configPath), before);
+      assert.equal(cached(), 'old comparison\n');
+      assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), 'private local source\n');
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    });
+  }
 
   const sizedFile = (file: string, size: number, newline = true): void => {
     const fd = fs.openSync(file, 'w');
@@ -510,6 +555,7 @@ describe('repository backup lifecycle', function() {
       const bytes = fs.readFileSync(configPath, 'utf8');
       const result = run(['setup'], 'y\n'); assert.equal(result.status, 1);
       assert.include(result.stdout, 'expected true or false');
+      assert.notInclude(result.stdout, 'Remote creation or initialization');
       assert.notInclude(result.stdout, 'Review sensitive sources for inclusion?');
       assert.equal(fs.readFileSync(configPath, 'utf8'), bytes); assert.lengthOf(mutations(), 0);
     });
@@ -1240,6 +1286,88 @@ describe('repository backup lifecycle', function() {
     const value = config(); value.update.npm = 'invalid'; saveConfig(value);
     assert.equal(run().status, 1); assert.equal(state().requests.length, 0);
   });
+  for (const signal of ['INT', 'TERM']) {
+    for (const boundary of ['collector', 'prefix discovery']) {
+      it(`stops on child SIG${signal} in ${boundary} without later work or saved-state changes`, () => {
+        source(); fs.writeFileSync(path.join(home, '.bashrc'), 'earlier source\n');
+        seedCache('zshrc.sh', 'prior cache\n'); seedSuccess();
+        const beforeConfig = fs.readFileSync(configPath);
+        const effects = path.join(root, 'children');
+        const command = boundary === 'collector' ? 'cat' : 'brew';
+        fs.rmSync(path.join(bin, command), { force: true });
+        fs.writeFileSync(path.join(bin, command), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${effects}'\n${boundary === 'collector' ? 'if [ "$1" = .bashrc ]; then exec /bin/cat "$@"; fi\n' : ''}kill -${signal} $$\n`, { mode: 0o755 });
+        const result = run();
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.include(result.stdout + result.stderr, 'Interrupted');
+        assert.deepEqual(fs.readFileSync(effects, 'utf8').trim().split('\n'), boundary === 'collector' ? ['.bashrc', '.zshrc'] : ['--prefix']);
+        assert.lengthOf(state().requests, 0);
+        assert.deepEqual(fs.readFileSync(configPath), beforeConfig);
+        assert.equal(cached(), 'prior cache\n');
+        assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+      });
+    }
+  }
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    for (const target of ['user/repos', 'feature-patch', 'BallinPublish', 'ruleset-post']) {
+      it(`recovers after accepted ${target} receives ${signal} during creation without later work`, () => {
+        unconfigured(); const value = state(); value.exists = false; saveState(value);
+        seedCache('zshrc.sh', 'prior cache\n'); seedSuccess();
+        const before = fs.readFileSync(configPath);
+        interruptAfterRemote(target, signal);
+        const result = run(['setup'], 'y\ncreate\n\nn\ny\n');
+        assert.equal(result.status, signal === 'SIGINT' ? 130 : 143, result.stdout + result.stderr);
+        assert.include(result.stdout, 'Remote work may already have completed at https://github.com/fixture-user/ballin-backups.');
+        assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.');
+        assert.notInclude(result.stdout, 'Private backup created:');
+        assert.notInclude(result.stdout, 'Automatically run');
+        assert.deepEqual(fs.readFileSync(configPath), before);
+        assert.equal(cached(), 'prior cache\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        const after = state(); const last = after.requests.at(-1);
+        assert.isTrue(after.exists);
+        assert.lengthOf(after.requests.filter(request => request.endpoint === 'user/repos'), 1);
+        assert.lengthOf(publications(), ['BallinPublish', 'ruleset-post'].includes(target) ? 1 : 0);
+        if (target === 'feature-patch') assert.equal(last?.method, 'PATCH');
+        else if (target === 'ruleset-post') { assert.equal(last?.method, 'POST'); assert.lengthOf(after.rulesets, 1); }
+        else if (target === 'BallinPublish') assert.include(last?.payload?.query, 'BallinPublish');
+        else assert.equal(last?.endpoint, target);
+        assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+      });
+    }
+    for (const installer of [false, true]) {
+      it(`reports configured ruleset ${signal} recovery in ${installer ? 'installer' : 'standalone'} maintenance`, () => {
+        const value = state(); value.rulesets = [];
+        if (!installer) value.name = 'renamed';
+        saveState(value); seedCache('zshrc.sh', 'prior cache\n'); seedSuccess();
+        const expected = config(); if (!installer) expected.backup.repository.name = 'renamed';
+        interruptAfterRemote('ruleset-post', signal);
+        const result = installer ? runSetup() : run(['setup']);
+        assert.equal(result.status, signal === 'SIGINT' ? 130 : 143, result.stdout + result.stderr);
+        assert.include(result.stdout, `Remote work may already have completed at https://github.com/fixture-user/${value.name}.`);
+        assert.notInclude(result.stdout, 'Review backup settings?');
+        assert.notInclude(result.stdout, 'Backup setup complete');
+        assert.deepEqual(config(), expected);
+        assert.equal(cached(), 'prior cache\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        const last = state().requests.at(-1); assert.equal(last?.method, 'POST'); assert.include(last?.endpoint, '/rulesets');
+        assert.lengthOf(state().rulesets, 1); assert.lengthOf(publications(), 0);
+        assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+      });
+    }
+    it(`retains an accepted snapshot after ${signal} without cache advancement or remote reconciliation`, () => {
+      saveState(fixtureState({ 'zshrc.sh': 'prior cache\n' }));
+      source(); seedCache('zshrc.sh', 'prior cache\n'); seedSuccess();
+      const before = fs.readFileSync(configPath);
+      interruptAfterRemote('BallinPublish', signal);
+      const result = run();
+      assert.equal(result.status, signal === 'SIGINT' ? 130 : 143, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Interrupted'); assert.notInclude(result.stdout, 'View changes:');
+      assert.equal(remote('zshrc.sh'), 'local\n'); assert.lengthOf(publications(), 1);
+      assert.include(state().requests.at(-1)?.payload?.query, 'BallinPublish');
+      assert.deepEqual(fs.readFileSync(configPath), before);
+      assert.equal(cached(), 'prior cache\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    });
+  }
   ['true-ish', null, 1, {}].forEach((consent) => {
     it(`rejects invalid consent before discovery: ${JSON.stringify(consent)}`, () => {
       const value = config(); value.backup.includeSensitive = consent; saveConfig(value);
@@ -1602,6 +1730,42 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.stdout, 'Opened https://github.com/fixture-user/ballin-backups in your browser.\n');
     assert.isTrue(JSON.parse(fs.readFileSync(path.join(root, 'browser-order.json'), 'utf8')).validated);
   });
+  for (const browserResult of [0, 7, 130, 143, 'SIGINT', 'SIGTERM'] as const) {
+    it(`preserves opted-in browser interruption and ordinary telemetry for ${browserResult}`, () => {
+      const capture = createAnalyticsCapture(root);
+      const value = config(); value.analytics.enabled = 'true'; saveConfig(value);
+      seedCache('zshrc.sh', 'cached bytes\n');
+      const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
+      const status = typeof browserResult === 'number' ? browserResult : browserResult === 'SIGINT' ? 130 : 143;
+      const interrupted = status === 130 || status === 143;
+      const effect = typeof browserResult === 'number' ? `process.exit(${browserResult});` : `process.kill(process.pid, '${browserResult}');`;
+      const result = run(['open'], '', { ...capture.env,
+        NODE_OPTIONS: `--require ${JSON.stringify(path.join(root, 'preload.cjs'))} ${capture.env.NODE_OPTIONS}`,
+      }, `
+        const child = require('child_process'); const spawn = child.spawnSync;
+        child.spawnSync = function(command, args, options) {
+          if (command === 'gh' && args[0] === 'browse') {
+            require('fs').writeFileSync(${JSON.stringify(path.join(root, 'browse-request-count'))},
+              String(JSON.parse(require('fs').readFileSync(${JSON.stringify(statePath)}, 'utf8')).requests.length));
+            return spawn.call(this, process.execPath, ['-e', ${JSON.stringify(effect)}], options);
+          }
+          return spawn.call(this, command, args, options);
+        };
+      `);
+      assert.equal(result.status, status, result.stdout + result.stderr);
+      const events: CapturedAnalyticsEvent[] = capture.readEvents();
+      assert.deepEqual(events.map(({ command, status }) => ({ command, status })), interrupted ? []
+        : [{ command: 'ballin backup', status: status === 0 ? 'success' : 'failure' }]);
+      if (interrupted) {
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stderr, 'unable to open your browser');
+      } else if (status === 0) assert.include(result.stdout, 'Opened https://github.com/fixture-user/ballin-backups');
+      else assert.include(result.stderr, 'unable to open your browser');
+      assert.equal(state().requests.length, Number(fs.readFileSync(path.join(root, 'browse-request-count'), 'utf8')));
+      assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
+      assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    });
+  }
   for (const failure of ['spawn', 'signal']) {
     it(`reports browser ${failure} failure without exposing child diagnostics`, () => {
       const result = run(['open'], '', {}, `
@@ -1616,9 +1780,14 @@ describe('repository backup lifecycle', function() {
         };
       `);
       assert.equal(result.status, failure === 'spawn' ? 1 : 143);
-      assert.equal(result.stdout, '');
-      assert.include(result.stderr, 'unable to open your browser'); assert.include(result.stderr, 'manually');
-      assert.include(result.stderr, 'https://github.com/fixture-user/ballin-backups');
+      if (failure === 'signal') {
+        assert.equal(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stderr, 'unable to open your browser');
+      } else {
+        assert.equal(result.stdout, '');
+        assert.include(result.stderr, 'unable to open your browser'); assert.include(result.stderr, 'manually');
+        assert.include(result.stderr, 'https://github.com/fixture-user/ballin-backups');
+      }
       assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_BROWSER_ERROR');
       assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
     });
@@ -2333,6 +2502,25 @@ describe('repository backup lifecycle', function() {
       const value = config(); value.analytics.enabled = 'true'; saveConfig(value);
       capture = createAnalyticsCapture(root);
     });
+
+    for (const signal of ['SIGINT', 'SIGTERM']) {
+      for (const boundary of ['collector', 'transport']) {
+        it(`starts no analytics after opted-in ${boundary} ${signal}`, () => {
+          source(); seedCache('zshrc.sh', 'prior cache\n'); seedSuccess();
+          if (boundary === 'collector') {
+            fs.rmSync(path.join(bin, 'cat'));
+            fs.writeFileSync(path.join(bin, 'cat'), '#!' + process.execPath + `\nprocess.kill(process.pid, '${signal}');\n`, { mode: 0o755 });
+          } else interruptAfterRemote('user', signal);
+          const result = observedRun();
+          assert.equal(result.status, signal === 'SIGINT' ? 130 : 143, result.stdout + result.stderr);
+          assert.include(result.stdout, 'Interrupted');
+          assert.deepEqual(capture.readEvents(), []);
+          assert.equal(cached(), 'prior cache\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+          assert.lengthOf(mutations(), 0);
+          assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+        });
+      }
+    }
 
     it('emits one success for repository publication and one for an unchanged backup', () => {
       source(); ok(observedRun()); assertOutcome('success');

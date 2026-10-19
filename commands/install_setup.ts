@@ -16,8 +16,10 @@ const {
   configuredBackupDestination,
 } = require('./backup_config.ts');
 const {
+  CommandInterrupted,
   commandExists,
-  readCommandOutput,
+  runCommand,
+  requireUninterrupted,
   runNodeScript,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
@@ -108,6 +110,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
     env: childEnv,
   });
 
+  requireUninterrupted(updateResult);
   if (updateResult.stderr) {
     process.stderr.write(updateResult.stderr);
   }
@@ -190,7 +193,9 @@ const symlinkBinaries = (repoDir: string, binDir: string): boolean => {
 
 const resolveBinDir = (): string | null => {
   if (commandExists('brew')) {
-    const brewPrefix = readCommandOutput('brew', ['--prefix']);
+    const result = runCommand('brew', ['--prefix']);
+    requireUninterrupted(result);
+    const brewPrefix = result.status === 0 && !result.error ? result.stdout : null;
     if (brewPrefix !== null) {
       return path.join(brewPrefix.trimEnd(), 'bin');
     }
@@ -288,7 +293,7 @@ const setup = (
   return backupSetupSucceeded;
 };
 
-const runInstallSetupCli = (): void => {
+const runInstallSetupCommand = (): void => {
   const [, , command, repoDir, option] = process.argv;
 
   if (command === 'supports-command') {
@@ -326,6 +331,14 @@ const runInstallSetupCli = (): void => {
 
   writeStdoutLine(`Unknown install setup command: ${command}`);
   process.exitCode = 1;
+};
+
+const runInstallSetupCli = (): void => {
+  try { runInstallSetupCommand(); } catch (error) {
+    if (!(error instanceof CommandInterrupted)) throw error;
+    process.exitCode = (error as { status: number }).status;
+    writeStdoutLine((error as Error).message);
+  }
 };
 
 if (require.main === module) {
