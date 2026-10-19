@@ -3,8 +3,6 @@ const path = require('path');
 const tty = require('tty');
 const { readPromptLine, parseYesNo, writeStdoutLine, rethrowInterruption } = require('./commandHelpers.ts');
 
-const { zshStartupDirectory } = require('./shell_location.ts');
-
 class CompletionProfileError extends Error {}
 
 type CompletionTarget = { shell: 'zsh' | 'bash'; profile: string; line: string };
@@ -38,14 +36,20 @@ const completionTarget = (
   if (!home || !path.isAbsolute(home) || !env.SHELL || !path.isAbsolute(env.SHELL)) return null;
   const shell = path.basename(env.SHELL);
   let profile: string;
-  if (shell === 'zsh') {
-    let directory = zshStartupDirectory(env);
-    if (!directory) {
-      const choice = prompt('Enter the absolute directory containing your .zshrc, or skip: ');
-      if (choice.eof || choice.text === 'skip') return null;
-      directory = choice.text === 'home' ? home : choice.text;
-      if (!directory || !path.isAbsolute(directory)) return null;
-    }
+  // Quickstart may reuse a file the user explicitly selected, never edit consent.
+  const selected = env.BALLIN_SETUP_PROFILE;
+  const reusable = selected && path.isAbsolute(selected) && !/[\r\n\0]/u.test(selected)
+    && (shell === 'zsh' ? path.basename(selected) === '.zshrc'
+      : shell === 'bash' && ['.bashrc', '.bash_profile', '.bash_login', '.profile'].includes(path.basename(selected)));
+  if (reusable) {
+    if (shell === 'bash' && path.basename(selected) === '.profile') return null;
+    profile = selected;
+  } else if (shell === 'zsh') {
+    const suggested = env.ZDOTDIR && path.isAbsolute(env.ZDOTDIR) && !/[\r\n\0]/u.test(env.ZDOTDIR) ? env.ZDOTDIR : home;
+    const choice = prompt(`Zsh settings directory [${suggested}; Enter to use, another absolute directory, or skip]: `);
+    if (choice.eof || choice.text === 'skip') return null;
+    const directory = choice.text === '' ? suggested : choice.text === 'home' ? home : choice.text;
+    if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) return null;
     profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
   } else if (shell === 'bash') {
     const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ');
@@ -128,27 +132,6 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
   const prompt = options.prompt ?? readPromptLine;
   try {
     const env = options.env ?? process.env;
-    const directory = zshStartupDirectory(env);
-    // A normal zsh rerun needs no directory or edit prompts when already configured.
-    if (env.HOME && path.isAbsolute(env.HOME) && env.SHELL && path.isAbsolute(env.SHELL)
-      && path.basename(env.SHELL) === 'zsh' && directory && path.isAbsolute(directory)) {
-      const profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
-      let enabled = false;
-      try {
-        inspectProfile(profile);
-        const fd = fs.openSync(profile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-        try {
-          if (fs.fstatSync(fd).isFile()) {
-            const lines = fs.readFileSync(fd, 'utf8').split('\n');
-            enabled = lines.includes(activationLine('zsh')) && !lines.includes(`${activationLine('zsh')}\r`);
-          }
-        } finally { fs.closeSync(fd); }
-      } catch { /* Uncertain profiles still use the normal selection and inspection path. */ }
-      if (enabled) {
-        if (options.presentation !== 'installation') write('Tab completion is already enabled.');
-        return;
-      }
-    }
     let firstQuestion = true;
     const completionPrompt: typeof prompt = (question: string) => {
       if (firstQuestion && options.presentation === 'installation') write('');
@@ -157,6 +140,21 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     };
     const target = completionTarget(env, completionPrompt);
     if (!target) { fallback(true); return; }
+    // Inspect only the selected file; a conventional location is not activation proof.
+    try {
+      const fd = fs.openSync(target.profile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      let enabled = false;
+      try {
+        if (fs.fstatSync(fd).isFile()) {
+          const lines = fs.readFileSync(fd, 'utf8').split('\n');
+          enabled = lines.includes(target.line) && !lines.includes(`${target.line}\r`);
+        }
+      } finally { fs.closeSync(fd); }
+      if (enabled) {
+        if (options.presentation !== 'installation') write('Tab completion is already enabled.');
+        return;
+      }
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     while (true) {
       const answer = completionPrompt(`Enable tab completion in ${target.profile}? [y/N] `);
       if (answer.eof) { fallback(); return; }

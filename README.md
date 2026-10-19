@@ -29,10 +29,10 @@ personal GitHub.com account. See [Node.js setup](docs/optional-capabilities.md#n
 if you need a supported runtime.
 
 Review the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh),
-then run in zsh or Bash:
+then open Terminal and run it (zsh or Bash):
 
 ```shell
-BALLIN_SHELL_PID=$$ BALLIN_SHELL_HOME="$HOME" BALLIN_SHELL_CONFIGURED="${SHELL-}" BALLIN_SHELL_ZDOTDIR_SET="${ZDOTDIR+x}" BALLIN_SHELL_ZDOTDIR="${ZDOTDIR-}" bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
 The installer links to installation details and asks before a fresh installation.

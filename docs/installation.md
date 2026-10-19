@@ -24,12 +24,12 @@ before running it.
 
 ## Install
 
-In zsh or Bash, run the installer through Bash process substitution so it can read
-your confirmation from standard input:
+Choose a route:
 
-```shell
-BALLIN_SHELL_PID=$$ BALLIN_SHELL_HOME="$HOME" BALLIN_SHELL_CONFIGURED="${SHELL-}" BALLIN_SHELL_ZDOTDIR_SET="${ZDOTDIR+x}" BALLIN_SHELL_ZDOTDIR="${ZDOTDIR-}" bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
-```
+- [Direct installer](../README.md#installation) if Git and a supported Node.js are already available.
+- [Guided Quickstart](quickstart.md#run-quickstart) to check prerequisites and offer missing tools.
+
+Both guides provide the command to paste into Terminal. Zsh and Bash are supported.
 
 A fresh install checks Git and Node.js, links to installation details, and asks for `y/N`
 before making installation changes. It then offers
@@ -87,28 +87,29 @@ they exist in your backup.
 
 ### Startup files and manual activation
 
-For the usual zsh setup, the installer offers `~/.zshrc` directly when its
-original-shell evidence matches. PATH and completion require separate permissions.
+For Zsh, setup suggests `~/.zshrc`, or an absolute exported `ZDOTDIR` when
+available. Press Enter to use the suggestion, enter another absolute directory,
+or choose `skip` for manual setup. The suggestion does not prove which file your
+Terminal reads. Setup shows the selected file and asks before changing it.
+PATH and completion require separate permissions.
 To enable completion later, add this line near the end of that file:
 
 ```zsh
 [[ -r "$HOME/.ballin-scripts/completions/_ballin" ]] && source "$HOME/.ballin-scripts/completions/_ballin"
 ```
 
-Open a new terminal or run `source ~/.zshrc`. Once this line is present,
+Open a new Terminal, or reload the startup file you selected. Once this line is present,
 `ballin self-update` refreshes the completion scripts; reload the startup file or
 open a new terminal to use the updated command list.
 
-If you use `ZDOTDIR`, use the `.zshrc` in that directory instead. The documented
-launch commands preserve the original shell's location settings. Setup verifies
-that they came from the invoking Zsh session without executing startup scripts.
-PATH and completion each check independently. A missing `.zshrc` is normal.
-If setup cannot establish an absolute location, it asks for the directory or
-`skip`. Plain invocations without the captured settings also use this fallback.
+If you use a custom `ZDOTDIR`, select the directory containing the `.zshrc` your
+Terminal reads. An unexported setting is unavailable to the installer; empty or
+relative values use the conventional suggestion instead. Setup never runs
+startup files to discover a location. A missing `.zshrc` is normal.
+Quickstart can reuse the file you selected for PATH when offering completion,
+with separate permission to enable it. Choosing a file alone makes no changes.
 
-This is a location hint: a late ZDOTDIR change may not identify the file loaded
-earlier, and no check proves what every future shell will execute. Inspect your
-startup chain if you changed it. An existing exact activation is not appended
+An existing exact activation is not appended
 again. To disable completion, remove only Ballin's guarded activation line;
 reload the file or open a new Terminal. Self-update refreshes the completion
 assets and does not re-enable a removed line.

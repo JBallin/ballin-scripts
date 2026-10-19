@@ -652,19 +652,19 @@ configure_path() {
   fi
   case "${profile_shell##*/}" in
     zsh)
-      default_directory=$("$node_tool" "$scratch/shell_location.ts")
-      if [[ "$default_directory" == /* ]]; then
-        profile="${default_directory%/}/.zshrc"
-      else
-        installer_separator=true
-        printf 'Enter the absolute directory containing your .zshrc, or skip: '
-        if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
-        choice=$prompt_answer
-        [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }
-        [[ "$choice" != home ]] || choice="$HOME"
-        if [[ "$choice" != /* ]]; then path_incomplete 'No absolute zsh startup directory selected.'; return; fi
-        profile="${choice%/}/.zshrc"
+      default_directory="$HOME"
+      if [[ "${ZDOTDIR:-}" == /* && "$ZDOTDIR" != *$'\n'* && "$ZDOTDIR" != *$'\r'* ]]; then
+        default_directory="$ZDOTDIR"
       fi
+      installer_separator=true
+      printf 'Zsh settings directory [%s; Enter to use, another absolute directory, or skip]: ' "$default_directory"
+      if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
+      choice=$prompt_answer
+      [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }
+      [[ -n "$choice" ]] || choice="$default_directory"
+      [[ "$choice" != home ]] || choice="$HOME"
+      if [[ "$choice" != /* || "$choice" == *$'\n'* || "$choice" == *$'\r'* ]]; then path_incomplete 'No absolute zsh startup directory selected.'; return; fi
+      profile="${choice%/}/.zshrc"
       ;;
     bash)
       profile="$HOME/.bash_profile"
@@ -722,6 +722,8 @@ configure_path() {
     path_incomplete 'The startup file or directory could not be safely inspected.'; return
   fi
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
+  # Reuse the explicit location choice later, with separate completion permission.
+  selected_profile="$profile"
   # Literal presence is not evidence that the shell executes this line.
   if check_existing_path selected; then return; fi
   # Small append-boundary checks: syntax must parse, a trailing backslash must
@@ -761,7 +763,7 @@ configure_path() {
 }
 
 main() {
-  local exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true installer_separator=false
+  local exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true installer_separator=false selected_profile=''
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -941,7 +943,6 @@ main() {
   fi
   check_ballin_command
   if ! original_path_sufficient; then
-    download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/commands/shell_location.ts' "$scratch/shell_location.ts"
     configure_path
   fi
   if "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
@@ -962,7 +963,7 @@ main() {
   # Keep startup hooks from replacing the tools qualified above.
   result_file="$scratch/installation-result"
   printf 'pending\n' > "$result_file"
-  BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh"
+  BALLIN_SETUP_PROFILE="$selected_profile" BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh"
   result=$(cat "$result_file")
   [[ "$result" != cancelled ]] || return 0
   case "$result" in 'complete configured open'|'complete configured ended'|'complete configured failed'|'complete skipped open'|'complete skipped ended'|'complete skipped failed') ;; *) fail 'Installation outcome could not be verified. Review the installation before retrying.' ;; esac

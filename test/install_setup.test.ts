@@ -1133,7 +1133,7 @@ require('https').request = () => {
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, `${analyticsPrompt}\nEnter the absolute directory containing your .zshrc, or skip: `);
+      assert.include(result.stdout, `${analyticsPrompt}\nZsh settings directory [${path.join(testDir, "home")}; Enter to use, another absolute directory, or skip]: `);
       if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);

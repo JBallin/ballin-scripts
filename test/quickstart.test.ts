@@ -108,7 +108,7 @@ ${afterMain}
     env: testChildEnvironment({
       HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
       FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source,
-      FAKE_SHELL_SOURCE: path.resolve(__dirname, '../commands/shell_location.ts'), FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath, ...overrides,
+      FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath, ...overrides,
       FAKE_PRIVILEGED_HELPER: path.join(__dirname, 'helpers/quickstart_privileged.ts'),
     }),
   });
@@ -136,7 +136,6 @@ ${afterMain}
       assert.exists(target, `Fixture requires ${name}`);
       fs.symlinkSync(target, path.join(tools, name));
     }
-    fs.copyFileSync(path.resolve(__dirname, '../commands/shell_location.ts'), path.join(root, 'shell_location.ts'));
     const nodeBytes = 'Synthetic official Node package\n';
     const ghBytes = 'Synthetic official GitHub CLI archive\n';
     fs.writeFileSync(path.join(root, 'node.pkg'), nodeBytes);
@@ -225,8 +224,6 @@ case "$name" in
         if [[ -n "$target" && "$target" != - ]]; then cp "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}" "$target"
         else cat "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}"; fi
         if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
-      https://raw.githubusercontent.com/JBallin/ballin-scripts/main/commands/shell_location.ts)
-        cp "$FAKE_ROOT/shell_location.ts" "$target" ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
         cp "\${FAKE_CORE_INSTALL_SOURCE:-$FAKE_ROOT/fake-tool}" "$target" ;;
@@ -2114,7 +2111,7 @@ system_sudo=fixture_sudo
       cwd: home,
       env: testChildEnvironment({ HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
         FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source,
-        FAKE_SHELL_SOURCE: path.resolve(__dirname, '../commands/shell_location.ts'), FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath }),
+        FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath }),
     });
     let output = '';
     let interrupted = false;
@@ -2299,13 +2296,12 @@ system_sudo=fixture_sudo
     git_tool="$HOME/selected/git"; gh_tool=''; npm_tool=''
     original_normalized_path=$PATH
     scratch=$(mktemp -d "$TMPDIR/path-only.XXXXXX")
-    cp "$FAKE_LOCATION_SOURCE" "$scratch/shell_location.ts"
     trap cleanup EXIT
     tools_need_helper() { return 1; }
     configure_path
-  `], { encoding: 'utf8', input: (overrides.SHELL ?? '/bin/zsh') === '/bin/zsh' && input.startsWith('\n') ? 'home' + input : input, cwd: home, env: testChildEnvironment({
+  `], { encoding: 'utf8', input, cwd: home, env: testChildEnvironment({
     HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
-    FAKE_SOURCE: source, FAKE_LOCATION_SOURCE: path.resolve(__dirname, '../commands/shell_location.ts'), TEST_NODE_RUNTIME: process.execPath, ...overrides,
+    FAKE_SOURCE: source, TEST_NODE_RUNTIME: process.execPath, ...overrides,
   }) });
   for (const input of ['\n', '']) {
     it(`silently skips Bash startup selection on ${input ? 'Enter' : 'EOF'} without editing files`, () => {
@@ -2572,19 +2568,33 @@ system_sudo=fixture_sudo
     assert.isFalse(fs.existsSync(path.join(home, '.bash_profile')));
     assert.equal(fs.readFileSync(path.join(home, '.profile'), 'utf8'), '# Login\n');
   });
-  it('keeps empty ZDOTDIR distinct from unset and permits an explicit actual startup target', () => {
+  it('offers the conventional directory for empty ZDOTDIR and permits an explicit custom target', () => {
     const profile = path.join(home, '.zshrc');
-    const skipped = run('y\n', { ZDOTDIR: '' });
-    assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
-    assert.include(skipped.stdout, 'Enter the absolute directory containing your .zshrc, or skip:');
-    assert.include(skipped.stderr, 'No absolute zsh startup directory selected.');
+    const declined = runPathSetup('\nn\n', { ZDOTDIR: '' });
+    assert.equal(declined.status, 0, declined.stdout + declined.stderr);
+    assert.include(declined.stdout, `Zsh settings directory [${home}; Enter to use, another absolute directory, or skip]:`);
+    assert.include(declined.stdout, `Add Ballin setup to ${profile}`);
     assert.isFalse(fs.existsSync(profile));
-    const directory = path.join(home, 'actual-zsh');
-    fs.mkdirSync(directory);
-    const selected = run('y\n', { ZDOTDIR: '', FAKE_PROFILE_TARGET: directory });
+    const directory = path.join(home, 'actual-zsh'); fs.mkdirSync(directory);
+    const selected = runPathSetup(directory + '\ny\n', { ZDOTDIR: '' });
     assert.equal(selected.status, 0, selected.stdout + selected.stderr);
     assert.isTrue(fs.existsSync(path.join(directory, '.zshrc')));
     assert.isFalse(fs.existsSync(profile));
+  });
+  for (const choice of ['skip\n', '']) {
+    it(`leaves PATH files unchanged after Zsh location ${choice ? 'skip' : 'EOF'}`, () => {
+      const result = runPathSetup(choice);
+      assert.equal(result.status, 0, result.stderr);
+      assert.notInclude(result.stdout, 'Add Ballin setup');
+      assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+    });
+  }
+  it('accepts the suggested directory without treating selection as permission and reuses only that choice', () => {
+    const result = runPathSetup('\nn\n', { ZDOTDIR: 'relative' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, `Zsh settings directory [${home};`);
+    assert.include(result.stdout, `Add Ballin setup to ${home}/.zshrc`);
+    assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
   });
   for (const selectedShell of ['', 'bash', '/missing/bash', '/bin/sh']) {
     it(`continues first backup when persistent setup has unavailable shell ${JSON.stringify(selectedShell)}`, () => {

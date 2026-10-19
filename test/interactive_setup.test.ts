@@ -37,20 +37,20 @@ describe('interactive setup with delayed terminal answers', function() {
       sandbox = createSandbox({ quickstart: true });
       const startup = shell === 'bash'
         ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-        : { prompt: 'Enter the absolute directory containing your .zshrc, or skip: ', answer: 'home' };
+        : { prompt: 'Zsh settings directory [', answer: '' };
       const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
         { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
         startup,
         { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
         { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
         { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
-        startup,
         { prompt: 'Enable tab completion in ', answer: 'y' },
         ...backupAnswers.slice(1),
         { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
       assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(result.stdout.split(startup.prompt).length - 1, 1, 'Reuse the selected location without repeating its question');
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.notInclude(result.stdout, 'Usage analytics:');
       const terminalGuidance = '😎 Setup complete! Open a new Terminal to run `ballin`.';
@@ -78,7 +78,7 @@ describe('interactive setup with delayed terminal answers', function() {
         sandbox = createSandbox({ quickstart: true });
         const startup = shell === 'bash'
           ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-          : { prompt: 'Enter the absolute directory containing your .zshrc, or skip: ', answer: 'home' };
+          : { prompt: 'Zsh settings directory [', answer: '' };
         const backupSetup = backupAnswers.slice(1, 4).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
         const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
           { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
@@ -86,7 +86,6 @@ describe('interactive setup with delayed terminal answers', function() {
           { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
           { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
           { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
-          startup,
           { prompt: 'Enable tab completion in ', answer: 'n' },
           ...backupSetup,
           { prompt: 'Create this private GitHub backup without sensitive sources? [y/N] ', answer: acceptBackup ? '\x04' : 'no', raw: acceptBackup },
@@ -115,7 +114,7 @@ describe('interactive setup with delayed terminal answers', function() {
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
       { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
-      { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: '' },
+      { prompt: 'Enable tab completion in ', answer: 'n' },
     ], 'bash');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.notInclude(result.stdout, 'GitHub CLI sign-in:');

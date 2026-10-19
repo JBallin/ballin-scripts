@@ -466,6 +466,19 @@ describe('interactive onboarding QA lifecycle', function() {
     if (result.error?.code === 'ETIMEDOUT') throw new Error('Interactive QA fixture exceeded its 240000ms test timeout');
     return result;
   };
+  it('accepts only explicit supported QA shells without invoking host setup', () => {
+    for (const args of [['--shell'], ['--shell', 'fish'], ['--shell', 'zsh', '--shell', 'bash']]) {
+      const result = run('', args);
+      assert.equal(result.status, 2); assert.include(result.stdout, 'Usage:');
+      assert.notInclude(result.stdout, 'Ballin onboarding sandbox:');
+    }
+    for (const shell of ['zsh', 'bash']) {
+      const result = run('n\nexit\n', ['--shell', shell]);
+      findRoot(result.stdout); assert.equal(result.status, 0, result.stderr);
+      assert.notInclude(result.stdout, 'Created \'ballin.config.json\'');
+      assert.notInclude(result.stdout, 'Setup complete!');
+    }
+  });
   it('selects installer faults before prompts and shows clear/reset state in the menu', () => {
     const result = run('n\nscenarios\nscenario invalid\nclear\ninstall\ny\nn\nn\nscenario self-update\nballin self-update\nclear\nballin self-update\nreset fresh\nexit\n', ['--scenario', 'auth']);
     findRoot(result.stdout);

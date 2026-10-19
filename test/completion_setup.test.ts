@@ -69,12 +69,10 @@ describe('optional completion setup', () => {
     it(`separates a resolved installation completion target only when needed (already enabled: ${alreadyEnabled})`, () => {
       if (alreadyEnabled) fs.writeFileSync(path.join(home, '.zshrc'), `${activationLine('zsh')}\n`);
       const modulePath = path.resolve(__dirname, '../commands/completion_setup.ts');
-      const shellPath = path.resolve(__dirname, '../commands/shell_location.ts');
-      const script = 'require(process.argv[1]).zshStartupDirectory = () => process.env.HOME;'
-        + 'require(process.argv[2]).offerCompletionSetup("guide", { presentation: "installation", interactive: true,'
+      const script = 'require(process.argv[1]).offerCompletionSetup("guide", { presentation: "installation", interactive: true,'
         + 'prompt: text => { process.stdout.write("QUESTION:" + text); return {text:"n",eof:false}; } });';
-      const result = spawnSync(process.execPath, ['-e', script, shellPath, modulePath], {
-        encoding: 'utf8', env: testChildEnvironment(env),
+      const result = spawnSync(process.execPath, ['-e', script, modulePath], {
+        encoding: 'utf8', env: testChildEnvironment({ ...env, BALLIN_SETUP_PROFILE: path.join(home, '.zshrc') }),
       });
       assert.equal(result.status, 0, result.stderr);
       if (alreadyEnabled) assert.equal(result.stdout, '');
@@ -106,11 +104,11 @@ describe('optional completion setup', () => {
     assert.include(offer(['y']), 'could not finish');
     assert.isFalse(fs.existsSync(env.ZDOTDIR));
   });
-  it('reports existing completion without directory or edit prompts', () => {
+  it('selects the suggested location before reporting existing completion', () => {
     fs.writeFileSync(path.join(home, '.zshrc'), `${activationLine('zsh')}\n`);
     const prompts: string[] = [];
     assert.include(offer(['y'], true, (text) => prompts.push(text)), 'already enabled');
-    assert.lengthOf(prompts, 2); // Plain invocation has no original-shell metadata.
+    assert.lengthOf(prompts, 1); // Selection is separate; no repeated edit consent for an exact activation.
   });
   it('permits a home override when the exported default directory cannot be inspected', () => {
     env.ZDOTDIR = path.join(home, 'missing');
@@ -134,6 +132,42 @@ describe('optional completion setup', () => {
   it('falls back for missing, relative, or unsupported shell/home evidence', () => {
     for (const overrides of [{ HOME: '' }, { HOME: 'relative' }, { SHELL: '' }, { SHELL: 'zsh' }, { SHELL: '/bin/fish' }]) {
       assert.isNull(completionTarget({ ...env, ...overrides }, response('')));
+    }
+  });
+  for (const value of [undefined, '', 'relative', '/unsafe\nvalue']) {
+    it(`suggests home for unavailable ZDOTDIR ${JSON.stringify(value)} without granting edit consent`, () => {
+      env.ZDOTDIR = value;
+      const questions: string[] = [];
+      const answers = ['', 'n'];
+      offerCompletionSetup('guide', { env, interactive: true, write: () => {},
+        prompt: (text: string) => { questions.push(text); return { text: answers.shift()!, eof: false }; },
+      });
+      assert.include(questions[0], `Zsh settings directory [${home};`);
+      assert.equal(questions[1], `Enable tab completion in ${home}/.zshrc? [y/N] `);
+      assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
+    });
+  }
+  it('reuses an explicit custom choice but retains completion decline, EOF and unsafe-file checks', () => {
+    const custom = path.join(home, 'custom'); fs.mkdirSync(custom);
+    env.BALLIN_SETUP_PROFILE = path.join(custom, '.zshrc');
+    for (const answer of [{ text: 'n', eof: false }, { text: 'y', eof: true }]) {
+      const questions: string[] = [];
+      offerCompletionSetup('guide', { env, interactive: true, write: () => {},
+        prompt: (text: string) => { questions.push(text); return answer; },
+      });
+      assert.deepEqual(questions, [`Enable tab completion in ${custom}/.zshrc? [y/N] `]);
+      assert.isFalse(fs.existsSync(env.BALLIN_SETUP_PROFILE));
+    }
+    fs.symlinkSync(path.join(home, 'elsewhere'), env.BALLIN_SETUP_PROFILE);
+    assert.include(offer(['y']), 'could not finish');
+    assert.isFalse(fs.existsSync(path.join(home, 'elsewhere')));
+  });
+  it('rejects invalid reused context and still offers the conventional choice', () => {
+    for (const selected of ['relative/.zshrc', path.join(home, '.bashrc'), home + '/bad\n/.zshrc']) {
+      env.BALLIN_SETUP_PROFILE = selected;
+      const questions: string[] = [];
+      assert.equal(completionTarget(env, (text: string) => { questions.push(text); return { text: '', eof: false }; }).profile, path.join(home, '.zshrc'));
+      assert.lengthOf(questions, 1);
     }
   });
   it('clarifies Bash startup choice and honors login-file precedence', () => {
@@ -240,11 +274,11 @@ describe('optional completion setup', () => {
     }
   });
 
-  it('defaults zsh to home without sourcing .zshenv and accepts custom selection', () => {
+  it('offers conventional Zsh settings without sourcing .zshenv and accepts custom selection', () => {
     const directory = path.join(home, 'custom-zsh');
     fs.mkdirSync(directory);
     fs.writeFileSync(path.join(home, '.zshenv'), `ZDOTDIR=${directory}\nprintf touched > "${home}/startup-ran"\n`);
-    assert.isNull(completionTarget(env, response('')));
+    assert.equal(completionTarget(env, response('')).profile, path.join(home, '.zshrc'));
     assert.isNull(completionTarget(env, response('skip')));
     assert.isNull(completionTarget(env, () => ({ text: 'home', eof: true })));
     assert.strictEqual(completionTarget(env, response(directory)).profile, path.join(directory, '.zshrc'));
