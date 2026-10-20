@@ -40,8 +40,8 @@ describe('shell completions', () => {
 
   it('keeps the README top-level command table aligned with the command catalog', () => {
     const readme = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
-    const documentedCommands = [...readme.matchAll(/\| `ballin ([^`]+)` \|/gu)]
-      .map((match) => match[1])
+    const documentedCommands = [...readme.matchAll(/\| (?:`ballin ([^`]+)`|\[`ballin ([^`]+)`\]\([^)]+\)) \|/gu)]
+      .map((match) => match[1] ?? match[2])
       .filter((command) => !command.includes(' '));
 
     assert.sameMembers(documentedCommands, [...topLevelCommandNames]);
