@@ -82,8 +82,8 @@ Saved snapshots of your tools and configuration give you a reference when
 
 ## Commands
 
-Use `ballin --help` or a top-level command’s `--help` (for example,
-`ballin backup --help`) for syntax and options.
+For command syntax and options, use `--help` on a top-level command, such as
+`ballin backup --help`.
 
 | Command | Purpose |
 | --- | --- |
@@ -105,14 +105,10 @@ Use `ballin --help` or a top-level command’s `--help` (for example,
 
 ## Privacy and security
 
-Backups are stored in a private GitHub repository readable by GitHub and anyone
-authorized to access it.
-
-Default backup sources may contain private information; more sensitive sources
-require opt-in.
-Ballin does not scan or redact secrets. Review
+Backups are stored in a private GitHub repository. Default backup sources may
+contain private information; more sensitive sources require opt-in. Ballin does
+not scan or redact secrets. Review
 [Backup sources and sensitivity](docs/backup-sources.md) before choosing what to include.
-
 [Usage analytics](docs/analytics.md) are optional and disabled by default.
 
 ## Further reading
