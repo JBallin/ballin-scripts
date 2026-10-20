@@ -387,6 +387,30 @@ esac
     assert.isFalse(fs.existsSync(repoDir));
   });
 
+  for (const outcome of ['130', '143', 'INT', 'TERM']) {
+    it(`preserves Homebrew interruption ${outcome} in the direct installer preflight`, () => {
+      installBaseCommands();
+      const temporary = path.join(homeDir, 'tmp');
+      fs.mkdirSync(temporary);
+      const earlier = path.join(homeDir, 'earlier-approved-change');
+      fs.writeFileSync(earlier, 'keep this change\n');
+      writeExecutable('brew', `#!/bin/sh
+printf 'brew:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome} $$`}
+`);
+      const result = runInstall({ env: { TMPDIR: temporary } });
+      assert.equal(result.status, outcome === '130' || outcome === 'INT' ? 130 : 143, result.stdout + result.stderr);
+      assert.deepEqual(commandLog(), ['brew:--prefix']);
+      assert.equal(fs.readFileSync(path.join(homeDir, 'node-probes'), 'utf8'), 'probe\n');
+      for (const later of ['Install Ballin in', 'Analytics details:', 'Backup details:', 'Setup complete!']) {
+        assert.notInclude(result.stdout, later);
+      }
+      assert.isFalse(fs.existsSync(repoDir));
+      assert.equal(fs.readFileSync(earlier, 'utf8'), 'keep this change\n');
+      assert.isEmpty(fs.readdirSync(temporary));
+    });
+  }
+
   for (const prefix of ['', 'relative-prefix', '/bad:prefix', '/bad\nprefix']) {
     it(`rejects malformed Homebrew prefix ${JSON.stringify(prefix)} before consent or cloning`, () => {
       installBaseCommands();

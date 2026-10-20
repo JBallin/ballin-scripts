@@ -17,6 +17,15 @@ describe('beginner quickstart bootstrap', function() {
   const terminalGuidance = '\n😎 Setup complete! Open a new Terminal to run `ballin`.\n';
   const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
+  const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
+  printf 'brew-interruption:%s:%s\\n' "$stage" "$FAKE_BREW_INTERRUPTION" >> "$FAKE_COMMAND_LOG"
+  if [[ "$stage" == install ]]; then printf 'partial tool state\\n' > "$FAKE_ROOT/approved-brew-effect"; fi
+  case "$FAKE_BREW_INTERRUPTION" in
+    130|143) exit "$FAKE_BREW_INTERRUPTION" ;;
+    INT|TERM) kill -"$FAKE_BREW_INTERRUPTION" $$ ;;
+    *) exit 97 ;;
+  esac
+fi`;
   const nativeBrew = (arch = 'arm'): string => {
     const prefix = path.join(root, 'native-brew-' + arch);
     const repository = arch === 'intel' ? path.join(prefix, 'Homebrew') : prefix;
@@ -31,6 +40,11 @@ describe('beginner quickstart bootstrap', function() {
     fs.writeFileSync(path.join(prefix, 'bin/brew'), `#!/bin/bash
 set -euo pipefail
 printf 'native-brew:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+stage=$1
+if [[ "$stage" == ruby ]]; then
+  if [[ "$2" == -rjson ]]; then stage=ruby-metadata; else stage=ruby-plan; fi
+fi
+${brewInterruption}
 case "$1" in
   --prefix) printf '%s\\n' "$FAKE_NATIVE_PREFIX" ;;
   --cellar) printf '%s/Cellar\\n' "$FAKE_NATIVE_PREFIX" ;;
@@ -315,6 +329,72 @@ esac
     assert.equal(result.status, 1); assert.include(result.stderr, 'Homebrew cannot safely install');
     assert.notInclude(readLog(), 'native-brew:install'); assert.notInclude(readLog(), 'nodejs.org');
   });
+  for (const stage of ['select-prefix', 'sysctl', '--prefix', '--cellar', 'info', 'ruby-metadata', 'ruby-plan', 'install']) {
+    for (const outcome of ['130', '143', 'INT', 'TERM']) {
+      it(`preserves Homebrew interruption ${outcome} at ${stage} without later setup`, () => {
+        const checkedOperation = ['info', 'ruby-metadata', 'ruby-plan', 'install'].includes(stage);
+        const prefix = stage === 'select-prefix' ? path.join(root, 'non-native-brew') : nativeBrew();
+        if (stage === 'select-prefix') {
+          fs.writeFileSync(path.join(tools, 'brew'), `#!/bin/bash
+printf 'selected-brew:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+stage=select-prefix
+${brewInterruption}
+printf '%s\\n' "$FAKE_NATIVE_PREFIX"
+`, { mode: 0o755 });
+        }
+        fs.writeFileSync(path.join(tools, 'sysctl'), `#!/bin/bash
+printf 'sysctl:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+stage=sysctl
+${brewInterruption}
+printf '0\\n'
+`, { mode: 0o755 });
+        const profile = path.join(home, '.zshrc');
+        fs.writeFileSync(profile, '# existing settings\n', { mode: 0o640 });
+        const before = fs.statSync(profile);
+        const earlier = path.join(home, 'earlier-approved-change');
+        fs.writeFileSync(earlier, 'keep this change\n');
+        // Raw valid follow-on answers let swallowed cancellation reach later work.
+        const input = (stage === 'select-prefix' ? '' : 'yes\n') + 'home\nyes\nyes\nyes\n';
+        const result = run(input, {
+          FAKE_RAW_INPUT: '1', FAKE_BREW_INTERRUPT_AT: stage, FAKE_BREW_INTERRUPTION: outcome,
+          FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: stage === 'select-prefix' ? '0' : '1',
+          PATH: stage === 'select-prefix' ? tools : path.join(prefix, 'bin') + ':' + tools,
+        }, home, 'system_sysctl="$FAKE_ROOT/tools/sysctl"');
+        const commands = readLog();
+        const marker = `brew-interruption:${stage}:${outcome}\n`;
+        assert.equal(result.status, outcome === '130' || outcome === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.lengthOf(commands.split(marker), 2, 'the intended fault must run exactly once');
+        assert.equal(commands.slice(commands.indexOf(marker) + marker.length), '', 'no later tool invocation');
+        assert.equal(result.stdout.includes('Install Node.js? [y/N]'), checkedOperation);
+        if (stage !== 'select-prefix') assert.include(commands, 'sysctl:-in sysctl.proc_translated');
+        if (stage !== 'sysctl' && stage !== 'select-prefix') assert.include(commands, 'native-brew:--prefix');
+        if (checkedOperation || stage === '--cellar') assert.include(commands, 'native-brew:--cellar');
+        if (checkedOperation) assert.include(commands, 'native-brew:info --json=v2 node');
+        const rubyCalls = commands.match(/^native-brew:ruby /gm) ?? [];
+        assert.lengthOf(rubyCalls, ['ruby-plan', 'install'].includes(stage) ? 2 : stage === 'ruby-metadata' ? 1 : 0);
+        assert.equal(commands.includes('native-brew:install --formula node'), stage === 'install');
+        for (const later of ['Zsh settings directory', 'Add Ballin setup', 'Native login prompt', 'Native installation prompt', 'Run a backup now', 'Setup complete!']) {
+          assert.notInclude(result.stdout, later);
+        }
+        for (const forbidden of ['nodejs.org', 'xcode-select:--install', 'auth status --active', 'auth login', '/main/install.sh', 'install.sh:', 'git:clone', 'ballin:', 'sudo:']) {
+          assert.notInclude(commands, forbidden);
+        }
+        assert.equal(fs.readFileSync(profile, 'utf8'), '# existing settings\n');
+        const after = fs.statSync(profile);
+        for (const key of ['ino', 'mode', 'mtimeMs']) assert.equal(after[key], before[key], key);
+        assert.equal(fs.readFileSync(earlier, 'utf8'), 'keep this change\n');
+        assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+        assert.isFalse(fs.existsSync(path.join(root, 'login-complete')));
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        const managed = path.join(home, '.local/share/ballin-quickstart/.managed');
+        assert.equal(fs.existsSync(managed), checkedOperation || stage === 'select-prefix');
+        if (fs.existsSync(managed)) assert.equal(fs.readFileSync(managed, 'utf8'), '1\n');
+        const partial = path.join(root, 'approved-brew-effect');
+        assert.equal(fs.existsSync(partial), stage === 'install');
+        if (stage === 'install') assert.equal(fs.readFileSync(partial, 'utf8'), 'partial tool state\n');
+      });
+    }
+  }
   for (const blocked of ['', 'Homebrew', 'Homebrew/.git', 'Cellar', 'bin', 'lib', 'var/homebrew/linked']) {
     it(`checks existing Intel Homebrew managed locations with an unwritable parent (blocked: ${blocked || 'none'})`, () => {
       const prefix = nativeBrew('intel');
