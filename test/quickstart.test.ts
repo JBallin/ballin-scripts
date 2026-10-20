@@ -167,6 +167,20 @@ case "$name" in
     [[ "\${FAKE_XCODE_FAIL:-0}" != 1 ]] || exit 1
     touch "$FAKE_ROOT/git-installed" ;;
   node)
+    if [[ -n "\${FAKE_ORIGINAL_PATH_RESULT:-}" && "$1" == -e && $# == 8 && "\${4:-}" == "$HOME/.local/bin" ]]; then
+      printf 'original-path-probe:%s\\n' "$FAKE_ORIGINAL_PATH_RESULT" >> "$FAKE_COMMAND_LOG"
+      case "$FAKE_ORIGINAL_PATH_RESULT" in
+        130|143) exit "$FAKE_ORIGINAL_PATH_RESULT" ;;
+        INT) kill -INT $$ ;;
+        TERM) kill -TERM $$ ;;
+        real)
+          status=0
+          "$TEST_NODE_RUNTIME" "$@" || status=$?
+          printf 'original-path-result:%s\\n' "$status" >> "$FAKE_COMMAND_LOG"
+          exit "$status" ;;
+        *) exit 97 ;;
+      esac
+    fi
     if [[ "$1" == -p ]]; then
       if [[ "$0" == "$FAKE_ROOT/tools/node" && "\${FAKE_MISSING_NODE:-0}" == 1 ]]; then printf 'false\\n'; else printf 'true\\n'; fi
     elif [[ "\${FAKE_CHANGE_PROFILE:-0}" == 1 && "$1" == -e && "$3" == "$HOME/.zshrc" ]]; then
@@ -645,6 +659,69 @@ system_sudo=fixture_sudo
         for (const forbidden of ['auth status --active', 'auth login', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
       });
     }
+  }
+  for (const outcome of ['130', '143', 'INT', 'TERM']) {
+    for (const existingProfile of [false, true]) {
+      it(`stops at the late original-PATH probe on ${outcome} (existing profile: ${existingProfile})`, () => {
+        const localBin = path.join(home, '.local/bin');
+        fs.mkdirSync(localBin, { recursive: true });
+        const profile = path.join(home, '.zshrc');
+        const contents = '# Preserve existing settings\n';
+        if (existingProfile) fs.writeFileSync(profile, contents, { mode: 0o640 });
+        const before = existingProfile ? fs.statSync(profile) : null;
+        // The helper anticipates sufficient PATH and rewrites answers. Supply raw
+        // fallback answers so a swallowed interruption really continues setup.
+        const result = run('home\ny\ndevice-code\ny\ny\n', {
+          PATH: `${tools}:${localBin}`, FAKE_RAW_INPUT: '1', FAKE_AUTH: 'missing',
+          FAKE_ORIGINAL_PATH_RESULT: outcome,
+        });
+        const commands = readLog();
+        assert.match(commands, /^node:-p .*process\.versions\.node/m);
+        assert.include(commands, 'git:--version');
+        assert.include(commands, 'gh:--version');
+        assert.lengthOf(commands.match(/^original-path-probe:/gm) ?? [], 1);
+        assert.include(commands, `original-path-probe:${outcome}\n`);
+        assert.equal(result.status, outcome === '130' || outcome === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        for (const prompt of ['Zsh settings directory', 'Add Ballin setup', 'Native login prompt', 'Native installation prompt', 'Run a backup now', 'Setup complete!']) {
+          assert.notInclude(result.stdout, prompt);
+        }
+        assert.equal(fs.existsSync(profile), existingProfile);
+        if (before) {
+          assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+          const after = fs.statSync(profile);
+          for (const key of ['ino', 'mode', 'mtimeMs']) assert.equal(after[key], before[key], key);
+        }
+        for (const forbidden of ['gh:auth status --active', 'gh:auth login', '/main/install.sh', 'install.sh:', 'ballin:', 'sudo:']) {
+          assert.notInclude(commands, forbidden);
+        }
+        assert.isFalse(fs.existsSync(path.join(root, 'login-complete')));
+        assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+        assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+        assert.equal(fs.readFileSync(path.join(home, '.local/share/ballin-quickstart/.managed'), 'utf8'), '1\n');
+      });
+    }
+  }
+  for (const sufficient of [false, true]) {
+    it(`preserves real ${Number(!sufficient)} from the late original-PATH probe`, () => {
+      const localBin = path.join(home, '.local/bin');
+      fs.mkdirSync(localBin, { recursive: true });
+      const result = run(sufficient ? 'y\ny\n' : 'home\ny\ny\ny\n', {
+        PATH: sufficient ? `${tools}:${localBin}` : tools,
+        FAKE_RAW_INPUT: '1', FAKE_ORIGINAL_PATH_RESULT: 'real',
+      });
+      const commands = readLog();
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(commands, `original-path-result:${Number(!sufficient)}\n`);
+      assert.equal(result.stdout.includes('Zsh settings directory'), !sufficient);
+      assert.equal(result.stdout.includes('Add Ballin setup'), !sufficient);
+      const profile = path.join(home, '.zshrc');
+      assert.equal(fs.existsSync(profile), !sufficient);
+      if (!sufficient) assert.include(fs.readFileSync(profile, 'utf8'), localBin);
+      assert.include(commands, 'gh:auth status --active');
+      assert.include(commands, 'install.sh:');
+      assert.include(commands, 'ballin:backup open');
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+    });
   }
   it('reuses working tools, preserves native stdin, and opens only after capture', () => {
     assert.isFalse(fs.existsSync(path.join(tools, 'npm')));

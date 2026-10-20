@@ -273,7 +273,7 @@ select_command_bin() {
 }
 
 original_path_sufficient() {
-  "$node_tool" -e '
+  probe_tool "$node_tool" -e '
     const fs = require("fs");
     const [original, commands, ...tools] = process.argv.slice(1);
     const entries = original.split(":");
