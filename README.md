@@ -22,10 +22,9 @@ alongside other tools.
 > [!TIP]
 > Want guided setup? The interactive [Quickstart](docs/quickstart.md) helps install missing prerequisites. 🚀
 
-Start with Git and Node.js 24.12 or newer on your `PATH`. Homebrew is optional;
-backups also require [GitHub CLI](https://cli.github.com/) authenticated to your
-personal GitHub.com account. See [Node.js setup](docs/optional-capabilities.md#nodejs)
-if you need a supported runtime.
+Start with Git and [Node.js 24.12 or newer](docs/optional-capabilities.md#nodejs)
+on your `PATH`. Homebrew is optional; backups require an authenticated
+[GitHub CLI](https://cli.github.com/).
 
 Open Terminal and run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
@@ -89,36 +88,35 @@ Saved snapshots of your tools and configuration give you a reference when
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
-| `ballin doctor` | Checks the managed environment. |
-| `ballin backup setup [repository-name]` | Creates, reconnects to, or revalidates a private backup repository. |
-| `ballin backup` | Updates snapshots in the configured backup. |
-| `ballin backup open` | Opens the configured backup. |
-| `ballin backup disconnect` | Disconnects this Mac from its backup and disables automatic backups. |
-| `ballin backup list` | Lists supported snapshots saved in the configured backup. |
-| `ballin backup read <snapshot>` | Prints one supported snapshot from the destination. |
-| `ballin backup read <snapshot> --list` | Lists file paths in a saved bundle snapshot. |
-| `ballin backup read <snapshot> --file <path>` | Prints one file's contents from a bundle snapshot. |
-| `ballin update` | Runs configured update tasks. |
-| `ballin setup` | Guides you through [local onboarding preferences](docs/optional-capabilities.md#guided-preference-review) again. |
-| `ballin config` | Reads and updates local Ballin settings. |
-| `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
-| `ballin uninstall` | Removes installed command shims and the local checkout. |
+| [`ballin doctor`](docs/capabilities.md#ballin-doctor) | Checks the managed environment. |
+| [`ballin backup setup [repository-name]`](docs/installation.md#optional-backup-setup-and-reconnect) | Creates, reconnects to, or revalidates a private backup repository. |
+| [`ballin backup`](docs/capabilities.md#ballin-backup) | Updates snapshots in the configured backup. |
+| [`ballin backup open`](docs/new-mac.md#review-your-saved-state) | Opens the configured backup. |
+| [`ballin backup disconnect`](docs/installation.md#disconnect) | Disconnects this Mac from its backup and disables automatic backups. |
+| [`ballin backup list`](docs/new-mac.md#review-your-saved-state) | Lists supported snapshots saved in the configured backup. |
+| [`ballin backup read <snapshot>`](docs/installation.md#health-and-recovery) | Prints one supported snapshot from the destination. |
+| [`ballin backup read <snapshot> --list`](docs/installation.md#health-and-recovery) | Lists file paths in a saved bundle snapshot. |
+| [`ballin backup read <snapshot> --file <path>`](docs/installation.md#health-and-recovery) | Prints one file's contents from a bundle snapshot. |
+| [`ballin update`](docs/capabilities.md#ballin-update) | Runs configured update tasks. |
+| [`ballin setup`](docs/optional-capabilities.md#guided-preference-review) | Guides you through local onboarding preferences again. |
+| [`ballin config`](docs/optional-capabilities.md#working-with-settings) | Reads and updates local Ballin settings. |
+| [`ballin self-update`](docs/installation.md#core-installer) | Updates the local checkout and refreshes installed commands and configuration. |
+| [`ballin uninstall`](docs/installation.md#uninstall) | Removes installed command shims and the local checkout. |
 
 ## Privacy and security
 
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
-to access the repository can read its contents.
+to access it can read its contents.
 
-Inventories and filtered Ballin preferences are included by default. Sensitive
-sources, including raw configuration and pipx metadata, require one local opt-in
-covering current and future supported sources. Even default-included inventories
-can contain private tools, identities, paths, or URLs. Ballin does not scan or
-redact secrets. Review [Backup sources and sensitivity](docs/backup-sources.md)
-before choosing what to include. Changing that choice does not remove saved
-files or repository history.
+Inventories and filtered Ballin preferences are included by default; sensitive
+sources require a local opt-in covering current and future supported sources.
+Inventories can also contain private information. Ballin does not scan or redact
+secrets. Review [Backup sources and sensitivity](docs/backup-sources.md) before
+choosing what to include. Changing that choice does not remove saved files or
+repository history.
 
-[Usage analytics](docs/analytics.md) are a separate local choice, disabled by
-default and never saved or recovered through backups.
+[Usage analytics](docs/analytics.md) are optional, disabled by default, and never
+saved or recovered through backups.
 
 ## Further reading
 
