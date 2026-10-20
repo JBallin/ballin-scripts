@@ -108,8 +108,8 @@ Use `ballin --help` or a top-level command’s `--help` (for example,
 Backups are stored in a private GitHub repository readable by GitHub and anyone
 authorized to access it.
 
-Inventories and filtered Ballin preferences are included by default; sensitive
-sources require opt-in. Inventories can still contain private information.
+Default backup sources may contain private information; more sensitive sources
+require opt-in.
 Ballin does not scan or redact secrets. Review
 [Backup sources and sensitivity](docs/backup-sources.md) before choosing what to include.
 
