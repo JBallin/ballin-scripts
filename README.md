@@ -36,8 +36,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 
 Backups are optional; you can configure them later with `ballin backup setup`.
 
-See [Installation](docs/installation.md) for setup details,
-troubleshooting, and removal.
+See [Installation and removal](docs/installation.md) for setup details and
+troubleshooting.
 
 ## Example output
 
