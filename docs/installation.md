@@ -148,10 +148,9 @@ that line with the activation for your shell in
 
 ### Quickstart helper
 
-The [quickstart helper](quickstart.md) reuses Git, compatible Node.js, and GitHub
-CLI. It requires macOS 13.5 or newer and zsh or Bash. Homebrew is optional.
-
-[View the setup script](../quickstart.sh).
+The [quickstart helper](quickstart.md) ([setup script](../quickstart.sh)) reuses
+Git, compatible Node.js, and GitHub CLI. It requires macOS 13.5 or newer and zsh
+or Bash. Homebrew is optional.
 
 Quickstart first asks whether to set up backups. No still installs Ballin for
 maintenance; it omits backup-only GitHub CLI discovery/installation, sign-in,
@@ -441,39 +440,7 @@ unchanged. A failed config save retains the prior selection. If cleanup fails
 after saving, writes stay disabled; repeat disconnect to retry cleanup even when
 already unconfigured.
 
-## Health and recovery
-
-If the installer reports an unsupported Node.js version, switch to a supported
-runtime and retry. It includes the detected version when the runtime probe can
-identify it. Checkout preparation or update failures link here; review the
-reported error before retrying. A failed or incomplete checkout may not
-contain a usable inspection helper. Do not run helper code from a checkout you
-do not trust. Preserve local configuration and any Git stashes before removing
-a checkout.
-
-`ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
-Configured repositories are checked for authentication, expected private identity,
-supported layout, and coherent readability. This is readiness only: it does not
-collect, repair cache permissions, probe writes, or establish backup freshness,
-coverage, or successful publication.
-
-For a compact local snapshot when troubleshooting the installed checkout, run
-its read-only inspection helper:
-
-```shell
-node "$HOME/.ballin-scripts/test/inspect.ts"
-```
-
-It reports runtime versions, the installed commit, working-tree status, and
-selected backup configuration flags without printing destination identifiers
-or config contents. Review the output before sharing it. This is narrower than
-`ballin doctor`, which checks Ballin's overall managed-environment health and,
-when configured, remote backup readability. The helper does not verify remote
-repository identity or access, backup contents or freshness, or complete system
-health. Some results may be unavailable; if Git filters are configured, it
-declines to check working-tree status rather than execute them. It requires a
-compatible Node.js runtime (24.12 or newer) and the installed checkout at the
-default path above, including the helper file.
+## Inspect saved backups
 
 Use `ballin backup list` to find supported snapshots saved in the configured
 backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
@@ -503,6 +470,41 @@ For local history inspection, clone your backup repository with Git:
 ```shell
 git clone https://github.com/example-user/ballin-backups.git
 ```
+
+## Health and recovery
+
+If the installer reports an unsupported Node.js version, switch to a supported
+runtime and retry. It includes the detected version when the runtime probe can
+identify it. Checkout preparation or update failures link here; review the
+reported error before retrying. A failed or incomplete checkout may not
+contain a usable inspection helper. Do not run helper code from a checkout you
+do not trust. Preserve local configuration and any Git stashes before removing
+a checkout.
+
+`ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
+Configured repositories are checked for authentication, expected private identity,
+supported layout, and coherent readability. This is readiness only: it does not
+collect, repair cache permissions, probe writes, or establish backup freshness,
+coverage, or successful publication. See [Inspect saved backups](#inspect-saved-backups)
+for read-only snapshot inspection.
+
+For a compact local snapshot when troubleshooting the installed checkout, run
+its read-only inspection helper:
+
+```shell
+node "$HOME/.ballin-scripts/test/inspect.ts"
+```
+
+It reports runtime versions, the installed commit, working-tree status, and
+selected backup configuration flags without printing destination identifiers
+or config contents. Review the output before sharing it. This is narrower than
+`ballin doctor`, which checks Ballin's overall managed-environment health and,
+when configured, remote backup readability. The helper does not verify remote
+repository identity or access, backup contents or freshness, or complete system
+health. Some results may be unavailable; if Git filters are configured, it
+declines to check working-tree status rather than execute them. It requires a
+compatible Node.js runtime (24.12 or newer) and the installed checkout at the
+default path above, including the helper file.
 
 Use only one Mac to back up to a destination.
 Stop using the previous Mac for backups before publishing from a replacement Mac.

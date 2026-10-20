@@ -39,11 +39,8 @@ troubleshooting.
 
 ## Example output
 
-Use `ballin update` for everyday maintenance. It runs stages for installed tools
-and enabled integrations, checks readiness after a successful Ballin self-update,
-and backs up selected state at the end when automatic backups are enabled.
-
-This example shows a fully configured run.
+Run `ballin update` for routine maintenance and optional automatic backups. This
+example shows a fully configured run.
 
 ```text
 $ ballin update
@@ -91,32 +88,29 @@ Saved snapshots of your tools and configuration give you a reference when
 | [`ballin doctor`](docs/capabilities.md#ballin-doctor) | Checks the managed environment. |
 | [`ballin backup setup [repository-name]`](docs/installation.md#optional-backup-setup-and-reconnect) | Creates, reconnects to, or revalidates a private backup repository. |
 | [`ballin backup`](docs/capabilities.md#ballin-backup) | Updates snapshots in the configured backup. |
-| [`ballin backup open`](docs/new-mac.md#review-your-saved-state) | Opens the configured backup. |
+| [`ballin backup open`](docs/installation.md#inspect-saved-backups) | Opens the configured backup. |
 | [`ballin backup disconnect`](docs/installation.md#disconnect) | Disconnects this Mac from its backup and disables automatic backups. |
-| [`ballin backup list`](docs/new-mac.md#review-your-saved-state) | Lists supported snapshots saved in the configured backup. |
-| [`ballin backup read <snapshot>`](docs/installation.md#health-and-recovery) | Prints one supported snapshot from the destination. |
-| [`ballin backup read <snapshot> --list`](docs/installation.md#health-and-recovery) | Lists file paths in a saved bundle snapshot. |
-| [`ballin backup read <snapshot> --file <path>`](docs/installation.md#health-and-recovery) | Prints one file's contents from a bundle snapshot. |
+| [`ballin backup list`](docs/installation.md#inspect-saved-backups) | Lists supported snapshots saved in the configured backup. |
+| [`ballin backup read <snapshot>`](docs/installation.md#inspect-saved-backups) | Prints one supported snapshot from the destination. |
+| [`ballin backup read <snapshot> --list`](docs/installation.md#inspect-saved-backups) | Lists file paths in a saved bundle snapshot. |
+| [`ballin backup read <snapshot> --file <path>`](docs/installation.md#inspect-saved-backups) | Prints one file's contents from a bundle snapshot. |
 | [`ballin update`](docs/capabilities.md#ballin-update) | Runs configured update tasks. |
 | [`ballin setup`](docs/optional-capabilities.md#guided-preference-review) | Guides you through local onboarding preferences again. |
 | [`ballin config`](docs/optional-capabilities.md#working-with-settings) | Reads and updates local Ballin settings. |
-| [`ballin self-update`](docs/installation.md#core-installer) | Updates the local checkout and refreshes installed commands and configuration. |
+| `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
 | [`ballin uninstall`](docs/installation.md#uninstall) | Removes installed command shims and the local checkout. |
 
 ## Privacy and security
 
-Backups are stored in a private GitHub repository. GitHub and anyone authorized
-to access it can read its contents.
+Backups are stored in a private GitHub repository readable by GitHub and anyone
+authorized to access it.
 
 Inventories and filtered Ballin preferences are included by default; sensitive
-sources require a local opt-in covering current and future supported sources.
-Inventories can also contain private information. Ballin does not scan or redact
-secrets. Review [Backup sources and sensitivity](docs/backup-sources.md) before
-choosing what to include. Changing that choice does not remove saved files or
-repository history.
+sources require opt-in. Inventories can still contain private information.
+Ballin does not scan or redact secrets. Review
+[Backup sources and sensitivity](docs/backup-sources.md) before choosing what to include.
 
-[Usage analytics](docs/analytics.md) are optional, disabled by default, and never
-saved or recovered through backups.
+[Usage analytics](docs/analytics.md) are optional and disabled by default.
 
 ## Further reading
 
