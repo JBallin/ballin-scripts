@@ -473,6 +473,9 @@ git clone https://github.com/example-user/ballin-backups.git
 
 ## Health and recovery
 
+If `ballin self-update` fails during setup, the checkout may already be updated;
+address the reported setup error before retrying.
+
 If the installer reports an unsupported Node.js version, switch to a supported
 runtime and retry. It includes the detected version when the runtime probe can
 identify it. Checkout preparation or update failures link here; review the
