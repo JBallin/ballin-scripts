@@ -82,6 +82,9 @@ Saved snapshots of your tools and configuration give you a reference when
 
 ## Commands
 
+Use `ballin --help` or a top-level command’s `--help` (for example,
+`ballin backup --help`) for syntax and options.
+
 | Command | Purpose |
 | --- | --- |
 | `ballin` | Shows available commands and common usage. |
