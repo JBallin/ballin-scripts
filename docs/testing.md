@@ -66,6 +66,11 @@ run:
 npm run sandbox
 ```
 
+To exercise startup-file selection, use `npm run sandbox -- --shell zsh` or
+`--shell bash`. This sets only the supported shell in the isolated child
+environment; it does not load your shell settings. The menu runs the direct
+installer, not Quickstart's prerequisite or PATH setup.
+
 The tool prints its temporary sandbox paths and starts the real installer. Answer
 the normal prompts, then use the sandbox menu to run installed commands:
 

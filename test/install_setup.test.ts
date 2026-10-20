@@ -642,6 +642,50 @@ exit 2
     assert.notInclude(result.output, `symlinked binaries into ${binDir}`);
   });
 
+  for (const prefix of ['', 'relative-prefix', '/bad:prefix', '/bad\nprefix']) {
+    it(`rejects a malformed Homebrew prefix before configuring: ${JSON.stringify(prefix)}`, () => {
+      installConfigSources();
+      writeExecutable('brew', `#!/bin/sh\nprintf '%s\\n' '${prefix}'\n`);
+      const result = withEnvironment({ HOME: path.join(testDir, 'home'), PATH: binDir }, () => captureStdout(() => setup(repoDir, docsUrl)));
+      assert.isFalse(result.result);
+      assert.include(result.output, 'invalid installation prefix');
+      assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+      assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+    });
+  }
+
+  it('preserves a command target replaced after setup inspection', () => {
+    installConfigSources();
+    const command = path.join(binDir, 'ballin');
+    const originalWrite = fs.writeFileSync;
+    fs.writeFileSync = function(...args: unknown[]) {
+      const result = originalWrite.apply(this, args);
+      if (args[0] === path.join(repoDir, 'ballin.config.json')) originalWrite(command, 'new unrelated command\n');
+      return result;
+    };
+    let result;
+    try {
+      result = withEnvironment({ HOME: path.join(testDir, 'home'), PATH: binDir }, () => captureStdout(() => setup(repoDir, docsUrl)));
+    } finally { fs.writeFileSync = originalWrite; }
+    assert.isFalse(result.result);
+    assert.include(result.output, 'Command target changed after review');
+    assert.equal(fs.readFileSync(command, 'utf8'), 'new unrelated command\n');
+    assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
+  it('refuses a stale shell preflight before configuration', () => {
+    installConfigSources();
+    const command = path.join(binDir, 'ballin');
+    fs.writeFileSync(command, 'preserve\n');
+    const result = withEnvironment({ HOME: path.join(testDir, 'home'), PATH: binDir,
+      BALLIN_COMMAND_PREFLIGHT_JSON: JSON.stringify({ directory: binDir, target: command, snapshot: 'null' }),
+    }, () => captureStdout(() => setup(repoDir, docsUrl)));
+    assert.isFalse(result.result);
+    assert.include(result.output, 'Unable to verify the reviewed command target');
+    assert.equal(fs.readFileSync(command, 'utf8'), 'preserve\n');
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+  });
+
   it('stops full setup after a symlink failure while preserving the valid config', () => {
     installConfigSources();
     fs.rmSync(sourceBinDir, { recursive: true });
@@ -773,15 +817,11 @@ exit 2
       });
 
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, analyticsDisclosureFor('https://example.test/analytics'));
+      assert.include(result.stdout, 'Analytics details: https://example.test/analytics\n' + analyticsPrompt);
       assert.include(result.stdout, analyticsPrompt);
       assert.notInclude(result.stdout, 'Usage analytics are currently');
       assert.equal(readRepoConfig().analytics.enabled, String(enabled));
-      if (response === null) assert.notInclude(result.stdout, 'Usage analytics:');
-      else {
-        assert.lengthOf(result.stdout.split('Usage analytics:'), 2);
-        assert.include(result.stdout, `Usage analytics: ${enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` ${enabled ? 'set to' : 'unchanged at'} \`${enabled}\`).`);
-      }
+      assert.notInclude(result.stdout, 'Usage analytics:');
       assert.equal(fs.existsSync(installIdPath()), enabled);
       assert.notInclude(commandLog(), 'gh:');
     });
@@ -1066,13 +1106,13 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "\n🧠 Created 'ballin.config.json' file in root using default settings");
-    assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#shell-completion`));
-    assert.include(result.stdout, 'Optional backups use a private GitHub repository readable by GitHub and anyone with access.');
-    assert.include(result.stdout, `${docsUrl}#shell-completion\n\nOptional backups use a private GitHub repository`);
+    assert.include(result.stdout, "⚙️ Created 'ballin.config.json' file in root using default settings");
+    assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#startup-files-and-manual-activation`));
+    assert.include(result.stdout, 'Backup details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
+    assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped. Run `ballin backup setup`');
-    assert.equal(result.stdout.match(/😎 ballin!/gu)?.length, 1);
+    assert.notInclude(result.stdout, '😎 ballin!');
     assert.notInclude(result.stdout, 'symlinked binaries');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -1093,10 +1133,9 @@ require('https').request = () => {
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      const completionResult = enableCompletion
-        ? 'Shell completion enabled.'
-        : `${docsUrl}#shell-completion`;
-      assert.include(result.stdout, `${completionResult}\n\nOptional backups use a private GitHub repository`);
+      assert.include(result.stdout, `${analyticsPrompt}\nZsh settings directory [${path.join(testDir, "home")}; Enter to use, another absolute directory, or skip]: `);
+      if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
+      assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
       assert.equal(readRepoConfig().update.backup, 'false');
       assert.notInclude(commandLog(), 'gh:');
@@ -1117,8 +1156,9 @@ require('https').request = () => {
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Shell completion setup could not finish. Ballin remains installed.');
-      assert.include(result.stdout, `${docsUrl}#shell-completion\n\nOptional backups use a private GitHub repository`);
+      assert.include(result.stdout, 'Tab completion setup could not finish. Ballin remains installed.');
+      assert.notInclude(result.stdout, 'Tab completion skipped.');
+      assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1168,8 +1208,7 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'current permissions');
     assert.include(result.stdout, 'backup setup can continue normally');
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
-    assert.include(result.stdout, 'Sensitive sources in backups: excluded (`backup.includeSensitive` set to `false`).\n', result.stdout);
-    assert.isBelow(result.stdout.indexOf('Sensitive sources in backups: excluded (`backup.includeSensitive` set to `false`).'), result.stdout.indexOf('Automatically run `ballin backup` as part of `ballin update`?'));
+    assert.notInclude(result.stdout, 'Sensitive sources in backups:');
     assert.notInclude(result.stdout, 'before retrying `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
     assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1188,9 +1227,8 @@ require('https').request = () => {
     const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
       encoding: 'utf8', input: 'n\ny\ncreate\n\nn\nn\n', env: childEnvironment(),
     });
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Backup setup cancelled;');
-    assert.include(result.stdout, 'Ballin remains installed. Resume optional setup later with `ballin backup setup`.');
+    assert.equal(result.status, 0);
+    assert.include(result.stdout, 'Backup setup cancelled. Run `ballin backup setup` when you’re ready.');
     assert.notInclude(result.stdout + result.stderr, 'ERROR:');
     assert.notInclude(result.stdout, 'Backup setup complete.');
     assert.isNull(readRepoConfig().backup.repository ?? null);
