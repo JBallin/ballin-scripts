@@ -46,8 +46,8 @@ For synced Claude skills, Ballin reads bounded local collection manifests to
 select plugin packages. It checks selected file readability without reading
 their contents or creating backup snapshots. Codex and Claude Code directory
 discovery recursively inspects names and file types to identify
-nonempty sources. Missing and unavailable sources are shown; access or
-resolution errors prevent confirmation. Closing input or declining final
+nonempty sources. The preview lists detected sources; missing/unavailable
+sources are omitted. Access or resolution errors prevent confirmation. Closing input or declining final
 confirmation cancels without saving consent or changing destination, cache, or
 remote state. Excluded
 sensitive sources are not inspected just to verify them.

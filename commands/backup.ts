@@ -28,6 +28,8 @@ const {
 } = require('./install_setup.ts');
 const {
   makeTempFile,
+  rethrowInterruption,
+  requireUninterrupted,
   reportSpawnError,
   removeTempFile,
   runCommand,
@@ -130,6 +132,7 @@ const backupConfig = (): BackupConfigResult => {
       return { config: null, exitStatus: 1 };
     }
   } catch (error) {
+    rethrowInterruption(error);
     const message = error instanceof Error ? error.message : String(error);
     writeStderrLine(`Unable to read config: ${message}`);
     return { config: null, exitStatus: 1 };
@@ -199,6 +202,7 @@ const captureSnapshotInput = (snapshot: SnapshotCommand, inputFile: string, evid
     reportSpawnError(snapshot.command, result.error);
   }
   removeTransportFile(stderrFile);
+  requireUninterrupted(result);
 
   return result.status === 0 && !result.error;
 };
@@ -208,6 +212,7 @@ const snapshotFilesMatch = (leftFile: string, rightFile: string, boundLeft = fal
     return readBoundedFile(leftFile, boundLeft ? snapshotByteLimit : repositorySnapshotByteLimit).bytes
       .equals(readBoundedFile(rightFile, repositorySnapshotByteLimit).bytes);
   } catch (error) {
+    rethrowInterruption(error);
     if (error instanceof SnapshotLimitError) (error as Error).message = `${path.basename(leftFile)}: ${(error as Error).message}`;
     throw error;
   }
@@ -287,6 +292,7 @@ const secureExistingBackupCache = (cacheDir: string): boolean => {
     restrictCacheEntryPermissions(cacheDir);
     return true;
   } catch (error) {
+    rethrowInterruption(error);
     writeStderrLine(`ballin backup: unable to secure backup cache permissions${errorMessage(error)}`);
     return false;
   }
@@ -316,6 +322,7 @@ const captureAvailableSnapshot = (source: AvailableSnapshotObservation, evidence
       captured = true;
     }
   } catch (error) {
+    rethrowInterruption(error);
     observeBackupFailure(evidence, 'local_state');
     writeStderrLine(`ballin backup: unable to stage ${snapshot.fileName}${errorMessage(error)}`);
   } finally {
@@ -342,27 +349,30 @@ const stageSnapshots = (observations: SnapshotSourceObservation[], evidence: Bac
     return null;
   }
   const capturedBytes = { codex: 0, claude: 0 };
-  const collection = collectSnapshotObservations(observations, (source: AvailableSnapshotObservation) => {
-    const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(source.definition.name);
-    const result = captureAvailableSnapshot(source, evidence, group ? snapshotByteLimit - capturedBytes[group] : undefined);
-    if (group && result.status === 'captured') {
-      try {
-        capturedBytes[group] += fs.statSync(result.localFile).size;
-        requireWithinLimit('bytes', capturedBytes[group], snapshotByteLimit);
-      } catch {
-        observeBackupFailure(evidence, 'local_state');
-        try { removeTempFile(result.localFile); } catch { reportTemporaryCleanupFailure(); }
-        writeStderrLine(`ballin backup: unable to verify the bounded capture for ${source.definition.name}`);
-        return { status: 'collector-failed' as const };
+  const stagedSnapshots: StagedSnapshot[] = [];
+  let collection: SnapshotCollectionObservation[];
+  try {
+    collection = collectSnapshotObservations(observations, (source: AvailableSnapshotObservation) => {
+      const group: 'codex' | 'claude' | undefined = configurationSnapshotGroups.get(source.definition.name);
+      const result = captureAvailableSnapshot(source, evidence, group ? snapshotByteLimit - capturedBytes[group] : undefined);
+      if (group && result.status === 'captured') {
+        try {
+          capturedBytes[group] += fs.statSync(result.localFile).size;
+          requireWithinLimit('bytes', capturedBytes[group], snapshotByteLimit);
+        } catch {
+          observeBackupFailure(evidence, 'local_state');
+          try { removeTempFile(result.localFile); } catch { reportTemporaryCleanupFailure(); }
+          writeStderrLine(`ballin backup: unable to verify the bounded capture for ${source.definition.name}`);
+          return { status: 'collector-failed' as const };
+        }
       }
-    }
-    return result;
-  });
-  const stagedSnapshots = collection.flatMap((result: SnapshotCollectionObservation) => (
-    result.status === 'captured'
-      ? [{ snapshot: result.source.collector, localFile: result.localFile }]
-      : []
-  ));
+      if (result.status === 'captured') stagedSnapshots.push({ snapshot: source.collector, localFile: result.localFile });
+      return result;
+    });
+  } catch (error) {
+    if (!removeStagedSnapshots(stagedSnapshots)) { observeBackupFailure(evidence, 'local_state'); reportTemporaryCleanupFailure(); }
+    throw error;
+  }
 
   if (collection.some(({ status }: SnapshotCollectionObservation) => status === 'collector-failed')) {
     if (!removeStagedSnapshots(stagedSnapshots)) { observeBackupFailure(evidence, 'local_state'); reportTemporaryCleanupFailure(); }
@@ -475,6 +485,7 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
     fs.chmodSync(cacheDir, 0o700);
     stagingDir = fs.mkdtempSync(path.join(cacheDir, '.ballin-backup-cache-'));
   } catch (error) {
+    rethrowInterruption(error);
     writeStderrLine(`ballin backup: failed to prepare backup cache updates${errorMessage(error)}`);
     return false;
   }
@@ -486,6 +497,7 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
         fs.copyFileSync(localFile, stagedFile);
         fs.chmodSync(stagedFile, 0o600);
       } catch (error) {
+        rethrowInterruption(error);
         writeStderrLine(`ballin backup: failed to stage cache update for ${snapshot.fileName}${errorMessage(error)}`);
         return false;
       }
@@ -496,6 +508,7 @@ const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolea
       try {
         fs.renameSync(path.join(stagingDir, snapshot.fileName), cacheFile);
       } catch (error) {
+        rethrowInterruption(error);
         writeStderrLine(`ballin backup: failed to promote cache for ${snapshot.fileName}${errorMessage(error)}`);
         failed = true;
       }
@@ -583,6 +596,7 @@ const runRepositoryBackup = (
     }
     completed = evaluation.evaluated;
   } catch (error) {
+    rethrowInterruption(error);
     if (localWork) observeBackupFailure(evidence, 'local_state');
     else observeRepositoryFailure(evidence, error);
     if (error instanceof SnapshotLimitError) {
@@ -634,6 +648,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
       runRepositoryBackup(config.repository, includeSensitive, homeDir, backupCacheDir, evidence) ? 0 : 1
     ));
   } catch (error) {
+    rethrowInterruption(error);
     if (error instanceof SnapshotCwdError) observeBackupFailure(evidence, 'local_state');
     else observeRepositoryFailure(evidence, error);
     writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
@@ -785,6 +800,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       withTemporaryStatus('Opening...', () => {
         const url = repositoryOpenUrl(config.repository);
         const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
+        requireUninterrupted(result);
         process.exitCode = result.error ? 1 : spawnResultStatus(result);
         if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
         else writeStdoutLine(`Opened ${url} in your browser.`);
@@ -795,6 +811,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       throw new Error(`Unhandled backup command: ${String(unhandledCommand)}`);
     }
   } catch (error) {
+    rethrowInterruption(error);
     writeStderrLine(error instanceof DirectorySnapshotError
       ? `ballin backup read: ${(error as Error).message}`
       : `ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);

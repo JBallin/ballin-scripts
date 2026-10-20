@@ -2,6 +2,8 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { createAnalyticsCapture } = require('./helpers/analytics.ts');
+import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
@@ -42,6 +44,11 @@ describe('ballin self-update', () => {
     writeExecutable('git', `#!/usr/bin/env bash
 printf '%s|git:%s\\n' "$PWD" "$*" >> "$BALLIN_UPDATE_TEST_LOG"
 printf '%s|%s\\n' "$*" "$GIT_NO_LAZY_FETCH" >> "$BALLIN_UPDATE_TEST_LOCAL_GIT_LOG"
+if [ "$*" = "$FAKE_LOCAL_GIT_INTERRUPT_ARGS" ]; then
+  phase=before
+  if [ -f "$FAKE_GIT_MERGE_COUNT_PATH" ]; then phase=after; fi
+  if [ "$phase" = "$FAKE_LOCAL_GIT_INTERRUPT_PHASE" ]; then kill -"$FAKE_LOCAL_GIT_SIGNAL" $$; fi
+fi
 case "$1" in
   rev-parse)
     if [ "$2" = '--verify' ] && [ "$3" = 'HEAD' ]; then
@@ -276,6 +283,42 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     });
   });
   const revisions = { FAKE_HEAD_BEFORE: 'a'.repeat(40), FAKE_HEAD_AFTER: 'b'.repeat(40) };
+  for (const signal of ['INT', 'TERM']) {
+    for (const [phase, query] of [
+      ['before', 'show HEAD:commands/backup_scope.json'],
+      ['before', 'rev-parse --verify HEAD'],
+      ['after', 'show HEAD:commands/backup_scope.json'],
+      ['after', 'rev-parse --verify HEAD'],
+      ['after', `rev-parse --short=7 --verify ${revisions.FAKE_HEAD_BEFORE}`],
+      ['after', 'rev-parse --is-shallow-repository'],
+      ['after', 'config --get-regexp ^(extensions\\.partialclone|remote\\..*\\.promisor)$'],
+      ['after', `merge-base --is-ancestor ${revisions.FAKE_HEAD_BEFORE} ${revisions.FAKE_HEAD_AFTER}`],
+      ['after', `rev-list --count ${revisions.FAKE_HEAD_BEFORE}..${revisions.FAKE_HEAD_AFTER}`],
+    ]) {
+      it(`stops on child SIG${signal} during ${phase}-update local Git ${query}`, () => {
+        const result = runSelfUpdate({
+          ...revisions, FAKE_LOCAL_GIT_INTERRUPT_PHASE: phase,
+          FAKE_LOCAL_GIT_INTERRUPT_ARGS: query, FAKE_LOCAL_GIT_SIGNAL: signal,
+        });
+        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
+        assert.equal(result.stderr, '');
+        assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.\n');
+        assert.notInclude(result.stdout, 'Unable to compare');
+        const calls = fs.readFileSync(commandLogPath, 'utf8').trim().split('\n');
+        assert.equal(calls.at(-1), `${repoDir}|git:${query}`);
+        if (phase === 'before') {
+          assert.notInclude(result.stdout, 'Ballin updated');
+          assert.notMatch(calls.join('\n'), /git:(fetch|checkout|merge|stash)|install_setup:/u);
+          assert.isFalse(fs.existsSync(mergeCountPath));
+          assert.isFalse(fs.existsSync(checkoutCountPath));
+        } else {
+          // Completed update/setup effects remain; interruption cannot start later work.
+          assert.include(calls, setupLog());
+          assert.equal(fs.readFileSync(mergeCountPath, 'utf8'), '1\n');
+        }
+      });
+    }
+  }
   it('reports an unchanged installed revision after still completing setup', () => {
     const result = runSelfUpdate({ ...revisions, FAKE_HEAD_AFTER: revisions.FAKE_HEAD_BEFORE });
     assert.equal(result.status, 0, result.stderr);
@@ -708,6 +751,39 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     ]);
   });
 
+  for (const setupResult of [0, 27, 130, 143, 'SIGINT', 'SIGTERM'] as const) {
+    it(`preserves interruption and telemetry policy for opted-in direct self-update setup result ${setupResult}`, () => {
+      const capture = createAnalyticsCapture(testDir);
+      const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8'));
+      config.analytics.enabled = 'true';
+      const configPath = path.join(repoDir, 'ballin.config.json');
+      fs.writeFileSync(configPath, JSON.stringify(config));
+      const status = typeof setupResult === 'number' ? setupResult : setupResult === 'SIGINT' ? 130 : 143;
+      const interrupted = status === 130 || status === 143;
+      const result = runSelfUpdate({
+        ...capture.env, BALLIN_TEST_CONFIG_PATH: configPath,
+        FAKE_SETUP_STATUS: typeof setupResult === 'number' ? String(setupResult) : undefined,
+        FAKE_SETUP_SIGNAL: typeof setupResult === 'string' ? setupResult : undefined,
+        FAKE_SETUP_STDOUT: 'setup output\n', FAKE_SETUP_STDERR: 'setup diagnostic\n',
+      });
+
+      assert.equal(result.status, status, result.stdout + result.stderr);
+      assert.equal(result.stderr, 'setup diagnostic\n');
+      const events: CapturedAnalyticsEvent[] = capture.readEvents();
+      assert.deepEqual(events.map(({ schemaVersion, command, status }) => ({ schemaVersion, command, status })),
+        interrupted ? [] : [{ schemaVersion: 1, command: 'ballin self-update', status: status === 0 ? 'success' : 'failure' }]);
+      assert.equal(result.stdout, updateLine + 'setup output\n' + (interrupted
+        ? 'Interrupted. Earlier completed changes remain.\n' : status === 0 ? 'Ballin updated.\n' : ''));
+      if (interrupted) {
+        const calls = fs.readFileSync(commandLogPath, 'utf8').trim().split('\n');
+        assert.equal(calls.at(-1), setupLog());
+        assert.lengthOf(calls.filter((line: string) => line.endsWith('|git:show HEAD:commands/backup_scope.json')), 1);
+      }
+      assert.equal(fs.readFileSync(mergeCountPath, 'utf8'), '1\n', 'earlier accepted update remains');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), JSON.stringify(config));
+    });
+  }
+
   it('reports a missing setup through Node when the typed setup file is unavailable', () => {
     fs.rmSync(path.join(repoDir, 'commands', 'install_setup.ts'));
 
@@ -723,11 +799,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     ]);
   });
 
-  it('uses a shell-style signal exit status when the setup is signaled', () => {
+  it('preserves interruption identity and a shell-style exit status when the setup is signaled', () => {
     const result = runSelfUpdate({ FAKE_SETUP_SIGNAL: 'SIGTERM' });
 
     assert.equal(result.status, 143);
-    assert.equal(result.stdout, updateLine);
+    assert.equal(result.stdout, updateLine + 'Interrupted. Earlier completed changes remain.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,

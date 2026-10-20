@@ -6,7 +6,7 @@ const { findShell } = require('./shell_completion.ts');
 const { sandboxEnvironment, recordSession, processIsAlive } = require('./onboarding.ts');
 import type { Sandbox } from './onboarding.ts';
 
-type PromptAnswer = { prompt: string; answer: string };
+type PromptAnswer = { prompt: string; answer: string; raw?: boolean };
 
 // Answer only after each real terminal prompt is visible. A short delay leaves
 // fd 0 empty long enough to expose a synchronous read accidentally made nonblocking.
@@ -52,7 +52,7 @@ const driver = [
   '  print -u2 -r -- "TRANSCRIPT_BEGIN${transcript}TRANSCRIPT_END"',
   '  return 124',
   '}',
-  'supervisor=\'[[ -t 0 && -t 1 && -t 2 ]] || exit 78; "$INTERACTIVE_STTY" cols "$INTERACTIVE_COLUMNS" rows 24 "$INTERACTIVE_ECHO" || exit 79; printf "\\nSTART:%s:%s\\n" "$INTERACTIVE_MARKER" "$$"; "$@"; result=$?; printf "\\nEXIT:%s:%s\\n" "$INTERACTIVE_MARKER" "$result"; exit "$result"\'',
+  'supervisor=\'trap : INT; [[ -t 0 && -t 1 && -t 2 ]] || exit 78; "$INTERACTIVE_STTY" cols "$INTERACTIVE_COLUMNS" rows 24 "$INTERACTIVE_ECHO" || exit 79; printf "\\nSTART:%s:%s\\n" "$INTERACTIVE_MARKER" "$$"; "$@"; result=$?; printf "\\nEXIT:%s:%s\\n" "$INTERACTIVE_MARKER" "$result"; exit "$result"\'',
   'zpty -b -e setup exec "${(q)shell_path}" -d -f -c "${(q)supervisor}" supervisor "${(q)fixture_command[@]}" || exit 73',
   'created=1',
   'await_output "START:$marker:" 1 || exit $?',
@@ -60,12 +60,13 @@ const driver = [
   '[[ "$child_pid" == <-> && "$child_pid" -gt 1 ]] || exit 74',
   'print -r -- "CHILD_PID:$child_pid"',
   'while (( $# )); do',
-  '  needle="$1"; answer="$2"; shift 2',
+  '  needle="$1"; answer="$2"; raw="$3"; shift 3',
   '  await_output "$needle" || exit $?',
   '  zselect -t 10; select_status=$?',
   '  (( select_status <= 1 )) || exit 72',
   '  zpty -t setup || { print -u2 -r -- "Exited before answering: $needle"; exit 75; }',
-  '  zpty -w -n setup "$answer"$\'\\n\' || {',
+  '  suffix=$\'\\n\'; [[ "$raw" == 1 ]] && suffix=""',
+  '  zpty -w -n setup "$answer$suffix" || {',
   '    print -u2 -r -- "Unable to answer prompt: $needle"',
   '    print -u2 -r -- "TRANSCRIPT_BEGIN${transcript}TRANSCRIPT_END"',
   '    exit 76',
@@ -92,7 +93,7 @@ const runInteractiveSetup = (sandbox: Sandbox, command: string[], answers: Promp
   recordSession(sandbox, [], true);
   const result = spawnSync(shell, [
     '-d', '-f', '-c', driver, 'interactive-setup-test', shell, marker,
-    String(command.length), ...command, ...answers.flatMap(({ prompt, answer }) => [prompt, answer]),
+    String(command.length), ...command, ...answers.flatMap(({ prompt, answer, raw }) => [prompt, answer, raw ? '1' : '0']),
   ], { cwd: sandbox.home, env, encoding: 'utf8', timeout: 90000, killSignal: 'SIGTERM', detached: true });
   const childPid = Number(result.stdout?.match(/^CHILD_PID:(\d+)$/mu)?.[1]);
   const groups = [result.pid, childPid].filter((pid) => Number.isInteger(pid) && pid > 1);

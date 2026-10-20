@@ -2,7 +2,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { backupCommitMessage } = require('./backup_commit_message.ts');
 const { repositoryCacheDirectory } = require('./backup_cache.ts');
-const { makeTempFile, removeTempFile, runCommand, writeStderrLine } = require('./commandHelpers.ts');
+const { makeTempFile, removeTempFile, runCommand, requireUninterrupted, rethrowInterruption, writeStderrLine } = require('./commandHelpers.ts');
 const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
 const {
   classifySnapshotFileName,
@@ -13,12 +13,13 @@ import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
-type RepositoryProblem = 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
+type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
   'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
   'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
-  authentication: 'GitHub.com authentication is required; check the effective gh account and environment token.',
+  prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
+  authentication: 'GitHub.com authentication is required. Run `gh auth login --hostname github.com`, or check the effective gh account and environment token, then retry.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
   timeout: 'The GitHub.com request timed out. Check the network connection and GitHub service availability, then rerun.',
   request: 'The GitHub.com request could not be completed. Check gh, service availability, and account access; the cause is unconfirmed.',
@@ -113,6 +114,7 @@ const transportProblem = (
   result: ReturnType<NonNullable<RepositoryOptions['runCommand']>>, body: Record<string, unknown>,
 ): RepositoryProblem | undefined => {
   const stderr = result.stderr ?? '';
+  if (result.error?.code === 'ENOENT') return 'prerequisite';
   if (result.error?.code === 'ETIMEDOUT'
     || /(?:i\/o|TLS handshake|connection|request) (?:timeout|timed out)|context deadline exceeded|Client\.Timeout exceeded/iu.test(stderr)) return 'timeout';
   if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH'].includes(result.error?.code ?? '')
@@ -177,6 +179,7 @@ const api = (
         maxBuffer, timeout, killSignal: 'SIGKILL',
       });
     } finally { fs.closeSync(fd); }
+    requireUninterrupted(result);
     // Native maxBuffer stops excess output; fixture runners need the same check.
     if (result.error?.code === 'ENOBUFS') throw new RepositoryError('resource-limit');
     if (fs.statSync(output).size > maxBuffer) throw new RepositoryError('resource-limit');
@@ -200,6 +203,7 @@ const api = (
     const ok = result.status === 0 && !result.error && !result.signal;
     response = { ok, body, items, problem: ok ? undefined : transportProblem(result, body) };
   } catch (error) {
+    rethrowInterruption(error);
     failure = error instanceof RepositoryError ? error : new RepositoryError('local-io');
   } finally {
     if (output) {
@@ -400,6 +404,7 @@ const inspect = (
     assertCurrent(inspected, options);
     return { status: 'complete', read: inspected };
   } catch (error) {
+    rethrowInterruption(error);
     return { status: 'incomplete', inspected, problem: error instanceof RepositoryError ? error.problem : 'local-io',
       cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
   }
@@ -407,6 +412,7 @@ const inspect = (
 const inspectRepository = (destination: RepositoryDestination, options: RepositoryOptions = {}): RepositoryInspection => {
   options = inspectionOptions(options);
   try { return inspect(destination, readRepositoryAccount(options), options, false); } catch (error) {
+    rethrowInterruption(error);
     return { status: 'incomplete', problem: error instanceof RepositoryError ? error.problem : 'local-io',
       cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
   }
@@ -543,6 +549,7 @@ const readManagedBranchRuleset = (
 ): 'match' | 'permission-denied' | 'mismatch' | ProtectionApiOutcome => {
   let detail: ApiResult;
   try { detail = api(`${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
+    rethrowInterruption(error);
     const transportFailure = protectionTransportFailure(error);
     if (transportFailure) throw transportFailure;
     return 'ambiguous';
@@ -561,6 +568,7 @@ const findManagedBranchRuleset = (
   const base = `repos/${account.login}/${read.destination.name}/rulesets`;
   let list: ApiResult;
   try { list = api(`${base}?includes_parents=false&targets=branch&per_page=100`, undefined, options, true); } catch (error) {
+    rethrowInterruption(error);
     const transportFailure = protectionTransportFailure(error);
     if (transportFailure) throw transportFailure;
     return { status: 'ambiguous' };
@@ -608,6 +616,7 @@ const ensureManagedBranchRuleset = (
   let creation: ApiResult = { ok: false, body: {} };
   let mutationFailure: RepositoryError | undefined;
   try { creation = api(endpoint, managedBranchRulesetPayload(read.destination.branch), options); } catch (error) {
+    rethrowInterruption(error);
     mutationFailure = protectionTransportFailure(error);
   }
   if (!mutationFailure && !creation.ok) {
@@ -621,6 +630,7 @@ const ensureManagedBranchRuleset = (
     try { id = rulesetId(creation.body.id); } catch { /* Reconcile the ambiguous response below. */ }
     if (id !== undefined) {
       try { detailResult = readManagedBranchRuleset(endpoint, id, read, account, options); } catch (error) {
+        rethrowInterruption(error);
         mutationFailure = protectionTransportFailure(error);
       }
       if (detailResult === 'match') {
@@ -676,6 +686,7 @@ const publish = (
       },
     } },
   }, options); } catch (error) {
+    rethrowInterruption(error);
     // Confirm possible remote effects, but cleanup failure must remain fatal.
     if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'resource-limit')) transportFailure = error;
   }
@@ -738,6 +749,7 @@ const disableCreatedRepositoryPullRequests = (
       throw new RepositoryError('feature-settings');
     }
   } catch (error) {
+    rethrowInterruption(error);
     const failure = new RepositoryError('feature-settings');
     if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'cleanup')) failure.cleanupFailed = true;
     throw failure;
@@ -767,6 +779,7 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
       [repositoryReadmeFileName, repositoryReadmeBytes()],
     ]), true, options);
   } catch (error) {
+    rethrowInterruption(error);
     const failure = error instanceof RepositoryError ? error : new RepositoryError('uncertain');
     failure.completedStage = 'repository-created';
     throw failure;

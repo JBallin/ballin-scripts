@@ -6,7 +6,7 @@ import type { Sandbox } from './helpers/onboarding.ts';
 import type { ChildProcess } from 'child_process';
 
 const { scenarios, activeScenario, selectScenario } = require('./helpers/sandbox_scenarios.ts');
-const usage = 'Usage: npm run sandbox -- [--keep] [--scenario <name>] | --cleanup <sandbox-root>';
+const usage = 'Usage: npm run sandbox -- [--keep] [--scenario <name>] [--shell zsh|bash] | --cleanup <sandbox-root>';
 const write = (text: string): void => { process.stdout.write(text + '\n'); };
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\"'\"'")}'`;
 const readLine = (): Promise<string | null> => new Promise((resolve, reject) => {
@@ -43,7 +43,12 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
     write('Onboarding sandbox removed.');
     return 0;
   }
-  const options = args.filter((arg) => arg !== '--keep');
+  const shellIndex = args.indexOf('--shell');
+  const selectedShell = shellIndex >= 0 ? args[shellIndex + 1] : undefined;
+  if (shellIndex >= 0 && ((selectedShell !== 'zsh' && selectedShell !== 'bash') || args.lastIndexOf('--shell') !== shellIndex)) {
+    write(usage); return 2;
+  }
+  const options = args.filter((arg, index) => arg !== '--keep' && (shellIndex < 0 || (index !== shellIndex && index !== shellIndex + 1)));
   if (args.filter((arg) => arg === '--keep').length > 1 || (options.length && !(options.length === 2 && options[0] === '--scenario' && Object.hasOwn(scenarios, options[1])))) {
     write(usage);
     return 2;
@@ -84,6 +89,7 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
   };
   const launch = (commandArgs: string[]): Promise<number> => {
     const env = sandboxEnvironment(sandbox);
+    if (selectedShell) env.SHELL = `/bin/${selectedShell}`;
     const installer = commandArgs[0] === 'install';
     return new Promise((resolve, reject) => {
       launchPending = true;

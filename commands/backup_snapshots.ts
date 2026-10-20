@@ -3,6 +3,7 @@ const path = require('path');
 const backupScope = require('./backup_scope.json') as typeof import('./backup_scope.json');
 const {
   runCommand,
+  requireUninterrupted,
 } = require('./commandHelpers.ts');
 
 type SnapshotInclusionGroup = 'inventory' | 'sensitive' | 'preferences';
@@ -471,6 +472,7 @@ const bashCompletionsSnapshot = (): SnapshotDefinition => ({
       const prefixResult = runCommand(toolPath, ['--prefix'], {
         env: brewEnvironment(env),
       });
+      requireUninterrupted(prefixResult);
       const prefix = prefixResult.status === 0 && !prefixResult.error && !prefixResult.signal
         ? prefixResult.stdout.trim()
         : '';

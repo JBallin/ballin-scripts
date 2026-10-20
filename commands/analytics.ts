@@ -6,7 +6,7 @@ const path = require('path');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { fetchConfig } = require('../config/index.ts');
 const { createConfigStore } = require('../config/store.ts');
-const { readCommandOutput, readPromptLine, writeStdoutLine } = require('./commandHelpers.ts');
+const { readCommandOutput, readYesNo, writeStdoutLine, CommandInterrupted } = require('./commandHelpers.ts');
 const {
   topLevelCommandNames,
 } = require('./top_level_commands.ts') as {
@@ -105,6 +105,7 @@ type AnalyticsPreferenceOptions = {
   currentEnabled?: boolean;
   onCancelled?: () => void;
   docsUrl?: string;
+  presentation?: 'installation' | 'standalone';
 };
 
 type ConfigObject = { [key: string]: unknown };
@@ -122,6 +123,7 @@ const allowedBehavioralStatuses = new Set(['success', 'failure']);
 const allowedBackupFailureCategories = new Set(['transport', 'authentication', 'reconciliation', 'local_state', 'unknown']);
 const pendingBehavioralSends = new Set<Promise<void>>();
 let currentAnalyticsRuntime: AnalyticsRuntime | undefined;
+let currentBehavioralScope: { cancelled: boolean } | undefined;
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
@@ -301,28 +303,29 @@ const writeAnalyticsPreference = (configPath: string, enabled: boolean): { previ
 };
 
 const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
-  writeStdoutLine(`\n${analyticsDisclosureFor(options.docsUrl)}`);
+  writeStdoutLine(options.presentation === 'installation'
+    ? `\nAnalytics details: ${options.docsUrl || defaultAnalyticsDocsUrl}`
+    : `\n${analyticsDisclosureFor(options.docsUrl)}`);
   if (options.currentEnabled !== undefined) {
     writeStdoutLine(`Usage analytics are currently ${options.currentEnabled ? 'enabled' : 'disabled'}.`);
   }
   const defaultEnabled = options.defaultEnabled ?? false;
-  let response: { text: string; eof: boolean };
+  let enabled: boolean | null;
   try {
-    response = readPromptLine(analyticsPromptFor(defaultEnabled));
+    enabled = readYesNo(options.presentation === 'installation'
+      ? 'Share usage analytics to help improve Ballin? [y/N] '
+      : analyticsPromptFor(defaultEnabled), defaultEnabled);
   } catch {
     return false;
   }
-  if (response.eof) {
+  if (enabled === null) {
     options.onCancelled?.();
     return true;
   }
 
-  const enabled = response.text === ''
-    ? defaultEnabled
-    : response.text === 'y' || response.text === 'Y';
   const saved = writeAnalyticsPreference(options.configPath, enabled);
   if (saved) {
-    writeStdoutLine(savedPreferenceLine('analytics.enabled', enabled, saved.previous));
+    if (options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('analytics.enabled', enabled, saved.previous));
     return true;
   }
   writeStdoutLine('\nUnable to save the analytics preference; the existing local setting is unchanged.');
@@ -558,7 +561,10 @@ const recordBehavioralAnalyticsEvent = (
     };
     // Start network I/O after synchronous commands yield, so later spawnSync work
     // cannot block a running request's timeout or callbacks.
-    const pending = Promise.resolve().then(() => sender(payload, options)).catch(() => {
+    const scope = currentBehavioralScope;
+    const pending = Promise.resolve().then(() => {
+      if (!scope?.cancelled) return sender(payload, options);
+    }).catch(() => {
       // Analytics must never affect command behavior or exit status.
     });
     pendingBehavioralSends.add(pending);
@@ -589,7 +595,10 @@ const runWithCommandAnalytics = (
   const startedAt = nowMs();
   const analyticsRuntime = runtime.preserveLocalState ? preserveLocalAnalyticsState(runtime) : runtime;
   const previousRuntime = currentAnalyticsRuntime;
+  const previousScope = currentBehavioralScope;
+  const scope = { cancelled: false };
   currentAnalyticsRuntime = analyticsRuntime;
+  currentBehavioralScope = scope;
   process.exitCode = undefined;
   try {
     runCommand();
@@ -599,6 +608,12 @@ const runWithCommandAnalytics = (
       durationBucket: durationBucketFromMs(Math.max(0, nowMs() - startedAt)),
     }, analyticsRuntime), flushPendingAnalytics()]).then(() => {});
   } catch (error) {
+    if (error instanceof CommandInterrupted) {
+      scope.cancelled = true;
+      process.exitCode = (error as { status: number }).status;
+      writeStdoutLine((error as Error).message);
+      return Promise.resolve();
+    }
     return Promise.allSettled([recordAnalyticsEvent({
       command,
       status: 'failure',
@@ -608,6 +623,7 @@ const runWithCommandAnalytics = (
     });
   } finally {
     currentAnalyticsRuntime = previousRuntime;
+    currentBehavioralScope = previousScope;
   }
 };
 

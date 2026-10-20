@@ -56,16 +56,16 @@
     "@eslint/js": "^10.0.1",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^24.13.2",
+    "@types/node": "^24.19.2",
     "@typescript/native": "npm:typescript@^7.0.2",
     "c8": "^12.0.0",
-    "chai": "^6.2.2",
-    "eslint": "^10.5.0",
-    "globals": "^17.7.0",
+    "chai": "^6.3.0",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
     "js-yaml": "^4.3.2",
-    "mocha": "^11.7.6",
+    "mocha": "^11.8.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-eslint": "^8.62.0"
+    "typescript-eslint": "^8.71.2"
   },
   "overrides": {
     "diff": "^8.0.3",

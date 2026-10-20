@@ -5,7 +5,7 @@ const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configureAnalyticsPreference } = require('./analytics.ts');
 const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
-const { writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
+const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
 const setupHelp = `Usage:
     ballin setup
@@ -69,6 +69,7 @@ const runSetupCommand = (): void => {
     writeStdoutLine('Ballin preference review complete.');
     process.exitCode = 0;
   } catch (error) {
+    rethrowInterruption(error);
     writeStderrLine(`ballin setup: ${(error as Error).message}`);
     writeStderrLine(reviewing
       ? 'Unable to complete preference review; unconfirmed choices are unchanged.'

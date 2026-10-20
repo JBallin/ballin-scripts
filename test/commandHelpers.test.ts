@@ -10,9 +10,25 @@ const {
   runCommand,
   runNodeScript,
   spawnResultStatus,
+  requireUninterrupted,
+  rethrowInterruption,
+  CommandInterrupted,
 } = require('../commands/commandHelpers.ts');
 
 describe('command helpers', () => {
+  it('preserves explicit interruption while retaining real spawn-error classification', () => {
+    for (const result of [{ signal: 'SIGINT', status: null }, { signal: 'SIGTERM', status: null }, { status: 130 }, { status: 143 }]) {
+      try { requireUninterrupted(result); assert.fail('expected interruption'); } catch (error) {
+        assert.instanceOf(error, CommandInterrupted);
+        assert.equal((error as { status: number }).status, result.signal === 'SIGINT' ? 130 : result.signal === 'SIGTERM' ? 143 : result.status);
+        assert.throws(() => rethrowInterruption(error), CommandInterrupted);
+      }
+    }
+    for (const result of [{ status: 1 }, { status: null, signal: 'SIGKILL' },
+      { status: null, signal: 'SIGTERM', error: { code: 'ETIMEDOUT' } },
+      { status: 130, error: { code: 'ENOBUFS' } }]) assert.doesNotThrow(() => requireUninterrupted(result));
+    assert.doesNotThrow(() => rethrowInterruption(new Error('ordinary failure')));
+  });
   for (const code of ['EAGAIN', 'EBADF', 'secret-token', undefined, 123]) {
     it(`preserves prompt read failures with only a recognized system code: ${code}`, () => {
       const originalRead = fs.readSync;

@@ -57,8 +57,8 @@ const validateSandbox = (sandbox: Sandbox): void => {
         || fs.lstatSync(path.join(managed, '.managed')).isSymbolicLink()
         || fs.readFileSync(path.join(managed, '.managed'), 'utf8') !== '1\n') throw new Error('Quickstart directory was changed');
       const bin = path.join(managed, 'bin');
-      if (fs.realpathSync(bin) !== bin || fs.readdirSync(bin).sort().join(',') !== 'gh,git') throw new Error('Unexpected quickstart command');
-      for (const name of ['git', 'gh']) {
+      if (fs.realpathSync(bin) !== bin || !['git', 'gh,git'].includes(fs.readdirSync(bin).sort().join(','))) throw new Error('Unexpected quickstart command');
+      for (const name of fs.readdirSync(bin)) {
         if (!fs.lstatSync(path.join(bin, name)).isSymbolicLink()
           || fs.readlinkSync(path.join(bin, name)) !== path.join(sandbox.tools, name)) throw new Error('Quickstart tool was changed');
       }
@@ -183,9 +183,9 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
         uname: 'if (process.argv[2] === "-s") console.log("Darwin"); else if (process.argv[2] === "-m") console.log("arm64"); else process.exit(97);',
         sw_vers: 'if (process.argv.slice(2).join(" ") !== "-productVersion") process.exit(97); console.log("13.5");',
         curl: `const fs = require('fs'); const args = process.argv.slice(2);\n`
-          + `if (JSON.stringify(args.slice(0, -1)) !== JSON.stringify(['-q', '-fsSL', '--proto', '=https', '--proto-redir', '=https', '--tlsv1.2', 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh', '-o'])) process.exit(97);\n`
+          + `const url=args.at(-3); const file=url==='https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh'?'install.sh':null; if(!file || JSON.stringify(args.slice(0,-3))!==JSON.stringify(['-q','-fsSL','--proto','=https','--proto-redir','=https','--tlsv1.2'])) process.exit(97);\n`
           + `const target = args.at(-1); if (!target.startsWith(${JSON.stringify(sandbox.scratch + '/ballin-quickstart.')})) process.exit(97);\n`
-          + `fs.copyFileSync(${JSON.stringify(path.join(source, 'install.sh'))}, target);`,
+          + `fs.copyFileSync(${JSON.stringify(source)} + '/' + file, target);`,
       })) {
         const file = path.join(sandbox.tools, name);
         fs.writeFileSync(file, '#!/usr/bin/env node\n' + body + '\n', { mode: 0o755 });

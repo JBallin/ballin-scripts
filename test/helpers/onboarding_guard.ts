@@ -5,15 +5,15 @@ const root = process.env.BALLIN_QA_ROOT;
 const fail = (): never => { throw new Error('Onboarding sandbox safeguard refused the operation'); };
 const quickstart = root && JSON.parse(fs.readFileSync(path.join(root, '.ballin-onboarding-sandbox.json'), 'utf8')).quickstart === true;
 const allowedPaths = root && (quickstart
-  ? [path.join(root, 'tools'), [path.join(root, 'home/.local/share/ballin-quickstart/bin'), path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)]
+  ? [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter), path.join(root, 'tools'), [path.join(root, 'home/.local/share/ballin-quickstart/bin'), path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)]
   : [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)]);
 if (process.env.BALLIN_NO_ANALYTICS !== '1' || !root || fs.realpathSync(root) !== root || process.env.HOME !== path.join(root, 'home')
   || !allowedPaths?.includes(process.env.PATH ?? '')) fail();
 
 if (quickstart && process.env.PATH !== path.join(root, 'tools')) {
   const bin = path.join(root, 'home/.local/share/ballin-quickstart/bin');
-  if (fs.realpathSync(bin) !== bin || fs.readdirSync(bin).sort().join(',') !== 'gh,git') fail();
-  for (const name of ['git', 'gh']) {
+  if (fs.realpathSync(bin) !== bin || !['git', 'gh,git'].includes(fs.readdirSync(bin).sort().join(','))) fail();
+  for (const name of fs.readdirSync(bin)) {
     if (!fs.lstatSync(path.join(bin, name)).isSymbolicLink()
       || fs.readlinkSync(path.join(bin, name)) !== path.join(root, 'tools', name)) fail();
   }

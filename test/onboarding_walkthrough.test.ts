@@ -43,7 +43,7 @@ describe('first-run onboarding walkthroughs', function() {
     const installResult = runInstaller('y\nn\nn\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
-    assert.include(installResult.stdout, 'Installation plan');
+    assert.include(installResult.stdout, 'Installation details:');
     assert.lengthOf(installResult.stdout.match(/installation\.md#what-will-installation-change/gu) ?? [], 1);
     assert.include(installResult.stdout, 'Share usage analytics to help improve Ballin? [y/N]');
     assert.include(installResult.stdout, 'Backup setup skipped. Run `ballin backup setup`');
