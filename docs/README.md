@@ -7,8 +7,8 @@ For the project overview, see the [main README](../README.md).
 | Guide | Purpose |
 | --- | --- |
 | [Choosing Ballin](choosing-ballin.md) | When Ballin fits an existing Mac setup, when another approach is better, and how to use them together. |
-| [Quickstart: Install Ballin](quickstart.md) | One pasted command to prepare prerequisites and install Ballin for maintenance, with optional GitHub backups. |
-| [Installation and removal](installation.md) | Exact local effects, contacted services, optional backup setup, failure recovery, and removal. |
+| [Quickstart: Install Ballin](quickstart.md) | Install Ballin with guided setup. |
+| [Installation](installation.md) | Exact local effects, contacted services, optional backup setup, failure recovery, and removal. |
 | [Using saved state on another Mac](new-mac.md) | Reviewing snapshots while rebuilding and choosing a backup destination for the new Mac. |
 | [Backup sources and sensitivity](backup-sources.md) | Source-by-source audit of current snapshots and their plausible sensitive content. |
 | [Optional capabilities](optional-capabilities.md) | Local settings, Node.js setup, optional tools, analytics choices, and configurable `ballin update` settings. |

@@ -21,7 +21,7 @@ describe('canonical installation commands', () => {
     for (const heading of ['What will installation change?', 'Startup files and manual activation', 'Manual PATH setup', 'Optional backup setup and reconnect']) {
       assert.include(details, heading);
     }
-    assert.include(quick, 'only for backups'); assert.include(details, 'Ballin can be installed for maintenance without configuring backups.');
+    assert.include(quick, 'only if you choose to set up backups'); assert.include(details, 'Ballin can be installed for maintenance without configuring backups.');
   });
   for (const shell of ['bash', 'zsh']) {
     it(`runs the actual README command with untouched prompt stdin in ${shell}`, () => {

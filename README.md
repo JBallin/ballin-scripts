@@ -20,7 +20,7 @@ alongside other tools.
 ## Installation
 
 > [!TIP]
-> Want guided setup? The interactive [quickstart guide](docs/quickstart.md) reuses
+> Want guided setup? The interactive [Quickstart](docs/quickstart.md) reuses
 > compatible tools and helps install missing prerequisites. 🚀
 
 Start with Git and Node.js 24.12 or newer on your `PATH`. Homebrew is optional;
@@ -36,7 +36,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/
 
 Backups are optional; you can configure them later with `ballin backup setup`.
 
-See [Installation and removal](docs/installation.md) for setup details,
+See [Installation](docs/installation.md) for setup details,
 troubleshooting, and removal.
 
 ## Example output
