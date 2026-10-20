@@ -28,22 +28,16 @@ backups also require [GitHub CLI](https://cli.github.com/) authenticated to your
 personal GitHub.com account. See [Node.js setup](docs/optional-capabilities.md#nodejs)
 if you need a supported runtime.
 
-Review the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh),
-then open Terminal and run it (zsh or Bash):
+Open Terminal and run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
 ```shell
 bash <(curl -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
 ```
 
-The installer links to installation details and asks before a fresh installation.
-It offers optional usage analytics (disabled by default), shell completion, and backup
-setup. You can skip backups or configure them later with `ballin backup setup`.
-Installation does not run updates or capture snapshots. For a new backup
-destination, run `ballin backup` for your first capture; for an existing backup,
-see [using saved state on another Mac](#using-saved-state-on-another-mac).
+Backups are optional; you can configure them later with `ballin backup setup`.
 
-Review [Installation and removal](docs/installation.md) for local effects,
-network interactions, backup authentication, troubleshooting, and removal.
+See [Installation and removal](docs/installation.md) for setup details,
+troubleshooting, and removal.
 
 ## Example output
 

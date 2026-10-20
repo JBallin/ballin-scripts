@@ -9,7 +9,7 @@ describe('canonical installation commands', () => {
   const command = (file: string) => read(file).match(/```shell\n([\s\S]*?)\n```/)?.[1];
   it('keeps one discoverable command per route and stable detail/recovery links', () => {
     const readme = read('README.md'), quick = read('docs/quickstart.md'), details = read('docs/installation.md');
-    assert.include(readme, '## Installation\n'); assert.include(quick, '## Run Quickstart\n');
+    assert.include(readme, '## Installation\n'); assert.include(quick, '# Quickstart: Install Ballin\n');
     assert.include(command('README.md'), '/main/install.sh');
     assert.include(command('docs/quickstart.md'), '/main/quickstart.sh');
     const all = [readme, quick, details].join('\n');
@@ -17,11 +17,11 @@ describe('canonical installation commands', () => {
       assert.lengthOf(all.match(new RegExp('raw\\.githubusercontent\\.com/JBallin/ballin-scripts/main/' + route + '\\.sh', 'gu')) ?? [], 1);
     }
     assert.notInclude(all, 'BALLIN_SHELL_');
-    assert.include(details, '../README.md#installation'); assert.include(details, 'quickstart.md#run-quickstart');
+    assert.include(details, '../README.md#installation'); assert.include(details, 'quickstart.md#quickstart-install-ballin');
     for (const heading of ['What will installation change?', 'Startup files and manual activation', 'Manual PATH setup', 'Optional backup setup and reconnect']) {
       assert.include(details, heading);
     }
-    assert.include(quick, 'only for backups'); assert.include(quick, 'maintenance and updates');
+    assert.include(quick, 'only for backups'); assert.include(details, 'Ballin can be installed for maintenance without configuring backups.');
   });
   for (const shell of ['bash', 'zsh']) {
     it(`runs the actual README command with untouched prompt stdin in ${shell}`, () => {

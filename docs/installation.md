@@ -28,7 +28,7 @@ before running it.
 Choose a route:
 
 - [Direct installer](../README.md#installation) if Git and a supported Node.js are already available.
-- [Guided Quickstart](quickstart.md#run-quickstart) to check prerequisites and offer missing tools.
+- [Guided Quickstart](quickstart.md#quickstart-install-ballin) to check prerequisites and offer missing tools.
 
 Both guides provide the command to paste into Terminal. Zsh and Bash are supported.
 
