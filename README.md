@@ -20,8 +20,7 @@ alongside other tools.
 ## Installation
 
 > [!TIP]
-> Want guided setup? The interactive [Quickstart](docs/quickstart.md) reuses
-> compatible tools and helps install missing prerequisites. 🚀
+> Want guided setup? The interactive [Quickstart](docs/quickstart.md) helps install missing prerequisites. 🚀
 
 Start with Git and Node.js 24.12 or newer on your `PATH`. Homebrew is optional;
 backups also require [GitHub CLI](https://cli.github.com/) authenticated to your
