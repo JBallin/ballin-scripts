@@ -23,8 +23,8 @@ alongside other tools.
 > Want guided setup? The interactive [Quickstart](docs/quickstart.md) helps install missing prerequisites. 🚀
 
 Start with Git and [Node.js 24.12 or newer](docs/optional-capabilities.md#nodejs)
-on your `PATH`. Homebrew is optional; backups require an authenticated
-[GitHub CLI](https://cli.github.com/).
+on your `PATH`. Homebrew is optional; backups require
+[GitHub CLI](https://cli.github.com/) authenticated to GitHub.com.
 
 Open Terminal and run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
