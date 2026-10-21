@@ -7,7 +7,7 @@ const readWorkflow = (name: string): unknown => yaml.load(
   fs.readFileSync(path.join(workflowDirectory, name), 'utf8'),
 );
 const runtime = 'JBallin/claude-review-runtime/.github/workflows/';
-const pin = 'd85a8b21653d2d3703829f9b49fce447acd57415';
+const pin = '23727a9addb3f0875125eb00ba2c6a02218f19b1';
 const reviewPermissions = {
   contents: 'read', 'pull-requests': 'write', checks: 'write', issues: 'write', 'id-token': 'write',
 };

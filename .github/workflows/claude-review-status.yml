@@ -17,4 +17,4 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: JBallin/claude-review-runtime/.github/workflows/claude-review-status.yml@d85a8b21653d2d3703829f9b49fce447acd57415
+    uses: JBallin/claude-review-runtime/.github/workflows/claude-review-status.yml@23727a9addb3f0875125eb00ba2c6a02218f19b1
