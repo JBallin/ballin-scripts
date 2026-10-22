@@ -354,10 +354,15 @@ development-environment maintenance so the developer can focus on building.
 
 ## Terminal emphasis
 
-Use sparse bold emphasis for update stage headings and changed backup entries.
-Existing help terms may use bold or underline. Keep the terminal's default
-foreground; do not add a fixed color palette or dim unchanged entries. Backup
-symbols and stage labels carry meaning even when emphasis is unavailable.
+Use Homebrew-style phase headings throughout setup and update: a bold blue
+`==>` marker (`SGR 1;34`), followed by bold heading text in the terminal's default
+foreground (`SGR 1;39`), then a reset (`SGR 0`). Keep this color accent limited
+to phase markers.
+
+Use sparse bold emphasis for changed backup entries. Existing help terms may
+use bold or underline. Other output keeps the terminal's default foreground;
+do not add colors elsewhere or dim unchanged entries. Backup symbols and phase
+labels carry meaning even when emphasis is unavailable.
 
 Ballin adds emphasis only on a TTY when `TERM` is not `dumb` and `NO_COLOR` is
 unset or empty. A nonempty `NO_COLOR` disables all Ballin emphasis, including
