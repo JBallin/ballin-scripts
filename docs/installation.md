@@ -7,6 +7,9 @@ supported Node.js version are the only prerequisites for the installer. Backups
 and integrations such as Homebrew are optional. Ballin has no runtime npm
 dependencies.
 
+Ballin's installer and terminal output take inspiration from
+[Homebrew](https://brew.sh/).
+
 ## What will installation change?
 
 After you confirm a fresh installation, Ballin clones its checkout into
@@ -473,8 +476,16 @@ git clone https://github.com/example-user/ballin-backups.git
 
 ## Health and recovery
 
+For an unexpected problem, run `ballin self-update` first. If it succeeds and the
+problem remains, run `ballin doctor` and follow its guidance. If you still need
+help, see [Support](../SUPPORT.md). Review output before sharing it and remove
+credentials or sensitive backup contents.
+
 If `ballin self-update` fails during setup, the checkout may already be updated;
 address the reported setup error before retrying.
+
+For other self-update failures, follow the reported error and recovery guidance
+before retrying.
 
 If the installer reports an unsupported Node.js version, switch to a supported
 runtime and retry. It includes the detected version when the runtime probe can
