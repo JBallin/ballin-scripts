@@ -26,11 +26,29 @@ update every app on your Mac.
 
 ## Make maintenance a habit
 
-Run `ballin update` when you are ready for maintenance. It can install packages
-and macOS updates, so leave time to review output and address failures. Ballin
+Make `ballin update` a regular habit at a convenient maintenance time. Save your
+work first: Homebrew cask updates may quit running apps, and macOS updates may
+require a restart. Leave time to review output and address failures. Ballin
 does not install a recurring schedule for you. See [Supported capabilities](capabilities.md#ballin-update)
 for the integrations and [update settings](optional-capabilities.md#ballin-update-settings)
 to choose optional stages.
+
+Before updating, [`brew outdated`](https://docs.brew.sh/Manpage#outdated-options-formulacask-)
+lists outdated Homebrew packages. This previews
+only Homebrew's view of available updates, not the full `ballin update` run.
+
+## Include backups in your update routine
+
+Backup during updates is off by default (`update.backup=false`). After
+[setting up a backup destination](installation.md#optional-backup-setup-and-reconnect),
+enable it with:
+
+```shell
+ballin config set update.backup true
+```
+
+Ballin then runs a backup as the final stage of `ballin update`, after the update
+stages. It does not create a backup before upgrades or schedule updates for you.
 
 If you use backups, review [what they contain](backup-sources.md) and inspect
 saved snapshots with `ballin backup list` and `ballin backup read`. Package
