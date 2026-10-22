@@ -515,7 +515,7 @@ install_command_line_tools() {
       || fail 'Xcode Command Line Tools installation failed. Inspect the output, finish installation manually, then rerun Quickstart.'
   else
     printf 'No single Xcode Command Line Tools download was available in Terminal.\n'
-    printf 'Use Apple’s graphical installer, or install the tools manually and rerun Quickstart.\n'
+    printf "Use Apple's graphical installer, or install the tools manually and rerun Quickstart.\n"
     if ! confirm 'Open the graphical Xcode Command Line Tools installer?'; then
       "$input_ended" && fail 'No answer received. Xcode Command Line Tools were not installed.'
       fail 'Install Xcode Command Line Tools manually, then rerun Quickstart.'
@@ -940,7 +940,7 @@ main() {
     if [[ -n "$brew_tool" ]]; then
       printf 'Homebrew will install the missing tools and their dependencies; it will not upgrade existing Node.js.\n'
     else
-      "$need_git" && printf 'Xcode Command Line Tools: try Apple’s Terminal download with administrator access; offer the graphical installer if unavailable.\n'
+      "$need_git" && printf "Xcode Command Line Tools: try Apple's Terminal download with administrator access; offer the graphical installer if unavailable.\n"
       "$need_node" && printf 'Node.js: install the verified official Node 24 package in /usr/local/bin with administrator access.\n'
       "$need_gh" && printf 'GitHub CLI: download and verify the official archive in %s.\n' "$quick_root"
     fi
@@ -954,7 +954,7 @@ main() {
         stop_if_interrupted "$prefix_status"
         if [[ "$prefix_status" == 0 ]]; then
           detected_prefix="${detected_prefix%"${detected_prefix##*[![:space:]]}"}"
-          [[ "$detected_prefix" == /* && "$detected_prefix" != *:* && "$detected_prefix" != *$'\n'* && "$detected_prefix" != *$'\r'* ]] || fail 'Homebrew returned an invalid installation prefix. Inspect `brew --prefix`, then rerun Quickstart.'
+          [[ "$detected_prefix" == /* && "$detected_prefix" != *:* && "$detected_prefix" != *$'\n'* && "$detected_prefix" != *$'\r'* ]] || fail 'Homebrew returned an invalid installation prefix. Inspect brew --prefix, then rerun Quickstart.'
           planned_prefix="$detected_prefix"
         fi
       fi

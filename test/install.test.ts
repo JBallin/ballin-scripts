@@ -244,8 +244,8 @@ esac
       fs.mkdirSync(path.dirname(target), { recursive: true });
       if (kind === 'file') fs.writeFileSync(target, 'keep until installation');
       else fs.symlinkSync(kind === 'directory-link' ? homeDir : path.join(homeDir, 'missing'), target);
-      const snapshot = spawnSync('/bin/bash', ['-c', 'source "$1"; command_entry_snapshot "$2"',
-        'snapshot', path.join(__dirname, '../quickstart.sh'), target], {
+      const snapshot = spawnSync('/bin/bash', ['-s', '--', path.join(__dirname, '../quickstart.sh'), target], {
+        input: 'source "$1"\ncommand_entry_snapshot "$2"\n',
         encoding: 'utf8', env: { HOME: homeDir, PATH: toolDir },
       });
       assert.equal(snapshot.status, 0, snapshot.stderr);
