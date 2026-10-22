@@ -49,11 +49,12 @@ describe('interactive setup with delayed terminal answers', function() {
         { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
+      assert.include(result.stdout, '\x1b[1;34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(result.stdout.split(startup.prompt).length - 1, 1, 'Reuse the selected location without repeating its question');
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.notInclude(result.stdout, 'Usage analytics:');
-      const terminalGuidance = '😎 Setup complete! Open a new Terminal to run `ballin`.';
+      const terminalGuidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
       const firstBackupPrompt = 'Run a backup now and open its GitHub destination? [Y/n] ';
       assert.equal(result.stdout.split(terminalGuidance).length - 1, 1);
       assert.isBelow(result.stdout.indexOf('Private backup created:'), result.stdout.indexOf(firstBackupPrompt));

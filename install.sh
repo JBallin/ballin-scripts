@@ -1,5 +1,22 @@
 #!/usr/bin/env bash
-printf '%s\n' "🏀 let's ball..."
+phase() {
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[1;34m==>\033[1;39m %s\033[0m\n' "$1"
+  else printf '==> %s\n' "$1"; fi
+}
+
+# Compare the reviewed command entry again before using Quickstart consent.
+command_entry_snapshot() {
+  local target=$1 metadata
+  if [[ ! -e "$target" && ! -L "$target" ]]; then printf missing; return; fi
+  [[ -L "$target" || ( -f "$target" && ! -d "$target" ) ]] || return 1
+  metadata=$(/usr/bin/stat -f '%d:%i:%p:%l:%z:%m:%c' "$target" 2>/dev/null) \
+    || metadata=$(/usr/bin/stat -c '%d:%i:%f:%h:%s:%Y:%Z' "$target") || return 1
+  printf '%s' "$metadata"
+  if [[ -L "$target" ]]; then printf ':'; readlink "$target"; fi
+}
+
+if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then phase 'Setting up Ballin'; fi
 
 repo_dir="$HOME/.ballin-scripts"
 docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
@@ -21,6 +38,11 @@ if [ ! -d "$repo_dir" ]; then
 fi
 if [ ! -f "$repo_dir/ballin.config.json" ]; then
   setup_mode='fresh'
+fi
+
+if [[ -n "${BALLIN_APPROVED_INSTALL_ROOT:-}" && ( "$BALLIN_APPROVED_INSTALL_ROOT" != "$repo_dir" || "$repo_existed" == true ) ]]; then
+  printf 'The checkout changed after approval. Inspect it, then rerun Quickstart.\n' >&2
+  exit 1
 fi
 
 prerequisite_status=0
@@ -139,8 +161,23 @@ else
   exit $?
 fi
 if [ "$repo_existed" = false ]; then
-  printf '\nInstallation details: %s#what-will-installation-change\n' "$docs_url"
-  if ! confirm "Install Ballin in $repo_dir and make the ballin command available?"; then
+  install_approved=false
+  if [[ "${BALLIN_APPROVED_INSTALL_ROOT:-}" == "$repo_dir" && -n "${BALLIN_APPROVED_INSTALL_COMMAND:-}" ]]; then
+    reviewed_command=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).target)' "$command_preflight") || exit 1
+    reviewed_snapshot=$(command_entry_snapshot "$reviewed_command") || exit 1
+    approved_command=$(node -e 'process.stdout.write(require("path").normalize(process.argv[1]))' "$BALLIN_APPROVED_INSTALL_COMMAND") || exit 1
+    if [[ "$reviewed_command" != "$approved_command" || "$reviewed_snapshot" != "${BALLIN_APPROVED_INSTALL_SNAPSHOT:-}" ]]; then
+      printf 'The installation plan changed after approval. Inspect the command target, then rerun Quickstart.\n' >&2
+      exit 1
+    fi
+    install_approved=true
+  fi
+  if ! "$install_approved"; then
+    command_target=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).target)' "$command_preflight") || exit 1
+    printf 'Ballin will create %s, save its settings there, and link the command at %s.\n' "$repo_dir" "$command_target"
+    printf 'Installation details: %s#what-will-installation-change\n' "$docs_url"
+  fi
+  if ! "$install_approved" && ! confirm "Install Ballin in $repo_dir and make the ballin command available?"; then
     if "$input_ended"; then
       printf '\nNo answer received. Ballin installation stopped before installing Ballin.\n' >&2
       exit 1
@@ -155,7 +192,8 @@ fi
 if (
   cd "$HOME" || exit
   if [ "$repo_existed" = false ]; then
-    echo ''
+    phase 'Installing Ballin'
+    printf '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n'
     git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts || exit $?
   fi
 ); then :
@@ -169,6 +207,7 @@ fi
 
 ############################ UPDATE EXISTING REPO ##############################
 if [ "$repo_existed" = true ]; then
+  phase 'Updating Ballin'
   if [ -f "$repo_dir/commands/repo_update.ts" ]; then
     if (
       cd "$repo_dir" || exit
@@ -195,7 +234,6 @@ if [ "$repo_existed" = true ]; then
 fi
 
 ################################# TYPED SETUP ##################################
-printf '\n'
 if [ ! -f "$repo_dir/commands/install_setup.ts" ]; then
   print_stale_checkout_guidance
   exit 1
@@ -216,5 +254,5 @@ fi
 
 # Quickstart owns the final guidance after its optional backup/browser work.
 if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then
-  printf "\n😎 Setup complete! Open a new Terminal to run \`ballin\`.\n"
+  printf "\n😎 Setup complete! Open a new Terminal and run \`ballin help\`.\n"
 fi

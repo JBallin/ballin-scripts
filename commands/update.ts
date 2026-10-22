@@ -354,6 +354,7 @@ function runUpdateCommand(): void {
       env: {
         ...childEnv,
         BALLIN_NO_COMMAND_ANALYTICS: '1',
+        BALLIN_DEFER_UPDATE_HEADING: '1',
       },
     }));
     if (updateStatus === 0) {

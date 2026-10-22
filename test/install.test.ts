@@ -182,9 +182,9 @@ esac
         input: scenario === 'declined' ? 'n\n' : scenario === 'eof' ? '' : 'y\n',
       });
       assert.equal(result.status, scenario === 'failure' ? 7 : scenario === 'eof' ? 1 : 0, result.stdout + result.stderr);
-      const guidance = '😎 Setup complete! Open a new Terminal to run `ballin`.';
+      const guidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
       assert.equal(result.stdout.split(guidance).length - 1, scenario === 'standalone' ? 1 : 0);
-      if (scenario === 'standalone') assert.match(result.stdout, /\n\n😎 Setup complete! Open a new Terminal to run `ballin`\.\n$/u);
+      if (scenario === 'standalone') assert.match(result.stdout, /\n\n😎 Setup complete! Open a new Terminal and run `ballin help`\.\n$/u);
     });
   }
   it('separates checkout/update output from the compact typed setup summary', () => {
@@ -194,7 +194,7 @@ esac
       'printf "Validated private backup: https://github.com/fixture-user/ballin-backups\\nSensitive sources: excluded\\nAutomatic backup during update: disabled\\n"; exit "$FAKE_SETUP_STATUS"'));
     const result = runInstall();
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '\n\nValidated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n');
+    assert.include(result.stdout, '\nValidated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n');
   });
 
   for (const existing of [false, true]) {
@@ -208,8 +208,8 @@ esac
       fs.writeFileSync(node, fs.readFileSync(node, 'utf8').replace('    exit "$FAKE_SETUP_STATUS"', '    printf \'Typed setup fixture.\\n\'\n    exit "$FAKE_SETUP_STATUS"'));
       const result = runInstall();
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.isTrue(result.stdout.startsWith("🏀 let's ball...\n"), result.stdout);
-      assert.include(result.stdout, 'Git output fixture.\n\nTyped setup fixture.\n\n😎 Setup complete! Open a new Terminal to run `ballin`.\n');
+      assert.isTrue(result.stdout.startsWith("==> Setting up Ballin\n"), result.stdout);
+      assert.include(result.stdout, 'Git output fixture.\nTyped setup fixture.\n\n😎 Setup complete! Open a new Terminal and run `ballin help`.\n');
       assert.equal(result.stdout.split('Setup complete!').length - 1, 1);
     });
   }
@@ -222,19 +222,67 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.notInclude(result.stdout, 'Detected Node.js');
-    assert.include(result.stdout, "🏀 let's ball...");
+    assert.notInclude(result.stdout, "let's ball");
     assert.include(result.stdout, 'Installation details:');
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
     assert.notInclude(result.stdout, 'secret-Gist');
     assert.notInclude(result.stdout, 'remote Gist');
-    assert.include(result.stdout, `\nInstallation details: ${docsUrl}#what-will-installation-change\nInstall Ballin in ${repoDir} and make the ballin command available? [y/N] `);
-    assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 1);
+    assert.include(result.stdout, `Installation details: ${docsUrl}#what-will-installation-change\nInstall Ballin in ${repoDir} and make the ballin command available? [y/N] `);
+    assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 2);
     assert.deepEqual(commandLog(), [
       'git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts',
       setupCommand('fresh'),
     ]);
+  });
+
+  for (const kind of ['file', 'symlink', 'directory-link']) {
+    it(`reuses reviewed replacement consent for an existing ${kind}`, () => {
+      installBaseCommands(); linkCommand('readlink');
+      const target = path.join(homeDir, '.local/bin/ballin');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (kind === 'file') fs.writeFileSync(target, 'keep until installation');
+      else fs.symlinkSync(kind === 'directory-link' ? homeDir : path.join(homeDir, 'missing'), target);
+      const snapshot = spawnSync('/bin/bash', ['-c', 'source "$1"; command_entry_snapshot "$2"',
+        'snapshot', path.join(__dirname, '../quickstart.sh'), target], {
+        encoding: 'utf8', env: { HOME: homeDir, PATH: toolDir },
+      });
+      assert.equal(snapshot.status, 0, snapshot.stderr);
+      const result = runInstall({ input: '', env: {
+        BALLIN_APPROVED_INSTALL_ROOT: repoDir, BALLIN_APPROVED_INSTALL_COMMAND: target,
+        BALLIN_APPROVED_INSTALL_SNAPSHOT: snapshot.stdout.trimEnd(),
+      } });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'make the ballin command available?');
+      assert.include(commandLog(), setupCommand('fresh'));
+    });
+  }
+  for (const changed of [false, true]) {
+    it(`checks Quickstart's combined approval against the command target (${changed ? 'changed' : 'unchanged'})`, () => {
+      installBaseCommands();
+      const target = path.join(homeDir, '.local/bin/ballin');
+      if (changed) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, 'keep me'); }
+      const result = runInstall({ input: '', env: {
+        BALLIN_APPROVED_INSTALL_ROOT: repoDir,
+        BALLIN_APPROVED_INSTALL_COMMAND: target,
+        BALLIN_APPROVED_INSTALL_SNAPSHOT: 'missing',
+      } });
+      assert.equal(result.status, changed ? 1 : 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'make the ballin command available?');
+      if (changed) {
+        assert.include(result.stderr, 'installation plan changed after approval');
+        assert.equal(fs.readFileSync(target, 'utf8'), 'keep me');
+        assert.isEmpty(commandLog());
+      } else assert.include(commandLog(), setupCommand('fresh'));
+    });
+  }
+  it('stops stale combined approval when a checkout appeared after the preview', () => {
+    installBaseCommands(); writeCurrentCheckout();
+    const result = runInstall({ input: '', env: { BALLIN_APPROVED_INSTALL_ROOT: repoDir } });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'checkout changed after approval');
+    assert.isEmpty(commandLog());
   });
 
   it('makes no installation changes when fresh-install confirmation is declined', () => {

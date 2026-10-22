@@ -14,7 +14,7 @@ describe('beginner quickstart bootstrap', function() {
   let log: string;
   const source = path.resolve(__dirname, '../quickstart.sh');
   const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
-  const terminalGuidance = '\n😎 Setup complete! Open a new Terminal to run `ballin`.\n';
+  const terminalGuidance = '\n😎 Setup complete! Open a new Terminal and run `ballin help`.\n';
   const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
@@ -104,6 +104,13 @@ esac
     if (pathSufficient && !alreadyManaged && answers.length > 1) answers.shift();
     const preceding = missingGit || missingNode || missingGh ? (missingGit ? 2 : 1) : 0;
     if (!pathSufficient) answers.splice(preceding, 0, ...selection.split('\n').slice(0, -1));
+    const missingTools = missingGit || missingNode || missingGh;
+    if (missingTools && !fs.existsSync(path.join(home, '.ballin-scripts'))) {
+      // The core installer consumes the combined yes, leaving backup input next.
+      const installationAnswer = preceding + (pathSufficient ? 0 : 2);
+      if (answers.length > installationAnswer) answers.splice(installationAnswer, 1);
+    }
+    if (missingGit) answers.splice(1, 0, 'y');
     return spawnSync('/bin/bash', ['-c', `
 source "$FAKE_SOURCE"
 system_node_bin="$FAKE_SYSTEM_NODE"
@@ -111,6 +118,7 @@ system_brew_arm="$FAKE_ROOT/native-brew-arm"
 system_brew_intel="$FAKE_ROOT/native-brew-intel"
 system_git="\${FAKE_SYSTEM_GIT:-$FAKE_ROOT/tools/git}"
 system_xcode_select="\${FAKE_SYSTEM_XCODE_SELECT:-$FAKE_ROOT/tools/xcode-select}"
+system_softwareupdate="$FAKE_ROOT/tools/softwareupdate"
 system_pkgutil="\${FAKE_SYSTEM_PKGUTIL:-$FAKE_ROOT/tools/pkgutil}"
 system_sudo="\${FAKE_SYSTEM_SUDO:-$FAKE_ROOT/tools/sudo}"
 ${beforeMain}
@@ -175,6 +183,16 @@ case "$name" in
     [[ "$*" == --prefix ]] || exit 97
     [[ "\${FAKE_BREW_FAIL:-0}" != 1 ]] || exit 42
     printf '%s\\n' "$FAKE_BREW_PREFIX" ;;
+  softwareupdate)
+    [[ "$*" == --list ]] || exit 97
+    case "\${FAKE_CLT_MODE:-fallback}:$1" in
+      terminal:--list|failed:--list|unusable:--list|interrupt:--list)
+        printf '  * Label: Command Line Tools for Xcode-16.4\\n' ;;
+      ambiguous:--list)
+        printf '  * Label: Command Line Tools for Xcode-16.3\\n  * Label: Command Line Tools for Xcode-16.4\\n' ;;
+      *:--list) ;;
+      *) exit 97 ;;
+    esac ;;
   xcode-select)
     if [[ "$*" == -p ]]; then [[ "\${FAKE_GIT:-ready}" == ready || -f "$FAKE_ROOT/git-installed" ]]; exit; fi
     [[ "$*" == --install ]] || exit 97
@@ -263,6 +281,16 @@ case "$name" in
     if [[ "\${FAKE_BAD_PUBLISHER:-0}" == 1 ]]; then printf 'Unexpected publisher\\n'
     else printf 'Developer ID Installer: Node.js Foundation (HX7739G8FX)\\n'; fi ;;
   sudo)
+    if [[ "$1" == "$FAKE_ROOT/tools/softwareupdate" ]]; then
+      [[ "$2" == --install && "$3" == 'Command Line Tools for Xcode-16.4' && $# == 3 ]] || exit 97
+      case "\${FAKE_CLT_MODE:-}" in
+        failed) exit 42 ;;
+        interrupt) exit 130 ;;
+        unusable) exit 0 ;;
+      esac
+      touch "$FAKE_ROOT/git-installed"
+      exit 0
+    fi
     exec "$TEST_NODE_RUNTIME" "$FAKE_PRIVILEGED_HELPER" "$@" ;;
   ditto)
     [[ "$1" == -x && "$2" == -k && "$3" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/gh_2.102.0_macOS_*.zip && "$4" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/gh-extract && $# == 4 ]] || exit 97
@@ -270,7 +298,7 @@ case "$name" in
     mkdir -p "$4/$folder/bin"
     cp "$FAKE_ROOT/fake-tool" "$4/$folder/bin/gh" ;;
   install.sh)
-    printf "🏀 let's ball...\\n"
+    printf "==> Installing Ballin\\n"
     [[ "\${FAKE_INSTALL_FAIL:-0}" != 1 ]] || exit 1
     if [[ "\${FAKE_CHECK_INSTALL_CWD:-0}" == 1 ]]; then
       (cd "$FAKE_ROOT"; node -p fixture >/dev/null; git --version >/dev/null; gh --version >/dev/null)
@@ -278,7 +306,8 @@ case "$name" in
     fi
     repo="$HOME/.ballin-scripts"
     if [[ ! -f "$repo/ballin.config.json" ]]; then
-      printf 'Native installation prompt: '; IFS= read -r answer || answer=''
+      answer=y
+      if [[ "\${BALLIN_APPROVED_INSTALL_ROOT:-}" != "$repo" ]]; then printf 'Native installation prompt: '; IFS= read -r answer || answer=''; fi
       [[ "$answer" == y ]] || { printf 'cancelled\\n' > "$BALLIN_SETUP_RESULT_FILE"; exit 0; }
       mkdir -p "$repo/bin" "$repo/commands"
       if [[ "\${FAKE_SKIP_BACKUP:-0}" == 1 || "\${BALLIN_BACKUP_CHOICE:-}" == no ]]; then printf '{"backup":{}}\\n' > "$repo/ballin.config.json"
@@ -306,7 +335,7 @@ case "$name" in
   *) exit 97 ;;
 esac
 `, { mode: 0o755 });
-    for (const name of ['uname', 'sw_vers', 'git', 'xcode-select', 'node', 'gh', 'curl', 'pkgutil', 'sudo', 'ditto']) linkFake(name);
+    for (const name of ['uname', 'sw_vers', 'git', 'xcode-select', 'node', 'gh', 'curl', 'pkgutil', 'sudo', 'ditto', 'softwareupdate']) linkFake(name);
   });
   for (const declined of [false, true]) {
     it(`uses ordinary node through suitable existing Homebrew after consent (decline ${declined})`, () => {
@@ -315,7 +344,7 @@ esac
         FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Install Node.js? [y/N]');
+      assert.include(result.stdout, 'Install Node.js and Ballin? [y/N]');
       assert.equal(readLog().includes('native-brew:install --formula node\n'), !declined);
       assert.notInclude(readLog(), 'node@24'); assert.notInclude(readLog(), 'nodejs.org');
       if (declined) { assert.notInclude(readLog(), 'native-brew:ruby'); assert.notInclude(readLog(), 'native-brew:info'); }
@@ -365,7 +394,7 @@ printf '0\\n'
         assert.equal(result.status, outcome === '130' || outcome === 'INT' ? 130 : 143, result.stdout + result.stderr);
         assert.lengthOf(commands.split(marker), 2, 'the intended fault must run exactly once');
         assert.equal(commands.slice(commands.indexOf(marker) + marker.length), '', 'no later tool invocation');
-        assert.equal(result.stdout.includes('Install Node.js? [y/N]'), checkedOperation);
+        assert.equal(result.stdout.includes('Install Node.js and Ballin? [y/N]'), checkedOperation);
         if (stage !== 'select-prefix') assert.include(commands, 'sysctl:-in sysctl.proc_translated');
         if (stage !== 'sysctl' && stage !== 'select-prefix') assert.include(commands, 'native-brew:--prefix');
         if (checkedOperation || stage === '--cellar') assert.include(commands, 'native-brew:--cellar');
@@ -502,8 +531,8 @@ printf '0\\n'
           assert.include(result.stderr, 'Check it using its existing installation method and make a supported Node.js available on PATH');
           assert.notInclude(result.stderr, 'Update or select Node');
           assert.equal(fs.readFileSync(node, 'utf8'), '#!/bin/sh\nexit 97\n');
-          assert.notInclude(result.stdout, 'Install Node.js?');
-        } else assert.include(result.stdout, 'Install Node.js? [y/N]');
+          assert.notInclude(result.stdout, 'Install Node.js and Ballin?');
+        } else assert.include(result.stdout, 'Install Node.js and Ballin? [y/N]');
         for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
       });
     }
@@ -1159,7 +1188,7 @@ system_sudo=fixture_sudo
       else fs.symlinkSync(stub, path.join(tools, 'git'));
       const result = run('n\n', { FAKE_SYSTEM_GIT: stub, FAKE_GIT: 'missing' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Install Apple Command Line Tools?');
+      assert.include(result.stdout, 'Install Xcode Command Line Tools and Ballin?');
       for (const forbidden of ['git:--version', 'xcode-select:--install', 'auth status --active', 'install.sh:']) assert.notInclude(readLog(), forbidden);
       assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
@@ -1202,8 +1231,8 @@ system_sudo=fixture_sudo
         for (const forbidden of ['git:--version', 'gh:auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
       }
       if (scenario === 'ready') assert.notInclude(result.stdout, 'Missing prerequisites:');
-      else assert.include(result.stdout, 'Install Apple Command Line Tools?');
-      if (scenario === 'failure') assert.include(result.stderr, 'Finish any pending installation, then run this quickstart again.');
+      else assert.include(result.stdout, 'Install Xcode Command Line Tools and Ballin?');
+      if (scenario === 'failure') assert.include(result.stderr, 'Finish any pending installation, then rerun Quickstart.');
       if (scenario === 'decline') assert.isFalse(fs.existsSync(path.join(home, '.local')));
     });
   }
@@ -2052,7 +2081,7 @@ system_sudo=fixture_sudo
       fs.unlinkSync(path.join(tools, 'gh'));
       const result = run('y\n\ny\ny\n', { FAKE_GIT: 'missing', FAKE_ARCH: arch, FAKE_MISSING_NODE: '1' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Install Apple Command Line Tools, Node.js, and GitHub CLI? [y/N]');
+      assert.include(result.stdout, 'Install Xcode Command Line Tools, Node.js, and GitHub CLI and Ballin? [y/N]');
       assert.include(readLog(), 'xcode-select:--install');
       assert.notInclude(readLog(), 'brew:');
       assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), "PATH='" + path.join(home, '.local/share/ballin-quickstart/bin') + "':$PATH:'" + path.join(home, '.local/bin') + "'");
@@ -2067,7 +2096,7 @@ system_sudo=fixture_sudo
       fs.unlinkSync(path.join(tools, 'gh'));
       const result = run('n\n', { FAKE_MISSING_NODE: needsNode ? '1' : '0' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      const consent = result.stdout.indexOf(needsNode ? 'Install Node.js and GitHub CLI?' : 'Install GitHub CLI?');
+      const consent = result.stdout.indexOf(needsNode ? 'Install Node.js and GitHub CLI and Ballin?' : 'Install GitHub CLI and Ballin?');
       assert.isAtLeast(consent, 0);
       const notice = 'Installation may ask for your Mac password.';
       assert.notInclude(result.stdout, notice);
@@ -2313,6 +2342,58 @@ system_sudo=fixture_sudo
     assert.equal(run('y\nn\n').status, 0);
     assert.notInclude(readLog(), 'ballin:');
   });
+  it('uses the executable Homebrew prefix for combined consent without invoking an exported function', () => {
+    const prefix = nativeBrew();
+    const result = run('y\ny\ny\n', {
+      FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
+    }, home, 'brew() { touch "$FAKE_ROOT/exported-brew-ran"; printf "/wrong-prefix\\n"; }; export -f brew');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'link the command at ' + prefix + '/bin/ballin');
+    assert.isFalse(fs.existsSync(path.join(root, 'exported-brew-ran')));
+  });
+  it('combines missing tools and fresh Ballin consent before PATH setup', () => {
+    const result = run('y\nhome\ny\nn\n', { FAKE_GIT: 'missing', FAKE_CLT_MODE: 'terminal', FAKE_RAW_INPUT: '1' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Install Xcode Command Line Tools and Ballin? [y/N]');
+    assert.notInclude(result.stdout, 'Native installation prompt:');
+    assert.notInclude(result.stdout, "let's ball");
+    const choice = result.stdout.indexOf('Set up backups to GitHub? [Y/n]');
+    const detection = result.stdout.indexOf('Checking required tools');
+    const preview = result.stdout.indexOf('Ballin will create ');
+    const approval = result.stdout.indexOf('Install Xcode Command Line Tools and Ballin?');
+    assert.isBelow(choice, detection);
+    assert.isBelow(detection, preview);
+    assert.isBelow(preview, approval);
+    assert.isBelow(approval, result.stdout.indexOf('$ sudo softwareupdate --install'));
+    assert.include(readLog(), 'sudo:' + path.join(tools, 'softwareupdate') + ' --install Command Line Tools for Xcode-16.4');
+    assert.notInclude(readLog(), 'xcode-select:--install');
+    assert.isBelow(result.stdout.indexOf('Setting up PATH'), result.stdout.indexOf('==> Installing Ballin'));
+  });
+  for (const answer of ['', 'yes', 'no\n', '\n']) {
+    it(`makes no installation changes after combined-consent ${JSON.stringify(answer)}`, () => {
+      const result = run(answer, { FAKE_MISSING_NODE: '1', FAKE_RAW_INPUT: '1' });
+      assert.equal(result.status, ['no\n', '\n'].includes(answer) ? 0 : 1, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Install Node.js and Ballin? [y/N]');
+      for (const command of ['sudo:', 'curl:', 'install.sh:', 'auth login']) assert.notInclude(readLog(), command);
+      assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+      assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
+    });
+  }
+  for (const mode of ['failed', 'unusable', 'interrupt', 'ambiguous']) {
+    it(`preserves Xcode Command Line Tools recovery boundaries for ${mode}`, () => {
+      const input = mode === 'ambiguous' ? 'y\nn\n' : 'y\n';
+      const result = run(input, { FAKE_GIT: 'missing', FAKE_CLT_MODE: mode, FAKE_RAW_INPUT: '1' });
+      assert.equal(result.status, mode === 'interrupt' ? 130 : 1, result.stdout + result.stderr);
+      assert.notInclude(readLog(), 'install.sh:');
+      assert.notInclude(readLog(), 'xcode-select:--install');
+      if (mode === 'failed') assert.include(result.stderr, 'Xcode Command Line Tools installation failed.');
+      if (mode === 'unusable') assert.include(result.stderr, 'Git is still unavailable.');
+      if (mode === 'ambiguous') {
+        assert.include(result.stdout, 'Open the graphical Xcode Command Line Tools installer? [y/N]');
+        assert.notInclude(readLog(), 'sudo:');
+      }
+    });
+  }
   it('keeps the bootstrap Node.js release line aligned with .nvmrc', () => {
     const selectedMajor = fs.readFileSync(path.resolve(__dirname, '../.nvmrc'), 'utf8').trim();
     assert.match(selectedMajor, /^[1-9][0-9]*$/, 'Select a deliberate Node.js major');
@@ -2394,13 +2475,13 @@ system_sudo=fixture_sudo
       const result = run(input, overrides, home, '', backupInput);
       const succeeds = !['install-failed', 'backup-failed', 'open-failed'].includes(scenario);
       assert.equal(result.status, succeeds ? 0 : 1, result.stdout + result.stderr);
-      const guidance = '😎 Setup complete! Open a new Terminal to run `ballin`.';
+      const guidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
       const expected = succeeds && scenario !== 'install-declined' && !scenario.startsWith('path-incomplete');
       assert.equal(result.stdout.split(guidance).length - 1, expected ? 1 : 0, result.stdout);
       assert.equal(result.stdout.split(incompletePathGuidance).length - 1, scenario.startsWith('path-incomplete') ? 1 : 0, result.stdout);
       if (scenario === 'backup-declined') {
         assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + '\n' + terminalGuidance);
-      } else if (expected) assert.match(result.stdout, /\n\n😎 Setup complete! Open a new Terminal to run `ballin`\.\n$/u);
+      } else if (expected) assert.match(result.stdout, /\n\n😎 Setup complete! Open a new Terminal and run `ballin help`\.\n$/u);
       assert.notInclude(result.stdout, 'Tools are ready');
       assert.notInclude(result.stdout, 'Continue setup here');
       if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
@@ -2428,11 +2509,11 @@ system_sudo=fixture_sudo
       // Merge streams so warnings participate in the visible output order.
       const result = run(input, overrides, home, 'exec 2>&1', 'n\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      const banner = "🏀 let's ball...\n";
+      const banner = "==> Installing Ballin\n";
       {
         const previous = {
           'early choice': 'Set up backups to GitHub? [Y/n]',
-          prerequisites: 'Install Apple Command Line Tools?', 'PATH consent': 'so it works in new Terminal windows? [y/N]',
+          prerequisites: 'Install Xcode Command Line Tools?', 'PATH consent': 'so it works in new Terminal windows? [y/N]',
           'PATH warning': 'Persistent PATH setup incomplete:', authentication: 'Native login prompt:',
           'backups skipped': 'Backup setup skipped.',
         }[preceding];
@@ -2878,7 +2959,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           : 'create\n\nno\n' + (choice === 'final-no' ? 'no\n' : choice === 'final-eof' ? '' : 'yes\nno\nyes\n');
         const result = runSandbox(sandbox, ['quickstart'], prefix + core + answers + setup);
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.equal(result.stdout.split('😎 Setup complete! Open a new Terminal to run `ballin`.').length - 1, 1);
+        assert.equal(result.stdout.split('😎 Setup complete! Open a new Terminal and run `ballin help`.').length - 1, 1);
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.notInclude(result.stdout, 'Usage analytics:'); assert.notInclude(result.stdout, 'Backup setup complete.');
         assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
@@ -2959,8 +3040,8 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'PATH line added');
       assert.notInclude(result.stdout, 'Tab completion enabled.');
-      assert.equal(result.stdout.split('😎 Setup complete! Open a new Terminal to run `ballin`.').length - 1, 1);
-      assert.match(result.stdout, /Opened [^\n]+\n\n😎 Setup complete! Open a new Terminal to run `ballin`\.\n$/u);
+      assert.equal(result.stdout.split('😎 Setup complete! Open a new Terminal and run `ballin help`.').length - 1, 1);
+      assert.match(result.stdout, /Opened [^\n]+\n\n😎 Setup complete! Open a new Terminal and run `ballin help`\.\n$/u);
       assert.include(result.stdout, 'Backup source details:');
       assert.include(result.stdout, 'create');
       assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
@@ -2987,7 +3068,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       const retry = runSandbox(sandbox, ['quickstart'], 'yes\nno\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
       assert.notInclude(retry.stdout, 'PATH entry already present');
-      assert.include(retry.stdout, '\n\nValidated private backup:');
+      assert.include(retry.stdout, '\nValidated private backup:');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       const managedGit = path.join(sandbox.home, '.local/share/ballin-quickstart/bin/git');
       fs.unlinkSync(managedGit);

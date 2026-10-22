@@ -32,10 +32,13 @@ Choose a route:
 
 Both guides provide the command to paste into Terminal. Zsh and Bash are supported.
 
-A fresh install checks Git and Node.js, links to installation details, and asks for `y/N`
+A fresh install checks Git and Node.js, previews installation details, and asks for `[y/N]`
 before making installation changes. It then offers
 [usage analytics](analytics.md#what-will-analytics-share), disabled by default.
 Refreshes preserve existing choices without repeating onboarding.
+
+Successful setup ends with a reminder to open a new Terminal and run `ballin help`.
+Quickstart retains manual PATH guidance when startup setup was not verified.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run
@@ -177,7 +180,22 @@ stops setup for manual recovery rather than silently changing routes. Existing
 formulae or link conflicts may need manual attention. Homebrew can install
 dependencies; automatic updates and cleanup are suppressed.
 
-Direct routes are Apple's Command Line Tools for Git, the latest official Node
+When missing tools and a fresh Ballin installation are both needed, Quickstart
+previews the selected tools, installation routes, checkout and command paths,
+and asks one combined `[y/N]` question. Reruns with an existing checkout ask only
+about missing tools. Backup selection stays first; PATH, completion, analytics
+and backup destination permissions remain separate. Existing Node.js is never
+upgraded automatically during setup.
+
+For Xcode Command Line Tools, Quickstart first checks Apple's Terminal download
+list. With one matching package, it runs `sudo softwareupdate --install` for
+that exact package, showing native progress. It does not select
+macOS upgrades. If no single package is available, it asks separately before
+opening `xcode-select --install`, or you can install the tools manually and rerun
+Quickstart. A started Terminal installation failure stops for recovery rather
+than starting a second installation. Git must actually run before setup proceeds.
+
+Direct routes are Apple's Xcode Command Line Tools for Git, the latest official Node
 24 macOS package and GitHub CLI's architecture-specific archive. Node and GitHub
 CLI downloads use published SHA-256 checksums. The Node package requires
 administrator access and installs commands under `/usr/local/bin`; actual
@@ -273,7 +291,7 @@ tools, or change GitHub CLI authentication.
 ## Commands and services contacted
 
 The linked installation commands download scripts from GitHub. Quickstart's
-selected prerequisite routes may also contact Apple's Command Line Tools service,
+selected prerequisite routes may also contact Apple's Xcode Command Line Tools service,
 Homebrew's formula/bottle services, Node.js releases, or GitHub CLI releases.
 The core installer then:
 

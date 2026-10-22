@@ -3,6 +3,24 @@
 set -euo pipefail
 umask 077
 
+phase() {
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[1;34m==>\033[1;39m %s\033[0m\n' "$1"
+  else printf '==> %s\n' "$1"; fi
+}
+
+# Compare the reviewed command entry again before using Quickstart consent.
+command_entry_snapshot() {
+  local target=$1 metadata
+  if [[ ! -e "$target" && ! -L "$target" ]]; then printf missing; return; fi
+  [[ -L "$target" || ( -f "$target" && ! -d "$target" ) ]] || return 1
+  metadata=$(/usr/bin/stat -f '%d:%i:%p:%l:%z:%m:%c' "$target" 2>/dev/null) \
+    || metadata=$(/usr/bin/stat -c '%d:%i:%f:%h:%s:%Y:%Z' "$target") || return 1
+  printf '%s' "$metadata"
+  if [[ -L "$target" ]]; then printf ':'; readlink "$target"; fi
+}
+
+system_softwareupdate='/usr/sbin/softwareupdate'
 system_node_bin='/usr/local/bin'
 system_brew_arm='/opt/homebrew'
 system_brew_intel='/usr/local'
@@ -432,6 +450,8 @@ install_brew_tools() {
     abort "No compatible dependency bottle" unless plan.all? { |formula| FormulaInstaller.new(formula).pour_bottle? }
     abort "Existing dependents need manual attention" unless plan.flat_map(&:runtime_installed_formula_dependents).empty?
   ' "${formulas[@]}" || fail "Homebrew’s installation plan needs manual attention. No selected tools were installed; inspect existing formulae and bottle support before retrying."
+  phase "Installing ${formulas[*]} with Homebrew"
+  printf '$ brew install --formula %s\n' "${formulas[*]}"
   brew_checked install --formula "${formulas[@]}" || fail 'Homebrew installation did not finish. Inspect its output and existing tools before retrying; no direct fallback was started.'
   for formula in "${formulas[@]}"; do
     case "$formula" in
@@ -480,7 +500,37 @@ check_ballin_command() {
   fi
 }
 
+install_command_line_tools() {
+  phase 'Installing Xcode Command Line Tools'
+  local updates='' label='' status=0
+  updates=$(probe_tool "$system_softwareupdate" --list) || status=$?
+  stop_if_interrupted "$status"
+  if [[ "$status" == 0 ]]; then
+    # Use only an unambiguous Apple-provided label, never a macOS upgrade.
+    label=$(printf '%s\n' "$updates" | awk '/^[[:space:]]*\* Label: Command Line Tools for Xcode/ { sub(/^[[:space:]]*\* Label: /, ""); labels[++n]=$0 } END { if (n == 1) print labels[1] }')
+  fi
+  if [[ -n "$label" ]]; then
+    printf '$ sudo softwareupdate --install "%s"\n' "$label"
+    probe_tool "$system_sudo" "$system_softwareupdate" --install "$label" \
+      || fail 'Xcode Command Line Tools installation failed. Inspect the output, finish installation manually, then rerun Quickstart.'
+  else
+    printf 'No single Xcode Command Line Tools download was available in Terminal.\n'
+    printf 'Use Apple’s graphical installer, or install the tools manually and rerun Quickstart.\n'
+    if ! confirm 'Open the graphical Xcode Command Line Tools installer?'; then
+      "$input_ended" && fail 'No answer received. Xcode Command Line Tools were not installed.'
+      fail 'Install Xcode Command Line Tools manually, then rerun Quickstart.'
+    fi
+    printf '$ xcode-select --install\n'
+    probe_tool "$system_xcode_select" --install || fail 'Apple could not start Xcode Command Line Tools installation. Finish any pending installation, then rerun Quickstart.'
+    printf 'Finish the macOS installation, then press Return here: '
+    read_prompt_answer || fail 'Git setup did not complete.'
+  fi
+  git_tool=$(find_git)
+  [[ -n "$git_tool" ]] || fail 'Git is still unavailable. Finish Xcode Command Line Tools installation, then rerun Quickstart.'
+}
+
 install_node() {
+  phase 'Installing Node.js'
   local package version minor expected
   download 'https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
   package=$(awk '$2 ~ /^node-v24[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
@@ -530,6 +580,7 @@ install_node() {
 }
 
 install_gh() {
+  phase 'Installing GitHub CLI'
   local version archive directory
   download 'https://api.github.com/repos/cli/cli/releases/latest' "$scratch/gh-release.json"
   version=$("$node_tool" -e '
@@ -640,6 +691,7 @@ check_existing_path() {
 }
 
 configure_path() {
+  phase 'Setting up PATH'
   local escaped command_escaped line legacy_line choice candidate original default_directory login_profile
   escaped=${quick_bin//\'/\'\\\'\'}
   command_escaped=${command_path//\'/\'\\\'\'}
@@ -763,7 +815,7 @@ configure_path() {
 }
 
 main() {
-  local exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true installer_separator=false selected_profile=''
+  local approved_root='' approved_command='' approved_snapshot='' exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true installer_separator=false selected_profile=''
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -789,6 +841,7 @@ main() {
     [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $quick_bin."
     new_quick_root=false
   fi
+  phase 'Setting up Ballin'
   backup_choice=no
   if confirm 'Set up backups to GitHub?' y; then backup_choice=yes
   elif "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0
@@ -800,6 +853,7 @@ main() {
       fail "Refusing to replace an existing file at $quick_bin/$managed_tool."
     fi
   done
+  phase 'Checking required tools'
   active_node=$(type -P node) || active_node=''
   local active_node_status=0
   if [[ -n "$active_node" ]]; then
@@ -850,7 +904,7 @@ main() {
     prerequisite_names=''
     prerequisite_list=()
     if "$need_git"; then
-      if [[ -n "$brew_tool" ]]; then prerequisite_list+=(Git); else prerequisite_list+=('Apple Command Line Tools'); fi
+      if [[ -n "$brew_tool" ]]; then prerequisite_list+=(Git); else prerequisite_list+=('Xcode Command Line Tools'); fi
     fi
     "$need_node" && prerequisite_list+=('Node.js')
     "$need_gh" && prerequisite_list+=('GitHub CLI')
@@ -883,7 +937,39 @@ main() {
         fi
       done
     fi
-    if ! confirm "Install $prerequisite_names?"; then
+    if [[ -n "$brew_tool" ]]; then
+      printf 'Homebrew will install the missing tools and their dependencies; it will not upgrade existing Node.js.\n'
+    else
+      "$need_git" && printf 'Xcode Command Line Tools: try Apple’s Terminal download with administrator access; offer the graphical installer if unavailable.\n'
+      "$need_node" && printf 'Node.js: install the verified official Node 24 package in /usr/local/bin with administrator access.\n'
+      "$need_gh" && printf 'GitHub CLI: download and verify the official archive in %s.\n' "$quick_root"
+    fi
+    local approval_prompt="Install $prerequisite_names?"
+    approved_root=''; approved_command=''; approved_snapshot=''
+    if [[ ! -d "$HOME/.ballin-scripts" ]]; then
+      approved_root="$HOME/.ballin-scripts"
+      local planned_prefix="$HOME/.local" detected_prefix='' planned_brew='' prefix_status=0
+      if planned_brew=$(type -P brew); then
+        detected_prefix=$(probe_tool "$planned_brew" --prefix 2>/dev/null) || prefix_status=$?
+        stop_if_interrupted "$prefix_status"
+        if [[ "$prefix_status" == 0 ]]; then
+          detected_prefix="${detected_prefix%"${detected_prefix##*[![:space:]]}"}"
+          [[ "$detected_prefix" == /* && "$detected_prefix" != *:* && "$detected_prefix" != *$'\n'* && "$detected_prefix" != *$'\r'* ]] || fail 'Homebrew returned an invalid installation prefix. Inspect `brew --prefix`, then rerun Quickstart.'
+          planned_prefix="$detected_prefix"
+        fi
+      fi
+      approved_command="$planned_prefix/bin/ballin"
+      approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $approved_command."
+      printf 'Ballin will create %s, save its settings there, and link the command at %s.\n' "$approved_root" "$approved_command"
+      if [[ "$approved_snapshot" != missing ]]; then
+        printf 'Warning: installation will replace the existing command at %s' "$approved_command"
+        if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(readlink "$approved_command")"; fi
+        printf '.\n'
+      fi
+      approval_prompt="Install $prerequisite_names and Ballin?"
+    fi
+    printf 'Installation details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#local-effects\n'
+    if ! confirm "$approval_prompt"; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
       return 0
@@ -897,11 +983,7 @@ main() {
     install_brew_tools
   else
   if "$need_git"; then
-    probe_tool "$system_xcode_select" --install || fail 'Apple could not start Command Line Tools installation. Finish any pending installation, then run this quickstart again.'
-    printf 'Finish the macOS installation, then press Return here: '
-    read_prompt_answer || fail 'Git setup did not complete.'
-    git_tool=$(find_git)
-    [[ -n "$git_tool" ]] || fail 'Git is still unavailable. Finish Command Line Tools installation, then run this quickstart again.'
+    install_command_line_tools
   fi
   "$need_node" && install_node
   "$need_gh" && install_gh
@@ -952,7 +1034,8 @@ main() {
     if [[ "$auth_status" == 130 || "$auth_status" == 143 ]]; then exit "$auth_status"; fi
     if [[ "$auth_status" != 0 ]]; then
       installer_separator=true
-      printf '\n'
+      phase 'Signing in to GitHub'
+      printf '$ gh auth login --hostname github.com --git-protocol https --web\n'
       "$gh_tool" auth login --hostname github.com --git-protocol https --web
     fi
   fi
@@ -963,7 +1046,7 @@ main() {
   # Keep startup hooks from replacing the tools qualified above.
   result_file="$scratch/installation-result"
   printf 'pending\n' > "$result_file"
-  BALLIN_SETUP_PROFILE="$selected_profile" BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh"
+  BALLIN_APPROVED_INSTALL_ROOT="$approved_root" BALLIN_APPROVED_INSTALL_COMMAND="$approved_command" BALLIN_APPROVED_INSTALL_SNAPSHOT="$approved_snapshot" BALLIN_SETUP_PROFILE="$selected_profile" BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh"
   result=$(cat "$result_file")
   [[ "$result" != cancelled ]] || return 0
   case "$result" in 'complete configured open'|'complete configured ended'|'complete configured failed'|'complete skipped open'|'complete skipped ended'|'complete skipped failed') ;; *) fail 'Installation outcome could not be verified. Review the installation before retrying.' ;; esac
@@ -977,7 +1060,7 @@ main() {
     fi
   fi
   if "$path_setup_complete"; then
-    printf "\n😎 Setup complete! Open a new Terminal to run \`ballin\`.\n"
+    printf "\n😎 Setup complete! Open a new Terminal and run \`ballin help\`.\n"
   else
     printf "\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
   fi
