@@ -1,3 +1,4 @@
+const { terminalCommand } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { offerCompletionSetup } = require('./completion_setup.ts');
 const path = require('path');
@@ -221,7 +222,7 @@ const resolveBinDir = (): string | null => {
     if (brewPrefix !== null) {
       const prefix = brewPrefix.trimEnd();
       if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) {
-        writeStdoutLine('Homebrew returned an invalid installation prefix. Inspect `brew --prefix`, then rerun installation.');
+        writeStdoutLine(`Homebrew returned an invalid installation prefix. Inspect ${terminalCommand('brew --prefix')}, then rerun installation.`);
         return null;
       }
       return path.join(prefix, 'bin');
@@ -239,7 +240,7 @@ const validateBinDirInPath = (binDir: string): boolean => {
   }
 
   writeStdoutLine(`\n⚠️  ERROR: ${binDir} doesn't seem to be in your path.`);
-  writeStdoutLine(`Add \`export PATH="${binDir}:$PATH"\` to your shell profile.`);
+  writeStdoutLine(`Add ${terminalCommand(`export PATH="${binDir}:$PATH"`)} to your shell profile.`);
   writeStdoutLine('Then open a new terminal window and run the installer again.');
   return false;
 };
@@ -318,7 +319,7 @@ const setup = (
     if (backupSetupCancelled) backupSetupSucceeded = true;
     else if (!backupSetupSucceeded) {
       writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
-      writeStdoutLine('\nBallin remains installed. Follow the backup recovery guidance above before retrying `ballin backup setup`.');
+      writeStdoutLine(`\nBallin remains installed. Follow the backup recovery guidance above before retrying ${terminalCommand('ballin backup setup')}.`);
     }
   }
 

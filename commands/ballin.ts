@@ -1,4 +1,4 @@
-const { terminalEmphasis } = require('./terminalStyle.ts');
+const { terminalCommand, terminalCommandReferences } = require('./terminalStyle.ts');
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   ensureAnalyticsInstallId,
@@ -65,7 +65,7 @@ Commands:
     self-update           update Ballin itself
     uninstall             remove Ballin
 
-Run \`${terminalEmphasis('ballin <command> --help', 'bold')}\` for command-specific help.
+Run \`ballin <command> --help\` for command-specific help.
 
 `;
 const updateHelp = `Usage:
@@ -194,12 +194,12 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case undefined:
     case commandHelpOptionName:
     case 'help':
-      writeStdout(ballinHelp);
+      writeStdout(terminalCommandReferences(ballinHelp, ['ballin <command> --help']));
       return;
   }
 
   if (!isTopLevelCommandName(command)) {
-    writeStderr(`Unknown Ballin command: ${command}\nTry: \`ballin --help\`\n`);
+    writeStderr(`Unknown Ballin command: ${command}\nTry: ${terminalCommand('ballin --help', process.stderr)}\n`);
     process.exitCode = 2;
     return;
   }
@@ -207,18 +207,18 @@ function runBallinCommand(args = process.argv.slice(2)): void {
   switch (command) {
     case 'update':
       if (isCommandHelp(args)) {
-        writeStdout(updateHelp);
+        writeStdout(terminalCommandReferences(updateHelp, ['ballin config get update']));
         return;
       }
       runNoArgCommand('ballin update', commandArgs, runUpdateCommand);
       return;
     case 'backup':
       if (isCommandHelp(args)) {
-        writeStdout(backupHelp);
+        writeStdout(terminalCommandReferences(backupHelp, ['ballin setup']));
         return;
       }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
-        writeStdout(ballinHelp);
+        writeStdout(terminalCommandReferences(ballinHelp, ['ballin <command> --help']));
         return;
       }
       runBackupCommand(commandArgs);

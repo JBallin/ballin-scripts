@@ -8,6 +8,11 @@ phase() {
     printf '\033[1;34m==>\033[1;39m %s\033[0m\n' "$1"
   else printf '==> %s\n' "$1"; fi
 }
+command_reference() {
+  if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[1m%s\033[0m' "$1"
+  else printf '`%s`' "$1"; fi
+}
 
 # Compare the reviewed command entry again before using Quickstart consent.
 command_entry_snapshot() {
@@ -284,7 +289,7 @@ select_command_bin() {
     [[ "$brew_status" == 0 ]] || return 0
     local brew_prefix=$selected_prefix
     brew_prefix=$("$node_tool" -e 'process.stdout.write(process.argv[1].trimEnd())' "$brew_prefix")
-    [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix \`brew --prefix\`, then rerun this quickstart. PATH setup and Ballin installation have not run."
+    [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix $(command_reference 'brew --prefix' 2), then rerun this quickstart. PATH setup and Ballin installation have not run."
     command_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], "bin"))' "$brew_prefix")
   fi
   [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
@@ -399,7 +404,7 @@ manual_node_guidance() {
           cellar_root=$(cd -P -- "$prefix" 2>/dev/null && pwd -P) || continue
           case "$directory/${resolved##*/}" in
             "$cellar_root"/Cellar/node/*/bin/node)
-              owner="Homebrew (review \`brew upgrade node\` yourself)"
+              owner="Homebrew (review $(command_reference 'brew upgrade node' 2) yourself)"
               break
               ;;
           esac
@@ -845,7 +850,11 @@ main() {
   backup_choice=no
   if confirm 'Set up backups to GitHub?' y; then backup_choice=yes
   elif "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0
-  else printf "Backup setup skipped. Run \`ballin backup setup\` when you’re ready.\n"; fi
+  else
+    printf 'Backup setup skipped. Run '
+    command_reference 'ballin backup setup'
+    printf ' when you’re ready.\n'
+  fi
   # Refuse managed-slot conflicts before discovery can execute them.
   for managed_tool in node npm git gh; do
     [[ "$managed_tool" != gh || "$backup_choice" == yes ]] || continue
@@ -954,7 +963,7 @@ main() {
         stop_if_interrupted "$prefix_status"
         if [[ "$prefix_status" == 0 ]]; then
           detected_prefix="${detected_prefix%"${detected_prefix##*[![:space:]]}"}"
-          [[ "$detected_prefix" == /* && "$detected_prefix" != *:* && "$detected_prefix" != *$'\n'* && "$detected_prefix" != *$'\r'* ]] || fail 'Homebrew returned an invalid installation prefix. Inspect brew --prefix, then rerun Quickstart.'
+          [[ "$detected_prefix" == /* && "$detected_prefix" != *:* && "$detected_prefix" != *$'\n'* && "$detected_prefix" != *$'\r'* ]] || fail "Homebrew returned an invalid installation prefix. Inspect $(command_reference 'brew --prefix' 2), then rerun Quickstart."
           planned_prefix="$detected_prefix"
         fi
       fi
@@ -1060,7 +1069,9 @@ main() {
     fi
   fi
   if "$path_setup_complete"; then
-    printf "\n😎 Setup complete! Open a new Terminal and run \`ballin help\`.\n"
+    printf '\n😎 Setup complete! Open a new Terminal and run '
+    command_reference 'ballin help'
+    printf '.\n'
   else
     printf "\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
   fi

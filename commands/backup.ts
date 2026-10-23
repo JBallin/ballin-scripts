@@ -3,7 +3,7 @@ import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
-const { terminalEmphasis } = require('./terminalStyle.ts');
+const { terminalCommand, terminalEmphasis } = require('./terminalStyle.ts');
 const { compareBackupFileNames } = require('./backup_file_names.ts');
 const fs = require('fs');
 const tty = require('tty');
@@ -49,7 +49,7 @@ const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitErr
 const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember } = require('./directory_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
-  repositoryCacheDirectory, repositoryMessages, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
+  repositoryCacheDirectory, formatRepositoryMessage, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   unexpectedRepositoryEntries,
   repositorySnapshotByteLimit, requireRepositorySnapshotSizes,
 } = require('./backup_repository.ts');
@@ -93,7 +93,7 @@ const backupSetupDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/
 
 const interactiveReadHint = (): boolean => Boolean(tty.isatty(0) && process.stdout.isTTY && process.stderr.isTTY);
 const writeDirectoryReadHint = (option: string): void => {
-  if (interactiveReadHint()) writeStderrLine(`${option === '--list' ? 'List' : 'Read'} saved files with \`ballin backup read <bundle> ${option}\`.`);
+  if (interactiveReadHint()) writeStderrLine(`${option === '--list' ? 'List' : 'Read'} saved files with ${terminalCommand(`ballin backup read <bundle> ${option}`, process.stderr)}.`);
 };
 
 const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
@@ -101,7 +101,7 @@ const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
     .map((entry) => entry.path).toSorted(compareBackupFileNames);
   if (current.length > 0) {
     writeStdoutLine(`Saved snapshots:\n${current.map((name) => `  ${name}`).join('\n')}`);
-    writeStdoutLine('Read a snapshot with `ballin backup read <snapshot>`.');
+    writeStdoutLine(`Read a snapshot with ${terminalCommand('ballin backup read <snapshot>')}.`);
   } else {
     writeStdoutLine('No current snapshots are saved in this backup.');
   }
@@ -109,11 +109,11 @@ const writeSavedSnapshots = ({ entries }: RepositoryInventory): void => {
     .map((entry) => entry.path).toSorted(compareBackupFileNames);
   if (retired.length > 0) {
     writeStdoutLine(`\nRetired snapshots:\n${retired.map((name) => `  ${name}`).join('\n')}`);
-    writeStdoutLine('Inspect retired snapshots with `ballin backup open`.');
+    writeStdoutLine(`Inspect retired snapshots with ${terminalCommand('ballin backup open')}.`);
   }
   const unexpected = entries.filter((entry) => entry.classification === 'unexpected').length;
   if (unexpected > 0) {
-    writeStdoutLine(`\nUnexpected entries: ${unexpected}. Inspect them with \`ballin backup open\`.`);
+    writeStdoutLine(`\nUnexpected entries: ${unexpected}. Inspect them with ${terminalCommand('ballin backup open')}.`);
   }
 };
 
@@ -143,11 +143,11 @@ const backupConfig = (): BackupConfigResult => {
     return { config: { repository: destination.repository, includeSensitive: sensitiveSourceConsent(configObj) }, exitStatus: 0 };
   }
   if (destination.kind === 'legacy-gist') {
-    writeStderrLine('ballin backup: Gist backup support has been retired. Run `ballin backup disconnect`, then `ballin backup setup`. Historical Gists remain on GitHub.');
+    writeStderrLine(`ballin backup: Gist backup support has been retired. Run ${terminalCommand('ballin backup disconnect', process.stderr)}, then ${terminalCommand('ballin backup setup', process.stderr)}. Historical Gists remain on GitHub.`);
   } else if (destination.kind === 'invalid') {
-    writeStderrLine('ballin backup: invalid or conflicting destination configuration; repair the local configuration or run `ballin backup disconnect`, then `ballin backup setup`.');
+    writeStderrLine(`ballin backup: invalid or conflicting destination configuration; repair the local configuration or run ${terminalCommand('ballin backup disconnect', process.stderr)}, then ${terminalCommand('ballin backup setup', process.stderr)}.`);
   } else {
-    writeStderrLine("ballin backup: backup is not configured; run `ballin backup setup` to enable it");
+    writeStderrLine(`ballin backup: backup is not configured; run ${terminalCommand('ballin backup setup', process.stderr)} to enable it`);
   }
   return { config: null, exitStatus: 1 };
 };
@@ -382,7 +382,7 @@ const stageSnapshots = (observations: SnapshotSourceObservation[], evidence: Bac
     requireRepositorySnapshotSizes(stagedSnapshots.map(({ localFile }: StagedSnapshot) => fs.statSync(localFile).size));
   } catch {
     observeBackupFailure(evidence, 'local_state');
-    writeStderrLine(`ballin backup: ${repositoryMessages['resource-limit']} No snapshots were published.`);
+    writeStderrLine(`ballin backup: ${formatRepositoryMessage('resource-limit', process.stderr)} No snapshots were published.`);
     if (!removeStagedSnapshots(stagedSnapshots)) reportTemporaryCleanupFailure();
     return null;
   }
@@ -469,8 +469,8 @@ const reportConflicts = (conflicts: { fileName: string; reason: string }[], dest
     writeStderrLine(`ballin backup: conflict for ${fileName}: ${reason}`);
   });
   writeStderrLine(`ballin backup: conflicts detected; Ballin changed neither the ${destination} nor the backup cache contents`);
-  writeStderrLine(`ballin backup: inspect each remote snapshot with \`ballin backup read <file>\` or the ${destination} UI`);
-  writeStderrLine('ballin backup: reconcile local and remote content so they match, then rerun `ballin backup`');
+  writeStderrLine(`ballin backup: inspect each remote snapshot with ${terminalCommand('ballin backup read <file>', process.stderr)} or the ${destination} UI`);
+  writeStderrLine(`ballin backup: reconcile local and remote content so they match, then rerun ${terminalCommand('ballin backup', process.stderr)}`);
 };
 
 const promoteCaches = (cacheDir: string, snapshots: EvaluatedSnapshot[]): boolean => {
@@ -604,7 +604,7 @@ const runRepositoryBackup = (
       return false;
     }
     const problem = (error as RepositoryError).problem;
-    writeStderrLine(`ballin backup: ${repositoryMessages[problem] ?? 'Unable to reconcile local backup files.'}`);
+    writeStderrLine(`ballin backup: ${formatRepositoryMessage(problem, process.stderr) ?? 'Unable to reconcile local backup files.'}`);
     return false;
   } finally {
     const remoteRemoved = removeRemoteSnapshots(remote);
@@ -651,7 +651,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
     rethrowInterruption(error);
     if (error instanceof SnapshotCwdError) observeBackupFailure(evidence, 'local_state');
     else observeRepositoryFailure(evidence, error);
-    writeStderrLine(`ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
+    writeStderrLine(`ballin backup: ${formatRepositoryMessage((error as RepositoryError).problem, process.stderr) ?? 'Unable to read backup state.'}`);
     return 1;
   }
 };
@@ -669,7 +669,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   if (requestedCommand !== undefined && requestedCommand !== '' && !isBackupCommandName(requestedCommand)) {
-    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'\nTry: \`ballin backup --help\``);
+    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'\nTry: ${terminalCommand('ballin backup --help', process.stderr)}`);
     process.exitCode = 1;
     return;
   }
@@ -712,7 +712,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       onCancelled: () => { cancelled = true; },
     });
     if (!configured && !cancelled) {
-      writeStderrLine('ballin backup setup: setup incomplete; follow the recovery guidance above before running `ballin backup setup` again.');
+      writeStderrLine(`ballin backup setup: setup incomplete; follow the recovery guidance above before running ${terminalCommand('ballin backup setup', process.stderr)} again.`);
     }
     process.exitCode = configured ? 0 : 1;
     return;
@@ -737,7 +737,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
 
   const missingReadArgument = command === 'read' && !args[1];
   if (missingReadArgument) {
-    writeStderrLine('ballin backup read: expected one snapshot; use `ballin backup read <snapshot>`.');
+    writeStderrLine(`ballin backup read: expected one snapshot; use ${terminalCommand('ballin backup read <snapshot>', process.stderr)}.`);
     process.exitCode = 1;
   }
 
@@ -814,7 +814,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     rethrowInterruption(error);
     writeStderrLine(error instanceof DirectorySnapshotError
       ? `ballin backup read: ${(error as Error).message}`
-      : `ballin backup: ${repositoryMessages[(error as RepositoryError).problem] ?? 'Unable to read backup state.'}`);
+      : `ballin backup: ${formatRepositoryMessage((error as RepositoryError).problem, process.stderr) ?? 'Unable to read backup state.'}`);
     process.exitCode = 1;
   }
 }

@@ -16,7 +16,7 @@ describe('interactive setup with delayed terminal answers', function() {
     { prompt: 'Repository name [ballin-backups]: ', answer: 'interactive-test' },
     { prompt: 'Review files that may contain credentials or private information for backup inclusion? [y/N] ', answer: 'y' },
     { prompt: 'private GitHub backup ', answer: 'y' },
-    { prompt: 'Automatically run `ballin backup` as part of `ballin update`? [y/N] ', answer: 'y' },
+    { prompt: 'Automatically run \x1b[1mballin backup\x1b[0m as part of \x1b[1mballin update\x1b[0m? [y/N] ', answer: 'y' },
   ];
   const assertInitializedOnly = (): void => {
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
@@ -54,7 +54,7 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.equal(result.stdout.split(startup.prompt).length - 1, 1, 'Reuse the selected location without repeating its question');
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.notInclude(result.stdout, 'Usage analytics:');
-      const terminalGuidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
+      const terminalGuidance = '😎 Setup complete! Open a new Terminal and run \x1b[1mballin help\x1b[0m.';
       const firstBackupPrompt = 'Run a backup now and open its GitHub destination? [Y/n] ';
       assert.equal(result.stdout.split(terminalGuidance).length - 1, 1);
       assert.isBelow(result.stdout.indexOf('Private backup created:'), result.stdout.indexOf(firstBackupPrompt));

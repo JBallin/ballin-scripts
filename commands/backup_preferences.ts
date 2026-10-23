@@ -1,3 +1,4 @@
+const { terminalCommand } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { createConfigStore, stringify } = require('../config/store.ts');
@@ -36,7 +37,7 @@ const preferenceBoolean = (value: unknown, key: string): boolean => {
 type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone' };
 const selectAutomaticUpdateBackup = (options: AutomaticBackupOptions = {}): boolean | null => {
   const defaultEnabled = options.defaultEnabled ?? false;
-  return readYesNo(`\n🔄 Automatically run \`ballin backup\` as part of \`ballin update\`? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
+  return readYesNo(`\n🔄 Automatically run ${terminalCommand('ballin backup')} as part of ${terminalCommand('ballin update')}? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
 };
 const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
   const enabled = selectAutomaticUpdateBackup(options);

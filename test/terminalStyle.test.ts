@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { terminalEmphasis, terminalHeading } = require('../commands/terminalStyle.ts');
+const { terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences } = require('../commands/terminalStyle.ts');
 
 const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
 
@@ -12,6 +12,16 @@ describe('terminal emphasis', () => {
     assert.equal(terminalHeading('Checking tools', { isTTY: true }, {}), '\x1b[1;34m==>\x1b[1;39m Checking tools\x1b[0m');
     assert.equal(terminalEmphasis('stage', 'bold', { isTTY: true }, {}), '\x1b[1mstage\x1b[0m');
     assert.equal(terminalEmphasis('key', 'underline', { isTTY: true }, { NO_COLOR: '' }), '\x1b[4mkey\x1b[0m');
+    assert.equal(terminalCommand('ballin help', { isTTY: true }, {}), '\x1b[1mballin help\x1b[0m');
+    assert.equal(terminalCommand('ballin help', { isTTY: true }, { NO_COLOR: '' }), '\x1b[1mballin help\x1b[0m');
+  });
+
+  it('formats only explicitly selected command references, leaving identifiers and shorthand intact', () => {
+    const prose = 'Run `ballin backup` twice: `ballin backup`. Keep `update.backup`, `true`, `backup`, and `ballin config get/set/reset`.';
+    assert.equal(terminalCommandReferences(prose, ['ballin backup'], { isTTY: true }, {}),
+      'Run \x1b[1mballin backup\x1b[0m twice: \x1b[1mballin backup\x1b[0m. Keep `update.backup`, `true`, `backup`, and `ballin config get/set/reset`.');
+    assert.equal(terminalCommandReferences('Unselected `ballin doctor`.', [], { isTTY: true }, {}), 'Unselected `ballin doctor`.');
+    assert.equal(terminalCommandReferences('Run `echo $&`.', ['echo $&'], { isTTY: true }, {}), 'Run \x1b[1mecho $&\x1b[0m.');
   });
 
   for (const fixture of [
@@ -24,6 +34,8 @@ describe('terminal emphasis', () => {
     it(`keeps output plain for ${JSON.stringify(fixture)}`, () => {
       assert.equal(terminalHeading('Checking tools', fixture.stream, fixture.env), '==> Checking tools');
       assert.equal(terminalEmphasis('stage', 'bold', fixture.stream, fixture.env), 'stage');
+      assert.equal(terminalCommand('ballin help', fixture.stream, fixture.env), '`ballin help`');
+      assert.equal(terminalCommandReferences('Run `ballin help`.', ['ballin help'], fixture.stream, fixture.env), 'Run `ballin help`.');
     });
   }
 
@@ -65,8 +77,10 @@ describe('terminal emphasis', () => {
         const env = { ...(mode.tty ? { NODE_OPTIONS: `--require ${preload}` } : {}), ...mode.env };
         const help = run(['--help'], env);
         assert.equal(help.status, 0, help.stderr);
-        assert.equal(stripAnsi(help.stdout), plainHelp.stdout);
         const styled = env.TERM === 'xterm';
+        assert.equal(stripAnsi(help.stdout), styled
+          ? plainHelp.stdout.replace('`ballin <command> --help`', 'ballin <command> --help') : plainHelp.stdout);
+        if (styled) assert.include(help.stdout, 'Run \x1b[1mballin <command> --help\x1b[0m for command-specific help.');
         assert.equal(help.stdout.includes('\x1b['), styled);
         const stage = run([], env, true);
         assert.equal(stage.status, 0, stage.stderr);

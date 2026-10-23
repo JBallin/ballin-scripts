@@ -1,5 +1,6 @@
 const fs = require('fs');
 const crypto = require('crypto');
+const { terminalCommandReferences } = require('./terminalStyle.ts');
 const { backupCommitMessage } = require('./backup_commit_message.ts');
 const { repositoryCacheDirectory } = require('./backup_cache.ts');
 const { makeTempFile, removeTempFile, runCommand, requireUninterrupted, rethrowInterruption, writeStderrLine } = require('./commandHelpers.ts');
@@ -16,7 +17,7 @@ import type { SpawnSyncOptions } from 'child_process';
 type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
-  'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use ballin backup open, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
+  'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
   'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
   prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
   authentication: 'GitHub.com authentication is required. Run `gh auth login --hostname github.com`, or check the effective gh account and environment token, then retry.',
@@ -24,7 +25,7 @@ const repositoryMessages: Record<RepositoryProblem, string> = {
   timeout: 'The GitHub.com request timed out. Check the network connection and GitHub service availability, then rerun.',
   request: 'The GitHub.com request could not be completed. Check gh, service availability, and account access; the cause is unconfirmed.',
   unavailable: 'The backup repository is missing or inaccessible. Check access; this does not prove it was deleted.',
-  identity: 'The repository or personal owner does not match the selected backup. Revalidate with ballin backup setup.',
+  identity: 'The repository or personal owner does not match the selected backup. Revalidate with `ballin backup setup`.',
   unsupported: 'The repository is not a supported private Ballin destination. Inspect it deliberately in GitHub.',
   'invalid-data': 'GitHub returned invalid backup metadata or content; no complete comparison is possible.',
   incomplete: 'The repository could not be read completely; no missing snapshots can be inferred.',
@@ -34,6 +35,13 @@ const repositoryMessages: Record<RepositoryProblem, string> = {
   cleanup: 'Private temporary-file cleanup is incomplete; any completed remote effects are retained.',
   'local-io': 'Unable to prepare private backup transport files. Check local storage and permissions.',
 };
+const formatRepositoryMessage = (problem: RepositoryProblem, stream: { isTTY?: boolean } = process.stdout): string | undefined => {
+  const message = repositoryMessages[problem];
+  return message === undefined ? undefined : terminalCommandReferences(message, [
+    'ballin backup setup', 'ballin backup open', 'gh auth login --hostname github.com',
+  ], stream);
+};
+
 class RepositoryError extends Error {
   readonly problem: RepositoryProblem;
   completedStage?: 'repository-created';
@@ -796,7 +804,7 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 };
 
 module.exports = {
-  RepositoryError, repositoryMessages, readRepositoryAccount, candidateRepository, inspectRepository,
+  RepositoryError, repositoryMessages, formatRepositoryMessage, readRepositoryAccount, candidateRepository, inspectRepository,
   readRepositorySnapshot, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   inspectRepositoryMaintenance,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
