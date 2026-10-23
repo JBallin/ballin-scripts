@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const tty = require('tty');
 const { clearTemporaryStatus } = require('./temporaryStatus.ts');
-const { terminalEmphasis } = require('./terminalStyle.ts');
+const { terminalHeading } = require('./terminalStyle.ts');
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
 
@@ -170,7 +170,7 @@ const requireUninterrupted = (result: { signal?: string | null; status: number |
 };
 
 const progress = (text: string, leadingNewline = true): void => {
-  process.stdout.write(`${leadingNewline ? '\n' : ''}${terminalEmphasis(`==> ${text}`, 'bold')}\n`);
+  process.stdout.write(`${leadingNewline ? '\n' : ''}${terminalHeading(text)}\n`);
 };
 
 const reportSpawnError = (command: string, error: Error): number => {

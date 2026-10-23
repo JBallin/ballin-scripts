@@ -44,7 +44,6 @@ example shows a fully configured run.
 
 ```text
 $ ballin update
-
 ==> Updating Homebrew
 ...
 ==> Updating Homebrew packages

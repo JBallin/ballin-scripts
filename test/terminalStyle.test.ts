@@ -3,12 +3,13 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { terminalEmphasis } = require('../commands/terminalStyle.ts');
+const { terminalEmphasis, terminalHeading } = require('../commands/terminalStyle.ts');
 
 const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
 
 describe('terminal emphasis', () => {
   it('uses only owned bold and underline attributes on supported terminals', () => {
+    assert.equal(terminalHeading('Checking tools', { isTTY: true }, {}), '\x1b[1;34m==>\x1b[1;39m Checking tools\x1b[0m');
     assert.equal(terminalEmphasis('stage', 'bold', { isTTY: true }, {}), '\x1b[1mstage\x1b[0m');
     assert.equal(terminalEmphasis('key', 'underline', { isTTY: true }, { NO_COLOR: '' }), '\x1b[4mkey\x1b[0m');
   });
@@ -21,6 +22,7 @@ describe('terminal emphasis', () => {
     { stream: { isTTY: true }, env: { NO_COLOR: '1' } },
   ]) {
     it(`keeps output plain for ${JSON.stringify(fixture)}`, () => {
+      assert.equal(terminalHeading('Checking tools', fixture.stream, fixture.env), '==> Checking tools');
       assert.equal(terminalEmphasis('stage', 'bold', fixture.stream, fixture.env), 'stage');
     });
   }
@@ -70,6 +72,7 @@ describe('terminal emphasis', () => {
         assert.equal(stage.status, 0, stage.stderr);
         assert.equal(stripAnsi(stage.stdout), '\n==> Updating Homebrew\n');
         assert.equal(stage.stdout.includes('\x1b['), styled);
+        if (styled) assert.equal(stage.stdout, '\n\x1b[1;34m==>\x1b[1;39m Updating Homebrew\x1b[0m\n');
         const value = run(['config', 'get', 'backup.repository'], env);
         assert.equal(value.status, 0, value.stderr);
         assert.equal(value.stdout, 'null\n');

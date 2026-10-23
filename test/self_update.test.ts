@@ -8,7 +8,7 @@ import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
-const updateLine = 'Updating Ballin...\n';
+const updateLine = '==> Updating Ballin\n';
 type SpawnSelfUpdateOverrides = Omit<
   import('child_process').SpawnSyncOptionsWithStringEncoding,
   'encoding' | 'env'
@@ -248,17 +248,18 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
         return spawn.call(this, command, args, options);
       };
     `);
-    return { NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '' };
+    return { NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '1' };
   };
 
   for (const mode of ['stdin', 'stdout', 'stderr', 'dumb', 'NO_COLOR', 'narrow'] as const) {
-    it(`prints plain permanent self-update progress in ${mode} mode`, () => {
+    it(`respects terminal styling for permanent self-update progress in ${mode} mode`, () => {
       const env = interactiveEnv(['stdin', 'stdout', 'stderr'].includes(mode) ? mode as 'stdin' | 'stdout' | 'stderr' : undefined, mode === 'narrow' ? 10 : 80);
       if (mode === 'dumb') env.TERM = 'dumb';
-      if (mode === 'NO_COLOR') env.NO_COLOR = '1';
+      env.NO_COLOR = mode === 'NO_COLOR' ? '1' : '';
+      const styled = ['stdin', 'stderr', 'narrow'].includes(mode);
       const result = runSelfUpdate(env);
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, updateLine + 'Ballin updated.\n');
+      assert.equal(result.stdout, (styled ? '\x1b[1;34m==>\x1b[1;39m Updating Ballin\x1b[0m\n' : updateLine) + 'Ballin updated.\n');
       assert.equal(result.stderr, '');
     });
   }
