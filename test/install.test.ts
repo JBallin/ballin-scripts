@@ -614,6 +614,10 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
 
   for (const [label, current, env, message] of [
     ['clone failure', false, { FAKE_GIT_CLONE_STATUS: '17', FAKE_GIT_ERROR: 'fixture Git failure' }, 'Unable to prepare'],
+    ['authentication-required clone failure', false, {
+      FAKE_GIT_CLONE_STATUS: '128',
+      FAKE_GIT_ERROR: 'remote: Authentication required for this operation.\nfatal: Authentication failed for https://github.com/JBallin/ballin-scripts.git/',
+    }, 'Unable to prepare'],
     ['typed update failure', true, { FAKE_REPO_UPDATE_STATUS: '19', FAKE_REPO_UPDATE_ERROR: 'fixture update failure' }, 'Unable to update'],
     ['missing typed setup', true, {}, 'Unable to update'],
   ] as [string, boolean, NodeJS.ProcessEnv, string][]) {

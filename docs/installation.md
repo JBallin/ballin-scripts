@@ -514,6 +514,13 @@ contain a usable inspection helper. Do not run helper code from a checkout you
 do not trust. Preserve local configuration and any Git stashes before removing
 a checkout.
 
+If Git reports that authentication is required while cloning or fetching this
+public repository over HTTPS, GitHub may be applying a
+[temporary protection during unusual traffic](https://github.blog/changelog/2026-10-19-some-git-over-https-may-temporarily-require-authentication/).
+Wait and retry after the protection is lifted, or
+[configure Git authentication](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github)
+and retry. This is not a general account requirement for public repositories.
+
 `ballin doctor` treats maintenance-only Ballin as healthy and invokes no `gh`.
 Configured repositories are checked for authentication, expected private identity,
 supported layout, and coherent readability. This is readiness only: it does not
