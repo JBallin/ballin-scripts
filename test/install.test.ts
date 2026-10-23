@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
+const terminalGuidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
@@ -182,9 +183,8 @@ esac
         input: scenario === 'declined' ? 'n\n' : scenario === 'eof' ? '' : 'y\n',
       });
       assert.equal(result.status, scenario === 'failure' ? 7 : scenario === 'eof' ? 1 : 0, result.stdout + result.stderr);
-      const guidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
-      assert.equal(result.stdout.split(guidance).length - 1, scenario === 'standalone' ? 1 : 0);
-      if (scenario === 'standalone') assert.match(result.stdout, /\n\n😎 Setup complete! Open a new Terminal and run `ballin help`\.\n$/u);
+      assert.equal(result.stdout.split(terminalGuidance).length - 1, scenario === 'standalone' ? 1 : 0);
+      if (scenario === 'standalone') assert.isTrue(result.stdout.endsWith(`\n\n${terminalGuidance}\n`), result.stdout);
     });
   }
   it('separates checkout/update output from the compact typed setup summary', () => {
@@ -209,7 +209,7 @@ esac
       const result = runInstall();
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.isTrue(result.stdout.startsWith("==> Setting up Ballin\n"), result.stdout);
-      assert.include(result.stdout, 'Git output fixture.\nTyped setup fixture.\n\n😎 Setup complete! Open a new Terminal and run `ballin help`.\n');
+      assert.include(result.stdout, `Git output fixture.\nTyped setup fixture.\n\n${terminalGuidance}\n`);
       assert.equal(result.stdout.split('Setup complete!').length - 1, 1);
     });
   }

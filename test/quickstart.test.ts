@@ -5,6 +5,9 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
+const terminalGuidanceMessage = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
+const terminalGuidance = `\n${terminalGuidanceMessage}\n`;
+
 describe('beginner quickstart bootstrap', function() {
   this.timeout(15000);
   let root: string;
@@ -13,8 +16,9 @@ describe('beginner quickstart bootstrap', function() {
   let systemNode: string;
   let log: string;
   const source = path.resolve(__dirname, '../quickstart.sh');
+  const nodeInstallPrompt = 'Install Node.js and Ballin? [y/N]';
+  const cltInstallQuestion = 'Install Xcode Command Line Tools and Ballin?';
   const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
-  const terminalGuidance = '\n😎 Setup complete! Open a new Terminal and run `ballin help`.\n';
   const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
@@ -344,7 +348,7 @@ esac
         FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Install Node.js and Ballin? [y/N]');
+      assert.include(result.stdout, nodeInstallPrompt);
       assert.equal(readLog().includes('native-brew:install --formula node\n'), !declined);
       assert.notInclude(readLog(), 'node@24'); assert.notInclude(readLog(), 'nodejs.org');
       if (declined) { assert.notInclude(readLog(), 'native-brew:ruby'); assert.notInclude(readLog(), 'native-brew:info'); }
@@ -394,7 +398,7 @@ printf '0\\n'
         assert.equal(result.status, outcome === '130' || outcome === 'INT' ? 130 : 143, result.stdout + result.stderr);
         assert.lengthOf(commands.split(marker), 2, 'the intended fault must run exactly once');
         assert.equal(commands.slice(commands.indexOf(marker) + marker.length), '', 'no later tool invocation');
-        assert.equal(result.stdout.includes('Install Node.js and Ballin? [y/N]'), checkedOperation);
+        assert.equal(result.stdout.includes(nodeInstallPrompt), checkedOperation);
         if (stage !== 'select-prefix') assert.include(commands, 'sysctl:-in sysctl.proc_translated');
         if (stage !== 'sysctl' && stage !== 'select-prefix') assert.include(commands, 'native-brew:--prefix');
         if (checkedOperation || stage === '--cellar') assert.include(commands, 'native-brew:--cellar');
@@ -532,7 +536,7 @@ printf '0\\n'
           assert.notInclude(result.stderr, 'Update or select Node');
           assert.equal(fs.readFileSync(node, 'utf8'), '#!/bin/sh\nexit 97\n');
           assert.notInclude(result.stdout, 'Install Node.js and Ballin?');
-        } else assert.include(result.stdout, 'Install Node.js and Ballin? [y/N]');
+        } else assert.include(result.stdout, nodeInstallPrompt);
         for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
       });
     }
@@ -1188,7 +1192,7 @@ system_sudo=fixture_sudo
       else fs.symlinkSync(stub, path.join(tools, 'git'));
       const result = run('n\n', { FAKE_SYSTEM_GIT: stub, FAKE_GIT: 'missing' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Install Xcode Command Line Tools and Ballin?');
+      assert.include(result.stdout, cltInstallQuestion);
       for (const forbidden of ['git:--version', 'xcode-select:--install', 'auth status --active', 'install.sh:']) assert.notInclude(readLog(), forbidden);
       assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
@@ -1231,7 +1235,7 @@ system_sudo=fixture_sudo
         for (const forbidden of ['git:--version', 'gh:auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
       }
       if (scenario === 'ready') assert.notInclude(result.stdout, 'Missing prerequisites:');
-      else assert.include(result.stdout, 'Install Xcode Command Line Tools and Ballin?');
+      else assert.include(result.stdout, cltInstallQuestion);
       if (scenario === 'failure') assert.include(result.stderr, 'Finish any pending installation, then rerun Quickstart.');
       if (scenario === 'decline') assert.isFalse(fs.existsSync(path.join(home, '.local')));
     });
@@ -2354,13 +2358,13 @@ system_sudo=fixture_sudo
   it('combines missing tools and fresh Ballin consent before PATH setup', () => {
     const result = run('y\nhome\ny\nn\n', { FAKE_GIT: 'missing', FAKE_CLT_MODE: 'terminal', FAKE_RAW_INPUT: '1' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'Install Xcode Command Line Tools and Ballin? [y/N]');
+    assert.include(result.stdout, `${cltInstallQuestion} [y/N]`);
     assert.notInclude(result.stdout, 'Native installation prompt:');
     assert.notInclude(result.stdout, "let's ball");
     const choice = result.stdout.indexOf('Set up backups to GitHub? [Y/n]');
     const detection = result.stdout.indexOf('Checking required tools');
     const preview = result.stdout.indexOf('Ballin will create ');
-    const approval = result.stdout.indexOf('Install Xcode Command Line Tools and Ballin?');
+    const approval = result.stdout.indexOf(cltInstallQuestion);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
     assert.isBelow(preview, approval);
@@ -2373,7 +2377,7 @@ system_sudo=fixture_sudo
     it(`makes no installation changes after combined-consent ${JSON.stringify(answer)}`, () => {
       const result = run(answer, { FAKE_MISSING_NODE: '1', FAKE_RAW_INPUT: '1' });
       assert.equal(result.status, ['no\n', '\n'].includes(answer) ? 0 : 1, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Install Node.js and Ballin? [y/N]');
+      assert.include(result.stdout, nodeInstallPrompt);
       for (const command of ['sudo:', 'curl:', 'install.sh:', 'auth login']) assert.notInclude(readLog(), command);
       assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
       assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
@@ -2475,13 +2479,12 @@ system_sudo=fixture_sudo
       const result = run(input, overrides, home, '', backupInput);
       const succeeds = !['install-failed', 'backup-failed', 'open-failed'].includes(scenario);
       assert.equal(result.status, succeeds ? 0 : 1, result.stdout + result.stderr);
-      const guidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
       const expected = succeeds && scenario !== 'install-declined' && !scenario.startsWith('path-incomplete');
-      assert.equal(result.stdout.split(guidance).length - 1, expected ? 1 : 0, result.stdout);
+      assert.equal(result.stdout.split(terminalGuidanceMessage).length - 1, expected ? 1 : 0, result.stdout);
       assert.equal(result.stdout.split(incompletePathGuidance).length - 1, scenario.startsWith('path-incomplete') ? 1 : 0, result.stdout);
       if (scenario === 'backup-declined') {
         assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + '\n' + terminalGuidance);
-      } else if (expected) assert.match(result.stdout, /\n\n😎 Setup complete! Open a new Terminal and run `ballin help`\.\n$/u);
+      } else if (expected) assert.isTrue(result.stdout.endsWith(`\n${terminalGuidance}`), result.stdout);
       assert.notInclude(result.stdout, 'Tools are ready');
       assert.notInclude(result.stdout, 'Continue setup here');
       if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
@@ -2959,7 +2962,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           : 'create\n\nno\n' + (choice === 'final-no' ? 'no\n' : choice === 'final-eof' ? '' : 'yes\nno\nyes\n');
         const result = runSandbox(sandbox, ['quickstart'], prefix + core + answers + setup);
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.equal(result.stdout.split('😎 Setup complete! Open a new Terminal and run `ballin help`.').length - 1, 1);
+        assert.equal(result.stdout.split(terminalGuidanceMessage).length - 1, 1);
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.notInclude(result.stdout, 'Usage analytics:'); assert.notInclude(result.stdout, 'Backup setup complete.');
         assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());
@@ -3040,8 +3043,9 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'PATH line added');
       assert.notInclude(result.stdout, 'Tab completion enabled.');
-      assert.equal(result.stdout.split('😎 Setup complete! Open a new Terminal and run `ballin help`.').length - 1, 1);
-      assert.match(result.stdout, /Opened [^\n]+\n\n😎 Setup complete! Open a new Terminal and run `ballin help`\.\n$/u);
+      assert.equal(result.stdout.split(terminalGuidanceMessage).length - 1, 1);
+      assert.isTrue(result.stdout.endsWith(terminalGuidance), result.stdout);
+      assert.match(result.stdout.slice(0, -terminalGuidance.length), /Opened [^\n]+\n$/u);
       assert.include(result.stdout, 'Backup source details:');
       assert.include(result.stdout, 'create');
       assert.isTrue(fs.lstatSync(path.join(sandbox.bin, 'ballin')).isSymbolicLink());

@@ -38,7 +38,8 @@ before making installation changes. It then offers
 Refreshes preserve existing choices without repeating onboarding.
 
 Successful setup ends with a reminder to open a new Terminal and run `ballin help`.
-Quickstart retains manual PATH guidance when startup setup was not verified.
+If Quickstart cannot verify PATH setup for finding `ballin` in a new Terminal,
+it provides manual PATH setup instructions.
 
 The core installation completes before Ballin offers optional backup.
 Declining backup setup makes no GitHub CLI, authentication, or remote calls. Run
