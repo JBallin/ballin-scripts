@@ -7,7 +7,7 @@ phase() {
 command_reference() {
   if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
     printf '\033[1m%s\033[0m' "$1"
-  else printf '`%s`' "$1"; fi
+  else printf "\`%s\`" "$1"; fi
 }
 
 # Compare the reviewed command entry again before using Quickstart consent.

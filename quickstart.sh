@@ -11,7 +11,7 @@ phase() {
 command_reference() {
   if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
     printf '\033[1m%s\033[0m' "$1"
-  else printf '`%s`' "$1"; fi
+  else printf "\`%s\`" "$1"; fi
 }
 
 # Compare the reviewed command entry again before using Quickstart consent.
@@ -853,7 +853,7 @@ main() {
   else
     printf 'Backup setup skipped. Run '
     command_reference 'ballin backup setup'
-    printf ' when you’re ready.\n'
+    printf " when you’re ready.\n"
   fi
   # Refuse managed-slot conflicts before discovery can execute them.
   for managed_tool in node npm git gh; do
