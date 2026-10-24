@@ -262,7 +262,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
 
   it('preserves overview output and analytics eligibility with extra help arguments', () => {
     const expectedOutput = runBallin(['help']).stdout;
-    for (const args of [['help', 'extra'], ['--help', 'extra']]) {
+    for (const args of [['help', 'extra'], ['--help', 'extra'], ['help', 'backup', 'extra'], ['help', 'backup', 'read']]) {
       writeConfig({ analytics: { enabled: 'true' } });
       const installIdPath = path.join(tempDir, '.analytics', 'install-id');
       fs.rmSync(path.dirname(installIdPath), { recursive: true, force: true });

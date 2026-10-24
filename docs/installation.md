@@ -466,7 +466,8 @@ Use `ballin backup list` to find supported snapshots saved in the configured
 backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
 to inspect the backup in your browser, including retired snapshots and unexpected
 entries. These commands require remote access and work with read-only
-permissions. For offline help, run `ballin backup --help`.
+permissions. For offline syntax and options, run `ballin backup read --help`
+(or replace `read` with the backup subcommand you need).
 
 Bundle snapshots use `.bundle.json` filenames. List their files, then read one
 using its original stored path:

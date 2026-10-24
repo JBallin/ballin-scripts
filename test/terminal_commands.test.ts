@@ -45,6 +45,10 @@ describe('command references at prose output boundaries', () => {
       assert.equal(backup.status, 0, backup.stderr);
       assert.include(backup.stdout, '`setup` creates or reconnects');
       assert.include(backup.stdout, `review them with ${command('ballin setup')}.`);
+      assert.include(backup.stdout, `Run ${command('ballin backup <subcommand> --help')} for subcommand-specific help.`);
+      const backupAlias = cli(['help', 'backup']);
+      assert.equal(backupAlias.status, 0, backupAlias.stderr);
+      assert.equal(backupAlias.stdout, backup.stdout);
       const shorthand = cli(['setup', '--help']);
       assert.equal(shorthand.status, 0, shorthand.stderr);
       assert.include(shorthand.stdout, 'Use `ballin config get/set/reset` for direct configuration.');

@@ -44,6 +44,21 @@ raw bundle without `--list` or `--file` and pass the selected entry's JSON-decod
 `path` value to `--file` as one shell argument. See
 [bundle inspection](backup-design.md#bundle-inspection) for details.
 
+## Offline help
+
+`ballin <command> --help` and `ballin help <command>` print the same command help.
+For supported backup subcommands (`setup`, `open`, `list`, `read`, and
+`disconnect`), use exactly `ballin backup <subcommand> --help`, without selectors,
+repository names, or other options. These forms exit `0`, write help to stdout
+and nothing to stderr, and do not access configuration, analytics identity,
+authentication, network services, prompts, or local backup state.
+
+The existing `ballin config help` alias prints config help; `ballin backup help`
+prints the general Ballin overview. Both are also local and side-effect-free.
+Other placements and extra arguments retain ordinary command handling; they
+are not requests for offline help. In particular, a `--help` supplied as the
+path after `read <snapshot> --file` remains a literal saved-file path.
+
 ## Answers and interruption
 
 Redirected stdin can supply answers. Ballin yes/no prompts accept completed
