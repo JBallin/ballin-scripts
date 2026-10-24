@@ -1106,7 +1106,7 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "⚙️ Created 'ballin.config.json' file in root using default settings");
+    assert.include(result.stdout.split("\n"), "⚙️  Created 'ballin.config.json' file in root using default settings");
     assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#startup-files-and-manual-activation`));
     assert.include(result.stdout, 'Backup details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
@@ -1133,7 +1133,7 @@ require('https').request = () => {
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, `${analyticsPrompt}\nZsh settings directory [${path.join(testDir, "home")}; Enter to use, another absolute directory, or skip]: `);
+      assert.include(result.stdout, `${analyticsPrompt}\nZsh settings directory [Enter for ${path.join(testDir, "home")}, another absolute directory, or skip]: `);
       if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);

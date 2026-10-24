@@ -227,8 +227,17 @@ case "$name" in
     [[ "$*" == --version ]] || exit 97
     printf '11.0.0\\n' ;;
   gh)
+    if [[ "\${FAKE_RECORD_GH_NOTIFIER:-0}" == 1 ]]; then
+      printf 'gh-notifier:%s:%s\\n' "$*" "\${GH_NO_UPDATE_NOTIFIER-unset}" >> "$FAKE_COMMAND_LOG"
+    fi
+    # Synthetic notice mirrors gh 2.102.0 newline writers; no live authentication.
+    fake_gh_notice() {
+      if [[ "\${FAKE_GH_UPDATE_NOTICE:-0}" == 1 && -z "\${GH_NO_UPDATE_NOTIFIER:-}" ]]; then
+        printf '\\n\\nA new release of gh is available: fixture-old → fixture-new\\nhttps://github.com/cli/cli/releases/tag/fixture-new\\n\\n' >&2
+      fi
+    }
     case "$*" in
-      --version) printf 'gh version fixture\\n' ;;
+      --version) printf 'gh version fixture\\n'; fake_gh_notice ;;
       'auth status --help') printf '%s\\n' '--active' ;;
       'auth status --active --hostname github.com')
         if [[ -n "\${FAKE_TOKEN_SOURCE:-}" ]]; then
@@ -244,8 +253,18 @@ case "$name" in
           printf 'The %s environment variable controls authentication.\\nClear it from the environment before logging in.\\n' "$FAKE_TOKEN_SOURCE" >&2
           exit 1
         fi
+        if [[ -n "\${FAKE_GH_LOGIN_FAILURE:-}" ]]; then
+          printf 'Native login failure output\\n'
+          printf 'Native login failure diagnostic\\n' >&2
+          case "$FAKE_GH_LOGIN_FAILURE" in
+            INT|TERM) kill -"$FAKE_GH_LOGIN_FAILURE" $$ ;;
+            *) exit "$FAKE_GH_LOGIN_FAILURE" ;;
+          esac
+        fi
         printf 'Native login prompt: '; IFS= read -r answer
         [[ "$answer" == device-code ]] || exit 1
+        printf '✓ Logged in as fixture-user\\n' >&2
+        fake_gh_notice
         touch "$FAKE_ROOT/login-complete" ;;
       *) exit 97 ;;
     esac ;;
@@ -2185,6 +2204,51 @@ system_sudo=fixture_sudo
     assert.include(readLog(), 'gh:auth login --hostname github.com --git-protocol https --web');
     assert.isTrue(fs.existsSync(path.join(root, 'login-complete')));
   });
+  for (const inherited of [undefined, '', 'caller-choice']) {
+    it(`suppresses only login update notices and preserves the caller environment: ${JSON.stringify(inherited)}`, () => {
+      const result = run('y\ndevice-code\ny\n', {
+        FAKE_AUTH: 'missing', FAKE_GH_UPDATE_NOTICE: '1', FAKE_RECORD_GH_NOTIFIER: '1',
+        ...(inherited === undefined ? {} : { GH_NO_UPDATE_NOTIFIER: inherited }),
+      }, home, 'exec 2>&1', 'y\n', 'gh --version');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, '✓ Logged in as fixture-user\n\n==> Installing Ballin\n');
+      const events = readLog().split('\n').filter(line => line.startsWith('gh-notifier:'));
+      assert.deepEqual(events.filter(line => line.startsWith('gh-notifier:auth login ')), [
+        'gh-notifier:auth login --hostname github.com --git-protocol https --web:1',
+      ]);
+      const otherCalls = events.filter(line => !line.startsWith('gh-notifier:auth login '));
+      assert.include(otherCalls, `gh-notifier:auth status --active --hostname github.com:${inherited ?? 'unset'}`);
+      assert.isAtLeast(otherCalls.filter(line => line.startsWith('gh-notifier:--version:')).length, 2);
+      assert.isTrue(otherCalls.every(line => line.endsWith(`:${inherited ?? 'unset'}`)), events.join('\n'));
+      assert.equal(result.stdout.includes('A new release of gh is available:'), !inherited,
+        'The later gh call keeps its caller-selected notifier behavior');
+      assert.equal(result.stderr, '');
+    });
+  }
+  it('leaves notifier settings untouched when existing authentication skips login', () => {
+    const result = run('y\ny\n', { FAKE_RECORD_GH_NOTIFIER: '1' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const events = readLog().split('\n').filter(line => line.startsWith('gh-notifier:'));
+    assert.isNotEmpty(events);
+    assert.isTrue(events.every(line => line.endsWith(':unset')));
+    assert.notInclude(readLog(), 'gh:auth login');
+  });
+  for (const failure of ['7', '130', '143', 'INT', 'TERM']) {
+    it(`preserves native login output and failure ${failure} without installation`, () => {
+      const result = run('y\n', {
+        FAKE_AUTH: 'missing', FAKE_GH_LOGIN_FAILURE: failure, FAKE_RECORD_GH_NOTIFIER: '1',
+      });
+      const expected = failure === 'INT' ? 130 : failure === 'TERM' ? 143 : Number(failure);
+      assert.equal(result.status, expected, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Native login failure output\n');
+      assert.include(result.stderr, 'Native login failure diagnostic\n');
+      assert.include(readLog(), 'gh-notifier:auth login --hostname github.com --git-protocol https --web:1');
+      assert.notInclude(readLog(), '/main/install.sh');
+      assert.notInclude(readLog(), 'install.sh:');
+      assert.notInclude(readLog(), 'ballin:');
+      assert.isFalse(fs.existsSync(path.join(root, 'login-complete')));
+    });
+  }
   for (const tokenSource of ['GH_TOKEN', 'GITHUB_TOKEN']) {
     it(`retains ${tokenSource} and exposes native CLI refusal before installing Ballin`, () => {
       const result = run('y\n', { FAKE_TOKEN_SOURCE: tokenSource, [tokenSource]: 'fixture-invalid-token' });
@@ -2813,12 +2877,13 @@ system_sudo=fixture_sudo
     const profile = path.join(home, '.zshrc');
     const declined = runPathSetup('\nn\n', { ZDOTDIR: '' });
     assert.equal(declined.status, 0, declined.stdout + declined.stderr);
-    assert.include(declined.stdout, `Zsh settings directory [${home}; Enter to use, another absolute directory, or skip]:`);
+    assert.include(declined.stdout, `Zsh settings directory [Enter for ${home}, another absolute directory, or skip]:`);
     assert.include(declined.stdout, `Add Ballin setup to ${profile}`);
     assert.isFalse(fs.existsSync(profile));
     const directory = path.join(home, 'actual-zsh'); fs.mkdirSync(directory);
     const selected = runPathSetup(directory + '\ny\n', { ZDOTDIR: '' });
     assert.equal(selected.status, 0, selected.stdout + selected.stderr);
+    assert.include(selected.stdout, `Add Ballin setup to ${directory}/.zshrc`);
     assert.isTrue(fs.existsSync(path.join(directory, '.zshrc')));
     assert.isFalse(fs.existsSync(profile));
   });
@@ -2833,7 +2898,7 @@ system_sudo=fixture_sudo
   it('accepts the suggested directory without treating selection as permission and reuses only that choice', () => {
     const result = runPathSetup('\nn\n', { ZDOTDIR: 'relative' });
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `Zsh settings directory [${home};`);
+    assert.include(result.stdout, `Zsh settings directory [Enter for ${home}, another absolute directory, or skip]: `);
     assert.include(result.stdout, `Add Ballin setup to ${home}/.zshrc`);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
   });
@@ -2996,7 +3061,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.isUndefined(JSON.parse(previousConfig).backup.repository);
         const result = runSandbox(sandbox, ['quickstart'], `yes\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.lengthOf(result.stdout.match(/Reconnect to an existing backup or create a new one\?/gu) ?? [], 1);
+        assert.lengthOf(result.stdout.match(/Create a new backup or reconnect to an existing one\?/gu) ?? [], 1);
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]', result.stdout + result.stderr);
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));

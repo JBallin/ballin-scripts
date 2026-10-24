@@ -127,7 +127,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
   const updateOutput = updateResult.stdout.trimEnd();
   if (updateOutput) {
     writeStdoutLine(`\n🙌 ${updateOutput}`);
-    writeStdoutLine(`\n${docsUrl}#local-effects`);
+    writeStdoutLine(`\n${docsUrl}#what-installation-changes`);
   }
 
   return true;
@@ -147,7 +147,7 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
     } catch {
       return false;
     }
-    writeStdoutLine("⚙️ Created 'ballin.config.json' file in root using default settings");
+    writeStdoutLine("⚙️  Created 'ballin.config.json' file in root using default settings");
     return true;
   }
 

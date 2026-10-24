@@ -22,9 +22,9 @@ Analytics, [shell completion](#shell-completion), and
 [private backups](#optional-backup-setup-and-reconnect) have separate choices.
 The direct installer does not run updates or capture a backup. Quickstart may
 offer to run the first backup after successful destination setup. See
-[local effects](#local-effects) for the affected paths and refresh behavior,
-and [uninstall](#uninstall) for removal. Review the [installer source](../install.sh)
-before running it.
+[what installation changes](#what-installation-changes) for the affected paths
+and refresh behavior, and [uninstall](#uninstall) for removal. Review the
+[installer source](../install.sh) before running it.
 
 ## Install
 
@@ -151,7 +151,7 @@ reports an existing activation with a trailing carriage return, replace only
 that line with the activation for your shell in
 [manual activation](#startup-files-and-manual-activation), using LF line endings.
 
-## Local effects
+## What installation changes
 
 ### Quickstart helper
 
