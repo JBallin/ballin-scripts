@@ -217,7 +217,9 @@ duplicate edits, but are not proof the line executes. Unsafe/ambiguous files and
 write failures retain specific recovery guidance. Declines leave files unchanged.
 
 When backups are selected, Quickstart reuses active GitHub CLI authentication or
-starts gh's native browser sign-in. “Authenticate Git” controls Git credentials;
+starts gh's native browser sign-in. Quickstart suppresses gh update notices only
+for that login command, preserving its prompts, output and errors.
+“Authenticate Git” controls Git credentials;
 No still permits gh sign-in. Device codes can be entered in a browser on another
 computer. Exported tokens can block login; follow gh's instructions. Quickstart
 does not change exported credentials or switch accounts.

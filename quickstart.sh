@@ -1045,7 +1045,7 @@ main() {
       installer_separator=true
       phase 'Signing in to GitHub'
       printf '$ gh auth login --hostname github.com --git-protocol https --web\n'
-      "$gh_tool" auth login --hostname github.com --git-protocol https --web
+      GH_NO_UPDATE_NOTIFIER=1 "$gh_tool" auth login --hostname github.com --git-protocol https --web
     fi
   fi
   repo="$HOME/.ballin-scripts"
