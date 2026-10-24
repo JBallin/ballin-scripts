@@ -31,16 +31,26 @@ The redirect creates or truncates `saved-zshrc.sh` before Ballin runs; use its
 contents only if the command succeeds. A successful explicit snapshot read adds
 no framing or newline. A missing selector or unknown snapshot can instead print
 saved options to stdout while exiting `1`. Prompts and update-stage output also
-use stdout, and native tools control their own output. Do not treat every Ballin
-stdout stream as machine-only data. See [working with settings](optional-capabilities.md#working-with-settings)
+use stdout. Ballin adds no emphasis to piped or captured output, config values,
+or snapshot contents; native tools control their own output. Do not treat every
+Ballin stdout stream as machine-only data. See [working with settings](optional-capabilities.md#working-with-settings)
 and [using saved state](new-mac.md) for preference and snapshot guidance.
+
+For bundle snapshots, `--file <path>` writes the selected member's original bytes,
+including binary content and line endings, without framing or newline changes.
+`--list` displays control and directional characters as visible escapes;
+`--file` does not decode those escapes. For escaped or ambiguous names, read the
+raw bundle without `--list` or `--file` and pass the selected entry's JSON-decoded
+`path` value to `--file` as one shell argument. See
+[bundle inspection](backup-design.md#bundle-inspection) for details.
 
 ## Answers and interruption
 
 Redirected stdin can supply answers. Ballin yes/no prompts accept completed
-`y`/`yes` and `n`/`no` answers, ignoring case and surrounding whitespace. A blank
-line selects the shown default; EOF, including text without a terminating
-newline, leaves the pending choice unconfirmed. Consequences depend on the flow:
+`y`/`yes` and `n`/`no` answers, ignoring case and surrounding whitespace. Invalid
+completed answers repeat the question. A blank line selects the shown default;
+EOF, including text without a terminating newline, leaves the pending choice
+unconfirmed. Consequences depend on the flow:
 
 - At fresh-install consent, explicit No or a blank line using the No default
   exits `0` without installing; EOF exits `1`. Required prerequisite consent also

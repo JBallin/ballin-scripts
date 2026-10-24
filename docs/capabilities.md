@@ -7,11 +7,10 @@ when enabled but unavailable.
 
 ## `ballin update`
 
-`ballin update` runs these integrations in order. Ordinary child-command
-failures do not stop later integrations. The command exits nonzero after all
-configured stages finish, using the last nonzero stage status when several
-stages fail. Ctrl-C that terminates Ballin prevents later stages from running;
-see [interruption behavior](optional-capabilities.md#interrupting-updates).
+`ballin update` runs these integrations in order. Failure in one integration
+does not stop later integrations. Ctrl-C that terminates Ballin prevents later
+stages from running; see
+[interruption behavior](optional-capabilities.md#interrupting-updates).
 
 Before starting, Ballin loads and validates the update settings once. Missing
 known settings use bundled defaults in memory and produce one warning; the
@@ -95,11 +94,9 @@ On a successful run, `ballin backup` prints one line per collected snapshot.
 
 On a terminal, changed entries use bold emphasis; unchanged entries keep the
 normal foreground. The symbols above identify each state without emphasis.
-Piped or captured output remains plain. Set `NO_COLOR=1` to disable Ballin's
-bold and underline emphasis; `TERM=dumb` also disables it. This applies to
-Ballin's help and update stage headings too, while child tools control their
-own output. Ballin adds no styling to config values or `ballin backup read`
-contents.
+Set `NO_COLOR=1` to disable Ballin's bold and underline emphasis; `TERM=dumb`
+also disables it. This applies to Ballin's help and update stage headings too,
+while child tools control their own output.
 
 Empty snapshots use the same markers.
 

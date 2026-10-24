@@ -16,7 +16,7 @@ After you confirm a fresh installation, Ballin clones its checkout into
 `~/.ballin-scripts/`, creates local settings there, and links the `ballin`
 command into Homebrew's bin directory when available, otherwise `~/.local/bin`.
 An existing non-directory command target may be replaced; directories are not
-replaced. Declining makes no installation changes and exits successfully.
+replaced. Declining makes no installation changes.
 
 Analytics, [shell completion](#shell-completion), and
 [private backups](#optional-backup-setup-and-reconnect) have separate choices.
@@ -223,9 +223,9 @@ computer. Exported tokens can block login; follow gh's instructions. Quickstart
 does not change exported credentials or switch accounts.
 
 After successful destination setup, the optional run-now question runs a backup
-and opens its GitHub destination only after capture succeeds. No or EOF silently
-skips both. A failed capture/open remains an error. Cancelled/unconfigured setup
-never reopens setup or offers run-now.
+and opens its GitHub destination only after capture succeeds. Declining or closing
+input skips both. A failed capture/open remains an error. Cancelled/unconfigured
+setup never reopens setup or offers run-now.
 
 ### Manual PATH setup
 
@@ -248,13 +248,11 @@ only the Ballin PATH addition to undo it; prerequisites and other entries remain
 
 ### Answers, input ending and interruption
 
-Ballin yes/no questions accept y/yes and n/no, ignoring case and surrounding
-whitespace. Invalid completed answers repeat the question; Enter uses its shown
-default. Paths, names, menus and native tool prompts keep their own rules.
-Unanswered input grants no permission and leaves the unanswered preference
-unchanged. Closing input during optional setup ends further Ballin questions;
-already authorized core work may still finish. Required prerequisite and
-installation prompts need a completed answer to continue; closing input there
+For yes/no questions, press Enter to use the shown default. Cancelling or closing
+input leaves the pending preference unchanged. Closing input during optional
+setup ends further Ballin questions, but already approved core work may still
+finish. Required prerequisite and
+installation questions must be answered to continue; closing input there
 stops setup with an error.
 
 If setup fails or is interrupted, earlier approved changes are not rolled back.
@@ -478,13 +476,10 @@ ballin backup read codex_skills.bundle.json --list
 ballin backup read codex_skills.bundle.json --file 'example/SKILL.md'
 ```
 
-`--list` displays control and directional characters as visible escapes;
-`--file` does not decode those escapes. For escaped or ambiguous names, read the
-raw bundle without `--list` or `--file` and pass the selected entry’s JSON-decoded
-`path` value to `--file` as one shell argument. See
-[bundle inspection](backup-design.md#bundle-inspection) for details.
+For escaped or ambiguous filenames, see
+[bundle inspection](backup-design.md#bundle-inspection) for how to select the
+original saved path.
 
-`--file` prints the original bytes, including binary content and line endings.
 These commands inspect saved content without restoring files or executing them.
 
 For local history inspection, clone your backup repository with Git:
