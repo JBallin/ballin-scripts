@@ -1,3 +1,4 @@
+const { terminalCommand } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -318,7 +319,7 @@ function runUpdateCommand(): void {
     } else {
       reportDiagnostic();
       reportDiagnostic('Unable to update Node.js LTS: unable to load nvm.');
-      reportDiagnostic('Set `NVM_DIR` to your nvm installation or disable this update with: `ballin config set update.nvm false`');
+      reportDiagnostic(`Set \`NVM_DIR\` to your nvm installation or disable this update with: ${terminalCommand('ballin config set update.nvm false', process.stderr)}`);
       recordFailure(1);
     }
   }

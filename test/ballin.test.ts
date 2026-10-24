@@ -617,7 +617,7 @@ require('https').request = () => {
         const ordinary = runBallin(args);
         const interactive = runBallin(args, interactiveEnv());
         assert.equal(interactive.status, healthy ? 0 : 1);
-        assert.equal(interactive.stdout, ordinary.stdout);
+        assert.equal(interactive.stdout, ordinary.stdout.replaceAll('`ballin backup setup`', '\x1b[1mballin backup setup\x1b[0m'));
         assert.equal(interactive.stderr, 'Checking readiness...\r\x1b[2K');
       });
     }

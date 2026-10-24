@@ -370,13 +370,24 @@ bold and underline. This is deliberately broader than the color-only
 [NO_COLOR convention](https://no-color.org/). `FORCE_COLOR` does not override
 this policy. Child tools retain their own presentation behavior.
 
-Never add styling to config output or backed-up file contents, even on a TTY.
-Doctor reports, prompts, warnings, and errors stay plain for now. Avoid adding
-styling to these surfaces without a concrete readability benefit; the broader
-CLI wording and spacing audit is separate from this emphasis contract.
+Never add styling to config values, configuration read/write results, or backed-up
+file contents, even on a TTY. Human-facing config recovery diagnostics follow the
+prose convention below.
+Doctor reports, prompts, warnings, and errors keep plain labels and explanations;
+only complete command references use the convention below. The broader CLI
+wording and spacing audit is separate from this emphasis contract.
 
-In explanatory terminal prose, use literal backticks around command references
-and configuration keys so readers can distinguish them from the sentence.
-Command shorthand may also use backticks; usage lines, command tables, standalone
-command examples, and structured configuration output retain their own formatting.
-Backticks do not add ANSI styling or change the existing emphasis policy.
+In explanatory terminal prose, including help and recovery guidance, use sparse
+bold without backticks for complete command invocations on supported TTYs. For
+example, emphasize only the command in “Run **ballin backup setup** when you’re
+ready.” In plain output, retain literal backticks: “Run `ballin backup setup`
+when you’re ready.” Apply the TTY policy to the stream receiving that message.
+
+Configuration keys, values, flags, paths, and command shorthand retain backticks
+without newly added emphasis. For example, `update.backup`, `true`, `--verbose`,
+and `ballin config get/set/reset` are identifiers or shorthand rather than
+complete invocations. Existing help terms with other roles keep their formatting.
+Usage lines, command tables, standalone command examples, structured configuration
+output, actual Markdown, and native child-tool output retain their own formatting.
+Format explicitly identified commands in human-facing prose; never infer styling
+from arbitrary backticks in data or captured output.

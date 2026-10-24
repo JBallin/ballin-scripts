@@ -1,4 +1,5 @@
 const { configAction } = require('./index.ts');
+const { terminalCommandReferences } = require('../commands/terminalStyle.ts');
 const { ConfigError } = require('./store.ts');
 const { Console } = require('node:console');
 const { commandHelpOptionName } = require('../commands/top_level_commands.ts');
@@ -29,7 +30,8 @@ const runConfigCli = (args: string[] = process.argv.slice(2)): void => {
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     const failure = error as ConfigFailure;
-    process.stderr.write(`ballin config: ${failure.message}\n${failure.exitCode === 2 ? configHelp : ''}`);
+    const message = terminalCommandReferences(failure.message, ['ballin config get', 'ballin config reset'], process.stderr);
+    process.stderr.write(`ballin config: ${message}\n${failure.exitCode === 2 ? configHelp : ''}`);
     process.exitCode = failure.exitCode;
   }
 };

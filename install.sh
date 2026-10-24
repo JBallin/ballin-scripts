@@ -4,6 +4,11 @@ phase() {
     printf '\033[1;34m==>\033[1;39m %s\033[0m\n' "$1"
   else printf '==> %s\n' "$1"; fi
 }
+command_reference() {
+  if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[1m%s\033[0m' "$1"
+  else printf "\`%s\`" "$1"; fi
+}
 
 # Compare the reviewed command entry again before using Quickstart consent.
 command_entry_snapshot() {
@@ -129,7 +134,7 @@ write_install_cancelled() {
 }
 # Report only command entries that this installation would actually replace.
 # Directories and unsafe link targets never gain replacement permission.
-# The JavaScript diagnostics contain literal command hints.
+# The JavaScript diagnostics receive their stderr command-reference presentation.
 # shellcheck disable=SC2016
 if command_preflight=$(node -e '
   const fs = require("fs"), path = require("path"), cp = require("child_process");
@@ -139,7 +144,7 @@ if command_preflight=$(node -e '
   if (brew.signal === "SIGTERM" || brew.status === 143) process.exit(143);
   if (brew.status === 0) {
     const prefix = brew.stdout.trimEnd();
-    if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) { console.error("Homebrew returned an invalid installation prefix. Inspect `brew --prefix`, then rerun installation."); process.exit(1); }
+    if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) { console.error("Homebrew returned an invalid installation prefix. Inspect " + process.argv[2] + ", then rerun installation."); process.exit(1); }
     directory = path.join(prefix, "bin");
   }
   const source = path.join(process.argv[1], "bin", "ballin");
@@ -156,7 +161,7 @@ if command_preflight=$(node -e '
     if (error.code !== "ENOENT") { console.error(error.message); process.exit(1); }
   }
   process.stdout.write(JSON.stringify({directory, target, snapshot}));
-' "$repo_dir"); then :
+' "$repo_dir" "$(command_reference 'brew --prefix' 2)"); then :
 else
   exit $?
 fi
@@ -254,5 +259,7 @@ fi
 
 # Quickstart owns the final guidance after its optional backup/browser work.
 if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then
-  printf "\n😎 Setup complete! Open a new Terminal and run \`ballin help\`.\n"
+  printf '\n😎 Setup complete! Open a new Terminal and run '
+  command_reference 'ballin help'
+  printf '.\n'
 fi

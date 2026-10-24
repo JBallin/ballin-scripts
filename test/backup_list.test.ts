@@ -189,7 +189,7 @@ describe('saved backup discovery', function() {
     const listed = run(['read', 'codex_rules.bundle.json', '--list'], {}, tty);
     assert.equal(listed.status, 0, listed.stderr);
     assert.equal(listed.stdout, 'rule.md\n');
-    assert.equal(listed.stderr, '\nRead saved files with `ballin backup read <bundle> --file <path>`.\n');
+    assert.equal(listed.stderr, '\nRead saved files with \x1b[1mballin backup read <bundle> --file <path>\x1b[0m.\n');
     const member = run(['read', 'codex_rules.bundle.json', '--file', 'rule.md'], {}, tty);
     assert.equal(member.status, 0, member.stderr); assert.equal(member.stdout, 'synthetic\r\nlast'); assert.equal(member.stderr, '');
     preserved();
@@ -445,11 +445,13 @@ describe('saved backup discovery', function() {
     assert.equal(result.stdout, 'No current snapshots are saved in this backup.\n');
     assert.include(result.stderr, 'no supported snapshot found'); assert.notInclude(result.stderr, 'backup list'); preserved();
   });
-  it('keeps list plain on a TTY and preserves exact explicit-read bytes without execution', () => {
+  it('keeps list rows plain while emphasizing prose commands and preserves exact explicit-read bytes without execution', () => {
     const bytes = '\x1b[31m$(touch forbidden)\x1b[0m\r\n\n'; save(fixtureState({ 'zshrc.sh': bytes }));
     const preload = 'Object.defineProperty(process.stdout, "isTTY", { value: true });';
     for (const env of [{ TERM: 'xterm', FORCE_COLOR: '1' }, { TERM: 'xterm', NO_COLOR: '1' }]) {
-      const listed = run(['list'], env, preload); assert.equal(listed.status, 0); assert.notInclude(listed.stdout, '\x1b');
+      const listed = run(['list'], env, preload); assert.equal(listed.status, 0);
+      assert.equal(listed.stdout, 'Saved snapshots:\n  zshrc.sh\nRead a snapshot with '
+        + (env.NO_COLOR ? '`ballin backup read <snapshot>`' : '\x1b[1mballin backup read <snapshot>\x1b[0m') + '.\n');
       const read = run(['read', 'zshrc.sh'], env, preload); assert.equal(read.status, 0); assert.equal(read.stdout, bytes);
     }
     assert.isFalse(fs.existsSync(path.join(checkout, 'forbidden'))); preserved();

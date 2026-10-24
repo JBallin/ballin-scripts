@@ -1,3 +1,4 @@
+const { terminalCommand } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
@@ -29,7 +30,7 @@ const runSetupCommand = (): void => {
     const config = readSetupConfigContext(configPath);
     const destination = configuredBackupDestination(config);
     if (destination.kind === 'legacy-gist') {
-      writeStderrLine('Gist backup support has been retired. Run `ballin backup disconnect`, then `ballin backup setup` for a fresh repository backup.');
+      writeStderrLine(`Gist backup support has been retired. Run ${terminalCommand('ballin backup disconnect', process.stderr)}, then ${terminalCommand('ballin backup setup', process.stderr)} for a fresh repository backup.`);
       process.exitCode = 1;
       return;
     }
@@ -52,7 +53,7 @@ const runSetupCommand = (): void => {
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
       writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previous));
     } else {
-      writeStdoutLine('No backup is configured. Run `ballin backup setup` to choose a destination.');
+      writeStdoutLine(`No backup is configured. Run ${terminalCommand('ballin backup setup')} to choose a destination.`);
     }
 
     if (destination.kind !== 'unconfigured') {
@@ -73,7 +74,7 @@ const runSetupCommand = (): void => {
     writeStderrLine(`ballin setup: ${(error as Error).message}`);
     writeStderrLine(reviewing
       ? 'Unable to complete preference review; unconfirmed choices are unchanged.'
-      : 'Repair the local configuration before retrying. Use `ballin config get` to inspect it or `ballin config reset` to restore defaults.');
+      : `Repair the local configuration before retrying. Use ${terminalCommand('ballin config get', process.stderr)} to inspect it or ${terminalCommand('ballin config reset', process.stderr)} to restore defaults.`);
     process.exitCode = 1;
   }
 };

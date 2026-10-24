@@ -1,3 +1,5 @@
+const { terminalCommandReferences } = require('./terminalStyle.ts');
+
 type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
 type DoctorCheck = {
   id: string;
@@ -34,7 +36,10 @@ const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): str
   if (check.status === 'warn' || check.status === 'fail') {
     lines.push(`${nextPrefix}${nextSteps[check.id] ?? 'Review the check output above.'}`);
   }
-  return lines.join('\n');
+  return terminalCommandReferences(lines.join('\n'), [
+    'ballin config reset', 'ballin doctor', 'ballin backup setup', 'ballin backup disconnect',
+    'gh auth login --hostname github.com', 'ballin backup open',
+  ]);
 };
 
 const formatVerboseDoctorReport = (report: DoctorReport): string => {
