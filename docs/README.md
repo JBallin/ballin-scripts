@@ -14,7 +14,8 @@ For the project overview, see the [main README](../README.md).
 | [Backup sources and sensitivity](backup-sources.md) | Source-by-source audit of current snapshots and their plausible sensitive content. |
 | [Optional capabilities](optional-capabilities.md) | Local settings, Node.js setup, optional tools, analytics choices, and configurable `ballin update` settings. |
 | [Analytics](analytics.md) | The local analytics choice, command and behavioral events, payloads, controls, and retention. |
-| [Supported capabilities](capabilities.md) | Current update integrations, backup snapshots, and [shell-script behavior](capabilities.md#using-ballin-in-shell-scripts). |
+| [Supported capabilities](capabilities.md) | Current `ballin update` integrations and `ballin backup` snapshots. |
+| [Using Ballin in shell scripts](scripting.md) | Command-specific exit statuses, captured output, input, and interruption behavior. |
 
 ## Maintainer guides
 
