@@ -2877,12 +2877,13 @@ system_sudo=fixture_sudo
     const profile = path.join(home, '.zshrc');
     const declined = runPathSetup('\nn\n', { ZDOTDIR: '' });
     assert.equal(declined.status, 0, declined.stdout + declined.stderr);
-    assert.include(declined.stdout, `Zsh settings directory (for .zshrc) [${home}; Enter to use, another absolute directory, or skip]:`);
+    assert.include(declined.stdout, `Zsh settings directory [Enter for ${home}, another absolute directory, or skip]:`);
     assert.include(declined.stdout, `Add Ballin setup to ${profile}`);
     assert.isFalse(fs.existsSync(profile));
     const directory = path.join(home, 'actual-zsh'); fs.mkdirSync(directory);
     const selected = runPathSetup(directory + '\ny\n', { ZDOTDIR: '' });
     assert.equal(selected.status, 0, selected.stdout + selected.stderr);
+    assert.include(selected.stdout, `Add Ballin setup to ${directory}/.zshrc`);
     assert.isTrue(fs.existsSync(path.join(directory, '.zshrc')));
     assert.isFalse(fs.existsSync(profile));
   });
@@ -2897,7 +2898,7 @@ system_sudo=fixture_sudo
   it('accepts the suggested directory without treating selection as permission and reuses only that choice', () => {
     const result = runPathSetup('\nn\n', { ZDOTDIR: 'relative' });
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `Zsh settings directory (for .zshrc) [${home};`);
+    assert.include(result.stdout, `Zsh settings directory [Enter for ${home}, another absolute directory, or skip]: `);
     assert.include(result.stdout, `Add Ballin setup to ${home}/.zshrc`);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
   });

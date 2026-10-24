@@ -714,7 +714,7 @@ configure_path() {
         default_directory="$ZDOTDIR"
       fi
       installer_separator=true
-      printf 'Zsh settings directory (for .zshrc) [%s; Enter to use, another absolute directory, or skip]: ' "$default_directory"
+      printf 'Zsh settings directory [Enter for %s, another absolute directory, or skip]: ' "$default_directory"
       if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
       choice=$prompt_answer
       [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }

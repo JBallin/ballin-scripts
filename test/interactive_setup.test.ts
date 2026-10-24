@@ -43,7 +43,7 @@ describe('interactive setup with delayed terminal answers', function() {
       sandbox = createSandbox({ quickstart: true });
       const startup = shell === 'bash'
         ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-        : { prompt: 'Zsh settings directory (for .zshrc) [', answer: '' };
+        : { prompt: `Zsh settings directory [Enter for ${sandbox.home}, another absolute directory, or skip]: `, answer: '' };
       const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
         { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
         startup,
@@ -86,7 +86,7 @@ describe('interactive setup with delayed terminal answers', function() {
         sandbox = createSandbox({ quickstart: true });
         const startup = shell === 'bash'
           ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-          : { prompt: 'Zsh settings directory (for .zshrc) [', answer: '' };
+          : { prompt: `Zsh settings directory [Enter for ${sandbox.home}, another absolute directory, or skip]: `, answer: '' };
         const backupSetup = backupAnswers.slice(1, 4).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
         const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
           { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },

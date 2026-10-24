@@ -217,9 +217,7 @@ duplicate edits, but are not proof the line executes. Unsafe/ambiguous files and
 write failures retain specific recovery guidance. Declines leave files unchanged.
 
 When backups are selected, Quickstart reuses active GitHub CLI authentication or
-starts gh's native browser sign-in. Quickstart suppresses gh update notices only
-for that login command, preserving its prompts, output and errors.
-“Authenticate Git” controls Git credentials;
+starts gh's native browser sign-in. “Authenticate Git” controls Git credentials;
 No still permits gh sign-in. Device codes can be entered in a browser on another
 computer. Exported tokens can block login; follow gh's instructions. Quickstart
 does not change exported credentials or switch accounts.
@@ -334,9 +332,8 @@ ballin backup setup my-backup-name
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
 to access the repository can read its contents.
 
-New setup offers distinct **create** and **reconnect** choices. Press Enter to
-choose **create**; the suggested repository name is `ballin-backups`. The optional
-argument is a repository name, not a URL or owner.
+New setup offers distinct **create** and **reconnect** choices and defaults to
+`ballin-backups`. The optional argument is a repository name, not a URL or owner.
 Backups belong to the authenticated personal GitHub.com account. Setup shows
 that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create

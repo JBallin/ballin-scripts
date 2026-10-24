@@ -97,7 +97,10 @@ describe('optional completion setup', () => {
   it('uses an existing absolute ZDOTDIR without creating directories', () => {
     env.ZDOTDIR = path.join(home, 'zsh');
     fs.mkdirSync(env.ZDOTDIR);
-    assert.strictEqual(target().profile, path.join(env.ZDOTDIR, '.zshrc'));
+    const questions: string[] = [];
+    const selected = completionTarget(env, (text: string) => { questions.push(text); return { text: '', eof: false }; });
+    assert.strictEqual(selected.profile, path.join(env.ZDOTDIR, '.zshrc'));
+    assert.deepEqual(questions, [`Zsh settings directory [Enter for ${env.ZDOTDIR}, another absolute directory, or skip]: `]);
     env.ZDOTDIR = 'relative';
     assert.isNull(target());
     env.ZDOTDIR = path.join(home, 'missing');
@@ -142,7 +145,7 @@ describe('optional completion setup', () => {
       offerCompletionSetup('guide', { env, interactive: true, write: () => {},
         prompt: (text: string) => { questions.push(text); return { text: answers.shift()!, eof: false }; },
       });
-      assert.include(questions[0], `Zsh settings directory (for .zshrc) [${home};`);
+      assert.equal(questions[0], `Zsh settings directory [Enter for ${home}, another absolute directory, or skip]: `);
       assert.equal(questions[1], `Enable tab completion in ${home}/.zshrc? [y/N] `);
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     });
