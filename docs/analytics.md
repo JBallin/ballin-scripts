@@ -103,11 +103,11 @@ reconciliation, publication, or cache failure makes the backup fail, including
 cache failure after a successful remote write. Internal retries produce one
 final result, with no per-source or per-snapshot events.
 
-For automatic update steps, child exit zero means success, including self-update
-with no newer version available. Launch failure, a nonzero exit, or observed
-signal termination means failure. A later readiness failure can fail the overall
-update while `update.self-update` remains successful. Disabled, skipped, or
-unreached steps send no event.
+For automatic update steps, a successful child command counts as success,
+including self-update with no newer version available. A command that cannot
+start, fails, or is interrupted counts as failure. A later readiness failure can
+fail the overall update while `update.self-update` remains successful. Disabled,
+skipped, or unreached steps send no event.
 
 Setup, read, open, disconnect, help, invalid arguments, and other paths that do
 not execute a real backup send no behavioral event. Direct doctor and self-update

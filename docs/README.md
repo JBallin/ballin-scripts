@@ -15,6 +15,7 @@ For the project overview, see the [main README](../README.md).
 | [Optional capabilities](optional-capabilities.md) | Local settings, Node.js setup, optional tools, analytics choices, and configurable `ballin update` settings. |
 | [Analytics](analytics.md) | The local analytics choice, command and behavioral events, payloads, controls, and retention. |
 | [Supported capabilities](capabilities.md) | Current `ballin update` integrations and `ballin backup` snapshots. |
+| [Using Ballin in shell scripts](scripting.md) | Command-specific exit statuses, captured output, input, and interruption behavior. |
 
 ## Maintainer guides
 

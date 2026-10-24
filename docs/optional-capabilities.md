@@ -27,7 +27,7 @@ pending choice unchanged; earlier confirmed choices remain saved. Invalid
 configuration must be repaired before review. The command does not reinstall
 Ballin, change or validate remote destinations, or run backup/update operations.
 
-Use `ballin config get/set/reset` for direct, scriptable configuration. Guided
+Use `ballin config get/set/reset` for direct configuration. Guided
 review covers these onboarding choices rather than every setting.
 
 ## Working with settings
@@ -218,8 +218,7 @@ known settings use bundled defaults in memory for the current run and appear in
 one warning. The config file remains unchanged, and this behavior does not
 depend on self-update. Malformed JSON, invalid config structure, or known values
 other than booleans and canonical `"true"` or `"false"` strings fail before any
-integration runs. Later stages continue after ordinary child-command failures;
-if several fail, the command returns the last nonzero stage status.
+integration runs. Later stages continue after ordinary child-command failures.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
@@ -238,13 +237,11 @@ an interrupted stage or resume the remaining steps. Terminating Ballin does not
 undo completed changes or guarantee that every subprocess or macOS update
 service has stopped or that temporary files have been cleaned up.
 
-If only a child command is interrupted and Ballin remains running, the existing
-failure behavior applies: later stages continue, and the command returns the
-last nonzero stage status.
+If only a child command is interrupted and Ballin remains running, later stages
+continue.
 
-The readiness check after self-update runs inside Ballin. An explicit
-interruption while it checks access to the private backup stops the invocation
-before the backup stage.
+Interrupting the private-backup access check during readiness after self-update
+stops the invocation before the backup stage.
 
 To run macOS updates separately, disable that stage in advance:
 
