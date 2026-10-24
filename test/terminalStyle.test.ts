@@ -60,7 +60,7 @@ describe('terminal emphasis', () => {
       plainHelp = run(['--help']);
       assert.equal(plainHelp.status, 0, plainHelp.stderr);
       assert.equal(stripAnsi(plainHelp.stdout), plainHelp.stdout);
-      assert.include(plainHelp.stdout, 'Run `ballin <command> --help` for command-specific help.');
+      assert.include(plainHelp.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
     });
 
     after(() => {
@@ -79,8 +79,8 @@ describe('terminal emphasis', () => {
         assert.equal(help.status, 0, help.stderr);
         const styled = env.TERM === 'xterm';
         assert.equal(stripAnsi(help.stdout), styled
-          ? plainHelp.stdout.replace('`ballin <command> --help`', 'ballin <command> --help') : plainHelp.stdout);
-        if (styled) assert.include(help.stdout, 'Run \x1b[1mballin <command> --help\x1b[0m for command-specific help.');
+          ? plainHelp.stdout.replace('`ballin help <command...>`', 'ballin help <command...>') : plainHelp.stdout);
+        if (styled) assert.include(help.stdout, 'Run \x1b[1mballin help <command...>\x1b[0m for command or subcommand help.');
         assert.equal(help.stdout.includes('\x1b['), styled);
         const stage = run([], env, true);
         assert.equal(stage.status, 0, stage.stderr);

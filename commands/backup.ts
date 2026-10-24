@@ -669,7 +669,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   if (requestedCommand !== undefined && requestedCommand !== '' && !isBackupCommandName(requestedCommand)) {
-    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'\nTry: ${terminalCommand('ballin backup --help', process.stderr)}`);
+    writeStderrLine(`ballin backup: unknown command '${requestedCommand}'\nTry: ${terminalCommand('ballin help backup', process.stderr)}`);
     process.exitCode = 1;
     return;
   }
