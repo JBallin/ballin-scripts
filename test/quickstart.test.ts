@@ -246,6 +246,8 @@ case "$name" in
         fi
         printf 'Native login prompt: '; IFS= read -r answer
         [[ "$answer" == device-code ]] || exit 1
+        printf 'Logged in to github.com as fixture-user\\n'
+        if [[ "\${FAKE_GH_UPDATE_NOTICE:-0}" == 1 ]]; then printf '\\nA new release of gh is available: fixture-old -> fixture-new\\n' >&2; fi
         touch "$FAKE_ROOT/login-complete" ;;
       *) exit 97 ;;
     esac ;;
@@ -2185,6 +2187,15 @@ system_sudo=fixture_sudo
     assert.include(readLog(), 'gh:auth login --hostname github.com --git-protocol https --web');
     assert.isTrue(fs.existsSync(path.join(root, 'login-complete')));
   });
+  for (const notice of [false, true]) {
+    it(`keeps the existing login-to-installer separator with gh update notice: ${notice}`, () => {
+      const result = run('y\ndevice-code\ny\n', { FAKE_AUTH: 'missing', FAKE_GH_UPDATE_NOTICE: notice ? '1' : '0' }, home, 'exec 2>&1');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const updateNotice = notice ? '\nA new release of gh is available: fixture-old -> fixture-new\n' : '';
+      assert.include(result.stdout, 'Logged in to github.com as fixture-user\n' + updateNotice + '\n==> Installing Ballin\n');
+      assert.equal(result.stderr, '');
+    });
+  }
   for (const tokenSource of ['GH_TOKEN', 'GITHUB_TOKEN']) {
     it(`retains ${tokenSource} and exposes native CLI refusal before installing Ballin`, () => {
       const result = run('y\n', { FAKE_TOKEN_SOURCE: tokenSource, [tokenSource]: 'fixture-invalid-token' });
@@ -2813,7 +2824,7 @@ system_sudo=fixture_sudo
     const profile = path.join(home, '.zshrc');
     const declined = runPathSetup('\nn\n', { ZDOTDIR: '' });
     assert.equal(declined.status, 0, declined.stdout + declined.stderr);
-    assert.include(declined.stdout, `Zsh settings directory [${home}; Enter to use, another absolute directory, or skip]:`);
+    assert.include(declined.stdout, `Zsh settings directory (for .zshrc) [${home}; Enter to use, another absolute directory, or skip]:`);
     assert.include(declined.stdout, `Add Ballin setup to ${profile}`);
     assert.isFalse(fs.existsSync(profile));
     const directory = path.join(home, 'actual-zsh'); fs.mkdirSync(directory);
@@ -2833,7 +2844,7 @@ system_sudo=fixture_sudo
   it('accepts the suggested directory without treating selection as permission and reuses only that choice', () => {
     const result = runPathSetup('\nn\n', { ZDOTDIR: 'relative' });
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `Zsh settings directory [${home};`);
+    assert.include(result.stdout, `Zsh settings directory (for .zshrc) [${home};`);
     assert.include(result.stdout, `Add Ballin setup to ${home}/.zshrc`);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
   });
@@ -2996,7 +3007,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.isUndefined(JSON.parse(previousConfig).backup.repository);
         const result = runSandbox(sandbox, ['quickstart'], `yes\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.lengthOf(result.stdout.match(/Reconnect to an existing backup or create a new one\?/gu) ?? [], 1);
+        assert.lengthOf(result.stdout.match(/Create a new backup or reconnect to an existing one\?/gu) ?? [], 1);
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]', result.stdout + result.stderr);
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));

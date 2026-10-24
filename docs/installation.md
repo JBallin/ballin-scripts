@@ -22,9 +22,9 @@ Analytics, [shell completion](#shell-completion), and
 [private backups](#optional-backup-setup-and-reconnect) have separate choices.
 The direct installer does not run updates or capture a backup. Quickstart may
 offer to run the first backup after successful destination setup. See
-[local effects](#local-effects) for the affected paths and refresh behavior,
-and [uninstall](#uninstall) for removal. Review the [installer source](../install.sh)
-before running it.
+[what installation changes](#what-installation-changes) for the affected paths
+and refresh behavior, and [uninstall](#uninstall) for removal. Review the
+[installer source](../install.sh) before running it.
 
 ## Install
 
@@ -151,7 +151,7 @@ reports an existing activation with a trailing carriage return, replace only
 that line with the activation for your shell in
 [manual activation](#startup-files-and-manual-activation), using LF line endings.
 
-## Local effects
+## What installation changes
 
 ### Quickstart helper
 
@@ -332,8 +332,9 @@ ballin backup setup my-backup-name
 Backups are stored in a private GitHub repository. GitHub and anyone authorized
 to access the repository can read its contents.
 
-New setup offers distinct **create** and **reconnect** choices and defaults to
-`ballin-backups`. The optional argument is a repository name, not a URL or owner.
+New setup offers distinct **create** and **reconnect** choices. Press Enter to
+choose **create**; the suggested repository name is `ballin-backups`. The optional
+argument is a repository name, not a URL or owner.
 Backups belong to the authenticated personal GitHub.com account. Setup shows
 that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create

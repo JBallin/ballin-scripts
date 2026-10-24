@@ -127,7 +127,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
   const updateOutput = updateResult.stdout.trimEnd();
   if (updateOutput) {
     writeStdoutLine(`\n🙌 ${updateOutput}`);
-    writeStdoutLine(`\n${docsUrl}#local-effects`);
+    writeStdoutLine(`\n${docsUrl}#what-installation-changes`);
   }
 
   return true;

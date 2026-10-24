@@ -46,7 +46,7 @@ const completionTarget = (
     profile = selected;
   } else if (shell === 'zsh') {
     const suggested = env.ZDOTDIR && path.isAbsolute(env.ZDOTDIR) && !/[\r\n\0]/u.test(env.ZDOTDIR) ? env.ZDOTDIR : home;
-    const choice = prompt(`Zsh settings directory [${suggested}; Enter to use, another absolute directory, or skip]: `);
+    const choice = prompt(`Zsh settings directory (for .zshrc) [${suggested}; Enter to use, another absolute directory, or skip]: `);
     if (choice.eof || choice.text === 'skip') return null;
     const directory = choice.text === '' ? suggested : choice.text === 'home' ? home : choice.text;
     if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) return null;

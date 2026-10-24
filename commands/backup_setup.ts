@@ -1,4 +1,4 @@
-const { terminalCommand } = require('./terminalStyle.ts');
+const { terminalCommand, terminalHeading } = require('./terminalStyle.ts');
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
@@ -134,11 +134,14 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return maintain();
     }
     const account = readRepositoryAccount();
-    const choice = readPromptLine('Reconnect to an existing backup or create a new one? [reconnect/create] ');
-    if (choice.eof || !['reconnect', 'create'].includes(choice.text)) return cancelled();
+    writeStdoutLine(terminalHeading('Setting up GitHub backup'));
+    const choice = readPromptLine('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+    if (choice.eof) return cancelled();
+    const mode = choice.text || 'create';
+    if (!['create', 'reconnect'].includes(mode)) return cancelled();
     let suggested: string | undefined = 'ballin-backups';
     let found;
-    if (choice.text === 'create' && repositoryName === undefined) {
+    if (mode === 'create' && repositoryName === undefined) {
       try {
         found = candidateRepository(suggested, account);
         // Only suggest names checked as missing. Never reuse a collision or a redirect.
@@ -167,14 +170,14 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       name = nameLine.text || suggested || '';
       if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
       found = candidateRepository(name, account);
-      if (choice.text !== 'create' || !found || found.redirected) break;
+      if (mode !== 'create' || !found || found.redirected) break;
       writeStdoutLine('That repository name is already in use. Choose another name; use Reconnect for an existing backup.');
       if (repositoryName !== undefined) return false;
     }
     recoveryUrl = `https://github.com/${account.login}/${name}`;
     writeStdoutLine(`Proposed backup: ${recoveryUrl}`);
     let previous: RepositoryRead | undefined;
-    if (choice.text === 'reconnect') {
+    if (mode === 'reconnect') {
       if (!found || found.redirected) { writeStdoutLine(formatRepositoryMessage('unavailable')); return false; }
       const existing: RepositoryRead = requireRepositoryRead(inspectRepository(found));
       const unexpected = unexpectedRepositoryEntries(existing);

@@ -142,7 +142,7 @@ describe('optional completion setup', () => {
       offerCompletionSetup('guide', { env, interactive: true, write: () => {},
         prompt: (text: string) => { questions.push(text); return { text: answers.shift()!, eof: false }; },
       });
-      assert.include(questions[0], `Zsh settings directory [${home};`);
+      assert.include(questions[0], `Zsh settings directory (for .zshrc) [${home};`);
       assert.equal(questions[1], `Enable tab completion in ${home}/.zshrc? [y/N] `);
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     });

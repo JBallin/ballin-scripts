@@ -335,7 +335,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.isNotEmpty(guideUrl);
     const guidePath = new URL(guideUrl).pathname.replace('/JBallin/ballin-scripts/blob/main/', '');
     const guide = fs.readFileSync(path.join(__dirname, '..', guidePath), 'utf8');
-    assert.match(guide, /^## Local effects$/mu);
+    assert.match(guide, /^## What installation changes$/mu);
     assert.match(guide, /^## What will installation change\?$/mu);
   });
   for (const count of [1, 6]) {

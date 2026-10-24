@@ -594,7 +594,7 @@ describe('repository backup lifecycle', function() {
       const input = 'create\n\nno\n' + (confirmation === 'eof' ? '' : `${confirmation}\nno\n`);
       const result = runSetup('refresh', { BALLIN_BACKUP_CHOICE: 'yes', BALLIN_SETUP_RESULT_FILE: resultFile }, '', input);
       ok(result);
-      assert.lengthOf(result.stdout.match(/Reconnect to an existing backup or create a new one\?/gu) ?? [], 1);
+      assert.lengthOf(result.stdout.match(/Create a new backup or reconnect to an existing one\?/gu) ?? [], 1);
       assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
       assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]');
       if (confirmation === 'yes') {
@@ -2447,6 +2447,37 @@ describe('repository backup lifecycle', function() {
       const creates = mutations().filter((request) => request.endpoint === 'user/repos');
       assert.lengthOf(creates, 1); assert.equal(creates[0].payload?.name, name);
       assert.include(result.stdout, `Proposed backup: https://github.com/fixture-user/${name}`);
+    });
+  }
+  for (const confirmation of ['yes', 'no', 'eof']) {
+    it(`defaults Enter to create while retaining final ${confirmation} consent`, () => {
+      unconfigured(); const value = state(); value.exists = false; saveState(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['setup'], 'y\n\n\nn\n' + (confirmation === 'eof' ? '' : `${confirmation}\nn\n`));
+      assert.equal(result.status, confirmation === 'no' ? 1 : 0, result.stdout + result.stderr);
+      assert.include(result.stdout, '==> Setting up GitHub backup\nCreate a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+      assert.include(result.stdout, 'Repository name [ballin-backups]: ');
+      assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups');
+      assert.include(result.stdout, 'Review files that may contain credentials or private information for backup inclusion? [y/N] ');
+      assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N] ');
+      if (confirmation === 'yes') {
+        assert.deepEqual(config().backup.repository, fixtureDestination);
+        assert.equal(config().backup.includeSensitive, 'false');
+        assert.lengthOf(state().requests.filter(r => r.endpoint === 'user/repos'), 1);
+      } else {
+        assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+        assert.isFalse(state().exists); assert.isEmpty(mutations());
+      }
+    });
+  }
+  for (const input of ['', 'invalid\n']) {
+    it(`cancels EOF or invalid mode without defaulting to creation: ${JSON.stringify(input)}`, () => {
+      unconfigured(); const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['setup'], 'y\n' + input);
+      assert.equal(result.status, input ? 1 : 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Backup setup cancelled.');
+      assert.notInclude(result.stdout, 'Repository name'); assert.isEmpty(mutations());
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     });
   }
   it('lets an interactive create retry a typed collision without reconnecting', () => {

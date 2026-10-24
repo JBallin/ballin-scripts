@@ -12,12 +12,18 @@ describe('interactive setup with delayed terminal answers', function() {
 
   const backupAnswers = [
     { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
-    { prompt: 'Reconnect to an existing backup or create a new one? [reconnect/create] ', answer: 'create' },
+    { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
     { prompt: 'Repository name [ballin-backups]: ', answer: 'interactive-test' },
     { prompt: 'Review files that may contain credentials or private information for backup inclusion? [y/N] ', answer: 'y' },
     { prompt: 'private GitHub backup ', answer: 'y' },
     { prompt: 'Automatically run \x1b[1mballin backup\x1b[0m as part of \x1b[1mballin update\x1b[0m? [y/N] ', answer: 'y' },
   ];
+  const assertBackupHeading = (stdout: string): void => {
+    const output = stdout.replace(/\r\n/gu, '\n');
+    const heading = '\x1b[1;34m==>\x1b[1;39m Setting up GitHub backup\x1b[0m';
+    assert.equal(output.split(heading).length - 1, 1);
+    assert.include(output, heading + '\nCreate a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+  };
   const assertInitializedOnly = (): void => {
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.deepEqual(config.backup.repository, { id: 'R_fixture', ownerId: 'U_fixture', name: 'interactive-test', branch: 'main' });
@@ -37,7 +43,7 @@ describe('interactive setup with delayed terminal answers', function() {
       sandbox = createSandbox({ quickstart: true });
       const startup = shell === 'bash'
         ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-        : { prompt: 'Zsh settings directory [', answer: '' };
+        : { prompt: 'Zsh settings directory (for .zshrc) [', answer: '' };
       const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
         { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
         startup,
@@ -69,6 +75,7 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.include(fs.readFileSync(path.join(sandbox.home, shell === 'bash' ? '.bash_profile' : '.zshrc'), 'utf8'),
         shell === 'bash' ? 'completions/ballin.bash' : 'completions/_ballin');
       assert.equal(JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8')).analytics.enabled, 'false');
+      assertBackupHeading(result.stdout);
       assertInitializedOnly();
     });
   }
@@ -79,7 +86,7 @@ describe('interactive setup with delayed terminal answers', function() {
         sandbox = createSandbox({ quickstart: true });
         const startup = shell === 'bash'
           ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-          : { prompt: 'Zsh settings directory [', answer: '' };
+          : { prompt: 'Zsh settings directory (for .zshrc) [', answer: '' };
         const backupSetup = backupAnswers.slice(1, 4).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
         const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
           { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
@@ -142,7 +149,7 @@ describe('interactive setup with delayed terminal answers', function() {
     fs.writeFileSync(remotePath, JSON.stringify(remote));
     const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
       { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
-      { prompt: 'Reconnect to an existing backup or create a new one? [reconnect/create] ', answer: 'create' },
+      { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
       { prompt: 'Repository name: ', answer: 'fresh-name' },
       { prompt: 'Review files that may contain credentials or private information for backup inclusion? [y/N] ', answer: 'n' },
       { prompt: 'private GitHub backup ', answer: 'n' },
@@ -164,6 +171,7 @@ describe('interactive setup with delayed terminal answers', function() {
     const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], backupAnswers);
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    assertBackupHeading(result.stdout);
     assert.include(result.stdout, 'Creating private backup…');
     assert.include(result.stdout, 'Automatic backup during updates: enabled (`update.backup` set to `true`).');
     assert.include(result.stdout, 'Backup setup complete.');

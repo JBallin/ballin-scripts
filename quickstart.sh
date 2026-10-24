@@ -714,7 +714,7 @@ configure_path() {
         default_directory="$ZDOTDIR"
       fi
       installer_separator=true
-      printf 'Zsh settings directory [%s; Enter to use, another absolute directory, or skip]: ' "$default_directory"
+      printf 'Zsh settings directory (for .zshrc) [%s; Enter to use, another absolute directory, or skip]: ' "$default_directory"
       if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
       choice=$prompt_answer
       [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }
@@ -977,7 +977,7 @@ main() {
       fi
       approval_prompt="Install $prerequisite_names and Ballin?"
     fi
-    printf 'Installation details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#local-effects\n'
+    printf 'Installation details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
     if ! confirm "$approval_prompt"; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
