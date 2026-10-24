@@ -9,15 +9,15 @@ const { backupCommandNames } = require('../commands/backup_commands.ts');
 const repoRoot = path.join(__dirname, '..');
 const forms: { args: string[]; canonical: string[]; usage: string }[] = [
   ...topLevelCommandNames.flatMap((command: string) => [
-    { args: [command, '--help'], canonical: [command, '--help'], usage: `ballin ${command} --help` },
-    { args: ['help', command], canonical: [command, '--help'], usage: `ballin ${command} --help` },
+    { args: [command, '--help'], canonical: [command, '--help'], usage: `ballin ${command}` },
+    { args: ['help', command], canonical: [command, '--help'], usage: `ballin ${command}` },
   ]),
-  ...backupCommandNames.map((command: string) => ({
-    args: ['backup', command, '--help'], canonical: ['backup', command, '--help'],
-    usage: `ballin backup ${command} --help`,
-  })),
+  ...backupCommandNames.flatMap((command: string) => [
+    { args: ['backup', command, '--help'], canonical: ['backup', command, '--help'], usage: `ballin backup ${command}` },
+    { args: ['help', 'backup', command], canonical: ['backup', command, '--help'], usage: `ballin backup ${command}` },
+  ]),
   { args: ['backup', 'help'], canonical: ['--help'], usage: 'ballin <command> [options]' },
-  { args: ['config', 'help'], canonical: ['config', '--help'], usage: 'ballin config --help' },
+  { args: ['config', 'help'], canonical: ['config', '--help'], usage: 'ballin config' },
 ];
 
 describe('offline command and backup subcommand help', () => {
@@ -134,6 +134,24 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
     }
     assert.isFalse(fs.existsSync(attemptsPath));
   });
+
+  it('teaches prefix help and mentions the trailing flag once as an alternative', () => {
+    const result = run(['help']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'ballin help [command...]');
+    assert.include(result.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
+    assert.include(result.stdout, 'You can also append `--help` to a command.');
+    assert.lengthOf([...result.stdout.matchAll(/--help/gu)], 1);
+  });
+
+  for (const command of backupCommandNames) {
+    it(`keeps ${command} help focused on operational syntax`, () => {
+      const result = run(['help', 'backup', command]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.include(result.stdout, `ballin backup ${command}`);
+      assert.notInclude(result.stdout, '--help');
+    });
+  }
 
   for (const { args, canonical, usage } of forms) {
     for (const config of ['missing', 'malformed', 'enabled']) {

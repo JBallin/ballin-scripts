@@ -46,12 +46,19 @@ raw bundle without `--list` or `--file` and pass the selected entry's JSON-decod
 
 ## Offline help
 
-`ballin <command> --help` and `ballin help <command>` print the same command help.
-For supported backup subcommands (`setup`, `open`, `list`, `read`, and
-`disconnect`), use exactly `ballin backup <subcommand> --help`, without selectors,
-repository names, or other options. These forms exit `0`, write help to stdout
-and nothing to stderr, and do not access configuration, analytics identity,
-authentication, network services, prompts, or local backup state.
+Use `ballin help <command...>` for offline syntax and options. Each preferred
+form and its alternative print the same help:
+
+| Preferred form | Alternative |
+| --- | --- |
+| `ballin help <command>` | `ballin <command> --help` |
+| `ballin help backup <subcommand>` | `ballin backup <subcommand> --help` |
+
+Supported backup subcommands are `setup`, `open`, `list`, `read`, and
+`disconnect`. Supply no selectors, repository names, or other options. These
+forms exit `0`, write help to stdout and nothing to stderr, and do not access
+configuration, analytics identity, authentication, network services, prompts,
+or local backup state.
 
 The existing `ballin config help` alias prints config help; `ballin backup help`
 prints the general Ballin overview. Both are also local and side-effect-free.

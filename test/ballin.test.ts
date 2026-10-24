@@ -39,7 +39,7 @@ describe('ballin', () => {
     assert.sameMembers(documentedCommands, [...topLevelCommandNames]);
     assert.include(result.stdout, 'back up Ballin-managed environment state');
     assert.include(result.stdout, 'view or change Ballin configuration');
-    assert.include(result.stdout, 'Run `ballin <command> --help` for command-specific help.');
+    assert.include(result.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
     for (const detail of ['Examples:', '--verbose', 'backup.includeSensitive', 'configured backup',
       '[repository-name]', 'file name', '(ex:', 'local checkout', 'command shims']) {
       assert.notInclude(result.stdout, detail);
@@ -260,12 +260,16 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
     });
   });
 
-  it('preserves overview output and analytics eligibility with extra help arguments', () => {
-    const expectedOutput = runBallin(['help']).stdout;
-    for (const args of [['help', 'extra'], ['--help', 'extra'], ['help', 'backup', 'extra'], ['help', 'backup', 'read']]) {
+  for (const args of [
+    ['help', 'extra'], ['--help', 'extra'], ['help', 'backup', 'extra'],
+    ['help', 'backup', 'read', 'extra'], ['help', 'backup', 'read', '--help'],
+    ['help', 'backup', 'setup', 'repository'], ['help', 'backup', 'read', 'zshrc.sh'],
+    ['help', 'config', 'get'], ['help', 'doctor', '--help'],
+  ]) {
+    it(`preserves overview output and analytics eligibility for unsupported help route ${JSON.stringify(args)}`, () => {
+      const expectedOutput = runBallin(['help']).stdout;
       writeConfig({ analytics: { enabled: 'true' } });
       const installIdPath = path.join(tempDir, '.analytics', 'install-id');
-      fs.rmSync(path.dirname(installIdPath), { recursive: true, force: true });
       const result = runBallin(args, {
         BALLIN_NO_ANALYTICS: '',
         BALLIN_NO_COMMAND_ANALYTICS: '1',
@@ -274,8 +278,8 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
       assert.equal(result.stdout, expectedOutput);
       assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
       assert.deepEqual(commandLog(), []);
-    }
-  });
+    });
+  }
 
   topLevelCommandNames.forEach((command: string) => {
     it(`prints offline ${command} --help without config or workflow effects`, () => {
@@ -295,7 +299,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         });
         assert.equal(result.status, 0);
         assert.equal(result.stderr, '');
-        assert.include(result.stdout, `ballin ${command} --help`);
+        assert.include(result.stdout, `ballin ${command}`);
         assert.notInclude(result.stdout, 'ballin config help');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
         if (command === 'self-update') assert.include(result.stdout, 'local `ballin-scripts` checkout, command shims, and configuration');
@@ -391,7 +395,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
           NODE_OPTIONS: `--require=${preloadPath}`,
         });
         assert.equal(result.status, 0, result.stderr);
-        assert.include(result.stdout, `ballin ${command} --help`);
+        assert.include(result.stdout, `ballin ${command}`);
         assert.equal(result.stderr, '');
         assert.isFalse(fs.existsSync(attemptPath));
         assert.deepEqual(commandLog(), []);
@@ -428,7 +432,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
 
     assert.equal(result.status, 2);
     assert.equal(result.stdout, '');
-    assert.equal(result.stderr, 'Unknown Ballin command: upd\nTry: `ballin --help`\n');
+    assert.equal(result.stderr, 'Unknown Ballin command: upd\nTry: `ballin help`\n');
   });
 
   it('routes update through the update workflow and preserves its exit status', () => {

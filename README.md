@@ -81,8 +81,8 @@ Saved snapshots of your tools and configuration give you a reference when
 
 ## Commands
 
-For command syntax and options, use `ballin help backup` or
-`ballin backup --help`. For a backup subcommand, use `ballin backup read --help`.
+Use `ballin help <command...>` for syntax and options, such as
+`ballin help backup read`. Appending `--help` to a command is also supported.
 
 | Command | Purpose |
 | --- | --- |

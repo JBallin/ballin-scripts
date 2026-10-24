@@ -36,7 +36,7 @@ Use `true` instead of `false` to enable analytics persistently, or run
 `ballin setup` to review the analytics choice and its explanation. It shows
 whether analytics are currently enabled or disabled and uses that choice as the
 default. Setup uses the ordinary top-level command event contract and sends no
-additional preference event. `ballin setup --help` runs offline without reading
+additional preference event. `ballin help setup` runs offline without reading
 local configuration or sending analytics.
 
 Disable analytics for one command:
@@ -80,13 +80,13 @@ The existing schema-v1 command payload contains:
 `ballin update` sends one top-level command event. Its internally invoked
 backup and self-update do not send additional command events. Direct
 `ballin doctor` and `ballin self-update` retain their ordinary command events.
-The top-level overview (`ballin`, `ballin --help`, and `ballin help`) runs
+The top-level overview (`ballin` or `ballin help`) runs
 offline without reading user configuration, sending analytics, or creating or
 repairing local analytics state.
 
-All command-specific help (`ballin <command> --help`) runs offline without
-reading user configuration, sending analytics, or creating or repairing an
-installation ID.
+Help for commands and backup subcommands (`ballin help <command...>`) runs
+offline without reading user configuration, sending analytics, or creating or
+repairing an installation ID.
 
 ### Behavioral events
 

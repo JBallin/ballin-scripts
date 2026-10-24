@@ -190,6 +190,12 @@ describe('shell completions', () => {
         for (const command of backupCommandNames) {
           assert.deepEqual(complete(['ballin', 'backup', command, '--h']), [commandHelpOptionName]);
         }
+        assert.deepEqual(complete(['ballin', 'help', 'backup', '']), [...backupCommandNames]);
+        assert.deepEqual(complete(['ballin', 'help', 'backup', 're']), ['read']);
+        for (const words of [
+          ['ballin', 'help', 'config', ''], ['ballin', 'help', 'missing', ''],
+          ['ballin', 'help', 'backup', 'read', ''], ['ballin', 'help', 'backup', 'read', '--h'],
+        ]) assert.deepEqual(complete(words), [], words.join(' '));
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_user_sk']), ['codex_user_skills.bundle.json']);
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--file', '']),
           ['skill with spaces/SKILL.md', "quotes'and\"marks/file.md", 'other/readme.md']);
@@ -350,6 +356,9 @@ describe('shell completions', () => {
         ['ballin help back\t', 'ballin help backup'],
         ...backupCommandNames.map((command: string) => [
           `ballin backup ${command} --h\t`, `ballin backup ${command} --help`,
+        ]),
+        ...backupCommandNames.map((command: string) => [
+          `ballin help backup ${command.slice(0, 2)}\t`, `ballin help backup ${command}`,
         ]),
         ['ballin doctor --v\t', 'ballin doctor --verbose'],
         ['ballin backup op\t', 'ballin backup open'],

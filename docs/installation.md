@@ -78,7 +78,7 @@ file before asking for confirmation (default: no). The exact activation lines
 and undo instructions are below.
 Refreshes and `ballin self-update` do not enable completion or ask again.
 
-Completion covers commands, `--help`, `doctor --verbose`, backup snapshot names,
+Completion covers command and help targets, `doctor --verbose`, backup snapshot names,
 and the `--list` and `--file` options after a snapshot name. `config get` completes
 known sections and setting keys; `config set` completes setting keys and boolean
 `true`/`false` values.
@@ -242,7 +242,7 @@ export PATH="$PATH:$HOME/.local/bin"
 If selected prerequisite tools need Quickstart's managed links, also add
 `$HOME/.local/share/ballin-quickstart/bin` to PATH. Keep an existing version
 manager's working Node ahead of these fallback links. Open a new Terminal and check
-`command -v node git ballin` (and `gh` for backups), then `ballin --help`.
+`command -v node git ballin` (and `gh` for backups), then `ballin help`.
 Inspect unexpected earlier commands rather than deleting them blindly. Remove
 only the Ballin PATH addition to undo it; prerequisites and other entries remain.
 
@@ -466,7 +466,7 @@ Use `ballin backup list` to find supported snapshots saved in the configured
 backup, then `ballin backup read <snapshot>` to print one. Use `ballin backup open`
 to inspect the backup in your browser, including retired snapshots and unexpected
 entries. These commands require remote access and work with read-only
-permissions. For offline syntax and options, run `ballin backup read --help`
+permissions. For offline syntax and options, run `ballin help backup read`
 (or replace `read` with the backup subcommand you need).
 
 Bundle snapshots use `.bundle.json` filenames. List their files, then read one

@@ -49,6 +49,7 @@ const selection = (shell: 'bash' | 'zsh'): string[] => {
     `      case "${word(1)} ${word(2)}" in`,
     `        'config get') candidates=(${arrayWords(configNames.readable)}) ;;`,
     `        'config set') candidates=(${arrayWords(configNames.leaves)}) ;;`,
+    `        'help backup') candidates=(${arrayWords(backupCommandNames)}) ;;`,
     `        'backup read') candidates=(${arrayWords([...snapshotNames, commandHelpOptionName])}) ;;`,
     `        ${backupCommandNames.filter((name) => name !== 'read').map((name) => quote(`backup ${name}`)).join('|')}) candidates=(${arrayWords([commandHelpOptionName])}) ;;`,
     '      esac',

@@ -45,7 +45,7 @@ describe('command references at prose output boundaries', () => {
       assert.equal(backup.status, 0, backup.stderr);
       assert.include(backup.stdout, '`setup` creates or reconnects');
       assert.include(backup.stdout, `review them with ${command('ballin setup')}.`);
-      assert.include(backup.stdout, `Run ${command('ballin backup <subcommand> --help')} for subcommand-specific help.`);
+      assert.include(backup.stdout, `Run ${command('ballin help backup <subcommand>')} for subcommand-specific help.`);
       const backupAlias = cli(['help', 'backup']);
       assert.equal(backupAlias.status, 0, backupAlias.stderr);
       assert.equal(backupAlias.stdout, backup.stdout);
@@ -78,13 +78,13 @@ describe('command references at prose output boundaries', () => {
       const help = run(['--help'], stdout, !stdout);
       assert.equal(help.status, 0, help.stderr);
       assert.include(help.stdout, stdout
-        ? 'Run \x1b[1mballin <command> --help\x1b[0m for command-specific help.'
-        : 'Run `ballin <command> --help` for command-specific help.');
+        ? 'Run \x1b[1mballin help <command...>\x1b[0m for command or subcommand help.'
+        : 'Run `ballin help <command...>` for command or subcommand help.');
       const unknown = run(['unknown-command'], stdout, !stdout);
       assert.equal(unknown.status, 2);
       assert.equal(unknown.stderr, stdout
-        ? 'Unknown Ballin command: unknown-command\nTry: `ballin --help`\n'
-        : 'Unknown Ballin command: unknown-command\nTry: \x1b[1mballin --help\x1b[0m\n');
+        ? 'Unknown Ballin command: unknown-command\nTry: `ballin help`\n'
+        : 'Unknown Ballin command: unknown-command\nTry: \x1b[1mballin help\x1b[0m\n');
       const configError = run(['config', 'get', 'missing'], stdout, !stdout);
       assert.include(configError.stderr, stdout ? '`ballin config get`' : '\x1b[1mballin config get\x1b[0m');
     });
