@@ -90,7 +90,7 @@ Saved snapshots of your tools and configuration give you a reference when
 | [`ballin setup`](docs/optional-capabilities.md#guided-preference-review) | Reviews local onboarding preferences. |
 | [`ballin config`](docs/optional-capabilities.md#working-with-settings) | Reads and updates local Ballin settings. |
 | `ballin self-update` | Updates Ballin itself. |
-| [`ballin uninstall`](docs/installation.md#uninstall) | Removes installed command shims and the local checkout. |
+| [`ballin uninstall`](docs/installation.md#uninstall) | Removes Ballin. |
 
 See the [command reference](docs/commands.md) for subcommands and options.
 

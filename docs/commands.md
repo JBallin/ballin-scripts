@@ -3,7 +3,7 @@
 Use `ballin help` to see available commands, or `ballin help <command...>` for
 syntax and options, such as `ballin help backup read`.
 
-Square brackets mark optional arguments; angle brackets mark required values.
+*Square brackets mark optional arguments; angle brackets mark required values.*
 
 | Command | Purpose |
 | --- | --- |
@@ -25,4 +25,4 @@ Square brackets mark optional arguments; angle brackets mark required values.
 | [`ballin config set <key> <value>`](optional-capabilities.md#working-with-settings) | Changes an existing setting. |
 | [`ballin config reset`](optional-capabilities.md#working-with-settings) | Replaces saved settings with defaults. |
 | `ballin self-update` | Updates Ballin itself. |
-| [`ballin uninstall`](installation.md#uninstall) | Removes installed command shims and the local checkout. |
+| [`ballin uninstall`](installation.md#uninstall) | Removes Ballin. |
