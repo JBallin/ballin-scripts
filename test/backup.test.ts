@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
+const { backupCommandNames } = require('../commands/backup_commands.ts');
 import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
@@ -1569,7 +1570,21 @@ require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))}).runW
       assertOutcome('success', 'failure');
     });
 
-    for (const args of [['setup'], ['read', 'zshrc.sh'], ['open'], ['list'], ['disconnect'], ['help'], ['verify'], ['invalid'], ['read'], ['open', 'extra']]) {
+    it('emits no command or real-backup analytics for supported backup help forms', () => {
+      seedRemote('read-only fixture\n');
+      const originalConfig = fs.readFileSync(configPath, 'utf8');
+      for (const args of [['help'], ['--help'], ...backupCommandNames.map((command: string) => [command, '--help'])]) {
+        const result = observedRun({ args });
+        assert.equal(result.status, 0, result.stderr);
+        assert.include(result.stdout, 'Usage:');
+        assert.equal(result.stderr, '');
+        assert.deepEqual(capture.readEvents(), []);
+        assert.deepEqual(state().requests, []);
+        assert.equal(fs.readFileSync(configPath, 'utf8'), originalConfig);
+      }
+    });
+
+    for (const args of [['setup'], ['read', 'zshrc.sh'], ['open'], ['list'], ['disconnect'], ['verify'], ['invalid'], ['read'], ['open', 'extra']]) {
       it(`does not emit a real-backup event for ${args.join(' ')}`, () => {
         seedRemote('read-only fixture\n');
         observedRun({ args, input: 'n\n' });
