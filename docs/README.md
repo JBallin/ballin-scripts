@@ -8,6 +8,7 @@ For the project overview, see the [main README](../README.md).
 | --- | --- |
 | [Choosing Ballin](choosing-ballin.md) | When Ballin fits an existing Mac setup, when another approach is better, and how to use them together. |
 | [Quickstart: Install Ballin](quickstart.md) | Install Ballin with guided setup. |
+| [Command reference](commands.md) | All commands, subcommands, and options, with links to detailed guides. |
 | [Installation and removal](installation.md) | Exact local effects, contacted services, optional backup setup, and failure recovery. |
 | [Getting the most out of Ballin](getting-the-most-out-of-ballin.md) | Manage supported tools, build a maintenance routine, and inspect saved backups. |
 | [Using saved state on another Mac](new-mac.md) | Reviewing snapshots while rebuilding and choosing a backup destination for the new Mac. |

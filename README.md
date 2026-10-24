@@ -81,26 +81,18 @@ Saved snapshots of your tools and configuration give you a reference when
 
 ## Commands
 
-Use `ballin help <command...>` for syntax and options, such as
-`ballin help backup read`. Appending `--help` to a command is also supported.
-
 | Command | Purpose |
 | --- | --- |
-| `ballin` | Shows available commands and common usage. |
-| [`ballin doctor`](docs/capabilities.md#ballin-doctor) | Checks the managed environment. |
-| [`ballin backup setup [repository-name]`](docs/installation.md#optional-backup-setup-and-reconnect) | Creates, reconnects to, or revalidates a private backup repository. |
-| [`ballin backup`](docs/capabilities.md#ballin-backup) | Updates snapshots in the configured backup. |
-| [`ballin backup open`](docs/installation.md#inspect-saved-backups) | Opens the configured backup. |
-| [`ballin backup disconnect`](docs/installation.md#disconnect) | Disconnects this Mac from its backup and disables automatic backups. |
-| [`ballin backup list`](docs/installation.md#inspect-saved-backups) | Lists supported snapshots saved in the configured backup. |
-| [`ballin backup read <snapshot>`](docs/installation.md#inspect-saved-backups) | Prints one supported snapshot from the destination. |
-| [`ballin backup read <snapshot> --list`](docs/installation.md#inspect-saved-backups) | Lists file paths in a saved bundle snapshot. |
-| [`ballin backup read <snapshot> --file <path>`](docs/installation.md#inspect-saved-backups) | Prints one file's contents from a bundle snapshot. |
+| `ballin help [command...]` | Shows available commands or help for a command or subcommand. |
 | [`ballin update`](docs/capabilities.md#ballin-update) | Runs configured update tasks. |
-| [`ballin setup`](docs/optional-capabilities.md#guided-preference-review) | Guides you through local onboarding preferences again. |
+| [`ballin backup`](docs/capabilities.md#ballin-backup) | Updates snapshots in the configured backup. |
+| [`ballin doctor`](docs/capabilities.md#ballin-doctor) | Checks the managed environment. |
+| [`ballin setup`](docs/optional-capabilities.md#guided-preference-review) | Reviews local onboarding preferences. |
 | [`ballin config`](docs/optional-capabilities.md#working-with-settings) | Reads and updates local Ballin settings. |
-| `ballin self-update` | Updates the local checkout and refreshes installed commands and configuration. |
+| `ballin self-update` | Updates Ballin itself. |
 | [`ballin uninstall`](docs/installation.md#uninstall) | Removes installed command shims and the local checkout. |
+
+See the [command reference](docs/commands.md) for subcommands and options.
 
 ## Privacy and security
 
