@@ -41,7 +41,7 @@ const formatRepositoryMessage = (
   let message = repositoryMessages[problem];
   if (host !== 'github.com' && normalizeBackupHost(host) === host
     && ['authentication', 'connection', 'timeout', 'request'].includes(problem)) {
-    message = message.replaceAll('GitHub.com', host).replaceAll('github.com', host);
+    message = message.replace(/github\.com/giu, () => host);
   }
   return message === undefined ? undefined : terminalCommandReferences(message, [
     'ballin backup setup', 'ballin backup open', `gh auth login --hostname ${host}`,

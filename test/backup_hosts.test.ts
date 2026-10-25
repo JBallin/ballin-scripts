@@ -119,6 +119,16 @@ describe('host-bound repository transport', () => {
     assert.include(message, 'gh auth login --hostname git.example.com');
     assert.notInclude(message, 'github.com');
   });
+  it('preserves literal hosts containing github.com in recovery messages', () => {
+    const selectedHost = `github.com.${host}`;
+    assert.equal(formatRepositoryMessage('authentication', {}, selectedHost),
+      `${selectedHost} authentication is required. Run \`gh auth login --hostname ${selectedHost}\`, or check the effective gh account and environment token, then retry.`);
+    for (const problem of ['connection', 'timeout', 'request'] as const) {
+      const message = formatRepositoryMessage(problem, {}, selectedHost);
+      assert.include(message, selectedHost);
+      assert.notInclude(message, `${selectedHost}.${host}`);
+    }
+  });
   it('rejects an invalid transport host before invoking the runner', () => {
     let calls = 0;
     assert.throws(() => readRepositoryAccount('https://git.example.com', {
