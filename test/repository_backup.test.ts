@@ -155,7 +155,14 @@ describe('repository backup lifecycle', function() {
     const selectHost = (exists = false): void => {
       const remote = state(); remote.host = host; remote.exists = exists; saveState(remote);
     };
-    it('prompts once, saves the confirmed host, and uses it for the complete installed lifecycle', () => {
+    const configuredHost = (): void => {
+      const value = config(); value.backup.repository.host = host; saveConfig(value);
+      const remote = fixtureState({ 'zshrc.sh': 'work environment\n' }); remote.host = host; saveState(remote);
+    };
+    const assertSelectedHost = (): void => assert.isTrue(state().requests.every((r) => r.endpoint === 'open'
+      ? r.environmentHost === host : r.host === host && r.environmentHost === host));
+    // Keep independent CLI workflows within the existing per-case lifecycle budget.
+    it('prompts for and saves the confirmed host, then publishes and detects a no-op', () => {
       unconfigured(); selectHost(); source('work environment\n');
       const setup = run(['setup'], 'y\nGit.Example.COM\ncreate\n\ny\ny\nn\n'); ok(setup);
       assert.include(setup.stdout, 'GitHub hostname [github.com]: ');
@@ -163,19 +170,30 @@ describe('repository backup lifecycle', function() {
       assert.equal(config().backup.repository.host, host);
       ok(run()); const head = state().head;
       ok(run()); assert.equal(state().head, head);
+      assertSelectedHost();
+    });
+    it('uses the saved host for installed read, list and open commands', () => {
+      configuredHost();
       assert.equal(run(['read', 'zshrc.sh']).stdout, 'work environment\n');
       ok(run(['list'])); ok(run(['open']));
+      assertSelectedHost();
+    });
+    it('retains the saved host through setup revalidation and self-update', () => {
+      configuredHost();
       const revalidate = run(['setup'], 'n\n'); ok(revalidate);
       assert.notInclude(revalidate.stdout, 'GitHub hostname [');
       const refreshed = runSetup(); ok(refreshed);
       assert.equal(config().backup.repository.host, host);
-      assert.isTrue(state().requests.every((r) => r.endpoint === 'open'
-        ? r.environmentHost === host : r.host === host && r.environmentHost === host));
+      assertSelectedHost();
+    });
+    it('disconnects and reconnects on the explicit host without republishing', () => {
+      configuredHost(); const head = state().head;
       ok(run(['disconnect'])); assert.isNull(config().backup.repository);
       const reconnect = run(['setup', '--hostname', host], 'y\nreconnect\n\nn\ny\nn\n'); ok(reconnect);
       assert.notInclude(reconnect.stdout, 'GitHub hostname [');
       assert.equal(config().backup.repository.host, host);
       assert.equal(state().head, head);
+      assertSelectedHost();
     });
     it('skips the question with a flag and retains custom-host creation evidence on failure', () => {
       unconfigured(); selectHost();
