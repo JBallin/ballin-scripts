@@ -12,7 +12,7 @@
     "test:unit": "mocha --parallel",
     "test:claude-preflight": "mocha test/ci/claude_preflight.test.ts",
     "sandbox": "node test/qa_sandbox.ts",
-    "test:coverage": "node test/coverage.ts npm run test:unit",
+    "test:coverage": "node --max-old-space-size=6144 test/coverage.ts npm run test:unit",
     "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage"
   },
   "engines": {

@@ -70,7 +70,7 @@ function report(cell: Cell, corrected: boolean, options: {
       statements: thresholds.statements, lines: thresholds.lines,
       branches: thresholds.branches, functions: thresholds.functions,
     }));
-    const args = [corrected ? wrapper : vanilla, 'report', '--config', config,
+    const args = [...(corrected ? ['--max-old-space-size=6144'] : []), corrected ? wrapper : vanilla, 'report', '--config', config,
       '--temp-directory', raw, '--reports-dir', output];
     if (options.mergeAsync) args.push('--merge-async');
     if (options.checkCoverageFalse) args.push('--check-coverage=false');
@@ -180,9 +180,11 @@ describe('c8 absolute-path compatibility', () => {
       const code = `
         require('node:assert/strict').equal(require(${JSON.stringify(subject)})(), 7);
         require('node:assert/strict').equal(process.env.NODE_OPTIONS, undefined);
+        require('node:assert/strict').deepEqual(process.execArgv.slice(0, -2), []);
+        require('node:assert/strict').ok(require('node:v8').getHeapStatistics().heap_size_limit < 6144 * 2 ** 20);
         process.exitCode = 23;
       `;
-      const result = spawnSync(process.execPath, [wrapper, '--config', config,
+      const result = spawnSync(process.execPath, ['--max-old-space-size=6144', wrapper, '--config', config,
         '--temp-directory', path.join(temp, 'raw'), '--reports-dir', output,
         process.execPath, '-e', code], {
         cwd: temp, encoding: 'utf8', timeout: 8000,
