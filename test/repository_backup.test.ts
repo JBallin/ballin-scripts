@@ -667,7 +667,7 @@ describe('repository backup lifecycle', function() {
       previous.exists = false; saveState(previous);
       const resultFile = path.join(root, 'installation-result');
       fs.writeFileSync(resultFile, 'pending\n', { mode: 0o600 });
-      const input = 'create\n\nno\n' + (confirmation === 'eof' ? '' : `${confirmation}\nno\n`);
+      const input = '\ncreate\n\nno\n' + (confirmation === 'eof' ? '' : `${confirmation}\nno\n`);
       const result = runSetup('refresh', { BALLIN_BACKUP_CHOICE: 'yes', BALLIN_SETUP_RESULT_FILE: resultFile }, '', input);
       ok(result);
       assert.lengthOf(result.stdout.match(/Create a new backup or reconnect to an existing one\?/gu) ?? [], 1);
@@ -2529,7 +2529,7 @@ describe('repository backup lifecycle', function() {
     it(`defaults Enter to create while retaining final ${confirmation} consent`, () => {
       unconfigured(); const value = state(); value.exists = false; saveState(value);
       const before = fs.readFileSync(configPath, 'utf8');
-      const result = run(['setup'], 'y\n\n\nn\n' + (confirmation === 'eof' ? '' : `${confirmation}\nn\n`));
+      const result = run(['setup'], 'y\n\n\n\nn\n' + (confirmation === 'eof' ? '' : `${confirmation}\nn\n`));
       assert.equal(result.status, confirmation === 'no' ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, '==> Setting up GitHub backup\nCreate a new backup or reconnect to an existing one? [CREATE/reconnect] ');
       assert.include(result.stdout, 'Repository name [ballin-backups]: ');
@@ -2549,7 +2549,7 @@ describe('repository backup lifecycle', function() {
   for (const input of ['', 'invalid\n']) {
     it(`cancels EOF or invalid mode without defaulting to creation: ${JSON.stringify(input)}`, () => {
       unconfigured(); const before = fs.readFileSync(configPath, 'utf8');
-      const result = run(['setup'], 'y\n' + input);
+      const result = run(['setup'], 'y\n\n' + input);
       assert.equal(result.status, input ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Backup setup cancelled.');
       assert.notInclude(result.stdout, 'Repository name'); assert.isEmpty(mutations());

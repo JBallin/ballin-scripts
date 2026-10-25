@@ -12,6 +12,7 @@ describe('interactive setup with delayed terminal answers', function() {
 
   const backupAnswers = [
     { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
+    { prompt: 'GitHub hostname [github.com]: ', answer: '' },
     { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
     { prompt: 'Repository name [ballin-backups]: ', answer: 'interactive-test' },
     { prompt: 'Review files that may contain credentials or private information for backup inclusion? [y/N] ', answer: 'y' },
@@ -26,7 +27,7 @@ describe('interactive setup with delayed terminal answers', function() {
   };
   const assertInitializedOnly = (): void => {
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
-    assert.deepEqual(config.backup.repository, { id: 'R_fixture', ownerId: 'U_fixture', name: 'interactive-test', branch: 'main' });
+    assert.deepEqual(config.backup.repository, { host: 'github.com', id: 'R_fixture', ownerId: 'U_fixture', name: 'interactive-test', branch: 'main' });
     assert.equal(config.backup.includeSensitive, 'true');
     assert.equal(config.update.backup, 'true');
     const remote = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
@@ -87,7 +88,7 @@ describe('interactive setup with delayed terminal answers', function() {
         const startup = shell === 'bash'
           ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
           : { prompt: `Zsh settings directory [Enter for ${sandbox.home}, another absolute directory, or skip]: `, answer: '' };
-        const backupSetup = backupAnswers.slice(1, 4).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
+        const backupSetup = backupAnswers.slice(1, 5).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
         const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
           { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
           startup,
@@ -149,6 +150,7 @@ describe('interactive setup with delayed terminal answers', function() {
     fs.writeFileSync(remotePath, JSON.stringify(remote));
     const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
       { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
+      { prompt: 'GitHub hostname [github.com]: ', answer: '' },
       { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
       { prompt: 'Repository name: ', answer: 'fresh-name' },
       { prompt: 'Review files that may contain credentials or private information for backup inclusion? [y/N] ', answer: 'n' },

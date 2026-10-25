@@ -95,7 +95,7 @@ describe('onboarding sandbox', function() {
   for (const name of ['auth', 'connection', 'timeout']) {
     it(`recovers installer backup setup after ${name} without reinstalling`, () => {
       selectScenario(sandbox, name);
-      const failed = runSandbox(sandbox, ['install'], 'y\nn\ny\n');
+      const failed = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n');
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
       assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'ballin.config.json')));
       selectScenario(sandbox, 'none');

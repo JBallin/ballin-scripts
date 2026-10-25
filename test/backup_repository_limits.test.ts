@@ -147,7 +147,7 @@ describe('repository backup resource limits', function() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-repository-output-test-'));
     try {
       fs.writeFileSync(path.join(root, 'gh'), `#!${process.execPath}\nprocess.stdout.write('x'.repeat(2 * 1024 * 1024));\n`, { mode: 0o755 });
-      assert.throws(() => readRepositoryAccount({ env: testChildEnvironment({ HOME: root, PATH: root }) }), RepositoryError, 'normal CLI limits');
+      assert.throws(() => readRepositoryAccount('github.com', { env: testChildEnvironment({ HOME: root, PATH: root }) }), RepositoryError, 'normal CLI limits');
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
   it('bounds tree responses and rejects excessive tree entry count before mapping', () => {

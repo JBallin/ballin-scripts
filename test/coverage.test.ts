@@ -27,7 +27,6 @@ type FileCoverage = {
 const { cells } = require('./fixtures/coverage-identity/profiles.json') as { cells: Cell[] };
 const wrapper = path.resolve(__dirname, 'coverage.ts');
 const vanilla = require.resolve('c8/bin/c8.js');
-const root = path.resolve(__dirname, '..');
 
 function report(cell: Cell, corrected: boolean, options: {
   mergeAsync?: boolean; unexecutedFile?: boolean; uncalledFunction?: boolean;
@@ -37,9 +36,9 @@ function report(cell: Cell, corrected: boolean, options: {
   try {
     const extension = cell.cell.endsWith('-ts') ? 'ts' : 'cjs';
     const subject = path.join(temp, `backup cache ü.${extension}`);
-    const source = extension === 'ts'
-      ? path.join(root, 'commands/backup_cache.ts')
-      : path.join(__dirname, 'fixtures/coverage-identity/backup_cache.cjs');
+    // Recorded V8 offsets require the original source, independently of later production edits.
+    const source = path.join(__dirname, 'fixtures/coverage-identity',
+      extension === 'ts' ? 'backup_cache.ts.txt' : 'backup_cache.cjs');
     const bytes = fs.readFileSync(source);
     assert.equal(createHash('sha256').update(bytes).digest('hex'), cell.source.sha256);
     fs.writeFileSync(subject, bytes);
