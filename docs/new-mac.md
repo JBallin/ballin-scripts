@@ -28,8 +28,8 @@ backup for documents, applications, and other data.
 When the new Mac is ready, choose where to capture its future state during
 backup setup:
 
-- **Reuse the existing repository:** choose reconnect using its owning personal
-  GitHub.com account. Stop backups on the old Mac before publishing from the new
+- **Reuse the existing repository:** choose the original hostname and reconnect using
+  its owning individual account. Stop backups on the old Mac before publishing from the new
   one; only one Mac should write to a destination. Follow the
   [conflict guidance](capabilities.md#backup-consistency-and-conflicts) before
   backing up from the replacement Mac.

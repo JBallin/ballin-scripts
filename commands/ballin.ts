@@ -84,7 +84,7 @@ Use \`ballin config get update\` to inspect settings.
 
 const backupHelp = `Usage:
     ballin backup
-    ballin backup setup [repository-name]
+    ballin backup setup [repository-name] [--hostname <host>]
     ballin backup open
     ballin backup list
     ballin backup read <snapshot>
@@ -104,10 +104,12 @@ Run \`ballin help backup <subcommand>\` for subcommand-specific help.
 
 const backupSubcommandHelp: Record<BackupCommandName, string> = {
   setup: `Usage:
-    ballin backup setup [repository-name]
+    ballin backup setup [repository-name] [--hostname <host>]
 
-Create or reconnect to an optional private GitHub.com backup repository.
+Create or reconnect to an optional private GitHub backup repository owned by your account.
 Omit the repository name to choose it during setup.
+New setup asks for the GitHub hostname (default: github.com); --hostname skips that question.
+Configured backups keep their selected host. Authenticate gh for that host before setup.
 Setup asks for confirmation and reviews sensitive-source and automatic-backup choices.
 Setup and recovery: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
 Backup sources and sensitivity: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
@@ -116,7 +118,7 @@ Backup sources and sensitivity: https://github.com/JBallin/ballin-scripts/blob/m
     ballin backup open
 
 Open the configured backup in your browser, including its saved history.
-Requires GitHub.com authentication and remote access.
+Requires authentication for the selected GitHub host and remote access.
 `,
   list: `Usage:
     ballin backup list

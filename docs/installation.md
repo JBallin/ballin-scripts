@@ -302,7 +302,7 @@ The core installer then:
 - runs `brew --prefix` only when Homebrew is present, to select a command-link
   directory;
 - makes no GitHub CLI calls when optional backup setup is declined;
-- during repository backup setup, checks the personal GitHub.com account
+- during repository backup setup, checks the individual account on the selected host
   currently used by `gh` and the selected destination, then after confirmation
   either reconnects to an existing backup or creates a private backup repository;
 - sends no analytics request during installation. Later Ballin commands may send
@@ -327,15 +327,19 @@ when you need to create or reconnect a destination.
 ```shell
 ballin backup setup
 ballin backup setup my-backup-name
+ballin backup setup work-backups --hostname git.example.com
 ```
 
-Backups are stored in a private GitHub repository. GitHub and anyone authorized
-to access the repository can read its contents.
+Backups are stored in a private GitHub repository. The selected service's
+operators and anyone with authorized repository access can read its contents.
 
 New setup offers distinct **create** and **reconnect** choices and defaults to
 `ballin-backups`. The optional argument is a repository name, not a URL or owner.
-Backups belong to the authenticated personal GitHub.com account. Setup shows
-that account and the complete destination before final confirmation. A missing
+New setup asks for a **GitHub hostname**, defaulting to `github.com`. Enter a
+custom GitHub Enterprise Server hostname such as `git.example.com`, or pass
+`--hostname <host>` to skip that question. Use a hostname only, without `https://`,
+paths or a port. Backups belong to the authenticated individual account on that
+host. Setup shows that account and the complete destination before final confirmation. A missing
 or inaccessible reconnect candidate never causes replacement creation; a create
 collision offers a checked available suggestion such as `ballin-backups-2`.
 Accept it or enter another name; setup never silently reconnects to the existing
@@ -382,6 +386,39 @@ should run backups automatically (default: no). The choice is stored in
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.
 
+### GitHub account and host support
+
+Ballin can target GitHub.com or a GitHub Enterprise Server hostname, using a
+private repository owned by the authenticated individual account. Membership in
+an Enterprise Cloud organization does not change the ownership requirement.
+
+| Account or destination | Current backup support |
+| --- | --- |
+| Personal GitHub.com account, including Enterprise Cloud organization members | Supported for a private repository owned by that account, with the required access. |
+| Enterprise Managed User account on GitHub.com | Unsupported: Ballin rejects the underscore in managed usernames. Enterprise policy can also restrict user-owned repository creation. |
+| GitHub Enterprise Server, such as `git.example.com` | Available through hostname selection for a user-owned private repository. Instance policy and required APIs must permit the operation; see validation limits below. |
+| Enterprise Cloud with data residency on GHE.com | Not qualified by this Enterprise Server support work; managed-account limitations also apply. |
+| Organization-owned repository, including an Enterprise Cloud organization's repository | Unsupported, even when the authenticated user is an organization owner or repository administrator. |
+
+GitHub permits managed accounts to own private repositories when enterprise
+policy allows it; Ballin's username check is an additional limitation. See
+[managed-account restrictions](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-iam/understanding-iam-for-enterprises/abilities-and-restrictions-of-managed-user-accounts).
+
+Setup saves the confirmed host with the destination. Existing configured
+backups keep their host and do not ask again. Older repository linkage without a
+host still means GitHub.com. Changing `GH_HOST`, a Git remote, or a retained
+legacy `backup.host` setting cannot redirect it. To choose another host,
+[disconnect](#disconnect) and set up the new destination; an explicit hostname
+that differs from a configured backup is rejected.
+
+Enterprise support is exercised with isolated fake services for host routing,
+creation/reconnect, authentication failures, publication, reads, cache separation
+and recovery. **It has not been tested against a live Enterprise service.**
+See the [API and validation boundary](backup-design.md#host-and-account-support)
+for maintainers. Host selection does not import Gist snapshots or history;
+Ballin leaves old Gists on their original service. New backup captures this
+Mac's selected sources. Choosing a different service changes where that data is stored.
+
 ### GitHub authentication and protection
 
 Ballin uses your existing `gh` authentication. It does not log in, switch
@@ -396,7 +433,17 @@ owner and ensure it can access the selected repository and write backup contents
 A token limited to selected existing repositories may reconnect when it can
 access the destination, but it cannot be assumed to access a repository that
 Ballin creates later. If authentication is missing, run
-`gh auth login --hostname github.com`. If Ballin shows an unexpected account,
+`gh auth login --hostname github.com`, or use your selected Enterprise hostname:
+
+```shell
+gh auth login --hostname git.example.com
+```
+
+For custom-host backups, install for maintenance or decline backup onboarding
+until the CLI is authenticated, then run `ballin backup setup`. Guided
+Quickstart sign-in currently targets GitHub.com. Ballin's setup reports the
+selected host's authentication command if access is missing; it does not sign in
+for you or fall back to another host. If Ballin shows an unexpected account,
 check whether an environment token is overriding your saved `gh` login.
 
 GitHub Free is supported. When the repository and current GitHub permissions
@@ -438,7 +485,7 @@ remain unchanged. Setup offers create or reconnect and asks for sensitive-source
 and automatic-backup choices again. See [Disconnect](#disconnect) for preserved
 preferences and failure handling.
 
-Ballin backup repositories must be private, belong to the personal GitHub.com
+Ballin backup repositories must be private, belong to the individual GitHub
 account used for setup, and meet Ballin's other support requirements.
 
 If a name redirects to a renamed repository, **create** can reclaim it after
@@ -483,7 +530,8 @@ original saved path.
 
 These commands inspect saved content without restoring files or executing them.
 
-For local history inspection, clone your backup repository with Git:
+For local history inspection, clone your backup repository with Git. Use your
+backup's actual URL, including its selected hostname:
 
 ```shell
 git clone https://github.com/example-user/ballin-backups.git

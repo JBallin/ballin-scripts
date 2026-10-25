@@ -19,6 +19,8 @@ const {
   configuredBackupDestination,
   isConfigObject,
   sensitiveSourceConsent,
+  parseBackupSetupArgs,
+  resolveBackupSetupHost,
 } = require('./backup_config.ts');
 const {
   configure,
@@ -604,7 +606,7 @@ const runRepositoryBackup = (
       return false;
     }
     const problem = (error as RepositoryError).problem;
-    writeStderrLine(`ballin backup: ${formatRepositoryMessage(problem, process.stderr) ?? 'Unable to reconcile local backup files.'}`);
+    writeStderrLine(`ballin backup: ${formatRepositoryMessage(problem, process.stderr, destination.host) ?? 'Unable to reconcile local backup files.'}`);
     return false;
   } finally {
     const remoteRemoved = removeRemoteSnapshots(remote);
@@ -651,7 +653,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
     rethrowInterruption(error);
     if (error instanceof SnapshotCwdError) observeBackupFailure(evidence, 'local_state');
     else observeRepositoryFailure(evidence, error);
-    writeStderrLine(`ballin backup: ${formatRepositoryMessage((error as RepositoryError).problem, process.stderr) ?? 'Unable to read backup state.'}`);
+    writeStderrLine(`ballin backup: ${formatRepositoryMessage((error as RepositoryError).problem, process.stderr, config.repository.host) ?? 'Unable to read backup state.'}`);
     return 1;
   }
 };
@@ -683,8 +685,9 @@ function runBackupCommand(args = process.argv.slice(2)): void {
   }
 
   if (command === 'setup') {
-    if (args.length > 2) {
-      writeStderrLine('ballin backup setup: expected at most one repository name');
+    let setup: { repositoryName?: string; hostname?: string };
+    try { setup = parseBackupSetupArgs(args.slice(1)); } catch (error) {
+      writeStderrLine(`ballin backup setup: ${(error as Error).message}`);
       process.exitCode = 1;
       return;
     }
@@ -692,6 +695,11 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     const originalConfig = readOriginalSetupConfig(configPath);
     if (!originalConfig) {
       writeStderrLine('ballin backup setup: unable to inspect config');
+      process.exitCode = 1;
+      return;
+    }
+    try { resolveBackupSetupHost(originalConfig, setup.hostname); } catch (error) {
+      writeStderrLine(`ballin backup setup: ${(error as Error).message}`);
       process.exitCode = 1;
       return;
     }
@@ -707,7 +715,8 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       backupCacheDir,
       configPath,
       originalConfig,
-      repositoryName: args[1],
+      repositoryName: setup.repositoryName,
+      hostname: setup.hostname,
       reviewExistingSettings: true,
       onCancelled: () => { cancelled = true; },
     });
@@ -799,7 +808,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     } else if (command === 'open') {
       withTemporaryStatus('Opening...', () => {
         const url = repositoryOpenUrl(config.repository);
-        const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: 'github.com' }, stdio: 'ignore' });
+        const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: config.repository.host }, stdio: 'ignore' });
         requireUninterrupted(result);
         process.exitCode = result.error ? 1 : spawnResultStatus(result);
         if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
@@ -814,7 +823,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     rethrowInterruption(error);
     writeStderrLine(error instanceof DirectorySnapshotError
       ? `ballin backup read: ${(error as Error).message}`
-      : `ballin backup: ${formatRepositoryMessage((error as RepositoryError).problem, process.stderr) ?? 'Unable to read backup state.'}`);
+      : `ballin backup: ${formatRepositoryMessage((error as RepositoryError).problem, process.stderr, config.repository.host) ?? 'Unable to read backup state.'}`);
     process.exitCode = 1;
   }
 }

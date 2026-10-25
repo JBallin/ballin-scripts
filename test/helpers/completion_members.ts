@@ -3,7 +3,7 @@ const path = require('node:path');
 const { repositoryCacheDirectory } = require('../../commands/backup_cache.ts');
 
 const bundle = 'codex_skills.bundle.json';
-const destination = { id: 'repository-id', ownerId: 'owner-id', name: 'backup', branch: 'main' };
+const destination = { host: 'github.com', id: 'repository-id', ownerId: 'owner-id', name: 'backup', branch: 'main' };
 const archive = (names = ['skill with spaces/SKILL.md', "quotes'and\"marks/file.md", 'other/readme.md']) => JSON.stringify({
   format: 'ballin-directory', version: 2,
   entries: names.map((name) => ({ path: name, executable: false, encoding: 'utf8', content: ['text\n'] })),

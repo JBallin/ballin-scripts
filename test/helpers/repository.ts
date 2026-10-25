@@ -6,9 +6,9 @@ import type { SpawnSyncOptions } from 'child_process';
 
 type FixtureCommit = { files: Record<string, string>; parents: string[]; tree: string };
 type FixtureRuleset = Record<string, unknown> & { id: number; name: string };
-type Request = { endpoint: string; method: string; payload?: { query?: string; variables?: Record<string, unknown>; [key: string]: unknown }; debug?: string };
+type Request = { endpoint: string; method: string; payload?: { query?: string; variables?: Record<string, unknown>; [key: string]: unknown }; debug?: string; host?: string; environmentHost?: string };
 type FixtureState = {
-  exists: boolean; id: string; ownerId: string; login: string; name: string; branch: string; head: string;
+  exists: boolean; host: string; id: string; ownerId: string; login: string; name: string; branch: string; head: string;
   commits: Record<string, FixtureCommit>; requests: Request[]; rulesets: FixtureRuleset[]; nextRulesetId: number;
   faults: Record<string, unknown>;
 };
@@ -18,7 +18,7 @@ const blobHash = (base64: string): string => {
   const bytes = Buffer.from(base64, 'base64');
   return crypto.createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 };
-const fixtureDestination = { id: 'R_fixture', ownerId: 'U_fixture', name: 'ballin-backups', branch: 'main' };
+const fixtureDestination = { host: 'github.com', id: 'R_fixture', ownerId: 'U_fixture', name: 'ballin-backups', branch: 'main' };
 const fixtureRuleset = (overrides: Record<string, unknown> = {}): FixtureRuleset => ({
   id: 1,
   name: repositoryConstants().managedBranchRulesetName,
@@ -57,16 +57,19 @@ const fixtureState = (snapshots: Record<string, string> = {}): FixtureState => {
 const reply = (body: unknown, status = 0): Response => ({ status, stdout: JSON.stringify(body), signal: null });
 const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncOptions = {}): Response => {
   if (args[0] === 'browse') {
-    state.requests.push({ endpoint: 'open', method: 'GET', payload: { args } });
-    const expected = ['browse', '--repo', `https://github.com/${state.login}/${state.name}`];
+    state.requests.push({ endpoint: 'open', method: 'GET', payload: { args }, environmentHost: options.env?.GH_HOST });
+    const expected = ['browse', '--repo', `https://${state.host}/${state.login}/${state.name}`];
     if (JSON.stringify(args) !== JSON.stringify(expected)) return reply({}, 1);
+    if (options.env && options.env.GH_HOST !== state.host) throw new Error('Browser fixture targeted the wrong host');
     return { ...reply({}, state.faults.open ? 7 : 0), stderr: state.faults.open ? 'DUMMY_PRIVATE_BROWSER_ERROR' : '' };
   }
   const methodIndex = args.indexOf('--method');
   const method = methodIndex >= 0 ? args[methodIndex + 1] : 'GET';
   const endpoint = methodIndex >= 0 ? args[methodIndex + 2] : args[3];
   const payload = options.input ? JSON.parse(String(options.input)) : undefined;
-  state.requests.push({ endpoint, method, payload, debug: options.env?.GH_DEBUG });
+  const host = args[args.indexOf('--hostname') + 1];
+  state.requests.push({ endpoint, method, payload, debug: options.env?.GH_DEBUG, host, environmentHost: options.env?.GH_HOST });
+  if (host !== state.host || (options.env && options.env.GH_HOST !== state.host)) throw new Error('API fixture targeted the wrong host');
   const fault = state.faults;
   const transport = fault.transport as { target: string; response: Response } | undefined;
   if (transport && (endpoint.includes(transport.target) || payload?.query?.includes(transport.target))) return transport.response;

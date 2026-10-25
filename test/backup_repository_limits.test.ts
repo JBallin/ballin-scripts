@@ -113,7 +113,7 @@ describe('repository backup resource limits', function() {
         ? { status: null, error: Object.assign(new Error('DUMMY_PRIVATE_ERROR'), { code: 'ENOBUFS' }), stdout: 'not JSON' }
         : { status: 0, stdout: kind === 'stderr' ? '{}' : 'x'.repeat(kind === 'combined' ? 600_000 : 1_100_000),
           stderr: kind === 'stdout' ? '' : 'DUMMY_PRIVATE_ERROR'.repeat(kind === 'combined' ? 30_000 : 60_000) };
-      assert.throws(() => readRepositoryAccount(options), RepositoryError, 'normal CLI limits');
+      assert.throws(() => readRepositoryAccount('github.com', options), RepositoryError, 'normal CLI limits');
       assert.notInclude(String(inspectRepository(fixtureDestination, options).problem), 'DUMMY_PRIVATE_ERROR');
     });
   }
@@ -123,7 +123,7 @@ describe('repository backup resource limits', function() {
       assert.equal(opts.maxBuffer, 1024 * 1024); assert.equal(opts.timeout, 30000); assert.equal(opts.killSignal, 'SIGKILL');
       return requestFixture(state, args, opts);
     };
-    assert.equal(readRepositoryAccount(options).id, state.ownerId);
+    assert.equal(readRepositoryAccount('github.com', options).id, state.ownerId);
   });
   it('allows a bounded slow snapshot transfer without retrying publication', () => {
     const before = read(), bytes = Buffer.alloc(3 * 1024 * 1024, 120);

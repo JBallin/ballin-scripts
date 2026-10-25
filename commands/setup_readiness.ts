@@ -8,7 +8,7 @@ const {
   configuredBackupDestination,
   sensitiveSourceConsent,
 } = require('./backup_config.ts');
-const { inspectRepository, repositoryMessages } = require('./backup_repository.ts');
+const { inspectRepository, formatRepositoryMessage } = require('./backup_repository.ts');
 import type { RepositoryInspection } from './backup_repository.ts';
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
@@ -283,7 +283,7 @@ const guConfigChecks = (
       status: inspection.status === 'complete' ? 'pass' : 'fail',
       summary: inspection.status === 'complete'
         ? 'The expected private backup is readable. Write permission and current source coverage were not checked.'
-        : repositoryMessages[inspection.problem],
+        : formatRepositoryMessage(inspection.problem, {}, selected.repository.host),
     });
     return checks;
   }

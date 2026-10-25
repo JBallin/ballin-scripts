@@ -1,9 +1,17 @@
 const { formatDefaultDoctorReport, formatVerboseDoctorReport } = require('../commands/doctor_report.ts');
-const { repositoryMessages } = require('../commands/backup_repository.ts');
+const { repositoryMessages, formatRepositoryMessage } = require('../commands/backup_repository.ts');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
 describe('doctor literal recovery guidance', () => {
+  it('retains the selected custom host in authentication guidance', () => {
+    const report = { status: 'fail', checks: [{ id: 'backup.read', label: 'Backup', status: 'fail',
+      summary: formatRepositoryMessage('authentication', {}, 'git.example.com') }] };
+    for (const formatted of [formatDefaultDoctorReport(report), formatVerboseDoctorReport(report)]) {
+      assert.include(formatted, 'gh auth login --hostname git.example.com');
+      assert.notInclude(formatted, 'github.com');
+    }
+  });
   const cases = {
     'config.read': 'Run `ballin config reset` to recreate the config.',
     'backup.read': 'Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.',

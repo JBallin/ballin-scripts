@@ -24,7 +24,9 @@ alongside other tools.
 
 Start with Git and [Node.js 24.12 or newer](docs/optional-capabilities.md#nodejs)
 on your `PATH`. Homebrew is optional; backups require
-[GitHub CLI](https://cli.github.com/) authenticated to GitHub.com.
+[GitHub CLI](https://cli.github.com/) authenticated to your selected GitHub host.
+Backups use a private repository owned by your personal account; see
+[GitHub.com and Enterprise Server support](docs/installation.md#github-account-and-host-support).
 
 Open Terminal and run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 

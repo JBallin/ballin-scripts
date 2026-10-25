@@ -40,6 +40,7 @@ type ConfigLeaf = string | number | boolean | null;
 type ConfigValue = ConfigLeaf | ConfigObject;
 type SetupMode = 'fresh' | 'refresh' | 'self-update';
 type ConfigureBackupOptions = {
+  hostname?: string;
   backupCacheDir?: string;
   configPath?: string;
   originalConfig?: Record<string, unknown>;
@@ -162,7 +163,7 @@ const configureBackup = (
   const originalConfig = options.originalConfig ?? readOriginalSetupConfig(configPath);
   if (!originalConfig) return false;
   return configureRepositoryBackup({
-    configPath, originalConfig, repositoryName: options.repositoryName, onCancelled: options.onCancelled,
+    configPath, originalConfig, repositoryName: options.repositoryName, hostname: options.hostname, onCancelled: options.onCancelled,
     initialConsent: options.initialConsent,
     presentation: options.presentation,
     showValidationSummary: options.showValidationSummary,

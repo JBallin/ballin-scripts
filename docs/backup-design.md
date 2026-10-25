@@ -14,11 +14,11 @@ finite failure reasons, and a revision handle. There is no backend/provider
 registry. `commands/backup.ts` owns staging, three-way comparison, and private
 cache promotion for repository backups.
 
-Local `backup.repository` is null or `{ id, ownerId, name, branch }`: opaque
+Local `backup.repository` is null or `{ host, id, ownerId, name, branch }`: opaque
 GitHub node IDs establish identity, the mutable name locates REST resources,
 and the initial default branch remains selected. The effective `gh api ... user`
-account must be the personal GitHub.com owner. Stable-ID resolution revalidates
-owner, private visibility, supported state, selected branch, and marker. A rename
+account must be the individual owner on the selected host. Stable-ID resolution
+revalidates owner, private visibility, supported state, selected branch, and marker. A rename
 cannot switch destinations. An explicit setup name must resolve to the same
 identity when configured. Invalid or unsupported local destination configuration
 fails without fallback or remote operations.
@@ -74,6 +74,52 @@ guide. Ballin verifies the resulting tree and marker before saving the repositor
 as the configured destination. Later backups leave `README.md` untouched and
 ignore it as backup state. If initialization cannot be confirmed safely, Ballin
 stops for inspection rather than risk creating a duplicate repository.
+
+## Host and account support
+
+The [support matrix](installation.md#github-account-and-host-support) distinguishes
+GitHub.com personal accounts, GitHub Enterprise Server, managed users and
+organization ownership. New setup asks for the host, defaulting to GitHub.com;
+`--hostname` selects it without that question. Confirmed linkage stores the
+canonical host in `backup.repository`. Older repository objects without that
+field resolve to GitHub.com, independently of a retained legacy `backup.host`.
+A present invalid host fails closed. Configured setup refuses another explicit
+host; changing services requires disconnect and new setup.
+
+Transport passes both `--hostname` and `GH_HOST` for that destination. GitHub CLI
+selects the corresponding REST/GraphQL base and existing credential. Account
+lookups, conditional writes, readback, browser/commit/recovery URLs and cache keys
+use the same host. Backup storage uses APIs independently of the installed
+checkout's Git remote. Product-source and documentation links remain on GitHub.com.
+
+Account lookup requires REST `type: User` and an alphanumeric-or-hyphen login.
+The login check rejects managed usernames containing an underscore. Repository
+lookup requires the authenticated account's stable ID and a `User` owner;
+creation uses `/user/repos`. Identity comparisons include the host so IDs from
+different services cannot identify the same destination. Marker format v1 stays
+unchanged: its IDs are validated within the configured host's repository.
+
+The existing bootstrap/publication contract is reused. GHES 3.21 documents
+[`createCommitOnBranch` with `expectedHeadOid`](https://docs.github.com/en/enterprise-server@3.21/graphql/reference/commits#createcommitonbranch)
+and [repository updates with `has_pull_requests`](https://docs.github.com/en/enterprise-server@3.21/rest/repos/repos#update-a-repository).
+This is API-schema evidence, not a claim that 3.21 is the minimum compatible
+version or that a live Enterprise instance has passed validation. Isolated
+fixtures exercise hostname routing, create/reconnect, authentication and policy
+failures, publication, recovery, old linkage and cross-host cache isolation.
+Real CLI credential selection, TLS/network access and live GHES API/policy
+behavior remain unvalidated. An instance must allow private user-owned
+repositories and the mandatory API operations; optional rulesets remain nonfatal.
+
+The old configurable Gist host was a separate storage path.
+[`gu.url`](https://github.com/JBallin/ballin-scripts/pull/13) originally selected
+the browser URL while the Ruby `gist` dependency selected its API host externally.
+[The GitHub CLI migration](https://github.com/JBallin/ballin-scripts/pull/171)
+introduced explicit `gu.host` routing through `GH_HOST`; the
+[Ballin 2 rename](https://github.com/JBallin/ballin-scripts/pull/229) called it
+`backup.host`. The [original repository scope](https://github.com/JBallin/ballin-scripts/issues/333)
+was GitHub.com-only; [Gist retirement](https://github.com/JBallin/ballin-scripts/pull/449)
+removed that path. Host selection now belongs to repository identity. Setup
+neither imports historical Gist contents/history nor deletes them.
 
 ## Managed-branch protection
 
@@ -195,8 +241,9 @@ included affects future captures but does not delete existing remote snapshots
 or history.
 
 Repository caches live beneath `.backup-cache/<hash>`, using SHA-256 of the
-fixed GitHub.com/owner ID/repository ID/selected branch tuple. Mutable names and
-legacy cache files cannot establish a base. New linkage invalidates all
+canonical host/owner ID/repository ID/selected branch tuple. Older GitHub.com
+linkage retains the exact same namespace after host normalization. Mutable names
+and legacy cache files cannot establish a base. New linkage invalidates all
 untrusted comparison state before atomically saving linkage, local consent, and
 eligible restored preferences. Recovery never seeds a comparison base from remote
 content. Disconnect saves both associations cleared and automatic backup disabled

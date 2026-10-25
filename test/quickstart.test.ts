@@ -3024,7 +3024,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         const core = 'login\nyes\nyes\n';
         const answers = choice === 'analytics-eof' ? '' : 'no\nlogin\nno\n';
         const setup = choice === 'maintenance' || choice === 'analytics-eof' ? ''
-          : 'create\n\nno\n' + (choice === 'final-no' ? 'no\n' : choice === 'final-eof' ? '' : 'yes\nno\nyes\n');
+          : '\ncreate\n\nno\n' + (choice === 'final-no' ? 'no\n' : choice === 'final-eof' ? '' : 'yes\nno\nyes\n');
         const result = runSandbox(sandbox, ['quickstart'], prefix + core + answers + setup);
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.equal(result.stdout.split(terminalGuidanceMessage).length - 1, 1);
@@ -3059,7 +3059,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         const configPath = path.join(sandbox.repo, 'ballin.config.json');
         const previousConfig = fs.readFileSync(configPath, 'utf8');
         assert.isUndefined(JSON.parse(previousConfig).backup.repository);
-        const result = runSandbox(sandbox, ['quickstart'], `yes\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
+        const result = runSandbox(sandbox, ['quickstart'], `yes\n\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.lengthOf(result.stdout.match(/Create a new backup or reconnect to an existing one\?/gu) ?? [], 1);
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
@@ -3104,7 +3104,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
     try {
       const profile = path.join(sandbox.home, '.bash_profile');
       fs.writeFileSync(profile, '# Synthetic Bash login settings\n', { mode: 0o640 });
-      const result = runSandbox(sandbox, ['quickstart'], 'yes\nlogin\nyes\nyes\nno\nlogin\nyes\ncreate\n\nyes\nyes\nno\nyes\n');
+      const result = runSandbox(sandbox, ['quickstart'], 'yes\nlogin\nyes\nyes\nno\nlogin\nyes\n\ncreate\n\nyes\nyes\nno\nyes\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'PATH line added');
       assert.notInclude(result.stdout, 'Tab completion enabled.');

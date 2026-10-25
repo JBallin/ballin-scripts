@@ -36,6 +36,8 @@ describe('completion definitions and local member reader', () => {
     assert.deepEqual(complete(), ['skill with spaces/SKILL.md', "quotes'and\"marks/file.md", 'other/readme.md']);
     assert.equal(process.cwd(), cwd);
     assert.deepEqual(fixtureState(fixture), before);
+    fs.writeFileSync(files.config, JSON.stringify({ backup: { repository: { ...destination, host: 'git.example.com' } } }));
+    assert.deepEqual(complete(), []);
     fs.writeFileSync(files.config, JSON.stringify({ backup: { repository: { ...destination, branch: 'different' } } }));
     assert.deepEqual(complete(), []);
     fs.writeFileSync(files.config, JSON.stringify({ backup: { repository: { ...destination, ownerId: 'other' } } }));

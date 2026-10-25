@@ -33,6 +33,16 @@ const baseline = (): ConfigObject => ({
 });
 
 describe('portable Ballin preferences', () => {
+  it('never exports a destination host or replaces it from recovered preferences', () => {
+    const local = { update: { cleanup: 'true' }, backup: { repository: {
+      host: 'git.example.com', id: 'R_local', ownerId: 'U_local', name: 'backup', branch: 'main',
+    } } };
+    assert.deepEqual(projectPortablePreferences(local), { update: { cleanup: 'true' } });
+    const recovered = restorePortablePreferences(local, local, { backup: { repository: {
+      ...local.backup.repository, host: 'github.com', id: 'R_other',
+    } } });
+    assert.deepEqual(recovered.backup, local.backup);
+  });
   describe('setup context before defaults are filled', () => {
     let temporaryRoot: string;
     let configPath: string;

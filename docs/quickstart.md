@@ -1,6 +1,9 @@
 # Quickstart: Install Ballin
 
 You’ll need a [GitHub account](https://github.com/signup) only if you choose to set up backups.
+Quickstart’s guided sign-in uses GitHub.com. For a GitHub Enterprise Server
+backup, choose maintenance-only installation here, then follow
+[custom-host backup setup](installation.md#github-account-and-host-support).
 
 Open Terminal and paste:
 

@@ -26,7 +26,7 @@ describe('private repository transport', () => {
   });
 
   it('uses the effective account, candidate identity, and stable node lookup', () => {
-    const account = readRepositoryAccount(options);
+    const account = readRepositoryAccount('github.com', options);
     assert.equal(account.id, state.ownerId);
     assert.deepEqual(candidateRepository(state.name, account, options), fixtureDestination);
     assert.equal(repositoryUrl(fixtureDestination, account), 'https://github.com/fixture-user/ballin-backups');
@@ -71,7 +71,7 @@ describe('private repository transport', () => {
   });
   it('recognizes the real string 404 response without claiming a prior destination was deleted', () => {
     state.exists = false;
-    assert.isNull(candidateRepository(state.name, readRepositoryAccount(options), options));
+    assert.isNull(candidateRepository(state.name, readRepositoryAccount('github.com', options), options));
     assert.equal(inspectRepository(fixtureDestination, options).problem, 'unavailable');
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 0);
   });
@@ -131,7 +131,7 @@ describe('private repository transport', () => {
     }
   }
   it('preserves candidate access ambiguity and does not turn connection failure into absence', () => {
-    const account = readRepositoryAccount(options);
+    const account = readRepositoryAccount('github.com', options);
     state.faults.transport = { target: 'repos/', response: { status: 1, stdout: '', stderr: 'connection refused', signal: null } };
     assert.throws(() => candidateRepository(state.name, account, options), RepositoryError, 'Unable to connect');
     state.faults.transport = { target: 'repos/', response: { status: 1, stdout: '{"status":"404"}', stderr: 'connection refused', signal: null } };
@@ -142,23 +142,23 @@ describe('private repository transport', () => {
   });
   it('retains same-owner redirected identity for the caller to classify', () => {
     state.faults.candidate = 'redirect';
-    assert.deepEqual(candidateRepository(state.name, readRepositoryAccount(options), options), {
+    assert.deepEqual(candidateRepository(state.name, readRepositoryAccount('github.com', options), options), {
       ...fixtureDestination, id: 'R_renamed', redirected: true,
     });
     assert.isTrue(state.requests.every((request) => request.method === 'GET'));
   });
   it('keeps case-insensitive exact-name collisions', () => {
     state.faults.candidateMetadata = { name: state.name.toUpperCase() };
-    assert.deepEqual(candidateRepository(state.name, readRepositoryAccount(options), options), fixtureDestination);
+    assert.deepEqual(candidateRepository(state.name, readRepositoryAccount('github.com', options), options), fixtureDestination);
   });
   [undefined, '', '../invalid', 42].forEach((name) => it(`rejects malformed candidate names ${JSON.stringify(name)}`, () => {
     state.faults.candidateMetadata = { name };
-    assert.throws(() => candidateRepository(state.name, readRepositoryAccount(options), options), RepositoryError);
+    assert.throws(() => candidateRepository(state.name, readRepositoryAccount('github.com', options), options), RepositoryError);
   }));
   it('rejects foreign-owner redirects before allowing creation', () => {
     state.faults.candidate = 'redirect';
     state.faults.candidateMetadata = { owner: { node_id: 'U_other', type: 'User' } };
-    assert.throws(() => candidateRepository(state.name, readRepositoryAccount(options), options), RepositoryError);
+    assert.throws(() => candidateRepository(state.name, readRepositoryAccount('github.com', options), options), RepositoryError);
     assert.isTrue(state.requests.every((request) => request.method === 'GET'));
   });
   it('reads only the requested supported snapshot and marker without exposing a partial reconciliation read', () => {
@@ -265,7 +265,7 @@ describe('private repository transport', () => {
     it(`rejects a mismatched created repository ${label} before initialization`, () => {
       state.exists = false;
       state.faults.createdMetadata = metadata;
-      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount(options), options), RepositoryError, 'does not match');
+      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount('github.com', options), options), RepositoryError, 'does not match');
       assert.equal(state.requests.filter((request) => request.endpoint === 'user/repos').length, 1);
       assert.equal(publications().length, 0);
       assert.deepEqual(state.requests.map(({ endpoint }) => endpoint), ['user', 'user', 'user/repos']);
@@ -273,7 +273,7 @@ describe('private repository transport', () => {
   }
   it('stops repository creation when the effective account changes before the write', () => {
     state.exists = false;
-    const account = readRepositoryAccount(options);
+    const account = readRepositoryAccount('github.com', options);
     state.faults.user = { node_id: 'U_other', login: 'other', type: 'User' };
     assert.throws(() => createRepositoryBackup(state.name, account, options), RepositoryError, 'does not match');
     assert.equal(state.requests.filter((request) => request.endpoint === 'user/repos').length, 0);
@@ -281,7 +281,7 @@ describe('private repository transport', () => {
   });
   it('creates a private repository and initializes the marker and Ballin README in one conditional commit', () => {
     state.exists = false;
-    const result = createRepositoryBackup(state.name, readRepositoryAccount(options), options);
+    const result = createRepositoryBackup(state.name, readRepositoryAccount('github.com', options), options);
     assert.deepEqual([...result.snapshots.keys()], ['.ballin-backup.json']);
     assert.deepEqual(
       result.revision.entries.map(({ path }: { path: string }) => path).sort(),
@@ -322,7 +322,7 @@ describe('private repository transport', () => {
     it(`retains creation evidence without initialization after feature settings failure ${JSON.stringify(faults)}`, () => {
       state.exists = false; Object.assign(state.faults, faults);
       try {
-        createRepositoryBackup(state.name, readRepositoryAccount(options), options);
+        createRepositoryBackup(state.name, readRepositoryAccount('github.com', options), options);
         assert.fail('expected feature settings failure');
       } catch (error) {
         assert.instanceOf(error, RepositoryError);
@@ -348,7 +348,7 @@ describe('private repository transport', () => {
         }
         return requestFixture(state, args, opts);
       };
-      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount(options), options), RepositoryError, 'pull-request settings step');
+      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount('github.com', options), options), RepositoryError, 'pull-request settings step');
       assert.lengthOf(publications(), 0);
       assert.lengthOf(state.requests.filter((r) => r.method === 'PATCH'), 1);
     });
@@ -374,7 +374,7 @@ describe('private repository transport', () => {
         return result;
       };
       try {
-        createRepositoryBackup(state.name, readRepositoryAccount(options), options);
+        createRepositoryBackup(state.name, readRepositoryAccount('github.com', options), options);
         assert.fail('expected seed rejection');
       } catch (error) {
         assert.instanceOf(error, RepositoryError);
@@ -755,7 +755,7 @@ describe('private repository transport', () => {
         }
         return result;
       };
-      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount(options), options), RepositoryError, 'not a supported');
+      assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount('github.com', options), options), RepositoryError, 'not a supported');
       assert.equal(publications().length, 0);
     });
   });
@@ -929,11 +929,11 @@ describe('private repository transport', () => {
   }));
   [null, false, '', 'unsafe value'].forEach((nodeId) => it(`rejects malformed account identity ${JSON.stringify(nodeId)}`, () => {
     state.faults.user = { type: 'User', login: 'fixture-user', node_id: nodeId };
-    assert.throws(() => readRepositoryAccount(options), RepositoryError);
+    assert.throws(() => readRepositoryAccount('github.com', options), RepositoryError);
   }));
   [{ type: 'Bot' }, { type: 'User', login: 'bad/path' }].forEach((user) => it('rejects unsupported effective accounts', () => {
     state.faults.user = user;
-    assert.throws(() => readRepositoryAccount(options), RepositoryError);
+    assert.throws(() => readRepositoryAccount('github.com', options), RepositoryError);
   }));
   const faults = [
     { auth: true }, { query: 'errors' }, { query: 'missing' }, { tree: 'unreadable' },
@@ -973,11 +973,11 @@ describe('private repository transport', () => {
   });
   ['reject', 'ambiguous'].forEach((mode) => it(`does not repeat ${mode} repository creation`, () => {
     state.exists = false; state.faults.create = mode;
-    assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount(options), options), RepositoryError);
+    assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount('github.com', options), options), RepositoryError);
     assert.equal(state.requests.filter((r) => r.endpoint === 'user/repos').length, 1);
   }));
   it('rejects invalid candidates and handles candidate access/owner failures', () => {
-    const account = readRepositoryAccount(options);
+    const account = readRepositoryAccount('github.com', options);
     assert.throws(() => candidateRepository('../bad', account, options), RepositoryError);
     assert.throws(() => createRepositoryBackup('../bad', account, options), RepositoryError);
     state.faults.candidate = 'denied';
@@ -987,13 +987,13 @@ describe('private repository transport', () => {
   });
   it('sanitizes malformed transport output and spawn/storage failures', () => {
     options.runCommand = () => ({ status: 0, stdout: 'dummy-sensitive-text' });
-    assert.throws(() => readRepositoryAccount(options), RepositoryError, 'invalid');
+    assert.throws(() => readRepositoryAccount('github.com', options), RepositoryError, 'invalid');
     options.runCommand = () => ({ status: 1, error: new Error('dummy-secret') });
-    assert.throws(() => readRepositoryAccount(options), RepositoryError, 'cause is unconfirmed');
+    assert.throws(() => readRepositoryAccount('github.com', options), RepositoryError, 'cause is unconfirmed');
     const original = fs.openSync;
     try {
       fs.openSync = () => { throw new Error('local secret'); };
-      assert.throws(() => readRepositoryAccount(options), RepositoryError, 'private backup transport');
+      assert.throws(() => readRepositoryAccount('github.com', options), RepositoryError, 'private backup transport');
     } finally { fs.openSync = original; }
   });
 });

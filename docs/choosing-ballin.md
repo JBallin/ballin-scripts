@@ -39,8 +39,8 @@ checks protect saved content from some conflicting writes; they do not provide
 multi-Mac synchronization. `ballin doctor` checks readiness, not whether every
 source is captured or a saved snapshot is current.
 
-Private GitHub storage is not client-side encryption. GitHub and authorized
-accounts can read the saved contents. Ballin does not scan or redact secrets;
+Private GitHub storage is not client-side encryption. The selected service's
+operators and authorized accounts can read the saved contents. Ballin does not scan or redact secrets;
 even inventories can contain private names, paths, and URLs.
 
 ## Other useful workflows

@@ -4,6 +4,6 @@ import type { RepositoryDestination } from './backup_config.ts';
 
 // Shared namespace calculation without importing remote backup workflows.
 const repositoryCacheDirectory = (root: string, destination: RepositoryDestination): string => path.join(root,
-  crypto.createHash('sha256').update(JSON.stringify(['github.com', destination.ownerId, destination.id, destination.branch])).digest('hex'));
+  crypto.createHash('sha256').update(JSON.stringify([destination.host, destination.ownerId, destination.id, destination.branch])).digest('hex'));
 
 module.exports = { repositoryCacheDirectory };

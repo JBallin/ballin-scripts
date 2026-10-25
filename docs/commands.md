@@ -10,7 +10,7 @@ syntax and options, such as `ballin help backup read`.
 | `ballin help [command...]` | Shows available commands or help for a command or subcommand. |
 | [`ballin update`](capabilities.md#ballin-update) | Runs configured update tasks. |
 | [`ballin backup`](capabilities.md#ballin-backup) | Updates snapshots in the configured backup. |
-| [`ballin backup setup [repository-name]`](installation.md#optional-backup-setup-and-reconnect) | Creates, reconnects to, or revalidates a private backup repository. |
+| [`ballin backup setup [repository-name] [--hostname <host>]`](installation.md#optional-backup-setup-and-reconnect) | Creates, reconnects to, or revalidates a private backup repository. |
 | [`ballin backup open`](installation.md#inspect-saved-backups) | Opens the backup and its history in your browser. |
 | [`ballin backup list`](installation.md#inspect-saved-backups) | Lists supported saved snapshots. |
 | [`ballin backup read <snapshot>`](installation.md#inspect-saved-backups) | Prints a saved snapshot's original contents. |
