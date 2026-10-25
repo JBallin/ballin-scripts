@@ -28,6 +28,10 @@ const {
 const {
   runBackupCommand,
 } = require('./backup.ts');
+import type { BackupCommandName } from './backup_commands.ts';
+const { isBackupCommandName } = require('./backup_commands.ts') as {
+  isBackupCommandName: (value: unknown) => value is BackupCommandName;
+};
 const {
   runUpdateCommand,
 } = require('./update.ts');
@@ -53,7 +57,7 @@ https://github.com/JBallin/ballin-scripts
 Usage:
 
     ballin <command> [options]
-    ballin --help
+    ballin help [command...]
 
 Commands:
 
@@ -65,12 +69,12 @@ Commands:
     self-update           update Ballin itself
     uninstall             remove Ballin
 
-Run \`ballin <command> --help\` for command-specific help.
+Run \`ballin help <command...>\` for command or subcommand help.
+You can also append \`--help\` to a command.
 
 `;
 const updateHelp = `Usage:
     ballin update
-    ballin update --help
 
 Update the Ballin-managed macOS development environment.
 Configured stages can update Homebrew, Node.js LTS, global npm packages,
@@ -87,7 +91,6 @@ const backupHelp = `Usage:
     ballin backup read <snapshot> --list
     ballin backup read <snapshot> --file <path>
     ballin backup disconnect
-    ballin backup --help
 
 Back up Ballin-managed environment state to the configured backup.
 \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
@@ -96,11 +99,53 @@ For bundle snapshots, append \`--list\` to list their files or \`--file <path>\`
 Without a snapshot selector, \`read\` shows usage and lists saved options when readable.
 \`disconnect\` stops local backups and clears comparison state.
 Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`.
+Run \`ballin help backup <subcommand>\` for subcommand-specific help.
 `;
+
+const backupSubcommandHelp: Record<BackupCommandName, string> = {
+  setup: `Usage:
+    ballin backup setup [repository-name]
+
+Create or reconnect to an optional private GitHub.com backup repository.
+Omit the repository name to choose it during setup.
+Setup asks for confirmation and reviews sensitive-source and automatic-backup choices.
+Setup and recovery: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
+Backup sources and sensitivity: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
+`,
+  open: `Usage:
+    ballin backup open
+
+Open the configured backup in your browser, including its saved history.
+Requires GitHub.com authentication and remote access.
+`,
+  list: `Usage:
+    ballin backup list
+
+List supported snapshots saved in the configured backup.
+Requires remote read access; does not collect local backup sources.
+`,
+  read: `Usage:
+    ballin backup read <snapshot>
+    ballin backup read <snapshot> --list
+    ballin backup read <snapshot> --file <path>
+
+Print a supported saved snapshot's original bytes without restoring or executing it.
+For bundle snapshots, \`--list\` lists saved files; \`--file <path>\` prints one file's original bytes.
+Without a snapshot selector, show usage and list saved options when readable.
+Requires remote read access.
+Inspect saved backups: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#inspect-saved-backups
+`,
+  disconnect: `Usage:
+    ballin backup disconnect
+
+Clear local backup linkage and comparison state, and disable automatic backup during updates.
+Preserve remote history, shared GitHub CLI authentication, and sensitive-source preferences.
+Requires no authentication or network access.
+`,
+};
 
 const doctorHelp = `Usage:
     ballin doctor [--verbose]
-    ballin doctor --help
 
 Check whether the Ballin-managed environment is healthy.
 Use \`--verbose\` to show full readiness details.
@@ -108,14 +153,12 @@ Use \`--verbose\` to show full readiness details.
 
 const selfUpdateHelp = `Usage:
     ballin self-update
-    ballin self-update --help
 
 Update the local \`ballin-scripts\` checkout, command shims, and configuration.
 `;
 
 const uninstallHelp = `Usage:
     ballin uninstall
-    ballin uninstall --help
 
 Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
 `;
@@ -123,6 +166,15 @@ Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
 const isCommandHelp = (args: string[]): boolean => (
   args.length === 2 && args[1] === commandHelpOptionName
   && isTopLevelCommandName(args[0])
+);
+
+const backupHelpCommand = (args: string[]): BackupCommandName | undefined => (
+  args.length === 3 && args[0] === 'backup' && isBackupCommandName(args[1])
+    && args[2] === commandHelpOptionName ? args[1] : undefined
+);
+
+const isPositionalHelp = (args: string[]): boolean => (
+  args.length === 2 && ['backup', 'config'].includes(args[0]) && args[1] === 'help'
 );
 
 const writeStdout = (text: string): void => {
@@ -194,12 +246,12 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case undefined:
     case commandHelpOptionName:
     case 'help':
-      writeStdout(terminalCommandReferences(ballinHelp, ['ballin <command> --help']));
+      writeStdout(terminalCommandReferences(ballinHelp, ['ballin help <command...>']));
       return;
   }
 
   if (!isTopLevelCommandName(command)) {
-    writeStderr(`Unknown Ballin command: ${command}\nTry: ${terminalCommand('ballin --help', process.stderr)}\n`);
+    writeStderr(`Unknown Ballin command: ${command}\nTry: ${terminalCommand('ballin help', process.stderr)}\n`);
     process.exitCode = 2;
     return;
   }
@@ -212,17 +264,23 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       }
       runNoArgCommand('ballin update', commandArgs, runUpdateCommand);
       return;
-    case 'backup':
+    case 'backup': {
       if (isCommandHelp(args)) {
-        writeStdout(terminalCommandReferences(backupHelp, ['ballin setup']));
+        writeStdout(terminalCommandReferences(backupHelp, ['ballin setup', 'ballin help backup <subcommand>']));
         return;
       }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
-        writeStdout(terminalCommandReferences(ballinHelp, ['ballin <command> --help']));
+        writeStdout(terminalCommandReferences(ballinHelp, ['ballin help <command...>']));
+        return;
+      }
+      const helpCommand = backupHelpCommand(args);
+      if (helpCommand !== undefined) {
+        writeStdout(backupSubcommandHelp[helpCommand]);
         return;
       }
       runBackupCommand(commandArgs);
       return;
+    }
     case 'doctor':
       if (isCommandHelp(args)) {
         writeStdout(doctorHelp);
@@ -276,8 +334,16 @@ const analyticsCommandForBallinArgs = (args = process.argv.slice(2)): string => 
 };
 
 const runBallinCli = (): void => {
-  const args = process.argv.slice(2);
-  if (args.length === 0 || (args.length === 1 && ['help', commandHelpOptionName].includes(args[0])) || isCommandHelp(args)) {
+  let args = process.argv.slice(2);
+  if (args[0] === 'help') {
+    if (args.length === 2 && isTopLevelCommandName(args[1])) {
+      args = [args[1], commandHelpOptionName];
+    } else if (args.length === 3 && args[1] === 'backup' && isBackupCommandName(args[2])) {
+      args = ['backup', args[2], commandHelpOptionName];
+    }
+  }
+  if (args.length === 0 || (args.length === 1 && ['help', commandHelpOptionName].includes(args[0]))
+    || isCommandHelp(args) || backupHelpCommand(args) !== undefined || isPositionalHelp(args)) {
     runBallinCommand(args);
     return;
   }

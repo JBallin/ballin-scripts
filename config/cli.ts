@@ -11,7 +11,6 @@ const configHelp = `Usage:
     ballin config [get [key]]
     ballin config set <key> <value>
     ballin config reset
-    ballin config --help
 
 Read settings with dot paths, such as \`update.cleanup\`.
 \`set\` changes an existing setting; \`reset\` restores defaults.

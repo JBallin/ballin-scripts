@@ -386,6 +386,39 @@ describe('saved backup discovery', function() {
       assert.isFalse(fs.existsSync(path.join(root, 'collector.log')));
     }
   });
+  it('rejects malformed backup help as ordinary arguments before inventory lookup', () => {
+    fs.writeFileSync(configPath, '{broken');
+    for (const args of [
+      ['open', '--help', 'extra'], ['open', 'extra', '--help'], ['open', 'help'],
+      ['list', '--help', 'extra'], ['list', 'extra', '--help'], ['list', 'help'],
+      ['disconnect', '--help', 'extra'], ['disconnect', 'extra', '--help'], ['disconnect', 'help'],
+      ['setup', '--help', 'extra'], ['setup', 'extra', '--help'],
+      ['read', 'zshrc.sh', '--help'], ['read', '--help', 'extra'],
+      ['read', '--help', '--help'], ['--help', 'read'], ['missing', '--help'], ['help', 'extra'],
+    ]) {
+      const result = run(args);
+      assert.equal(result.status, 1, args.join(' '));
+      assert.equal(result.stdout, '');
+      assert.notInclude(result.stderr, 'Usage:');
+      assert.notInclude(result.stderr, 'unable to inspect config');
+      assert.deepEqual(state().requests, []);
+      assert.equal(fs.readFileSync(configPath, 'utf8'), '{broken');
+      assert.isFalse(fs.existsSync(path.join(root, 'collector.log')));
+    }
+  });
+  it('keeps --help literal when supplied as a saved bundle member path', () => {
+    const bytes = 'saved help file\r\n';
+    save(fixtureState({ 'codex_skills.bundle.json': JSON.stringify({
+      format: 'ballin-directory', version: 2,
+      entries: [{ path: '--help', executable: false, encoding: 'base64', content: Buffer.from(bytes).toString('base64') }],
+    }) }));
+    const result = run(['read', 'codex_skills.bundle.json', '--file', '--help']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, bytes);
+    assert.equal(result.stderr, '');
+    assert.isAbove(state().requests.length, 0);
+    preserved();
+  });
   it('rejects excess read arguments before any inventory lookup, including an empty selector', () => {
     for (const selector of ['', 'gitconfig']) {
       const result = run(['read', selector, 'extra']);

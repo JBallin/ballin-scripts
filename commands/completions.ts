@@ -19,7 +19,7 @@ const nestedCommandNames: Partial<Record<TopLevelCommandName, readonly string[]>
   backup: backupCommandNames,
   config: configOperationNames,
 };
-const topLevelCompletionNames = [...topLevelCommandNames, commandHelpOptionName];
+const topLevelCompletionNames = [...topLevelCommandNames, 'help', commandHelpOptionName];
 const commandCompletionNames = (topLevelCommandNames as readonly TopLevelCommandName[]).map((command) => [command, [
   ...(nestedCommandNames[command] ?? []),
   ...(command === 'doctor' ? [doctorVerboseOptionName] : []),
@@ -42,13 +42,16 @@ const selection = (shell: 'bash' | 'zsh'): string[] => {
     ...commandCompletionNames.map(([command, names]) => (
       `        ${command}) candidates=(${arrayWords(names)}) ;;`
     )),
+    `        help) candidates=(${arrayWords(topLevelCommandNames)}) ;;`,
     '      esac',
     '      ;;',
     `    ${3 + offset})`,
     `      case "${word(1)} ${word(2)}" in`,
     `        'config get') candidates=(${arrayWords(configNames.readable)}) ;;`,
     `        'config set') candidates=(${arrayWords(configNames.leaves)}) ;;`,
-    `        'backup read') candidates=(${arrayWords(snapshotNames)}) ;;`,
+    `        'help backup') candidates=(${arrayWords(backupCommandNames)}) ;;`,
+    `        'backup read') candidates=(${arrayWords([...snapshotNames, commandHelpOptionName])}) ;;`,
+    `        ${backupCommandNames.filter((name) => name !== 'read').map((name) => quote(`backup ${name}`)).join('|')}) candidates=(${arrayWords([commandHelpOptionName])}) ;;`,
     '      esac',
     '      ;;',
     `    ${4 + offset})`,

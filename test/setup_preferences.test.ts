@@ -583,7 +583,7 @@ fs.readFileSync = (file, ...args) => {
         NODE_OPTIONS: `${capture.env.NODE_OPTIONS} --require ${JSON.stringify(guardPath)}`,
       });
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'ballin setup --help');
+      assert.include(result.stdout, 'ballin setup');
       assert.notInclude(result.stdout, 'Review your Ballin');
       assert.deepEqual(capture.readEvents(), []);
     });

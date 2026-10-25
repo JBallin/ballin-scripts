@@ -184,7 +184,18 @@ describe('shell completions', () => {
           ['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--file', 'other/readme.md', ''],
           ['ballin', 'backup', 'read', 'unknown.bundle.json', '--file', ''],
         ]) assert.deepEqual(complete(words), [], words.join(' '));
-        assert.deepEqual(complete(['ballin', 'backup', 'read', '']), snapshotDefinitions.map(({ name }: { name: string }) => name));
+        assert.deepEqual(complete(['ballin', 'backup', 'read', '']), [
+          ...snapshotDefinitions.map(({ name }: { name: string }) => name), commandHelpOptionName,
+        ]);
+        for (const command of backupCommandNames) {
+          assert.deepEqual(complete(['ballin', 'backup', command, '--h']), [commandHelpOptionName]);
+        }
+        assert.deepEqual(complete(['ballin', 'help', 'backup', '']), [...backupCommandNames]);
+        assert.deepEqual(complete(['ballin', 'help', 'backup', 're']), ['read']);
+        for (const words of [
+          ['ballin', 'help', 'config', ''], ['ballin', 'help', 'missing', ''],
+          ['ballin', 'help', 'backup', 'read', ''], ['ballin', 'help', 'backup', 'read', '--h'],
+        ]) assert.deepEqual(complete(words), [], words.join(' '));
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_user_sk']), ['codex_user_skills.bundle.json']);
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--file', '']),
           ['skill with spaces/SKILL.md', "quotes'and\"marks/file.md", 'other/readme.md']);
@@ -304,7 +315,7 @@ describe('shell completions', () => {
         });
         assert.equal(syntax.status, 0, syntax.stderr);
         const cases: [number, string, string, readonly string[]][] = [
-          [1, '', '', [...topLevelCommandNames, commandHelpOptionName]], [1, 'upd', '', ['update']],
+          [1, '', '', [...topLevelCommandNames, 'help', commandHelpOptionName]], [1, 'upd', '', ['update']],
           [1, 'u', '', ['uninstall', 'update']], [1, 'missing', '', []],
           [2, '', 'backup', [...backupCommandNames, commandHelpOptionName]], [2, 'op', 'backup', ['open']],
           [2, 's', 'backup', ['setup']], [2, 'r', 'backup', ['read']],
@@ -314,6 +325,7 @@ describe('shell completions', () => {
           [2, 'help', 'config', []], [2, '--', 'config', [commandHelpOptionName]],
           [2, 'help', 'backup', []], [2, '--', 'backup', [commandHelpOptionName]],
           [2, 'missing', 'backup', []], [2, '', 'unknown', []],
+          [2, '', 'help', [...topLevelCommandNames]], [2, 'back', 'help', ['backup']],
           [3, '', 'backup', []], [3, '', 'config', []], [4, '', 'config', []],
           [4, '', 'backup', ['--list', '--file']], [4, '--f', 'backup', ['--file']],
         ];
@@ -341,6 +353,13 @@ describe('shell completions', () => {
         ['ballin upd\t', 'ballin update'],
         ['ballin --h\t', 'ballin --help'],
         ['ballin update --h\t', 'ballin update --help'],
+        ['ballin help back\t', 'ballin help backup'],
+        ...backupCommandNames.map((command: string) => [
+          `ballin backup ${command} --h\t`, `ballin backup ${command} --help`,
+        ]),
+        ...backupCommandNames.map((command: string) => [
+          `ballin help backup ${command.slice(0, 2)}\t`, `ballin help backup ${command}`,
+        ]),
         ['ballin doctor --v\t', 'ballin doctor --verbose'],
         ['ballin backup op\t', 'ballin backup open'],
         ['ballin config ge\t', 'ballin config get'],
