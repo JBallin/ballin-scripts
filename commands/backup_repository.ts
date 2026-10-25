@@ -15,10 +15,9 @@ import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
 type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
-  | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
+  | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
   'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
-  'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
   prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
   authentication: 'GitHub.com authentication is required. Run `gh auth login --hostname github.com`, or check the effective gh account and environment token, then retry.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
@@ -252,7 +251,7 @@ const readRepositoryAccount = (host: string, options: RepositoryOptions = {}): A
   }
   if (result.body.type !== 'User') throw new RepositoryError('identity');
   const login = identifier(result.body.login);
-  if (!/^[A-Za-z0-9-]+$/u.test(login)) throw new RepositoryError('invalid-data');
+  if (!/^[A-Za-z0-9_-]+$/u.test(login)) throw new RepositoryError('invalid-data');
   const id = identifier(result.body.node_id);
   requireCleanTransport(result);
   return { host, id, login };
@@ -755,26 +754,48 @@ const publishRepositorySnapshots = (
   if (additions.size === 0) { assertCurrent(before, options); return before; }
   return publish(before, additions, false, options);
 };
-// Only bootstrap calls this after validating the newly created destination. Never retry the write.
-const disableCreatedRepositoryPullRequests = (
+const repositoryFeatureSettings = { has_issues: false, has_wiki: false, has_projects: false, has_pull_requests: false };
+// A status alone cannot distinguish unsupported fields from policy, validation or abuse errors.
+const unsupportedFeatureFields = (result: ApiResult, settings: Record<string, boolean>): string[] => {
+  if (result.problem !== undefined || ![400, 422].includes(apiStatus(result) ?? 0) || !Array.isArray(result.body.errors)
+    || result.body.errors.length === 0 || /rate limit|abuse|spam/iu.test(responseText(result.body))) return [];
+  const fields: string[] = [];
+  for (const error of result.body.errors) {
+    if (!isConfigObject(error) || error.resource !== 'Repository' || typeof error.field !== 'string'
+      || !Object.hasOwn(settings, error.field)
+      || !(typeof error.code === 'string' && ['unsupported', 'unknown', 'not_supported'].includes(error.code)
+        || typeof error.message === 'string'
+          && /\b(?:unsupported|not supported)\b|\b(?:unknown|unrecognized)\s+(?:field|parameter|setting|feature)\b|\b(?:field|parameter|setting|feature)\b.*\b(?:unknown|unrecognized)\b/iu.test(error.message))) return [];
+    fields.push(error.field);
+  }
+  return [...new Set(fields)];
+};
+// Cosmetic settings are best effort, only on creation. At most one reduced batch;
+// assigning false remains idempotent if a rejected batch partially applied.
+const tidyCreatedRepository = (
   destination: RepositoryDestination, account: Account, options: RepositoryOptions,
 ): void => {
-  try {
-    const result = api(destination.host, `repos/${account.login}/${destination.name}`, { has_pull_requests: false }, options, false, 'PATCH');
+  const update = (settings: Record<string, boolean>): ApiResult => {
+    const result = api(destination.host, `repos/${account.login}/${destination.name}`, settings, options, false, 'PATCH');
     requireCleanTransport(result);
-    if (!result.ok) throw new RepositoryError('feature-settings');
+    if (!result.ok) {
+      if (result.problem === 'authentication' || result.problem === 'prerequisite') throw new RepositoryError(result.problem);
+      return result;
+    }
     const owner = object(result.body.owner);
     if (result.body.node_id !== destination.id || result.body.name !== destination.name
       || result.body.private !== true || owner.node_id !== account.id || owner.type !== 'User'
-      || owner.login !== account.login || result.body.has_pull_requests !== false) {
-      throw new RepositoryError('feature-settings');
+      || owner.login !== account.login) {
+      throw new RepositoryError('identity');
     }
-  } catch (error) {
-    rethrowInterruption(error);
-    const failure = new RepositoryError('feature-settings');
-    if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'cleanup')) failure.cleanupFailed = true;
-    throw failure;
-  }
+    return result;
+  };
+  const result = update(repositoryFeatureSettings);
+  if (result.ok) return;
+  const unsupported = unsupportedFeatureFields(result, repositoryFeatureSettings);
+  if (!unsupported.length) return;
+  const remaining = Object.fromEntries(Object.entries(repositoryFeatureSettings).filter(([field]) => !unsupported.includes(field)));
+  if (Object.keys(remaining).length) update(remaining);
 };
 const createRepositoryBackup = (name: string, account: Account, options: RepositoryOptions = {}): RepositoryRead => {
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
@@ -782,7 +803,6 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
   if (readRepositoryAccount(account.host, options).id !== account.id) throw new RepositoryError('identity');
   const result = api(account.host, 'user/repos', {
     name, description: 'Developer environment backups created by Ballin', private: true, auto_init: true,
-    has_issues: false, has_wiki: false, has_projects: false,
   }, options);
   if (!result.ok) throw new RepositoryError('uncertain');
   if (object(result.body.owner).node_id !== account.id || result.body.private !== true || result.body.name !== name) {
@@ -793,8 +813,8 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
   };
   try {
     requireCleanTransport(result);
-    disableCreatedRepositoryPullRequests(destination, account, options);
     const seed = requireRepositoryRead(inspect(destination, account, options, true));
+    tidyCreatedRepository(destination, account, options);
     return publish(seed, new Map([
       [repositoryMarkerFileName, markerBytes(destination)],
       [repositoryReadmeFileName, repositoryReadmeBytes()],

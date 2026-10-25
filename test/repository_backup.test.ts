@@ -196,13 +196,13 @@ describe('repository backup lifecycle', function() {
       assert.equal(state().head, head);
       assertSelectedHost();
     });
-    it('skips the question with a flag and retains custom-host creation evidence on failure', () => {
+    it('skips the host question and completes creation when optional cleanup is unsupported', () => {
       unconfigured(); selectHost();
-      const remote = state(); remote.faults.featureMetadata = { has_pull_requests: true }; saveState(remote);
-      const result = run(['setup', '--hostname', host], 'y\ncreate\n\nn\ny\n');
-      assert.equal(result.status, 1); assert.notInclude(result.stdout, 'GitHub hostname [');
-      assert.include(result.stdout, 'Repository creation completed at https://git.example.com/fixture-user/ballin-backups');
-      assert.isNull(config().backup.repository);
+      const remote = state(); remote.faults.unsupportedFeatures = ['has_pull_requests']; saveState(remote);
+      const result = run(['setup', '--hostname', host], 'y\ncreate\n\nn\ny\nn\n');
+      ok(result); assert.notInclude(result.stdout, 'GitHub hostname [');
+      assert.equal(config().backup.repository.host, host);
+      assert.lengthOf(state().requests.filter(r => r.method === 'PATCH'), 2);
     });
     it('does not use another host when custom-host credentials fail', () => {
       unconfigured(); selectHost();
@@ -215,6 +215,21 @@ describe('repository backup lifecycle', function() {
       assert.deepEqual(state().requests.map(r => [r.endpoint, r.host]), [['user', host]]);
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     });
+    for (const selectedHost of ['github.com', host, 'fixture.ghe.com']) {
+      it(`sets up and revalidates an authenticated managed username on ${selectedHost}`, () => {
+        unconfigured(); const value = state(); value.exists = false; value.host = selectedHost;
+        value.login = 'fixture_user'; saveState(value);
+        ok(run(['setup', '--hostname', selectedHost], 'y\ncreate\n\nn\ny\nn\n'));
+        assert.equal(config().backup.repository.ownerId, value.ownerId);
+        assert.equal(config().backup.repository.host, selectedHost);
+        ok(run(['setup'], 'n\n'));
+        assert.isTrue(state().requests.every(r => r.host === selectedHost && r.environmentHost === selectedHost));
+        const wrong = state(); wrong.faults.user = { node_id: 'U_other', login: 'fixture_user', type: 'User' }; saveState(wrong);
+        const before = fs.readFileSync(configPath, 'utf8');
+        const refused = run(['setup'], 'n\n'); assert.equal(refused.status, 1);
+        assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      });
+    }
     it('rejects a configured-host switch before any authentication or config change', () => {
       const before = fs.readFileSync(configPath, 'utf8');
       const result = run(['setup', '--hostname', host], 'y\n');
@@ -1633,29 +1648,28 @@ describe('repository backup lifecycle', function() {
     assert.isNull(config().backup.repository); assert.isUndefined(cached());
   });
 
-  for (const mode of ['denied', 'reject', 'ambiguous', 'malformed']) {
-    it(`preserves recovery URL and avoids duplicate creation after ${mode} feature update`, () => {
-      unconfigured(); seedCache('zshrc.sh', 'cached before setup\n');
-      const value = state(); value.exists = false; value.faults.features = mode; saveState(value);
-      const result = run(['setup'], 'y\n\ncreate\n\nn\ny\n');
-      assert.equal(result.status, 1);
-      assert.include(result.stdout, 'pull-request settings step');
-      assert.include(result.stdout, 'Administration (write)');
-      assert.include(result.stdout, 'Repository creation completed at https://github.com/fixture-user/ballin-backups');
-      assert.include(result.stdout, 'initialization is unconfirmed');
-      assert.isNull(config().backup.repository); assert.equal(cached(), 'cached before setup\n');
-      assert.lengthOf(publications(), 0); assert.lengthOf(rulesetWrites(), 0);
-      const retry = run(['setup', 'ballin-backups'], 'y\n\ncreate\n');
-      assert.equal(retry.status, 1);
-      assert.lengthOf(state().requests.filter((r) => r.endpoint === 'user/repos'), 1);
-      assert.lengthOf(state().requests.filter((r) => r.method === 'PATCH'), 1);
+  for (const mode of ['denied', 'reject', 'ambiguous']) {
+    it(`saves linkage without a warning when optional cleanup is ${mode}`, () => {
+      unconfigured(); const value = state(); value.exists = false; value.faults.features = mode; saveState(value);
+      const result = run(['setup'], 'y\n\ncreate\n\nn\ny\nn\n'); ok(result);
+      assert.equal(config().backup.repository.id, fixtureDestination.id);
+      assert.notInclude(result.stdout + result.stderr, 'settings');
+      assert.lengthOf(publications(), 1);
+      assert.lengthOf(state().requests.filter(r => r.method === 'PATCH'), 1);
     });
   }
+  it('preserves a malformed housekeeping response as a protocol failure', () => {
+    unconfigured(); const value = state(); value.exists = false; value.faults.features = 'malformed'; saveState(value);
+    const result = run(['setup'], 'y\n\ncreate\n\nn\ny\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'invalid backup metadata');
+    assert.include(result.stdout, 'Repository creation completed');
+    assert.isNull(config().backup.repository); assert.lengthOf(publications(), 0);
+  });
   it('retains creation and cleanup failure after feature update without saving linkage', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\n\ncreate\n\nn\ny\n', {}, transportCleanupFailure('feature-patch'));
     assertTransportCleanupFailed(result);
-    assert.include(result.stdout, 'pull-request settings step');
     assert.include(result.stdout, 'Repository creation completed');
     assert.isNull(config().backup.repository); assert.lengthOf(publications(), 0);
   });

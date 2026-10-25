@@ -39,10 +39,10 @@ repair cache permissions, or claim freshness, coverage, or verified publication.
 ## `ballin backup`
 
 `ballin backup` saves changed snapshots to the configured destination. New setup
-uses a private repository on GitHub.com or a selected GitHub Enterprise Server
+uses a private repository on GitHub.com or a selected GitHub Enterprise Server or GHE.com
 host; run `ballin backup setup` to create or reconnect. See
 [account and host support](installation.md#github-account-and-host-support) for
-requirements and Enterprise validation limits.
+requirements.
 
 Repository backups include a fixed baseline of inventories and filtered
 preferences; raw configuration and pipx require the single local sensitive-source

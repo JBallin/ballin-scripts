@@ -49,6 +49,20 @@ describe('backup host selection', () => {
 });
 
 describe('host-bound repository transport', () => {
+  for (const selectedHost of ['github.com', 'git.example.com', 'fixture.ghe.com']) {
+    it(`uses an authenticated managed username for creation and publication on ${selectedHost}`, () => {
+      const state: FixtureState = { ...fixtureState(), host: selectedHost, login: 'fixture_user', exists: false };
+      const options = { runCommand: (_command: string, args: string[], opts: SpawnSyncOptions) => requestFixture(state, args, opts) };
+      const account = readRepositoryAccount(selectedHost, options);
+      const created = createRepositoryBackup(state.name, account, options);
+      const after = publishRepositorySnapshots(created, new Map([['zshrc.sh', Buffer.from('managed backup\n')]]), options);
+      assert.equal(after.snapshots.get('zshrc.sh').toString(), 'managed backup\n');
+      assert.equal(repositoryOpenUrl(after.destination, options), `https://${selectedHost}/fixture_user/ballin-backups`);
+      assert.isTrue(state.requests.every(r => r.host === selectedHost && r.environmentHost === selectedHost));
+      state.faults.user = { node_id: 'U_other', login: state.login, type: 'User' };
+      assert.equal(inspectRepository(after.destination, options).problem, 'identity');
+    });
+  }
   const host = 'git.example.com';
   const destination = { ...fixtureDestination, host };
   const setup = () => {
@@ -136,7 +150,7 @@ describe('host-bound repository transport', () => {
     }), /invalid backup metadata/u);
     assert.equal(calls, 0);
   });
-  for (const fault of ['wrong owner', 'mandatory feature settings', 'optional policy unavailable', 'missing GraphQL']) {
+  for (const fault of ['wrong owner', 'optional policy unavailable', 'missing GraphQL']) {
     it(`preserves safety on the custom host for ${fault}`, () => {
       const { state, options } = setup();
       if (fault === 'wrong owner') {
@@ -148,8 +162,7 @@ describe('host-bound repository transport', () => {
         assert.equal(ensureManagedBranchRuleset(read, options).status, 'ambiguous');
       } else {
         state.exists = false;
-        if (fault === 'mandatory feature settings') state.faults.featureMetadata = { has_pull_requests: undefined };
-        else state.faults.transport = { target: 'BallinPublish', response: { status: 0,
+        state.faults.transport = { target: 'BallinPublish', response: { status: 0,
           stdout: '{"errors":[{"message":"Field createCommitOnBranch is not defined"}]}', signal: null } };
         assert.throws(() => createRepositoryBackup(state.name, readRepositoryAccount(host, options), options));
       }

@@ -113,7 +113,7 @@ setting is required.
 ## Private repository backups
 
 Newly configured backups use private repositories owned by an individual account
-on GitHub.com or a selected GitHub Enterprise Server host, accessed through [GitHub CLI](https://cli.github.com/). Backup is
+on GitHub.com, GitHub Enterprise Server or a GHE.com tenant host, accessed through [GitHub CLI](https://cli.github.com/). Backup is
 optional; declining it leaves a healthy maintenance-only installation and makes
 no `gh` calls.
 

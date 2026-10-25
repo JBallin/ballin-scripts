@@ -11,6 +11,7 @@ type FixtureState = {
   exists: boolean; host: string; id: string; ownerId: string; login: string; name: string; branch: string; head: string;
   commits: Record<string, FixtureCommit>; requests: Request[]; rulesets: FixtureRuleset[]; nextRulesetId: number;
   faults: Record<string, unknown>;
+  featureSettings: Record<string, boolean>;
 };
 type Response = { status: number; stdout: string; stderr?: string; signal: null };
 const hash = (text: string): string => crypto.createHash('sha1').update(text).digest('hex');
@@ -45,6 +46,7 @@ const fixtureState = (snapshots: Record<string, string> = {}): FixtureState => {
   const state: FixtureState = {
     exists: true, ...fixtureDestination, login: 'fixture-user', head: '', commits: {}, requests: [],
     rulesets: [fixtureRuleset()], nextRulesetId: 2, faults: {},
+    featureSettings: { has_issues: true, has_wiki: true, has_projects: true, has_pull_requests: true },
   };
   const files = {
     '.ballin-backup.json': fixtureMarker(),
@@ -98,8 +100,17 @@ const requestFixture = (state: FixtureState, args: string[], options: SpawnSyncO
     if (fault.features === 'reject') return reply({ status: '422' }, 1);
     if (fault.features === 'ambiguous') return reply({}, 1);
     if (fault.features === 'malformed') return { status: 0, stdout: 'truncated JSON', signal: null };
+    const unsupported = (fault.unsupportedFeatures as string[] | undefined ?? []).filter(field => Object.hasOwn(payload, field));
+    if (!unsupported.length || fault.partialFeatures) {
+      for (const [field, value] of Object.entries(payload)) {
+        if (!unsupported.includes(field)) state.featureSettings[field] = value as boolean;
+      }
+    }
+    if (unsupported.length) return reply({ status: '422', errors: unsupported.map(field => ({
+      resource: 'Repository', field, code: 'custom', message: 'This setting is not supported',
+    })) }, 1);
     return reply({ node_id: state.id, name: state.name, private: true,
-      owner: { node_id: state.ownerId, login: state.login, type: 'User' }, has_pull_requests: false,
+      owner: { node_id: state.ownerId, login: state.login, type: 'User' }, ...state.featureSettings,
       ...(fault.featureMetadata as Record<string, unknown> ?? {}) });
   }
   if (endpoint === `repos/${state.login}/${state.name}` || endpoint === `repos/${state.login}/alternate` || endpoint === `repos/${state.login}/${fault.candidateAlias}`) {

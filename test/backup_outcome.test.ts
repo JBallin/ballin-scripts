@@ -8,7 +8,7 @@ describe('backup terminal failure evidence', () => {
       ['connection', 'transport'], ['timeout', 'transport'], ['authentication', 'authentication'],
       ['moved', 'reconciliation'], ['local-io', 'local_state'], ['cleanup', 'local_state'],
       ['request', 'unknown'], ['unavailable', 'unknown'], ['identity', 'unknown'], ['unsupported', 'unknown'],
-      ['feature-settings', 'unknown'], ['invalid-data', 'unknown'], ['incomplete', 'unknown'],
+      ['invalid-data', 'unknown'], ['incomplete', 'unknown'],
       ['rejected', 'unknown'], ['uncertain', 'unknown'],
     ]) {
       const evidence: BackupFailureEvidence = {};

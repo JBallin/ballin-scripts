@@ -345,11 +345,10 @@ collision offers a checked available suggestion such as `ballin-backups-2`.
 Accept it or enter another name; setup never silently reconnects to the existing
 repository. A name can become unavailable before creation; follow the reported
 error rather than assuming a backup was created.
-New repositories start with Issues, Wiki, Projects, and pull requests disabled.
-Disabling pull requests requires Administration (write) on the effective GitHub
-credential; creation permission alone may be insufficient. If that step fails,
-setup reports the created repository for inspection without saving local linkage.
-Reconnect leaves existing feature settings unchanged.
+After creating and verifying a private repository, Ballin attempts to disable
+Issues, Wiki, Projects and pull requests. These optional housekeeping settings
+may remain enabled when the service or credential does not permit the update;
+backup setup can still complete. Reconnect leaves existing settings unchanged.
 
 Fresh create or reconnect setup asks whether to review sensitive sources for
 inclusion, with No as the default. Final confirmation saves the selection. Review
@@ -388,20 +387,23 @@ configured, and Ballin reports the partial result.
 
 ### GitHub account and host support
 
-Ballin can target GitHub.com or a GitHub Enterprise Server hostname, using a
-private repository owned by the authenticated individual account. Membership in
-an Enterprise Cloud organization does not change the ownership requirement.
+Ballin can target GitHub.com, a GitHub Enterprise Server hostname or your
+GHE.com tenant hostname through GitHub CLI. Membership in an Enterprise Cloud
+organization does not change the ownership requirement.
+For GHE.com, enter your tenant's web hostname (`<subdomain>.ghe.com`), not its
+`api.<subdomain>.ghe.com` API hostname; GitHub CLI selects the API endpoint.
 
 | Account or destination | Current backup support |
 | --- | --- |
 | Personal GitHub.com account, including Enterprise Cloud organization members | Supported for a private repository owned by that account, with the required access. |
-| Enterprise Managed User account on GitHub.com | Unsupported: Ballin rejects the underscore in managed usernames. Enterprise policy can also restrict user-owned repository creation. |
-| GitHub Enterprise Server, such as `git.example.com` | Available through hostname selection for a user-owned private repository. Instance policy and required APIs must permit the operation; see validation limits below. |
-| Enterprise Cloud with data residency on GHE.com | Not qualified by this Enterprise Server support work; managed-account limitations also apply. |
-| Organization-owned repository, including an Enterprise Cloud organization's repository | Unsupported, even when the authenticated user is an organization owner or repository administrator. |
+| Enterprise Managed User account on GitHub.com | Available when enterprise policy permits a private repository owned by your account and your GitHub CLI credential has the required access. |
+| GitHub Enterprise Server, such as `git.example.com` | Available through hostname selection for a user-owned private repository. Instance policy and required APIs must permit the operation. |
+| Enterprise Cloud with data residency on GHE.com | Available using your tenant hostname, a current GitHub CLI with GHE.com support and the required account/repository permissions. Enterprise policy must permit user-owned private repositories. |
 
-GitHub permits managed accounts to own private repositories when enterprise
-policy allows it; Ballin's username check is an additional limitation. See
+Backups require a **private repository owned by the authenticated user**.
+Organization-owned repositories are unsupported, even if you are an organization
+owner or repository administrator. Enterprise policy controls whether managed
+accounts may create user-owned private repositories. See
 [managed-account restrictions](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-iam/understanding-iam-for-enterprises/abilities-and-restrictions-of-managed-user-accounts).
 
 Setup saves the confirmed host with the destination. Existing configured
@@ -411,13 +413,16 @@ legacy `backup.host` setting cannot redirect it. To choose another host,
 [disconnect](#disconnect) and set up the new destination; an explicit hostname
 that differs from a configured backup is rejected.
 
-Enterprise support is exercised with isolated fake services for host routing,
-creation/reconnect, authentication failures, publication, reads, cache separation
-and recovery. **It has not been tested against a live Enterprise service.**
-See the [API and validation boundary](backup-design.md#host-and-account-support)
-for maintainers. Host selection does not import Gist snapshots or history;
-Ballin leaves old Gists on their original service. New backup captures this
-Mac's selected sources. Choosing a different service changes where that data is stored.
+GHES 3.3 is the documented minimum API baseline for the required backup
+operations, not a live-tested compatibility range. Use a currently maintained
+server release; this baseline is not a recommendation to run obsolete GHES 3.3.
+If you need older-server support, [open an issue](https://github.com/JBallin/ballin-scripts/issues).
+See the [developer API and validation notes](backup-design.md#host-and-account-support)
+for evidence and qualification limits.
+
+Host selection does not import Gist snapshots or history. Ballin leaves old
+Gists on their original service. New backups capture this Mac's selected sources.
+Choosing a different service changes where that data is stored.
 
 ### GitHub authentication and protection
 
@@ -439,7 +444,7 @@ Ballin creates later. If authentication is missing, run
 gh auth login --hostname git.example.com
 ```
 
-For custom-host backups, install for maintenance or decline backup onboarding
+For GHES or GHE.com backups, install for maintenance or decline backup onboarding
 until the CLI is authenticated, then run `ballin backup setup`. Guided
 Quickstart sign-in currently targets GitHub.com. Ballin's setup reports the
 selected host's authentication command if access is missing; it does not sign in

@@ -51,21 +51,25 @@ Directories, workflows, executable modes, symlinks, submodules, duplicate paths,
 and other unsupported entries fail closed. There are no timestamps, device IDs,
 checkpoint receipts, or configurable layouts.
 
-Repository bootstrap is deliberately strict. Ballin creates a private,
-auto-initialized repository through `/user/repos` (`private:true`,
-`auto_init:true`, `has_issues:false`, `has_wiki:false`, `has_projects:false`).
-After validating the new repository's identity, it sends one
-`PATCH /repos/{owner}/{repo}` with `has_pull_requests:false`; this field is
-supported by the update endpoint, not repository creation. Setup requires a
-successful response matching the repository node ID, name, private visibility,
-and personal owner, with `has_pull_requests:false`. Missing, malformed,
-mismatched, or unsuccessful responses stop setup without retrying the write.
-The effective credential needs Administration (write) for this update;
-Repository creation (write) alone can allow creation without allowing the update.
-Ballin does not create credentials or expand permissions. Feature settings are
-never changed by reconnect, maintenance, or ordinary backups. A failed settings
-step retains creation evidence and the recovery URL without deleting the partial
-repository or saving local linkage. Transport cleanup failures also stop setup.
+Repository bootstrap creates a private, auto-initialized repository through
+`/user/repos` (`private:true`, `auto_init:true`) and validates its stable identity,
+individual owner, private visibility and seed layout before cosmetic cleanup.
+One optional `PATCH /repos/{owner}/{repo}` attempts to disable Issues, Wiki,
+Projects and pull requests together. These settings are housekeeping, not branch
+protection or backup prerequisites; insufficient Administration permission does
+not prevent initialization. Reconnect, maintenance and ordinary backups never
+change them.
+
+A successful update need not apply every cosmetic flag. An unsuccessful update
+gets at most one reduced-batch fallback, only for structured errors explicitly
+identifying unsupported requested fields. Generic validation, rate limits,
+permission denials and uncertain network outcomes do not authorize retries.
+Repeated false assignments are idempotent if the first batch partially applied.
+Unsuccessful cosmetic cleanup is silent. Authentication failures, invalid
+transport data, identity/privacy mismatches, interruption, local resource/I/O
+and private temporary-file cleanup failures remain fatal. Required pre-publication
+inspection and conditional publication are unchanged. Ballin never expands
+credentials or permissions to tidy the repository.
 
 Bootstrap accepts only GitHub's expected seed: a single root commit
 containing one regular `README.md`. Against that exact head, one conditional
@@ -78,8 +82,8 @@ stops for inspection rather than risk creating a duplicate repository.
 ## Host and account support
 
 The [support matrix](installation.md#github-account-and-host-support) distinguishes
-GitHub.com personal accounts, GitHub Enterprise Server, managed users and
-organization ownership. New setup asks for the host, defaulting to GitHub.com;
+GitHub.com personal and managed accounts, GitHub Enterprise Server,
+GHE.com and organization ownership. New setup asks for the host, defaulting to GitHub.com;
 `--hostname` selects it without that question. Confirmed linkage stores the
 canonical host in `backup.repository`. Older repository objects without that
 field resolve to GitHub.com, independently of a retained legacy `backup.host`.
@@ -92,23 +96,56 @@ lookups, conditional writes, readback, browser/commit/recovery URLs and cache ke
 use the same host. Backup storage uses APIs independently of the installed
 checkout's Git remote. Product-source and documentation links remain on GitHub.com.
 
-Account lookup requires REST `type: User` and an alphanumeric-or-hyphen login.
-The login check rejects managed usernames containing an underscore. Repository
+Account lookup requires REST `type: User` and a login containing only ASCII
+letters, digits, hyphens or underscores. Accepting managed usernames does not
+bypass enterprise policy or change the stable owner-ID requirement. Repository
 lookup requires the authenticated account's stable ID and a `User` owner;
 creation uses `/user/repos`. Identity comparisons include the host so IDs from
 different services cannot identify the same destination. Marker format v1 stays
 unchanged: its IDs are validated within the configured host's repository.
 
-The existing bootstrap/publication contract is reused. GHES 3.21 documents
-[`createCommitOnBranch` with `expectedHeadOid`](https://docs.github.com/en/enterprise-server@3.21/graphql/reference/commits#createcommitonbranch)
-and [repository updates with `has_pull_requests`](https://docs.github.com/en/enterprise-server@3.21/rest/repos/repos#update-a-repository).
-This is API-schema evidence, not a claim that 3.21 is the minimum compatible
-version or that a live Enterprise instance has passed validation. Isolated
-fixtures exercise hostname routing, create/reconnect, authentication and policy
-failures, publication, recovery, old linkage and cross-host cache isolation.
-Real CLI credential selection, TLS/network access and live GHES API/policy
-behavior remain unvalidated. An instance must allow private user-owned
-repositories and the mandatory API operations; optional rulesets remain nonfatal.
+The hard backup API contract is documented in GHES 3.3. Its
+[release notes](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes)
+introduce `createCommitOnBranch`, and its
+[input schema](https://docs.github.com/en/enterprise-server@3.3/graphql/reference/input-objects#createcommitonbranchinput)
+includes branch node identity, `expectedHeadOid` and file changes. The
+[3.3 REST description](https://github.com/github/rest-api-description/blob/main/descriptions/ghes-3.3/ghes-3.3.json)
+documents the account, private repository creation/lookup and tree/blob endpoints
+and required response fields. Its
+[GraphQL schema](https://docs.github.com/en/enterprise-server@3.3/graphql/reference/objects)
+documents the repository state, owner, branch, commit/tree and parent-pagination
+fields used for inspection and readback. This is a documented API baseline,
+not a live-tested compatibility range or advice to operate an obsolete release.
+Older-server needs can be reported in an issue; there is no version probe or
+legacy publication fallback.
+
+Use the [current GHES commit API](https://docs.github.com/en/enterprise-server@latest/graphql/reference/commits#createcommitonbranch)
+and [repository API](https://docs.github.com/en/enterprise-server@latest/rest/repos/repos#update-a-repository)
+for general reference. Pull-request disabling was introduced in
+[GHES 3.21](https://docs.github.com/en/enterprise-server@3.21/admin/release-notes#3.21.0),
+but optional housekeeping does not raise the hard backup API baseline.
+
+GHE.com uses its tenant hostname as destination identity. Ballin passes relative
+REST/GraphQL endpoints to GitHub CLI instead of building API base URLs. Current
+CLI routing sends tenant API traffic to `api.<subdomain>.ghe.com` and uses the
+cloud credential family (`GH_TOKEN`/`GITHUB_TOKEN` or the saved tenant login),
+whereas GHES uses `GH_ENTERPRISE_TOKEN`/`GITHUB_ENTERPRISE_TOKEN` or its saved login.
+See [GitHub's platform guidance](https://docs.github.com/en/enterprise-cloud@latest/admin/data-residency/about-github-enterprise-cloud-with-data-residency#api-access)
+and [CLI environment reference](https://cli.github.com/manual/gh_help_environment).
+Use a current CLI with GHE.com support; Ballin neither chooses tokens nor
+rewrites host-specific authentication. Guided Quickstart sign-in remains GitHub.com-only.
+
+Isolated fixtures exercise host routing, managed usernames, create/reconnect,
+optional cleanup and bounded fallback, authentication/policy failures,
+publication, recovery, old linkage and cross-host cache isolation. CLI source
+and documentation establish routing/authentication contracts. A separate local
+check with CLI 2.102.0, dummy tokens, empty temporary configuration and a rejecting
+loopback proxy verified tenant API host routing and environment token-family
+selection without provider contact. Fixtures alone do not exercise CLI token
+selection. No live GHES/GHE.com service or real managed
+account has been tested. TLS/network access, real credentials and instance policy
+remain live qualification needs. The same limits apply despite passing CI.
+Optional rulesets remain nonfatal.
 
 The old configurable Gist host was a separate storage path.
 [`gu.url`](https://github.com/JBallin/ballin-scripts/pull/13) originally selected
