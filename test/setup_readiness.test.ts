@@ -186,7 +186,7 @@ describe('setup readiness', () => {
     writeConfig([]);
     assert.include(checkById(collect(), 'config.read').summary, 'must contain a JSON object');
 
-    writeConfig({ backup: { id: null, host: 'example.test' } });
+    writeConfig({ backup: { repository: null } });
     const sectionCheck = checkById(collect(), 'config.read');
 
     assert.equal(checkById(readableConfig, 'config.read').status, 'pass');
@@ -227,10 +227,7 @@ describe('setup readiness', () => {
     fs.rmSync(path.join(binDir, 'gh'));
     writeConfig({
       update: {},
-      backup: {
-        id: null,
-        host: 'example.test',
-      },
+      backup: { repository: null },
       analytics: {},
     });
 

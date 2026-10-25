@@ -746,10 +746,7 @@ require('https').request = () => {
     fs.rmSync(path.join(binDir, 'ballin'));
     writeConfig({
       update: {},
-      backup: {
-        id: null,
-        host: 'example.test',
-      },
+      backup: { repository: null },
       analytics: {
         enabled: 'false',
       },

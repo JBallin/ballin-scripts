@@ -2172,7 +2172,7 @@ describe('repository backup lifecycle', function() {
       update: { cleanup: 'invalid', npm: false }, analytics: {}, custom: { preserve: true } };
     saveConfig(local); seedCache('zshrc.sh', 'stale base\n');
     const value = fixtureState({ ballin_config: JSON.stringify({ update: { cleanup: true, npm: true, nvm: false, selfUpdate: 'false', softwareupdate: true, backup: true },
-      analytics: { enabled: 'false' }, backup: { id: 'ignored', repository: { id: 'other' }, includeSensitive: true }, custom: 'ignored' }) });
+      analytics: { enabled: 'false' }, backup: { repository: { ...fixtureDestination, id: 'R_other', ownerId: 'U_other', name: 'other-backup', branch: 'other-main' }, includeSensitive: true }, custom: 'ignored' }) });
     value.faults.publish = 'denied'; value.faults.rulesetCreate = 'denied'; saveState(value);
     ok(run(['setup'], 'y\nreconnect\n\nn\ny\nn\n'));
     const restored = config(); assert.equal(restored.update.cleanup, 'invalid'); assert.isFalse(restored.update.npm);

@@ -930,10 +930,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
         selfUpdate: 'true',
         backup: 'false',
       },
-      backup: {
-        id: null,
-        host: 'example.test',
-      },
+      backup: { repository: null },
       analytics: { enabled: 'false' },
     });
 
@@ -956,10 +953,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
         selfUpdate: 'false',
         backup: 'true',
       },
-      backup: {
-        id: null,
-        host: 'example.test',
-      },
+      backup: { repository: null },
       analytics: { enabled: 'false' },
     });
 
