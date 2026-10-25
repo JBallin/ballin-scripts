@@ -67,7 +67,7 @@ describe('standalone read-only inspection helper', () => {
     const report = run();
     assert.deepEqual(report.runtime, { platform: process.platform, arch: process.arch, macOS: process.platform === 'darwin' ? '26.0.1' : null, node: process.versions.node, npm: '11.19.0', git: '2.50.1', gh: '2.80.0' });
     assert.equal(report.installedCommit, sha); assert.equal(report.workingTree, 'clean'); assert.isNull(report.workingTreeReason);
-    assert.deepEqual(report.backup, { state: 'read', linkagePresent: true, nameMatchesExpected: true, repositoryIdPresent: true, ownerIdPresent: true, branchIsMain: true, legacyGistPresent: false, includeSensitive: 'true', automaticBackup: 'false' });
+    assert.deepEqual(report.backup, { state: 'read', linkagePresent: true, nameMatchesExpected: true, repositoryIdPresent: true, ownerIdPresent: true, branchIsMain: true, includeSensitive: 'true', automaticBackup: 'false' });
     const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((line: string) => JSON.parse(line));
     assert.isTrue(calls.filter(({ name }: { name: string }) => name === 'git').every(({ locks }: { locks: string }) => locks === '0'));
     assert.isFalse(calls.some(({ args }: { args: string[] }) => args.includes('api') || args.includes('fetch') || args.includes('setup') || args.includes('backup')));

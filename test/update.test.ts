@@ -976,7 +976,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     { name: 'array', id: ['unexpected-id'] },
     { name: 'object', id: { value: 'unexpected-id' } },
   ].forEach(({ name, id }) => {
-    it(`rejects a raw ${name} destination ID when an enabled backup stage validates config`, () => {
+    it(`rejects a raw ${name} repository destination when an enabled backup stage validates config`, () => {
       fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
       writeConfig({
         update: {
@@ -987,7 +987,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
           selfUpdate: 'false',
           backup: 'true',
         },
-        backup: { id, host: 'example.test' },
+        backup: { repository: id },
         analytics: { enabled: 'false' },
       });
 
@@ -1000,7 +1000,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     });
   });
 
-  it('rejects a raw object destination host when an enabled backup stage validates config', () => {
+  it('reports no repository configured when only obsolete Gist fields remain', () => {
     fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
     writeConfig({
       update: {
@@ -1018,8 +1018,8 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     const malformedHost = spawnUpdate();
 
     assert.equal(malformedHost.status, 1);
-    assert.include(malformedHost.stderr, 'Gist backup support has been retired');
-    assert.include(malformedHost.stderr, '`ballin backup disconnect`, then `ballin backup setup`');
+    assert.include(malformedHost.stderr, 'backup is not configured');
+    assert.include(malformedHost.stderr, 'ballin backup setup');
     assert.deepEqual(commandLog(), []);
   });
 

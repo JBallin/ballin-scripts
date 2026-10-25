@@ -2003,6 +2003,7 @@ describe('repository backup lifecycle', function() {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], 'y\ncreate\n\nn\ny\n\n'); ok(result);
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
+    assert.notProperty(config().backup, 'id'); assert.notProperty(config().backup, 'host');
     assert.equal(config().update.backup, 'false');
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
     assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups\n\nBackup source details:');
@@ -2167,7 +2168,7 @@ describe('repository backup lifecycle', function() {
   });
 
   it('reconnects without write permission or a cached base and restores only eligible preferences with local precedence', () => {
-    const local = { backup: { id: null, host: 'preserved.test', repository: null, includeSensitive: 'true' },
+    const local = { backup: { id: 'untouched-obsolete-id', host: 'preserved.test', repository: null, includeSensitive: 'true' },
       update: { cleanup: 'invalid', npm: false }, analytics: {}, custom: { preserve: true } };
     saveConfig(local); seedCache('zshrc.sh', 'stale base\n');
     const value = fixtureState({ ballin_config: JSON.stringify({ update: { cleanup: true, npm: true, nvm: false, selfUpdate: 'false', softwareupdate: true, backup: true },
@@ -2178,7 +2179,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(restored.update.nvm, 'false'); assert.equal(restored.update.softwareupdate, 'true');
     assert.equal(restored.update.selfUpdate, 'false'); assert.equal(restored.update.backup, 'false');
     assert.equal(restored.analytics.enabled, 'false'); assert.deepEqual(restored.custom, { preserve: true });
-    assert.equal(restored.backup.host, 'preserved.test'); assert.equal(restored.backup.includeSensitive, 'false');
+    assert.equal(restored.backup.id, 'untouched-obsolete-id'); assert.equal(restored.backup.host, 'preserved.test'); assert.equal(restored.backup.includeSensitive, 'false');
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 0);
     assert.deepEqual(rulesetRequests().map(({ method }) => method), ['GET', 'GET']);
   });
@@ -2501,14 +2502,12 @@ describe('repository backup lifecycle', function() {
     assert.lengthOf(mutations().filter((request) => request.endpoint === 'user/repos'), 1);
     assert.include(result.stdout, 'may already have occurred at https://github.com/fixture-user/ballin-backups-2');
   });
-  it('rejects create collisions and malformed or conflicting destination configuration', () => {
+  it('rejects create collisions and malformed destination configuration', () => {
     unconfigured(); assert.equal(run(['setup'], 'y\ncreate\n\n').status, 0); assert.equal(mutations().length, 0);
     for (const invalid of [[], {}, { ...fixtureDestination, id: '' }, { ...fixtureDestination, ownerId: 'bad id' }]) {
       const value = config(); value.backup.repository = invalid; saveConfig(value);
       assert.equal(run().status, 1); assert.equal(run(['setup']).status, 1);
     }
-    const value = config(); value.backup.repository = fixtureDestination; value.backup.id = 'legacy'; saveConfig(value);
-    assert.equal(run(['read', 'zshrc.sh']).status, 1); assert.equal(mutations().length, 0);
   });
   it('reports the existing initialized destination after a local save failure and permits explicit reconnect', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value); const before = config();
@@ -2542,12 +2541,18 @@ describe('repository backup lifecycle', function() {
     seedCache('zshrc.sh', 'base\n'); const before = config(); before.update.backup = 'true'; saveConfig(before);
     const result = run(['disconnect'], '', {}, cacheFailure('rmSync', `args[0] === ${JSON.stringify(cacheRoot)}`));
     assert.equal(result.status, 1); assert.include(result.stdout, 'cleanup is incomplete');
-    assert.isNull(config().backup.repository); assert.isNull(config().backup.id); assert.equal(config().update.backup, 'false');
-    assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().backup.host, before.backup.host);
+    assert.isNull(config().backup.repository); assert.notProperty(config().backup, 'id'); assert.equal(config().update.backup, 'false');
+    assert.equal(config().backup.includeSensitive, 'true'); assert.notProperty(config().backup, 'host');
     assert.equal(run().status, 1);
     const disconnected = run(['disconnect']); ok(disconnected);
     assert.equal(disconnected.stdout, 'Backup disconnected. Your remote backup and GitHub authentication are unchanged.\n');
     assert.isFalse(fs.existsSync(cacheRoot));
+    assert.equal(state().requests.length, 0);
+  });
+  it('preserves unknown backup fields on disconnect without interpreting obsolete Gist settings', () => {
+    const before = config(); before.backup.id = 'untouched-obsolete-id'; before.backup.host = 'preserved.test'; saveConfig(before);
+    ok(run(['disconnect']));
+    assert.deepEqual(config().backup, { ...before.backup, repository: null });
     assert.equal(state().requests.length, 0);
   });
   it('keeps the previous destination and cache when disconnect persistence fails', () => {
@@ -2567,8 +2572,8 @@ describe('repository backup lifecycle', function() {
   });
   it('classifies configuration without inventing fallback destinations or additional consent values', () => {
     assert.equal(configuredBackupDestination({}).kind, 'unconfigured');
-    assert.equal(configuredBackupDestination({ backup: { id: 'legacy', host: 'enterprise.test' } }).kind, 'legacy-gist');
-    [null, [], { backup: [] }, { backup: { id: 4 } }, { backup: { repository: { ...fixtureDestination, branch: '' } } }].forEach((value) => {
+    assert.equal(configuredBackupDestination({ backup: { id: 'legacy', host: 'enterprise.test' } }).kind, 'unconfigured');
+    [null, [], { backup: [] }, { backup: { repository: { ...fixtureDestination, branch: '' } } }].forEach((value) => {
       assert.equal(configuredBackupDestination(value).kind, 'invalid');
     });
     [undefined, false, 'false'].forEach((value) => assert.isFalse(sensitiveSourceConsent({ backup: { includeSensitive: value } })));

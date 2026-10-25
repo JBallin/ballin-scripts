@@ -724,12 +724,12 @@ require('https').request = () => {
     });
   }
 
-  it('rejects stale Gist and malformed destinations without contacting GitHub', () => {
+  it('rejects malformed repository destinations without contacting GitHub', () => {
     for (const backup of [
-      { id: 'legacy-fixture', host: 'example.test' },
-      { id: 42 },
-      { id: ['unexpected-id'] },
-      { id: { value: 'unexpected-id' } },
+      { repository: {} },
+      { repository: 42 },
+      { repository: ['unexpected-id'] },
+      { repository: { value: 'unexpected-id' } },
     ]) {
       writeConfig({ update: {}, backup, analytics: {} });
       const result = runBallin(['doctor', '--verbose']);

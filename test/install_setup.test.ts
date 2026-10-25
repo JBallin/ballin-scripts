@@ -181,9 +181,9 @@ describe('install setup', () => {
     }
   }
 
-  it('rejects repository setup while a Gist is configured before contacting GitHub or changing config', () => {
+  it('rejects malformed repository configuration before contacting GitHub or changing config', () => {
     const configFile = path.join(repoDir, 'ballin.config.json');
-    const original = '{"backup":{"id":"returning-gist-id","host":"github.example.test"}}\n';
+    const original = '{"backup":{"repository":{}}}\n';
     fs.writeFileSync(configFile, original);
     const { output, result } = withEnvironment(childEnvironment({
       FAKE_COMMAND_LOG: commandLogPath, FAKE_GH_AUTH_STATUS: '0',
@@ -191,8 +191,7 @@ describe('install setup', () => {
       configPath: configFile, repositoryName: 'independent-backup',
     })));
     assert.isFalse(result);
-    assert.include(output, 'Gist');
-    assert.include(output, 'retired');
+    assert.include(output, 'destination configuration is invalid');
     assert.include(output, 'ballin backup disconnect');
     assert.equal(fs.readFileSync(configFile, 'utf8'), original);
     assert.equal(commandLog(), '');
