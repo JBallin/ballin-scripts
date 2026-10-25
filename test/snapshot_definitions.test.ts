@@ -329,7 +329,6 @@ describe('backup snapshot definitions', () => {
     });
     assert.equal(captured.status, 0, captured.stderr);
     assert.deepEqual(JSON.parse(captured.stdout), { update: { cleanup: 'false' } });
-    assert.notInclude(captured.stdout, 'private-destination');
     assert.notInclude(captured.stdout, 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');
     assert.include(fs.readFileSync(sourcePath, 'utf8'), 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');
   });
