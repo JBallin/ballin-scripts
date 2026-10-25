@@ -169,6 +169,7 @@ describe('repository backup lifecycle', function() {
       assert.include(setup.stdout, 'Proposed backup: https://git.example.com/fixture-user/ballin-backups');
       assert.equal(config().backup.repository.host, host);
       ok(run()); const head = state().head;
+      assert.equal(remote('zshrc.sh'), 'work environment\n');
       ok(run()); assert.equal(state().head, head);
       assertSelectedHost();
     });
