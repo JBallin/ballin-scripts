@@ -74,7 +74,7 @@ installs show one completion message after setup.
 
 Ballin includes command completion for zsh and Bash. A fresh interactive
 install offers to enable it after the command is installed, showing the startup
-file before asking for confirmation (default: no). The exact activation lines
+file before asking for confirmation (default: “No”). The exact activation lines
 and undo instructions are below.
 Refreshes and `ballin self-update` do not enable completion or ask again.
 
@@ -162,9 +162,8 @@ or Bash. Homebrew is optional.
 Quickstart first asks whether to set up backups. If selected, it asks for a
 hostname (default `github.com`) before sign-in and installing Ballin, then reuses it
 without another host prompt. An existing destination keeps its configured host.
-No still installs Ballin for
-maintenance; it omits backup-only GitHub CLI discovery/installation, sign-in,
-destination setup and run-now. Existing tools, accounts and backups remain.
+Choosing “No” still installs Ballin for maintenance; it omits backup-only GitHub
+CLI discovery/installation, sign-in, destination setup and run-now. Existing tools, accounts and backups remain.
 Later `ballin backup setup` checks current prerequisites and GitHub access.
 
 Compatible existing Git, Node.js and (when selected) GitHub CLI are reused.
@@ -221,8 +220,8 @@ write failures retain specific recovery guidance. Declines leave files unchanged
 
 When backups are selected, Quickstart reuses active GitHub CLI authentication or
 starts gh's native browser sign-in. “Authenticate Git” controls Git credentials;
-No still permits gh sign-in. Device codes can be entered in a browser on another
-computer. Exported tokens can block login; follow gh's instructions. Quickstart
+Choosing “No” still permits gh sign-in. Device codes can be entered in a browser
+on another computer. Exported tokens can block login; follow gh's instructions. Quickstart
 does not change exported credentials or switch accounts.
 
 After successful destination setup, the optional run-now question runs a backup
@@ -356,7 +355,7 @@ may remain enabled when the service or credential does not permit the update;
 backup setup can still complete. Reconnect leaves existing settings unchanged.
 
 Fresh create or reconnect setup asks whether to review sensitive sources for
-inclusion, with No as the default. Final confirmation saves the selection. Review
+inclusion, with “No” as the default. Final confirmation saves the selection. Review
 [what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
 baseline, sensitive-source scope, and privacy limitations.
 
@@ -385,7 +384,7 @@ existing local choices take precedence. It does not restore saved dotfiles or
 reinstall saved packages.
 
 After creating or reconnecting a backup, Ballin asks whether `ballin update`
-should run backups automatically (default: no). The choice is stored in
+should run backups automatically (default: “No”). The choice is stored in
 `update.backup`; change it later with `ballin config set update.backup true` or
 `false`. If Ballin cannot save the choice, the backup destination remains
 configured, and Ballin reports the partial result.

@@ -226,8 +226,7 @@ Avoid labels such as `Private backups`, `Always current`, `Restore-ready`,
 behavior or distract from the hero. New backups use private GitHub repositories,
 whose contents remain accessible to GitHub on GitHub.com/GHE.com, or to the
 GHES hosting operator and site administrators, as well as authorized repository
-users. Broad privacy claims
-also omit sensitive content within allowed backup sources.
+users. Supported backup sources may also contain sensitive information.
 
 A possible future-safe label set, if a strip is ever needed, is:
 
