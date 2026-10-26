@@ -264,8 +264,9 @@ linkage retains the exact same namespace after host normalization. Mutable names
 and legacy cache files cannot establish a base. New linkage invalidates all
 untrusted comparison state before atomically saving linkage, local consent, and
 eligible restored preferences. Recovery never seeds a comparison base from remote
-content. Disconnect saves both associations cleared and automatic backup disabled
-before cache cleanup; retrying disconnect can finish cleanup without network access.
+content. Disconnect clears the repository association and disables automatic
+backups before cache cleanup; retrying disconnect can finish cleanup without
+network access.
 
 ## Coherent repository reads and publication
 
