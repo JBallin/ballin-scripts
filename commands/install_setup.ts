@@ -322,6 +322,7 @@ const setup = (
     // A prior complete No or input end must not reopen optional onboarding.
   } else if (mode === 'fresh' || process.env.BALLIN_BACKUP_CHOICE === 'yes' || backupConfigured || backupInvalid) {
     let backupSetupCancelled = false;
+    if (mode === 'refresh' && backupConfigured) writeStdoutLine();
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
       presentation: mode === 'self-update' ? 'standalone' : 'installation',
       initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',
