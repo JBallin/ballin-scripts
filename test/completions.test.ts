@@ -188,8 +188,11 @@ describe('shell completions', () => {
           ...snapshotDefinitions.map(({ name }: { name: string }) => name), commandHelpOptionName,
         ]);
         for (const command of backupCommandNames) {
-          assert.deepEqual(complete(['ballin', 'backup', command, '--h']), [commandHelpOptionName]);
+          assert.deepEqual(complete(['ballin', 'backup', command, '--h']), command === 'setup'
+            ? ['--hostname', commandHelpOptionName] : [commandHelpOptionName]);
         }
+        assert.deepEqual(complete(['ballin', 'backup', 'setup', 'work-backups', '--h']), ['--hostname']);
+        assert.deepEqual(complete(['ballin', 'backup', 'setup', '--hostname', '']), []);
         assert.deepEqual(complete(['ballin', 'help', 'backup', '']), [...backupCommandNames]);
         assert.deepEqual(complete(['ballin', 'help', 'backup', 're']), ['read']);
         for (const words of [
@@ -355,8 +358,9 @@ describe('shell completions', () => {
         ['ballin update --h\t', 'ballin update --help'],
         ['ballin help back\t', 'ballin help backup'],
         ...backupCommandNames.map((command: string) => [
-          `ballin backup ${command} --h\t`, `ballin backup ${command} --help`,
+          `ballin backup ${command} --he\t`, `ballin backup ${command} --help`,
         ]),
+        ['ballin backup setup --ho\t', 'ballin backup setup --hostname'],
         ...backupCommandNames.map((command: string) => [
           `ballin help backup ${command.slice(0, 2)}\t`, `ballin help backup ${command}`,
         ]),

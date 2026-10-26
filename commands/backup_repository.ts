@@ -4,7 +4,7 @@ const { terminalCommandReferences } = require('./terminalStyle.ts');
 const { backupCommitMessage } = require('./backup_commit_message.ts');
 const { repositoryCacheDirectory } = require('./backup_cache.ts');
 const { makeTempFile, removeTempFile, runCommand, requireUninterrupted, rethrowInterruption, writeStderrLine } = require('./commandHelpers.ts');
-const { isConfigObject, validRepositoryName } = require('./backup_config.ts');
+const { isConfigObject, validRepositoryName, normalizeBackupHost } = require('./backup_config.ts');
 const {
   classifySnapshotFileName,
   repositoryMarkerFileName,
@@ -15,10 +15,9 @@ import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
 
 type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
-  | 'feature-settings' | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
+  | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
   'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
-  'feature-settings': 'The pull-request settings step could not be completed. Inspect the created repository before recovery; the effective credential may need Administration (write), even if Repository creation (write) allowed creation.',
   prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
   authentication: 'GitHub.com authentication is required. Run `gh auth login --hostname github.com`, or check the effective gh account and environment token, then retry.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
@@ -35,10 +34,16 @@ const repositoryMessages: Record<RepositoryProblem, string> = {
   cleanup: 'Private temporary-file cleanup is incomplete; any completed remote effects are retained.',
   'local-io': 'Unable to prepare private backup transport files. Check local storage and permissions.',
 };
-const formatRepositoryMessage = (problem: RepositoryProblem, stream: { isTTY?: boolean } = process.stdout): string | undefined => {
-  const message = repositoryMessages[problem];
+const formatRepositoryMessage = (
+  problem: RepositoryProblem, stream: { isTTY?: boolean } = process.stdout, host = 'github.com',
+): string | undefined => {
+  let message = repositoryMessages[problem];
+  if (host !== 'github.com' && normalizeBackupHost(host) === host
+    && ['authentication', 'connection', 'timeout', 'request'].includes(problem)) {
+    message = message.replace(/github\.com/giu, () => host);
+  }
   return message === undefined ? undefined : terminalCommandReferences(message, [
-    'ballin backup setup', 'ballin backup open', 'gh auth login --hostname github.com',
+    'ballin backup setup', 'ballin backup open', `gh auth login --hostname ${host}`,
   ], stream);
 };
 
@@ -90,7 +95,7 @@ const requireRepositorySnapshotSizes = (sizes: Iterable<number>): void => {
 const blobResponseByteLimit = (size: number): number => Math.min(
   48 * 1024 * 1024, Math.ceil(4 * Math.ceil(size / 3) * 1.08) + 64 * 1024,
 );
-type Account = { id: string; login: string };
+type Account = { host: string; id: string; login: string };
 type Entry = { path: string; sha: string; size: number; classification: SnapshotNameClassification };
 // A revision is a storage-local handle. Callers pass it back without interpreting Git objects.
 type Revision = { head: string; tree: string; branchId: string; parents: string[]; entries: Entry[] };
@@ -156,9 +161,10 @@ const oid = (value: unknown): string => {
   return value;
 };
 const api = (
-  endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false, method?: 'PATCH',
+  host: string, endpoint: string, payload: unknown, options: RepositoryOptions, allowArray = false, method?: 'PATCH',
   responseLimit = metadataResponseByteLimit, metadata = true,
 ): ApiResult => {
+  if (normalizeBackupHost(host) !== host) throw new RepositoryError('invalid-data');
   let output: string | undefined;
   let response: ApiResult = { ok: false, body: {} };
   let failure: RepositoryError | undefined;
@@ -178,10 +184,10 @@ const api = (
     let result;
     try {
       result = (options.runCommand ?? runCommand)('gh', [
-        'api', '--hostname', 'github.com', '--method', method ?? (payload === undefined ? 'GET' : 'POST'),
+        'api', '--hostname', host, '--method', method ?? (payload === undefined ? 'GET' : 'POST'),
         endpoint, ...(payload === undefined ? [] : ['--input', '-']),
       ], {
-        env: { ...(options.env ?? process.env), GH_HOST: 'github.com', GH_DEBUG: '', DEBUG: '' },
+        env: { ...(options.env ?? process.env), GH_HOST: host, GH_DEBUG: '', DEBUG: '' },
         input,
         stdio: [payload === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
         maxBuffer, timeout, killSignal: 'SIGKILL',
@@ -226,8 +232,8 @@ const api = (
   if (failure) throw failure;
   return response;
 };
-const query = (document: string, variables: Record<string, unknown>, options: RepositoryOptions): Record<string, unknown> => {
-  const result = api('graphql', { query: document, variables }, options);
+const query = (host: string, document: string, variables: Record<string, unknown>, options: RepositoryOptions): Record<string, unknown> => {
+  const result = api(host, 'graphql', { query: document, variables }, options);
   if (!result.ok || result.body.errors) {
     const error = new RepositoryError(result.problem ?? 'unavailable');
     error.cleanupFailed = result.cleanupFailed;
@@ -236,8 +242,8 @@ const query = (document: string, variables: Record<string, unknown>, options: Re
   requireCleanTransport(result);
   return object(result.body.data);
 };
-const readRepositoryAccount = (options: RepositoryOptions = {}): Account => {
-  const result = api('user', undefined, options);
+const readRepositoryAccount = (host: string, options: RepositoryOptions = {}): Account => {
+  const result = api(host, 'user', undefined, options);
   if (!result.ok) {
     const error = new RepositoryError(result.problem ?? 'request');
     error.cleanupFailed = result.cleanupFailed;
@@ -245,10 +251,10 @@ const readRepositoryAccount = (options: RepositoryOptions = {}): Account => {
   }
   if (result.body.type !== 'User') throw new RepositoryError('identity');
   const login = identifier(result.body.login);
-  if (!/^[A-Za-z0-9-]+$/u.test(login)) throw new RepositoryError('invalid-data');
+  if (!/^[A-Za-z0-9_-]+$/u.test(login)) throw new RepositoryError('invalid-data');
   const id = identifier(result.body.node_id);
   requireCleanTransport(result);
-  return { id, login };
+  return { host, id, login };
 };
 const repositoryFields = `id name isPrivate isFork isArchived isDisabled
   owner { __typename id login }
@@ -259,13 +265,13 @@ const repositoryFields = `id name isPrivate isFork isArchived isDisabled
 const readInfo = (
   destination: RepositoryDestination, account: Account, options: RepositoryOptions,
 ): RepositoryInfo => {
-  const data = query(`query BallinRepository($id: ID!, $branch: String!) {
+  const data = query(destination.host, `query BallinRepository($id: ID!, $branch: String!) {
     node(id: $id) { ... on Repository { ${repositoryFields} } }
   }`, { id: destination.id, branch: `refs/heads/${destination.branch}` }, options);
   if (!data.node) throw new RepositoryError('unavailable');
   const node = object(data.node);
   const owner = object(node.owner);
-  if (node.id !== destination.id || owner.id !== destination.ownerId || owner.id !== account.id || owner.__typename !== 'User') {
+  if (account.host !== destination.host || node.id !== destination.id || owner.id !== destination.ownerId || owner.id !== account.id || owner.__typename !== 'User') {
     throw new RepositoryError('identity');
   }
   if (node.isPrivate !== true || node.isFork !== false || node.isArchived !== false || node.isDisabled !== false) {
@@ -288,7 +294,7 @@ const readInfo = (
 };
 const candidateRepository = (name: string, account: Account, options: RepositoryOptions = {}): (RepositoryDestination & { redirected?: true }) | null => {
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
-  const result = api(`repos/${account.login}/${name}`, undefined, options);
+  const result = api(account.host, `repos/${account.login}/${name}`, undefined, options);
   // Advisory callers may recover from lookup errors, but cleanup failures remain fatal.
   requireCleanTransport(result);
   if (!result.ok) {
@@ -300,7 +306,7 @@ const candidateRepository = (name: string, account: Account, options: Repository
   const owner = object(result.body.owner);
   if (owner.node_id !== account.id || owner.type !== 'User') throw new RepositoryError('identity');
   const destination = {
-    id: identifier(result.body.node_id), ownerId: account.id,
+    host: account.host, id: identifier(result.body.node_id), ownerId: account.id,
     name, branch: identifier(result.body.default_branch),
   };
   if (!validRepositoryName(result.body.name)) throw new RepositoryError('invalid-data');
@@ -308,6 +314,11 @@ const candidateRepository = (name: string, account: Account, options: Repository
   if ((result.body.name as string).toLowerCase() !== name.toLowerCase()) return { ...destination, redirected: true };
   return destination;
 };
+const repositoryUrl = (destination: Pick<RepositoryDestination, 'host' | 'ownerId' | 'name'>, account: Account): string => {
+  if (destination.host !== account.host || destination.ownerId !== account.id) throw new RepositoryError('identity');
+  return `https://${destination.host}/${account.login}/${destination.name}`;
+};
+
 const markerBytes = (destination: RepositoryDestination): Buffer => Buffer.from(`${JSON.stringify({
   format: 'ballin-backup', version: 1, repositoryId: destination.id, ownerId: destination.ownerId,
 })}\n`);
@@ -325,7 +336,7 @@ const repositoryReadmeBytes = (): Buffer => Buffer.from(repositoryReadmeContents
 const blobOid = (bytes: Buffer): string => crypto.createHash('sha1')
   .update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[] => {
-  const result = api(`repos/${info.login}/${info.destination.name}/git/trees/${info.revision.tree}?recursive=1`, undefined, options, false, undefined, treeResponseByteLimit);
+  const result = api(info.destination.host, `repos/${info.login}/${info.destination.name}/git/trees/${info.revision.tree}?recursive=1`, undefined, options, false, undefined, treeResponseByteLimit);
   if (!result.ok) {
     const error = new RepositoryError(result.problem ?? 'incomplete');
     error.cleanupFailed = result.cleanupFailed;
@@ -352,7 +363,7 @@ const readInventory = (info: RepositoryInfo, options: RepositoryOptions): Entry[
 };
 const readBlob = (info: RepositoryInfo, entry: Entry, options: RepositoryOptions): Buffer => {
   requireRepositorySnapshotSizes([entry.size]);
-  const result = api(`repos/${info.login}/${info.destination.name}/git/blobs/${entry.sha}`, undefined, options,
+  const result = api(info.destination.host, `repos/${info.login}/${info.destination.name}/git/blobs/${entry.sha}`, undefined, options,
     false, undefined, blobResponseByteLimit(entry.size), false);
   if (!result.ok) {
     const error = new RepositoryError(result.problem ?? 'incomplete');
@@ -375,7 +386,7 @@ const readBlob = (info: RepositoryInfo, entry: Entry, options: RepositoryOptions
   return bytes;
 };
 const assertCurrent = (read: RepositoryRead, options: RepositoryOptions = {}): void => {
-  const info = readInfo(read.destination, readRepositoryAccount(options), options);
+  const info = readInfo(read.destination, readRepositoryAccount(read.destination.host, options), options);
   if (info.revision.head !== read.revision.head || info.revision.branchId !== read.revision.branchId
     || info.revision.tree !== read.revision.tree) throw new RepositoryError('moved');
 };
@@ -389,7 +400,7 @@ const inspect = (
     const info = readInfo(destination, account, options);
     inspected = {
       destination: info.destination, revision: info.revision, snapshots: new Map(),
-      commitUrl: `https://github.com/${info.login}/${info.destination.name}/commit/${info.revision.head}`,
+      commitUrl: `${repositoryUrl(info.destination, account)}/commit/${info.revision.head}`,
     };
     info.revision.entries = readInventory(info, options);
     if (seed) {
@@ -419,7 +430,7 @@ const inspect = (
 };
 const inspectRepository = (destination: RepositoryDestination, options: RepositoryOptions = {}): RepositoryInspection => {
   options = inspectionOptions(options);
-  try { return inspect(destination, readRepositoryAccount(options), options, false); } catch (error) {
+  try { return inspect(destination, readRepositoryAccount(destination.host, options), options, false); } catch (error) {
     rethrowInterruption(error);
     return { status: 'incomplete', problem: error instanceof RepositoryError ? error.problem : 'local-io',
       cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
@@ -437,7 +448,7 @@ const inspectRepositoryMaintenance = (
   destination: RepositoryDestination, options: RepositoryOptions = {},
 ): RepositoryMaintenance => {
   options = inspectionOptions(options);
-  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(destination.host, options), options, false, null));
   return { destination: read.destination, revision: read.revision };
 };
 // Partial content reads stay private: reconciliation/publication must only receive full reads.
@@ -446,7 +457,7 @@ const readRepositorySnapshotWithInventory = (
   destination: RepositoryDestination, name: string, options: RepositoryOptions = {},
 ): RepositorySnapshotRead => {
   options = inspectionOptions(options);
-  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, name));
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(destination.host, options), options, false, name));
   return {
     bytes: classifySnapshotFileName(name) === 'current' ? read.snapshots.get(name) : undefined,
     inventory: { entries: read.revision.entries },
@@ -459,11 +470,12 @@ const readRepositoryInventory = (
   destination: RepositoryDestination, options: RepositoryOptions = {},
 ): RepositoryInventory => {
   options = inspectionOptions(options);
-  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(destination.host, options), options, false, null));
   return { entries: read.revision.entries };
 };
 const sameRepositoryRevision = (left: RepositoryRead, right: RepositoryRead): boolean => (
-  left.destination.id === right.destination.id && left.revision.branchId === right.revision.branchId
+  left.destination.host === right.destination.host && left.destination.ownerId === right.destination.ownerId
+  && left.destination.id === right.destination.id && left.revision.branchId === right.revision.branchId
   && left.revision.head === right.revision.head && left.revision.tree === right.revision.tree
 );
 const unexpectedRepositoryEntries = (read: RepositoryRead): number => (
@@ -556,7 +568,7 @@ const readManagedBranchRuleset = (
   base: string, id: number, read: RepositoryMaintenance, account: Account, options: RepositoryOptions,
 ): 'match' | 'permission-denied' | 'mismatch' | ProtectionApiOutcome => {
   let detail: ApiResult;
-  try { detail = api(`${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
+  try { detail = api(read.destination.host, `${base}/${id}?includes_parents=false`, undefined, options); } catch (error) {
     rethrowInterruption(error);
     const transportFailure = protectionTransportFailure(error);
     if (transportFailure) throw transportFailure;
@@ -575,7 +587,7 @@ const findManagedBranchRuleset = (
   | { status: ProtectionApiOutcome } | { status: 'duplicate' } => {
   const base = `repos/${account.login}/${read.destination.name}/rulesets`;
   let list: ApiResult;
-  try { list = api(`${base}?includes_parents=false&targets=branch&per_page=100`, undefined, options, true); } catch (error) {
+  try { list = api(read.destination.host, `${base}?includes_parents=false&targets=branch&per_page=100`, undefined, options, true); } catch (error) {
     rethrowInterruption(error);
     const transportFailure = protectionTransportFailure(error);
     if (transportFailure) throw transportFailure;
@@ -616,14 +628,14 @@ const rulesetLookupOutcome = (
 const ensureManagedBranchRuleset = (
   read: RepositoryMaintenance, options: RepositoryOptions = {},
 ): ManagedBranchRulesetOutcome => {
-  const account = readRepositoryAccount(options);
+  const account = readRepositoryAccount(read.destination.host, options);
   if (account.id !== read.destination.ownerId) throw new RepositoryError('identity');
   const existing = rulesetLookupOutcome(findManagedBranchRuleset(read, account, options), 'present');
   if (existing) return existing;
   const endpoint = `repos/${account.login}/${read.destination.name}/rulesets`;
   let creation: ApiResult = { ok: false, body: {} };
   let mutationFailure: RepositoryError | undefined;
-  try { creation = api(endpoint, managedBranchRulesetPayload(read.destination.branch), options); } catch (error) {
+  try { creation = api(read.destination.host, endpoint, managedBranchRulesetPayload(read.destination.branch), options); } catch (error) {
     rethrowInterruption(error);
     mutationFailure = protectionTransportFailure(error);
   }
@@ -682,7 +694,7 @@ const publish = (
   additions.forEach((bytes, name) => expected.set(name, blobOid(bytes)));
   let result: ApiResult = { ok: false, body: {} };
   let transportFailure: RepositoryError | undefined;
-  try { result = api('graphql', {
+  try { result = api(before.destination.host, 'graphql', {
     query: `mutation BallinPublish($input: CreateCommitOnBranchInput!) {
       createCommitOnBranch(input: $input) { commit { oid } }
     }`,
@@ -742,46 +754,67 @@ const publishRepositorySnapshots = (
   if (additions.size === 0) { assertCurrent(before, options); return before; }
   return publish(before, additions, false, options);
 };
-// Only bootstrap calls this after validating the newly created destination. Never retry the write.
-const disableCreatedRepositoryPullRequests = (
+const repositoryFeatureSettings = { has_issues: false, has_wiki: false, has_projects: false, has_pull_requests: false };
+// A status alone cannot distinguish unsupported fields from policy, validation or abuse errors.
+const unsupportedFeatureFields = (result: ApiResult, settings: Record<string, boolean>): string[] => {
+  if (result.problem !== undefined || ![400, 422].includes(apiStatus(result) ?? 0) || !Array.isArray(result.body.errors)
+    || result.body.errors.length === 0 || /rate limit|abuse|spam/iu.test(responseText(result.body))) return [];
+  const fields: string[] = [];
+  for (const error of result.body.errors) {
+    if (!isConfigObject(error) || error.resource !== 'Repository' || typeof error.field !== 'string'
+      || !Object.hasOwn(settings, error.field)
+      || !(typeof error.code === 'string' && ['unsupported', 'unknown', 'not_supported'].includes(error.code)
+        || typeof error.message === 'string'
+          && /\b(?:unsupported|not supported)\b|\b(?:unknown|unrecognized)\s+(?:field|parameter|setting|feature)\b|\b(?:field|parameter|setting|feature)\b.*\b(?:unknown|unrecognized)\b/iu.test(error.message))) return [];
+    fields.push(error.field);
+  }
+  return [...new Set(fields)];
+};
+// Cosmetic settings are best effort, only on creation. At most one reduced batch;
+// assigning false remains idempotent if a rejected batch partially applied.
+const tidyCreatedRepository = (
   destination: RepositoryDestination, account: Account, options: RepositoryOptions,
 ): void => {
-  try {
-    const result = api(`repos/${account.login}/${destination.name}`, { has_pull_requests: false }, options, false, 'PATCH');
+  const update = (settings: Record<string, boolean>): ApiResult => {
+    const result = api(destination.host, `repos/${account.login}/${destination.name}`, settings, options, false, 'PATCH');
     requireCleanTransport(result);
-    if (!result.ok) throw new RepositoryError('feature-settings');
+    if (!result.ok) {
+      if (result.problem === 'authentication' || result.problem === 'prerequisite') throw new RepositoryError(result.problem);
+      return result;
+    }
     const owner = object(result.body.owner);
     if (result.body.node_id !== destination.id || result.body.name !== destination.name
       || result.body.private !== true || owner.node_id !== account.id || owner.type !== 'User'
-      || owner.login !== account.login || result.body.has_pull_requests !== false) {
-      throw new RepositoryError('feature-settings');
+      || owner.login !== account.login) {
+      throw new RepositoryError('identity');
     }
-  } catch (error) {
-    rethrowInterruption(error);
-    const failure = new RepositoryError('feature-settings');
-    if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'cleanup')) failure.cleanupFailed = true;
-    throw failure;
-  }
+    return result;
+  };
+  const result = update(repositoryFeatureSettings);
+  if (result.ok) return;
+  const unsupported = unsupportedFeatureFields(result, repositoryFeatureSettings);
+  if (!unsupported.length) return;
+  const remaining = Object.fromEntries(Object.entries(repositoryFeatureSettings).filter(([field]) => !unsupported.includes(field)));
+  if (Object.keys(remaining).length) update(remaining);
 };
 const createRepositoryBackup = (name: string, account: Account, options: RepositoryOptions = {}): RepositoryRead => {
   if (!validRepositoryName(name)) throw new RepositoryError('invalid-data');
   // Confirm the effective account immediately before creating under /user.
-  if (readRepositoryAccount(options).id !== account.id) throw new RepositoryError('identity');
-  const result = api('user/repos', {
+  if (readRepositoryAccount(account.host, options).id !== account.id) throw new RepositoryError('identity');
+  const result = api(account.host, 'user/repos', {
     name, description: 'Developer environment backups created by Ballin', private: true, auto_init: true,
-    has_issues: false, has_wiki: false, has_projects: false,
   }, options);
   if (!result.ok) throw new RepositoryError('uncertain');
   if (object(result.body.owner).node_id !== account.id || result.body.private !== true || result.body.name !== name) {
     throw new RepositoryError('identity');
   }
   const destination = {
-    id: identifier(result.body.node_id), ownerId: account.id, name, branch: identifier(result.body.default_branch),
+    host: account.host, id: identifier(result.body.node_id), ownerId: account.id, name, branch: identifier(result.body.default_branch),
   };
   try {
     requireCleanTransport(result);
-    disableCreatedRepositoryPullRequests(destination, account, options);
     const seed = requireRepositoryRead(inspect(destination, account, options, true));
+    tidyCreatedRepository(destination, account, options);
     return publish(seed, new Map([
       [repositoryMarkerFileName, markerBytes(destination)],
       [repositoryReadmeFileName, repositoryReadmeBytes()],
@@ -793,14 +826,10 @@ const createRepositoryBackup = (name: string, account: Account, options: Reposit
     throw failure;
   }
 };
-const repositoryUrl = (destination: RepositoryDestination, account: Account): string => {
-  if (destination.ownerId !== account.id) throw new RepositoryError('identity');
-  return `https://github.com/${account.login}/${destination.name}`;
-};
 const repositoryOpenUrl = (destination: RepositoryDestination, options: RepositoryOptions = {}): string => {
   options = inspectionOptions(options);
-  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(options), options, false, null));
-  return repositoryUrl(read.destination, readRepositoryAccount(options));
+  const read = requireRepositoryRead(inspect(destination, readRepositoryAccount(destination.host, options), options, false, null));
+  return repositoryUrl(read.destination, readRepositoryAccount(destination.host, options));
 };
 
 module.exports = {

@@ -36,6 +36,8 @@ describe('completion definitions and local member reader', () => {
     assert.deepEqual(complete(), ['skill with spaces/SKILL.md', "quotes'and\"marks/file.md", 'other/readme.md']);
     assert.equal(process.cwd(), cwd);
     assert.deepEqual(fixtureState(fixture), before);
+    fs.writeFileSync(files.config, JSON.stringify({ backup: { repository: { ...destination, host: 'git.example.com' } } }));
+    assert.deepEqual(complete(), []);
     fs.writeFileSync(files.config, JSON.stringify({ backup: { repository: { ...destination, branch: 'different' } } }));
     assert.deepEqual(complete(), []);
     fs.writeFileSync(files.config, JSON.stringify({ backup: { repository: { ...destination, ownerId: 'other' } } }));
@@ -50,7 +52,6 @@ describe('completion definitions and local member reader', () => {
     ['invalid UTF-8 config', () => fs.writeFileSync(files.config, Buffer.from([255]))],
     ['unconfigured destination', () => fs.writeFileSync(files.config, '{}')],
     ['invalid destination', () => fs.writeFileSync(files.config, '{"backup":{"repository":{}}}')],
-    ['legacy destination', () => fs.writeFileSync(files.config, '{"backup":{"id":"legacy"}}')],
     ['oversized config', () => fs.truncateSync(files.config, configByteLimit + 1)],
     ['missing cache', () => fs.rmSync(files.cache, { recursive: true })],
     ['missing bundle', () => fs.unlinkSync(files.file)],

@@ -94,7 +94,7 @@ jobs:
             mocha: require('mocha/package.json').version,
           }, null, 2) + '\n');
           NODE
-          node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
+          node --max-old-space-size=6144 test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary
 
       - name: Upload coverage comparison evidence
         if: >-

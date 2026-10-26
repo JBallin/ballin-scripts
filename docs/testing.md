@@ -19,6 +19,8 @@ The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;
 unexecuted included files still count as uncovered. Use the same wrapper when
 reporting saved profiles, and review the compatibility correction when updating c8.
+Coverage reporting runs with a 6 GiB JavaScript heap limit to merge the full suite's
+profiles. This process-local Node flag does not change test subprocess heap limits.
 
 ## Pull request review
 
@@ -253,9 +255,9 @@ run replaces the raw coverage data:
 
 ```shell
 npm run test:coverage
-node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
+node --max-old-space-size=6144 test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/local
 CI=true npm run test:coverage
-node test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
+node --max-old-space-size=6144 test/coverage.ts report --check-coverage=false --temp-directory=coverage/tmp --reporter=json --reporter=json-summary --reports-dir=coverage/ci
 ```
 
 Compare exact totals in `coverage-summary.json` and file/source-location maps

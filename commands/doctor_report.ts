@@ -38,7 +38,8 @@ const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): str
   }
   return terminalCommandReferences(lines.join('\n'), [
     'ballin config reset', 'ballin doctor', 'ballin backup setup', 'ballin backup disconnect',
-    'gh auth login --hostname github.com', 'ballin backup open',
+    ...[...check.summary.matchAll(/`(gh auth login --hostname [a-z0-9.-]+)`/gu)].map((match) => match[1]),
+    'ballin backup open',
   ]);
 };
 

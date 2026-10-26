@@ -102,6 +102,46 @@ backup_destination_kind() {
   ' "$1"
 }
 
+# Bootstrap reads configuration as data; the installed checkout may be older.
+# Mirror backup_config.ts host/destination validation before any authentication.
+backup_setup_host() {
+  "$node_tool" -e '
+    const fs = require("fs");
+    const [file, proposed] = process.argv.slice(1);
+    const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
+    const host = value => {
+      if (typeof value !== "string" || value.length > 253 || !/^[A-Za-z0-9.-]+$/u.test(value)) return null;
+      const normalized = value.toLowerCase();
+      return normalized.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label)) ? normalized : null;
+    };
+    const identifier = value => typeof value === "string" && value.length > 0 && !/[\s\x00-\x1f\x7f]/u.test(value);
+    try {
+      let config = {};
+      try { if (!fs.statSync(file).isFile()) throw Error(); config = JSON.parse(fs.readFileSync(file, "utf8")); }
+      catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        try { fs.lstatSync(file); throw Error(); } catch (missing) { if (missing.code !== "ENOENT") throw missing; }
+      }
+      if (!object(config) || ["backup", "update", "analytics"].some(key => Object.hasOwn(config, key) && !object(config[key]))) throw Error();
+      const backup = config.backup ?? {};
+      let configured;
+      if (backup.repository !== undefined && backup.repository !== null) {
+        const repo = backup.repository;
+        if (!object(repo) || !identifier(repo.id) || !identifier(repo.ownerId) || !identifier(repo.branch)
+          || typeof repo.name !== "string" || !/^[A-Za-z0-9_.-]{1,100}$/.test(repo.name) || [".", ".."].includes(repo.name)) throw Error();
+        configured = Object.hasOwn(repo, "host") ? host(repo.host) : "github.com";
+        if (!configured) throw Error();
+      }
+      const selected = proposed === undefined ? configured : host(proposed);
+      if (proposed !== undefined && (!selected || (configured && configured !== selected))) throw Error();
+      process.stdout.write(selected ?? "");
+    } catch {
+      process.stderr.write("Quickstart: Invalid backup hostname or destination. Check configuration; disconnect before choosing another host.\n");
+      process.exitCode = 1;
+    }
+  ' "$HOME/.ballin-scripts/ballin.config.json" "$@"
+}
+
 download() {
   local options=(-fsSL)
   [[ "${3:-}" != progress ]] || options=(-fL --progress-bar)
@@ -820,7 +860,7 @@ configure_path() {
 }
 
 main() {
-  local approved_root='' approved_command='' approved_snapshot='' exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true installer_separator=false selected_profile=''
+  local approved_root='' approved_command='' approved_snapshot='' exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true installer_separator=false selected_profile='' backup_hostname=''
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -1033,19 +1073,27 @@ main() {
     npm_compatible "$exposed_npm" || fail "npm cannot run through the final PATH: $exposed_npm. Fix or remove this broken command, then rerun this quickstart. PATH setup and authentication have not run."
   fi
   check_ballin_command
+  if [[ "$backup_choice" == yes ]]; then
+    backup_hostname=$(backup_setup_host) || return $?
+    if [[ -z "$backup_hostname" ]]; then
+      printf 'GitHub hostname [github.com]: '
+      if ! read_prompt_answer; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
+      backup_hostname=$(backup_setup_host "${prompt_answer:-github.com}") || return $?
+    fi
+  fi
   if ! original_path_sufficient; then
     configure_path
   fi
   if "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
   if [[ "$backup_choice" == yes ]]; then
     auth_status=0
-    "$gh_tool" auth status --active --hostname github.com >/dev/null 2>&1 || auth_status=$?
+    "$gh_tool" auth status --active --hostname "$backup_hostname" >/dev/null 2>&1 || auth_status=$?
     if [[ "$auth_status" == 130 || "$auth_status" == 143 ]]; then exit "$auth_status"; fi
     if [[ "$auth_status" != 0 ]]; then
       installer_separator=true
       phase 'Signing in to GitHub'
-      printf '$ gh auth login --hostname github.com --git-protocol https --web\n'
-      GH_NO_UPDATE_NOTIFIER=1 "$gh_tool" auth login --hostname github.com --git-protocol https --web
+      printf '$ gh auth login --hostname %s --git-protocol https --web\n' "$backup_hostname"
+      GH_NO_UPDATE_NOTIFIER=1 "$gh_tool" auth login --hostname "$backup_hostname" --git-protocol https --web
     fi
   fi
   repo="$HOME/.ballin-scripts"
@@ -1055,7 +1103,7 @@ main() {
   # Keep startup hooks from replacing the tools qualified above.
   result_file="$scratch/installation-result"
   printf 'pending\n' > "$result_file"
-  BALLIN_APPROVED_INSTALL_ROOT="$approved_root" BALLIN_APPROVED_INSTALL_COMMAND="$approved_command" BALLIN_APPROVED_INSTALL_SNAPSHOT="$approved_snapshot" BALLIN_SETUP_PROFILE="$selected_profile" BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh"
+  BALLIN_APPROVED_INSTALL_ROOT="$approved_root" BALLIN_APPROVED_INSTALL_COMMAND="$approved_command" BALLIN_APPROVED_INSTALL_SNAPSHOT="$approved_snapshot" BALLIN_SETUP_PROFILE="$selected_profile" BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_BACKUP_HOSTNAME="$backup_hostname" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh"
   result=$(cat "$result_file")
   [[ "$result" != cancelled ]] || return 0
   case "$result" in 'complete configured open'|'complete configured ended'|'complete configured failed'|'complete skipped open'|'complete skipped ended'|'complete skipped failed') ;; *) fail 'Installation outcome could not be verified. Review the installation before retrying.' ;; esac

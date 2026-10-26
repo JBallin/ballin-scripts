@@ -25,9 +25,27 @@ describe('onboarding sandbox', function() {
 
   const { scenarios, activeScenario, selectScenario, scenarioPath } = require('./helpers/sandbox_scenarios.ts');
   const installBackup = () => {
-    const result = runSandbox(sandbox, ['install'], 'y\nn\ny\ncreate\n\ny\ny\ny\n');
+    const result = runSandbox(sandbox, ['install'], 'y\nn\ny\n\ncreate\n\ny\ny\ny\n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
+  it('runs custom-host creation and backup through the guarded installer and installed CLI', () => {
+    const remoteFile = path.join(sandbox.remote, 'repository.json');
+    const remote = JSON.parse(fs.readFileSync(remoteFile, 'utf8')); remote.host = 'git.example.com';
+    fs.writeFileSync(remoteFile, JSON.stringify(remote));
+    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\ngit.example.com\ncreate\n\ny\ny\nn\n');
+    assert.equal(install.status, 0, install.stdout + install.stderr);
+    assert.include(install.stdout, 'GitHub hostname [github.com]: ');
+    const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
+    assert.equal(config.backup.repository.host, 'git.example.com');
+    for (const args of [['backup'], ['backup', 'open']]) {
+      const result = runSandbox(sandbox, args); assert.equal(result.status, 0, result.stdout + result.stderr);
+    }
+    const requests = JSON.parse(fs.readFileSync(remoteFile, 'utf8')).requests;
+    assert.isTrue(requests.every((request: { endpoint: string; host?: string; environmentHost?: string }) => (
+      request.environmentHost === 'git.example.com' && (request.endpoint === 'open' || request.host === 'git.example.com')
+    )));
+  });
+
   it('limits the backup scope read to the sandbox catalog and exact Git operation', () => {
     const install = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
@@ -77,11 +95,11 @@ describe('onboarding sandbox', function() {
   for (const name of ['auth', 'connection', 'timeout']) {
     it(`recovers installer backup setup after ${name} without reinstalling`, () => {
       selectScenario(sandbox, name);
-      const failed = runSandbox(sandbox, ['install'], 'y\nn\ny\n');
+      const failed = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n');
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
       assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'ballin.config.json')));
       selectScenario(sandbox, 'none');
-      const retry = runSandbox(sandbox, ['backup', 'setup'], 'y\ncreate\n\ny\ny\ny\n');
+      const retry = runSandbox(sandbox, ['backup', 'setup'], 'y\n\ncreate\n\ny\ny\ny\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
       assert.lengthOf(remote().requests.filter((request: { endpoint: string }) => request.endpoint === 'user/repos'), 1);
     });
@@ -313,7 +331,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('runs self-update and automatic backup through the real guarded installed CLI', () => {
-    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\ncreate\n\ny\ny\ny\n');
+    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\n\ncreate\n\ny\ny\ny\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.update.selfUpdate, 'true');
@@ -348,7 +366,7 @@ describe('onboarding sandbox', function() {
   it('reuses an install for later opt-in and clean create/reconnect walkthrough resets', () => {
     assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
     assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'completions/_ballin')));
-    const setup = runSandbox(sandbox, ['backup', 'setup'], 'y\ncreate\n\ny\ny\n\n');
+    const setup = runSandbox(sandbox, ['backup', 'setup'], 'y\n\ncreate\n\ny\ny\n\n');
     assert.equal(setup.status, 0, setup.stdout + setup.stderr);
     assert.include(setup.stdout, 'sensitive sources');
     assert.include(setup.stdout, 'Automatically');
@@ -357,7 +375,7 @@ describe('onboarding sandbox', function() {
     const config = () => JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.isNull(config().backup.repository);
     assert.equal(config().backup.includeSensitive, 'false');
-    const reconnect = runSandbox(sandbox, ['backup', 'setup'], 'y\nreconnect\n\nn\ny\nn\n');
+    const reconnect = runSandbox(sandbox, ['backup', 'setup'], 'y\n\nreconnect\n\nn\ny\nn\n');
     assert.equal(reconnect.status, 0, reconnect.stdout + reconnect.stderr);
     assert.isNotNull(config().backup.repository);
     assert.isFalse(remote().requests.some((request: { endpoint: string }) => request.endpoint === 'user/repos'));
@@ -533,7 +551,7 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.include(retry.stdout, "You're ballin.");
   });
   it('runs actual installer and setup prompts, inspects fake state, and preserves explicitly', () => {
-    const result = run('y\nn\nn\nballin backup setup\ny\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\ny\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);
+    const result = run('y\nn\nn\nballin backup setup\ny\n\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\ny\n\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'and make the ballin command available? [y/N]');
@@ -584,7 +602,7 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.isFalse(fs.existsSync(path.join(root, 'home/.ballin-scripts')));
   });
   it('explicitly preserves optional EOF cancellation without creating a fake destination', () => {
-    const result = run('y\nn\nn\nballin backup setup\ny\ncreate\n\n', ['--keep']);
+    const result = run('y\nn\nn\nballin backup setup\ny\n\ncreate\n\n', ['--keep']);
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Backup setup cancelled');
@@ -696,7 +714,7 @@ describe('interactive onboarding QA lifecycle', function() {
       assert.equal(actualPath.stdout.trim(), interpreter);
       const result = spawnSync(interpreter, [cli, '--keep'], {
         env, encoding: 'utf8', timeout: 240000,
-        input: 'y\nn\nn\nballin backup setup\ny\ncreate\n\nn\ny\ny\nballin update\nexit\n',
+        input: 'y\nn\nn\nballin backup setup\ny\n\ncreate\n\nn\ny\ny\nballin update\nexit\n',
       });
       root = findRoot(result.stdout);
       assert.equal(result.status, 0, result.stdout + result.stderr);

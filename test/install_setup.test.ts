@@ -115,6 +115,19 @@ describe('install setup', () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
+  for (const selected of ['git.example.com', 'https://github.com', '']) {
+    it(`rejects a conflicting or invalid Quickstart host before changing installation state: ${selected}`, () => {
+      const file = path.join(repoDir, 'ballin.config.json');
+      const bytes = JSON.stringify({ backup: { repository: { host: 'github.com', id: 'R_fixture', ownerId: 'U_fixture', name: 'backups', branch: 'main' } } });
+      fs.writeFileSync(file, bytes);
+      const value = withEnvironment({ BALLIN_BACKUP_CHOICE: 'yes', BALLIN_BACKUP_HOSTNAME: selected },
+        () => captureStdout(() => setup(repoDir, docsUrl)));
+      assert.isFalse(value.result);
+      assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+      assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+      assert.equal(commandLog(), '');
+    });
+  }
   it('creates the command directory and symlinks repository binaries', () => {
     const result = withoutStdout(() => symlinkBinaries(repoDir, binDir));
 
@@ -146,7 +159,7 @@ describe('install setup', () => {
   it('propagates an installed config migration failure without reporting success or changing config', () => {
     installConfigSources();
     const configFile = path.join(repoDir, 'ballin.config.json');
-    const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+    const original = '{"backup":{"repository":null},"custom":"preserve"}\n';
     fs.writeFileSync(configFile, original);
     fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'), "process.stderr.write('fixture migration failed\\n'); process.exitCode = 1;\n");
     const result = spawnSync(process.execPath, [installSetupPath, 'configure', repoDir, docsUrl], {
@@ -164,7 +177,7 @@ describe('install setup', () => {
       it(`preserves migration ${signal} in ${mode} without later setup or child output`, () => {
         installConfigSources();
         const configFile = path.join(repoDir, 'ballin.config.json');
-        const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+        const original = '{"backup":{"repository":null},"custom":"preserve"}\n';
         fs.writeFileSync(configFile, original);
         fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'),
           `process.stdout.write('unfinished migration\\n'); process.stderr.write('unfinished diagnostic\\n'); process.kill(process.pid, '${signal}');\n`);
@@ -1152,7 +1165,7 @@ require('https').request = () => {
       const preloadPath = path.join(testDir, 'interactive-completion.cjs');
       fs.writeFileSync(preloadPath, 'require("tty").isatty = (fd) => fd === 0;\n');
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
-        encoding: 'utf8', input: backupFails ? 'n\nhome\ny\n' : 'n\nhome\nn\n',
+        encoding: 'utf8', input: backupFails ? 'n\nhome\ny\n\n' : 'n\nhome\nn\n',
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
@@ -1177,7 +1190,7 @@ require('https').request = () => {
       'fresh',
     ], {
       encoding: 'utf8',
-      input: 'n\ny\n',
+      input: 'n\ny\n\n',
       env: childEnvironment(),
     });
 
@@ -1202,7 +1215,7 @@ require('https').request = () => {
     fs.writeFileSync(remotePath, JSON.stringify(remote)); installRepositoryFixture(binDir, remotePath);
 
     const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
-      encoding: 'utf8', input: 'n\ny\ncreate\n\nn\ny\n', env: childEnvironment(),
+      encoding: 'utf8', input: 'n\ny\n\ncreate\n\nn\ny\n', env: childEnvironment(),
     });
 
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'current permissions');
@@ -1225,7 +1238,7 @@ require('https').request = () => {
     const remotePath = path.join(testDir, 'cancelled-repository.json');
     fs.writeFileSync(remotePath, JSON.stringify(remote)); installRepositoryFixture(binDir, remotePath);
     const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
-      encoding: 'utf8', input: 'n\ny\ncreate\n\nn\nn\n', env: childEnvironment(),
+      encoding: 'utf8', input: 'n\ny\n\ncreate\n\nn\nn\n', env: childEnvironment(),
     });
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Backup setup cancelled. Run `ballin backup setup` when you’re ready.');
@@ -1249,7 +1262,7 @@ require('https').request = () => {
       fs.writeFileSync(remotePath, JSON.stringify(remote));
       installRepositoryFixture(binDir, remotePath);
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'fresh'], {
-        encoding: 'utf8', input: `y\ny\nreconnect\n\nn\ny\n${value ? 'y' : 'n'}\n`,
+        encoding: 'utf8', input: `y\ny\n\nreconnect\n\nn\ny\n${value ? 'y' : 'n'}\n`,
         env: childEnvironment(analyticsEnabledEnv),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);

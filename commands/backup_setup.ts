@@ -9,7 +9,7 @@ const {
   selectAutomaticUpdateBackup, preferenceBoolean,
 } = require('./backup_preferences.ts');
 const { readSetupConfigContext, restorePortablePreferences, PortableConfigError } = require('../config/portable.ts');
-const { configuredBackupDestination, isConfigObject, validRepositoryName, sensitiveSourceConsent } = require('./backup_config.ts');
+const { configuredBackupDestination, isConfigObject, validRepositoryName, sensitiveSourceConsent, normalizeBackupHost, resolveBackupSetupHost } = require('./backup_config.ts');
 const { configSnapshotFileName } = require('./backup_snapshots.ts');
 const { readPromptLine, readYesNo, promptInputState, CommandInterrupted, rethrowInterruption, writeStdoutLine } = require('./commandHelpers.ts');
 const {
@@ -43,6 +43,7 @@ const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome, ins
 };
 type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig: Record<string, unknown>; repositoryName?: string;
+  hostname?: string;
   onCancelled?: () => void;
   initialConsent?: boolean;
   presentation?: 'installation' | 'standalone';
@@ -62,6 +63,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   let remoteMayExist = false;
   let remoteInitialized = false;
   let linkageSaved = false;
+  let host = 'github.com';
   try {
     let candidate = readSetupConfigContext(configPath);
     const configured = configuredBackupDestination(candidate);
@@ -82,9 +84,20 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         }
       }
     }
+    const selectedHost = resolveBackupSetupHost(candidate, options.hostname);
+    if (selectedHost === undefined) {
+      const answer = readPromptLine('GitHub hostname [github.com]: ');
+      if (answer.eof) return cancelled();
+      const normalized = normalizeBackupHost(answer.text || 'github.com');
+      if (!normalized) {
+        writeStdoutLine('Enter a GitHub hostname only, such as github.com or git.example.com.');
+        return false;
+      }
+      host = normalized;
+    } else host = selectedHost;
     if (configured.kind === 'repository') {
       const maintain = (): boolean => {
-        const account = readRepositoryAccount();
+        const account = readRepositoryAccount(host);
         if (repositoryName !== undefined) {
           const found = candidateRepository(repositoryName, account);
           if (!found || found.id !== configured.repository.id || found.ownerId !== configured.repository.ownerId) {
@@ -133,7 +146,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       };
       return maintain();
     }
-    const account = readRepositoryAccount();
+    const account = readRepositoryAccount(host);
     writeStdoutLine(terminalHeading('Setting up GitHub backup'));
     const choice = readPromptLine('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
     if (choice.eof) return cancelled();
@@ -156,7 +169,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         const failure = error as RepositoryError;
         if (!(error instanceof RepositoryLookupError) || !['authentication', 'connection', 'timeout', 'request',
           'unavailable', 'identity', 'invalid-data', 'resource-limit'].includes(failure.problem) || failure.cleanupFailed) throw error;
-        writeStdoutLine(formatRepositoryMessage(failure.problem));
+        writeStdoutLine(formatRepositoryMessage(failure.problem, process.stdout, host));
         suggested = undefined;
       }
       if (suggested === undefined) writeStdoutLine('Unable to suggest an available name. Enter a repository name to check.');
@@ -174,7 +187,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine('That repository name is already in use. Choose another name; use Reconnect for an existing backup.');
       if (repositoryName !== undefined) return false;
     }
-    recoveryUrl = `https://github.com/${account.login}/${name}`;
+    recoveryUrl = repositoryUrl({ host, ownerId: account.id, name }, account);
     writeStdoutLine(`Proposed backup: ${recoveryUrl}`);
     let previous: RepositoryRead | undefined;
     if (mode === 'reconnect') {
@@ -246,7 +259,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     rethrowInterruption(error);
     writeStdoutLine(error instanceof PortableConfigError ? (error as Error).message
-      : formatRepositoryMessage((error as RepositoryError).problem) ?? 'Unable to prepare backup configuration.');
+      : formatRepositoryMessage((error as RepositoryError).problem, process.stdout, host) ?? 'Unable to prepare backup configuration.');
     if (remoteMayExist && recoveryUrl) {
       writeStdoutLine(linkageSaved
         ? `The backup destination is saved locally and remains available at ${recoveryUrl}. Setup is incomplete; run ${terminalCommand('ballin setup')} to review the remaining preferences. Do not create a duplicate.`
