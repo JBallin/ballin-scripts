@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 phase() {
   if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    printf '\033[1;34m==>\033[1;39m %s\033[0m\n' "$1"
+    printf '\033[34m==>\033[1;39m %s\033[0m\n' "$1"
   else printf '==> %s\n' "$1"; fi
 }
 command_reference() {

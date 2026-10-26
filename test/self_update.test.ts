@@ -259,7 +259,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       const styled = ['stdin', 'stderr', 'narrow'].includes(mode);
       const result = runSelfUpdate(env);
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, (styled ? '\x1b[1;34m==>\x1b[1;39m Updating Ballin\x1b[0m\n' : updateLine) + 'Ballin updated.\n');
+      assert.equal(result.stdout, (styled ? '\x1b[34m==>\x1b[1;39m Updating Ballin\x1b[0m\n' : updateLine) + 'Ballin updated.\n');
       assert.equal(result.stderr, '');
     });
   }

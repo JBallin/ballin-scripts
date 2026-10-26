@@ -19,7 +19,7 @@ const terminalHeading = (
   env: NodeJS.ProcessEnv = process.env,
 ): string => {
   if (!supportsEmphasis(stream, env)) return `==> ${text}`;
-  return `\x1b[1;34m==>\x1b[1;39m ${text}\x1b[0m`;
+  return `\x1b[34m==>\x1b[1;39m ${text}\x1b[0m`;
 };
 
 const terminalCommand = (
