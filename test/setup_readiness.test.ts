@@ -117,6 +117,20 @@ describe('setup readiness', () => {
     assert.isFalse(state.requests.some((r: { payload?: { query?: string } }) => r.payload?.query?.includes('BallinPublish')));
   });
 
+  it('uses the configured custom host for read-only checks and authentication recovery', () => {
+    const { fixtureDestination, fixtureState, requestFixture } = require('./helpers/repository.ts');
+    const state = { ...fixtureState(), host: 'git.example.com' };
+    writeConfig({ backup: { repository: { ...fixtureDestination, host: state.host }, includeSensitive: 'false' } });
+    const runCommand: NonNullable<Parameters<typeof collect>[0]>['runCommand'] = (_command, args, options) => (
+      { ...requestFixture(state, args, options), stderr: '' }
+    );
+    assert.equal(checkById(collect({ runCommand }), 'backup.read').status, 'pass');
+    state.faults.auth = true;
+    const summary = checkById(collect({ runCommand }), 'backup.read').summary;
+    assert.include(summary, 'gh auth login --hostname git.example.com');
+    assert.notInclude(summary, 'github.com');
+  });
+
   it('fails repository readiness for invalid consent, unavailable gh, invalid linkage, and incomplete reads', () => {
     const { fixtureDestination, fixtureState, requestFixture } = require('./helpers/repository.ts');
     const state = fixtureState(); state.faults.tree = { truncated: true };

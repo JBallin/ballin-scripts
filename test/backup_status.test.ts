@@ -34,7 +34,7 @@ describe('destination-scoped local last-success status', () => {
   it('uses stable identity and branch without current revision or mutable name', () => {
     seed();
     assert.equal(readLastBackupSuccess(root, { ...fixtureDestination, name: 'renamed' }, now), new Date(now).toISOString());
-    for (const change of [{ ownerId: 'other' }, { id: 'other' }, { branch: 'other' }]) {
+    for (const change of [{ host: 'git.example.com' }, { ownerId: 'other' }, { id: 'other' }, { branch: 'other' }]) {
       assert.isNull(readLastBackupSuccess(root, { ...fixtureDestination, ...change }, now));
     }
   });

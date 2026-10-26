@@ -31,7 +31,7 @@ invalid known setting values fail before any integration runs.
 
 Maintenance-only Ballin is healthy: verbose doctor output shows one optional
 backup `INFO` check and executes no `gh`. Configured repositories require the
-effective personal GitHub.com account, expected private destination identity,
+effective individual account on the destination's host, expected private destination identity,
 supported layout, and coherent readability. Invalid configuration or failed
 checks affect overall health. Doctor does not collect snapshots, probe writes,
 repair cache permissions, or claim freshness, coverage, or verified publication.
@@ -39,8 +39,10 @@ repair cache permissions, or claim freshness, coverage, or verified publication.
 ## `ballin backup`
 
 `ballin backup` saves changed snapshots to the configured destination. New setup
-uses private GitHub.com repositories; run `ballin backup setup [repository-name]`
-to create or reconnect.
+uses a private repository on GitHub.com or a selected GitHub Enterprise Server or GHE.com
+host; run `ballin backup setup` to create or reconnect. See
+[account and host support](installation.md#github-account-and-host-support) for
+requirements.
 
 Repository backups include a fixed baseline of inventories and filtered
 preferences; raw configuration and pipx require the single local sensitive-source

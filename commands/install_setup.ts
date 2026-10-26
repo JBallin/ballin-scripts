@@ -15,6 +15,7 @@ const {
 } = require('../config/portable.ts');
 const {
   configuredBackupDestination,
+  resolveBackupSetupHost,
 } = require('./backup_config.ts');
 const {
   promptInputState,
@@ -40,6 +41,7 @@ type ConfigLeaf = string | number | boolean | null;
 type ConfigValue = ConfigLeaf | ConfigObject;
 type SetupMode = 'fresh' | 'refresh' | 'self-update';
 type ConfigureBackupOptions = {
+  hostname?: string;
   backupCacheDir?: string;
   configPath?: string;
   originalConfig?: Record<string, unknown>;
@@ -162,7 +164,7 @@ const configureBackup = (
   const originalConfig = options.originalConfig ?? readOriginalSetupConfig(configPath);
   if (!originalConfig) return false;
   return configureRepositoryBackup({
-    configPath, originalConfig, repositoryName: options.repositoryName, onCancelled: options.onCancelled,
+    configPath, originalConfig, repositoryName: options.repositoryName, hostname: options.hostname, onCancelled: options.onCancelled,
     initialConsent: options.initialConsent,
     presentation: options.presentation,
     showValidationSummary: options.showValidationSummary,
@@ -255,6 +257,17 @@ const setup = (
   if (!originalConfig) {
     return false;
   }
+  let hostname: string | undefined;
+  if (process.env.BALLIN_BACKUP_CHOICE === 'yes' && process.env.BALLIN_BACKUP_HOSTNAME !== undefined) {
+    try {
+      const destination = configuredBackupDestination(originalConfig);
+      if (destination.kind === 'invalid') throw new Error('Invalid backup destination; disconnect before choosing another host.');
+      hostname = resolveBackupSetupHost(originalConfig, process.env.BALLIN_BACKUP_HOSTNAME);
+    } catch (error) {
+      writeStdoutLine((error as Error).message);
+      return false;
+    }
+  }
   const binDir = resolveBinDir();
   if (!binDir || !validateBinDirInPath(binDir)) {
     return false;
@@ -312,7 +325,7 @@ const setup = (
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
       presentation: mode === 'self-update' ? 'standalone' : 'installation',
       initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',
-      originalConfig, onCancelled: () => { backupSetupCancelled = true; },
+      hostname, originalConfig, onCancelled: () => { backupSetupCancelled = true; },
       showValidationSummary: mode !== 'self-update',
       maintenanceOnly: mode === 'self-update',
     });

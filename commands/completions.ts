@@ -4,9 +4,10 @@ import type { ConfigOperationName } from '../config/commands.ts';
 const fs = require('fs');
 const path = require('path');
 const { topLevelCommandNames, commandHelpOptionName, doctorVerboseOptionName } = require('./top_level_commands.ts');
-const { backupCommandNames, backupReadOptionNames } = require('./backup_commands.ts') as {
+const { backupCommandNames, backupReadOptionNames, backupSetupOptionNames } = require('./backup_commands.ts') as {
   backupCommandNames: readonly BackupCommandName[];
   backupReadOptionNames: readonly string[];
+  backupSetupOptionNames: readonly string[];
 };
 const { configOperationNames } = require('../config/commands.ts') as {
   configOperationNames: readonly ConfigOperationName[];
@@ -51,7 +52,8 @@ const selection = (shell: 'bash' | 'zsh'): string[] => {
     `        'config set') candidates=(${arrayWords(configNames.leaves)}) ;;`,
     `        'help backup') candidates=(${arrayWords(backupCommandNames)}) ;;`,
     `        'backup read') candidates=(${arrayWords([...snapshotNames, commandHelpOptionName])}) ;;`,
-    `        ${backupCommandNames.filter((name) => name !== 'read').map((name) => quote(`backup ${name}`)).join('|')}) candidates=(${arrayWords([commandHelpOptionName])}) ;;`,
+    `        'backup setup') candidates=(${arrayWords([...backupSetupOptionNames, commandHelpOptionName])}) ;;`,
+    `        ${backupCommandNames.filter((name) => !['read', 'setup'].includes(name)).map((name) => quote(`backup ${name}`)).join('|')}) candidates=(${arrayWords([commandHelpOptionName])}) ;;`,
     '      esac',
     '      ;;',
     `    ${4 + offset})`,
@@ -62,6 +64,7 @@ const selection = (shell: 'bash' | 'zsh'): string[] => {
     '          esac',
     '          ;;',
     `        'backup read') candidates=(${arrayWords(backupReadOptionNames)}) ;;`,
+    `        'backup setup') [[ "${word(3)}" != --hostname ]] && candidates=(${arrayWords(backupSetupOptionNames)}) ;;`,
     '      esac',
     '      ;;',
     `    ${5 + offset})`,

@@ -112,16 +112,17 @@ setting is required.
 
 ## Private repository backups
 
-Newly configured backups use private GitHub.com repositories owned by a personal
-account, accessed through [GitHub CLI](https://cli.github.com/). Backup is
+Newly configured backups use private repositories owned by an individual account
+on GitHub.com, GitHub Enterprise Server or a GHE.com tenant host, accessed through [GitHub CLI](https://cli.github.com/). Backup is
 optional; declining it leaves a healthy maintenance-only installation and makes
 no `gh` calls.
 
 ```shell
-ballin backup setup [repository-name]
+ballin backup setup [repository-name] [--hostname <host>]
 ```
 
-Fresh setup offers create or reconnect, reviews one local sensitive-source choice,
+Fresh setup asks for the host (default: `github.com`, unless supplied by flag),
+offers create or reconnect, reviews one local sensitive-source choice,
 and confirms before remote or linkage changes. The effective `gh` credential
 can come from an environment token; Ballin shows the selected account and never
 logs in, switches accounts, or expands scopes automatically. Read-only access
@@ -149,15 +150,17 @@ ballin config set backup.includeSensitive false
 ```
 
 After new linkage, setup asks whether updates should run backups automatically,
-with no as the default. Change that independent choice later with:
+with “No” as the default. Change that independent choice later with:
 
 ```shell
 ballin config set update.backup true
 ballin config set update.backup false
 ```
 
-Backups are stored in a private GitHub repository. GitHub and anyone authorized
-to access the repository can read its contents.
+Backups are stored in a private GitHub repository.
+GitHub can access backups on GitHub.com or GHE.com; a GitHub Enterprise
+Server hosting operator and site administrators may also have access. Anyone
+with authorized repository access can read the contents.
 
 Even when sensitive sources are excluded, the default-included inventory can
 reveal identities, private or custom URLs, and paths; Ballin does not scan or

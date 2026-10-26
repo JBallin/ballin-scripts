@@ -115,6 +115,14 @@ esac
       if (answers.length > installationAnswer) answers.splice(installationAnswer, 1);
     }
     if (missingGit) answers.splice(1, 0, 'y');
+    const early = overrides.FAKE_EARLY_ANSWER ?? 'y\n';
+    const earlyYes = early.endsWith('\n') && !/^(?:n|no)\n/iu.test(early);
+    let configured = false;
+    try { configured = !!JSON.parse(fs.readFileSync(path.join(home, '.ballin-scripts/ballin.config.json'), 'utf8')).backup?.repository; } catch { /* Fresh installation. */ }
+    if (earlyYes && !configured && overrides.FAKE_RAW_INPUT !== '1') {
+      answers.splice(preceding + (missingGit ? 1 : 0), 0, overrides.FAKE_HOST_ANSWER ?? '');
+    }
+
     return spawnSync('/bin/bash', ['-c', `
 source "$FAKE_SOURCE"
 system_node_bin="$FAKE_SYSTEM_NODE"
@@ -239,14 +247,14 @@ case "$name" in
     case "$*" in
       --version) printf 'gh version fixture\\n'; fake_gh_notice ;;
       'auth status --help') printf '%s\\n' '--active' ;;
-      'auth status --active --hostname github.com')
+      'auth status --active --hostname '*)
         if [[ -n "\${FAKE_TOKEN_SOURCE:-}" ]]; then
           [[ "\${!FAKE_TOKEN_SOURCE}" == fixture-invalid-token ]] || exit 97
           printf 'token-preserved:status:%s\\n' "$FAKE_TOKEN_SOURCE" >> "$FAKE_COMMAND_LOG"
           exit 1
         fi
         [[ "\${FAKE_AUTH:-ready}" == ready || -f "$FAKE_ROOT/login-complete" ]] ;;
-      'auth login --hostname github.com --git-protocol https --web')
+      'auth login --hostname '*' --git-protocol https --web')
         if [[ -n "\${FAKE_TOKEN_SOURCE:-}" ]]; then
           [[ "\${!FAKE_TOKEN_SOURCE}" == fixture-invalid-token ]] || exit 97
           printf 'token-preserved:login:%s\\n' "$FAKE_TOKEN_SOURCE" >> "$FAKE_COMMAND_LOG"
@@ -327,6 +335,7 @@ case "$name" in
       (cd "$FAKE_ROOT"; node -p fixture >/dev/null; git --version >/dev/null; gh --version >/dev/null)
       printf 'fixture:changed-cwd-tools-ready\\n' >> "$FAKE_COMMAND_LOG"
     fi
+    printf 'installer-host:%s\\n' "\${BALLIN_BACKUP_HOSTNAME:-}" >> "$FAKE_COMMAND_LOG"
     repo="$HOME/.ballin-scripts"
     if [[ ! -f "$repo/ballin.config.json" ]]; then
       answer=y
@@ -334,9 +343,9 @@ case "$name" in
       [[ "$answer" == y ]] || { printf 'cancelled\\n' > "$BALLIN_SETUP_RESULT_FILE"; exit 0; }
       mkdir -p "$repo/bin" "$repo/commands"
       if [[ "\${FAKE_SKIP_BACKUP:-0}" == 1 || "\${BALLIN_BACKUP_CHOICE:-}" == no ]]; then printf '{"backup":{}}\\n' > "$repo/ballin.config.json"
-      else printf '{"backup":{"repository":true}}\\n' > "$repo/ballin.config.json"; fi
+      else printf '{"backup":{"repository":{"id":"R_fixture","ownerId":"U_fixture","name":"ballin-backups","branch":"main"}}}\\n' > "$repo/ballin.config.json"; fi
     fi
-    if grep -q '"repository":true' "$repo/ballin.config.json"; then printf 'complete configured open\\n' > "$BALLIN_SETUP_RESULT_FILE"
+    if grep -q '"repository":{' "$repo/ballin.config.json"; then printf 'complete configured open\\n' > "$BALLIN_SETUP_RESULT_FILE"
     else printf 'complete skipped open\\n' > "$BALLIN_SETUP_RESULT_FILE"; fi
     printf 'Installed fixture.\\n'
     cp "$FAKE_ROOT/fake-tool" "$repo/bin/ballin"
@@ -347,11 +356,11 @@ case "$name" in
         printf 'Native backup setup prompt: '; IFS= read -r answer
         [[ "\${FAKE_SETUP_FAIL:-0}" != 1 ]] || exit 1
         [[ "$answer" == y ]] || { printf 'Backup setup skipped.\\n'; exit 0; }
-        printf '{"backup":{"repository":true}}\\n' > "$HOME/.ballin-scripts/ballin.config.json" ;;
+        printf '{"backup":{"repository":{"id":"R_fixture","ownerId":"U_fixture","name":"ballin-backups","branch":"main"}}}\\n' > "$HOME/.ballin-scripts/ballin.config.json" ;;
       backup)
         [[ "\${FAKE_BACKUP_FAIL:-0}" != 1 ]] || exit 1
         if [[ "\${FAKE_CHECK_NPM_COLLECTOR:-0}" == 1 ]]; then npm list -g --depth=0 >/dev/null; fi
-        if ! grep -q '"repository":true' "$HOME/.ballin-scripts/ballin.config.json"; then printf 'Backup is not configured\\n' >&2; exit 1; fi ;;
+        if ! grep -q '"repository":{' "$HOME/.ballin-scripts/ballin.config.json"; then printf 'Backup is not configured\\n' >&2; exit 1; fi ;;
       'backup open') [[ "\${FAKE_OPEN_FAIL:-0}" != 1 ]] || exit 1 ;;
       *) exit 97 ;;
     esac ;;
@@ -803,7 +812,7 @@ system_sudo=fixture_sudo
         const before = existingProfile ? fs.statSync(profile) : null;
         // The helper anticipates sufficient PATH and rewrites answers. Supply raw
         // fallback answers so a swallowed interruption really continues setup.
-        const result = run('home\ny\ndevice-code\ny\ny\n', {
+        const result = run('\nhome\ny\ndevice-code\ny\ny\n', {
           PATH: `${tools}:${localBin}`, FAKE_RAW_INPUT: '1', FAKE_AUTH: 'missing',
           FAKE_ORIGINAL_PATH_RESULT: outcome,
         });
@@ -837,7 +846,7 @@ system_sudo=fixture_sudo
     it(`preserves real ${Number(!sufficient)} from the late original-PATH probe`, () => {
       const localBin = path.join(home, '.local/bin');
       fs.mkdirSync(localBin, { recursive: true });
-      const result = run(sufficient ? 'y\ny\n' : 'home\ny\ny\ny\n', {
+      const result = run(sufficient ? '\ny\ny\n' : '\nhome\ny\ny\ny\n', {
         PATH: sufficient ? `${tools}:${localBin}` : tools,
         FAKE_RAW_INPUT: '1', FAKE_ORIGINAL_PATH_RESULT: 'real',
       });
@@ -1271,7 +1280,7 @@ system_sudo=fixture_sudo
         'export -f brew',
         '/bin/bash -c \'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main\'',
       ].join('\n')], {
-        encoding: 'utf8', input: 'y\nhome\ny\ny\n\n', cwd: home, timeout: 12000,
+        encoding: 'utf8', input: 'y\n\nhome\ny\ny\n\n', cwd: home, timeout: 12000,
         env: testChildEnvironment({
           HOME: home, PATH: `${brewTools}:${tools}`, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
           FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source, FAKE_SYSTEM_NODE: systemNode,
@@ -1396,7 +1405,7 @@ system_sudo=fixture_sudo
         `declare -F ${name} >/dev/null && printf 'parent-function-preserved\\n' >> "$FAKE_COMMAND_LOG"`,
         'exit "$status"',
       ].join('\n')], {
-        encoding: 'utf8', input: 'y\nhome\ny\nn\n', cwd: home, timeout: 12000,
+        encoding: 'utf8', input: 'y\n\nhome\ny\nn\n', cwd: home, timeout: 12000,
         env: testChildEnvironment({ HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
           FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source, FAKE_SYSTEM_NODE: systemNode,
           TEST_NODE_RUNTIME: process.execPath, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') }),
@@ -2378,7 +2387,7 @@ system_sudo=fixture_sudo
     });
     child.stderr.on('data', (data: Buffer) => { output += data.toString(); });
     const timeout = setTimeout(() => child.kill('SIGKILL'), 8000);
-    child.stdin.write('y\nhome\ny\ny\n');
+    child.stdin.write('y\n\nhome\ny\ny\n');
     try {
       const status = await new Promise((resolve, reject) => {
         child.once('error', reject);
@@ -3005,6 +3014,46 @@ confirm() {
       assert.notInclude(result.stdout, incompletePathGuidance);
     });
   }
+  for (const [answer, expected] of [['', 'github.com'], ['GIT.EXAMPLE.COM', 'git.example.com'], ['fixture.ghe.com', 'fixture.ghe.com']]) {
+    it(`selects ${expected} once before authentication and installer handoff`, () => {
+      const result = run('y\ny\n', { FAKE_HOST_ANSWER: answer });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.lengthOf(result.stdout.match(/GitHub hostname \[github.com\]:/gu) ?? [], 1);
+      assert.include(readLog(), `gh:auth status --active --hostname ${expected}`);
+      assert.include(readLog(), `installer-host:${expected}`);
+      assert.isBelow(readLog().indexOf('gh:auth status --active'), readLog().indexOf('install.sh:'));
+    });
+  }
+  for (const hostname of ['https://git.example.com', 'git.example.com:443', 'bad_host', 'K.example.com']) {
+    it(`refuses invalid Quickstart hostname ${hostname} before authentication`, () => {
+      const result = run('y\ny\n', { FAKE_HOST_ANSWER: hostname });
+      assert.equal(result.status, 1);
+      assert.notInclude(readLog(), 'gh:auth status --active');
+      assert.notInclude(readLog(), 'install.sh:');
+    });
+  }
+  for (const status of ['1', '130', '143']) {
+    it(`preserves custom-host login failure ${status} without installation`, () => {
+      const result = run('y\ny\n', { FAKE_HOST_ANSWER: 'git.example.com', FAKE_AUTH: 'missing', FAKE_GH_LOGIN_FAILURE: status });
+      assert.equal(result.status, Number(status), result.stdout + result.stderr);
+      assert.include(readLog(), 'gh:auth login --hostname git.example.com --git-protocol https --web');
+      assert.notInclude(readLog(), 'install.sh:');
+    });
+  }
+  it('ignores an inherited hostname when backups are declined', () => {
+    const result = run('y\ny\n', { FAKE_EARLY_ANSWER: 'no\n', BALLIN_BACKUP_HOSTNAME: 'wrong.example.com' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notInclude(result.stdout, 'GitHub hostname [');
+    assert.notInclude(readLog(), 'gh:auth status --active');
+    assert.include(readLog(), 'installer-host:\n');
+  });
+  it('stops on hostname EOF without sign-in or installation', () => {
+    const result = run('', { FAKE_RAW_INPUT: '1' }, home, '', '');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'GitHub hostname [github.com]:');
+    assert.notInclude(readLog(), 'gh:auth status --active');
+    assert.notInclude(readLog(), 'install.sh:');
+  });
   it('rejects unsupported platforms before changing home files', () => {
     for (const env of [{ FAKE_OS: 'Linux' }, { FAKE_MACOS: '13.4' }, { FAKE_ARCH: 'i386' }]) {
       assert.equal(run('', env).status, 1);
@@ -3021,7 +3070,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       const sandbox = createSandbox({ quickstart: true });
       try {
         const prefix = choice === 'maintenance' ? 'no\n' : 'yes\n';
-        const core = 'login\nyes\nyes\n';
+        const core = (choice === 'maintenance' ? '' : '\n') + 'login\nyes\nyes\n';
         const answers = choice === 'analytics-eof' ? '' : 'no\nlogin\nno\n';
         const setup = choice === 'maintenance' || choice === 'analytics-eof' ? ''
           : 'create\n\nno\n' + (choice === 'final-no' ? 'no\n' : choice === 'final-eof' ? '' : 'yes\nno\nyes\n');
@@ -3059,7 +3108,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         const configPath = path.join(sandbox.repo, 'ballin.config.json');
         const previousConfig = fs.readFileSync(configPath, 'utf8');
         assert.isUndefined(JSON.parse(previousConfig).backup.repository);
-        const result = runSandbox(sandbox, ['quickstart'], `yes\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
+        const result = runSandbox(sandbox, ['quickstart'], `yes\n\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.lengthOf(result.stdout.match(/Create a new backup or reconnect to an existing one\?/gu) ?? [], 1);
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
@@ -3077,6 +3126,31 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           assert.notInclude(result.stdout, 'Run a backup now and open');
           assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 0);
         }
+      } finally { cleanupSandbox(sandbox.root); }
+    });
+  }
+  for (const host of ['github.com', 'git.example.com', 'fixture.ghe.com']) {
+    it(`hands ${host} from the single Quickstart prompt through real setup and capture`, () => {
+      const sandbox = createSandbox({ quickstart: true });
+      try {
+        const file = path.join(sandbox.remote, 'repository.json');
+        const state = JSON.parse(fs.readFileSync(file, 'utf8')); state.host = host; fs.writeFileSync(file, JSON.stringify(state));
+        const result = runSandbox(sandbox, ['quickstart'], `yes\n${host}\nlogin\nyes\nyes\nno\nlogin\nno\ncreate\n\nno\nyes\nno\nyes\n`);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.lengthOf(result.stdout.match(/GitHub hostname \[github.com\]:/gu) ?? [], 1);
+        const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
+        assert.equal(config.backup.repository.host, host);
+        const remote = JSON.parse(fs.readFileSync(file, 'utf8'));
+        assert.isTrue(remote.requests.filter((r: { endpoint: string }) => r.endpoint !== 'open').every((r: { host: string; environmentHost: string }) => r.host === host && r.environmentHost === host));
+        assert.lengthOf(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'open'), 1);
+        if (host === 'github.com') {
+          delete config.backup.repository.host; config.backup.host = 'stale.example.com';
+          fs.writeFileSync(path.join(sandbox.repo, 'ballin.config.json'), JSON.stringify(config));
+        }
+        const rerun = runSandbox(sandbox, ['quickstart'], 'yes\nno\n');
+        assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+        assert.notInclude(rerun.stdout, 'GitHub hostname [');
+        assert.equal(require('../commands/backup_config.ts').configuredBackupDestination(JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'))).repository.host, host);
       } finally { cleanupSandbox(sandbox.root); }
     });
   }
@@ -3104,7 +3178,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
     try {
       const profile = path.join(sandbox.home, '.bash_profile');
       fs.writeFileSync(profile, '# Synthetic Bash login settings\n', { mode: 0o640 });
-      const result = runSandbox(sandbox, ['quickstart'], 'yes\nlogin\nyes\nyes\nno\nlogin\nyes\ncreate\n\nyes\nyes\nno\nyes\n');
+      const result = runSandbox(sandbox, ['quickstart'], 'yes\n\nlogin\nyes\nyes\nno\nlogin\nyes\ncreate\n\nyes\nyes\nno\nyes\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'PATH line added');
       assert.notInclude(result.stdout, 'Tab completion enabled.');

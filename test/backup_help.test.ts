@@ -122,7 +122,7 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
   it('shows operation-specific syntax and backup consequences', () => {
     for (const [command, details] of Object.entries({
       setup: ['setup [repository-name]', 'confirmation', 'sensitive-source', '#optional-backup-setup-and-reconnect', 'docs/backup-sources.md'],
-      open: ['Open the configured backup in your browser', 'authentication and remote access'],
+      open: ['Open the configured backup in your browser', 'authentication for the selected GitHub host and remote access'],
       list: ['List supported snapshots', 'remote read access', 'does not collect local backup sources'],
       read: ['read <snapshot> --list', 'read <snapshot> --file <path>', 'original bytes', 'Without a snapshot selector', '#inspect-saved-backups'],
       disconnect: ['disable automatic backup', 'Preserve remote history', 'sensitive-source preferences', 'no authentication or network access'],

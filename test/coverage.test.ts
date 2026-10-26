@@ -27,7 +27,6 @@ type FileCoverage = {
 const { cells } = require('./fixtures/coverage-identity/profiles.json') as { cells: Cell[] };
 const wrapper = path.resolve(__dirname, 'coverage.ts');
 const vanilla = require.resolve('c8/bin/c8.js');
-const root = path.resolve(__dirname, '..');
 
 function report(cell: Cell, corrected: boolean, options: {
   mergeAsync?: boolean; unexecutedFile?: boolean; uncalledFunction?: boolean;
@@ -37,9 +36,9 @@ function report(cell: Cell, corrected: boolean, options: {
   try {
     const extension = cell.cell.endsWith('-ts') ? 'ts' : 'cjs';
     const subject = path.join(temp, `backup cache ü.${extension}`);
-    const source = extension === 'ts'
-      ? path.join(root, 'commands/backup_cache.ts')
-      : path.join(__dirname, 'fixtures/coverage-identity/backup_cache.cjs');
+    // Recorded V8 offsets require the original source, independently of later production edits.
+    const source = path.join(__dirname, 'fixtures/coverage-identity',
+      extension === 'ts' ? 'backup_cache.ts.txt' : 'backup_cache.cjs');
     const bytes = fs.readFileSync(source);
     assert.equal(createHash('sha256').update(bytes).digest('hex'), cell.source.sha256);
     fs.writeFileSync(subject, bytes);
@@ -71,7 +70,7 @@ function report(cell: Cell, corrected: boolean, options: {
       statements: thresholds.statements, lines: thresholds.lines,
       branches: thresholds.branches, functions: thresholds.functions,
     }));
-    const args = [corrected ? wrapper : vanilla, 'report', '--config', config,
+    const args = [...(corrected ? ['--max-old-space-size=6144'] : []), corrected ? wrapper : vanilla, 'report', '--config', config,
       '--temp-directory', raw, '--reports-dir', output];
     if (options.mergeAsync) args.push('--merge-async');
     if (options.checkCoverageFalse) args.push('--check-coverage=false');
@@ -181,9 +180,11 @@ describe('c8 absolute-path compatibility', () => {
       const code = `
         require('node:assert/strict').equal(require(${JSON.stringify(subject)})(), 7);
         require('node:assert/strict').equal(process.env.NODE_OPTIONS, undefined);
+        require('node:assert/strict').deepEqual(process.execArgv.slice(0, -2), []);
+        require('node:assert/strict').ok(require('node:v8').getHeapStatistics().heap_size_limit < 6144 * 2 ** 20);
         process.exitCode = 23;
       `;
-      const result = spawnSync(process.execPath, [wrapper, '--config', config,
+      const result = spawnSync(process.execPath, ['--max-old-space-size=6144', wrapper, '--config', config,
         '--temp-directory', path.join(temp, 'raw'), '--reports-dir', output,
         process.execPath, '-e', code], {
         cwd: temp, encoding: 'utf8', timeout: 8000,

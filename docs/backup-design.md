@@ -14,11 +14,11 @@ finite failure reasons, and a revision handle. There is no backend/provider
 registry. `commands/backup.ts` owns staging, three-way comparison, and private
 cache promotion for repository backups.
 
-Local `backup.repository` is null or `{ id, ownerId, name, branch }`: opaque
+Local `backup.repository` is null or `{ host, id, ownerId, name, branch }`: opaque
 GitHub node IDs establish identity, the mutable name locates REST resources,
 and the initial default branch remains selected. The effective `gh api ... user`
-account must be the personal GitHub.com owner. Stable-ID resolution revalidates
-owner, private visibility, supported state, selected branch, and marker. A rename
+account must be the individual owner on the selected host. Stable-ID resolution
+revalidates owner, private visibility, supported state, selected branch, and marker. A rename
 cannot switch destinations. An explicit setup name must resolve to the same
 identity when configured. Invalid or unsupported local destination configuration
 fails without fallback or remote operations.
@@ -51,21 +51,25 @@ Directories, workflows, executable modes, symlinks, submodules, duplicate paths,
 and other unsupported entries fail closed. There are no timestamps, device IDs,
 checkpoint receipts, or configurable layouts.
 
-Repository bootstrap is deliberately strict. Ballin creates a private,
-auto-initialized repository through `/user/repos` (`private:true`,
-`auto_init:true`, `has_issues:false`, `has_wiki:false`, `has_projects:false`).
-After validating the new repository's identity, it sends one
-`PATCH /repos/{owner}/{repo}` with `has_pull_requests:false`; this field is
-supported by the update endpoint, not repository creation. Setup requires a
-successful response matching the repository node ID, name, private visibility,
-and personal owner, with `has_pull_requests:false`. Missing, malformed,
-mismatched, or unsuccessful responses stop setup without retrying the write.
-The effective credential needs Administration (write) for this update;
-Repository creation (write) alone can allow creation without allowing the update.
-Ballin does not create credentials or expand permissions. Feature settings are
-never changed by reconnect, maintenance, or ordinary backups. A failed settings
-step retains creation evidence and the recovery URL without deleting the partial
-repository or saving local linkage. Transport cleanup failures also stop setup.
+Repository bootstrap creates a private, auto-initialized repository through
+`/user/repos` (`private:true`, `auto_init:true`) and validates its stable identity,
+individual owner, private visibility and seed layout before cosmetic cleanup.
+One optional `PATCH /repos/{owner}/{repo}` attempts to disable Issues, Wiki,
+Projects and pull requests together. These settings are housekeeping, not branch
+protection or backup prerequisites; insufficient Administration permission does
+not prevent initialization. Reconnect, maintenance and ordinary backups never
+change them.
+
+A successful update need not apply every cosmetic flag. An unsuccessful update
+gets at most one reduced-batch fallback, only for structured errors explicitly
+identifying unsupported requested fields. Generic validation, rate limits,
+permission denials and uncertain network outcomes do not authorize retries.
+Repeated false assignments are idempotent if the first batch partially applied.
+Unsuccessful cosmetic cleanup is silent. Authentication failures, invalid
+transport data, identity/privacy mismatches, interruption, local resource/I/O
+and private temporary-file cleanup failures remain fatal. Required pre-publication
+inspection and conditional publication are unchanged. Ballin never expands
+credentials or permissions to tidy the repository.
 
 Bootstrap accepts only GitHub's expected seed: a single root commit
 containing one regular `README.md`. Against that exact head, one conditional
@@ -74,6 +78,66 @@ guide. Ballin verifies the resulting tree and marker before saving the repositor
 as the configured destination. Later backups leave `README.md` untouched and
 ignore it as backup state. If initialization cannot be confirmed safely, Ballin
 stops for inspection rather than risk creating a duplicate repository.
+
+## Host and account support
+
+The [support matrix](installation.md#github-account-and-host-support) distinguishes
+GitHub.com personal and managed accounts, GitHub Enterprise Server,
+GHE.com and organization ownership. New setup asks for the host, defaulting to GitHub.com;
+`--hostname` selects it without that question. Confirmed linkage stores the
+canonical host in `backup.repository`. Older repository objects without that
+field resolve to GitHub.com, independently of a retained legacy `backup.host`.
+A present invalid host fails closed. Configured setup refuses another explicit
+host; changing services requires disconnect and new setup.
+
+Transport passes both `--hostname` and `GH_HOST` for that destination. GitHub CLI
+selects the corresponding REST/GraphQL base and existing credential. Account
+lookups, conditional writes, readback, browser/commit/recovery URLs and cache keys
+use the same host. Backup storage uses APIs independently of the installed
+checkout's Git remote. Product-source and documentation links remain on GitHub.com.
+
+Account lookup requires REST `type: User` and a login containing only ASCII
+letters, digits, hyphens or underscores. Accepting managed usernames does not
+bypass enterprise policy or change the stable owner-ID requirement. Repository
+lookup requires the authenticated account's stable ID and a `User` owner;
+creation uses `/user/repos`. Identity comparisons include the host so IDs from
+different services cannot identify the same destination. Marker format v1 stays
+unchanged: its IDs are validated within the configured host's repository.
+
+GHES 3.3 introduced the required `createCommitOnBranch` mutation; its
+[input schema](https://docs.github.com/en/enterprise-server@3.3/graphql/reference/input-objects#createcommitonbranchinput)
+includes branch identity, `expectedHeadOid` and file changes. The
+[release notes](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes),
+[REST description](https://github.com/github/rest-api-description/blob/main/descriptions/ghes-3.3/ghes-3.3.json)
+and [GraphQL schema](https://docs.github.com/en/enterprise-server@3.3/graphql/reference/objects)
+establish the documented API baseline, not a live-tested compatibility range.
+There is no version probe or legacy publication fallback. Optional housekeeping
+does not raise that baseline.
+
+Use the [current GHES commit API](https://docs.github.com/en/enterprise-server@latest/graphql/reference/commits#createcommitonbranch)
+and [repository API](https://docs.github.com/en/enterprise-server@latest/rest/repos/repos#update-a-repository)
+for general reference.
+
+GHE.com uses its tenant hostname as destination identity. Ballin passes relative
+REST/GraphQL endpoints to GitHub CLI instead of building API base URLs. Current
+CLI routing sends tenant API traffic to `api.<subdomain>.ghe.com` and uses the
+cloud credential family (`GH_TOKEN`/`GITHUB_TOKEN` or the saved tenant login),
+whereas GHES uses `GH_ENTERPRISE_TOKEN`/`GITHUB_ENTERPRISE_TOKEN` or its saved login.
+See [GitHub's platform guidance](https://docs.github.com/en/enterprise-cloud@latest/admin/data-residency/about-github-enterprise-cloud-with-data-residency#api-access)
+and [CLI environment reference](https://cli.github.com/manual/gh_help_environment).
+Use a current CLI with GHE.com support; Ballin neither chooses tokens nor
+rewrites host-specific authentication.
+
+Isolated fixtures exercise host routing, managed usernames, create/reconnect,
+optional cleanup/fallback, failures, publication, recovery and cache isolation.
+An offline GitHub CLI check with dummy tokens, temporary configuration and a
+rejecting loopback proxy separately verified API-host routing and token-family
+selection without provider contact. No live GHES/GHE.com service or real managed
+account has been tested; TLS/network access, real credentials and instance policy
+remain qualification needs.
+
+Legacy Gist configuration cannot redirect repository backups. Setup neither
+imports historical Gist contents/history nor deletes them.
 
 ## Managed-branch protection
 
@@ -195,12 +259,14 @@ included affects future captures but does not delete existing remote snapshots
 or history.
 
 Repository caches live beneath `.backup-cache/<hash>`, using SHA-256 of the
-fixed GitHub.com/owner ID/repository ID/selected branch tuple. Mutable names and
-legacy cache files cannot establish a base. New linkage invalidates all
+canonical host/owner ID/repository ID/selected branch tuple. Older GitHub.com
+linkage retains the exact same namespace after host normalization. Mutable names
+and legacy cache files cannot establish a base. New linkage invalidates all
 untrusted comparison state before atomically saving linkage, local consent, and
 eligible restored preferences. Recovery never seeds a comparison base from remote
-content. Disconnect saves both associations cleared and automatic backup disabled
-before cache cleanup; retrying disconnect can finish cleanup without network access.
+content. Disconnect clears the repository association and disables automatic
+backups before cache cleanup; retrying disconnect can finish cleanup without
+network access.
 
 ## Coherent repository reads and publication
 
