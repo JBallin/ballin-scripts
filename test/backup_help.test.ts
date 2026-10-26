@@ -153,9 +153,9 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
       { name: 'NO_COLOR', HELP_TTY: '1', TERM: 'xterm', NO_COLOR: '1' },
       { name: 'redirected', HELP_TTY: '0', TERM: 'xterm', NO_COLOR: '' },
     ]) {
-      it(`wraps help at ${columns} columns for ${mode.name} without side effects`, () => {
-        const before = snapshot();
-        for (const target of [[], ['setup'], ['backup'], ['backup', 'read'], ['backup', 'setup'], ['config']]) {
+      for (const target of [[], ['setup'], ['backup'], ['backup', 'read'], ['backup', 'setup'], ['config']]) {
+        it(`wraps ${['help', ...target].join(' ')} at ${columns} columns for ${mode.name} without side effects`, () => {
+          const before = snapshot();
           const env = { ...mode, HELP_COLUMNS: String(columns) };
           const result = run(['help', ...target], env);
           const equivalent = run(target.length ? [...target, '--help'] : ['--help'], env);
@@ -176,10 +176,10 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
             assert.isTrue(line.trim().split(' ').some((word: string) => word.length > Math.min(columns, 80)), line);
           }
           for (const url of baseline.match(/https:\/\/\S+/gu) ?? []) assert.include(plain, url);
-        }
-        assert.isFalse(fs.existsSync(attemptsPath));
-        assert.deepEqual(snapshot(), before);
-      });
+          assert.isFalse(fs.existsSync(attemptsPath));
+          assert.deepEqual(snapshot(), before);
+        });
+      }
     }
   }
 
