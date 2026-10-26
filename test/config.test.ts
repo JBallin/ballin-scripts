@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const defaultConfig = require('../config/.defaultConfig.json');
 const configModule = require('../config/index.ts');
+const { formatHelp } = require('../commands/help_format.ts');
 const { configHelp, runConfigCli: executeConfigCli } = require('../config/cli.ts');
 const {
   ConfigError,
@@ -445,7 +446,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
         });
         assert.equal(result.status, 2);
         assert.equal(result.stdout, '');
-        assert.equal(result.stderr, `ballin config: ${configMessages.actionErr}\n${configHelp}`);
+        assert.equal(result.stderr, `ballin config: ${configMessages.actionErr}\n${formatHelp(configHelp)}`);
         assert.isFalse(fs.existsSync(childLogPath));
       }
     } finally {
@@ -475,7 +476,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
 
         assert.equal(result.status, 2);
         assert.equal(result.stdout, '');
-        assert.equal(result.stderr, `ballin config: ${message}\n${configHelp}`);
+        assert.equal(result.stderr, `ballin config: ${message}\n${formatHelp(configHelp)}`);
         assert.equal(fs.readFileSync(configPath, 'utf8'), malformed);
       });
     });
@@ -489,7 +490,7 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
           for (const fixturePath of [path.join(tempDir, 'missing.json'), malformedPath, tempDir]) {
             const result = runConfigCli([action], { BALLIN_TEST_CONFIG_PATH: fixturePath });
             assert.equal(result.status, 0);
-            assert.equal(result.stdout, configHelp);
+            assert.equal(result.stdout, formatHelp(configHelp));
             assert.equal(result.stderr, '');
           }
         } finally {

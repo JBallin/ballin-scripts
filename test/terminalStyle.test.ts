@@ -9,7 +9,7 @@ const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
 
 describe('terminal emphasis', () => {
   it('uses only owned bold and underline attributes on supported terminals', () => {
-    assert.equal(terminalHeading('Checking tools', { isTTY: true }, {}), '\x1b[1;34m==>\x1b[1;39m Checking tools\x1b[0m');
+    assert.equal(terminalHeading('Checking tools', { isTTY: true }, {}), '\x1b[34m==>\x1b[1;39m Checking tools\x1b[0m');
     assert.equal(terminalEmphasis('stage', 'bold', { isTTY: true }, {}), '\x1b[1mstage\x1b[0m');
     assert.equal(terminalEmphasis('key', 'underline', { isTTY: true }, { NO_COLOR: '' }), '\x1b[4mkey\x1b[0m');
     assert.equal(terminalCommand('ballin help', { isTTY: true }, {}), '\x1b[1mballin help\x1b[0m');
@@ -86,7 +86,7 @@ describe('terminal emphasis', () => {
         assert.equal(stage.status, 0, stage.stderr);
         assert.equal(stripAnsi(stage.stdout), '\n==> Updating Homebrew\n');
         assert.equal(stage.stdout.includes('\x1b['), styled);
-        if (styled) assert.equal(stage.stdout, '\n\x1b[1;34m==>\x1b[1;39m Updating Homebrew\x1b[0m\n');
+        if (styled) assert.equal(stage.stdout, '\n\x1b[34m==>\x1b[1;39m Updating Homebrew\x1b[0m\n');
         const value = run(['config', 'get', 'backup.repository'], env);
         assert.equal(value.status, 0, value.stderr);
         assert.equal(value.stdout, 'null\n');
