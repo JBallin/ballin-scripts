@@ -606,7 +606,7 @@ install_command_line_tools() {
       || fail 'Xcode Command Line Tools installation failed. Inspect the output, finish installation manually, then rerun Quickstart.'
   else
     if [[ "$status" != 0 ]]; then
-      printf 'Apple’s Terminal download list could not be checked (status %s).\n' "$status"
+      printf "Apple’s Terminal download list could not be checked (status %s).\n" "$status"
     elif [[ "$candidates" == 0 ]]; then
       printf 'No Xcode Command Line Tools download was listed in Terminal.\n'
     else
