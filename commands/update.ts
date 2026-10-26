@@ -288,7 +288,7 @@ function runUpdateCommand(): void {
       HOMEBREW_NO_ENV_HINTS: '1',
       HOMEBREW_NO_ASK: '1',
     };
-    progress('Updating Homebrew');
+    // Homebrew prints its own update heading.
     const updateStatus = runIntegrationCommand('brew', ['update'], { env: childEnv });
 
     if (updateStatus === 0) {
