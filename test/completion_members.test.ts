@@ -52,7 +52,6 @@ describe('completion definitions and local member reader', () => {
     ['invalid UTF-8 config', () => fs.writeFileSync(files.config, Buffer.from([255]))],
     ['unconfigured destination', () => fs.writeFileSync(files.config, '{}')],
     ['invalid destination', () => fs.writeFileSync(files.config, '{"backup":{"repository":{}}}')],
-    ['legacy destination', () => fs.writeFileSync(files.config, '{"backup":{"id":"legacy"}}')],
     ['oversized config', () => fs.truncateSync(files.config, configByteLimit + 1)],
     ['missing cache', () => fs.rmSync(files.cache, { recursive: true })],
     ['missing bundle', () => fs.unlinkSync(files.file)],

@@ -159,7 +159,7 @@ describe('install setup', () => {
   it('propagates an installed config migration failure without reporting success or changing config', () => {
     installConfigSources();
     const configFile = path.join(repoDir, 'ballin.config.json');
-    const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+    const original = '{"backup":{"repository":null},"custom":"preserve"}\n';
     fs.writeFileSync(configFile, original);
     fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'), "process.stderr.write('fixture migration failed\\n'); process.exitCode = 1;\n");
     const result = spawnSync(process.execPath, [installSetupPath, 'configure', repoDir, docsUrl], {
@@ -177,7 +177,7 @@ describe('install setup', () => {
       it(`preserves migration ${signal} in ${mode} without later setup or child output`, () => {
         installConfigSources();
         const configFile = path.join(repoDir, 'ballin.config.json');
-        const original = '{"backup":{"id":null},"custom":"preserve"}\n';
+        const original = '{"backup":{"repository":null},"custom":"preserve"}\n';
         fs.writeFileSync(configFile, original);
         fs.writeFileSync(path.join(repoDir, 'config', 'updateConfig.ts'),
           `process.stdout.write('unfinished migration\\n'); process.stderr.write('unfinished diagnostic\\n'); process.kill(process.pid, '${signal}');\n`);
