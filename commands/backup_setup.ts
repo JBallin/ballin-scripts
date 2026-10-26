@@ -65,8 +65,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   try {
     let candidate = readSetupConfigContext(configPath);
     const configured = configuredBackupDestination(candidate);
-    if (configured.kind === 'invalid' || configured.kind === 'legacy-gist') {
-      writeStdoutLine(`Gist backup support has been retired or the destination configuration is invalid. Run ${terminalCommand('ballin backup disconnect')}, then ${terminalCommand('ballin backup setup')}. Historical Gists remain on GitHub.`);
+    if (configured.kind === 'invalid') {
+      writeStdoutLine(`The backup destination configuration is invalid. Run ${terminalCommand('ballin backup disconnect')}, then ${terminalCommand('ballin backup setup')}.`);
       return false;
     }
     if (repositoryName !== undefined && !validRepositoryName(repositoryName)) {
@@ -227,7 +227,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return false;
     }
     const previousSensitive = candidate.backup?.includeSensitive;
-    candidate.backup = { ...candidate.backup, repository: read.destination, id: null, includeSensitive: String(includeSensitive) };
+    candidate.backup = { ...candidate.backup, repository: read.destination, includeSensitive: String(includeSensitive) };
     if (!saveBackupConfig(configPath, candidate)) {
       writeStdoutLine(`Reconnect to the existing backup at ${recoveryUrl}; do not create a duplicate.`);
       return false;
@@ -262,7 +262,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
 const disconnectBackup = (configPath: string, cacheDir: string): boolean => {
   try {
     const config = readSetupConfigContext(configPath);
-    config.backup = { ...(isConfigObject(config.backup) ? config.backup : {}), repository: null, id: null };
+    config.backup = { ...(isConfigObject(config.backup) ? config.backup : {}), repository: null };
     config.update = { ...(isConfigObject(config.update) ? config.update : {}), backup: 'false' };
     if (!saveBackupConfig(configPath, config)) return false;
     if (!invalidateBackupCache(cacheDir)) {

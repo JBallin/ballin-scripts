@@ -302,7 +302,7 @@ const setup = (
   }
 
   const destination = configuredBackupDestination(readJsonObject(configPathFor(repoDir)));
-  const backupConfigured = destination.kind === 'repository' || destination.kind === 'legacy-gist';
+  const backupConfigured = destination.kind === 'repository';
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
   if (process.env.BALLIN_SKIP_BACKUP_SETUP === '1' || process.env.BALLIN_BACKUP_CHOICE === 'no' || promptInputState() !== 'open') {

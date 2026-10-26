@@ -370,45 +370,28 @@ require(${JSON.stringify(ballinPath)});
     });
   }
 
-  for (const destination of ['legacy', 'malformed', 'conflicting']) {
-    for (const args of [[], ['read', 'zshrc.sh'], ['open'], ['setup']]) {
-      it(`rejects ${destination} configuration before GitHub or collectors for ${args[0] ?? 'backup'}`, () => {
-        writeSnapshot('fixture local source\n');
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        config.backup.id = destination === 'malformed' ? {} : 'fixture-historical-id';
-        if (destination === 'legacy') delete config.backup.repository;
-        const original = JSON.stringify(config);
-        fs.writeFileSync(configPath, original);
-
-        const result = runBackup({ args });
-
-        assert.equal(result.status, 1, result.stdout + result.stderr);
-        assert.include(result.stdout + result.stderr, 'ballin backup disconnect');
-        assert.include(result.stdout + result.stderr, 'ballin backup setup');
-        assert.deepEqual(state().requests, []);
-        assert.deepEqual(readLogLines(path.join(testHomeDir, 'collector.log')), []);
-        assert.deepEqual(fs.readdirSync(scratchDir), []);
-        if (args[0] === 'setup') {
-          const after = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          assert.deepEqual(after.backup.id, config.backup.id);
-          assert.deepEqual(after.backup.repository, config.backup.repository);
-        } else {
-          assert.equal(fs.readFileSync(configPath, 'utf8'), original);
-        }
-      });
-    }
-  }
-
-  for (const id of [undefined, null, 'null']) {
-    it(`permits repository backups when the legacy ID is ${String(id)}`, () => {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (id !== undefined) config.backup.id = id;
-      fs.writeFileSync(configPath, JSON.stringify(config));
+  for (const args of [[], ['read', 'zshrc.sh'], ['open'], ['setup']]) {
+    it(`rejects malformed repository configuration before GitHub or collectors for ${args[0] ?? 'backup'}`, () => {
       writeSnapshot('fixture local source\n');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      config.backup.repository = {};
+      const original = JSON.stringify(config);
+      fs.writeFileSync(configPath, original);
 
-      assertBackupSucceeded(runBackup());
-      assert.deepEqual(uploadedFiles(), [snapshotFileName]);
-      assert.isAbove(readLogLines(path.join(testHomeDir, 'collector.log')).length, 0);
+      const result = runBackup({ args });
+
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout + result.stderr, 'ballin backup disconnect');
+      assert.include(result.stdout + result.stderr, 'ballin backup setup');
+      assert.deepEqual(state().requests, []);
+      assert.deepEqual(readLogLines(path.join(testHomeDir, 'collector.log')), []);
+      assert.deepEqual(fs.readdirSync(scratchDir), []);
+      if (args[0] === 'setup') {
+        const after = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        assert.deepEqual(after.backup.repository, config.backup.repository);
+      } else {
+        assert.equal(fs.readFileSync(configPath, 'utf8'), original);
+      }
     });
   }
 

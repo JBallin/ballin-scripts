@@ -263,11 +263,9 @@ const guConfigChecks = (
   }
 
   const selected = configuredBackupDestination(config);
-  if (selected.kind === 'invalid' || selected.kind === 'legacy-gist') {
+  if (selected.kind === 'invalid') {
     return [{ id: 'backup.config', label: 'Backup config', status: 'fail',
-      summary: selected.kind === 'legacy-gist'
-        ? 'Gist backups have been retired. Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository. Existing Gists are preserved.'
-        : 'Invalid or conflicting backup destination. Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.' }];
+      summary: 'Invalid or conflicting backup destination. Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.' }];
   }
   if (selected.kind === 'repository') {
     const checks: SetupReadinessCheck[] = [];

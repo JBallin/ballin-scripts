@@ -28,11 +28,6 @@ const runSetupCommand = (): void => {
     if (!fs.existsSync(configPath)) throw new Error('Local config is missing.');
     const config = readSetupConfigContext(configPath);
     const destination = configuredBackupDestination(config);
-    if (destination.kind === 'legacy-gist') {
-      writeStderrLine(`Gist backup support has been retired. Run ${terminalCommand('ballin backup disconnect', process.stderr)}, then ${terminalCommand('ballin backup setup', process.stderr)} for a fresh repository backup.`);
-      process.exitCode = 1;
-      return;
-    }
     if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
     const sensitive = destination.kind === 'repository' ? sensitiveSourceConsent(config) : false;
     if (sensitive === null) throw new Error('Invalid `backup.includeSensitive`; expected true or false.');

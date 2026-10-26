@@ -275,7 +275,7 @@ describe('saved backup discovery', function() {
   });
   it('distinguishes retired entries, hides reserved entries, and counts unexpected names without disclosure', () => {
     const unknown = 'DUMMY_PRIVATE_NAME $(touch forbidden)';
-    save(fixtureState({ gitconfig: 'private git\n', brackets_extensions: 'old\n', [unknown]: 'secret\n', '.MyConfig.md': 'old gist\n', 'zshrc.sh.bak': 'near match\n' }));
+    save(fixtureState({ gitconfig: 'private git\n', brackets_extensions: 'old\n', [unknown]: 'secret\n', '.MyConfig.md': 'unknown saved content\n', 'zshrc.sh.bak': 'near match\n' }));
     const result = run(); assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, 'Saved snapshots:\n  gitconfig\nRead a snapshot with `ballin backup read <snapshot>`.\n\nRetired snapshots:\n  brackets_extensions\nInspect retired snapshots with `ballin backup open`.\n\nUnexpected entries: 3. Inspect them with `ballin backup open`.\n');
     for (const text of [unknown, '.MyConfig.md', 'zshrc.sh.bak', 'README.md', '.ballin-backup.json', 'secret', state().id, state().head]) assert.notInclude(result.stdout + result.stderr, text);

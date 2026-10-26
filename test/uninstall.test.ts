@@ -140,8 +140,8 @@ fs[operation] = (currentPath, ...args) => {
     fs.symlinkSync(ballin, path.join(userBin, 'ballin'));
     fs.writeFileSync(path.join(userBin, 'unrelated-file'), 'keep me\n');
     fs.symlinkSync(path.join(testDir, 'unrelated'), path.join(userBin, 'unrelated-link'));
-    const remoteGistFixture = path.join(testDir, 'remote-gist');
-    fs.writeFileSync(remoteGistFixture, 'remote destination remains\n');
+    const outsideCheckout = path.join(testDir, 'outside-checkout-file');
+    fs.writeFileSync(outsideCheckout, 'unrelated data\n');
 
     const result = runUninstall();
 
@@ -151,7 +151,7 @@ fs[operation] = (currentPath, ...args) => {
     assert.isTrue(fs.statSync(path.join(userBin, 'unrelated-file')).isFile());
     assert.isTrue(fs.lstatSync(path.join(userBin, 'unrelated-link')).isSymbolicLink());
     assert.isFalse(fs.existsSync(repoDir));
-    assert.equal(fs.readFileSync(remoteGistFixture, 'utf8'), 'remote destination remains\n');
+    assert.equal(fs.readFileSync(outsideCheckout, 'utf8'), 'unrelated data\n');
   });
 
   it('preserves a regular file that has the same name as an installed command', () => {
