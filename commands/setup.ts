@@ -11,10 +11,9 @@ const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./com
 const setupHelp = `Usage:
     ballin setup
 
-Review local sensitive-source, automatic-backup, and analytics preferences.
-Backup choices appear when a backup is configured; sensitive-source review applies to repository backups.
-Use \`ballin config get/set/reset\` for direct configuration.
-This review does not reinstall Ballin, change backup destinations, or run backup/update.
+Review local sensitive-source, automatic-backup, and analytics preferences. Backup choices appear when a backup is configured; sensitive-source review applies to repository backups.
+
+Use \`ballin config get/set/reset\` for direct configuration. This review does not reinstall Ballin, change backup destinations, or run backup/update.
 `;
 
 const cancelSetup = (): void => {

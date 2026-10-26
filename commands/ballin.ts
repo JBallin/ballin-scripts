@@ -1,3 +1,4 @@
+const { formatHelp } = require('./help_format.ts');
 const { terminalCommand, terminalCommandReferences } = require('./terminalStyle.ts');
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
@@ -76,10 +77,7 @@ You can also append \`--help\` to a command.
 const updateHelp = `Usage:
     ballin update
 
-Update the Ballin-managed macOS development environment.
-Configured stages can update Homebrew, Node.js LTS, global npm packages,
-macOS, and Ballin, then back up environment state.
-Use \`ballin config get update\` to inspect settings.
+Update the Ballin-managed macOS development environment. Configured stages can update Homebrew, Node.js LTS, global npm packages, macOS, and Ballin, then back up environment state. Use \`ballin config get update\` to inspect settings.
 `;
 
 const backupHelp = `Usage:
@@ -92,65 +90,52 @@ const backupHelp = `Usage:
     ballin backup read <snapshot> --file <path>
     ballin backup disconnect
 
-Back up Ballin-managed environment state to the configured backup.
-\`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser.
-\`list\` finds saved snapshots; \`read\` prints one supported snapshot.
-For bundle snapshots, append \`--list\` to list their files or \`--file <path>\` to print one file’s contents.
-Without a snapshot selector, \`read\` shows usage and lists saved options when readable.
-\`disconnect\` stops local backups and clears comparison state.
-Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`.
-Run \`ballin help backup <subcommand>\` for subcommand-specific help.
+Back up Ballin-managed environment state to the configured backup. \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser. \`list\` finds saved snapshots; \`read\` prints one supported snapshot.
+
+For bundle snapshots, append \`--list\` to list their files or \`--file <path>\` to print one file’s contents. Without a snapshot selector, \`read\` shows usage and lists saved options when readable. \`disconnect\` stops local backups and clears comparison state.
+
+Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`. Run \`ballin help backup <subcommand>\` for subcommand-specific help.
 `;
 
 const backupSubcommandHelp: Record<BackupCommandName, string> = {
   setup: `Usage:
     ballin backup setup [repository-name] [--hostname <host>]
 
-Create or reconnect to an optional private GitHub backup repository owned by your account.
-Omit the repository name to choose it during setup.
-New setup asks for the GitHub hostname (default: github.com); --hostname skips that question.
-Configured backups keep their selected host. Authenticate gh for that host before setup.
-Setup asks for confirmation and reviews sensitive-source and automatic-backup choices.
+Create or reconnect to an optional private GitHub backup repository owned by your account. Omit the repository name to choose it during setup. New setup asks for the GitHub hostname (default: github.com); --hostname skips that question. Configured backups keep their selected host. Authenticate gh for that host before setup. Setup asks for confirmation and reviews sensitive-source and automatic-backup choices.
+
 Setup and recovery: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
 Backup sources and sensitivity: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
 `,
   open: `Usage:
     ballin backup open
 
-Open the configured backup in your browser, including its saved history.
-Requires authentication for the selected GitHub host and remote access.
+Open the configured backup in your browser, including its saved history. Requires authentication for the selected GitHub host and remote access.
 `,
   list: `Usage:
     ballin backup list
 
-List supported snapshots saved in the configured backup.
-Requires remote read access; does not collect local backup sources.
+List supported snapshots saved in the configured backup. Requires remote read access; does not collect local backup sources.
 `,
   read: `Usage:
     ballin backup read <snapshot>
     ballin backup read <snapshot> --list
     ballin backup read <snapshot> --file <path>
 
-Print a supported saved snapshot's original bytes without restoring or executing it.
-For bundle snapshots, \`--list\` lists saved files; \`--file <path>\` prints one file's original bytes.
-Without a snapshot selector, show usage and list saved options when readable.
-Requires remote read access.
+Print a supported saved snapshot's original bytes without restoring or executing it. For bundle snapshots, \`--list\` lists saved files; \`--file <path>\` prints one file's original bytes. Without a snapshot selector, show usage and list saved options when readable. Requires remote read access.
+
 Inspect saved backups: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#inspect-saved-backups
 `,
   disconnect: `Usage:
     ballin backup disconnect
 
-Clear local backup linkage and comparison state, and disable automatic backup during updates.
-Preserve remote history, shared GitHub CLI authentication, and sensitive-source preferences.
-Requires no authentication or network access.
+Clear local backup linkage and comparison state, and disable automatic backup during updates. Preserve remote history, shared GitHub CLI authentication, and sensitive-source preferences. Requires no authentication or network access.
 `,
 };
 
 const doctorHelp = `Usage:
     ballin doctor [--verbose]
 
-Check whether the Ballin-managed environment is healthy.
-Use \`--verbose\` to show full readiness details.
+Check whether the Ballin-managed environment is healthy. Use \`--verbose\` to show full readiness details.
 `;
 
 const selfUpdateHelp = `Usage:
@@ -248,7 +233,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case undefined:
     case commandHelpOptionName:
     case 'help':
-      writeStdout(terminalCommandReferences(ballinHelp, ['ballin help <command...>']));
+      writeStdout(terminalCommandReferences(formatHelp(ballinHelp), ['ballin help <command...>']));
       return;
   }
 
@@ -261,23 +246,23 @@ function runBallinCommand(args = process.argv.slice(2)): void {
   switch (command) {
     case 'update':
       if (isCommandHelp(args)) {
-        writeStdout(terminalCommandReferences(updateHelp, ['ballin config get update']));
+        writeStdout(terminalCommandReferences(formatHelp(updateHelp), ['ballin config get update']));
         return;
       }
       runNoArgCommand('ballin update', commandArgs, runUpdateCommand);
       return;
     case 'backup': {
       if (isCommandHelp(args)) {
-        writeStdout(terminalCommandReferences(backupHelp, ['ballin setup', 'ballin help backup <subcommand>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
         return;
       }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
-        writeStdout(terminalCommandReferences(ballinHelp, ['ballin help <command...>']));
+        writeStdout(terminalCommandReferences(formatHelp(ballinHelp), ['ballin help <command...>']));
         return;
       }
       const helpCommand = backupHelpCommand(args);
       if (helpCommand !== undefined) {
-        writeStdout(backupSubcommandHelp[helpCommand]);
+        writeStdout(formatHelp(backupSubcommandHelp[helpCommand]));
         return;
       }
       runBackupCommand(commandArgs);
@@ -285,7 +270,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     }
     case 'doctor':
       if (isCommandHelp(args)) {
-        writeStdout(doctorHelp);
+        writeStdout(formatHelp(doctorHelp));
         return;
       }
       runDoctorCommand(commandArgs);
@@ -295,7 +280,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       return;
     case 'setup':
       if (commandArgs.length === 1 && commandArgs[0] === commandHelpOptionName) {
-        writeStdout(setupHelp);
+        writeStdout(formatHelp(setupHelp));
         return;
       }
       runNoArgCommand('ballin setup', commandArgs, () => {
@@ -305,14 +290,14 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       return;
     case 'self-update':
       if (isCommandHelp(args)) {
-        writeStdout(selfUpdateHelp);
+        writeStdout(formatHelp(selfUpdateHelp));
         return;
       }
       runNoArgCommand('ballin self-update', commandArgs, runSelfUpdateCommand);
       return;
     case 'uninstall':
       if (isCommandHelp(args)) {
-        writeStdout(uninstallHelp);
+        writeStdout(formatHelp(uninstallHelp));
         return;
       }
       runNoArgCommand('ballin uninstall', commandArgs, runUninstallCommand);

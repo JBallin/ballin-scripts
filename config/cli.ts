@@ -1,3 +1,4 @@
+const { formatHelp } = require('../commands/help_format.ts');
 const { configAction } = require('./index.ts');
 const { terminalCommandReferences } = require('../commands/terminalStyle.ts');
 const { ConfigError } = require('./store.ts');
@@ -12,13 +13,12 @@ const configHelp = `Usage:
     ballin config set <key> <value>
     ballin config reset
 
-Read settings with dot paths, such as \`update.cleanup\`.
-\`set\` changes an existing setting; \`reset\` restores defaults.
+Read settings with dot paths, such as \`update.cleanup\`. \`set\` changes an existing setting; \`reset\` restores defaults.
 `;
 
 const runConfigCli = (args: string[] = process.argv.slice(2)): void => {
   if (args.length === 1 && (args[0] === 'help' || args[0] === commandHelpOptionName)) {
-    process.stdout.write(configHelp);
+    process.stdout.write(formatHelp(configHelp));
     process.exitCode = 0;
     return;
   }
@@ -30,7 +30,7 @@ const runConfigCli = (args: string[] = process.argv.slice(2)): void => {
     if (!(error instanceof ConfigError)) throw error;
     const failure = error as ConfigFailure;
     const message = terminalCommandReferences(failure.message, ['ballin config get', 'ballin config reset'], process.stderr);
-    process.stderr.write(`ballin config: ${message}\n${failure.exitCode === 2 ? configHelp : ''}`);
+    process.stderr.write(`ballin config: ${message}\n${failure.exitCode === 2 ? formatHelp(configHelp, process.stderr) : ''}`);
     process.exitCode = failure.exitCode;
   }
 };

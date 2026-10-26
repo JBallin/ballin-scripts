@@ -26,13 +26,13 @@ describe('offline command and backup subcommand help', () => {
   let preloadPath: string;
   let attemptsPath: string;
 
-  const run = (args: string[]) => spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), ...args], {
+  const run = (args: string[], env: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), ...args], {
     cwd: root, encoding: 'utf8', timeout: 3000,
     env: testChildEnvironment({
       HOME: root, PATH: root, TMPDIR: root,
       BALLIN_TEST_REPO_DIR: root, BALLIN_TEST_CONFIG_PATH: configPath,
       NODE_ENV: 'production', BALLIN_NO_ANALYTICS: undefined, BALLIN_NO_COMMAND_ANALYTICS: undefined,
-      NODE_OPTIONS: `--require=${preloadPath}`,
+      NODE_OPTIONS: `--require=${preloadPath}`, ...env,
     }),
   });
 
@@ -55,6 +55,8 @@ describe('offline command and backup subcommand help', () => {
       fs.writeFileSync(path.join(root, directory, 'sentinel'), 'retained\n', { mode: 0o600 });
     }
     fs.writeFileSync(preloadPath, `
+Object.defineProperty(process.stdout, 'columns', { value: Number(process.env.HELP_COLUMNS) || undefined });
+Object.defineProperty(process.stdout, 'isTTY', { value: process.env.HELP_TTY === '1' });
 const fs = require('fs');
 const path = require('path');
 const open = fs.openSync.bind(fs);
@@ -130,7 +132,7 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
       const result = run(['backup', command, '--help']);
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stderr, '');
-      for (const detail of details) assert.include(result.stdout, detail);
+      for (const detail of details) assert.include(result.stdout.replace(/\s+/gu, ' '), detail);
     }
     assert.isFalse(fs.existsSync(attemptsPath));
   });
@@ -143,6 +145,43 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
     assert.include(result.stdout, 'You can also append `--help` to a command.');
     assert.lengthOf([...result.stdout.matchAll(/--help/gu)], 1);
   });
+
+  for (const columns of [40, 80, 120]) {
+    for (const mode of [
+      { name: 'styled TTY', HELP_TTY: '1', TERM: 'xterm', NO_COLOR: '' },
+      { name: 'TERM=dumb', HELP_TTY: '1', TERM: 'dumb', NO_COLOR: '' },
+      { name: 'NO_COLOR', HELP_TTY: '1', TERM: 'xterm', NO_COLOR: '1' },
+      { name: 'redirected', HELP_TTY: '0', TERM: 'xterm', NO_COLOR: '' },
+    ]) {
+      for (const target of [[], ['setup'], ['backup'], ['backup', 'read'], ['backup', 'setup'], ['config']]) {
+        it(`wraps ${['help', ...target].join(' ')} at ${columns} columns for ${mode.name} without side effects`, () => {
+          const before = snapshot();
+          const env = { ...mode, HELP_COLUMNS: String(columns) };
+          const result = run(['help', ...target], env);
+          const equivalent = run(target.length ? [...target, '--help'] : ['--help'], env);
+          assert.equal(result.status, 0, result.stderr);
+          assert.equal(result.stderr, '');
+          assert.equal(equivalent.status, 0, equivalent.stderr);
+          assert.equal(equivalent.stderr, '');
+          assert.equal(result.stdout, equivalent.stdout);
+          const plain = result.stdout.replace(/\x1b\[[0-9;]*m/gu, '');
+          const baseline = run(['help', ...target]).stdout;
+          const content = (text: string) => text.replace(/`/gu, '').replace(/\s+/gu, ' ').trim();
+          assert.equal(content(plain), content(baseline));
+          assert.equal(result.stdout.includes('\x1b['), mode.name === 'styled TTY' && target.length === 0
+            || mode.name === 'styled TTY' && target.join(' ') === 'backup');
+          for (const line of plain.split('\n')) {
+            // Usage is deliberately preformatted; indivisible URLs and syntax may overflow.
+            if (line.trimStart().startsWith('ballin ') || line.length <= Math.min(columns, 80)) continue;
+            assert.isTrue(line.trim().split(' ').some((word: string) => word.length > Math.min(columns, 80)), line);
+          }
+          for (const url of baseline.match(/https:\/\/\S+/gu) ?? []) assert.include(plain, url);
+          assert.isFalse(fs.existsSync(attemptsPath));
+          assert.deepEqual(snapshot(), before);
+        });
+      }
+    }
+  }
 
   for (const command of backupCommandNames) {
     it(`keeps ${command} help focused on operational syntax`, () => {
