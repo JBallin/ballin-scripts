@@ -193,10 +193,13 @@ about missing tools. Backup selection stays first; PATH, completion, analytics
 and backup destination permissions remain separate. Existing Node.js is never
 upgraded automatically during setup.
 
-For Xcode Command Line Tools, Quickstart first checks Apple's Terminal download
-list. With one matching package, it runs `sudo softwareupdate --install` for
-that exact package, showing native progress. It does not select
-macOS upgrades. If no single package is available, it asks separately before
+For Xcode Command Line Tools, Quickstart checks Apple's Terminal download list
+with administrator access and a temporary install-on-demand marker. Cleanup runs
+after discovery, including on failure or interruption, and removes only the
+marker Quickstart created. Preexisting markers remain untouched. With one matching
+package, it runs `sudo softwareupdate --install` for that exact package, showing
+native progress. It does not select macOS upgrades. If listing fails or returns
+zero or multiple packages, it explains the result and asks separately before
 opening `xcode-select --install`, or you can install the tools manually and rerun
 Quickstart. A started Terminal installation failure stops for recovery rather
 than starting a second installation. Git must actually run before setup proceeds.
