@@ -2370,19 +2370,43 @@ system_sudo=fixture_sudo
     });
   }
   it('stops after SIGINT at the first-backup prompt without capture or open', async () => {
-    const child = spawn('/bin/bash', ['-c', 'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; trap "exit 130" INT; main'], {
+    const child = spawn('/bin/bash', ['-c', `
+source "$FAKE_SOURCE"
+system_node_bin="$FAKE_SYSTEM_NODE"
+system_git="$FAKE_ROOT/tools/git"
+system_xcode_select="$FAKE_ROOT/tools/xcode-select"
+trap cleanup EXIT
+trap 'exit 130' INT
+# Wait for the read call, after prompt preparation and its command substitution.
+read() {
+  local caller
+  for caller in "\${FUNCNAME[@]}"; do
+    if [[ "$caller" == confirm_first_backup ]]; then
+      printf 'first-backup-read-ready\\n' >&3
+      break
+    fi
+  done
+  builtin read "$@"
+}
+main
+`], {
       cwd: home,
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
       env: testChildEnvironment({ HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
         FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source,
         FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath }),
     });
     let output = '';
+    let readiness = '';
+    let readReady = false;
     let interrupted = false;
-    child.stdout.on('data', (data: Buffer) => {
-      output += data.toString();
-      if (!interrupted && output.includes('Run a backup now and open its GitHub destination? [Y/n]')) {
-        interrupted = true;
-        child.kill('SIGINT');
+    child.stdout.on('data', (data: Buffer) => { output += data.toString(); });
+    // The production read redirects stderr, so readiness uses its own pipe.
+    (child.stdio[3] as NodeJS.ReadableStream).on('data', (data: Buffer) => {
+      readiness += data.toString();
+      if (!readReady && readiness.includes('first-backup-read-ready\n')) {
+        readReady = true;
+        interrupted = child.kill('SIGINT');
       }
     });
     child.stderr.on('data', (data: Buffer) => { output += data.toString(); });
@@ -2393,7 +2417,9 @@ system_sudo=fixture_sudo
         child.once('error', reject);
         child.once('close', (code: number | null) => resolve(code));
       });
+      assert.isTrue(readReady, output);
       assert.isTrue(interrupted, output);
+      assert.include(output, 'Run a backup now and open its GitHub destination? [Y/n]');
       assert.equal(status, 130, output);
       assert.notInclude(readLog(), 'ballin:');
     } finally { clearTimeout(timeout); }
