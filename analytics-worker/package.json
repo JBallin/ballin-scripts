@@ -9,6 +9,6 @@
     "migrate:remote": "./node_modules/.bin/wrangler d1 migrations apply ballin-scripts-analytics --remote"
   },
   "devDependencies": {
-    "wrangler": "4.151.2"
+    "wrangler": "4.153.0"
   }
 }
