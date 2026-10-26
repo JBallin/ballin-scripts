@@ -57,6 +57,10 @@ describe('interactive setup with delayed terminal answers', function() {
         { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
+      const output = result.stdout.replace(/\r\n/gu, '\n');
+      assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created');
+      assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nEnable tab completion in ');
+      assert.notInclude(output, '\n\n\n');
       assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(result.stdout.split(backupAnswers[1].prompt).length - 1, 1, 'Quickstart selects the host once');
@@ -83,6 +87,24 @@ describe('interactive setup with delayed terminal answers', function() {
       assertInitializedOnly();
     });
   }
+
+  it('keeps clone and onboarding spacing in a plain terminal', () => {
+    sandbox = createSandbox();
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], [
+      { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+      { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
+      { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
+      { prompt: 'Enable tab completion in ', answer: 'n' },
+      { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'n' },
+    ], 'bash', { term: 'dumb' });
+    assert.isUndefined(result.error, result.stderr);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const output = result.stdout.replace(/\r\n/gu, '\n');
+    assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created');
+    assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nWhich Bash startup file does your terminal read? ');
+    assert.notInclude(output, '\x1b[');
+    assert.notInclude(output, '\n\n\n');
+  });
 
   for (const shell of ['bash', 'zsh'] as const) {
     for (const acceptBackup of [false, true]) {

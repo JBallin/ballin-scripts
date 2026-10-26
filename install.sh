@@ -244,6 +244,10 @@ if [ ! -f "$repo_dir/commands/install_setup.ts" ]; then
   exit 1
 fi
 
+if [ "$repo_existed" = false ]; then
+  printf '\n'
+fi
+
 if [ "$repo_existed" = true ] && [ "$setup_mode" = fresh ]; then
   printf '\nInitial configuration\n%s#what-will-installation-change\n' "$docs_url"
 fi
