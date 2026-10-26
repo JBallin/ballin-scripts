@@ -47,17 +47,20 @@ describe('interactive setup with delayed terminal answers', function() {
         : { prompt: `Zsh settings directory [Enter for ${sandbox.home}, another absolute directory, or skip]: `, answer: '' };
       const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
         { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
+        backupAnswers[1],
         startup,
         { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
         { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
         { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
         { prompt: 'Enable tab completion in ', answer: 'y' },
-        ...backupAnswers.slice(1),
+        ...backupAnswers.slice(2),
         { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
       assert.include(result.stdout, '\x1b[1;34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
       assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(result.stdout.split(backupAnswers[1].prompt).length - 1, 1, 'Quickstart selects the host once');
+      assert.isBelow(result.stdout.indexOf(backupAnswers[1].prompt), result.stdout.indexOf(startup.prompt));
       assert.equal(result.stdout.split(startup.prompt).length - 1, 1, 'Reuse the selected location without repeating its question');
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.notInclude(result.stdout, 'Usage analytics:');
@@ -88,9 +91,10 @@ describe('interactive setup with delayed terminal answers', function() {
         const startup = shell === 'bash'
           ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
           : { prompt: `Zsh settings directory [Enter for ${sandbox.home}, another absolute directory, or skip]: `, answer: '' };
-        const backupSetup = backupAnswers.slice(1, 5).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
+        const backupSetup = backupAnswers.slice(2, 5).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
         const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
           { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
+          backupAnswers[1],
           startup,
           { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
           { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
@@ -101,6 +105,8 @@ describe('interactive setup with delayed terminal answers', function() {
         ], shell, { columns: 200 });
         assert.isUndefined(result.error, result.stderr);
         assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(result.stdout.split(backupAnswers[1].prompt).length - 1, 1, 'Quickstart selects the host once');
+        assert.isBelow(result.stdout.indexOf(backupAnswers[1].prompt), result.stdout.indexOf(startup.prompt));
         const output = result.stdout.replace(/\r\n/gu, '\n');
         const reminder = 'Ballin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup';
         assert.include(output, reminder + '\n', output);
