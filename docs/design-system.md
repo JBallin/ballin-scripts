@@ -355,10 +355,10 @@ development-environment maintenance so the developer can focus on building.
 
 ## Terminal emphasis
 
-Use Homebrew-style phase headings throughout setup and update: a bold blue
-`==>` marker (`SGR 1;34`), followed by bold heading text in the terminal's default
-foreground (`SGR 1;39`), then a reset (`SGR 0`). Keep this color accent limited
-to phase markers.
+Use Homebrew-style phase headings throughout setup and update: a blue
+`==>` marker without bold (`SGR 34`), followed by bold heading text in the
+terminal's default foreground (`SGR 1;39`), then a reset (`SGR 0`). Keep this
+color accent limited to phase markers.
 
 Use sparse bold emphasis for changed backup entries. Existing help terms may
 use bold or underline. Other output keeps the terminal's default foreground;

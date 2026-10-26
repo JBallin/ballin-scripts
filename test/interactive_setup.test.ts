@@ -21,7 +21,7 @@ describe('interactive setup with delayed terminal answers', function() {
   ];
   const assertBackupHeading = (stdout: string): void => {
     const output = stdout.replace(/\r\n/gu, '\n');
-    const heading = '\x1b[1;34m==>\x1b[1;39m Setting up GitHub backup\x1b[0m';
+    const heading = '\x1b[34m==>\x1b[1;39m Setting up GitHub backup\x1b[0m';
     assert.equal(output.split(heading).length - 1, 1);
     assert.include(output, heading + '\nCreate a new backup or reconnect to an existing one? [CREATE/reconnect] ');
   };
@@ -57,7 +57,7 @@ describe('interactive setup with delayed terminal answers', function() {
         { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
-      assert.include(result.stdout, '\x1b[1;34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
+      assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(result.stdout.split(backupAnswers[1].prompt).length - 1, 1, 'Quickstart selects the host once');
       assert.isBelow(result.stdout.indexOf(backupAnswers[1].prompt), result.stdout.indexOf(startup.prompt));
