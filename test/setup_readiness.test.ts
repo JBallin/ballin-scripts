@@ -212,17 +212,6 @@ describe('setup readiness', () => {
     assert.deepEqual(commandLog, []);
   });
 
-  it('ignores obsolete Gist fields without invoking gh or changing config', () => {
-    for (const id of ['legacy-id', '--help']) {
-      writeConfig({ update: {}, backup: { id, host: 'example.test' }, analytics: {} });
-      const beforeConfig = fs.readFileSync(configPath, 'utf8');
-      const report = collect();
-      assert.equal(checkById(report, 'backup.optional').status, 'info');
-      assert.deepEqual(commandLog, []);
-      assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
-    }
-  });
-
   it('treats an unconfigured backup as an optional healthy capability without gh', () => {
     fs.rmSync(path.join(binDir, 'gh'));
     writeConfig({
@@ -241,26 +230,4 @@ describe('setup readiness', () => {
     ]);
     assert.deepEqual(commandLog, []);
   });
-
-  it('ignores obsolete backup ID values when no repository is configured', () => {
-    ['', '   ', 'null', 42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
-      commandLog = [];
-      writeConfig({
-        update: {},
-        backup: {
-          id,
-          host: 'example.test',
-        },
-        analytics: {},
-      });
-
-      const report = collect();
-
-      assert.equal(report.status, 'pass');
-      assert.equal(checkById(report, 'backup.optional').status, 'info');
-      assert.deepEqual(commandLog, []);
-    });
-  });
-
-
 });

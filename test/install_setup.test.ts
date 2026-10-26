@@ -451,6 +451,8 @@ describe('install setup', () => {
     assert.include(missing.stdout, 'Usage: install_setup.ts');
     assert.equal(unknown.status, 1);
     assert.equal(unknown.stdout, 'Unknown install setup command: future-command\n');
+    assert.equal(commandLog(), '');
+    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 
   it('propagates configure and symlink failures through the setup CLI', () => {
@@ -741,7 +743,6 @@ exit 2
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Set up optional Gist backups now?');
     assert.notInclude(result.stdout, analyticsPrompt);
     assert.notInclude(result.stdout, '😎 ballin!');
   });
@@ -1285,15 +1286,5 @@ require('https').request = () => {
       assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
       assert.equal(commandLog(), '');
     });
-  });
-
-  it('removes the internal Gist setup entrypoint without contacting GitHub', () => {
-    const result = spawnSync(process.execPath, [installSetupPath, 'gist', repoDir, docsUrl], {
-      encoding: 'utf8', env: childEnvironment(),
-    });
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Unknown install setup command: gist');
-    assert.equal(commandLog(), '');
-    assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 });

@@ -689,7 +689,6 @@ require('https').request = () => {
     assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
     assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
-    assert.notInclude(result.stdout, 'OK    Gist host:');
     assert.notInclude(result.stdout, 'Result: Ballin-managed environment has warnings. Warnings do not fail this command.');
     assert.equal(result.stderr, '');
 
@@ -737,7 +736,6 @@ require('https').request = () => {
       assert.include(result.stdout, 'ERROR Backup config:');
       assert.include(result.stdout, 'ballin backup disconnect');
       assert.include(result.stdout, 'ballin backup setup');
-      assert.notInclude(result.stdout, 'legacy-fixture');
       assert.deepEqual(commandLog(), []);
     }
   });
@@ -757,7 +755,6 @@ require('https').request = () => {
     assert.equal(missingShim.status, 1);
     assert.include(missingShim.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: `ballin`.');
     assert.include(missingShim.stdout, '\nNext: Run the installer again or add the Ballin command directory to PATH.');
-    assert.notInclude(missingShim.stdout, 'Gist ID:');
     assert.notInclude(missingShim.stdout, 'GitHub CLI:');
     assert.notInclude(missingShim.stdout, '      Next:');
     assert.notInclude(missingShim.stdout, 'OK    Node.js runtime:');

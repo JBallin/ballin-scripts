@@ -15,7 +15,7 @@ const { fixtureDestination } = require('./helpers/repository.ts');
 
 const updateKeys = ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'];
 const excludedLeaves = [
-  ['update', 'backup'], ['backup', 'includeRaw'], ['backup', 'includeDetailed'],
+  ['update', 'backup'],
   ['backup', 'repository'], ['backup', 'includeSensitive'], ['backup', 'includeFuture'],
   ['analytics', 'enabled'], ['analytics', 'installId'], ['update', 'futureIntegration'], ['custom', 'token'],
 ];
@@ -54,7 +54,7 @@ describe('portable Ballin preferences', () => {
       const original = {
         update: { npm: false, backup: null, cleanup: { invalid: 'private-value' } },
         analytics: { enabled: true },
-        backup: { includeRaw: 'invalid', custom: [1, 2] },
+        backup: { includeSensitive: 'invalid', custom: [1, 2] },
         custom: { token: 'dummy-sensitive-value' },
       };
       const text = JSON.stringify(original);
@@ -167,7 +167,7 @@ describe('portable Ballin preferences', () => {
       assert.deepEqual(projectPortablePreferences(Object.create({ update: { npm: true }, analytics: { enabled: 'false' } })), {});
       assert.deepEqual(projectPortablePreferences({
         update: Object.create({ npm: true }),
-        backup: Object.create({ includeRaw: true }),
+        backup: Object.create({ includeSensitive: true }),
         analytics: Object.create({ enabled: 'false' }),
       }), {});
     });
@@ -269,12 +269,12 @@ describe('portable Ballin preferences', () => {
     });
 
     it('ignores inherited remote permissions and prototype-shaped unknown fields', () => {
-      const remote = Object.create({ update: { npm: true }, analytics: { enabled: 'false' }, backup: { includeRaw: true } });
+      const remote = Object.create({ update: { npm: true }, analytics: { enabled: 'false' }, backup: { includeSensitive: true } });
       assert.deepEqual(restorePortablePreferences({}, {}, remote), {});
       assert.deepEqual(restorePortablePreferences({}, {}, {
         update: Object.create({ npm: true }),
         analytics: Object.create({ enabled: 'false' }),
-        backup: Object.create({ includeRaw: true }),
+        backup: Object.create({ includeSensitive: true }),
       }), {});
       const local = JSON.parse('{"__proto__":{"local":"keep"},"constructor":{"keep":true}}');
       const unsafeRemote = JSON.parse('{"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}}}');

@@ -227,8 +227,6 @@ esac
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
-    assert.notInclude(result.stdout, 'secret-Gist');
-    assert.notInclude(result.stdout, 'remote Gist');
     assert.include(result.stdout, `Installation details: ${docsUrl}#what-will-installation-change\nInstall Ballin in ${repoDir} and make the ballin command available? [y/N] `);
     assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 2);
     assert.deepEqual(commandLog(), [

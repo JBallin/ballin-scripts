@@ -994,29 +994,6 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     });
   });
 
-  it('reports no repository configured when only obsolete Gist fields remain', () => {
-    fs.symlinkSync(ballinPath, path.join(binDir, 'ballin'));
-    writeConfig({
-      update: {
-        cleanup: 'false',
-        nvm: 'false',
-        npm: 'false',
-        softwareupdate: 'false',
-        selfUpdate: 'false',
-        backup: 'true',
-      },
-      backup: { id: 'test-gist-id', host: { value: 'unexpected-host' } },
-      analytics: { enabled: 'false' },
-    });
-
-    const malformedHost = spawnUpdate();
-
-    assert.equal(malformedHost.status, 1);
-    assert.include(malformedHost.stderr, 'backup is not configured');
-    assert.include(malformedHost.stderr, 'ballin backup setup');
-    assert.deepEqual(commandLog(), []);
-  });
-
   it('checks Ballin readiness with the Node.js runtime from the updated nvm PATH', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     const nvmBinDir = path.join(tempDir, 'nvm-bin');

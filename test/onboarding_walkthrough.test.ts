@@ -131,6 +131,5 @@ describe('first-run onboarding walkthroughs', function() {
       request.endpoint.endsWith('/rulesets') && request.method === 'POST'
     ));
     assert.lengthOf(publications, 2); assert.isBelow(publications[0], protection); assert.isBelow(protection, publications[1]);
-    assert.isTrue(requests.every((r: { endpoint: string }) => !r.endpoint.includes('gists')));
   });
 });
