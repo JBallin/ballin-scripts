@@ -351,6 +351,9 @@ exit ${status}
   it('preserves the Homebrew environment and runs refresh, upgrade, cleanup, and doctor in order', () => {
     writeTestExecutable('brew', `#!/usr/bin/env bash
 printf 'brew|%s|%s|%s|%s\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$HOMEBREW_NO_AUTO_UPDATE" "$UPDATE_CALLER_MARKER" "$*" >> "$UPDATE_TEST_LOG"
+if [ "$1" = 'update' ]; then
+  printf '%s\n' '==> Updating Homebrew...'
+fi
 printf '%s\n' 'visible Homebrew output'
 exit 0
 `);
@@ -363,10 +366,12 @@ exit 0
     });
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /^==> Updating Homebrew\nvisible Homebrew output\n\n==> Updating Homebrew packages\n/u);
+    assert.match(result.stdout, /^==> Updating Homebrew\.\.\.\nvisible Homebrew output\n==> Updating Homebrew packages\n/u);
+    assert.notMatch(result.stdout, /^==> Updating Homebrew$/mu);
+    assert.equal(result.stderr, '');
     assert.include(result.stdout, 'visible Homebrew output');
     [
-      'Updating Homebrew',
+      'Updating Homebrew...',
       'Updating Homebrew packages',
       'Cleaning up Homebrew packages',
       'Checking Homebrew installation',
@@ -383,11 +388,23 @@ exit 0
     ]);
   });
 
+  it('adds no refresh heading or leading blank line when Homebrew update is quiet', () => {
+    installCommandStub('brew');
+
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false' });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+    assert.equal(result.stdout, '==> Updating Homebrew packages\n\n==> Checking Homebrew installation\n');
+    assert.deepEqual(commandLog(), ['brew|1,1|update', 'brew|1,1|upgrade', 'brew|1,1|doctor']);
+  });
+
   it('skips package upgrade after a failed Homebrew refresh and continues later stages', () => {
     writeTestExecutable('brew', `#!/usr/bin/env bash
 printf 'brew|%s|%s\n' "$HOMEBREW_NO_ENV_HINTS,$HOMEBREW_NO_ASK" "$*" >> "$UPDATE_TEST_LOG"
 if [ "$1" = 'update' ]; then
   printf '%s\n' 'simulated refresh failure'
+  printf '%s\n' 'Homebrew refresh diagnostic' >&2
   exit 42
 fi
 exit 0
@@ -401,8 +418,9 @@ exit 0
     });
 
     assert.equal(result.status, 42);
-    assert.include(result.stdout, 'simulated refresh failure');
-    assert.include(result.stdout, 'Updating Homebrew');
+    assert.match(result.stdout, /^simulated refresh failure\n==> Cleaning up Homebrew packages\n/u);
+    assert.equal(result.stderr, 'Homebrew refresh diagnostic\n');
+    assert.notMatch(result.stdout, /^==> Updating Homebrew$/mu);
     assert.notInclude(result.stdout, 'Updating Homebrew packages');
     assert.include(result.stdout, 'Cleaning up Homebrew packages');
     assert.include(result.stdout, 'Checking Homebrew installation');
