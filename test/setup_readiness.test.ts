@@ -140,7 +140,7 @@ describe('setup readiness', () => {
     assert.equal(checkById(report, 'backup.consent').summary, '`backup.includeSensitive` must be true or false; read-only recovery remains available.');
     assert.equal(checkById(report, 'backup.read').status, 'fail');
     fs.rmSync(path.join(binDir, 'gh')); assert.equal(checkById(collect(), 'backup.gh').status, 'fail');
-    writeConfig({ backup: { repository: fixtureDestination, id: 'legacy' } });
+    writeConfig({ backup: { repository: {} } });
     assert.equal(checkById(collect(), 'backup.config').status, 'fail');
     assert.equal(checkById(collect(), 'backup.config').summary, 'Invalid or conflicting backup destination. Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.');
     assert.deepEqual(commandLog, []);
@@ -200,7 +200,7 @@ describe('setup readiness', () => {
     writeConfig([]);
     assert.include(checkById(collect(), 'config.read').summary, 'must contain a JSON object');
 
-    writeConfig({ backup: { id: null, host: 'example.test' } });
+    writeConfig({ backup: { repository: null } });
     const sectionCheck = checkById(collect(), 'config.read');
 
     assert.equal(checkById(readableConfig, 'config.read').status, 'pass');
@@ -226,28 +226,11 @@ describe('setup readiness', () => {
     assert.deepEqual(commandLog, []);
   });
 
-  it('reports retired Gist linkage without invoking gh or changing config', () => {
-    for (const id of ['legacy-id', '--help']) {
-      writeConfig({ update: {}, backup: { id, host: 'example.test' }, analytics: {} });
-      const beforeConfig = fs.readFileSync(configPath, 'utf8');
-      const report = collect();
-      assert.equal(report.status, 'fail');
-      assert.equal(checkById(report, 'backup.config').summary,
-        'Gist backups have been retired. Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository. Existing Gists are preserved.');
-      assert.deepEqual(report.checks.filter((check) => check.id.startsWith('backup.')).map((check) => check.id), ['backup.config']);
-      assert.deepEqual(commandLog, []);
-      assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
-    }
-  });
-
   it('treats an unconfigured backup as an optional healthy capability without gh', () => {
     fs.rmSync(path.join(binDir, 'gh'));
     writeConfig({
       update: {},
-      backup: {
-        id: null,
-        host: 'example.test',
-      },
+      backup: { repository: null },
       analytics: {},
     });
 
@@ -260,36 +243,5 @@ describe('setup readiness', () => {
       'backup.optional',
     ]);
     assert.deepEqual(commandLog, []);
-  });
-
-  it('normalizes blank and legacy string null backup IDs as unconfigured', () => {
-    ['', '   ', 'null'].forEach((id) => {
-      commandLog = [];
-      writeConfig({
-        update: {},
-        backup: {
-          id,
-          host: 'example.test',
-        },
-        analytics: {},
-      });
-
-      const report = collect();
-
-      assert.equal(report.status, 'pass');
-      assert.equal(checkById(report, 'backup.optional').status, 'info');
-      assert.deepEqual(commandLog, []);
-    });
-  });
-
-  it('rejects malformed legacy linkage without invoking gh', () => {
-    [42, ['unexpected-id'], { value: 'unexpected-id' }].forEach((id) => {
-      writeConfig({ update: {}, backup: { id }, analytics: {} });
-      const report = collect();
-      assert.equal(report.status, 'fail');
-      assert.equal(checkById(report, 'backup.config').status, 'fail');
-      assert.include(checkById(report, 'backup.config').summary, '`ballin backup disconnect`, then `ballin backup setup`');
-      assert.deepEqual(commandLog, []);
-    });
   });
 });

@@ -144,9 +144,7 @@ const backupConfig = (): BackupConfigResult => {
   if (destination.kind === 'repository') {
     return { config: { repository: destination.repository, includeSensitive: sensitiveSourceConsent(configObj) }, exitStatus: 0 };
   }
-  if (destination.kind === 'legacy-gist') {
-    writeStderrLine(`ballin backup: Gist backup support has been retired. Run ${terminalCommand('ballin backup disconnect', process.stderr)}, then ${terminalCommand('ballin backup setup', process.stderr)}. Historical Gists remain on GitHub.`);
-  } else if (destination.kind === 'invalid') {
+  if (destination.kind === 'invalid') {
     writeStderrLine(`ballin backup: invalid or conflicting destination configuration; repair the local configuration or run ${terminalCommand('ballin backup disconnect', process.stderr)}, then ${terminalCommand('ballin backup setup', process.stderr)}.`);
   } else {
     writeStderrLine(`ballin backup: backup is not configured; run ${terminalCommand('ballin backup setup', process.stderr)} to enable it`);

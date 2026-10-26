@@ -261,7 +261,7 @@ const setup = (
   if (process.env.BALLIN_BACKUP_CHOICE === 'yes' && process.env.BALLIN_BACKUP_HOSTNAME !== undefined) {
     try {
       const destination = configuredBackupDestination(originalConfig);
-      if (destination.kind === 'invalid' || destination.kind === 'legacy-gist') throw new Error('Invalid backup destination; disconnect before choosing another host.');
+      if (destination.kind === 'invalid') throw new Error('Invalid backup destination; disconnect before choosing another host.');
       hostname = resolveBackupSetupHost(originalConfig, process.env.BALLIN_BACKUP_HOSTNAME);
     } catch (error) {
       writeStdoutLine((error as Error).message);
@@ -315,7 +315,7 @@ const setup = (
   }
 
   const destination = configuredBackupDestination(readJsonObject(configPathFor(repoDir)));
-  const backupConfigured = destination.kind === 'repository' || destination.kind === 'legacy-gist';
+  const backupConfigured = destination.kind === 'repository';
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
   if (process.env.BALLIN_SKIP_BACKUP_SETUP === '1' || process.env.BALLIN_BACKUP_CHOICE === 'no' || promptInputState() !== 'open') {

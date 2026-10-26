@@ -124,7 +124,6 @@ backup_setup_host() {
       }
       if (!object(config) || ["backup", "update", "analytics"].some(key => Object.hasOwn(config, key) && !object(config[key]))) throw Error();
       const backup = config.backup ?? {};
-      if (backup.id !== undefined && backup.id !== null && (typeof backup.id !== "string" || !["", "null"].includes(backup.id.trim()))) throw Error();
       let configured;
       if (backup.repository !== undefined && backup.repository !== null) {
         const repo = backup.repository;

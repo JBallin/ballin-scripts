@@ -19,7 +19,6 @@ describe('guided preference setup', () => {
   const writeConfig = (config: unknown) => fs.writeFileSync(configPath, JSON.stringify(config));
   const configFor = (kind = 'repository', enabled = false) => ({
     backup: {
-      id: kind === 'legacy-gist' ? 'fixture-gist' : null,
       repository: kind === 'repository' ? { id: '1', ownerId: '2', name: 'fixture-backup', branch: 'main' } : null,
       includeSensitive: String(enabled),
       custom: { retained: true },
@@ -206,18 +205,6 @@ fs.readFileSync = (file, ...args) => {
     assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
     assert.equal(readConfig().update.backup, 'false');
     assert.equal(readConfig().analytics.enabled, 'true');
-  });
-
-  it('rejects stale Gist linkage before review and preserves local choices', () => {
-    writeConfig(configFor('legacy-gist', true));
-    const before = fs.readFileSync(configPath, 'utf8');
-    const result = run('y\ny\ny\ny\n');
-    assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Gist backup support has been retired');
-    assert.include(result.stderr, '`ballin backup disconnect`');
-    assert.include(result.stderr, '`ballin backup setup`');
-    assert.notInclude(result.stdout, 'Review your Ballin');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
   });
 
   ['', 'y', 'y\n', 'y\ny', 'y\nn\n'].forEach((input) => {

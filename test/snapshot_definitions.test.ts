@@ -310,7 +310,7 @@ describe('backup snapshot definitions', () => {
     fs.mkdirSync(path.dirname(sourcePath));
     fs.writeFileSync(sourcePath, JSON.stringify({
       update: { cleanup: 'false', backup: 'false' },
-      backup: { id: 'private-destination', host: 'example.test' },
+      backup: { repository: { id: 'R_private', ownerId: 'U_private', name: 'private-backup', branch: 'main' } },
       custom: { token: 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED' },
     }));
     const result = observation('ballin_config');
@@ -329,7 +329,6 @@ describe('backup snapshot definitions', () => {
     });
     assert.equal(captured.status, 0, captured.stderr);
     assert.deepEqual(JSON.parse(captured.stdout), { update: { cleanup: 'false' } });
-    assert.notInclude(captured.stdout, 'private-destination');
     assert.notInclude(captured.stdout, 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');
     assert.include(fs.readFileSync(sourcePath, 'utf8'), 'DUMMY_SECRET_MUST_NOT_BE_EXPORTED');
   });

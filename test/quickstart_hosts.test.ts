@@ -32,7 +32,7 @@ describe('Quickstart bootstrap host parity', () => {
   const configs = [{}, { backup: { host: 'stale.example.com' } },
     { backup: { repository } }, { backup: { repository: { ...repository, host: 'git.example.com' } } },
     { backup: { repository: { ...repository, host: 'fixture.ghe.com' } } },
-    { backup: { repository: { ...repository, host: '' } } }, { backup: { id: 'old-gist' } },
+    { backup: { repository: { ...repository, host: '' } } },
     { backup: { repository: true } }, { backup: null }, { analytics: [] }, { update: null }];
   for (const config of configs) {
     it(`matches destination and hostname rules for ${JSON.stringify(config)}`, () => {
@@ -44,7 +44,7 @@ describe('Quickstart bootstrap host parity', () => {
           let expected: string | undefined; let invalid = false;
           try {
             readSetupConfigContext(path.join(home, '.ballin-scripts/ballin.config.json'));
-            if (['invalid', 'legacy-gist'].includes(configuredBackupDestination(config).kind)) throw Error();
+            if (configuredBackupDestination(config).kind === 'invalid') throw Error();
             const normalized = input === undefined ? undefined : normalizeBackupHost(input);
             if (normalized === null) throw Error();
             expected = resolveBackupSetupHost(config, normalized);

@@ -11,10 +11,12 @@ const {
 } = require('../config/portable.ts');
 import type { ConfigObject } from '../config/portable.ts';
 
+const { fixtureDestination } = require('./helpers/repository.ts');
+
 const updateKeys = ['cleanup', 'selfUpdate', 'softwareupdate', 'npm', 'nvm'];
 const excludedLeaves = [
-  ['update', 'backup'], ['backup', 'includeRaw'], ['backup', 'includeDetailed'],
-  ['backup', 'id'], ['backup', 'host'], ['backup', 'includeFuture'],
+  ['update', 'backup'],
+  ['backup', 'repository'], ['backup', 'includeSensitive'], ['backup', 'includeFuture'],
   ['analytics', 'enabled'], ['analytics', 'installId'], ['update', 'futureIntegration'], ['custom', 'token'],
 ];
 const booleanCases = [
@@ -28,7 +30,7 @@ const baseline = (): ConfigObject => ({
   update: {
     cleanup: 'true', selfUpdate: 'true', backup: 'false', softwareupdate: 'true', npm: 'false', nvm: 'false',
   },
-  backup: { id: null, host: 'local.example.test' },
+  backup: { repository: { ...fixtureDestination } },
   analytics: { enabled: 'true' },
 });
 
@@ -62,7 +64,7 @@ describe('portable Ballin preferences', () => {
       const original = {
         update: { npm: false, backup: null, cleanup: { invalid: 'private-value' } },
         analytics: { enabled: true },
-        backup: { includeRaw: 'invalid', custom: [1, 2] },
+        backup: { includeSensitive: 'invalid', custom: [1, 2] },
         custom: { token: 'dummy-sensitive-value' },
       };
       const text = JSON.stringify(original);
@@ -161,7 +163,7 @@ describe('portable Ballin preferences', () => {
     it('omits missing, destination, identity, unknown and future fields without changing local data', () => {
       const local = {
         update: { futureIntegration: true },
-        backup: { id: 'private-id', host: 'private.example.test', includeFuture: true },
+        backup: { repository: { ...fixtureDestination }, includeFuture: true },
         analytics: { enabled: 'true', installId: 'private-identity' },
         custom: { token: 'dummy-sensitive-value' },
       };
@@ -175,7 +177,7 @@ describe('portable Ballin preferences', () => {
       assert.deepEqual(projectPortablePreferences(Object.create({ update: { npm: true }, analytics: { enabled: 'false' } })), {});
       assert.deepEqual(projectPortablePreferences({
         update: Object.create({ npm: true }),
-        backup: Object.create({ includeRaw: true }),
+        backup: Object.create({ includeSensitive: true }),
         analytics: Object.create({ enabled: 'false' }),
       }), {});
     });
@@ -236,13 +238,13 @@ describe('portable Ballin preferences', () => {
 
     it('clones local state, retains its destination and unknown fields, and never imports remote unknowns', () => {
       const local = {
-        backup: { id: 'selected-id', host: 'selected.example.test' },
+        backup: { repository: { ...fixtureDestination } },
         custom: { private: 'dummy-local-secret', nested: ['preserve'] },
         update: { futureLocal: { preserve: true } },
       };
       const original = structuredClone(local);
       const remote = {
-        backup: { id: 'remote-id', host: 'remote.example.test', includeFuture: true },
+        backup: { repository: { ...fixtureDestination, id: 'R_remote', ownerId: 'U_remote', name: 'remote-backup', branch: 'remote-main' }, includeFuture: true },
         update: { futureRemote: true },
         custom: { private: 'dummy-remote-secret' },
         analytics: { installId: 'remote-install-id' },
@@ -277,12 +279,12 @@ describe('portable Ballin preferences', () => {
     });
 
     it('ignores inherited remote permissions and prototype-shaped unknown fields', () => {
-      const remote = Object.create({ update: { npm: true }, analytics: { enabled: 'false' }, backup: { includeRaw: true } });
+      const remote = Object.create({ update: { npm: true }, analytics: { enabled: 'false' }, backup: { includeSensitive: true } });
       assert.deepEqual(restorePortablePreferences({}, {}, remote), {});
       assert.deepEqual(restorePortablePreferences({}, {}, {
         update: Object.create({ npm: true }),
         analytics: Object.create({ enabled: 'false' }),
-        backup: Object.create({ includeRaw: true }),
+        backup: Object.create({ includeSensitive: true }),
       }), {});
       const local = JSON.parse('{"__proto__":{"local":"keep"},"constructor":{"keep":true}}');
       const unsafeRemote = JSON.parse('{"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}}}');
@@ -311,7 +313,7 @@ describe('portable Ballin preferences', () => {
 
     it('emits only projected JSON and leaves the source unchanged', () => {
       const contents = JSON.stringify({
-        update: { npm: true }, backup: { id: 'private-id', includeRaw: false },
+        update: { npm: true }, backup: { repository: { ...fixtureDestination }, includeSensitive: false },
         analytics: { enabled: 'false' }, custom: 'dummy-sensitive-value',
       });
       fs.writeFileSync(configPath, contents);

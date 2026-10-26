@@ -44,7 +44,6 @@ const inspectConfig = (checkout: string, expectedName?: string): Record<string, 
       repositoryIdPresent: hasText(repository?.id),
       ownerIdPresent: hasText(repository?.ownerId),
       branchIsMain: repository?.branch === 'main',
-      legacyGistPresent: hasText(config.backup?.id),
       includeSensitive: booleanSetting(config.backup?.includeSensitive),
       automaticBackup: booleanSetting(config.update?.backup),
     };
