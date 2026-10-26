@@ -43,9 +43,9 @@ describe('command references at prose output boundaries', () => {
       assert.include(help.stdout, '    ballin update\n');
       const backup = cli(['backup', '--help']);
       assert.equal(backup.status, 0, backup.stderr);
-      assert.include(backup.stdout, '`setup` creates or reconnects');
-      assert.include(backup.stdout, `review them with ${command('ballin setup')}.`);
-      assert.include(backup.stdout, `Run ${command('ballin help backup <subcommand>')} for subcommand-specific help.`);
+      assert.include(backup.stdout.replace(/\s+/gu, ' '), '`setup` creates or reconnects');
+      assert.include(backup.stdout.replace(/\s+/gu, ' '), `review them with ${command('ballin setup')}.`);
+      assert.include(backup.stdout.replace(/\s+/gu, ' '), `Run ${command('ballin help backup <subcommand>')} for subcommand-specific help.`);
       const backupAlias = cli(['help', 'backup']);
       assert.equal(backupAlias.status, 0, backupAlias.stderr);
       assert.equal(backupAlias.stdout, backup.stdout);

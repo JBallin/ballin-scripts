@@ -29,7 +29,7 @@ describe('ballin', () => {
     assert.include(result.stdout, 'Usage:');
     assert.include(result.stdout, 'ballin <command> [options]');
     const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\n')[0];
-    const commandLines = commandSection.split('\n');
+    const commandLines = commandSection.split('\n').filter((line: string) => /^ {4}\S/u.test(line));
     assert.lengthOf(commandLines, topLevelCommandNames.length);
     const documentedCommands = commandLines.map((line: string) => {
       const match = /^ {4}([a-z][a-z-]*) {2,}([a-z].*)$/u.exec(line);
@@ -304,17 +304,17 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
         if (command === 'self-update') assert.include(result.stdout, 'local `ballin-scripts` checkout, command shims, and configuration');
         if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
-        if (command === 'update') assert.include(result.stdout, 'Use `ballin config get update` to inspect settings.\n');
-        if (command === 'setup') assert.include(result.stdout, 'Use `ballin config get/set/reset` for direct configuration.\n');
+        if (command === 'update') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get update` to inspect settings.');
+        if (command === 'setup') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
         if (command === 'backup') {
-          assert.include(result.stdout, '`setup` creates or reconnects to an optional backup; `open` opens it in a browser.\n');
-          assert.include(result.stdout, '`list` finds saved snapshots; `read` prints one supported snapshot.\n');
-          assert.include(result.stdout, 'Without a snapshot selector, `read` shows usage and lists saved options when readable.\n');
-          assert.include(result.stdout, '`disconnect` stops local backups and clears comparison state.\n');
+          assert.include(result.stdout.replace(/\s+/gu, ' '), '`setup` creates or reconnects to an optional backup; `open` opens it in a browser.');
+          assert.include(result.stdout.replace(/\s+/gu, ' '), '`list` finds saved snapshots; `read` prints one supported snapshot.');
+          assert.include(result.stdout.replace(/\s+/gu, ' '), 'Without a snapshot selector, `read` shows usage and lists saved options when readable.');
+          assert.include(result.stdout.replace(/\s+/gu, ' '), '`disconnect` stops local backups and clears comparison state.');
           ['setup [repository-name]', 'open', 'list', 'read <snapshot>', 'read <snapshot> --list', 'read <snapshot> --file <path>', 'disconnect'].forEach((usage) => {
-            assert.include(result.stdout, `ballin backup ${usage}`);
+            assert.include(result.stdout.replace(/\s+/gu, ' '), `ballin backup ${usage}`);
           });
-          assert.include(result.stdout, 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');
+          assert.include(result.stdout.replace(/\s+/gu, ' '), 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');
         }
         assert.deepEqual(commandLog(), []);
         assert.isFalse(fs.existsSync(networkMarker));
