@@ -32,10 +32,18 @@ revision. See the [runtime setup and review guide](https://github.com/JBallin/cl
 for shared setup, behavior, and review verification.
 
 Opened or newly ready same-repository PRs receive one automatic review; drafts,
-forks, and Dependabot-triggered runs are excluded. Pushes and base retargets
-refresh existing presentation without running Claude. For a fresh review of an
+forks, and Dependabot-triggered runs are excluded. PR head pushes and base
+retargets refresh existing presentation without running Claude. For a fresh review of an
 open, non-draft, same-repository PR, a human owner, member, or collaborator can
-post `/claude-review` as the entire top-level or inline PR comment.
+post `/claude-review` as the entire top-level or inline PR comment. Append
+`opus`, `effort <level>`, or `opus effort <level>` to request a selection;
+`<level>` accepts `low`, `medium`, `high`, `xhigh`, or `max`. Commands are
+case-insensitive and require single spaces, with no surrounding whitespace or
+extra text. Plain requests retain account/configuration defaults. Higher effort
+can increase usage and latency; displayed effort records the request, not a
+verified effective setting. See the runtime guide's
+[selection details](https://github.com/JBallin/claude-review-runtime/blob/fdb26f96afb3ffbee64186561a15b8e9c3f41919/docs/consumer-workflows.md#optional-model-and-effort-selection)
+for model availability and evidence limits.
 
 Run `npm run test:unit -- test/claude_workflows.test.ts` for the portable offline
 caller contracts, also included in `npm test`. They parse YAML and compare the
