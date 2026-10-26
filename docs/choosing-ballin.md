@@ -22,7 +22,7 @@ You can also use maintenance alone. Backup setup is optional, so running
 configured updates does not require uploading your settings to GitHub.
 See [optional capabilities](optional-capabilities.md) for the update controls.
 Installation requires Git and Node.js; Homebrew stages require Homebrew, and
-optional backups require GitHub CLI and a personal GitHub account. Review the
+optional backups require GitHub CLI and a GitHub user account. Review the
 [installation effects](installation.md), enabled stages, and captured sources
 when setting up Ballin and as your environment changes.
 
@@ -39,8 +39,10 @@ checks protect saved content from some conflicting writes; they do not provide
 multi-Mac synchronization. `ballin doctor` checks readiness, not whether every
 source is captured or a saved snapshot is current.
 
-Private GitHub storage is not client-side encryption. The selected service's
-operators and authorized accounts can read the saved contents. Ballin does not scan or redact secrets;
+Private GitHub storage is not client-side encryption. GitHub can access backups
+on GitHub.com or GHE.com; a GitHub Enterprise
+Server hosting operator and site administrators may also have access. Anyone
+with authorized repository access can read the contents. Ballin does not scan or redact secrets;
 even inventories can contain private names, paths, and URLs.
 
 ## Other useful workflows

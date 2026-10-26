@@ -115,6 +115,19 @@ describe('install setup', () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
+  for (const selected of ['git.example.com', 'https://github.com', '']) {
+    it(`rejects a conflicting or invalid Quickstart host before changing installation state: ${selected}`, () => {
+      const file = path.join(repoDir, 'ballin.config.json');
+      const bytes = JSON.stringify({ backup: { repository: { host: 'github.com', id: 'R_fixture', ownerId: 'U_fixture', name: 'backups', branch: 'main' } } });
+      fs.writeFileSync(file, bytes);
+      const value = withEnvironment({ BALLIN_BACKUP_CHOICE: 'yes', BALLIN_BACKUP_HOSTNAME: selected },
+        () => captureStdout(() => setup(repoDir, docsUrl)));
+      assert.isFalse(value.result);
+      assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+      assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+      assert.equal(commandLog(), '');
+    });
+  }
   it('creates the command directory and symlinks repository binaries', () => {
     const result = withoutStdout(() => symlinkBinaries(repoDir, binDir));
 

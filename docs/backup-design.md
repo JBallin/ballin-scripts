@@ -104,26 +104,19 @@ creation uses `/user/repos`. Identity comparisons include the host so IDs from
 different services cannot identify the same destination. Marker format v1 stays
 unchanged: its IDs are validated within the configured host's repository.
 
-The hard backup API contract is documented in GHES 3.3. Its
-[release notes](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes)
-introduce `createCommitOnBranch`, and its
+GHES 3.3 introduced the required `createCommitOnBranch` mutation; its
 [input schema](https://docs.github.com/en/enterprise-server@3.3/graphql/reference/input-objects#createcommitonbranchinput)
-includes branch node identity, `expectedHeadOid` and file changes. The
-[3.3 REST description](https://github.com/github/rest-api-description/blob/main/descriptions/ghes-3.3/ghes-3.3.json)
-documents the account, private repository creation/lookup and tree/blob endpoints
-and required response fields. Its
-[GraphQL schema](https://docs.github.com/en/enterprise-server@3.3/graphql/reference/objects)
-documents the repository state, owner, branch, commit/tree and parent-pagination
-fields used for inspection and readback. This is a documented API baseline,
-not a live-tested compatibility range or advice to operate an obsolete release.
-Older-server needs can be reported in an issue; there is no version probe or
-legacy publication fallback.
+includes branch identity, `expectedHeadOid` and file changes. The
+[release notes](https://docs.github.com/en/enterprise-server@3.3/admin/release-notes),
+[REST description](https://github.com/github/rest-api-description/blob/main/descriptions/ghes-3.3/ghes-3.3.json)
+and [GraphQL schema](https://docs.github.com/en/enterprise-server@3.3/graphql/reference/objects)
+establish the documented API baseline, not a live-tested compatibility range.
+There is no version probe or legacy publication fallback. Optional housekeeping
+does not raise that baseline.
 
 Use the [current GHES commit API](https://docs.github.com/en/enterprise-server@latest/graphql/reference/commits#createcommitonbranch)
 and [repository API](https://docs.github.com/en/enterprise-server@latest/rest/repos/repos#update-a-repository)
-for general reference. Pull-request disabling was introduced in
-[GHES 3.21](https://docs.github.com/en/enterprise-server@3.21/admin/release-notes#3.21.0),
-but optional housekeeping does not raise the hard backup API baseline.
+for general reference.
 
 GHE.com uses its tenant hostname as destination identity. Ballin passes relative
 REST/GraphQL endpoints to GitHub CLI instead of building API base URLs. Current
@@ -133,30 +126,18 @@ whereas GHES uses `GH_ENTERPRISE_TOKEN`/`GITHUB_ENTERPRISE_TOKEN` or its saved l
 See [GitHub's platform guidance](https://docs.github.com/en/enterprise-cloud@latest/admin/data-residency/about-github-enterprise-cloud-with-data-residency#api-access)
 and [CLI environment reference](https://cli.github.com/manual/gh_help_environment).
 Use a current CLI with GHE.com support; Ballin neither chooses tokens nor
-rewrites host-specific authentication. Guided Quickstart sign-in remains GitHub.com-only.
+rewrites host-specific authentication.
 
 Isolated fixtures exercise host routing, managed usernames, create/reconnect,
-optional cleanup and bounded fallback, authentication/policy failures,
-publication, recovery, old linkage and cross-host cache isolation. CLI source
-and documentation establish routing/authentication contracts. A separate local
-check with CLI 2.102.0, dummy tokens, empty temporary configuration and a rejecting
-loopback proxy verified tenant API host routing and environment token-family
-selection without provider contact. Fixtures alone do not exercise CLI token
-selection. No live GHES/GHE.com service or real managed
-account has been tested. TLS/network access, real credentials and instance policy
-remain live qualification needs. The same limits apply despite passing CI.
-Optional rulesets remain nonfatal.
+optional cleanup/fallback, failures, publication, recovery and cache isolation.
+An offline GitHub CLI check with dummy tokens, temporary configuration and a
+rejecting loopback proxy separately verified API-host routing and token-family
+selection without provider contact. No live GHES/GHE.com service or real managed
+account has been tested; TLS/network access, real credentials and instance policy
+remain qualification needs.
 
-The old configurable Gist host was a separate storage path.
-[`gu.url`](https://github.com/JBallin/ballin-scripts/pull/13) originally selected
-the browser URL while the Ruby `gist` dependency selected its API host externally.
-[The GitHub CLI migration](https://github.com/JBallin/ballin-scripts/pull/171)
-introduced explicit `gu.host` routing through `GH_HOST`; the
-[Ballin 2 rename](https://github.com/JBallin/ballin-scripts/pull/229) called it
-`backup.host`. The [original repository scope](https://github.com/JBallin/ballin-scripts/issues/333)
-was GitHub.com-only; [Gist retirement](https://github.com/JBallin/ballin-scripts/pull/449)
-removed that path. Host selection now belongs to repository identity. Setup
-neither imports historical Gist contents/history nor deletes them.
+Legacy Gist configuration cannot redirect repository backups. Setup neither
+imports historical Gist contents/history nor deletes them.
 
 ## Managed-branch protection
 

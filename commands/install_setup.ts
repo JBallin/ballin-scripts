@@ -15,6 +15,7 @@ const {
 } = require('../config/portable.ts');
 const {
   configuredBackupDestination,
+  resolveBackupSetupHost,
 } = require('./backup_config.ts');
 const {
   promptInputState,
@@ -256,6 +257,17 @@ const setup = (
   if (!originalConfig) {
     return false;
   }
+  let hostname: string | undefined;
+  if (process.env.BALLIN_BACKUP_CHOICE === 'yes' && process.env.BALLIN_BACKUP_HOSTNAME !== undefined) {
+    try {
+      const destination = configuredBackupDestination(originalConfig);
+      if (destination.kind === 'invalid' || destination.kind === 'legacy-gist') throw new Error('Invalid backup destination; disconnect before choosing another host.');
+      hostname = resolveBackupSetupHost(originalConfig, process.env.BALLIN_BACKUP_HOSTNAME);
+    } catch (error) {
+      writeStdoutLine((error as Error).message);
+      return false;
+    }
+  }
   const binDir = resolveBinDir();
   if (!binDir || !validateBinDirInPath(binDir)) {
     return false;
@@ -313,7 +325,7 @@ const setup = (
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
       presentation: mode === 'self-update' ? 'standalone' : 'installation',
       initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',
-      originalConfig, onCancelled: () => { backupSetupCancelled = true; },
+      hostname, originalConfig, onCancelled: () => { backupSetupCancelled = true; },
       showValidationSummary: mode !== 'self-update',
       maintenanceOnly: mode === 'self-update',
     });

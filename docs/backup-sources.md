@@ -7,8 +7,9 @@
 Backups are optional. By default, a backup includes allowlisted tool inventories
 and filtered Ballin preferences. These can contain private tool choices,
 identities, paths, URLs, or secrets. Backups are stored in a private GitHub
-repository; the selected service's operators and anyone with authorized
-repository access can read them.
+repository. GitHub can access backups on GitHub.com or GHE.com; a GitHub Enterprise
+Server hosting operator and site administrators may also have access. Anyone
+with authorized repository access can read the contents.
 
 Sensitive sources are off by default on a new installation. The local
 `backup.includeSensitive` choice adds all currently supported sensitive sources

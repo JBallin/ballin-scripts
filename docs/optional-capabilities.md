@@ -157,8 +157,10 @@ ballin config set update.backup true
 ballin config set update.backup false
 ```
 
-Backups are stored in a private GitHub repository. The selected service's
-operators and anyone with authorized repository access can read its contents.
+Backups are stored in a private GitHub repository.
+GitHub can access backups on GitHub.com or GHE.com; a GitHub Enterprise
+Server hosting operator and site administrators may also have access. Anyone
+with authorized repository access can read the contents.
 
 Even when sensitive sources are excluded, the default-included inventory can
 reveal identities, private or custom URLs, and paths; Ballin does not scan or

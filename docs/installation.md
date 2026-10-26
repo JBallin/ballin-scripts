@@ -159,7 +159,10 @@ The [quickstart helper](quickstart.md) ([setup script](../quickstart.sh)) reuses
 Git, compatible Node.js, and GitHub CLI. It requires macOS 13.5 or newer and zsh
 or Bash. Homebrew is optional.
 
-Quickstart first asks whether to set up backups. No still installs Ballin for
+Quickstart first asks whether to set up backups. If selected, it asks for a
+hostname (default `github.com`) before sign-in and installing Ballin, then reuses it
+without another host prompt. An existing destination keeps its configured host.
+No still installs Ballin for
 maintenance; it omits backup-only GitHub CLI discovery/installation, sign-in,
 destination setup and run-now. Existing tools, accounts and backups remain.
 Later `ballin backup setup` checks current prerequisites and GitHub access.
@@ -330,8 +333,10 @@ ballin backup setup my-backup-name
 ballin backup setup work-backups --hostname git.example.com
 ```
 
-Backups are stored in a private GitHub repository. The selected service's
-operators and anyone with authorized repository access can read its contents.
+Backups are stored in a private GitHub repository.
+GitHub can access backups on GitHub.com or GHE.com; a GitHub Enterprise
+Server hosting operator and site administrators may also have access. Anyone
+with authorized repository access can read the contents.
 
 New setup offers distinct **create** and **reconnect** choices and defaults to
 `ballin-backups`. The optional argument is a repository name, not a URL or owner.
@@ -395,15 +400,17 @@ For GHE.com, enter your tenant's web hostname (`<subdomain>.ghe.com`), not its
 
 | Account or destination | Current backup support |
 | --- | --- |
-| Personal GitHub.com account, including Enterprise Cloud organization members | Supported for a private repository owned by that account, with the required access. |
-| Enterprise Managed User account on GitHub.com | Available when enterprise policy permits a private repository owned by your account and your GitHub CLI credential has the required access. |
-| GitHub Enterprise Server, such as `git.example.com` | Available through hostname selection for a user-owned private repository. Instance policy and required APIs must permit the operation. |
-| Enterprise Cloud with data residency on GHE.com | Available using your tenant hostname, a current GitHub CLI with GHE.com support and the required account/repository permissions. Enterprise policy must permit user-owned private repositories. |
+| Personal GitHub.com account, including Enterprise Cloud organization members | Supported for a private repository owned by that account. |
+| Enterprise Managed User account on GitHub.com | Available for a private repository owned by your managed account. |
+| GitHub Enterprise Server, such as `git.example.com` | Available through hostname selection; the required server APIs must be available. |
+| Enterprise Cloud with data residency on GHE.com | Available using your tenant hostname and a current GitHub CLI with GHE.com support. |
 
 Backups require a **private repository owned by the authenticated user**.
 Organization-owned repositories are unsupported, even if you are an organization
-owner or repository administrator. Enterprise policy controls whether managed
-accounts may create user-owned private repositories. See
+owner or repository administrator. For every host, account policy must permit
+user-owned private repositories and
+your GitHub CLI credential must have the required repository access. Enterprise
+policy controls whether managed accounts may create these repositories. See
 [managed-account restrictions](https://docs.github.com/en/enterprise-cloud@latest/admin/managing-iam/understanding-iam-for-enterprises/abilities-and-restrictions-of-managed-user-accounts).
 
 Setup saves the confirmed host with the destination. Existing configured
@@ -429,11 +436,11 @@ Choosing a different service changes where that data is stored.
 Ballin uses your existing `gh` authentication. It does not log in, switch
 accounts, or expand permissions on your behalf. Normal browser-based
 [`gh` authentication](https://cli.github.com/manual/gh_auth_login) works when
-the active personal account owns the destination. Routine backup publication
+the active user account owns the destination. Routine backup publication
 requires contents write access. Optional policy hardening can require additional
 repository authority, but read, open, recovery, and normal publication do not.
 
-If you use a fine-grained token, choose the same personal account as its resource
+If you use a fine-grained token, choose the same user account as its resource
 owner and ensure it can access the selected repository and write backup contents.
 A token limited to selected existing repositories may reconnect when it can
 access the destination, but it cannot be assumed to access a repository that
@@ -444,9 +451,8 @@ Ballin creates later. If authentication is missing, run
 gh auth login --hostname git.example.com
 ```
 
-For GHES or GHE.com backups, install for maintenance or decline backup onboarding
-until the CLI is authenticated, then run `ballin backup setup`. Guided
-Quickstart sign-in currently targets GitHub.com. Ballin's setup reports the
+Quickstart authenticates to the selected host before installation and reuses
+that host during backup setup. Ballin's setup reports the
 selected host's authentication command if access is missing; it does not sign in
 for you or fall back to another host. If Ballin shows an unexpected account,
 check whether an environment token is overriding your saved `gh` login.
