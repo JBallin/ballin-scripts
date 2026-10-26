@@ -193,14 +193,10 @@ about missing tools. Backup selection stays first; PATH, completion, analytics
 and backup destination permissions remain separate. Existing Node.js is never
 upgraded automatically during setup.
 
-For Xcode Command Line Tools, Quickstart checks Apple's Terminal downloads with
-administrator access. When one suitable package is available, it installs that
-package with `sudo softwareupdate --install`, showing native progress. It does
-not install macOS upgrades. If it cannot identify a suitable package, it asks
-separately before opening Apple's graphical installer with `xcode-select --install`.
-You can instead install the tools manually and rerun Quickstart. If a Terminal
-installation fails or is interrupted, Quickstart stops for recovery rather than
-launching another installer. Git must run successfully before setup continues.
+Quickstart can install missing Xcode Command Line Tools with administrator access.
+If Terminal installation is unavailable, it asks before opening Apple’s installer.
+If installation fails or is interrupted, follow the recovery instructions and
+rerun Quickstart.
 
 Direct routes are Apple's Xcode Command Line Tools for Git, the latest official Node
 24 macOS package and GitHub CLI's architecture-specific archive. Node and GitHub
