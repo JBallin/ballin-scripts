@@ -74,7 +74,6 @@ const runUninstallCommand = (): void => {
   const unverifiedLinkPaths: string[] = [];
 
   writeStdoutLine();
-  writeStdoutLine("It's been real...");
 
   if (commandExists('brew')) {
     const brewPrefix = readCommandOutput('brew', ['--prefix'])?.trim();
@@ -126,12 +125,13 @@ const runUninstallCommand = (): void => {
       );
     }
     process.exitCode = 1;
-    writeStdoutLine();
     return;
   }
 
-  writeStdoutLine('Removed Ballin command links and the local checkout.');
-  writeStdoutLine();
+  writeStdoutLine('Removed ~/.ballin-scripts and the ballin command links.');
+  writeStdoutLine('Other tools and shell settings were left unchanged.');
+  writeStdoutLine('Removal details:');
+  writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall');
 };
 
 module.exports = {
