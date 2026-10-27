@@ -77,7 +77,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     if (configured.kind === 'unconfigured') {
       if (!options.initialConsent) {
-        writeStdoutLine('Backup details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
+        writeStdoutLine('Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
         if (readYesNo('Set up private backups to GitHub? [y/N] ') !== true) {
           writeStdoutLine(`Backup setup skipped. Run ${terminalCommand('ballin backup setup')} when you’re ready.`);
           return true;
