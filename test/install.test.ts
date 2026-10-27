@@ -236,7 +236,7 @@ esac
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
-    assert.include(result.stdout, `Installation details: ${docsUrl}#what-will-installation-change\nProceed with installation? [y/N] `);
+    assert.include(result.stdout, `Installation details:\n${docsUrl}#what-will-installation-change\nProceed with installation? [y/N] `);
     assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 2);
     assert.deepEqual(commandLog(), [
       `git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`,

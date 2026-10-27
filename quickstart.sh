@@ -1101,7 +1101,7 @@ main() {
     if [[ -z "$brew_tool" ]] && { "$need_git" || "$need_node"; }; then
       printf 'Administrator access is required.\n'
     fi
-    printf 'Installation details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
+    printf 'Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
