@@ -1,3 +1,4 @@
+const { terminalPath } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const tty = require('tty');
@@ -46,7 +47,8 @@ const completionTarget = (
     profile = selected;
   } else if (shell === 'zsh') {
     const suggested = env.ZDOTDIR && path.isAbsolute(env.ZDOTDIR) && !/[\r\n\0]/u.test(env.ZDOTDIR) ? env.ZDOTDIR : home;
-    const choice = prompt(`Zsh settings directory [Enter for ${suggested}, another absolute directory, or skip]: `);
+    const defaultLabel = suggested === home ? 'home (~), an absolute directory' : `${terminalPath(suggested, home)}, another absolute directory`;
+    const choice = prompt(`Zsh settings directory [Enter for ${defaultLabel}, or skip]: `);
     if (choice.eof || choice.text === 'skip') return null;
     const directory = choice.text === '' ? suggested : choice.text === 'home' ? home : choice.text;
     if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) return null;
@@ -89,7 +91,7 @@ const appendActivation = (target: CompletionTarget): boolean => {
     const contents = fs.readFileSync(fd) as Buffer;
     const lines = contents.toString('utf8').split('\n');
     if (lines.includes(`${target.line}\r`)) {
-      throw new CompletionProfileError(`The completion activation in ${target.profile} has a trailing carriage return. Replace only that activation line manually with the command below, using LF line endings before reloading this file:\n${target.line}`);
+      throw new CompletionProfileError(`The completion activation in ${terminalPath(target.profile)} has a trailing carriage return. Replace only that activation line manually with the command below, using LF line endings before reloading this file:\n${target.line}`);
     }
     if (lines.includes(target.line)) return false;
     const trailingBackslashes = contents.toString('utf8').match(/(\\+)(?:\r?\n)?$/u)?.[1];
@@ -114,7 +116,7 @@ const appendActivation = (target: CompletionTarget): boolean => {
         }
         fs.ftruncateSync(fd, contents.length);
       } catch {
-        throw new CompletionProfileError(`The completion append could not be restored. Inspect ${target.profile} for incomplete activation before reloading it.`);
+        throw new CompletionProfileError(`The completion append could not be restored. Inspect ${terminalPath(target.profile)} for incomplete activation before reloading it.`);
       }
       throw error;
     }
@@ -156,7 +158,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     while (true) {
-      const answer = completionPrompt(`Enable tab completion in ${target.profile}? [y/N] `);
+      const answer = completionPrompt(`Enable tab completion in ${terminalPath(target.profile, env.HOME)}? [y/N] `);
       if (answer.eof) { fallback(); return; }
       const enabled = parseYesNo(answer.text, false);
       if (enabled === false) { fallback(); return; }

@@ -58,7 +58,7 @@ case "$1" in
     ;;
   clone)
     printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-    if [ "$2:$3" != 'https://github.com/JBallin/ballin-scripts.git:.ballin-scripts' ]; then
+    if [ "$2:$3" != "https://github.com/JBallin/ballin-scripts.git:$HOME/.ballin-scripts" ]; then
       exit 2
     fi
     mkdir -p "$HOME/.ballin-scripts/commands" "$HOME/.ballin-scripts/bin"
@@ -232,14 +232,14 @@ esac
     assert.notInclude(result.stdout, 'Detected Node.js');
     assert.notInclude(result.stdout, "let's ball");
     assert.include(result.stdout, 'Installation details:');
-    assert.include(result.stdout, `Installation will:\n  - Create Ballin and its settings in:\n    ${repoDir}\n  - Link the ballin command at:\n    ${path.join(homeDir, '.local', 'bin', 'ballin')}\n`);
+    assert.include(result.stdout, `Installation will:\n  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the ballin command at ~/.local/bin/ballin.\n`);
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
-    assert.include(result.stdout, `Installation details: ${docsUrl}#what-will-installation-change\nInstall Ballin in ${repoDir} and make the ballin command available? [y/N] `);
+    assert.include(result.stdout, `Installation details: ${docsUrl}#what-will-installation-change\nProceed with installation? [y/N] `);
     assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 2);
     assert.deepEqual(commandLog(), [
-      'git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts',
+      `git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
       setupCommand('fresh'),
     ]);
   });
@@ -359,7 +359,7 @@ esac
 
     assert.equal(first.status, 27);
     assert.deepEqual(commandLog(), [
-      'git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts',
+      `git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
       setupCommand('fresh'),
     ]);
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -400,8 +400,8 @@ esac
     const result = runInstall({ env: { FAKE_GIT_MERGE_STATUS: '24' } });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, `Unable to update ${repoDir} before setup`);
-    assert.include(result.stdout, `Update or delete ${repoDir}`);
+    assert.include(result.stdout, `Unable to update ~/.ballin-scripts before setup`);
+    assert.include(result.stdout, `Update or delete ~/.ballin-scripts`);
     assert.equal(result.stdout.split(troubleshootingUrl).length - 1, 1);
     assert.isBelow(result.stdout.indexOf('Unable to update'), result.stdout.indexOf(troubleshootingUrl));
     assert.deepEqual(commandLog(), [
@@ -490,9 +490,9 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       const before = fs.lstatSync(target);
       const result = runInstall({ input: 'no\n' });
       assert.equal(result.status, entry === 'directory' ? 1 : 0, result.stdout + result.stderr);
-      if (entry === 'file' || entry === 'foreign link') assert.include(result.stderr, `installation will replace the existing command at ${target}`);
+      if (entry === 'file' || entry === 'foreign link') assert.include(result.stderr, `installation will replace the existing command at ~/.local/bin/ballin`);
       else assert.notInclude(result.stderr, 'installation will replace');
-      if (entry === 'foreign link') assert.include(result.stderr, `(link target: ${path.join(homeDir, 'foreign')})`);
+      if (entry === 'foreign link') assert.include(result.stderr, `(link target: ~/foreign)`);
       if (entry === 'directory') assert.include(result.stderr, 'Refusing to replace a directory');
       assert.equal(fs.lstatSync(target).ino, before.ino);
       assert.deepEqual(commandLog(), []);
@@ -612,7 +612,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       assert.notInclude(result.stdout, 'Unable to prepare');
       assert.notInclude(result.stdout, troubleshootingUrl);
       assert.notInclude(result.stdout, 'Setup complete!');
-      assert.deepEqual(commandLog(), ['git:clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts']);
+      assert.deepEqual(commandLog(), [`git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`]);
       assert.isTrue(fs.existsSync(path.join(repoDir, 'commands', 'install_setup.ts')), 'partial checkout remains');
       assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
       assert.equal(fs.readFileSync(earlier, 'utf8'), 'keep this change\n');

@@ -590,7 +590,7 @@ kill -${signal} $$
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
 
     assert.isFalse(result.result);
-    assert.include(result.output, `${binDir} doesn't seem to be in your path.`);
+    assert.include(result.output, "~/.local/bin doesn't seem to be in your path.");
     assert.include(result.output, `Add \`export PATH="${binDir}:$PATH"\` to your shell profile.\n`);
   });
 
@@ -711,7 +711,7 @@ exit 2
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
 
     assert.isFalse(result.result);
-    assert.include(result.output, `Unable to symlink binaries into ${binDir}`);
+    assert.include(result.output, 'Unable to symlink binaries into ~/.local/bin');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 
@@ -729,7 +729,7 @@ exit 2
     assert.include(result.stdout, analyticsPrompt);
     assert.isBelow(
       result.stdout.indexOf(analyticsPrompt),
-      result.stdout.indexOf(`Unable to symlink binaries into ${binDir}`),
+      result.stdout.indexOf('Unable to symlink binaries into ~/.local/bin'),
     );
     assert.equal(readRepoConfig().analytics.enabled, 'false');
     assert.isFalse(fs.existsSync(installIdPath()));
@@ -776,7 +776,7 @@ exit 2
       assert.equal(result.status, fail ? 1 : 0, result.stderr);
       assert.notInclude(result.stdout, 'symlinked binaries into');
       assert.notInclude(result.stdout, '😎 ballin!');
-      if (fail) assert.include(result.stdout, `Unable to symlink binaries into ${binDir}`);
+      if (fail) assert.include(result.stdout, 'Unable to symlink binaries into ~/.local/bin');
       else assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
     });
   }
@@ -1147,7 +1147,7 @@ require('https').request = () => {
         env: childEnvironment({ SHELL: '/bin/zsh', NODE_OPTIONS: `--require=${preloadPath}` }),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, `${analyticsPrompt}\nZsh settings directory [Enter for ${path.join(testDir, "home")}, another absolute directory, or skip]: `);
+      assert.include(result.stdout, `${analyticsPrompt}\nZsh settings directory [Enter for home (~), an absolute directory, or skip]: `);
       if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);

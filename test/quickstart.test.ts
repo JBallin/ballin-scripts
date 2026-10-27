@@ -16,8 +16,8 @@ describe('beginner quickstart bootstrap', function() {
   let systemNode: string;
   let log: string;
   const source = path.resolve(__dirname, '../quickstart.sh');
-  const nodeInstallPrompt = 'Install Node.js and Ballin? [y/N]';
-  const cltInstallQuestion = 'Install Xcode Command Line Tools and Ballin?';
+  const nodeInstallPrompt = 'Proceed with installation? [y/N]';
+  const cltInstallQuestion = 'Proceed with installation?';
   const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
   const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
@@ -375,6 +375,9 @@ esac
         FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, '  - Install missing tools and dependencies using existing Homebrew: Node.js.\n');
+      assert.notInclude(result.stdout, 'existing Homebrew:\n');
+      assert.notInclude(result.stdout, 'Administrator access is required.');
       assert.include(result.stdout, nodeInstallPrompt);
       assert.equal(readLog().includes('native-brew:install --formula node\n'), !declined);
       assert.notInclude(readLog(), 'node@24'); assert.notInclude(readLog(), 'nodejs.org');
@@ -558,11 +561,11 @@ printf '0\\n'
         const result = run('no\n', { FAKE_MISSING_NODE: '1', FNM_DIR: undefined });
         assert.equal(result.status, installed ? 1 : 0, result.stdout + result.stderr);
         if (installed) {
-          assert.include(result.stderr, `Existing Node.js at ${node} could not be verified.`);
+          assert.include(result.stderr, `Existing Node.js at ~/${fnmRoot}/node-versions/v24.22.0/installation/bin/node could not be verified.`);
           assert.include(result.stderr, 'Check it using its existing installation method and make a supported Node.js available on PATH');
           assert.notInclude(result.stderr, 'Update or select Node');
           assert.equal(fs.readFileSync(node, 'utf8'), '#!/bin/sh\nexit 97\n');
-          assert.notInclude(result.stdout, 'Install Node.js and Ballin?');
+          assert.notInclude(result.stdout, 'Proceed with installation?');
         } else assert.include(result.stdout, nodeInstallPrompt);
         for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);
       });
@@ -766,7 +769,7 @@ system_sudo=fixture_sudo
       '#!/bin/bash\nprintf "conflict-ran\\n" >> "$FAKE_COMMAND_LOG"\nexit 77\n', { mode: 0o755 });
     const result = run('y\ny\n', { FAKE_BREW_PREFIX: brewPrefix });
     assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.include(result.stderr, `Another ballin command would take precedence: ${path.join(commandBin, 'ballin')}.`);
+    assert.include(result.stderr, 'Another ballin command would take precedence: ~/.local/bin/ballin.');
     assert.notInclude(readLog(), 'conflict-ran');
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     assert.notInclude(readLog(), 'auth status --active');
@@ -892,7 +895,7 @@ system_sudo=fixture_sudo
         const result = run();
 
         assert.equal(result.status, 1, result.stdout + result.stderr);
-        assert.include(result.stderr, `Refusing to replace an existing file at ${target}.`);
+        assert.include(result.stderr, `Refusing to replace an existing file at ~/${path.relative(home, target)}.`);
         assert.isFalse(fs.existsSync(path.join(root, 'conflict-ran')));
         assert.equal(fs.lstatSync(target).ino, before.ino);
         assert.equal(fs.lstatSync(target).mode, before.mode);
@@ -994,7 +997,7 @@ system_sudo=fixture_sudo
 
         assert.equal(result.status, state === 'broken' ? 1 : 0, result.stdout + result.stderr);
         if (state === 'broken') {
-          assert.include(result.stderr, `npm cannot run through the final PATH: ${npm}.`);
+          assert.include(result.stderr, `npm cannot run through the final PATH: ${placement === 'local bin' ? '~/.local/bin/npm' : npm}.`);
           assert.equal(fs.readFileSync(profile, 'utf8'), '# Existing settings\n');
           assert.equal(fs.statSync(profile).ino, before.ino);
           assert.equal(fs.statSync(profile).mode, before.mode);
@@ -1377,7 +1380,7 @@ system_sudo=fixture_sudo
       assert.include(readLog(), 'bash-env-loaded');
       assert.notInclude(readLog(), 'core-startup-reloaded');
       assert.notInclude(result.stdout, 'Missing prerequisites:');
-      assert.include(result.stdout, 'and make the ballin command available? [y/N]');
+      assert.include(result.stdout, 'Proceed with installation? [y/N]');
       assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
       const childEnv = JSON.parse(fs.readFileSync(path.join(root, 'core-env.json'), 'utf8'));
       const parentEnv = JSON.parse(fs.readFileSync(path.join(root, 'parent-env.json'), 'utf8'));
@@ -1411,7 +1414,7 @@ system_sudo=fixture_sudo
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'Missing prerequisites:');
-      assert.include(result.stdout, 'and make the ballin command available? [y/N]');
+      assert.include(result.stdout, 'Proceed with installation? [y/N]');
       assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
       assert.notInclude(readLog(), `exported-${name}:called`);
       assert.include(readLog(), 'parent-function-preserved');
@@ -1485,7 +1488,7 @@ system_sudo=fixture_sudo
         assert.deepEqual(fs.readFileSync(target), fs.readFileSync(executable));
         assert.deepEqual(fs.readFileSync(path.join(home, '.zshrc')), profile);
         if (regular) {
-          assert.include(result.stderr, `Refusing to replace an existing file at ${target}.`);
+          assert.include(result.stderr, `Refusing to replace an existing file at ~/${path.relative(home, target)}.`);
           for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) {
             assert.notInclude(readLog(), forbidden);
           }
@@ -1542,7 +1545,7 @@ system_sudo=fixture_sudo
       }
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'Missing prerequisites:');
-      assert.include(result.stdout, 'and make the ballin command available? [y/N]');
+      assert.include(result.stdout, 'Proceed with installation? [y/N]');
       assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
       const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
       assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(later, name));
@@ -1696,7 +1699,7 @@ system_sudo=fixture_sudo
       fs.writeFileSync(log, '');
       const rerun = run('n\n', core);
       assert.equal(rerun.status, 1, rerun.stdout + rerun.stderr);
-      assert.include(rerun.stderr, `Refusing to replace an existing file at ${target}`);
+      assert.include(rerun.stderr, `Refusing to replace an existing file at ~/${path.relative(home, target)}`);
       assert.equal(fs.readFileSync(protectedFile, 'utf8'), 'Do not remove.\n');
       const after = fs.statSync(protectedFile);
       for (const key of ['ino', 'mode', 'mtimeMs']) assert.equal(after[key], before[key], key);
@@ -1914,7 +1917,7 @@ system_sudo=fixture_sudo
         assert.equal(result.status, managedFirst ? 0 : 1, result.stdout + result.stderr);
         if (managedFirst) assert.notInclude(result.stderr, 'needs manual attention');
         else {
-          assert.include(result.stderr, `Existing Node.js at ${path.join(older, 'node')} needs manual attention`);
+          assert.include(result.stderr, `Existing Node.js at ~/${path.relative(home, path.join(older, 'node'))} needs manual attention`);
           assert.notInclude(readLog(), 'auth status --active'); assert.notInclude(readLog(), 'install.sh:');
         }
         assert.deepEqual(['node', 'npm'].map(name => fs.readlinkSync(path.join(quickBin, name))), links);
@@ -1960,7 +1963,7 @@ system_sudo=fixture_sudo
       fs.writeFileSync(log, '');
       const retry = run('n\n', inherited);
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-      assert.include(retry.stdout, 'and make the ballin command available? [y/N]');
+      assert.include(retry.stdout, 'Proceed with installation? [y/N]');
       assert.include(retry.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
       assert.include(retry.stderr, 'unrelated: cannot overwrite existing file');
       assert.equal(fs.readFileSync(unrelated, 'utf8'), 'Keep this file.\n');
@@ -2112,7 +2115,7 @@ system_sudo=fixture_sudo
       fs.unlinkSync(path.join(tools, 'gh'));
       const result = run('y\n\ny\ny\n', { FAKE_GIT: 'missing', FAKE_ARCH: arch, FAKE_MISSING_NODE: '1' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Install Xcode Command Line Tools, Node.js, and GitHub CLI and Ballin? [y/N]');
+      assert.include(result.stdout, 'Proceed with installation? [y/N]');
       assert.include(readLog(), 'xcode-select:--install');
       assert.notInclude(readLog(), 'brew:');
       assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), "PATH='" + path.join(home, '.local/share/ballin-quickstart/bin') + "':$PATH:'" + path.join(home, '.local/bin') + "'");
@@ -2127,7 +2130,7 @@ system_sudo=fixture_sudo
       fs.unlinkSync(path.join(tools, 'gh'));
       const result = run('n\n', { FAKE_MISSING_NODE: needsNode ? '1' : '0' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      const consent = result.stdout.indexOf(needsNode ? 'Install Node.js and GitHub CLI and Ballin?' : 'Install GitHub CLI and Ballin?');
+      const consent = result.stdout.indexOf('Proceed with installation?');
       assert.isAtLeast(consent, 0);
       const notice = 'Installation may ask for your Mac password.';
       assert.notInclude(result.stdout, notice);
@@ -2450,11 +2453,11 @@ main
       FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
     }, home, 'brew() { touch "$FAKE_ROOT/exported-brew-ran"; printf "/wrong-prefix\\n"; }; export -f brew');
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '  - Link the ballin command at:\n    ' + prefix + '/bin/ballin');
+    assert.include(result.stdout, '  - Link the ballin command at ' + prefix + '/bin/ballin.');
     assert.isFalse(fs.existsSync(path.join(root, 'exported-brew-ran')));
   });
   it('combines missing tools and fresh Ballin consent before PATH setup', () => {
-    const result = run('y\nhome\ny\nn\n', { FAKE_GIT: 'missing', FAKE_CLT_MODE: 'terminal', FAKE_RAW_INPUT: '1' });
+    const result = run('y\n\n\ny\nn\n', { FAKE_GIT: 'missing', FAKE_CLT_MODE: 'terminal', FAKE_RAW_INPUT: '1' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `${cltInstallQuestion} [y/N]`);
     assert.notInclude(result.stdout, 'Native installation prompt:');
@@ -2463,15 +2466,41 @@ main
     const detection = result.stdout.indexOf('Checking required tools');
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
-    assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools in Terminal with administrator access.\n  - Ask before opening Apple's graphical installer if needed.\n");
-    assert.include(result.stdout, `  - Create Ballin and its settings in:\n    ${home}/.ballin-scripts\n  - Link the ballin command at:\n    ${home}/.local/bin/ballin\n`);
+    assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools.\n");
+    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the ballin command at ~/.local/bin/ballin.\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
     assert.isBelow(preview, approval);
+    const plan = result.stdout.slice(preview, approval);
+    assert.equal(plan.split('Administrator access is required.').length - 1, 1);
+    assert.notInclude(plan, 'graphical');
+    assert.notInclude(plan, 'verified official');
     assert.isBelow(approval, result.stdout.indexOf('$ sudo softwareupdate --install'));
+    assert.include(result.stdout, 'Add Ballin setup to ~/.zshrc so it works in new Terminal windows? [y/N]');
+    assert.isTrue(fs.existsSync(path.join(home, '.zshrc')));
+    assert.isTrue(result.stdout.endsWith(terminalGuidance));
     assert.include(readLog(), 'clt-softwareupdate:--install Command Line Tools for Xcode-16.4');
     assert.notInclude(readLog(), 'xcode-select:--install');
     assert.isBelow(result.stdout.indexOf('Setting up PATH'), result.stdout.indexOf('==> Installing Ballin'));
+  });
+  it('previews all missing prerequisites in one-line bullets with one administrator notice', () => {
+    fs.unlinkSync(path.join(tools, 'gh'));
+    const result = run('n\n', { FAKE_GIT: 'missing', FAKE_MISSING_NODE: '1', FAKE_RAW_INPUT: '1' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, `Installation will:
+  - Install Xcode Command Line Tools.
+  - Install Node.js 24 in ${systemNode}.
+  - Install GitHub CLI in ~/.local/share/ballin-quickstart.
+  - Create Ballin and its settings in ~/.ballin-scripts.
+  - Link the ballin command at ~/.local/bin/ballin.
+Administrator access is required.
+Installation details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
+Proceed with installation? [y/N] `);
+    assert.notInclude(result.stdout, 'graphical');
+    assert.notInclude(result.stdout, 'verified official');
+    assert.equal(result.stdout.split('Administrator access').length - 1, 1);
+    assert.isEmpty(fs.readdirSync(home));
+    for (const forbidden of ['sudo:', 'curl:', 'xcode-select:--install', 'install.sh:']) assert.notInclude(readLog(), forbidden);
   });
   for (const answer of ['', 'yes', 'no\n', '\n']) {
     it(`makes no installation changes after combined-consent ${JSON.stringify(answer)}`, () => {
@@ -2789,7 +2818,7 @@ main
       {
         const previous = {
           'early choice': 'Set up backups to GitHub? [Y/n]',
-          prerequisites: 'Install Xcode Command Line Tools?', 'PATH consent': 'so it works in new Terminal windows? [y/N]',
+          prerequisites: 'Proceed with installation?', 'PATH consent': 'so it works in new Terminal windows? [y/N]',
           'PATH warning': 'Persistent PATH setup incomplete:', authentication: 'Native login prompt:',
           'backups skipped': 'Backup setup skipped.',
         }[preceding];
@@ -2846,7 +2875,7 @@ main
     it(`accepts Enter for home and preserves correct PATH separation: ${JSON.stringify(initial)}`, () => {
       const profile = path.join(home, '.zshrc'); fs.writeFileSync(profile, initial);
       const result = runPathSetup('home\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, `Add Ballin setup to ${profile} so it works in new Terminal windows?`);
+      assert.include(result.stdout, `Add Ballin setup to ~/${path.basename(profile)} so it works in new Terminal windows?`);
       assert.equal(fs.readFileSync(profile, 'utf8'), initial + (initial ? '\n' : '') + pathLine() + '\n');
       const retry = runPathSetup('home\n'); assert.equal(retry.status, 0, retry.stdout + retry.stderr);
       assert.notInclude(retry.stdout, 'PATH entry already present');
@@ -2906,7 +2935,7 @@ main
   it('accepts a custom exported ZDOTDIR default, explicit home override, and skip', () => {
     const directory = path.join(home, 'zsh'); fs.mkdirSync(directory);
     const selected = runPathSetup(directory + '\ny\n', { ZDOTDIR: directory }); assert.equal(selected.status, 0, selected.stderr);
-    assert.include(selected.stdout, `Add Ballin setup to ${directory}/.zshrc so it works in new Terminal windows?`);
+    assert.include(selected.stdout, `Add Ballin setup to ~/${path.basename(directory)}/.zshrc so it works in new Terminal windows?`);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     const skipped = runPathSetup('skip\n'); assert.equal(skipped.status, 0, skipped.stderr);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
@@ -3086,15 +3115,31 @@ main
     const profile = path.join(home, '.zshrc');
     const declined = runPathSetup('\nn\n', { ZDOTDIR: '' });
     assert.equal(declined.status, 0, declined.stdout + declined.stderr);
-    assert.include(declined.stdout, `Zsh settings directory [Enter for ${home}, another absolute directory, or skip]:`);
-    assert.include(declined.stdout, `Add Ballin setup to ${profile}`);
+    assert.include(declined.stdout, `Zsh settings directory [Enter for home (~), an absolute directory, or skip]:`);
+    assert.include(declined.stdout, `Add Ballin setup to ~/${path.basename(profile)}`);
     assert.isFalse(fs.existsSync(profile));
     const directory = path.join(home, 'actual-zsh'); fs.mkdirSync(directory);
     const selected = runPathSetup(directory + '\ny\n', { ZDOTDIR: '' });
     assert.equal(selected.status, 0, selected.stdout + selected.stderr);
-    assert.include(selected.stdout, `Add Ballin setup to ${directory}/.zshrc`);
+    assert.include(selected.stdout, `Add Ballin setup to ~/${path.basename(directory)}/.zshrc`);
     assert.isTrue(fs.existsSync(path.join(directory, '.zshrc')));
     assert.isFalse(fs.existsSync(profile));
+  });
+  it('keeps outside-home ZDOTDIR explicit and does not accept typed tilde paths', () => {
+    const directory = path.join(root, 'outside-home-zsh');
+    fs.mkdirSync(directory);
+    const selected = runPathSetup('\nn\n', { ZDOTDIR: directory });
+    assert.equal(selected.status, 0, selected.stderr);
+    assert.include(selected.stdout, `Zsh settings directory [Enter for ${directory}, another absolute directory, or skip]: `);
+    assert.include(selected.stdout, `Add Ballin setup to ${directory}/.zshrc`);
+    for (const value of ['~', '~/outside-home-zsh']) {
+      const rejected = runPathSetup(value + '\n');
+      assert.equal(rejected.status, 0, rejected.stderr);
+      assert.include(rejected.stderr, 'No absolute zsh startup directory selected.');
+      assert.notInclude(rejected.stdout, 'Add Ballin setup');
+    }
+    assert.isFalse(fs.existsSync(path.join(directory, '.zshrc')));
+    assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
   });
   for (const choice of ['skip\n', '']) {
     it(`leaves PATH files unchanged after Zsh location ${choice ? 'skip' : 'EOF'}`, () => {
@@ -3107,8 +3152,8 @@ main
   it('accepts the suggested directory without treating selection as permission and reuses only that choice', () => {
     const result = runPathSetup('\nn\n', { ZDOTDIR: 'relative' });
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `Zsh settings directory [Enter for ${home}, another absolute directory, or skip]: `);
-    assert.include(result.stdout, `Add Ballin setup to ${home}/.zshrc`);
+    assert.include(result.stdout, `Zsh settings directory [Enter for home (~), an absolute directory, or skip]: `);
+    assert.include(result.stdout, `Add Ballin setup to ~/.zshrc`);
     assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
   });
   for (const selectedShell of ['', 'bash', '/missing/bash', '/bin/sh']) {
@@ -3151,7 +3196,7 @@ original_confirm=$(declare -f confirm)
 eval "\${original_confirm/confirm ()/original_confirm ()}"
 confirm() {
   original_confirm "$@" || return
-  if [[ "$1" == "Add Ballin setup to $HOME/.zshrc so it works in new Terminal windows?" ]]; then ln "$HOME/.zshrc" "$HOME/dotfiles-startup"; fi
+  if [[ "$1" == "Add Ballin setup to ~/.zshrc so it works in new Terminal windows?" ]]; then ln "$HOME/.zshrc" "$HOME/dotfiles-startup"; fi
 }
 `);
     assert.equal(result.status, 0, result.stdout + result.stderr);

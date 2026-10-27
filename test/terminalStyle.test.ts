@@ -3,11 +3,20 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences } = require('../commands/terminalStyle.ts');
+const { terminalPath, terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences } = require('../commands/terminalStyle.ts');
 
 const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
 
 describe('terminal emphasis', () => {
+  it('abbreviates only paths contained within HOME', () => {
+    const home = '/tmp/ballin-home';
+    assert.equal(terminalPath(home, home), '~');
+    assert.equal(terminalPath(home + '/.ballin-scripts/ballin.config.json', home), '~/.ballin-scripts/ballin.config.json');
+    assert.equal(terminalPath(home + '-sibling/file', home), home + '-sibling/file');
+    assert.equal(terminalPath(home + '/../outside', home), '/tmp/outside');
+    assert.equal(terminalPath('/usr/local/bin', home), '/usr/local/bin');
+    assert.equal(terminalPath('/usr/local/bin', ''), '/usr/local/bin');
+  });
   it('uses only owned bold and underline attributes on supported terminals', () => {
     assert.equal(terminalHeading('Checking tools', { isTTY: true }, {}), '\x1b[34m==>\x1b[1;39m Checking tools\x1b[0m');
     assert.equal(terminalEmphasis('stage', 'bold', { isTTY: true }, {}), '\x1b[1mstage\x1b[0m');

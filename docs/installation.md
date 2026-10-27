@@ -12,6 +12,9 @@ Ballin's installer and terminal output take inspiration from
 
 ## What will installation change?
 
+Displayed paths inside your home directory use `~`; installation uses the absolute
+home path even when started from another directory.
+
 After you confirm a fresh installation, Ballin clones its checkout into
 `~/.ballin-scripts/`, creates local settings there, and links the `ballin`
 command into Homebrew's bin directory when available, otherwise `~/.local/bin`.
