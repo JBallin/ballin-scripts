@@ -14,27 +14,6 @@ command_reference() {
   else printf "\`%s\`" "$1"; fi
 }
 
-# Keep prerequisite prose readable before a Node runtime is available.
-preview_bullet() {
-  local width=${COLUMNS:-80} dimensions='' word line='  -'
-  local words=()
-  if [[ -t 1 ]]; then
-    # Capture the terminal before command substitution redirects stdout.
-    { dimensions=$(/bin/stty size <&3 2>/dev/null) || dimensions=''; } 3<&1
-    [[ -z "$dimensions" ]] || width=${dimensions##* }
-  fi
-  [[ "$width" =~ ^[1-9][0-9]{1,2}$ ]] && (( width >= 20 )) || width=80
-  read -r -a words <<< "$1"
-  for word in "${words[@]}"; do
-    if (( ${#line} + ${#word} + 1 > width && ${#line} > 3 )); then
-      printf '%s\n' "$line"
-      line='   '
-    fi
-    line+=" $word"
-  done
-  printf '%s\n' "$line"
-}
-
 # Compare the reviewed command entry again before using Quickstart consent.
 command_entry_snapshot() {
   local target=$1 metadata
@@ -1068,20 +1047,18 @@ main() {
     fi
     printf 'Installation will:\n'
     if [[ -n "$brew_tool" ]]; then
-      preview_bullet "Install $prerequisite_names and dependencies using existing Homebrew."
-      preview_bullet 'Keep existing Node.js unchanged.'
+      printf '  - Install missing tools and dependencies using existing Homebrew:\n    %s\n' "$prerequisite_names"
+      printf '  - Keep existing Node.js unchanged.\n'
     else
       if "$need_git"; then
-        preview_bullet "Install Xcode Command Line Tools in Terminal with administrator access."
-        preview_bullet "Ask before opening Apple's graphical installer if needed."
+        printf '  - Install Xcode Command Line Tools in Terminal with administrator access.\n'
+        printf "  - Ask before opening Apple's graphical installer if needed.\n"
       fi
       if "$need_node"; then
-        preview_bullet 'Install the verified official Node 24 package with administrator access in:'
-        printf '    %s\n' "$system_node_bin"
+        printf '  - Install the verified official Node 24 package with administrator access in:\n    %s\n' "$system_node_bin"
       fi
       if "$need_gh"; then
-        preview_bullet 'Download and verify the official GitHub CLI archive in:'
-        printf '    %s\n' "$quick_root"
+        printf '  - Download and verify the official GitHub CLI archive in:\n    %s\n' "$quick_root"
       fi
     fi
     local approval_prompt="Install $prerequisite_names?"
@@ -1100,10 +1077,8 @@ main() {
       fi
       approved_command="$planned_prefix/bin/ballin"
       approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $approved_command."
-      preview_bullet 'Create Ballin and its settings in:'
-      printf '    %s\n' "$approved_root"
-      preview_bullet 'Link the ballin command at:'
-      printf '    %s\n' "$approved_command"
+      printf '  - Create Ballin and its settings in:\n    %s\n' "$approved_root"
+      printf '  - Link the ballin command at:\n    %s\n' "$approved_command"
       if [[ "$approved_snapshot" != missing ]]; then
         printf 'Warning: installation will replace the existing command at %s' "$approved_command"
         if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(readlink "$approved_command")"; fi

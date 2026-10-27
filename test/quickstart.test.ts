@@ -2463,6 +2463,8 @@ main
     const detection = result.stdout.indexOf('Checking required tools');
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
+    assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools in Terminal with administrator access.\n  - Ask before opening Apple's graphical installer if needed.\n");
+    assert.include(result.stdout, `  - Create Ballin and its settings in:\n    ${home}/.ballin-scripts\n  - Link the ballin command at:\n    ${home}/.local/bin/ballin\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
     assert.isBelow(preview, approval);

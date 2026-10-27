@@ -58,7 +58,7 @@ describe('interactive setup with delayed terminal answers', function() {
       ], shell);
       assert.isUndefined(result.error, result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\nCreated config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+      assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
       assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nEnable tab completion in ');
       assert.notInclude(output, '\n\n\n');
       assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
@@ -88,19 +88,6 @@ describe('interactive setup with delayed terminal answers', function() {
     });
   }
 
-  it('wraps prerequisite preview prose at the actual terminal width', () => {
-    sandbox = createSandbox({ quickstart: true });
-    const prose = 'Install Xcode Command Line Tools in Terminal with administrator access.';
-    const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', 'source "$1"; preview_bullet "$2"',
-      'preview', path.join(sandbox.source, 'quickstart.sh'), prose], [], 'bash', { columns: 48 });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    const output = result.stdout.replace(/\r\n/gu, '\n');
-    const lines = output.slice(output.indexOf('  - '), output.indexOf('\nEXIT:')).trimEnd().split('\n');
-    assert.isAbove(lines.length, 1);
-    for (const line of lines) assert.isAtMost(line.length, 48, line);
-    assert.equal(lines.join(' ').replace(/\s+/gu, ' ').trim(), '- ' + prose);
-  });
-
   it('uses one separator after tab completion when Quickstart backups are declined', () => {
     sandbox = createSandbox({ quickstart: true });
     const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
@@ -115,7 +102,7 @@ describe('interactive setup with delayed terminal answers', function() {
     const output = result.stdout.replace(/\r\n/gu, '\n');
     assert.include(output, `Enable tab completion in ${path.join(sandbox.home, '.bash_profile')}? [y/N] y\n\n😎 Setup complete!`);
     assert.notInclude(output, '\n\n\n');
-    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\nCreated config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
   });
 
   for (const scenario of ['quiet', 'migration', 'unconfigured', 'backup', 'migrated backup']) {
@@ -167,7 +154,7 @@ describe('interactive setup with delayed terminal answers', function() {
           else assert.include(output, `${docs}#what-installation-changes\n\n😎 Setup complete!`);
         } else if (backup) assert.include(output, update + '\n' + summary);
         else if (scenario === 'quiet') assert.include(output, update + '\n😎 Setup complete!');
-        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\nCreated config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
         assert.notInclude(output, '\n\n\n');
       });
     }
@@ -185,7 +172,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const output = result.stdout.replace(/\r\n/gu, '\n');
-    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\nCreated config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
     assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nWhich Bash startup file does your terminal read? ');
     assert.notInclude(output, '\x1b[');
     assert.notInclude(output, '\n\n\n');

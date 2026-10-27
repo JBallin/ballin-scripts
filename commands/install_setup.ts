@@ -149,7 +149,7 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
     } catch {
       return false;
     }
-    writeStdoutLine(`Created config: ${path.resolve(configPath)}`);
+    writeStdoutLine(`⚙️  Created config: ${path.resolve(configPath)}`);
     return true;
   }
 

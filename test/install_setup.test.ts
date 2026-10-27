@@ -235,7 +235,7 @@ describe('install setup', () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, `Created config: ${path.join(fs.realpathSync(repoDir), 'ballin.config.json')}\n`);
+    assert.equal(result.stdout, `⚙️  Created config: ${path.join(fs.realpathSync(repoDir), 'ballin.config.json')}\n`);
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 
@@ -1120,7 +1120,7 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout.split("\n"), `Created config: ${path.join(repoDir, 'ballin.config.json')}`);
+    assert.include(result.stdout.split("\n"), `⚙️  Created config: ${path.join(repoDir, 'ballin.config.json')}`);
     assert.isBelow(result.stdout.indexOf(analyticsPrompt), result.stdout.indexOf(`${docsUrl}#startup-files-and-manual-activation`));
     assert.include(result.stdout, 'Backup details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBackup details:`);
