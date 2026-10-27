@@ -8,12 +8,18 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      fixture_comparison:
+        description: Qualify the frozen fixture responder with two workers
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   test:
+    if: ${{ !inputs.fixture_comparison }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -122,3 +128,104 @@ jobs:
           name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
           path: coverage/tmp/
           retention-days: 7
+
+  fixture_comparison:
+    if: ${{ inputs.fixture_comparison }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    concurrency:
+      group: issue-569-fixture-comparison
+      cancel-in-progress: false
+    env:
+      PERF_SOURCE: ${{ github.workspace }}/benchmark-source
+    steps:
+      - name: Configure evidence directory
+        run: echo "PERF_EVIDENCE=$RUNNER_TEMP/fixture-comparison" >> "$GITHUB_ENV"
+      - name: Check out qualification candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check out frozen baseline
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: 4cb3abbc59c7cb3ca980702377e0e1dadd2a1e24
+          path: benchmark-source
+          persist-credentials: false
+      - name: Install matching shell tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck zsh jq coreutils
+      - name: Set up fixed Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.22.1
+          cache: npm
+          cache-dependency-path: benchmark-source/package-lock.json
+      - name: Install frozen dependencies
+        working-directory: benchmark-source
+        run: npm ci
+      - name: Validate workflow and unchanged shell surfaces
+        run: |
+          git diff --check "$(git hash-object -t tree /dev/null)" HEAD
+          git grep -Ilz '^#!.*bash' -- . | xargs -0 -r -n1 bash -n
+          git grep -Ilz '^#!.*bash' -- . | xargs -0 -r shellcheck
+          docker run --rm -v "${PWD}:/repo:ro" --workdir /repo rhysd/actionlint:1.7.12 -color .github/workflows/*.yml
+      - name: Record baseline and matched test manifest
+        run: node .github/benchmarks/fixture/prepare.js control
+      - name: Validate baseline Node and preflight gates
+        working-directory: benchmark-source
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run typecheck:analytics-worker
+          npm run test:claude-preflight
+      - name: Run baseline with two workers and coverage
+        id: control
+        continue-on-error: true
+        run: python3 .github/benchmarks/fixture/run.py control
+      - name: Apply bounded candidate overlay
+        run: |
+          cp test/helpers/repository.ts benchmark-source/test/helpers/repository.ts
+          cp test/helpers/repository-runtime.js benchmark-source/test/helpers/repository-runtime.js
+          cp tsconfig.json benchmark-source/tsconfig.json
+          cp docs/testing.md benchmark-source/docs/testing.md
+      - name: Record candidate and validate matched controls
+        run: node .github/benchmarks/fixture/prepare.js candidate
+      - name: Validate candidate Node and preflight gates
+        working-directory: benchmark-source
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run typecheck:analytics-worker
+          npm run test:claude-preflight
+      - name: Run candidate with two workers and coverage
+        id: candidate
+        continue-on-error: true
+        run: python3 .github/benchmarks/fixture/run.py candidate
+      - name: Compare test outcomes, ordering and reports
+        if: ${{ !cancelled() && steps.control.outcome != 'skipped' && steps.candidate.outcome != 'skipped' }}
+        run: python3 .github/benchmarks/fixture/compare.py
+      - name: Compare effective raw V8 coverage
+        if: ${{ !cancelled() && steps.control.outcome != 'skipped' && steps.candidate.outcome != 'skipped' }}
+        run: node .github/benchmarks/fixture/effective-v8.js
+      - name: Require successful coverage commands
+        if: ${{ !cancelled() && (steps.control.outcome != 'success' || steps.candidate.outcome != 'success') }}
+        run: exit 1
+      - name: Package retained evidence
+        if: ${{ always() }}
+        run: |
+          if [ -d "$PERF_EVIDENCE" ]; then
+            tar -czf "$RUNNER_TEMP/fixture-comparison.tar.gz" -C "$RUNNER_TEMP" fixture-comparison
+            sha256sum "$RUNNER_TEMP/fixture-comparison.tar.gz" > "$RUNNER_TEMP/fixture-comparison.sha256"
+          fi
+      - name: Upload retained evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: fixture-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/fixture-comparison.tar.gz
+            ${{ runner.temp }}/fixture-comparison.sha256
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 0
