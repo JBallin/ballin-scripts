@@ -102,7 +102,6 @@ const runUninstallCommand = (): void => {
   fs.rmSync(repoDir, { recursive: true, force: true });
 
   if (remainingOwnedLinks.length > 0 || unverifiedLinkPaths.length > 0) {
-    writeStdoutLine();
     writeStdoutLine('Removed the local checkout, but symlink cleanup is incomplete.');
     if (remainingOwnedLinks.length > 0) {
       process.stderr.write('Uninstall incomplete: these Ballin-owned links remain:\n');

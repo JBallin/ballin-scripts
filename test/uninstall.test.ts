@@ -199,7 +199,7 @@ fs[operation] = (currentPath, ...args) => {
     assert.equal(result.status, 1, result.stderr);
     assert.equal(
       result.stdout,
-      "\nRemoved the local checkout, but symlink cleanup is incomplete.\n",
+      "Removed the local checkout, but symlink cleanup is incomplete.\n",
     );
     assert.include(result.stderr, `unlinkSync failed for ${linkPath}`);
     assert.include(result.stderr, 'Uninstall incomplete: these Ballin-owned links remain:');
@@ -226,7 +226,7 @@ fs[operation] = (currentPath, ...args) => {
     assert.equal(result.status, 1, result.stderr);
     assert.equal(
       result.stdout,
-      "\nRemoved the local checkout, but symlink cleanup is incomplete.\n",
+      "Removed the local checkout, but symlink cleanup is incomplete.\n",
     );
     assert.include(result.stderr, `lstatSync failed for ${linkPath}`);
     assert.include(result.stderr, 'These candidate Ballin link paths could not be inspected:');
