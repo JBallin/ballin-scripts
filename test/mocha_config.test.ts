@@ -53,7 +53,7 @@ describe('default full-run ordering', () => {
   let optionsPath: string;
   let preloadPath: string;
   type Observation = { name: string; worker?: string; pid: number; config: string };
-  const names = ['a.test.ts', 'b.test.ts', 'repository_backup.test.ts', 'utility.ts', 'z.test.ts'];
+  const names = ['quickstart.test.ts', 'a.test.ts', 'b.test.ts', 'repository_backup.test.ts', 'utility.ts', 'z.test.ts'];
   const nativeNames = (): string[] => require('mocha/lib/cli').lookupFiles(path.join(root, 'test'), ['ts']).map((file: string) => path.basename(file));
   const observations = (): Observation[] => fs.readFileSync(tracePath, 'utf8').trim().split('\n').map((line: string) => JSON.parse(line));
   const options = (): { jobs: number; spec?: string[] } => JSON.parse(fs.readFileSync(optionsPath, 'utf8'));
@@ -125,10 +125,10 @@ describe('default full-run ordering', () => {
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
-  it('queues lifecycle first with every native default file exactly once and safely reuses workers', () => {
+  it('queues lifecycle then Quickstart with every native file once and safely reuses workers', () => {
     const observed = assertResult(run(4), names.length);
     assert.deepEqual(options(), { jobs: 2, spec: [
-      'test/repository_backup.test.ts', ...nativeNames().filter((name) => name !== 'repository_backup.test.ts').map((name) => path.join('test', name)),
+      'test/repository_backup.test.ts', 'test/quickstart.test.ts', ...nativeNames().filter((name) => !['repository_backup.test.ts', 'quickstart.test.ts'].includes(name)).map((name) => path.join('test', name)),
     ] });
     assert.equal(observed.find(({ name }) => name === 'repository_backup.test.ts')?.worker, '0');
     assert.equal(new Set(observed.map(({ pid }) => pid)).size, 2);
@@ -160,10 +160,15 @@ describe('default full-run ordering', () => {
     assert.equal(observed[0].name, 'b.test.ts');
     assert.isUndefined(observed[0].worker);
   });
+  it('does not invent a missing Quickstart file', () => {
+    fs.unlinkSync(path.join(root, 'test', 'quickstart.test.ts'));
+    assertResult(run(4), names.length - 1);
+    assert.deepEqual(options().spec, ['test/repository_backup.test.ts', ...nativeNames().filter((name) => name !== 'repository_backup.test.ts').map((name) => path.join('test', name))]);
+  });
   it('does not invent or duplicate a missing lifecycle file', () => {
     fs.unlinkSync(path.join(root, 'test', 'repository_backup.test.ts'));
     assertResult(run(4), names.length - 1);
-    assert.deepEqual(options().spec, nativeNames().map((name) => path.join('test', name)));
+    assert.deepEqual(options().spec, ['test/quickstart.test.ts', ...nativeNames().filter((name) => name !== 'quickstart.test.ts').map((name) => path.join('test', name))]);
   });
   it('retains a failing default-run result and the remaining test cases', () => {
     assertResult(run(4, [], { MOCHA_ORDER_FAIL: 'repository_backup.test.ts' }), names.length, 1);
