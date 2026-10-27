@@ -197,21 +197,29 @@ esac
     assert.include(result.stdout, '\nValidated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n');
   });
 
-  for (const existing of [false, true]) {
-    it(`keeps the banner before Git output and separates typed setup (${existing ? 'update' : 'clone'})`, () => {
-      installBaseCommands();
-      if (existing) writeCurrentCheckout();
-      const tool = path.join(toolDir, existing ? 'node' : 'git');
-      const marker = existing ? '    exit "$FAKE_REPO_UPDATE_STATUS"' : '    exit "$FAKE_GIT_CLONE_STATUS"';
-      fs.writeFileSync(tool, fs.readFileSync(tool, 'utf8').replace(marker, '    printf \'Git output fixture.\\n\'\n' + marker));
-      const node = path.join(toolDir, 'node');
-      fs.writeFileSync(node, fs.readFileSync(node, 'utf8').replace('    exit "$FAKE_SETUP_STATUS"', '    printf \'Typed setup fixture.\\n\'\n    exit "$FAKE_SETUP_STATUS"'));
-      const result = runInstall();
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.isTrue(result.stdout.startsWith("==> Setting up Ballin\n"), result.stdout);
-      assert.include(result.stdout, `Git output fixture.\nTyped setup fixture.\n\n${terminalGuidance}\n`);
-      assert.equal(result.stdout.split('Setup complete!').length - 1, 1);
-    });
+  for (const scenario of ['clone', 'refresh', 'initial configuration']) {
+    for (const noColor of [false, true]) {
+      it(`keeps exactly one separator before setup after ${scenario} (NO_COLOR: ${noColor})`, () => {
+        const existing = scenario !== 'clone';
+        installBaseCommands();
+        if (existing) writeCurrentCheckout();
+        if (scenario === 'initial configuration') fs.unlinkSync(path.join(repoDir, 'ballin.config.json'));
+        const tool = path.join(toolDir, existing ? 'node' : 'git');
+        const marker = existing ? '    exit "$FAKE_REPO_UPDATE_STATUS"' : '    exit "$FAKE_GIT_CLONE_STATUS"';
+        fs.writeFileSync(tool, fs.readFileSync(tool, 'utf8').replace(marker, '    printf \'Git output fixture.\\n\'\n' + marker));
+        const node = path.join(toolDir, 'node');
+        fs.writeFileSync(node, fs.readFileSync(node, 'utf8').replace('    exit "$FAKE_SETUP_STATUS"', '    printf \'Typed setup fixture.\\n\'\n    exit "$FAKE_SETUP_STATUS"'));
+        const result = runInstall({ env: noColor ? { NO_COLOR: '1' } : {} });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.isTrue(result.stdout.startsWith("==> Setting up Ballin\n"), result.stdout);
+        const separator = scenario === 'initial configuration'
+          ? `\nInitial configuration\n${docsUrl}#what-will-installation-change\n`
+          : existing ? '' : '\n';
+        assert.include(result.stdout, `Git output fixture.\n${separator}Typed setup fixture.\n\n${terminalGuidance}\n`);
+        assert.notInclude(result.stdout, '\n\n\n');
+        assert.equal(result.stdout.split('Setup complete!').length - 1, 1);
+      });
+    }
   }
 
   it('clones a missing checkout and delegates fresh setup to typed code', () => {

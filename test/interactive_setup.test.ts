@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { createSandbox, cleanupSandbox, runSandbox, sandboxSuiteTimeout } = require('./helpers/onboarding.ts');
+const { createSandbox, cleanupSandbox, runSandbox, resetRemote, sandboxSuiteTimeout } = require('./helpers/onboarding.ts');
 const { selectScenario } = require('./helpers/sandbox_scenarios.ts');
 const { runInteractiveSetup } = require('./helpers/interactive_setup.ts');
 import type { Sandbox } from './helpers/onboarding.ts';
@@ -57,6 +57,10 @@ describe('interactive setup with delayed terminal answers', function() {
         { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
+      const output = result.stdout.replace(/\r\n/gu, '\n');
+      assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created');
+      assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nEnable tab completion in ');
+      assert.notInclude(output, '\n\n\n');
       assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(result.stdout.split(backupAnswers[1].prompt).length - 1, 1, 'Quickstart selects the host once');
@@ -83,6 +87,79 @@ describe('interactive setup with delayed terminal answers', function() {
       assertInitializedOnly();
     });
   }
+
+  for (const scenario of ['quiet', 'migration', 'unconfigured', 'backup', 'migrated backup']) {
+    for (const fetchOutput of [false, true]) {
+      it(`separates real refresh output for ${scenario} (fetch output: ${fetchOutput})`, () => {
+        sandbox = createSandbox();
+        fs.mkdirSync(sandbox.repo);
+        for (const name of ['commands', 'config', 'bin', 'completions', 'package.json']) {
+          fs.cpSync(path.join(sandbox.source, name), path.join(sandbox.repo, name), { recursive: true });
+        }
+        const backup = scenario.includes('backup');
+        const migration = scenario === 'migration' || scenario === 'migrated backup';
+        if (scenario !== 'unconfigured') {
+          const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'config/.defaultConfig.json'), 'utf8'));
+          delete config.backup.repository;
+          delete config.backup.includeSensitive;
+          if (backup) {
+            resetRemote(sandbox, true);
+            config.backup.repository = { host: 'github.com', id: 'R_fixture', ownerId: 'U_fixture', name: 'ballin-backups', branch: 'main' };
+            config.backup.includeSensitive = 'false';
+          }
+          if (migration) delete config.update;
+          fs.writeFileSync(path.join(sandbox.repo, 'ballin.config.json'), JSON.stringify(config));
+        }
+        const progress = 'remote: Enumerating objects: 3, done.\n';
+        if (fetchOutput) {
+          const git = path.join(sandbox.tools, 'git');
+          const stub = fs.readFileSync(git, 'utf8').replace("if (args[0] === 'fetch' &&",
+            `if (args[0] === 'fetch') process.stderr.write(${JSON.stringify(progress)});\n  if (args[0] === 'fetch' &&`);
+          fs.writeFileSync(git, stub);
+          sandbox.expected.set(git, stub);
+        }
+        const answers = scenario === 'unconfigured' ? [
+          { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
+          { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
+          { prompt: 'Enable tab completion in ', answer: 'n' },
+          { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'n' },
+        ] : [];
+        const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], answers, 'bash', { term: 'dumb', columns: 240 });
+        assert.isUndefined(result.error, result.stderr);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        const output = result.stdout.replace(/\r\n/gu, '\n');
+        const update = '==> Updating Ballin\n' + (fetchOutput ? progress : '');
+        const docs = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
+        const summary = 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n';
+        if (migration) {
+          assert.include(output, update + '\n🙌 New configuration options have been added! Here are the updates:\n');
+          if (backup) assert.include(output, `${docs}#what-installation-changes\n\n${summary}`);
+          else assert.include(output, `${docs}#what-installation-changes\n\n😎 Setup complete!`);
+        } else if (backup) assert.include(output, update + '\n' + summary);
+        else if (scenario === 'quiet') assert.include(output, update + '\n😎 Setup complete!');
+        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\n⚙️  Created`);
+        assert.notInclude(output, '\n\n\n');
+      });
+    }
+  }
+
+  it('keeps clone and onboarding spacing in a plain terminal', () => {
+    sandbox = createSandbox();
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], [
+      { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+      { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
+      { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
+      { prompt: 'Enable tab completion in ', answer: 'n' },
+      { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'n' },
+    ], 'bash', { term: 'dumb' });
+    assert.isUndefined(result.error, result.stderr);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const output = result.stdout.replace(/\r\n/gu, '\n');
+    assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created');
+    assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nWhich Bash startup file does your terminal read? ');
+    assert.notInclude(output, '\x1b[');
+    assert.notInclude(output, '\n\n\n');
+  });
 
   for (const shell of ['bash', 'zsh'] as const) {
     for (const acceptBackup of [false, true]) {
