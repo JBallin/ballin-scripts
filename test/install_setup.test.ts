@@ -831,7 +831,7 @@ exit 2
       });
 
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Analytics details: https://example.test/analytics\n' + analyticsPrompt);
+      assert.include(result.stdout, 'Analytics details:\nhttps://example.test/analytics\n' + analyticsPrompt);
       assert.include(result.stdout, analyticsPrompt);
       assert.notInclude(result.stdout, 'Usage analytics are currently');
       assert.equal(readRepoConfig().analytics.enabled, String(enabled));

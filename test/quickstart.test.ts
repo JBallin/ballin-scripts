@@ -2222,7 +2222,7 @@ system_sudo=fixture_sudo
         ...(inherited === undefined ? {} : { GH_NO_UPDATE_NOTIFIER: inherited }),
       }, home, 'exec 2>&1', 'y\n', 'gh --version');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, '✓ Logged in as fixture-user\n\n==> Installing Ballin\n');
+      assert.include(result.stdout, '✓ Logged in as fixture-user\n==> Installing Ballin\n');
       const events = readLog().split('\n').filter(line => line.startsWith('gh-notifier:'));
       assert.deepEqual(events.filter(line => line.startsWith('gh-notifier:auth login ')), [
         'gh-notifier:auth login --hostname github.com --git-protocol https --web:1',
@@ -2799,7 +2799,7 @@ Proceed with installation? [y/N] `);
     });
   }
   for (const preceding of ['early choice', 'prerequisites', 'PATH consent', 'PATH warning', 'authentication', 'backups skipped']) {
-    it(`separates installer output only after Quickstart output: ${preceding}`, () => {
+    it(`hands off to the installer without an extra blank line after: ${preceding}`, () => {
       const installed = run();
       assert.equal(installed.status, 0, installed.stdout + installed.stderr);
       const overrides: NodeJS.ProcessEnv = { PATH: `${tools}:${path.join(home, '.local/bin')}` };
@@ -2825,8 +2825,8 @@ Proceed with installation? [y/N] `);
         }[preceding];
         assert.include(result.stdout, previous);
         assert.isBelow(result.stdout.indexOf(previous), result.stdout.indexOf(banner));
-        const separator = ['early choice', 'prerequisites', 'authentication', 'backups skipped'].includes(preceding) ? '\n' : '\n\n';
-        assert.include(result.stdout, separator + banner);
+        assert.include(result.stdout, '\n' + banner);
+        assert.notInclude(result.stdout, '\n\n' + banner);
       }
       assert.equal(result.stdout.split('Setup complete!').length - 1, preceding === 'PATH warning' ? 0 : 1);
     });
@@ -3356,6 +3356,9 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.isUndefined(JSON.parse(previousConfig).backup.repository);
         const result = runSandbox(sandbox, ['quickstart'], `yes\n\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.include(result.stdout, '\n==> Updating Ballin\n');
+        assert.notInclude(result.stdout, '\n\n==> Updating Ballin\n');
+        assert.notInclude(result.stdout, 'Analytics details:');
         assert.lengthOf(result.stdout.match(/Create a new backup or reconnect to an existing one\?/gu) ?? [], 1);
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]', result.stdout + result.stderr);

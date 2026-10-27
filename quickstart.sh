@@ -729,7 +729,6 @@ install_gh() {
 
 path_incomplete() {
   path_setup_complete=false
-  installer_separator=true
   printf '\nPersistent PATH setup incomplete: %s\n' "$1" >&2
   printf 'The startup file was left unchanged. Setup can continue with the helper PATH.\n' >&2
   printf 'Review your shell startup and PATH setup, or rerun this quickstart to retry.\n' >&2
@@ -824,7 +823,6 @@ configure_path() {
       if [[ "${ZDOTDIR:-}" == /* && "$ZDOTDIR" != *$'\n'* && "$ZDOTDIR" != *$'\r'* ]]; then
         default_directory="$ZDOTDIR"
       fi
-      installer_separator=true
       if [[ "$default_directory" == "$HOME" ]]; then
         printf 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: '
       else
@@ -848,7 +846,6 @@ configure_path() {
       profile="$HOME/.bashrc"
       if check_existing_path; then return; fi
       profile="$login_profile"
-      installer_separator=true
       printf 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] '
       read_prompt_answer || prompt_answer=''
       choice=$prompt_answer
@@ -935,7 +932,7 @@ configure_path() {
 }
 
 main() {
-  local approved_root='' approved_command='' approved_snapshot='' exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true installer_separator=false selected_profile='' backup_hostname=''
+  local approved_root='' approved_command='' approved_snapshot='' exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true selected_profile='' backup_hostname=''
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -1024,7 +1021,6 @@ main() {
   [[ -n "$node_tool" ]] || need_node=true
   [[ "$backup_choice" != yes || -n "$gh_tool" ]] || need_gh=true
   if "$need_git" || "$need_node" || "$need_gh"; then
-    installer_separator=true
     prerequisite_names=''
     prerequisite_list=()
     if "$need_git"; then
@@ -1174,7 +1170,6 @@ main() {
     "$gh_tool" auth status --active --hostname "$backup_hostname" >/dev/null 2>&1 || auth_status=$?
     if [[ "$auth_status" == 130 || "$auth_status" == 143 ]]; then exit "$auth_status"; fi
     if [[ "$auth_status" != 0 ]]; then
-      installer_separator=true
       phase 'Signing in to GitHub'
       printf '$ gh auth login --hostname %s --git-protocol https --web\n' "$backup_hostname"
       GH_NO_UPDATE_NOTIFIER=1 "$gh_tool" auth login --hostname "$backup_hostname" --git-protocol https --web
@@ -1182,8 +1177,6 @@ main() {
   fi
   repo="$HOME/.ballin-scripts"
   download 'https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh' "$scratch/install.sh"
-  # Separate prior Quickstart output while keeping quiet reruns flush.
-  if "$installer_separator"; then printf '\n'; fi
   # Keep startup hooks from replacing the tools qualified above.
   result_file="$scratch/installation-result"
   printf 'pending\n' > "$result_file"

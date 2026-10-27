@@ -101,6 +101,8 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const output = result.stdout.replace(/\r\n/gu, '\n');
     assert.include(output, `Enable tab completion in ~/.bash_profile? [y/N] y\n\n😎 Setup complete!`);
+    assert.include(output, 'Proceed with installation? [y/N] y\n\x1b[34m==>\x1b[1;39m Installing Ballin\x1b[0m\n');
+    assert.include(output, '⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n\nAnalytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\nShare usage analytics to help improve Ballin? [y/N] n\n\nEnable tab completion in ');
     assert.notInclude(output, '\n\n\n');
     assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
   });
