@@ -144,6 +144,7 @@ ${afterMain}
       FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source,
       FAKE_SYSTEM_NODE: systemNode, TEST_NODE_RUNTIME: process.execPath, ...overrides,
       FAKE_PRIVILEGED_HELPER: path.join(__dirname, 'helpers/quickstart_privileged.ts'),
+      FAKE_CLT_PRIVILEGED_HELPER: path.join(__dirname, 'helpers/quickstart_clt_privileged.ts'),
     }),
   });
   };
@@ -197,9 +198,15 @@ case "$name" in
     printf '%s\\n' "$FAKE_BREW_PREFIX" ;;
   softwareupdate)
     [[ "$*" == --list ]] || exit 97
+    [[ -f "$FAKE_ROOT/clt-marker" ]] || exit 96
+    printf '  * Label: macOS 27.0.1-26B42\\n'
     case "\${FAKE_CLT_MODE:-fallback}:$1" in
       terminal:--list|failed:--list|unusable:--list|interrupt:--list)
         printf '  * Label: Command Line Tools for Xcode-16.4\\n' ;;
+      observed:--list)
+        printf '  * Label: Command Line Tools for Xcode 27.0-27.0\\n' ;;
+      lookalike:--list)
+        printf '  * Label: Command Line Tools for Xcode-malformed\\n' ;;
       ambiguous:--list)
         printf '  * Label: Command Line Tools for Xcode-16.3\\n  * Label: Command Line Tools for Xcode-16.4\\n' ;;
       *:--list) ;;
@@ -313,7 +320,8 @@ case "$name" in
     else printf 'Developer ID Installer: Node.js Foundation (HX7739G8FX)\\n'; fi ;;
   sudo)
     if [[ "$1" == "$FAKE_ROOT/tools/softwareupdate" ]]; then
-      [[ "$2" == --install && "$3" == 'Command Line Tools for Xcode-16.4' && $# == 3 ]] || exit 97
+      [[ "$2" == --install && ( "$3" == 'Command Line Tools for Xcode-16.4' || "$3" == 'Command Line Tools for Xcode 27.0-27.0' ) && $# == 3 ]] || exit 97
+      [[ -f "$FAKE_ROOT/clt-marker" || -f "$FAKE_ROOT/clt-cleaned" ]] || exit 96
       case "\${FAKE_CLT_MODE:-}" in
         failed) exit 42 ;;
         interrupt) exit 130 ;;
@@ -321,6 +329,9 @@ case "$name" in
       esac
       touch "$FAKE_ROOT/git-installed"
       exit 0
+    fi
+    if [[ "\${7:-}" == ballin-clt-discovery ]]; then
+      exec "$TEST_NODE_RUNTIME" "$FAKE_CLT_PRIVILEGED_HELPER" "$@"
     fi
     exec "$TEST_NODE_RUNTIME" "$FAKE_PRIVILEGED_HELPER" "$@" ;;
   ditto)
@@ -2493,8 +2504,124 @@ main
       if (mode === 'unusable') assert.include(result.stderr, 'Git is still unavailable.');
       if (mode === 'ambiguous') {
         assert.include(result.stdout, 'Open the graphical Xcode Command Line Tools installer? [y/N]');
-        assert.notInclude(readLog(), 'sudo:');
+        assert.notInclude(readLog(), ' --install Command Line Tools');
       }
+    });
+  }
+  const assertCltCleaned = (): void => {
+    assert.isFalse(fs.existsSync(path.join(root, 'clt-marker')));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')).filter((name: string) => name.startsWith('ballin-clt.')), []);
+  };
+  it('discovers the observed macOS 27 CLT label only while the marker exists', () => {
+    const result = run('y\nhome\ny\nn\n', { FAKE_GIT: 'missing', FAKE_CLT_MODE: 'observed', FAKE_RAW_INPUT: '1' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const commands = readLog();
+    assert.include(commands, 'clt-marker-present-during-list');
+    assert.include(commands, ' --install Command Line Tools for Xcode 27.0-27.0');
+    assert.isBelow(commands.indexOf('clt-rm:-f --'), commands.indexOf(' --install Command Line Tools'));
+    assert.notInclude(commands, '--install macOS');
+    assertCltCleaned();
+  });
+  for (const mode of ['fallback', 'ambiguous', 'lookalike']) {
+    it(`cleans CLT discovery before manual fallback for ${mode}`, () => {
+      const result = run('y\nn\n', { FAKE_GIT: 'missing', FAKE_CLT_MODE: mode, FAKE_RAW_INPUT: '1' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, mode === 'ambiguous' ? 'Apple listed 2 Xcode Command Line Tools downloads' : 'No Xcode Command Line Tools download was listed');
+      assert.include(result.stdout, 'Open the graphical Xcode Command Line Tools installer?');
+      assert.notInclude(readLog(), ' --install Command Line Tools');
+      assert.notInclude(readLog(), '--install macOS');
+      assertCltCleaned();
+    });
+  }
+  for (const mode of ['terminal', 'fallback', 'failure', 'interrupt']) {
+    it(`leaves a preexisting CLT marker unchanged after ${mode} discovery`, () => {
+      const marker = path.join(root, 'clt-marker');
+      fs.writeFileSync(marker, 'another installer\n', { mode: 0o640 });
+      const before = fs.statSync(marker);
+      const result = run(mode === 'terminal' ? 'y\nhome\ny\nn\n' : 'y\nn\n', {
+        FAKE_GIT: 'missing', FAKE_CLT_MODE: mode, FAKE_RAW_INPUT: '1',
+        ...(mode === 'failure' ? { FAKE_CLT_DISCOVERY_RESULT: '42' } : {}),
+        ...(mode === 'interrupt' ? { FAKE_CLT_DISCOVERY_RESULT: 'TERM' } : {}),
+      });
+      assert.equal(result.status, mode === 'terminal' ? 0 : mode === 'interrupt' ? 143 : 1, result.stdout + result.stderr);
+      assert.equal(fs.readFileSync(marker, 'utf8'), 'another installer\n');
+      const after = fs.statSync(marker);
+      assert.equal(after.ino, before.ino); assert.equal(after.mode, before.mode); assert.equal(after.mtimeMs, before.mtimeMs);
+      assert.notInclude(readLog(), 'clt-link:'); assert.notInclude(readLog(), 'clt-rm:');
+    });
+  }
+  for (const kind of ['directory', 'symlink']) {
+    it(`refuses a preexisting CLT marker ${kind} without changing it`, () => {
+      const marker = path.join(root, 'clt-marker');
+      const target = path.join(root, 'untouched');
+      fs.writeFileSync(target, 'untouched\n');
+      if (kind === 'directory') fs.mkdirSync(marker); else fs.symlinkSync(target, marker);
+      const result = run('y\nn\n', { FAKE_GIT: 'missing', FAKE_RAW_INPUT: '1' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Terminal download list could not be checked');
+      assert.notInclude(readLog(), 'clt-softwareupdate:'); assert.notInclude(readLog(), 'clt-rm:');
+      assert.equal(fs.readFileSync(target, 'utf8'), 'untouched\n');
+      assert.equal(fs.lstatSync(marker).isDirectory(), kind === 'directory');
+      if (kind === 'symlink') assert.equal(fs.readlinkSync(marker), target);
+    });
+  }
+  for (const resultCode of ['42', '129', '130', '143', 'HUP', 'INT', 'TERM']) {
+    it(`cleans the CLT marker after discovery result ${resultCode}`, () => {
+      const result = run('y\nn\n', {
+        FAKE_GIT: 'missing', FAKE_CLT_MODE: 'terminal', FAKE_RAW_INPUT: '1', FAKE_CLT_DISCOVERY_RESULT: resultCode,
+      });
+      const expected = { '42': 1, '129': 129, '130': 130, '143': 143, HUP: 129, INT: 130, TERM: 143 }[resultCode];
+      assert.equal(result.status, expected, result.stdout + result.stderr);
+      assertCltCleaned();
+      assert.notInclude(readLog(), ' --install Command Line Tools');
+      assert.notInclude(readLog(), 'xcode-select:--install');
+      if (resultCode === '42') assert.include(result.stdout, 'Terminal download list could not be checked (status 42)');
+      else assert.notInclude(result.stdout, 'Open the graphical');
+    });
+  }
+  for (const signal of ['SIGHUP', 'SIGINT', 'SIGTERM']) {
+    it(`cleans the CLT marker on ${signal} immediately after linking it`, () => {
+      const result = run('y\n', { FAKE_GIT: 'missing', FAKE_RAW_INPUT: '1', FAKE_CLT_CANCEL_AFTER_LINK: signal });
+      assert.equal(result.status, { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 }[signal], result.stdout + result.stderr);
+      assertCltCleaned();
+      assert.notInclude(readLog(), 'clt-softwareupdate:');
+      assert.notInclude(result.stdout, 'Open the graphical');
+    });
+  }
+  for (const failure of ['mktemp', 'link', 'race']) {
+    it(`handles CLT marker creation failure at ${failure} without installing anything`, () => {
+      const result = run('y\nn\n', { FAKE_GIT: 'missing', FAKE_RAW_INPUT: '1', FAKE_CLT_CREATE_FAIL: failure });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Terminal download list could not be checked');
+      assert.notInclude(readLog(), 'clt-softwareupdate:');
+      if (failure === 'race') assert.equal(fs.readFileSync(path.join(root, 'clt-marker'), 'utf8'), 'another installer\n');
+      else assertCltCleaned();
+      assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+    });
+  }
+  it('does not remove a different CLT marker that replaces the owned entry', () => {
+    const result = run('y\nn\n', { FAKE_GIT: 'missing', FAKE_RAW_INPUT: '1', FAKE_CLT_REPLACE_MARKER: '1' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(path.join(root, 'clt-marker'), 'utf8'), 'replacement marker\n');
+    assert.notInclude(readLog(), 'clt-rm:-f');
+    assert.deepEqual(fs.readdirSync(path.join(root, 'tmp')), []);
+  });
+  it('reports CLT marker cleanup failure and offers recovery before installation', () => {
+    const result = run('y\nn\n', {
+      FAKE_GIT: 'missing', FAKE_CLT_MODE: 'terminal', FAKE_RAW_INPUT: '1', FAKE_CLT_CLEANUP_FAIL: '1',
+    });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'Could not remove the temporary CLT discovery marker at ' + path.join(root, 'clt-marker'));
+    assert.include(result.stdout, 'Terminal download list could not be checked');
+    assert.isTrue(fs.existsSync(path.join(root, 'clt-marker')));
+    assert.notInclude(readLog(), ' --install Command Line Tools');
+  });
+  for (const status of ['1', '130', '143']) {
+    it(`handles denied or cancelled sudo (${status}) before CLT marker creation`, () => {
+      const result = run('y\nn\n', { FAKE_GIT: 'missing', FAKE_RAW_INPUT: '1', FAKE_CLT_SUDO_STATUS: status });
+      assert.equal(result.status, status === '1' ? 1 : Number(status), result.stdout + result.stderr);
+      assertCltCleaned();
+      assert.notInclude(readLog(), 'clt-link:'); assert.notInclude(readLog(), 'clt-softwareupdate:');
     });
   }
   it('keeps the bootstrap Node.js release line aligned with .nvmrc', () => {

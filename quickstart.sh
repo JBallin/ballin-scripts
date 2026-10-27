@@ -545,21 +545,73 @@ check_ballin_command() {
   fi
 }
 
+# Keep marker creation and cleanup in one clean privileged process. A private
+# hard-link anchor identifies our marker even if discovery fails or is cancelled.
+list_command_line_tools() {
+  # shellcheck disable=SC2016 # Expand only in the clean privileged shell.
+  "$system_sudo" /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c '
+    set -euo pipefail
+    umask 077
+    marker=/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+    stage=""
+    cleanup_marker() {
+      local status=$?
+      trap "" HUP INT TERM
+      if [[ -n "$stage" ]]; then
+        if [[ "$marker" -ef "$stage/marker" ]]; then
+          /bin/rm -f -- "$marker" || {
+            printf "Quickstart: Could not remove the temporary CLT discovery marker at %s.\n" "$marker" >&2
+            [[ "$status" != 0 ]] || status=1
+          }
+        fi
+        /bin/rm -rf -- "$stage" || { [[ "$status" != 0 ]] || status=1; }
+      fi
+      exit "$status"
+    }
+    trap cleanup_marker EXIT
+    trap "exit 129" HUP
+    trap "exit 130" INT
+    trap "exit 143" TERM
+    if [[ -e "$marker" || -L "$marker" ]]; then
+      [[ -f "$marker" && ! -L "$marker" ]] || exit 1
+    else
+      stage=$(/usr/bin/mktemp -d /tmp/ballin-clt.XXXXXX)
+      : > "$stage/marker"
+      # link(1) creates exactly this entry, refusing any existing destination.
+      # Unlike ln, it never treats an existing directory as a target directory.
+      /bin/link "$stage/marker" "$marker"
+    fi
+    /usr/sbin/softwareupdate --list
+  ' ballin-clt-discovery
+}
+
 install_command_line_tools() {
   phase 'Installing Xcode Command Line Tools'
-  local updates='' label='' status=0
-  updates=$(probe_tool "$system_softwareupdate" --list) || status=$?
-  stop_if_interrupted "$status"
+  local updates='' label='' status=0 candidates=0
+  updates=$(list_command_line_tools) || status=$?
+  case "$status" in 129|130|143) exit "$status" ;; esac
   if [[ "$status" == 0 ]]; then
     # Use only an unambiguous Apple-provided label, never a macOS upgrade.
-    label=$(printf '%s\n' "$updates" | awk '/^[[:space:]]*\* Label: Command Line Tools for Xcode/ { sub(/^[[:space:]]*\* Label: /, ""); labels[++n]=$0 } END { if (n == 1) print labels[1] }')
+    local labels
+    labels=$(printf '%s\n' "$updates" | awk '/^[[:space:]]*\* Label: Command Line Tools for Xcode[- ][0-9]/ { sub(/^[[:space:]]*\* Label: /, ""); print }')
+    while IFS= read -r label; do
+      [[ -z "$label" ]] || candidates=$(( candidates + 1 ))
+    done <<< "$labels"
+    label=''
+    [[ "$candidates" != 1 ]] || label="$labels"
   fi
   if [[ -n "$label" ]]; then
     printf '$ sudo softwareupdate --install "%s"\n' "$label"
     probe_tool "$system_sudo" "$system_softwareupdate" --install "$label" \
       || fail 'Xcode Command Line Tools installation failed. Inspect the output, finish installation manually, then rerun Quickstart.'
   else
-    printf 'No single Xcode Command Line Tools download was available in Terminal.\n'
+    if [[ "$status" != 0 ]]; then
+      printf "Apple’s Terminal download list could not be checked (status %s).\n" "$status"
+    elif [[ "$candidates" == 0 ]]; then
+      printf 'No Xcode Command Line Tools download was listed in Terminal.\n'
+    else
+      printf 'Apple listed %s Xcode Command Line Tools downloads; choose a version manually.\n' "$candidates"
+    fi
     printf "Use Apple's graphical installer, or install the tools manually and rerun Quickstart.\n"
     if ! confirm 'Open the graphical Xcode Command Line Tools installer?'; then
       "$input_ended" && fail 'No answer received. Xcode Command Line Tools were not installed.'
