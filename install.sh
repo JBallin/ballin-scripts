@@ -193,7 +193,7 @@ if [ "$repo_existed" = false ]; then
     printf 'Installation will:\n'
     printf '  - Create Ballin and its settings in %s.\n' "$(display_path "$repo_dir")"
     printf '  - Link the ballin command at %s.\n' "$(display_path "$command_target")"
-    printf 'Installation details: %s#what-will-installation-change\n' "$docs_url"
+    printf 'Installation details:\n%s#what-will-installation-change\n' "$docs_url"
   fi
   if ! "$install_approved" && ! confirm 'Proceed with installation?'; then
     if "$input_ended"; then

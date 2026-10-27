@@ -2494,7 +2494,8 @@ main
   - Create Ballin and its settings in ~/.ballin-scripts.
   - Link the ballin command at ~/.local/bin/ballin.
 Administrator access is required.
-Installation details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
+Installation details:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
 Proceed with installation? [y/N] `);
     assert.notInclude(result.stdout, 'graphical');
     assert.notInclude(result.stdout, 'verified official');
