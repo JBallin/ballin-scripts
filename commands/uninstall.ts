@@ -73,8 +73,6 @@ const runUninstallCommand = (): void => {
   const remainingOwnedLinks: string[] = [];
   const unverifiedLinkPaths: string[] = [];
 
-  writeStdoutLine();
-
   if (commandExists('brew')) {
     const brewPrefix = readCommandOutput('brew', ['--prefix'])?.trim();
     if (brewPrefix) {
@@ -104,6 +102,7 @@ const runUninstallCommand = (): void => {
   fs.rmSync(repoDir, { recursive: true, force: true });
 
   if (remainingOwnedLinks.length > 0 || unverifiedLinkPaths.length > 0) {
+    writeStdoutLine();
     writeStdoutLine('Removed the local checkout, but symlink cleanup is incomplete.');
     if (remainingOwnedLinks.length > 0) {
       process.stderr.write('Uninstall incomplete: these Ballin-owned links remain:\n');
@@ -130,6 +129,7 @@ const runUninstallCommand = (): void => {
 
   writeStdoutLine('Removed ~/.ballin-scripts and the ballin command links.');
   writeStdoutLine('Other tools and shell settings were left unchanged.');
+  writeStdoutLine();
   writeStdoutLine('Removal details:');
   writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall');
 };
