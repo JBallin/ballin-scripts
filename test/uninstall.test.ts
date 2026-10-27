@@ -146,7 +146,7 @@ fs[operation] = (currentPath, ...args) => {
     const result = runUninstall();
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "\nRemoved ~/.ballin-scripts and the ballin command links.\nOther tools and shell settings were left unchanged.\nRemoval details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall\n");
+    assert.equal(result.stdout, "Removed ~/.ballin-scripts and the ballin command links.\nOther tools and shell settings were left unchanged.\n\nRemoval details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall\n");
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isTrue(fs.statSync(path.join(userBin, 'unrelated-file')).isFile());
     assert.isTrue(fs.lstatSync(path.join(userBin, 'unrelated-link')).isSymbolicLink());
@@ -179,7 +179,7 @@ fs[operation] = (currentPath, ...args) => {
     const result = runUninstall({ commandPath: symlinkPath });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "\nRemoved ~/.ballin-scripts and the ballin command links.\nOther tools and shell settings were left unchanged.\nRemoval details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall\n");
+    assert.equal(result.stdout, "Removed ~/.ballin-scripts and the ballin command links.\nOther tools and shell settings were left unchanged.\n\nRemoval details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall\n");
     assert.isFalse(fs.existsSync(path.join(userBin, 'ballin')));
     assert.isFalse(fs.existsSync(repoDir));
   });
@@ -199,7 +199,7 @@ fs[operation] = (currentPath, ...args) => {
     assert.equal(result.status, 1, result.stderr);
     assert.equal(
       result.stdout,
-      "\nRemoved the local checkout, but symlink cleanup is incomplete.\n",
+      "Removed the local checkout, but symlink cleanup is incomplete.\n",
     );
     assert.include(result.stderr, `unlinkSync failed for ${linkPath}`);
     assert.include(result.stderr, 'Uninstall incomplete: these Ballin-owned links remain:');
@@ -226,7 +226,7 @@ fs[operation] = (currentPath, ...args) => {
     assert.equal(result.status, 1, result.stderr);
     assert.equal(
       result.stdout,
-      "\nRemoved the local checkout, but symlink cleanup is incomplete.\n",
+      "Removed the local checkout, but symlink cleanup is incomplete.\n",
     );
     assert.include(result.stderr, `lstatSync failed for ${linkPath}`);
     assert.include(result.stderr, 'These candidate Ballin link paths could not be inspected:');
@@ -251,7 +251,7 @@ fs[operation] = (currentPath, ...args) => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    assert.equal(result.stdout, "\nRemoved ~/.ballin-scripts and the ballin command links.\nOther tools and shell settings were left unchanged.\nRemoval details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall\n");
+    assert.equal(result.stdout, "Removed ~/.ballin-scripts and the ballin command links.\nOther tools and shell settings were left unchanged.\n\nRemoval details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall\n");
     assert.isFalse(fs.existsSync(linkPath));
     assert.isFalse(fs.existsSync(repoDir));
   });
