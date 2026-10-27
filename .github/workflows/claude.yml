@@ -12,7 +12,7 @@ jobs:
   eligibility:
     # Fetch PR state with read access before invoking the runtime.
     if: >-
-      github.event.comment.body == '/claude-review' &&
+      contains(fromJSON('["/claude-review","/claude-review opus","/claude-review effort low","/claude-review effort medium","/claude-review effort high","/claude-review effort xhigh","/claude-review effort max","/claude-review opus effort low","/claude-review opus effort medium","/claude-review opus effort high","/claude-review opus effort xhigh","/claude-review opus effort max"]'), github.event.comment.body) &&
       github.event.comment.user.type == 'User' &&
       github.event.sender.type == 'User' &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
@@ -54,6 +54,6 @@ jobs:
       checks: write
       issues: write
       id-token: write
-    uses: JBallin/claude-review-runtime/.github/workflows/claude.yml@23727a9addb3f0875125eb00ba2c6a02218f19b1
+    uses: JBallin/claude-review-runtime/.github/workflows/claude.yml@fdb26f96afb3ffbee64186561a15b8e9c3f41919
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

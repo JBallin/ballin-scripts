@@ -32,10 +32,12 @@ revision. See the [runtime setup and review guide](https://github.com/JBallin/cl
 for shared setup, behavior, and review verification.
 
 Opened or newly ready same-repository PRs receive one automatic review; drafts,
-forks, and Dependabot-triggered runs are excluded. Pushes and base retargets
-refresh existing presentation without running Claude. For a fresh review of an
-open, non-draft, same-repository PR, a human owner, member, or collaborator can
-post `/claude-review` as the entire top-level or inline PR comment.
+forks, and Dependabot-triggered runs are excluded. PR head pushes and base
+retargets refresh existing presentation without running Claude. For a fresh
+review of an open, non-draft, same-repository PR, a human owner, member, or
+collaborator can post `/claude-review` as the entire top-level or inline PR
+comment. See the Runtime guide for
+[model and effort options](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#optional-model-and-effort-selection).
 
 Run `npm run test:unit -- test/claude_workflows.test.ts` for the portable offline
 caller contracts, also included in `npm test`. They parse YAML and compare the

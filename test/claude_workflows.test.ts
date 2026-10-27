@@ -7,7 +7,16 @@ const readWorkflow = (name: string): unknown => yaml.load(
   fs.readFileSync(path.join(workflowDirectory, name), 'utf8'),
 );
 const runtime = 'JBallin/claude-review-runtime/.github/workflows/';
-const pin = '23727a9addb3f0875125eb00ba2c6a02218f19b1';
+const pin = 'fdb26f96afb3ffbee64186561a15b8e9c3f41919';
+// Exact full-comment forms accepted by the selected Runtime. Actions contains()
+// compares strings case-insensitively; no trimming or token splitting is added.
+const manualCommands = ['/claude-review', '/claude-review opus'];
+for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+  manualCommands.push(`/claude-review effort ${effort}`);
+}
+for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+  manualCommands.push(`/claude-review opus effort ${effort}`);
+}
 const reviewPermissions = {
   contents: 'read', 'pull-requests': 'write', checks: 'write', issues: 'write', 'id-token': 'write',
 };
@@ -42,7 +51,7 @@ const contracts = {
     permissions: {},
     jobs: {
       eligibility: {
-        if: "github.event.comment.body == '/claude-review' && "
+        if: `contains(fromJSON('${JSON.stringify(manualCommands)}'), github.event.comment.body) && `
           + "github.event.comment.user.type == 'User' && "
           + "github.event.sender.type == 'User' && "
           + 'contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association) && '
