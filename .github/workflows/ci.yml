@@ -8,12 +8,18 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      worker_comparison:
+        description: Run the frozen two-versus-four-worker experiment
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   test:
+    if: ${{ !inputs.worker_comparison }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -122,3 +128,67 @@ jobs:
           name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
           path: coverage/tmp/
           retention-days: 7
+
+  worker_comparison:
+    if: ${{ inputs.worker_comparison }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    concurrency:
+      group: issue-569-hosted-worker-comparison
+      cancel-in-progress: false
+    env:
+      PERF_SOURCE: ${{ github.workspace }}/benchmark-source
+    steps:
+      - name: Configure isolated evidence directory
+        run: echo "PERF_EVIDENCE=$RUNNER_TEMP/worker-comparison" >> "$GITHUB_ENV"
+      - name: Check out experiment harness
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check out frozen application
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: 4cb3abbc59c7cb3ca980702377e0e1dadd2a1e24
+          path: benchmark-source
+          persist-credentials: false
+      - name: Install matching shell tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck zsh jq coreutils
+      - name: Set up fixed Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.22.1
+          cache: npm
+          cache-dependency-path: benchmark-source/package-lock.json
+      - name: Install frozen dependencies
+        working-directory: benchmark-source
+        run: npm ci
+      - name: Record capacity and identical test manifest
+        run: node .github/benchmarks/workers/prepare.js
+      - name: Run two workers with coverage
+        run: python3 .github/benchmarks/workers/run.py 2
+      - name: Run four workers with coverage
+        run: python3 .github/benchmarks/workers/run.py 4
+      - name: Compare test outcomes, ordering and reports
+        run: python3 .github/benchmarks/workers/compare.py
+      - name: Compare effective raw V8 coverage
+        run: node .github/benchmarks/workers/effective-v8.js
+      - name: Package retained evidence
+        if: ${{ always() }}
+        run: |
+          if [ -d "$PERF_EVIDENCE" ]; then
+            tar -czf "$RUNNER_TEMP/worker-comparison.tar.gz" -C "$RUNNER_TEMP" worker-comparison
+            sha256sum "$RUNNER_TEMP/worker-comparison.tar.gz" > "$RUNNER_TEMP/worker-comparison.sha256"
+          fi
+      - name: Upload retained evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: worker-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/worker-comparison.tar.gz
+            ${{ runner.temp }}/worker-comparison.sha256
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 0
