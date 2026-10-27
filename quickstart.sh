@@ -25,7 +25,6 @@ command_entry_snapshot() {
   if [[ -L "$target" ]]; then printf ':'; readlink "$target"; fi
 }
 
-system_softwareupdate='/usr/sbin/softwareupdate'
 system_node_bin='/usr/local/bin'
 system_brew_arm='/opt/homebrew'
 system_brew_intel='/usr/local'
@@ -545,9 +544,9 @@ check_ballin_command() {
   fi
 }
 
-# Keep marker creation and cleanup in one clean privileged process. A private
-# hard-link anchor identifies our marker even if discovery fails or is cancelled.
-list_command_line_tools() {
+# Keep the marker through discovery and installation in one clean privileged
+# process. A private hard-link anchor identifies only the entry we created.
+install_terminal_command_line_tools() {
   # shellcheck disable=SC2016 # Expand only in the clean privileged shell.
   "$system_sudo" /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c '
     set -euo pipefail
@@ -560,7 +559,7 @@ list_command_line_tools() {
       if [[ -n "$stage" ]]; then
         if [[ "$marker" -ef "$stage/marker" ]]; then
           /bin/rm -f -- "$marker" || {
-            printf "Quickstart: Could not remove the temporary CLT discovery marker at %s.\n" "$marker" >&2
+            printf "Quickstart: Could not remove the temporary CLT installation marker at %s.\n" "$marker" >&2
             [[ "$status" != 0 ]] || status=1
           }
         fi
@@ -581,45 +580,54 @@ list_command_line_tools() {
       # Unlike ln, it never treats an existing directory as a target directory.
       /bin/link "$stage/marker" "$marker"
     fi
-    /usr/sbin/softwareupdate --list
-  ' ballin-clt-discovery
+    status=0
+    updates=$(trap "exit 129" HUP; trap "exit 130" INT; trap "exit 143" TERM; /usr/sbin/softwareupdate --list) || status=$?
+    case "$status" in 129|130|143) exit "$status" ;; esac
+    if [[ "$status" != 0 ]]; then
+      printf "The Terminal download list could not be checked (status %s).\n" "$status"
+      exit "$status"
+    fi
+    # Select only one recognizable CLT label; never install a macOS update.
+    labels=$(printf "%s\n" "$updates" | /usr/bin/awk '\''/^[[:space:]]*\* Label: Command Line Tools for Xcode[- ][0-9]/ { sub(/^[[:space:]]*\* Label: /, ""); print }'\'')
+    candidates=0
+    while IFS= read -r label; do
+      [[ -z "$label" ]] || candidates=$(( candidates + 1 ))
+    done <<< "$labels"
+    if [[ "$candidates" == 0 ]]; then
+      printf "No Xcode Command Line Tools download was listed in Terminal.\n"
+      exit 1
+    elif [[ "$candidates" != 1 ]]; then
+      printf "Apple listed %s Xcode Command Line Tools downloads; choose a version manually.\n" "$candidates"
+      exit 1
+    fi
+    printf '\''$ sudo softwareupdate --install "%s"\n'\'' "$labels"
+    /usr/sbin/softwareupdate --install "$labels" || {
+      status=$?
+      case "$status" in 129|130|143) exit "$status" ;; esac
+      printf "Xcode Command Line Tools installation failed (status %s).\n" "$status"
+      exit "$status"
+    }
+  ' ballin-clt-install
 }
 
 install_command_line_tools() {
   phase 'Installing Xcode Command Line Tools'
-  local updates='' label='' status=0 candidates=0
-  updates=$(list_command_line_tools) || status=$?
+  local status=0
+  install_terminal_command_line_tools || status=$?
   case "$status" in 129|130|143) exit "$status" ;; esac
-  if [[ "$status" == 0 ]]; then
-    # Use only an unambiguous Apple-provided label, never a macOS upgrade.
-    local labels
-    labels=$(printf '%s\n' "$updates" | awk '/^[[:space:]]*\* Label: Command Line Tools for Xcode[- ][0-9]/ { sub(/^[[:space:]]*\* Label: /, ""); print }')
-    while IFS= read -r label; do
-      [[ -z "$label" ]] || candidates=$(( candidates + 1 ))
-    done <<< "$labels"
-    label=''
-    [[ "$candidates" != 1 ]] || label="$labels"
-  fi
-  if [[ -n "$label" ]]; then
-    printf '$ sudo softwareupdate --install "%s"\n' "$label"
-    probe_tool "$system_sudo" "$system_softwareupdate" --install "$label" \
-      || fail 'Xcode Command Line Tools installation failed. Inspect the output, finish installation manually, then rerun Quickstart.'
+  git_tool=$(find_git)
+  if [[ -n "$git_tool" ]]; then
+    [[ "$status" == 0 ]] || fail 'Git is usable, but the Terminal attempt did not finish cleanly. Inspect the output before rerunning Quickstart.'
   else
-    if [[ "$status" != 0 ]]; then
-      printf "Apple’s Terminal download list could not be checked (status %s).\n" "$status"
-    elif [[ "$candidates" == 0 ]]; then
-      printf 'No Xcode Command Line Tools download was listed in Terminal.\n'
-    else
-      printf 'Apple listed %s Xcode Command Line Tools downloads; choose a version manually.\n' "$candidates"
-    fi
+    printf 'Git is still unavailable after the Terminal attempt (status %s).\n' "$status"
     printf "Use Apple's graphical installer, or install the tools manually and rerun Quickstart.\n"
     if ! confirm 'Open the graphical Xcode Command Line Tools installer?'; then
-      "$input_ended" && fail 'No answer received. Xcode Command Line Tools were not installed.'
+      "$input_ended" && fail 'No answer received. Git setup did not complete.'
       fail 'Install Xcode Command Line Tools manually, then rerun Quickstart.'
     fi
     printf '$ xcode-select --install\n'
     probe_tool "$system_xcode_select" --install || fail 'Apple could not start Xcode Command Line Tools installation. Finish any pending installation, then rerun Quickstart.'
-    printf 'Finish the macOS installation, then press Return here: '
+    printf 'Finish installing Xcode Command Line Tools, then press Return here: '
     read_prompt_answer || fail 'Git setup did not complete.'
   fi
   git_tool=$(find_git)
@@ -1018,7 +1026,6 @@ main() {
       fi
       prerequisite_names+=${prerequisite_list[index]}
     done
-    [[ -z "$brew_tool" ]] || printf 'Using existing Homebrew for missing tools.\n'
     if "$need_node"; then
       local replacement_bin=$system_node_bin replacement_method='the official Node installer'
       if [[ -n "$brew_tool" ]]; then
@@ -1038,12 +1045,21 @@ main() {
         fi
       done
     fi
+    printf 'Installation will:\n'
     if [[ -n "$brew_tool" ]]; then
-      printf 'Homebrew will install the missing tools and their dependencies; it will not upgrade existing Node.js.\n'
+      printf '  - Install missing tools and dependencies using existing Homebrew:\n    %s\n' "$prerequisite_names"
+      printf '  - Keep existing Node.js unchanged.\n'
     else
-      "$need_git" && printf "Xcode Command Line Tools: try Apple's Terminal download with administrator access; offer the graphical installer if unavailable.\n"
-      "$need_node" && printf 'Node.js: install the verified official Node 24 package in /usr/local/bin with administrator access.\n'
-      "$need_gh" && printf 'GitHub CLI: download and verify the official archive in %s.\n' "$quick_root"
+      if "$need_git"; then
+        printf '  - Install Xcode Command Line Tools in Terminal with administrator access.\n'
+        printf "  - Ask before opening Apple's graphical installer if needed.\n"
+      fi
+      if "$need_node"; then
+        printf '  - Install the verified official Node 24 package with administrator access in:\n    %s\n' "$system_node_bin"
+      fi
+      if "$need_gh"; then
+        printf '  - Download and verify the official GitHub CLI archive in:\n    %s\n' "$quick_root"
+      fi
     fi
     local approval_prompt="Install $prerequisite_names?"
     approved_root=''; approved_command=''; approved_snapshot=''
@@ -1061,7 +1077,8 @@ main() {
       fi
       approved_command="$planned_prefix/bin/ballin"
       approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $approved_command."
-      printf 'Ballin will create %s, save its settings there, and link the command at %s.\n' "$approved_root" "$approved_command"
+      printf '  - Create Ballin and its settings in:\n    %s\n' "$approved_root"
+      printf '  - Link the ballin command at:\n    %s\n' "$approved_command"
       if [[ "$approved_snapshot" != missing ]]; then
         printf 'Warning: installation will replace the existing command at %s' "$approved_command"
         if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(readlink "$approved_command")"; fi

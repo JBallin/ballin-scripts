@@ -1,11 +1,11 @@
-// Run the actual privileged discovery body with fixed commands and /tmp paths
+// Run the actual privileged installation body with fixed commands and /tmp paths
 // replaced before execution. No sudo, host marker or real softwareupdate runs.
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert/strict');
 const { spawnSync } = require('child_process');
 const root = process.env.FAKE_ROOT;
-if (!root) throw new Error('CLT discovery requires an isolated root');
+if (!root) throw new Error('CLT installation requires an isolated root');
 const marker = path.join(root, 'clt-marker');
 const log = (text: string): void => fs.appendFileSync(path.join(root, 'commands.log'), text + '\n');
 const runCommand = (name: string, args: string[]): number => {
@@ -26,9 +26,24 @@ const runCommand = (name: string, args: string[]): number => {
     assert.equal(fs.statSync(marker).mode & 0o777, 0o600);
     if (process.env.FAKE_CLT_CANCEL_AFTER_LINK) process.kill(process.ppid, process.env.FAKE_CLT_CANCEL_AFTER_LINK);
   } else if (name === 'softwareupdate') {
-    assert.deepEqual(args, ['--list']);
     assert.equal(fs.statSync(marker).isFile(), true);
     assert.equal(fs.lstatSync(marker).isSymbolicLink(), false);
+    if (args[0] === '--install') {
+      assert.equal(args.length, 2);
+      assert.ok(['Command Line Tools for Xcode-16.4', 'Command Line Tools for Xcode 27.0-27.0'].includes(args[1]));
+      log('clt-marker-present-during-install');
+      process.stdout.write('Native CLT installation progress\n');
+      const result = process.env.FAKE_CLT_INSTALL_RESULT;
+      if (result === 'HUP' || result === 'INT' || result === 'TERM') {
+        process.kill(process.ppid, 'SIG' + result); return 0;
+      }
+      if (result) return Number(result);
+      if (process.env.FAKE_CLT_MODE === 'failed') return 42;
+      if (process.env.FAKE_CLT_MODE === 'interrupt') return 130;
+      if (process.env.FAKE_CLT_MODE !== 'unusable') fs.writeFileSync(path.join(root, 'git-installed'), '1');
+      return 0;
+    }
+    assert.deepEqual(args, ['--list']);
     log('clt-marker-present-during-list');
     const result = process.env.FAKE_CLT_DISCOVERY_RESULT;
     if (result === 'HUP' || result === 'INT' || result === 'TERM') {
@@ -42,6 +57,8 @@ const runCommand = (name: string, args: string[]): number => {
       fs.unlinkSync(marker); fs.writeFileSync(marker, 'replacement marker\n');
     }
     return spawnSync(path.join(root, 'tools/softwareupdate'), args, { env: process.env, stdio: 'inherit' }).status ?? 97;
+  } else if (name === 'awk') {
+    return spawnSync('/usr/bin/awk', args, { env: { PATH: '/usr/bin:/bin' }, stdio: 'inherit' }).status ?? 97;
   } else if (name === 'rm') {
     if (args[0] === '-f') {
       assert.deepEqual(args, ['-f', '--', marker]);
@@ -65,7 +82,7 @@ if (process.argv[2] === '--command') {
   const args = process.argv.slice(2);
   assert.equal(args.length, 7);
   assert.deepEqual(args.slice(0, 5), ['/usr/bin/env', '-i', 'PATH=/usr/bin:/bin:/usr/sbin:/sbin', '/bin/bash', '-c']);
-  assert.equal(args[6], 'ballin-clt-discovery');
+  assert.equal(args[6], 'ballin-clt-install');
   if (process.env.FAKE_CLT_SUDO_STATUS) process.exit(Number(process.env.FAKE_CLT_SUDO_STATUS));
   const commands = path.join(root, 'clt-commands');
   fs.mkdirSync(commands);
@@ -73,7 +90,7 @@ if (process.argv[2] === '--command') {
   let body = args[5];
   for (const [name, executable, count] of [
     ['mktemp', '/usr/bin/mktemp', 1], ['link', '/bin/link', 1],
-    ['softwareupdate', '/usr/sbin/softwareupdate', 1], ['rm', '/bin/rm', 2],
+    ['softwareupdate', '/usr/sbin/softwareupdate', 2], ['rm', '/bin/rm', 2], ['awk', '/usr/bin/awk', 1],
   ] as const) {
     assert.equal(body.split(executable).length - 1, count);
     const fixture = path.join(commands, name);

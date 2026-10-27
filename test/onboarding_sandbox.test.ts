@@ -493,7 +493,7 @@ describe('interactive onboarding QA lifecycle', function() {
     for (const shell of ['zsh', 'bash']) {
       const result = run('n\nexit\n', ['--shell', shell]);
       findRoot(result.stdout); assert.equal(result.status, 0, result.stderr);
-      assert.notInclude(result.stdout, 'Created \'ballin.config.json\'');
+      assert.notInclude(result.stdout, 'Created config:');
       assert.notInclude(result.stdout, 'Setup complete!');
     }
   });

@@ -58,7 +58,7 @@ describe('interactive setup with delayed terminal answers', function() {
       ], shell);
       assert.isUndefined(result.error, result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created');
+      assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
       assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nEnable tab completion in ');
       assert.notInclude(output, '\n\n\n');
       assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
@@ -87,6 +87,23 @@ describe('interactive setup with delayed terminal answers', function() {
       assertInitializedOnly();
     });
   }
+
+  it('uses one separator after tab completion when Quickstart backups are declined', () => {
+    sandbox = createSandbox({ quickstart: true });
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+      { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
+      { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
+      { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
+      { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+      { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
+      { prompt: 'Enable tab completion in ', answer: 'y' },
+    ], 'bash');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const output = result.stdout.replace(/\r\n/gu, '\n');
+    assert.include(output, `Enable tab completion in ${path.join(sandbox.home, '.bash_profile')}? [y/N] y\n\n😎 Setup complete!`);
+    assert.notInclude(output, '\n\n\n');
+    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+  });
 
   for (const scenario of ['quiet', 'migration', 'unconfigured', 'backup', 'migrated backup']) {
     for (const fetchOutput of [false, true]) {
@@ -137,7 +154,7 @@ describe('interactive setup with delayed terminal answers', function() {
           else assert.include(output, `${docs}#what-installation-changes\n\n😎 Setup complete!`);
         } else if (backup) assert.include(output, update + '\n' + summary);
         else if (scenario === 'quiet') assert.include(output, update + '\n😎 Setup complete!');
-        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\n⚙️  Created`);
+        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
         assert.notInclude(output, '\n\n\n');
       });
     }
@@ -155,7 +172,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const output = result.stdout.replace(/\r\n/gu, '\n');
-    assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created');
+    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
     assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nWhich Bash startup file does your terminal read? ');
     assert.notInclude(output, '\x1b[');
     assert.notInclude(output, '\n\n\n');
