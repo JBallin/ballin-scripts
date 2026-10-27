@@ -3,9 +3,7 @@
 *Maintainer guide to test suites, coverage standards, runtime boundaries, and CI gates.*
 
 Run commands from the repository root. `npm test` runs comprehensive local Node
-checks: lint, both typechecks, and tests with coverage. The normal TypeScript
-check also checks the handwritten repository fixture responder through its shared
-JSDoc and TypeScript types. For faster feedback, use
+checks: lint, both typechecks, and tests with coverage. For faster feedback, use
 the focused commands in [Test runtime and timeouts](#test-runtime-and-timeouts).
 CI runs the same Node scripts in separate steps and adds checks defined in the
 [CI workflow](../.github/workflows/ci.yml), including shell and workflow
