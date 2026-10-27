@@ -304,7 +304,7 @@ const writeAnalyticsPreference = (configPath: string, enabled: boolean): { previ
 
 const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
   writeStdoutLine(options.presentation === 'installation'
-    ? `\nAnalytics details: ${options.docsUrl || defaultAnalyticsDocsUrl}`
+    ? `\nAnalytics details:\n${options.docsUrl || defaultAnalyticsDocsUrl}`
     : `\n${analyticsDisclosureFor(options.docsUrl)}`);
   if (options.currentEnabled !== undefined) {
     writeStdoutLine(`Usage analytics are currently ${options.currentEnabled ? 'enabled' : 'disabled'}.`);
