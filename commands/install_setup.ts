@@ -149,7 +149,7 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
     } catch {
       return false;
     }
-    writeStdoutLine("⚙️  Created 'ballin.config.json' file in root using default settings");
+    writeStdoutLine(`Created config: ${path.resolve(configPath)}`);
     return true;
   }
 
@@ -311,7 +311,6 @@ const setup = (
 
   if (mode === 'fresh' && promptInputState() === 'open') {
     offerCompletionSetup(docsUrl, { presentation: 'installation' });
-    writeStdoutLine();
   }
 
   const destination = configuredBackupDestination(readJsonObject(configPathFor(repoDir)));
@@ -322,7 +321,7 @@ const setup = (
     // A prior complete No or input end must not reopen optional onboarding.
   } else if (mode === 'fresh' || process.env.BALLIN_BACKUP_CHOICE === 'yes' || backupConfigured || backupInvalid) {
     let backupSetupCancelled = false;
-    if (mode === 'refresh' && backupConfigured) writeStdoutLine();
+    if (mode === 'fresh' || (mode === 'refresh' && backupConfigured)) writeStdoutLine();
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
       presentation: mode === 'self-update' ? 'standalone' : 'installation',
       initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',

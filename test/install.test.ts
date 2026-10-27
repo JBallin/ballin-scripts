@@ -232,6 +232,7 @@ esac
     assert.notInclude(result.stdout, 'Detected Node.js');
     assert.notInclude(result.stdout, "let's ball");
     assert.include(result.stdout, 'Installation details:');
+    assert.include(result.stdout, `Installation will:\n  - Create Ballin and its settings in:\n    ${repoDir}\n  - Link the ballin command at:\n    ${path.join(homeDir, '.local', 'bin', 'ballin')}\n`);
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
