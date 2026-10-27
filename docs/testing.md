@@ -32,10 +32,12 @@ revision. See the [runtime setup and review guide](https://github.com/JBallin/cl
 for shared setup, behavior, and review verification.
 
 Opened or newly ready same-repository PRs receive one automatic review; drafts,
-forks, and Dependabot-triggered runs are excluded. PR head pushes and base
-retargets refresh existing presentation without running Claude. For a fresh
-review of an open, non-draft, same-repository PR, a human owner, member, or
-collaborator can post `/claude-review` as the entire top-level or inline PR
+forks, and Dependabot-triggered runs are excluded. PR head pushes, base
+retargets, and pushes to target branches (including non-default branches)
+refresh existing presentation without running Claude. Branch deletions and tag
+pushes are excluded. For a fresh review of an open, non-draft, same-repository
+PR, a human owner, member, or collaborator can post `/claude-review` as the
+entire top-level or inline PR
 comment. See the Runtime guide for
 [model and effort options](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#optional-model-and-effort-selection).
 
@@ -44,10 +46,13 @@ caller contracts, also included in `npm test`. They parse YAML and compare the
 approved eligibility expressions, events, permissions, secrets, runtime pins,
 execution keys, and manual preflight wiring/script. An inventory checks every
 YAML workflow for runtime or Claude credential references. These checks guard
-configuration changes; they do not evaluate GitHub Actions expressions or claim
-behavior for alternative expressions. Formatting and YAML comments may change
-without changing the parsed contract. Shared runtime behavior stays tested in
-the runtime repository.
+configuration changes. Status routing fixtures also exercise the subscribed
+events and actual wrapper condition for supported pushes and PR updates, plus
+irrelevant events. The fixture evaluator covers only the approved condition's
+operators and literal values; it is not a general GitHub Actions interpreter and
+does not claim behavior for alternative expressions. Formatting and YAML comments
+may change without changing the parsed contract. Shared runtime behavior stays
+tested in the runtime repository.
 
 CI additionally runs `npm run test:claude-preflight` with Bash, `jq`, and GNU
 `timeout` declared as prerequisites. That bounded test executes the workflow's

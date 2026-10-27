@@ -3,16 +3,21 @@ name: Refresh Claude Review status
 on:
   pull_request:
     types: [synchronize, edited]
+  push:
+    branches: ["**"]
 
 permissions: {}
 
 jobs:
   status:
     if: >-
+      (github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/heads/') && github.event.deleted == false) ||
+      (github.event_name == 'pull_request' &&
       github.event.pull_request.state == 'open' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action == 'synchronize' ||
-      (github.event.action == 'edited' && github.event.changes.base.ref.from != ''))
+      (github.event.action == 'edited' && github.event.changes.base.ref.from != '')))
     permissions:
       contents: read
       pull-requests: write

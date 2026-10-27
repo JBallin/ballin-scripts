@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const { runInNewContext } = require('node:vm');
 
 const workflowDirectory = path.join(__dirname, '..', '.github', 'workflows');
 const readWorkflow = (name: string): unknown => yaml.load(
@@ -95,14 +96,20 @@ const contracts = {
   },
   'claude-review-status.yml': {
     name: 'Refresh Claude Review status',
-    on: { pull_request: { types: ['synchronize', 'edited'] } },
+    on: {
+      pull_request: { types: ['synchronize', 'edited'] },
+      push: { branches: ['**'] },
+    },
     permissions: {},
     jobs: {
       status: {
-        if: "github.event.pull_request.state == 'open' && "
+        if: "(github.event_name == 'push' && "
+          + "startsWith(github.ref, 'refs/heads/') && github.event.deleted == false) || "
+          + "(github.event_name == 'pull_request' && "
+          + "github.event.pull_request.state == 'open' && "
           + 'github.event.pull_request.head.repo.full_name == github.repository && '
           + "(github.event.action == 'synchronize' || "
-          + "(github.event.action == 'edited' && github.event.changes.base.ref.from != ''))",
+          + "(github.event.action == 'edited' && github.event.changes.base.ref.from != '')))",
         permissions: { contents: 'read', 'pull-requests': 'write', issues: 'write' },
         uses: `${runtime}claude-review-status.yml@${pin}`,
       },
@@ -123,6 +130,92 @@ describe('offline Claude caller contracts', () => {
   for (const [name, expected] of Object.entries(contracts)) {
     it(`retains the complete approved ${name} consumer contract`, () => {
       assert.deepEqual(readWorkflow(name), expected);
+    });
+  }
+});
+
+describe('Claude status event routes', () => {
+  const status = readWorkflow('claude-review-status.yml') as typeof contracts['claude-review-status.yml'];
+  const repository = 'JBallin/ballin-scripts';
+  const pullRequest = (overrides = {}) => ({
+    state: 'open', draft: false, head: { repo: { full_name: repository } }, ...overrides,
+  });
+
+  // Exercise the parsed caller, including event subscription and its actual if.
+  // The exact contract above bounds this to Boolean operators, string/Boolean
+  // fixture values and startsWith; this is not a general Actions interpreter.
+  const routesToStatus = (eventName: string, event: object, ref = ''): boolean => {
+    const subscribed = eventName === 'push'
+      ? status.on.push.branches.includes('**') && ref.startsWith('refs/heads/')
+      : eventName === 'pull_request'
+        && status.on.pull_request.types.includes((event as { action: string }).action);
+    if (!subscribed) return false;
+    const github = { event_name: eventName, repository, event, ref };
+    const expression = status.jobs.status.if.replace(/github(?:\.[a-z_]+)+/gu, (key: string) => {
+      let value: unknown = { github };
+      for (const part of key.split('.')) {
+        value = value && typeof value === 'object' ? Reflect.get(value, part) : undefined;
+      }
+      return JSON.stringify(value ?? '');
+    });
+    return Boolean(runInNewContext(expression, {
+      startsWith: (value: string, prefix: string) => value.startsWith(prefix),
+    }));
+  };
+
+  for (const ref of ['refs/heads/main', 'refs/heads/release', 'refs/heads/stack/parent']) {
+    it(`forwards a target push to ${ref} without a PR payload`, () => {
+      assert.isTrue(routesToStatus('push', { deleted: false }, ref));
+    });
+    it(`rejects deletion of ${ref}`, () => {
+      assert.isFalse(routesToStatus('push', { deleted: true }, ref));
+    });
+  }
+
+  for (const ref of ['refs/tags/v2', 'refs/pull/616/merge', '']) {
+    it(`rejects a non-branch push (${ref || 'missing ref'})`, () => {
+      assert.isFalse(routesToStatus('push', { deleted: false }, ref));
+    });
+  }
+
+  for (const draft of [false, true]) {
+    it(`retains same-repository head sync and base retarget (draft=${draft})`, () => {
+      const pr = pullRequest({ draft });
+      assert.isTrue(routesToStatus('pull_request', { action: 'synchronize', pull_request: pr }));
+      assert.isTrue(routesToStatus('pull_request', {
+        action: 'edited', pull_request: pr, changes: { base: { ref: { from: 'release' } } },
+      }));
+    });
+  }
+
+  for (const pr of [
+    pullRequest({ state: 'closed' }),
+    pullRequest({ head: { repo: { full_name: 'someone/fork' } } }),
+    pullRequest({ head: { repo: null } }),
+  ]) {
+    it(`rejects ineligible PR head sync and base retarget: ${JSON.stringify(pr)}`, () => {
+      assert.isFalse(routesToStatus('pull_request', { action: 'synchronize', pull_request: pr }));
+      assert.isFalse(routesToStatus('pull_request', {
+        action: 'edited', pull_request: pr, changes: { base: { ref: { from: 'main' } } },
+      }));
+    });
+  }
+
+  for (const changes of [undefined, { title: { from: 'old title' } }, { base: { ref: { from: '' } } }]) {
+    it(`rejects an edit without a base retarget: ${JSON.stringify(changes)}`, () => {
+      assert.isFalse(routesToStatus('pull_request', { action: 'edited', pull_request: pullRequest(), changes }));
+    });
+  }
+
+  for (const action of ['opened', 'ready_for_review', 'closed']) {
+    it(`leaves ${action} outside status event handling`, () => {
+      assert.isFalse(routesToStatus('pull_request', { action, pull_request: pullRequest() }));
+    });
+  }
+
+  for (const eventName of ['workflow_dispatch', 'issue_comment', 'pull_request_target']) {
+    it(`rejects unrelated ${eventName} events`, () => {
+      assert.isFalse(routesToStatus(eventName, { deleted: false }, 'refs/heads/main'));
     });
   }
 });
