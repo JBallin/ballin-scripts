@@ -605,7 +605,7 @@ install_terminal_command_line_tools() {
     updates=$(trap "exit 129" HUP; trap "exit 130" INT; trap "exit 143" TERM; /usr/sbin/softwareupdate --list) || status=$?
     case "$status" in 129|130|143) exit "$status" ;; esac
     if [[ "$status" != 0 ]]; then
-      printf "Apple’s Terminal download list could not be checked (status %s).\n" "$status"
+      printf "The Terminal download list could not be checked (status %s).\n" "$status"
       exit "$status"
     fi
     # Select only one recognizable CLT label; never install a macOS update.
