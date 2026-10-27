@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "allowJs": false,
-    "checkJs": false,
+    "allowJs": true,
+    "checkJs": true,
     "erasableSyntaxOnly": true,
     "forceConsistentCasingInFileNames": true,
     "module": "CommonJS",
@@ -20,6 +20,7 @@
     "analytics-worker/wrangler.ts",
     "commands/**/*.ts",
     "config/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "test/helpers/repository-runtime.js"
   ]
 }
