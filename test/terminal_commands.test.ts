@@ -34,13 +34,16 @@ describe('command references at prose output boundaries', () => {
     { name: 'NO_COLOR zero', stdout: true, stderr: true, env: { NO_COLOR: '0' }, styled: false },
     { name: 'empty NO_COLOR', stdout: true, stderr: true, env: { NO_COLOR: '' }, styled: true },
   ]) {
-    it(`preserves help roles, recovery and config bytes on ${mode.name}`, () => {
-      const command = (text: string) => mode.styled ? `\x1b[1m${text}\x1b[0m` : `\`${text}\``;
-      const cli = (args: string[]) => run(args, mode.stdout, mode.stderr, mode.env);
+    const command = (text: string) => mode.styled ? `\x1b[1m${text}\x1b[0m` : `\`${text}\``;
+    const cli = (args: string[]) => run(args, mode.stdout, mode.stderr, mode.env);
+    // Independent command checks get separate budgets; compare aliases together.
+    it(`preserves update help roles on ${mode.name}`, () => {
       const help = cli(['update', '--help']);
       assert.equal(help.status, 0, help.stderr);
       assert.include(help.stdout, `Use ${command('ballin config get update')} to inspect settings.`);
       assert.include(help.stdout, '    ballin update\n');
+    });
+    it(`preserves backup help roles and alias output on ${mode.name}`, () => {
       const backup = cli(['backup', '--help']);
       assert.equal(backup.status, 0, backup.stderr);
       assert.include(backup.stdout.replace(/\s+/gu, ' '), '`setup` creates or reconnects');
@@ -49,21 +52,31 @@ describe('command references at prose output boundaries', () => {
       const backupAlias = cli(['help', 'backup']);
       assert.equal(backupAlias.status, 0, backupAlias.stderr);
       assert.equal(backupAlias.stdout, backup.stdout);
+    });
+    it(`preserves setup help notation on ${mode.name}`, () => {
       const shorthand = cli(['setup', '--help']);
       assert.equal(shorthand.status, 0, shorthand.stderr);
       assert.include(shorthand.stdout, 'Use `ballin config get/set/reset` for direct configuration.');
+    });
+    it(`preserves config help notation on ${mode.name}`, () => {
       const configHelp = cli(['config', '--help']);
       assert.include(configHelp.stdout, '`update.cleanup`');
       assert.notInclude(configHelp.stdout, '\x1b');
+    });
+    it(`preserves literal config bytes on ${mode.name}`, () => {
       const value = cli(['config', 'get', 'literal']);
       assert.equal(value.status, 0, value.stderr);
       assert.equal(value.stdout, '`ballin setup`\x1b[31m\n\n\n');
+    });
+    it(`styles missing-key recovery without changing config on ${mode.name}`, () => {
       const before = fs.readFileSync(config);
       const error = cli(['config', 'get', 'missing']);
       assert.equal(error.status, 1);
       assert.equal(error.stdout, '');
       assert.include(error.stderr, `Use ${command('ballin config get')} to inspect available keys.`);
       assert.deepEqual(fs.readFileSync(config), before);
+    });
+    it(`styles malformed-config recovery without changing config on ${mode.name}`, () => {
       fs.writeFileSync(config, '{invalid');
       const recovery = cli(['setup']);
       assert.equal(recovery.status, 1);
