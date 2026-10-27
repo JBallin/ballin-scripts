@@ -1,4 +1,4 @@
-const { terminalCommand } = require('./terminalStyle.ts');
+const { terminalCommand, terminalPath } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { offerCompletionSetup } = require('./completion_setup.ts');
 const path = require('path');
@@ -149,7 +149,7 @@ const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(
     } catch {
       return false;
     }
-    writeStdoutLine(`⚙️  Created config: ${path.resolve(configPath)}`);
+    writeStdoutLine(`⚙️  Created config: ${terminalPath(configPath)}`);
     return true;
   }
 
@@ -192,7 +192,7 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
   try {
     fs.mkdirSync(binDir, { recursive: true });
   } catch {
-    writeStdoutLine(`\n⚠️  ERROR: Unable to create ${binDir}`);
+    writeStdoutLine(`\n⚠️  ERROR: Unable to create ${terminalPath(binDir)}`);
     return false;
   }
 
@@ -202,14 +202,14 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
       const targetPath = path.join(binDir, binName);
       const current = commandTargetSnapshot(targetPath);
       if (preflight && (preflight.target !== targetPath || preflight.snapshot !== current)) {
-        writeStdoutLine(`Command target changed after review: ${targetPath}. Inspect it before retrying installation.`);
+        writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying installation.`);
         return false;
       }
       fs.rmSync(targetPath, { force: true });
       fs.symlinkSync(sourcePath, targetPath);
     }
   } catch {
-    writeStdoutLine(`\n⚠️  ERROR: Unable to symlink binaries into ${binDir}`);
+    writeStdoutLine(`\n⚠️  ERROR: Unable to symlink binaries into ${terminalPath(binDir)}`);
     return false;
   }
 
@@ -241,7 +241,7 @@ const validateBinDirInPath = (binDir: string): boolean => {
     return true;
   }
 
-  writeStdoutLine(`\n⚠️  ERROR: ${binDir} doesn't seem to be in your path.`);
+  writeStdoutLine(`\n⚠️  ERROR: ${terminalPath(binDir)} doesn't seem to be in your path.`);
   writeStdoutLine(`Add ${terminalCommand(`export PATH="${binDir}:$PATH"`)} to your shell profile.`);
   writeStdoutLine('Then open a new terminal window and run the installer again.');
   return false;

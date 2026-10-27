@@ -14,6 +14,16 @@ command_reference() {
   else printf "\`%s\`" "$1"; fi
 }
 
+# Abbreviate only paths inside HOME for display; filesystem operations stay absolute.
+display_path() {
+  local home_path=${HOME%/}
+  case "$1" in
+    "$home_path") printf '~' ;;
+    "$home_path"/*) printf '%s/%s' '~' "${1#"$home_path"/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 # Compare the reviewed command entry again before using Quickstart consent.
 command_entry_snapshot() {
   local target=$1 metadata
@@ -243,7 +253,7 @@ release_tool_links() {
     if [[ -L "$target" ]]; then
       rm -f -- "$target"
     elif [[ -e "$target" ]]; then
-      fail "Refusing to replace an existing file at $target."
+      fail "Refusing to replace an existing file at $(display_path "$target")."
     fi
   done
 }
@@ -295,7 +305,7 @@ find_gh() {
 bind_tool() {
   local target="$quick_bin/$1"
   if [[ -e "$target" && ! -L "$target" ]]; then
-    fail "Refusing to replace an existing file at $target."
+    fail "Refusing to replace an existing file at $(display_path "$target")."
   fi
   [[ "$target" != "$2" ]] || return 0
   if [[ -L "$target" ]] && { [[ "$(readlink "$target")" == "$2" ]] || [[ "$target" -ef "$2" ]]; }; then return; fi
@@ -423,9 +433,9 @@ existing_hidden_node() {
 manual_node_guidance() {
   local candidate=$1 state=${2:-incompatible} owner='its existing installation method' resolved=$1 target hops=0
   if [[ "$state" == compatible ]]; then
-    fail "Existing compatible Node.js at $candidate is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+    fail "Existing compatible Node.js at $(display_path "$candidate") is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
   elif [[ "$state" == unknown ]]; then
-    fail "Existing Node.js at $candidate could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+    fail "Existing Node.js at $(display_path "$candidate") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
   fi
   while [[ -L "$resolved" && $hops -lt 40 ]]; do
     target=$(readlink "$resolved") || break
@@ -451,7 +461,7 @@ manual_node_guidance() {
       fi
       ;;
   esac
-  fail "Existing Node.js at $candidate needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fail "Existing Node.js at $(display_path "$candidate") needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
 }
 
 brew_checked() {
@@ -510,6 +520,7 @@ check_ballin_command() {
   local problem
   if ! problem=$("$node_tool" -e '
     const fs = require("fs"), path = require("path");
+    const displayPath = value => value === process.env.HOME ? "~" : value.startsWith(process.env.HOME + "/") ? "~" + value.slice(process.env.HOME.length) : value;
     const directory = file => {
       try { return fs.realpathSync(file); }
       catch (error) {
@@ -532,7 +543,7 @@ check_ballin_command() {
           throw error;
         }
         if (fs.realpathSync(candidate) === intended) break;
-        process.stdout.write("Another ballin command would take precedence: " + candidate + ". Move or remove it, then rerun this quickstart.");
+        process.stdout.write("Another ballin command would take precedence: " + displayPath(candidate) + ". Move or remove it, then rerun this quickstart.");
         process.exit(1);
       }
     } catch {
@@ -710,7 +721,7 @@ install_gh() {
   [[ -f "$scratch/gh-extract/$directory/bin/gh" && ! -L "$scratch/gh-extract/$directory/bin/gh" ]] \
     || fail 'The GitHub CLI archive has an unexpected layout.'
   [[ ! -e "$quick_root/$directory" && ! -L "$quick_root/$directory" ]] \
-    || fail "An existing quickstart download at $quick_root/$directory needs inspection before retrying."
+    || fail "An existing quickstart download at $(display_path "$quick_root/$directory") needs inspection before retrying."
   mv "$scratch/gh-extract/$directory" "$quick_root/$directory"
   gh_tool="$quick_root/$directory/bin/gh"
   "$gh_tool" --version >/dev/null
@@ -790,7 +801,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=false
   else
-    path_incomplete "$profile already mentions a setup directory. Review its PATH entries before changing PATH. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
+    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
   fi
   return 0
 }
@@ -814,7 +825,11 @@ configure_path() {
         default_directory="$ZDOTDIR"
       fi
       installer_separator=true
-      printf 'Zsh settings directory [Enter for %s, another absolute directory, or skip]: ' "$default_directory"
+      if [[ "$default_directory" == "$HOME" ]]; then
+        printf 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: '
+      else
+        printf 'Zsh settings directory [Enter for %s, another absolute directory, or skip]: ' "$(display_path "$default_directory")"
+      fi
       if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
       choice=$prompt_answer
       [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }
@@ -895,7 +910,7 @@ configure_path() {
   if "${syntax_check[@]}" "$scratch/profile-boundary" >/dev/null 2>&1; then
     path_incomplete 'The startup file may end at an unfinished heredoc.'; return
   fi
-  if ! confirm "Add Ballin setup to $profile so it works in new Terminal windows?"; then
+  if ! confirm "Add Ballin setup to $(display_path "$profile") so it works in new Terminal windows?"; then
     path_setup_complete=false; printf 'PATH setup skipped.\n'; return
   fi
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
@@ -941,9 +956,9 @@ main() {
   if [[ -e "$quick_root" || -L "$quick_root" ]]; then
     if ! { [[ -d "$quick_root" && ! -L "$quick_root" && -f "$quick_root/.managed" && ! -L "$quick_root/.managed" ]] \
       && [[ "$(cat "$quick_root/.managed")" == 1 ]]; }; then
-      fail "Refusing to change an unrecognized directory at $quick_root."
+      fail "Refusing to change an unrecognized directory at $(display_path "$quick_root")."
     fi
-    [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $quick_bin."
+    [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $(display_path "$quick_bin")."
     new_quick_root=false
   fi
   phase 'Setting up Ballin'
@@ -959,7 +974,7 @@ main() {
   for managed_tool in node npm git gh; do
     [[ "$managed_tool" != gh || "$backup_choice" == yes ]] || continue
     if [[ -e "$quick_bin/$managed_tool" && ! -L "$quick_bin/$managed_tool" ]]; then
-      fail "Refusing to replace an existing file at $quick_bin/$managed_tool."
+      fail "Refusing to replace an existing file at $(display_path "$quick_bin/$managed_tool")."
     fi
   done
   phase 'Checking required tools'
@@ -1033,35 +1048,33 @@ main() {
         # The formula's npm post-install can remove this tree. Do not authorize
         # directory replacement through a prerequisite yes/no question.
         if [[ -e "$brew_prefix/lib/node_modules/npm" || -L "$brew_prefix/lib/node_modules/npm" ]]; then
-          fail "Existing npm data at $brew_prefix/lib/node_modules/npm needs manual attention before installing Node."
+          fail "Existing npm data at $(display_path "$brew_prefix/lib/node_modules/npm") needs manual attention before installing Node."
         fi
       fi
       for replacement in "$replacement_bin/node" "$replacement_bin/npm" "$replacement_bin/npx"; do
-        [[ ! -d "$replacement" ]] || fail "Refusing to replace a directory at $replacement."
+        [[ ! -d "$replacement" ]] || fail "Refusing to replace a directory at $(display_path "$replacement")."
         if [[ -e "$replacement" || -L "$replacement" ]]; then
-          printf 'Warning: %s may replace %s' "$replacement_method" "$replacement"
-          if [[ -L "$replacement" ]]; then printf ' (link to %s)' "$(readlink "$replacement")"; fi
+          printf 'Warning: %s may replace %s' "$replacement_method" "$(display_path "$replacement")"
+          if [[ -L "$replacement" ]]; then printf ' (link to %s)' "$(display_path "$(readlink "$replacement")")"; fi
           printf '.\n'
         fi
       done
     fi
     printf 'Installation will:\n'
     if [[ -n "$brew_tool" ]]; then
-      printf '  - Install missing tools and dependencies using existing Homebrew:\n    %s\n' "$prerequisite_names"
+      printf '  - Install missing tools and dependencies using existing Homebrew: %s.\n' "$prerequisite_names"
       printf '  - Keep existing Node.js unchanged.\n'
     else
       if "$need_git"; then
-        printf '  - Install Xcode Command Line Tools in Terminal with administrator access.\n'
-        printf "  - Ask before opening Apple's graphical installer if needed.\n"
+        printf '  - Install Xcode Command Line Tools.\n'
       fi
       if "$need_node"; then
-        printf '  - Install the verified official Node 24 package with administrator access in:\n    %s\n' "$system_node_bin"
+        printf '  - Install Node.js 24 in %s.\n' "$(display_path "$system_node_bin")"
       fi
       if "$need_gh"; then
-        printf '  - Download and verify the official GitHub CLI archive in:\n    %s\n' "$quick_root"
+        printf '  - Install GitHub CLI in %s.\n' "$(display_path "$quick_root")"
       fi
     fi
-    local approval_prompt="Install $prerequisite_names?"
     approved_root=''; approved_command=''; approved_snapshot=''
     if [[ ! -d "$HOME/.ballin-scripts" ]]; then
       approved_root="$HOME/.ballin-scripts"
@@ -1076,18 +1089,20 @@ main() {
         fi
       fi
       approved_command="$planned_prefix/bin/ballin"
-      approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $approved_command."
-      printf '  - Create Ballin and its settings in:\n    %s\n' "$approved_root"
-      printf '  - Link the ballin command at:\n    %s\n' "$approved_command"
+      approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $(display_path "$approved_command")."
+      printf '  - Create Ballin and its settings in %s.\n' "$(display_path "$approved_root")"
+      printf '  - Link the ballin command at %s.\n' "$(display_path "$approved_command")"
       if [[ "$approved_snapshot" != missing ]]; then
-        printf 'Warning: installation will replace the existing command at %s' "$approved_command"
-        if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(readlink "$approved_command")"; fi
+        printf 'Warning: installation will replace the existing command at %s' "$(display_path "$approved_command")"
+        if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(display_path "$(readlink "$approved_command")")"; fi
         printf '.\n'
       fi
-      approval_prompt="Install $prerequisite_names and Ballin?"
+    fi
+    if [[ -z "$brew_tool" ]] && { "$need_git" || "$need_node"; }; then
+      printf 'Administrator access is required.\n'
     fi
     printf 'Installation details: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
-    if ! confirm "$approval_prompt"; then
+    if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
       return 0
@@ -1139,7 +1154,7 @@ main() {
     command_path="$local_bin:$command_bin"
   fi
   if exposed_npm=$(type -P npm) && [[ -f "$exposed_npm" && -x "$exposed_npm" ]]; then
-    npm_compatible "$exposed_npm" || fail "npm cannot run through the final PATH: $exposed_npm. Fix or remove this broken command, then rerun this quickstart. PATH setup and authentication have not run."
+    npm_compatible "$exposed_npm" || fail "npm cannot run through the final PATH: $(display_path "$exposed_npm"). Fix or remove this broken command, then rerun this quickstart. PATH setup and authentication have not run."
   fi
   check_ballin_command
   if [[ "$backup_choice" == yes ]]; then
