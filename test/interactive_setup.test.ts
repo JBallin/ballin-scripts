@@ -44,13 +44,13 @@ describe('interactive setup with delayed terminal answers', function() {
       sandbox = createSandbox({ quickstart: true });
       const startup = shell === 'bash'
         ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-        : { prompt: `Zsh settings directory [Enter for ${sandbox.home}, another absolute directory, or skip]: `, answer: '' };
+        : { prompt: `Zsh settings directory [Enter for home (~), an absolute directory, or skip]: `, answer: '' };
       const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
         { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
         backupAnswers[1],
         startup,
         { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
-        { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+        { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
         { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
         { prompt: 'Enable tab completion in ', answer: 'y' },
         ...backupAnswers.slice(2),
@@ -58,7 +58,7 @@ describe('interactive setup with delayed terminal answers', function() {
       ], shell);
       assert.isUndefined(result.error, result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+      assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
       assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nEnable tab completion in ');
       assert.notInclude(output, '\n\n\n');
       assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
@@ -94,15 +94,15 @@ describe('interactive setup with delayed terminal answers', function() {
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
       { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
-      { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+      { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
       { prompt: 'Enable tab completion in ', answer: 'y' },
     ], 'bash');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const output = result.stdout.replace(/\r\n/gu, '\n');
-    assert.include(output, `Enable tab completion in ${path.join(sandbox.home, '.bash_profile')}? [y/N] y\n\n😎 Setup complete!`);
+    assert.include(output, `Enable tab completion in ~/.bash_profile? [y/N] y\n\n😎 Setup complete!`);
     assert.notInclude(output, '\n\n\n');
-    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
   });
 
   for (const scenario of ['quiet', 'migration', 'unconfigured', 'backup', 'migrated backup']) {
@@ -154,16 +154,45 @@ describe('interactive setup with delayed terminal answers', function() {
           else assert.include(output, `${docs}#what-installation-changes\n\n😎 Setup complete!`);
         } else if (backup) assert.include(output, update + '\n' + summary);
         else if (scenario === 'quiet') assert.include(output, update + '\n😎 Setup complete!');
-        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
         assert.notInclude(output, '\n\n\n');
       });
     }
   }
 
+  for (const columns of [60, 240]) {
+    it(`installs into absolute HOME from a non-home directory at ${columns} columns`, () => {
+      sandbox = createSandbox({ quickstart: true });
+      const launchDirectory = path.join(sandbox.root, 'launch');
+      fs.mkdirSync(launchDirectory);
+      const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+        { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
+        { prompt: 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: ', answer: '' },
+        { prompt: 'Add Ballin setup to ~/.zshrc so it works in new Terminal windows? [y/N] ', answer: 'y' },
+        { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
+        { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
+        { prompt: 'Enable tab completion in ~/.zshrc? [y/N] ', answer: 'y' },
+      ], 'zsh', { columns, term: 'dumb', cwd: launchDirectory });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const output = result.stdout.replace(/\r\n/gu, '\n');
+      assert.include(output, '  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the ballin command at ~/.local/bin/ballin.\n');
+      assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n');
+      assert.include(fs.readFileSync(sandbox.log, 'utf8'), `git:clone https://github.com/JBallin/ballin-scripts.git ${sandbox.repo}\n`);
+      assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'ballin.config.json')));
+      assert.equal(fs.readlinkSync(path.join(sandbox.home, '.local/bin/ballin')), path.join(sandbox.repo, 'bin/ballin'));
+      const profile = fs.readFileSync(path.join(sandbox.home, '.zshrc'), 'utf8');
+      assert.include(profile, path.join(sandbox.home, '.local/bin'));
+      assert.include(profile, 'completions/_ballin');
+      assert.isEmpty(fs.readdirSync(launchDirectory));
+      assert.notInclude(output, sandbox.home);
+      assert.notInclude(output, '\n\n\n');
+    });
+  }
+
   it('keeps clone and onboarding spacing in a plain terminal', () => {
     sandbox = createSandbox();
     const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], [
-      { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+      { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
       { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
       { prompt: 'Enable tab completion in ', answer: 'n' },
@@ -172,7 +201,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const output = result.stdout.replace(/\r\n/gu, '\n');
-    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n\n⚙️  Created config: ${path.join(sandbox.repo, 'ballin.config.json')}\n`);
+    assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
     assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nWhich Bash startup file does your terminal read? ');
     assert.notInclude(output, '\x1b[');
     assert.notInclude(output, '\n\n\n');
@@ -184,14 +213,14 @@ describe('interactive setup with delayed terminal answers', function() {
         sandbox = createSandbox({ quickstart: true });
         const startup = shell === 'bash'
           ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
-          : { prompt: `Zsh settings directory [Enter for ${sandbox.home}, another absolute directory, or skip]: `, answer: '' };
+          : { prompt: `Zsh settings directory [Enter for home (~), an absolute directory, or skip]: `, answer: '' };
         const backupSetup = backupAnswers.slice(2, 5).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
         const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
           { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
           backupAnswers[1],
           startup,
           { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
-          { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+          { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
           { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
           { prompt: 'Enable tab completion in ', answer: 'n' },
           ...backupSetup,
@@ -221,7 +250,7 @@ describe('interactive setup with delayed terminal answers', function() {
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'no' },
       { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
-      { prompt: 'and make the ballin command available? [y/N] ', answer: 'y' },
+      { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
       { prompt: 'Enable tab completion in ', answer: 'n' },
     ], 'bash');

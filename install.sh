@@ -10,6 +10,16 @@ command_reference() {
   else printf "\`%s\`" "$1"; fi
 }
 
+# Abbreviate only paths inside HOME for display; filesystem operations stay absolute.
+display_path() {
+  local home_path=${HOME%/}
+  case "$1" in
+    "$home_path") printf '~' ;;
+    "$home_path"/*) printf '%s/%s' '~' "${1#"$home_path"/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 # Compare the reviewed command entry again before using Quickstart consent.
 command_entry_snapshot() {
   local target=$1 metadata
@@ -31,8 +41,8 @@ repo_existed=true
 setup_mode='refresh'
 
 print_stale_checkout_guidance() {
-  printf '\n⚠️  ERROR: Unable to update %s before setup.\n' "$repo_dir"
-  printf 'Update or delete %s, then run this installer again.\n' "$repo_dir"
+  printf '\n⚠️  ERROR: Unable to update %s before setup.\n' "$(display_path "$repo_dir")"
+  printf 'Update or delete %s, then run this installer again.\n' "$(display_path "$repo_dir")"
   printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
 }
 
@@ -147,16 +157,17 @@ if command_preflight=$(node -e '
     if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) { console.error("Homebrew returned an invalid installation prefix. Inspect " + process.argv[2] + ", then rerun installation."); process.exit(1); }
     directory = path.join(prefix, "bin");
   }
+  const displayPath = value => value === process.env.HOME ? "~" : value.startsWith(process.env.HOME + "/") ? "~" + value.slice(process.env.HOME.length) : value;
   const source = path.join(process.argv[1], "bin", "ballin");
   const target = path.join(directory, "ballin");
   let snapshot = "null";
   try {
     const stat = fs.lstatSync(target);
-    if (stat.isDirectory()) throw Error("Refusing to replace a directory at " + target);
-    if (!stat.isFile() && !stat.isSymbolicLink()) throw Error("Refusing to replace an unsafe command entry at " + target);
+    if (stat.isDirectory()) throw Error("Refusing to replace a directory at " + displayPath(target));
+    if (!stat.isFile() && !stat.isSymbolicLink()) throw Error("Refusing to replace an unsafe command entry at " + displayPath(target));
     const link = stat.isSymbolicLink() ? fs.readlinkSync(target) : null;
     snapshot = JSON.stringify({dev:stat.dev, ino:stat.ino, mode:stat.mode, nlink:stat.nlink, size:stat.size, mtimeMs:stat.mtimeMs, ctimeMs:stat.ctimeMs, link});
-    if (!(stat.isSymbolicLink() && path.resolve(path.dirname(target), link) === source)) console.error("Warning: installation will replace the existing command at " + target + (link === null ? "." : " (link target: " + link + ")."));
+    if (!(stat.isSymbolicLink() && path.resolve(path.dirname(target), link) === source)) console.error("Warning: installation will replace the existing command at " + displayPath(target) + (link === null ? "." : " (link target: " + displayPath(link) + ")."));
   } catch (error) {
     if (error.code !== "ENOENT") { console.error(error.message); process.exit(1); }
   }
@@ -180,11 +191,11 @@ if [ "$repo_existed" = false ]; then
   if ! "$install_approved"; then
     command_target=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).target)' "$command_preflight") || exit 1
     printf 'Installation will:\n'
-    printf '  - Create Ballin and its settings in:\n    %s\n' "$repo_dir"
-    printf '  - Link the ballin command at:\n    %s\n' "$command_target"
+    printf '  - Create Ballin and its settings in %s.\n' "$(display_path "$repo_dir")"
+    printf '  - Link the ballin command at %s.\n' "$(display_path "$command_target")"
     printf 'Installation details: %s#what-will-installation-change\n' "$docs_url"
   fi
-  if ! "$install_approved" && ! confirm "Install Ballin in $repo_dir and make the ballin command available?"; then
+  if ! "$install_approved" && ! confirm 'Proceed with installation?'; then
     if "$input_ended"; then
       printf '\nNo answer received. Ballin installation stopped before installing Ballin.\n' >&2
       exit 1
@@ -200,14 +211,14 @@ if (
   cd "$HOME" || exit
   if [ "$repo_existed" = false ]; then
     phase 'Installing Ballin'
-    printf '$ git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts\n'
-    git clone https://github.com/JBallin/ballin-scripts.git .ballin-scripts || exit $?
+    printf '$ git clone https://github.com/JBallin/ballin-scripts.git %s\n' "$(display_path "$repo_dir")"
+    git clone https://github.com/JBallin/ballin-scripts.git "$repo_dir" || exit $?
   fi
 ); then :
 else
   prepare_status=$?
   [[ "$prepare_status" != 130 && "$prepare_status" != 143 ]] || exit "$prepare_status"
-  printf '\n⚠️  ERROR: Unable to prepare %s\n' "$repo_dir"
+  printf '\n⚠️  ERROR: Unable to prepare %s\n' "$(display_path "$repo_dir")"
   printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
   exit 1
 fi

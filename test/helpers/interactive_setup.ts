@@ -81,7 +81,7 @@ const driver = [
   'exit "$exit_status"',
 ].join('\n');
 
-const runInteractiveSetup = (sandbox: Sandbox, command: string[], answers: PromptAnswer[], profileShell?: 'bash' | 'zsh', options: { columns?: number; echo?: boolean; term?: string } = {}) => {
+const runInteractiveSetup = (sandbox: Sandbox, command: string[], answers: PromptAnswer[], profileShell?: 'bash' | 'zsh', options: { columns?: number; echo?: boolean; term?: string; cwd?: string } = {}) => {
   const shell = findShell('zsh');
   const marker = randomUUID();
   const stty = ['/bin/stty', '/usr/bin/stty'].find((file) => fs.existsSync(file));
@@ -94,7 +94,7 @@ const runInteractiveSetup = (sandbox: Sandbox, command: string[], answers: Promp
   const result = spawnSync(shell, [
     '-d', '-f', '-c', driver, 'interactive-setup-test', shell, marker,
     String(command.length), ...command, ...answers.flatMap(({ prompt, answer, raw }) => [prompt, answer, raw ? '1' : '0']),
-  ], { cwd: sandbox.home, env, encoding: 'utf8', timeout: 90000, killSignal: 'SIGTERM', detached: true });
+  ], { cwd: options.cwd ?? sandbox.home, env, encoding: 'utf8', timeout: 90000, killSignal: 'SIGTERM', detached: true });
   const childPid = Number(result.stdout?.match(/^CHILD_PID:(\d+)$/mu)?.[1]);
   const groups = [result.pid, childPid].filter((pid) => Number.isInteger(pid) && pid > 1);
   recordSession(sandbox, groups, Boolean(result.pid) && !childPid);

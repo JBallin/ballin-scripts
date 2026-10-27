@@ -554,7 +554,7 @@ describe('interactive onboarding QA lifecycle', function() {
     const result = run('y\nn\nn\nballin backup setup\ny\n\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\ny\n\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'and make the ballin command available? [y/N]');
+    assert.include(result.stdout, 'Proceed with installation? [y/N]');
     assert.include(result.stdout, 'Fake repository: fixture-user/ballin-backups');
     assert.include(result.stdout, 'Preserved sandbox:');
     const state = JSON.parse(fs.readFileSync(path.join(root, 'remote/repository.json'), 'utf8'));
@@ -618,7 +618,7 @@ describe('interactive onboarding QA lifecycle', function() {
     let signalled = false;
     child.stdout.on('data', (bytes: Buffer) => {
       output += bytes.toString();
-      if (!signalled && output.includes('and make the ballin command available? [y/N]')) {
+      if (!signalled && output.includes('Proceed with installation? [y/N]')) {
         signalled = true;
         child.kill('SIGINT');
       }
@@ -654,7 +654,7 @@ describe('interactive onboarding QA lifecycle', function() {
         wrapper.stdout.on('data', (bytes: Buffer) => {
           output += bytes.toString();
           if (output.includes('QA_EXITED')) finish(new Error('Fixture QA exited before installer prompt'));
-          if (output.includes('and make the ballin command available? [y/N]')) finish();
+          if (output.includes('Proceed with installation? [y/N]')) finish();
         });
       });
       root = findRoot(output);
