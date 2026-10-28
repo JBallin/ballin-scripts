@@ -399,7 +399,7 @@ esac
       const installLine = 'Install missing tools and dependencies using existing Homebrew:';
       if (scenario === 'gh') {
         assert.include(result.stdout, `${installLine} GitHub CLI.`);
-        assert.include(result.stdout, 'Keep existing Node.js unchanged.');
+        assert.notInclude(result.stdout, 'Keep existing Node.js unchanged.');
       } else if (scenario === 'node and gh') {
         assert.include(result.stdout, `${installLine} Node.js and GitHub CLI.`);
         assert.notInclude(result.stdout, 'Keep existing Node.js unchanged.');
