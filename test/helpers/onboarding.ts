@@ -50,20 +50,6 @@ const validateSandbox = (sandbox: Sandbox): void => {
   if (JSON.parse(fs.readFileSync(path.join(sandbox.root, markerName), 'utf8')).quickstart !== sandbox.quickstart) {
     throw new Error('Sandbox mode was changed');
   }
-  if (sandbox.quickstart) {
-    const managed = path.join(sandbox.home, '.local/share/ballin-quickstart');
-    if (existsWithoutFollowingLinks(managed)) {
-      if (fs.realpathSync(managed) !== managed || !fs.lstatSync(managed).isDirectory()
-        || fs.lstatSync(path.join(managed, '.managed')).isSymbolicLink()
-        || fs.readFileSync(path.join(managed, '.managed'), 'utf8') !== '1\n') throw new Error('Quickstart directory was changed');
-      const bin = path.join(managed, 'bin');
-      if (fs.realpathSync(bin) !== bin || !['git', 'gh,git'].includes(fs.readdirSync(bin).sort().join(','))) throw new Error('Unexpected quickstart command');
-      for (const name of fs.readdirSync(bin)) {
-        if (!fs.lstatSync(path.join(bin, name)).isSymbolicLink()
-          || fs.readlinkSync(path.join(bin, name)) !== path.join(sandbox.tools, name)) throw new Error('Quickstart tool was changed');
-      }
-    }
-  }
   for (const directory of [sandbox.home, sandbox.tools, sandbox.bin, sandbox.scratch, sandbox.remote]) {
     if (fs.realpathSync(directory) !== directory) throw new Error('Sandbox directory was replaced');
   }
@@ -90,10 +76,8 @@ const validateSandbox = (sandbox: Sandbox): void => {
 const sandboxEnvironment = (sandbox: Sandbox): NodeJS.ProcessEnv => {
   validateSandbox(sandbox);
   return {
-    HOME: sandbox.home, PATH: sandbox.quickstart
-      ? (fs.existsSync(path.join(sandbox.home, '.local/share/ballin-quickstart/.managed'))
-        ? [path.join(sandbox.home, '.local/share/ballin-quickstart/bin'), sandbox.tools, sandbox.bin].join(path.delimiter) : sandbox.tools)
-      : [sandbox.tools, sandbox.bin].join(path.delimiter),
+    HOME: sandbox.home, PATH: sandbox.quickstart && !existsWithoutFollowingLinks(sandbox.repo)
+      ? sandbox.tools : [sandbox.tools, sandbox.bin].join(path.delimiter),
     ...(sandbox.quickstart ? { SHELL: '/bin/bash' } : {}),
     TMPDIR: sandbox.scratch, PWD: sandbox.home,
     GH_CONFIG_DIR: path.join(sandbox.home, '.config/gh'), XDG_CONFIG_HOME: path.join(sandbox.home, '.config'),

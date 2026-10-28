@@ -43,10 +43,12 @@ system_xcode_select='/usr/bin/xcode-select'
 system_pkgutil='/usr/sbin/pkgutil'
 system_sudo='/usr/bin/sudo'
 system_sysctl='/usr/sbin/sysctl'
+system_file='/usr/bin/file'
 # Mirrored bootstrap requirement; tests keep this aligned with package.json.
 required_node_version='24.12'
 scratch=''
 profile_temp=''
+gh_temp=''
 original_path=${PATH-}
 original_pwd=$PWD
 
@@ -58,6 +60,7 @@ fail() {
 cleanup() {
   [ -z "$prompt_error" ] || rm -f -- "$prompt_error"
   [ -z "$profile_temp" ] || rm -f -- "$profile_temp"
+  [ -z "$gh_temp" ] || rm -f -- "$gh_temp"
   [ -z "$scratch" ] || rm -rf -- "$scratch"
 }
 
@@ -202,58 +205,17 @@ node_compatible() {
   case "$answer" in true) return 0 ;; false) return 1 ;; *) return 2 ;; esac
 }
 
-tool_uses_managed_link() {
-  local candidate="$1" name="$2" target hops=0
-  # Follow executable links, not just the PATH directory. Equal final binaries
-  # can still be independently reachable through a version manager.
-  while :; do
-    if [[ "${candidate##*/}" == "$name" && "${candidate%/*}" -ef "$quick_bin" ]]; then return 0; fi
-    [[ -L "$candidate" ]] || return 1
-    (( hops += 1 ))
-    (( hops <= 40 )) || return 0
-    # Suppress readlink's delimiter and preserve target newlines with a sentinel.
-    target=$(readlink -n "$candidate" && printf .) || return 0
-    target=${target%.}
-    if [[ "$target" == /* ]]; then candidate="$target"
-    else candidate="${candidate%/*}/$target"; fi
-  done
-}
-
+# Preserve the first executable on PATH; do not mask a broken command.
 tool_on_path() {
-  local name="$1" validate="${2:-true}" remaining="$PATH" entry candidate
-  # Ignore our own fallback links so a version manager can take over on rerun.
-  # Exclude aliases that need the managed executable link to remain in place.
-  while :; do
-    entry=${remaining%%:*}
-    candidate="${entry:-.}/$name"
-    if [[ "$entry" != "$quick_bin" && ! "${entry:-.}" -ef "$quick_bin" && -f "$candidate" && -x "$candidate" ]] \
-      && ! tool_uses_managed_link "$candidate" "$name" && "$validate" "$candidate"; then
-      printf '%s' "$candidate"
-      return
-    fi
-    [[ "$remaining" == *:* ]] || break
-    remaining=${remaining#*:}
-  done
+  type -P "$1" || true
 }
 
 find_node() {
   local candidate
-  for candidate in "$1" "$quick_bin/node" "$system_node_bin/node"; do
+  for candidate in "$1" "$system_node_bin/node"; do
     if [[ "$candidate" == /* ]] && node_compatible "$candidate"; then
       printf '%s' "$candidate"
       return
-    fi
-  done
-}
-
-release_tool_links() {
-  local name target
-  for name in "$@"; do
-    target="$quick_bin/$name"
-    if [[ -L "$target" ]]; then
-      rm -f -- "$target"
-    elif [[ -e "$target" ]]; then
-      fail "Refusing to replace an existing file at $(display_path "$target")."
     fi
   done
 }
@@ -267,14 +229,15 @@ git_compatible() {
 }
 
 find_git() {
-  local candidate path_candidate
-  path_candidate=$(tool_on_path git git_compatible) || return $?
-  for candidate in "$path_candidate" "$quick_bin/git" "$system_git"; do
-    if git_compatible "$candidate"; then
-      printf '%s' "$candidate"
-      return
-    fi
-  done
+  local candidate
+  candidate=$(tool_on_path git)
+  if [[ -n "$candidate" ]]; then
+    if git_compatible "$candidate"; then printf '%s' "$candidate"; return; fi
+    # Apple's placeholder is missing CLT, including aliases to the same file.
+    if [[ "$candidate" -ef "$system_git" ]] && ! probe_tool "$system_xcode_select" -p >/dev/null 2>&1; then return; fi
+    fail "Git at $(display_path "$candidate") cannot run. Repair your PATH or this command, then rerun Quickstart."
+  fi
+  if git_compatible "$system_git"; then printf '%s' "$system_git"; fi
 }
 
 npm_compatible() {
@@ -292,56 +255,66 @@ gh_compatible() {
 }
 
 find_gh() {
-  local candidate path_candidate
-  path_candidate=$(tool_on_path gh gh_compatible) || return $?
-  for candidate in "$path_candidate" "$quick_bin/gh"; do
-    if gh_compatible "$candidate"; then
-      printf '%s' "$candidate"
-      return
-    fi
-  done
-}
-
-bind_tool() {
-  local target="$quick_bin/$1"
-  if [[ -e "$target" && ! -L "$target" ]]; then
-    fail "Refusing to replace an existing file at $(display_path "$target")."
+  local candidate
+  candidate=$(tool_on_path gh)
+  if [[ -n "$candidate" ]]; then
+    gh_compatible "$candidate" || fail "GitHub CLI at $(display_path "$candidate") is broken or unsupported. Repair your PATH or this command, then rerun Quickstart."
+    printf '%s' "$candidate"
+    return
   fi
-  [[ "$target" != "$2" ]] || return 0
-  if [[ -L "$target" ]] && { [[ "$(readlink "$target")" == "$2" ]] || [[ "$target" -ef "$2" ]]; }; then return; fi
-  ln -sfn "$2" "$target"
+  candidate="$HOME/.local/bin/gh"
+  if [[ -e "$candidate" || -L "$candidate" ]]; then
+    gh_compatible "$candidate" || fail "GitHub CLI at $(display_path "$candidate") is occupied or unsupported. Inspect it and repair your PATH before retrying."
+    printf '%s' "$candidate"
+  fi
 }
 
-# Qualify the invocation children will actually use, not just discovery's path.
 qualify_tool() {
-  local name="$1" selected="$2" validate="$3" resolved
-  resolved=$(type -P "$name")
-  if "$validate" "$resolved"; then return; fi
-  # A wrapper may need its original $0 to locate sibling resources. Release
-  # only our link when the original tool already wins the retained PATH.
-  if [[ "$selected" == "$(tool_on_path "$name")" ]]; then
-    if [[ "$name" == node ]]; then release_tool_links node npm
-    else release_tool_links "$name"; fi
-    resolved=$(type -P "$name")
-    if [[ "$resolved" == "$selected" ]] && "$validate" "$resolved"; then return; fi
-  fi
-  fail "Selected $name cannot run through the final PATH. Put its original directory first on PATH, then rerun this quickstart. PATH setup and authentication have not run."
+  local name="$1" validate="$2" resolved
+  resolved=$(type -P "$name") || fail "$name is not available on the final PATH. Repair your PATH, then rerun Quickstart."
+  "$validate" "$resolved" || fail "$name cannot run through the final PATH: $(display_path "$resolved"). Repair your PATH or this command, then rerun Quickstart."
+}
+
+# Match Node's lexical path normalization without requiring Node before install.
+normalize_absolute() {
+  local rest=$1 part result=''
+  local -a parts=()
+  while [[ -n "$rest" ]]; do
+    rest=${rest#/}; part=${rest%%/*}
+    [[ "$rest" == */* ]] && rest=${rest#*/} || rest=''
+    case "$part" in
+      ''|.) ;;
+      ..) (( ${#parts[@]} == 0 )) || unset 'parts[${#parts[@]}-1]' ;;
+      *) parts+=("$part") ;;
+    esac
+  done
+  for part in "${parts[@]}"; do result+="/$part"; done
+  normalized=${result:-/}
 }
 
 select_command_bin() {
-  local selected_brew selected_prefix brew_status
+  local selected_brew selected_prefix brew_status=0
   command_bin="$local_bin"
   if selected_brew=$(type -P brew); then
-    brew_status=0
-    selected_prefix=$("$selected_brew" --prefix 2>/dev/null) || brew_status=$?
-    [[ "$brew_status" != 130 && "$brew_status" != 143 ]] || exit "$brew_status"
-    [[ "$brew_status" == 0 ]] || return 0
-    local brew_prefix=$selected_prefix
-    brew_prefix=$("$node_tool" -e 'process.stdout.write(process.argv[1].trimEnd())' "$brew_prefix")
-    [[ -n "$brew_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix $(command_reference 'brew --prefix' 2), then rerun this quickstart. PATH setup and Ballin installation have not run."
-    command_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], "bin"))' "$brew_prefix")
+    selected_prefix=$(probe_tool "$selected_brew" --prefix 2>/dev/null) || brew_status=$?
+    stop_if_interrupted "$brew_status"
+    if [[ "$brew_status" == 0 ]]; then
+      selected_prefix="${selected_prefix%"${selected_prefix##*[![:space:]]}"}"
+      [[ -n "$selected_prefix" ]] || fail "Homebrew returned an empty installation prefix. Inspect and fix $(command_reference 'brew --prefix' 2), then rerun this quickstart. PATH setup and Ballin installation have not run."
+      [[ "$selected_prefix" == /* && "$selected_prefix" != *:* && "$selected_prefix" != *$'\n'* && "$selected_prefix" != *$'\r'* ]] || fail 'Homebrew returned an invalid installation prefix. Inspect brew --prefix, then rerun Quickstart.'
+      normalize_absolute "$selected_prefix/bin"
+      command_bin="$normalized"
+    fi
   fi
-  [[ "$command_bin" == /* && "$command_bin" != *:* && "$command_bin" != *$'\n'* ]] || fail 'Unable to select the Ballin command directory.'
+}
+
+add_path_directory() {
+  local directory=$1
+  if [[ ":$PATH:" != *":$directory:"* ]]; then
+    export PATH="$PATH:$directory"
+    if [[ -n "$command_path" ]]; then command_path+=":"; fi
+    command_path+="$directory"
+  fi
 }
 
 original_path_sufficient() {
@@ -360,17 +333,6 @@ original_path_sufficient() {
       if (!first || !same(first, selected)) process.exit(1);
     }
   ' "$original_normalized_path" "$command_bin" "$node_tool" "$git_tool" "$gh_tool" "$npm_tool"
-}
-
-tools_need_helper() {
-  local selected name found
-  for selected in "$node_tool" "$git_tool" "$gh_tool" "$npm_tool"; do
-    [[ -n "$selected" ]] || continue
-    name=${selected##*/}
-    found=$(PATH="$original_normalized_path" type -P "$name") || return 0
-    [[ "$found" -ef "$selected" ]] || return 0
-  done
-  return 1
 }
 
 find_suitable_brew() {
@@ -706,31 +668,42 @@ install_gh() {
   ' "$scratch/gh-release.json")
   archive="gh_${version}_macOS_${gh_arch}.zip"
   directory=${archive%.zip}
-  if [[ -d "$quick_root/$directory" && ! -L "$quick_root/$directory" ]] \
-    && [[ -f "$quick_root/$directory/bin/gh" && ! -L "$quick_root/$directory/bin/gh" ]] \
-    && "$quick_root/$directory/bin/gh" --version >/dev/null 2>&1; then
-    gh_tool="$quick_root/$directory/bin/gh"
-    return
-  fi
+  [[ ! -e "$local_bin/gh" && ! -L "$local_bin/gh" ]] || fail "GitHub CLI destination $(display_path "$local_bin/gh") is occupied. Inspect it before retrying."
   printf 'Downloading GitHub CLI %s...\n' "$version"
   download "https://github.com/cli/cli/releases/download/v$version/gh_${version}_checksums.txt" "$scratch/gh-checksums.txt"
   download "https://github.com/cli/cli/releases/download/v$version/$archive" "$scratch/$archive" progress
   checksum "$scratch/gh-checksums.txt" "$archive" >/dev/null
   mkdir "$scratch/gh-extract"
   ditto -x -k "$scratch/$archive" "$scratch/gh-extract"
-  [[ -f "$scratch/gh-extract/$directory/bin/gh" && ! -L "$scratch/gh-extract/$directory/bin/gh" ]] \
-    || fail 'The GitHub CLI archive has an unexpected layout.'
-  [[ ! -e "$quick_root/$directory" && ! -L "$quick_root/$directory" ]] \
-    || fail "An existing quickstart download at $(display_path "$quick_root/$directory") needs inspection before retrying."
-  mv "$scratch/gh-extract/$directory" "$quick_root/$directory"
-  gh_tool="$quick_root/$directory/bin/gh"
-  "$gh_tool" --version >/dev/null
+  local binary="$scratch/gh-extract/$directory/bin/gh"
+  [[ -d "$scratch/gh-extract/$directory" && ! -L "$scratch/gh-extract/$directory" \
+    && -d "$scratch/gh-extract/$directory/bin" && ! -L "$scratch/gh-extract/$directory/bin" \
+    && -f "$binary" && ! -L "$binary" && -x "$binary" ]] \
+    || fail 'The GitHub CLI archive has an unexpected layout or executable.'
+  # file is supplied by macOS and does not require Command Line Tools.
+  local architecture_description status=0
+  architecture_description=$(LC_ALL=C probe_tool "$system_file" -b "$binary" 2>/dev/null) || status=$?
+  stop_if_interrupted "$status"
+  # Universal-binary detail lines can contain the input filename.
+  architecture_description=${architecture_description%%$'\n'*}
+  [[ "$status" == 0 && "$architecture_description" =~ Mach-O[[:space:]]64-bit[[:space:]]executable[[:space:]]${machine}([^[:alnum:]_]|$) ]] \
+    || fail 'The GitHub CLI archive does not contain the expected native architecture.'
+  gh_compatible "$binary" || fail 'The downloaded GitHub CLI cannot run or is unsupported.'
+  mkdir -p "$local_bin"
+  gh_temp=$(mktemp "$local_bin/.gh.XXXXXX") || fail 'Unable to stage GitHub CLI.'
+  cp "$binary" "$gh_temp"
+  chmod 755 "$gh_temp"
+  # linkSync is exclusive even if the destination becomes a directory or link.
+  "$node_tool" -e 'require("fs").linkSync(process.argv[1], process.argv[2])' "$gh_temp" "$local_bin/gh" \
+    || fail "Could not install GitHub CLI at $(display_path "$local_bin/gh"); inspect the destination before retrying."
+  rm -f -- "$gh_temp"; gh_temp=''
+  gh_tool="$local_bin/gh"
 }
 
 path_incomplete() {
   path_setup_complete=false
   printf '\nPersistent PATH setup incomplete: %s\n' "$1" >&2
-  printf 'The startup file was left unchanged. Setup can continue with the helper PATH.\n' >&2
+  printf 'The startup file was left unchanged. Setup can continue with the current process PATH.\n' >&2
   printf 'Review your shell startup and PATH setup, or rerun this quickstart to retry.\n' >&2
 }
 
@@ -756,7 +729,7 @@ profile_unchanged() {
 profile_has_path() {
   "$node_tool" -e '
     const fs = require("fs"), path = require("path");
-    const [file, exact, legacy, quick, commands, home, snapshot, metadata] = process.argv.slice(1);
+    const [file, exact, commands, home, snapshot, metadata] = process.argv.slice(1);
     try {
       const parent = fs.lstatSync(path.dirname(file));
       if (!parent.isDirectory()) process.exit(1);
@@ -769,8 +742,8 @@ profile_has_path() {
         text = contents.toString("utf8");
       } finally { fs.closeSync(fd); }
       const lines = text.split("\n");
-      const exactLine = lines.includes(exact) || lines.includes(legacy);
-      const directories = [quick, ".local/share/ballin-quickstart/bin", ...commands.split(":")];
+      const exactLine = lines.includes(exact);
+      const directories = [".local/share/ballin-quickstart/bin", ...commands.split(":")];
       // Literal suffixes cover common HOME/tilde spellings without interpreting shell code.
       for (const directory of commands.split(":")) {
         const relative = path.relative(home, directory);
@@ -784,7 +757,7 @@ profile_has_path() {
       }
       process.exit(1);
     } catch { process.exit(1); }
-  ' "$1" "$line" "$legacy_line" "$quick_bin" "$command_path" "$HOME" "$scratch/profile-original" "$scratch/profile-metadata" 2>/dev/null
+  ' "$1" "$line" "$command_path" "$HOME" "$scratch/profile-original" "$scratch/profile-metadata" 2>/dev/null
 }
 
 check_existing_path() {
@@ -807,12 +780,9 @@ check_existing_path() {
 
 configure_path() {
   phase 'Setting up PATH'
-  local escaped command_escaped line legacy_line choice candidate original default_directory login_profile
-  escaped=${quick_bin//\'/\'\\\'\'}
+  local command_escaped line choice candidate original default_directory login_profile
   command_escaped=${command_path//\'/\'\\\'\'}
-  legacy_line="export PATH='$escaped':\$PATH:'$command_escaped'"
-  if tools_need_helper; then line="export PATH='$escaped':\$PATH:'$command_escaped'"
-  else line="export PATH=\$PATH:'$command_escaped'"; fi
+  line="export PATH=\$PATH:'$command_escaped'"
   profile_shell=${SHELL:-}
   if [[ "$profile_shell" != /* || ! -f "$profile_shell" || ! -x "$profile_shell" ]]; then
     path_incomplete 'Select an executable Bash or zsh in SHELL before retrying.'; return
@@ -932,7 +902,7 @@ configure_path() {
 }
 
 main() {
-  local approved_root='' approved_command='' approved_snapshot='' exposed_npm managed_tool os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path destination npm_tool='' new_quick_root=true path_setup_complete=true selected_profile='' backup_hostname=''
+  local approved_root='' approved_command='' approved_snapshot='' exposed_npm os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path='' destination npm_tool='' path_setup_complete=true selected_profile='' backup_hostname=''
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
@@ -948,16 +918,8 @@ main() {
   normalize_process_path
   # Select executable tools and keep child installers from importing overrides.
   unset -f git node gh
-  quick_root="$HOME/.local/share/ballin-quickstart"
-  quick_bin="$quick_root/bin"
-  if [[ -e "$quick_root" || -L "$quick_root" ]]; then
-    if ! { [[ -d "$quick_root" && ! -L "$quick_root" && -f "$quick_root/.managed" && ! -L "$quick_root/.managed" ]] \
-      && [[ "$(cat "$quick_root/.managed")" == 1 ]]; }; then
-      fail "Refusing to change an unrecognized directory at $(display_path "$quick_root")."
-    fi
-    [[ ! -L "$quick_bin" && ( ! -e "$quick_bin" || -d "$quick_bin" ) ]] || fail "Refusing to change $(display_path "$quick_bin")."
-    new_quick_root=false
-  fi
+  normalize_absolute "$HOME/.local/bin"
+  local_bin="$normalized"
   phase 'Setting up Ballin'
   backup_choice=no
   if confirm 'Set up backups to GitHub?' y; then backup_choice=yes
@@ -967,13 +929,6 @@ main() {
     command_reference 'ballin backup setup'
     printf " when you’re ready.\n"
   fi
-  # Refuse managed-slot conflicts before discovery can execute them.
-  for managed_tool in node npm git gh; do
-    [[ "$managed_tool" != gh || "$backup_choice" == yes ]] || continue
-    if [[ -e "$quick_bin/$managed_tool" && ! -L "$quick_bin/$managed_tool" ]]; then
-      fail "Refusing to replace an existing file at $(display_path "$quick_bin/$managed_tool")."
-    fi
-  done
   phase 'Checking required tools'
   active_node=$(type -P node) || active_node=''
   local active_node_status=0
@@ -984,23 +939,19 @@ main() {
       2) manual_node_guidance "$active_node" unknown ;;
     esac
   fi
-  path_node=$(tool_on_path node)
+  path_node="$active_node"
   find_suitable_brew
-  local path_node_status=0
-  [[ -z "$path_node" ]] || node_compatible "$path_node" || path_node_status=$?
-  if [[ "$path_node_status" != 0 ]]; then
-    if [[ -n "$active_node" ]] && tool_uses_managed_link "$active_node" node; then
-      # The compatible managed runtime actually wins PATH. Keep it while an
-      # older external runtime remains shadowed; do not release its links.
-      path_node=''
-    else
-      case "$path_node_status" in
-        1) manual_node_guidance "$path_node" incompatible ;;
-        2) manual_node_guidance "$path_node" unknown ;;
-      esac
-    fi
+  if [[ -n "$path_node" ]]; then
+    local path_node_status=0
+    node_compatible "$path_node" || path_node_status=$?
+    case "$path_node_status" in
+      1) manual_node_guidance "$path_node" incompatible ;;
+      2) manual_node_guidance "$path_node" unknown ;;
+    esac
+    node_tool="$path_node"
+  else
+    node_tool=$(find_node '')
   fi
-  node_tool=$(find_node "$path_node")
   if [[ -z "$node_tool" ]]; then
     hidden_node=$(existing_hidden_node)
     if [[ -n "$hidden_node" ]]; then
@@ -1020,6 +971,21 @@ main() {
   [[ -n "$git_tool" ]] || need_git=true
   [[ -n "$node_tool" ]] || need_node=true
   [[ "$backup_choice" != yes || -n "$gh_tool" ]] || need_gh=true
+  # Compute the complete child PATH before previewing the core installer target.
+  if [[ -n "$node_tool" && "$node_tool" != "$path_node" ]]; then add_path_directory "${node_tool%/*}"; fi
+  if "$need_node"; then
+    if [[ -n "$brew_tool" ]]; then add_path_directory "$brew_prefix/bin"
+    else add_path_directory "$system_node_bin"; fi
+  fi
+  if [[ -n "$git_tool" ]]; then add_path_directory "${git_tool%/*}"
+  elif "$need_git" && [[ -z "$brew_tool" ]]; then add_path_directory "${system_git%/*}"; fi
+  if [[ -n "$gh_tool" ]]; then add_path_directory "${gh_tool%/*}"
+  elif "$need_gh" && [[ -z "$brew_tool" ]]; then add_path_directory "$local_bin"; fi
+  select_command_bin
+  add_path_directory "$command_bin"
+  # The first addition can expose Homebrew and change the command destination.
+  select_command_bin
+  add_path_directory "$command_bin"
   if "$need_git" || "$need_node" || "$need_gh"; then
     prerequisite_names=''
     prerequisite_list=()
@@ -1067,23 +1033,13 @@ main() {
         printf '  - Install Node.js 24 in %s.\n' "$(display_path "$system_node_bin")"
       fi
       if "$need_gh"; then
-        printf '  - Install GitHub CLI in %s.\n' "$(display_path "$quick_root")"
+        printf '  - Install GitHub CLI in %s.\n' "$(display_path "$local_bin/gh")"
       fi
     fi
     approved_root=''; approved_command=''; approved_snapshot=''
     if [[ ! -d "$HOME/.ballin-scripts" ]]; then
       approved_root="$HOME/.ballin-scripts"
-      local planned_prefix="$HOME/.local" detected_prefix='' planned_brew='' prefix_status=0
-      if planned_brew=$(type -P brew); then
-        detected_prefix=$(probe_tool "$planned_brew" --prefix 2>/dev/null) || prefix_status=$?
-        stop_if_interrupted "$prefix_status"
-        if [[ "$prefix_status" == 0 ]]; then
-          detected_prefix="${detected_prefix%"${detected_prefix##*[![:space:]]}"}"
-          [[ "$detected_prefix" == /* && "$detected_prefix" != *:* && "$detected_prefix" != *$'\n'* && "$detected_prefix" != *$'\r'* ]] || fail "Homebrew returned an invalid installation prefix. Inspect $(command_reference 'brew --prefix' 2), then rerun Quickstart."
-          planned_prefix="$detected_prefix"
-        fi
-      fi
-      approved_command="$planned_prefix/bin/ballin"
+      approved_command="$command_bin/ballin"
       approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $(display_path "$approved_command")."
       printf '  - Create Ballin and its settings in %s.\n' "$(display_path "$approved_root")"
       printf '  - Link the ballin command at %s.\n' "$(display_path "$approved_command")"
@@ -1103,9 +1059,6 @@ main() {
       return 0
     fi
   fi
-  mkdir -p "$quick_bin"
-  # Existing markers were validated above; leave them untouched on reruns.
-  if "$new_quick_root"; then printf '1\n' > "$quick_root/.managed"; fi
   scratch=$(mktemp -d "${TMPDIR:-/tmp}/ballin-quickstart.XXXXXX")
   if [[ -n "$brew_tool" ]] && { "$need_git" || "$need_node" || "$need_gh"; }; then
     install_brew_tools
@@ -1116,40 +1069,15 @@ main() {
   "$need_node" && install_node
   "$need_gh" && install_gh
   fi
-  if [[ "$node_tool" == "$path_node" ]]; then
-    # Release fallbacks only when the selected Node already wins the underlying PATH.
-    release_tool_links node npm
-  else
-    bind_tool node "$node_tool"
-    if [[ -x "${node_tool%/*}/npm" ]]; then
-      npm_tool="${node_tool%/*}/npm"
-      bind_tool npm "$npm_tool"
-    else
-      release_tool_links npm
-    fi
-  fi
-  [[ "$backup_choice" != yes ]] || bind_tool gh "$gh_tool"
-  bind_tool git "$git_tool"
-  local_bin=$("$node_tool" -e 'process.stdout.write(require("path").join(process.argv[1], ".local", "bin"))' "$HOME")
-  select_command_bin
-  command_path="$command_bin"
-  export PATH="$quick_bin:$PATH:$command_bin"
-  qualify_tool node "$node_tool" node_compatible
-  [[ -z "$npm_tool" ]] || qualify_tool npm "$npm_tool" npm_compatible
-  qualify_tool git "$git_tool" git_compatible
-  [[ "$backup_choice" != yes ]] || qualify_tool gh "$gh_tool" gh_compatible
-  # The added command directory can expose Homebrew. Keep that directory so
-  # the core installer and fresh shells discover the same brew executable.
-  select_command_bin
-  if [[ "$command_path" != "$command_bin" ]]; then
-    command_path+=":$command_bin"
-    export PATH="$PATH:$command_bin"
-  fi
-  if [[ "$command_bin" != "$local_bin" && ":$PATH:" == *":$local_bin:"* ]]; then
-    command_path="$local_bin:$command_bin"
-  fi
+  # Validate what all child processes will actually resolve after every PATH addition.
+  qualify_tool node node_compatible
+  node_tool=$(type -P node)
+  qualify_tool git git_compatible
+  git_tool=$(type -P git)
+  if [[ "$backup_choice" == yes ]]; then qualify_tool gh gh_compatible; gh_tool=$(type -P gh); fi
   if exposed_npm=$(type -P npm) && [[ -f "$exposed_npm" && -x "$exposed_npm" ]]; then
-    npm_compatible "$exposed_npm" || fail "npm cannot run through the final PATH: $(display_path "$exposed_npm"). Fix or remove this broken command, then rerun this quickstart. PATH setup and authentication have not run."
+    npm_tool="$exposed_npm"
+    npm_compatible "$npm_tool" || fail "npm cannot run through the final PATH: $(display_path "$npm_tool"). Fix or remove this broken command, then rerun this quickstart. PATH setup and authentication have not run."
   fi
   check_ballin_command
   if [[ "$backup_choice" == yes ]]; then

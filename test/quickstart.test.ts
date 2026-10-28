@@ -94,8 +94,8 @@ esac
     const selection = fs.existsSync(shell) && ['bash', 'zsh'].includes(path.basename(shell)) ? target + '\n' : '';
     const missingGit = overrides.FAKE_GIT === 'missing';
     const missingNode = overrides.FAKE_MISSING_NODE === '1' && !fs.existsSync(path.join(systemNode, 'node'))
-      && !fs.existsSync(path.join(home, '.local/share/ballin-quickstart/bin/node'));
-    const missingGh = !(overrides.PATH ?? tools).split(':').some((entry) => fs.existsSync(path.resolve(cwd, entry || '.', 'gh'))) && !fs.existsSync(path.join(home, '.local/share/ballin-quickstart/bin/gh'));
+      && !fs.existsSync(path.join(systemNode, 'node'));
+    const missingGh = !(overrides.PATH ?? tools).split(':').some((entry) => fs.existsSync(path.resolve(cwd, entry || '.', 'gh'))) && !fs.existsSync(path.join(home, '.local/bin/gh'));
     const commandDirectory = overrides.FAKE_BREW_PREFIX ? path.join(overrides.FAKE_BREW_PREFIX, 'bin') : path.join(home, '.local/bin');
     const originalHasCommands = (overrides.PATH ?? tools).split(':').some(entry => {
       try { return fs.realpathSync(path.resolve(cwd, entry || '.')) === fs.realpathSync(commandDirectory); }
@@ -132,6 +132,7 @@ system_git="\${FAKE_SYSTEM_GIT:-$FAKE_ROOT/tools/git}"
 system_xcode_select="\${FAKE_SYSTEM_XCODE_SELECT:-$FAKE_ROOT/tools/xcode-select}"
 system_pkgutil="\${FAKE_SYSTEM_PKGUTIL:-$FAKE_ROOT/tools/pkgutil}"
 system_sudo="\${FAKE_SYSTEM_SUDO:-$FAKE_ROOT/tools/sudo}"
+system_file="$FAKE_ROOT/tools/file"
 ${beforeMain}
 trap cleanup EXIT
 main
@@ -322,11 +323,16 @@ case "$name" in
       exec "$TEST_NODE_RUNTIME" "$FAKE_CLT_PRIVILEGED_HELPER" "$@"
     fi
     exec "$TEST_NODE_RUNTIME" "$FAKE_PRIVILEGED_HELPER" "$@" ;;
+  file)
+    [[ "$1" == -b && $# == 2 ]] || exit 97
+    if [[ "\${FAKE_GH_COLLISION:-0}" == 1 ]]; then mkdir -p "$HOME/.local/bin"; printf 'occupied' > "$HOME/.local/bin/gh"; fi
+    if [[ "\${FAKE_GH_WRONG_ARCH:-0}" == 1 ]]; then printf 'Mach-O 64-bit executable wrongarch\\nMach-O 64-bit executable %s\\n' "\${FAKE_ARCH:-arm64}"
+    else printf 'Mach-O 64-bit executable %s\\n' "\${FAKE_ARCH:-arm64}"; fi ;;
   ditto)
     [[ "$1" == -x && "$2" == -k && "$3" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/gh_2.102.0_macOS_*.zip && "$4" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/gh-extract && $# == 4 ]] || exit 97
     folder="\${3##*/}"; folder="\${folder%.zip}"
     mkdir -p "$4/$folder/bin"
-    cp "$FAKE_ROOT/fake-tool" "$4/$folder/bin/gh" ;;
+    if [[ "\${FAKE_GH_BAD_LAYOUT:-0}" != 1 ]]; then cp "$FAKE_ROOT/fake-tool" "$4/$folder/bin/gh"; fi ;;
   install.sh)
     printf "==> Installing Ballin\\n"
     [[ "\${FAKE_INSTALL_FAIL:-0}" != 1 ]] || exit 1
@@ -366,7 +372,7 @@ case "$name" in
   *) exit 97 ;;
 esac
 `, { mode: 0o755 });
-    for (const name of ['uname', 'sw_vers', 'git', 'xcode-select', 'node', 'gh', 'curl', 'pkgutil', 'sudo', 'ditto', 'softwareupdate']) linkFake(name);
+    for (const name of ['uname', 'sw_vers', 'git', 'xcode-select', 'node', 'gh', 'curl', 'pkgutil', 'sudo', 'ditto', 'file', 'softwareupdate']) linkFake(name);
   });
   for (const declined of [false, true]) {
     it(`uses ordinary node through suitable existing Homebrew after consent (decline ${declined})`, () => {
@@ -449,9 +455,7 @@ printf '0\\n'
         assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
         assert.isFalse(fs.existsSync(path.join(root, 'login-complete')));
         assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
-        const managed = path.join(home, '.local/share/ballin-quickstart/.managed');
-        assert.equal(fs.existsSync(managed), checkedOperation || stage === 'select-prefix');
-        if (fs.existsSync(managed)) assert.equal(fs.readFileSync(managed, 'utf8'), '1\n');
+        assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
         const partial = path.join(root, 'approved-brew-effect');
         assert.equal(fs.existsSync(partial), stage === 'install');
         if (stage === 'install') assert.equal(fs.readFileSync(partial, 'utf8'), 'partial tool state\n');
@@ -840,7 +844,7 @@ system_sudo=fixture_sudo
         assert.isFalse(fs.existsSync(path.join(root, 'login-complete')));
         assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
         assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
-        assert.equal(fs.readFileSync(path.join(home, '.local/share/ballin-quickstart/.managed'), 'utf8'), '1\n');
+        assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
       });
     }
   }
@@ -876,52 +880,6 @@ system_sudo=fixture_sudo
     for (const unexpected of ['sudo:', 'xcode-select:--install', 'releases/latest', 'ballin:update', 'brew:']) assert.notInclude(readLog(), unexpected);
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), "PATH=$PATH:'" + path.join(home, '.local/bin') + "'");
   });
-  for (const name of ['node', 'npm', 'git', 'gh']) {
-    for (const kind of ['executable', 'file', 'directory']) {
-      it(`rejects managed ${name} ${kind} in slot preflight before tool probes`, () => {
-        assert.equal(run().status, 0);
-        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-        const target = path.join(quickBin, name);
-        fs.rmSync(target, { force: true });
-        if (kind === 'directory') fs.mkdirSync(target);
-        const content = kind === 'directory' ? path.join(target, 'keep') : target;
-        const bytes = '#!/bin/bash\nprintf "executed\\n" > "$FAKE_ROOT/conflict-ran"\nexit 1\n';
-        fs.writeFileSync(content, bytes, { mode: kind === 'executable' ? 0o755 : 0o640 });
-        const before = fs.lstatSync(target);
-        const profile = fs.readFileSync(path.join(home, '.zshrc'));
-        if (name !== 'npm') fs.unlinkSync(path.join(tools, name));
-        fs.writeFileSync(log, '');
-
-        const result = run();
-
-        assert.equal(result.status, 1, result.stdout + result.stderr);
-        assert.include(result.stderr, `Refusing to replace an existing file at ~/${path.relative(home, target)}.`);
-        assert.isFalse(fs.existsSync(path.join(root, 'conflict-ran')));
-        assert.equal(fs.lstatSync(target).ino, before.ino);
-        assert.equal(fs.lstatSync(target).mode, before.mode);
-        assert.equal(fs.readFileSync(content, 'utf8'), bytes);
-        assert.deepEqual(fs.readFileSync(path.join(home, '.zshrc')), profile);
-        for (const forbidden of ['node:', 'npm:', 'git:', 'gh:', 'curl:', 'sudo:', 'install.sh:', 'ballin:']) {
-          assert.notInclude(readLog(), forbidden);
-        }
-      });
-    }
-    it(`allows a dangling managed ${name} symlink through slot preflight on rerun`, () => {
-      assert.equal(run().status, 0);
-      const target = path.join(home, '.local/share/ballin-quickstart/bin', name);
-      fs.rmSync(target, { force: true });
-      const missing = path.join(root, 'missing-' + name);
-      fs.symlinkSync(missing, target);
-      fs.writeFileSync(log, '');
-
-      const result = run();
-
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.isFalse(fs.existsSync(missing));
-      assert.notInclude(result.stderr, 'Refusing to replace');
-      assert.include(readLog(), 'ballin:backup open');
-    });
-  }
   for (const name of ['node', 'git', 'gh']) {
     for (const shadowed of [false, true]) {
       it(`qualifies sibling-relative ${name} wrappers at the final handoff (shadowed: ${shadowed})`, () => {
@@ -943,7 +901,7 @@ system_sudo=fixture_sudo
         assert.equal(result.status, shadowed ? 1 : 0, result.stdout + result.stderr);
         assert.deepEqual(fs.readFileSync(wrapper), original);
         if (shadowed) {
-          assert.include(result.stderr, name === 'node' ? 'Existing Node.js at' : 'cannot run through the final PATH');
+          assert.include(result.stderr, name === 'node' ? 'Existing Node.js at' : name === 'git' ? 'cannot run' : 'broken or unsupported');
           assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
           for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
         } else {
@@ -1042,15 +1000,15 @@ system_sudo=fixture_sudo
       const fixturePath = placement === 'outside PATH' ? tools
         : [tools, ...(placement === 'shadowed' ? [other] : []), systemNode].join(':');
       const result = run('y\ny\n', { PATH: fixturePath, FAKE_MISSING_NODE: '1', FAKE_CHECK_NPM_COLLECTOR: '1' });
-      assert.equal(result.status, placement === 'reachable' ? 0 : 1, result.stdout + result.stderr);
-      if (placement !== 'reachable') {
-        assert.include(result.stderr, placement === 'outside PATH' ? 'Selected npm cannot run through the final PATH' : 'npm cannot run through the final PATH');
+      assert.equal(result.status, placement === 'shadowed' ? 1 : 0, result.stdout + result.stderr);
+      if (placement === 'shadowed') {
+        assert.include(result.stderr, 'npm cannot run through the final PATH');
         assert.equal(fs.readFileSync(profile, 'utf8'), '# Existing profile\n');
         assert.equal(fs.statSync(profile).ino, before.ino);
         assert.equal(fs.statSync(profile).mode, before.mode);
         for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'wrong-npm']) assert.notInclude(readLog(), forbidden);
       }
-      const retry = run(placement === 'reachable' ? '' : 'y\ny\n', {
+      const retry = run(placement !== 'shadowed' ? '' : 'y\ny\n', {
         PATH: `${tools}:${systemNode}`, FAKE_MISSING_NODE: '1', FAKE_CHECK_NPM_COLLECTOR: '1',
       });
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
@@ -1189,13 +1147,7 @@ system_sudo=fixture_sudo
         for (const forbidden of ['sudo:', 'xcode-select:--install', 'releases/latest']) assert.notInclude(readLog(), forbidden);
         assert.include(readLog(), 'fixture:changed-cwd-tools-ready');
         assert.include(readLog(), 'ballin:backup open');
-        if (name !== 'node') {
-          const selected = fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin', name));
-          assert.isTrue(path.isAbsolute(selected));
-          assert.equal(fs.realpathSync(selected), fs.realpathSync(path.join(relativeBin, name)));
-        } else {
-          assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart/bin/node')));
-        }
+        assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
       });
     }
   }
@@ -1387,7 +1339,7 @@ system_sudo=fixture_sudo
       assert.equal(childEnv.BASH_ENV, '');
       assert.equal(parentEnv.BASH_ENV, startup);
       assert.equal(childEnv.PATH, parentEnv.PATH);
-      assert.isTrue(childEnv.PATH.startsWith(path.join(home, '.local/share/ballin-quickstart/bin') + ':'));
+      assert.isTrue(childEnv.PATH.startsWith(tools + ':'));
       for (const [key, value] of Object.entries(retained)) assert.equal(childEnv[key], value, key);
       assert.notInclude(readLog(), 'git:clone');
       assert.notInclude(readLog(), 'ballin:');
@@ -1461,69 +1413,8 @@ system_sudo=fixture_sudo
     assert.notInclude(readLog(), 'gh:auth status --active');
     assert.notInclude(readLog(), 'install.sh:');
   });
-  for (const name of ['node', 'git', 'gh']) {
-    for (const regular of [false, true]) {
-      it(`handles a managed ${name} fallback rerun with a ${regular ? 'regular file' : 'symlink'} slot`, () => {
-        assert.equal(run().status, 0);
-        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-        const target = path.join(quickBin, name);
-        const fallback = path.join(root, 'fallback');
-        fs.mkdirSync(fallback);
-        const executable = path.join(fallback, name);
-        fs.copyFileSync(path.join(root, 'fake-tool'), executable);
-        fs.chmodSync(executable, 0o755);
-        fs.rmSync(target, { force: true });
-        if (regular) fs.copyFileSync(executable, target);
-        else fs.symlinkSync(executable, target);
-        fs.unlinkSync(path.join(tools, name));
-        const before = fs.lstatSync(target);
-        const profile = fs.readFileSync(path.join(home, '.zshrc'));
-        fs.writeFileSync(log, '');
-
-        const result = run();
-
-        assert.equal(result.status, regular ? 1 : 0, result.stdout + result.stderr);
-        assert.equal(fs.lstatSync(target).ino, before.ino);
-        assert.equal(fs.lstatSync(target).mode, before.mode);
-        assert.deepEqual(fs.readFileSync(target), fs.readFileSync(executable));
-        assert.deepEqual(fs.readFileSync(path.join(home, '.zshrc')), profile);
-        if (regular) {
-          assert.include(result.stderr, `Refusing to replace an existing file at ~/${path.relative(home, target)}.`);
-          for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) {
-            assert.notInclude(readLog(), forbidden);
-          }
-        } else {
-          assert.equal(fs.readlinkSync(target), executable);
-          assert.include(readLog(), 'ballin:backup open');
-        }
-      });
-    }
-  }
-  for (const kind of ['file', 'directory']) {
-    for (const self of [true, false]) {
-      it(`refuses a managed ${kind} conflict when binding ${self ? 'the same' : 'another'} path`, () => {
-        const quickBin = path.join(root, 'binding slots');
-        fs.mkdirSync(quickBin);
-        const target = path.join(quickBin, 'npm');
-        if (kind === 'directory') fs.mkdirSync(target);
-        const content = kind === 'directory' ? path.join(target, 'sentinel') : target;
-        fs.writeFileSync(content, 'preserve this content\n');
-        const before = fs.lstatSync(target);
-        const result = spawnSync('/bin/bash', ['-c',
-          'source "$1"; quick_bin="$2"; bind_tool npm "$3"', 'fixture', source, quickBin,
-          self ? target : path.join(tools, 'node')], {
-          encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: tools }),
-        });
-        assert.equal(result.status, 1, result.stdout + result.stderr);
-        assert.include(result.stderr, `Refusing to replace an existing file at ${target}.`);
-        assert.equal(fs.lstatSync(target).ino, before.ino);
-        assert.equal(fs.lstatSync(target).mode, before.mode);
-        assert.equal(fs.readFileSync(content, 'utf8'), 'preserve this content\n');
-      });
-    }
-  }
   for (const [name, kind] of [['git', 'broken'], ['node', 'broken'], ['node', 'outdated'], ['gh', 'broken'], ['gh', 'unsupported']]) {
-    it(`uses a later working PATH ${name} past a ${kind} executable in the actual core installer`, () => {
+    it(`stops on an earlier ${kind} PATH ${name} before the core installer`, () => {
       const early = path.join(root, 'invalid-first');
       const later = path.join(root, 'working-later');
       fs.mkdirSync(early);
@@ -1538,18 +1429,10 @@ system_sudo=fixture_sudo
         PATH: `${early}:${later}:${tools}`, FAKE_SYSTEM_GIT: path.join(root, 'missing-system-git'),
         FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh'),
       });
-      if (name === 'node') {
-        assert.equal(result.status, 1, result.stdout + result.stderr);
-        assert.include(result.stderr, 'Existing Node.js at ' + path.join(early, name));
-        assert.notInclude(readLog(), 'install.sh:'); return;
-      }
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.notInclude(result.stdout, 'Missing prerequisites:');
-      assert.include(result.stdout, 'Proceed with installation? [y/N]');
-      assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
-      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-      assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(later, name));
-      if (name === 'node') assert.equal(fs.readlinkSync(path.join(quickBin, 'npm')), path.join(later, 'npm'));
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      if (name === 'node') assert.include(result.stderr, 'Existing Node.js at ' + path.join(early, name));
+      else assert.include(result.stderr, path.join(early, name));
+      assert.notInclude(readLog(), 'install.sh:');
       for (const forbidden of ['sudo:', 'xcode-select:--install', '/releases/latest', 'git:clone', 'ballin:']) {
         assert.notInclude(readLog(), forbidden);
       }
@@ -1574,11 +1457,7 @@ system_sudo=fixture_sudo
       const result = run('y\nn\n', {
         PATH: `${early}:${tools}`, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh'),
       });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.notInclude(result.stdout, 'Missing prerequisites:');
-      assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
-      const selected = fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin/gh'));
-      assert.equal(selected, helpExit === 0 ? candidate : path.join(tools, 'gh'));
+      assert.equal(result.status, helpExit === 0 ? 0 : 1, result.stdout + result.stderr);
       assert.include(readLog(), 'streamed-gh:auth status --help');
       if (helpExit === 0) assert.include(readLog(), 'streamed-gh:auth status --active --hostname github.com');
       else assert.notInclude(readLog(), 'streamed-gh:auth status --active');
@@ -1638,74 +1517,6 @@ system_sudo=fixture_sudo
     assert.notInclude(readLog(), 'sudo:');
     for (const name of ['node', 'npm']) assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart/bin', name)));
   });
-  for (const shell of ['bash', 'zsh']) {
-    for (const scenario of ['live link', 'dangling link', 'absent link', 'non-executable sibling', 'replacement sibling']) {
-      it(`reconciles the managed npm fallback on a ${shell} rerun with ${scenario}`, () => {
-        const early = path.join(root, 'invalid-first');
-        const first = path.join(root, 'first-node');
-        const next = path.join(root, 'next-node');
-        const npmBin = path.join(root, 'independent-npm');
-        for (const dir of [early, first, next, npmBin]) fs.mkdirSync(dir);
-        fs.unlinkSync(path.join(tools, 'node'));
-        linkFake('node', first);
-        fs.copyFileSync(path.join(root, 'fake-tool'), path.join(next, 'node'));
-        const npmContents = '#!/bin/bash\nexit 0\n';
-        for (const dir of [first, npmBin]) fs.writeFileSync(path.join(dir, 'npm'), npmContents, { mode: 0o755 });
-        const core = { SHELL: '/bin/' + shell, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') };
-        const installed = run('y\nn\n', { ...core, PATH: `${early}:${npmBin}:${tools}` }, home, 'system_node_bin="$FAKE_ROOT/first-node"');
-        assert.equal(installed.status, 0, installed.stdout + installed.stderr);
-        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-        const managedNpm = path.join(quickBin, 'npm');
-        assert.equal(fs.readlinkSync(managedNpm), path.join(first, 'npm'));
-        if (scenario === 'dangling link') fs.unlinkSync(path.join(first, 'npm'));
-        if (scenario === 'absent link') fs.unlinkSync(managedNpm);
-        if (scenario.includes('sibling')) {
-          fs.writeFileSync(path.join(next, 'npm'), npmContents, { mode: scenario === 'replacement sibling' ? 0o755 : 0o644 });
-        }
-        const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
-        const before = fs.readFileSync(profile, 'utf8');
-        fs.writeFileSync(log, '');
-        const rerun = run('n\n', { ...core, PATH: `${quickBin}:${early}:${next}:${npmBin}:${tools}` });
-        assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
-        for (const name of ['node', 'npm']) assert.notInclude(fs.readdirSync(quickBin), name, 'Release even a dangling link');
-        assert.equal(fs.readFileSync(profile, 'utf8'), before);
-        if (scenario !== 'dangling link') assert.equal(fs.readFileSync(path.join(first, 'npm'), 'utf8'), npmContents);
-        assert.equal(fs.readFileSync(path.join(npmBin, 'npm'), 'utf8'), npmContents);
-        if (scenario.includes('sibling')) assert.equal(fs.readFileSync(path.join(next, 'npm'), 'utf8'), npmContents);
-        const fresh = spawnSync('/bin/' + shell, ['-f', '-c', 'source "$FAKE_PROFILE"; command -v node; command -v npm'], {
-          encoding: 'utf8', cwd: home,
-          env: testChildEnvironment({ HOME: home, PATH: `${early}:${next}:${npmBin}:${tools}`, FAKE_PROFILE: profile }),
-        });
-        assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
-        assert.deepEqual(fresh.stdout.trim().split('\n'), [path.join(next, 'node'),
-          scenario === 'replacement sibling' ? path.join(next, 'npm') : path.join(npmBin, 'npm')]);
-        for (const forbidden of ['sudo:', 'xcode-select:--install', 'ballin:']) assert.notInclude(readLog(), forbidden);
-      });
-    }
-  }
-  for (const kind of ['file', 'directory']) {
-    it(`refuses to remove a non-symlink npm ${kind} while rebinding Node`, () => {
-      const early = path.join(root, 'invalid-first');
-      fs.mkdirSync(early);
-
-      const core = { FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh'), PATH: `${early}:${tools}` };
-      const first = run('y\nn\n', core);
-      assert.equal(first.status, 0, first.stdout + first.stderr);
-      const target = path.join(home, '.local/share/ballin-quickstart/bin/npm');
-      if (kind === 'directory') fs.mkdirSync(target);
-      const protectedFile = kind === 'file' ? target : path.join(target, 'keep');
-      fs.writeFileSync(protectedFile, 'Do not remove.\n', { mode: 0o640 });
-      const before = fs.statSync(protectedFile);
-      fs.writeFileSync(log, '');
-      const rerun = run('n\n', core);
-      assert.equal(rerun.status, 1, rerun.stdout + rerun.stderr);
-      assert.include(rerun.stderr, `Refusing to replace an existing file at ~/${path.relative(home, target)}`);
-      assert.equal(fs.readFileSync(protectedFile, 'utf8'), 'Do not remove.\n');
-      const after = fs.statSync(protectedFile);
-      for (const key of ['ino', 'mode', 'mtimeMs']) assert.equal(after[key], before[key], key);
-      for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
-    });
-  }
   for (const prefixResult of ['failure', 'empty']) {
     it(`keeps core Homebrew semantics when the first PATH brew returns ${prefixResult} before a working later brew`, () => {
       const early = path.join(root, 'first-brew');
@@ -1740,110 +1551,6 @@ system_sudo=fixture_sudo
       assert.equal(core.status, 0, core.stdout + core.stderr);
       assert.isTrue(fs.lstatSync(path.join(home, '.local/bin/ballin')).isSymbolicLink());
       assert.notMatch(readLog(), /^brew:/m);
-    });
-  }
-  for (const kind of ['absolute', 'relative', 'multihop', 'newline hop', 'managed parent alias']) {
-    it(`retains an executable Node alias through ${kind} links and permits independent same-binary manager takeover`, () => {
-      linkFake('npm', systemNode);
-      const first = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1' });
-      assert.equal(first.status, 0, first.stdout + first.stderr);
-      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-      const aliasBin = path.join(home, 'bin');
-      fs.mkdirSync(aliasBin);
-      const alias = path.join(aliasBin, 'node');
-      let target = path.join(quickBin, 'node');
-      if (kind === 'relative') target = path.relative(aliasBin, target);
-      if (kind === 'multihop' || kind === 'newline hop') {
-        const hop = kind === 'newline hop' ? 'current-node\n' : 'current-node';
-        fs.symlinkSync(path.relative(aliasBin, target), path.join(aliasBin, hop));
-        target = './' + hop;
-      }
-      if (kind === 'managed parent alias') {
-        const parentAlias = path.join(root, 'managed-parent');
-        fs.symlinkSync(path.dirname(quickBin), parentAlias);
-        target = path.join(parentAlias, 'bin/node');
-      }
-      fs.symlinkSync(target, alias);
-      const profile = path.join(home, '.zshrc');
-      const before = fs.readFileSync(profile, 'utf8');
-      const rerun = run('', { PATH: `${aliasBin}:${quickBin}:${tools}`, FAKE_MISSING_NODE: '1' });
-      assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
-      for (const name of ['node', 'npm']) {
-        assert.isTrue(fs.existsSync(path.join(quickBin, name)), `${name} fallback must remain available`);
-        assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(systemNode, name));
-      }
-      assert.equal(fs.realpathSync(alias), fs.realpathSync(path.join(systemNode, 'node')));
-      assert.equal(fs.readFileSync(profile, 'utf8'), before);
-      assert.notInclude(rerun.stderr, 'Persistent PATH setup incomplete');
-      const managerBin = path.join(home, '.nvm/current/bin');
-      fs.mkdirSync(managerBin, { recursive: true });
-      for (const name of ['node', 'npm']) fs.symlinkSync(path.join(systemNode, name), path.join(managerBin, name));
-      assert.equal(fs.realpathSync(path.join(managerBin, 'node')), fs.realpathSync(alias));
-      const takeover = run('', { PATH: `${aliasBin}:${quickBin}:${managerBin}:${tools}`, FAKE_MISSING_NODE: '1' });
-      assert.equal(takeover.status, 0, takeover.stdout + takeover.stderr);
-      for (const name of ['node', 'npm']) {
-        assert.isFalse(fs.existsSync(path.join(quickBin, name)));
-        assert.isTrue(fs.existsSync(path.join(managerBin, name)));
-      }
-      const resolved = spawnSync('/bin/bash', ['-c', 'command -v node; command -v npm'], {
-        encoding: 'utf8', cwd: home,
-        env: testChildEnvironment({ HOME: home, PATH: `${aliasBin}:${quickBin}:${managerBin}:${tools}` }),
-      });
-      assert.equal(resolved.status, 0, resolved.stdout + resolved.stderr);
-      assert.deepEqual(resolved.stdout.trim().split('\n'), [path.join(managerBin, 'node'), path.join(managerBin, 'npm')]);
-      assert.equal(fs.readFileSync(profile, 'utf8'), before);
-      assert.equal(readLog().split('sudo:').length - 1, 1);
-      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
-    });
-  }
-  for (const installed of [true, false]) {
-    it(`uses working system Git past a broken PATH shim${installed ? ' without installation' : ' after installing Command Line Tools'}`, () => {
-      const systemGit = path.join(root, 'system-git');
-      fs.mkdirSync(systemGit);
-      linkFake('git', systemGit);
-      const selectedGit = path.join(systemGit, 'git');
-      const result = run(installed ? 'y\ny\n' : 'y\ny\ny\ny\n', {
-        FAKE_SYSTEM_GIT: selectedGit, FAKE_BROKEN_PATH_GIT: '1', FAKE_GIT: installed ? 'ready' : 'missing',
-      });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin/git')), selectedGit);
-      if (installed) assert.notInclude(readLog(), 'xcode-select:--install');
-      else assert.include(readLog(), 'xcode-select:--install');
-      assert.include(readLog(), 'ballin:backup open');
-    });
-  }
-  for (const spelling of ['direct', 'directory alias', 'executable alias']) {
-    it(`lets an independent Git replace the managed link through ${spelling}`, () => {
-      assert.equal(run().status, 0);
-      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-      const managedGit = path.join(quickBin, 'git');
-      let entry = quickBin;
-      if (spelling === 'directory alias') {
-        entry = path.join(root, 'git-directory-alias');
-        fs.symlinkSync(quickBin, entry);
-      } else if (spelling === 'executable alias') {
-        entry = path.join(root, 'git-executable-alias');
-        fs.mkdirSync(entry);
-        fs.symlinkSync(path.relative(entry, managedGit), path.join(entry, 'git'));
-      }
-      const externalBin = path.join(root, 'external-git');
-      fs.mkdirSync(externalBin);
-      const externalGit = path.join(externalBin, 'git');
-      fs.writeFileSync(externalGit, '#!/bin/bash\nprintf "external-git:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n[[ "$*" == --version ]]\n', { mode: 0o755 });
-      const before = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-      const result = run('', { PATH: `${entry}:${quickBin}:${externalBin}:${tools}` });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(fs.readlinkSync(managedGit), externalGit);
-      assert.equal(fs.realpathSync(path.join(entry, 'git')), fs.realpathSync(externalGit));
-      assert.include(readLog(), 'external-git:--version');
-      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
-      // Keep the working managed fallback when no independent Git remains on PATH.
-      fs.unlinkSync(path.join(tools, 'git'));
-      const fallback = run('', { PATH: `${entry}:${quickBin}:${tools}`, FAKE_SYSTEM_GIT: path.join(root, 'missing-system-git') });
-      assert.equal(fallback.status, 0, fallback.stdout + fallback.stderr);
-      assert.equal(fs.readlinkSync(managedGit), externalGit);
-      assert.notInclude(fallback.stdout, 'Missing prerequisites:');
-      assert.include(readLog(), 'ballin:backup open');
     });
   }
   for (const shell of ['zsh', 'bash']) {
@@ -1890,226 +1597,6 @@ system_sudo=fixture_sudo
       });
     }
   }
-  for (const spelling of ['direct', 'directory alias', 'executable alias']) {
-    for (const managedFirst of [true, false]) {
-      it(`preserves Node PATH precedence with an older external runtime (${spelling}, managed first: ${managedFirst})`, () => {
-        linkFake('npm', systemNode);
-        const first = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1' });
-        assert.equal(first.status, 0, first.stdout + first.stderr);
-        const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-        let entry = quickBin;
-        if (spelling === 'directory alias') {
-          entry = path.join(root, 'managed-directory-alias');
-          fs.symlinkSync(quickBin, entry);
-        } else if (spelling === 'executable alias') {
-          entry = path.join(root, 'managed-executable-alias'); fs.mkdirSync(entry);
-          fs.symlinkSync(path.relative(entry, path.join(quickBin, 'node')), path.join(entry, 'node'));
-        }
-        const older = path.join(home, '.nvm/versions/node/v18.0.0/bin');
-        fs.mkdirSync(older, { recursive: true });
-        const oldBytes = "#!/bin/bash\nprintf 'false\\n'\n";
-        fs.writeFileSync(path.join(older, 'node'), oldBytes, { mode: 0o755 });
-        const profile = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-        const links = ['node', 'npm'].map(name => fs.readlinkSync(path.join(quickBin, name)));
-        fs.writeFileSync(log, '');
-        const entries = managedFirst ? [entry, older] : [older, entry];
-        const result = run('', { PATH: [...entries, quickBin, tools].join(':'), FAKE_MISSING_NODE: '1' });
-        assert.equal(result.status, managedFirst ? 0 : 1, result.stdout + result.stderr);
-        if (managedFirst) assert.notInclude(result.stderr, 'needs manual attention');
-        else {
-          assert.include(result.stderr, `Existing Node.js at ~/${path.relative(home, path.join(older, 'node'))} needs manual attention`);
-          assert.notInclude(readLog(), 'auth status --active'); assert.notInclude(readLog(), 'install.sh:');
-        }
-        assert.deepEqual(['node', 'npm'].map(name => fs.readlinkSync(path.join(quickBin, name))), links);
-        assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), profile);
-        assert.equal(fs.readFileSync(path.join(older, 'node'), 'utf8'), oldBytes);
-        for (const forbidden of ['sudo:', 'nodejs.org', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
-      });
-    }
-  }
-  it('releases managed fallback links when a compatible version manager becomes available on rerun', () => {
-    linkFake('npm', systemNode);
-    const first = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1' });
-    assert.equal(first.status, 0, first.stdout + first.stderr);
-    const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-    for (const name of ['node', 'npm']) assert.isTrue(fs.lstatSync(path.join(quickBin, name)).isSymbolicLink());
-    const managerBin = path.join(home, '.nvm/versions/node/v24.21.0/bin');
-    fs.mkdirSync(managerBin, { recursive: true });
-    linkFake('node', managerBin);
-    linkFake('npm', managerBin);
-    const before = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-    const rerun = run('', { PATH: `${quickBin}:${managerBin}:${tools}`, FAKE_MISSING_NODE: '1' });
-    assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
-    for (const name of ['node', 'npm']) assert.isFalse(fs.existsSync(path.join(quickBin, name)));
-    assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
-    assert.equal(readLog().split('sudo:').length - 1, 1);
-  });
-  for (const inheritedFromFirstRun of [false, true]) {
-    it(`preserves a recognized marker on noclobber reruns with initial inheritance ${inheritedFromFirstRun}`, () => {
-      const core = path.resolve(__dirname, '../install.sh');
-      const wrapper = path.join(root, 'core-with-noclobber-probe');
-      const unrelated = path.join(root, 'unrelated');
-      fs.writeFileSync(unrelated, 'Keep this file.\n');
-      fs.writeFileSync(wrapper, '#!/bin/bash\n'
-        + '[[ -o noclobber ]] || exit 97\n'
-        + 'if printf "overwritten" > "$FAKE_ROOT/unrelated"; then exit 98; fi\n'
-        + 'exec /bin/bash "$FAKE_ACTUAL_CORE"\n');
-      const inherited = { SHELLOPTS: 'noclobber', FAKE_CORE_INSTALL_SOURCE: wrapper, FAKE_ACTUAL_CORE: core };
-      const first = run('y\nn\n', inheritedFromFirstRun ? inherited : { FAKE_CORE_INSTALL_SOURCE: core });
-      assert.equal(first.status, 0, first.stdout + first.stderr);
-      const marker = path.join(home, '.local/share/ballin-quickstart/.managed');
-      const before = fs.statSync(marker);
-      const profile = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-      fs.writeFileSync(log, '');
-      const retry = run('n\n', inherited);
-      assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-      assert.include(retry.stdout, 'Proceed with installation? [y/N]');
-      assert.include(retry.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
-      assert.include(retry.stderr, 'unrelated: cannot overwrite existing file');
-      assert.equal(fs.readFileSync(unrelated, 'utf8'), 'Keep this file.\n');
-      assert.equal(fs.readFileSync(marker, 'utf8'), '1\n');
-      const after = fs.statSync(marker);
-      for (const key of ['ino', 'mode', 'mtimeMs', 'ctimeMs']) assert.equal(after[key], before[key], key);
-      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), profile);
-      assert.include(readLog(), 'gh:auth status --active --hostname github.com');
-      assert.notInclude(readLog(), 'ballin:');
-    });
-  }
-  for (const kind of ['missing', 'invalid', 'symlink']) {
-    it(`still refuses ${kind} managed markers with inherited noclobber`, () => {
-      const managed = path.join(home, '.local/share/ballin-quickstart');
-      const marker = path.join(managed, '.managed');
-      const unrelated = path.join(root, 'unrelated');
-      fs.mkdirSync(managed, { recursive: true });
-      fs.writeFileSync(unrelated, '1\n');
-      if (kind === 'invalid') fs.writeFileSync(marker, 'unrecognized\n');
-      if (kind === 'symlink') fs.symlinkSync(unrelated, marker);
-      const result = run('', { SHELLOPTS: 'noclobber' });
-      assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stderr, 'Refusing to change an unrecognized directory');
-      assert.isFalse(fs.existsSync(path.join(managed, 'bin')));
-      assert.equal(fs.readFileSync(unrelated, 'utf8'), '1\n');
-      if (kind === 'missing') assert.isFalse(fs.existsSync(marker));
-      if (kind === 'invalid') assert.equal(fs.readFileSync(marker, 'utf8'), 'unrecognized\n');
-      if (kind === 'symlink') assert.isTrue(fs.lstatSync(marker).isSymbolicLink());
-      assert.notInclude(readLog(), 'gh:auth status --active');
-      assert.notInclude(readLog(), 'install.sh:');
-    });
-  }
-  it('keeps links and one PATH line usable when rerun through the new PATH', () => {
-    assert.equal(run('y\ny\ny\n', { FAKE_MISSING_NODE: '1' }).status, 0);
-    const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-    const before = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-    const result = run('', { PATH: `${quickBin}:${tools}`, FAKE_MISSING_NODE: '1' });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
-    assert.notEqual(fs.readlinkSync(path.join(quickBin, 'node')), path.join(quickBin, 'node'));
-    assert.notInclude(result.stdout, 'Use these tools');
-    assert.notInclude(readLog(), 'ballin:backup setup');
-  });
-  for (const spelling of ['direct', 'directory alias', 'executable alias', 'newline alias']) {
-    it(`lets an independent GitHub CLI replace a downloaded fallback through ${spelling}`, () => {
-      fs.unlinkSync(path.join(tools, 'gh'));
-      const first = run('y\ny\ny\n');
-      assert.equal(first.status, 0, first.stdout + first.stderr);
-      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-      const managedGh = path.join(quickBin, 'gh');
-      const archiveGh = fs.readlinkSync(managedGh);
-      const before = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-      let entry = quickBin;
-      if (spelling === 'directory alias') {
-        entry = path.join(root, 'managed-alias');
-        fs.symlinkSync(quickBin, entry);
-      } else if (spelling === 'executable alias' || spelling === 'newline alias') {
-        entry = path.join(root, 'executable-alias');
-        fs.mkdirSync(entry);
-        if (spelling === 'newline alias') {
-          fs.symlinkSync(managedGh, path.join(entry, 'current-gh\n'));
-          fs.symlinkSync('./current-gh\n', path.join(entry, 'gh'));
-        } else fs.symlinkSync(path.relative(entry, managedGh), path.join(entry, 'gh'));
-      }
-      const fallback = run('', { PATH: `${entry}:${quickBin}:${tools}` });
-      assert.equal(fallback.status, 0, fallback.stdout + fallback.stderr);
-      assert.equal(fs.readlinkSync(managedGh), archiveGh);
-      const managerBin = path.join(root, 'external-gh/bin');
-      fs.mkdirSync(managerBin, { recursive: true });
-      const externalGh = path.join(managerBin, 'gh');
-      fs.writeFileSync(externalGh, fs.readFileSync(path.join(root, 'fake-tool'), 'utf8').replace(
-        'name="${0##*/}"', 'name="${0##*/}"\nprintf "external-gh:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"',
-      ), { mode: 0o755 });
-      const result = run('', { PATH: `${entry}:${quickBin}:${managerBin}:${tools}` });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(fs.readlinkSync(managedGh), externalGh);
-      assert.equal(fs.realpathSync(path.join(entry, 'gh')), fs.realpathSync(externalGh));
-      assert.include(readLog(), 'external-gh:auth status --active --hostname github.com');
-      assert.equal(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), before);
-      assert.equal(readLog().split('/releases/latest -o').length - 1, 1);
-      assert.isTrue(fs.existsSync(archiveGh));
-      const fresh = spawnSync('/bin/zsh', ['-f', '-c', 'source "$HOME/.zshrc"; gh --version'], {
-        encoding: 'utf8', cwd: home,
-        env: testChildEnvironment({ HOME: home, PATH: `${managerBin}:${tools}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
-      });
-      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
-      assert.include(readLog(), 'external-gh:--version');
-      assert.include(readLog(), 'ballin:backup open');
-      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
-    });
-  }
-  for (const kind of ['broken', 'unsupported']) {
-    it(`retains the downloaded GitHub CLI when the external candidate is ${kind}`, () => {
-      fs.unlinkSync(path.join(tools, 'gh'));
-      assert.equal(run('y\ny\ny\n').status, 0);
-      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-      const archiveGh = fs.readlinkSync(path.join(quickBin, 'gh'));
-      const managerBin = path.join(root, 'external-gh/bin');
-      fs.mkdirSync(managerBin, { recursive: true });
-      fs.writeFileSync(path.join(managerBin, 'gh'), '#!/bin/bash\n'
-        + 'printf "external-gh:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n'
-        + (kind === 'broken' ? 'exit 1\n' : 'case "$*" in --version) printf "fixture old gh\\n";; "auth status --help") printf "missing capability\\n";; *) exit 97;; esac\n'), { mode: 0o755 });
-      const result = run('', { PATH: `${quickBin}:${managerBin}:${tools}` });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(readLog(), 'external-gh:--version');
-      assert.notInclude(readLog(), 'external-gh:auth status --active');
-      assert.equal(fs.readlinkSync(path.join(quickBin, 'gh')), archiveGh);
-      assert.equal(readLog().split('/releases/latest -o').length - 1, 1);
-      assert.include(readLog(), 'ballin:backup open');
-    });
-  }
-  for (const spelling of ['trailing slash', 'directory symlink', 'parent segment']) {
-    it('preserves managed Node fallbacks through a PATH ' + spelling, () => {
-      linkFake('npm', systemNode);
-      const first = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1' });
-      assert.equal(first.status, 0, first.stdout + first.stderr);
-      const quickBin = path.join(home, '.local/share/ballin-quickstart/bin');
-      const alias = path.join(root, 'managed-bin-alias');
-      fs.symlinkSync(quickBin, alias);
-      const entry = spelling === 'trailing slash' ? quickBin + '/'
-        : spelling === 'directory symlink' ? alias : quickBin + '/../bin';
-      const profile = path.join(home, '.zshrc');
-      const before = fs.readFileSync(profile, 'utf8');
-      const rerun = run('', { PATH: `${entry}:${tools}`, FAKE_MISSING_NODE: '1' });
-      assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
-      for (const name of ['node', 'npm']) {
-        assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(systemNode, name));
-      }
-      for (const name of ['git', 'gh']) assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(tools, name));
-      assert.equal(fs.readFileSync(profile, 'utf8'), before);
-      assert.equal(readLog().split('sudo:').length - 1, 1);
-      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
-
-      const managerBin = path.join(home, '.nvm/versions/node/v24.21.0/bin');
-      fs.mkdirSync(managerBin, { recursive: true });
-      linkFake('node', managerBin);
-      linkFake('npm', managerBin);
-      const takeover = run('', { PATH: `${entry}:${managerBin}:${tools}`, FAKE_MISSING_NODE: '1' });
-      assert.equal(takeover.status, 0, takeover.stdout + takeover.stderr);
-      for (const name of ['node', 'npm']) assert.isFalse(fs.existsSync(path.join(quickBin, name)));
-      for (const name of ['git', 'gh']) assert.equal(fs.readlinkSync(path.join(quickBin, name)), path.join(tools, name));
-      assert.equal(fs.readFileSync(profile, 'utf8'), before);
-      assert.equal(readLog().split('sudo:').length - 1, 1);
-      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
-    });
-  }
   for (const arch of ['arm64', 'x86_64']) {
     it(`installs missing official prerequisites for ${arch}`, () => {
       fs.unlinkSync(path.join(tools, 'gh'));
@@ -2118,13 +1605,81 @@ system_sudo=fixture_sudo
       assert.include(result.stdout, 'Proceed with installation? [y/N]');
       assert.include(readLog(), 'xcode-select:--install');
       assert.notInclude(readLog(), 'brew:');
-      assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), "PATH='" + path.join(home, '.local/share/ballin-quickstart/bin') + "':$PATH:'" + path.join(home, '.local/bin') + "'");
+      assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), path.join(home, '.local/bin'));
+      assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
+      assert.isTrue(fs.lstatSync(path.join(home, '.local/bin/gh')).isFile());
+      assert.isFalse(fs.lstatSync(path.join(home, '.local/bin/gh')).isSymbolicLink());
       assert.include(readLog(), 'sudo:/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c');
       assert.include(readLog(), `gh_2.102.0_macOS_${arch === 'arm64' ? 'arm64' : 'amd64'}.zip`);
       assert.include(readLog(), 'ballin:backup open');
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
   }
+  it('leaves legacy helper files and profile entries untouched', () => {
+    const legacy = path.join(home, '.local/share/ballin-quickstart');
+    fs.mkdirSync(legacy, { recursive: true });
+    const marker = path.join(legacy, 'sentinel'); fs.writeFileSync(marker, 'keep');
+    const profile = path.join(home, '.zshrc');
+    const contents = 'export PATH="$HOME/.local/share/ballin-quickstart/bin:$PATH"\n';
+    fs.writeFileSync(profile, contents);
+    const result = run('y\ny\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(marker, 'utf8'), 'keep');
+    assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+    assert.include(result.stderr, 'Persistent PATH setup incomplete');
+  });
+  it('reuses an off-PATH local GitHub CLI on rerun without downloading again', () => {
+    fs.unlinkSync(path.join(tools, 'gh'));
+    const first = run('y\ny\ny\n');
+    assert.equal(first.status, 0, first.stdout + first.stderr);
+    const gh = path.join(home, '.local/bin/gh');
+    const before = fs.statSync(gh);
+    fs.writeFileSync(log, '');
+    const retry = run('', { PATH: tools });
+    assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+    assert.equal(fs.statSync(gh).ino, before.ino);
+    assert.notInclude(readLog(), '/releases/latest');
+    assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
+    assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+  });
+  for (const kind of ['file', 'directory', 'dangling link']) {
+    it(`preserves an occupied GitHub CLI destination (${kind})`, () => {
+      fs.unlinkSync(path.join(tools, 'gh'));
+      const bin = path.join(home, '.local/bin'); fs.mkdirSync(bin, { recursive: true });
+      const target = path.join(bin, 'gh');
+      if (kind === 'file') fs.writeFileSync(target, 'keep');
+      else if (kind === 'directory') fs.mkdirSync(target);
+      else fs.symlinkSync(path.join(root, 'missing'), target);
+      const before = fs.lstatSync(target);
+      const result = run('y\n');
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'occupied or unsupported');
+      assert.equal(fs.lstatSync(target).ino, before.ino);
+      assert.notInclude(readLog(), '/releases/latest');
+    });
+  }
+  for (const failure of ['FAKE_GH_WRONG_ARCH', 'FAKE_GH_BAD_LAYOUT', 'FAKE_GH_COLLISION']) {
+    it(`rejects GitHub CLI ${failure} without overwriting a destination`, () => {
+      fs.unlinkSync(path.join(tools, 'gh'));
+      const result = run('y\n', { [failure]: '1' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      const target = path.join(home, '.local/bin/gh');
+      if (failure === 'FAKE_GH_COLLISION') assert.equal(fs.readFileSync(target, 'utf8'), 'occupied');
+      else assert.isFalse(fs.existsSync(target));
+      assert.notInclude(readLog(), 'install.sh:');
+      assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
+      if (fs.existsSync(path.dirname(target))) assert.deepEqual(fs.readdirSync(path.dirname(target)), failure === 'FAKE_GH_COLLISION' ? ['gh'] : []);
+    });
+  }
+  it('previews the Homebrew command destination exposed by the planned Node PATH', () => {
+    linkFake('brew', systemNode);
+    const prefix = path.join(root, 'exposed-brew');
+    const result = run('y\nhome\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'no\n', FAKE_RAW_INPUT: '1',
+      FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') });
+    assert.include(result.stdout, `Link the ballin command at ${prefix}/bin/ballin.`);
+    assert.notInclude(result.stderr, 'The installation plan changed after approval');
+    assert.include(readLog(), 'git:clone');
+  });
   for (const needsNode of [true, false]) {
     it(`omits generic password/replacement notices for missing tools (Node missing: ${needsNode})`, () => {
       fs.unlinkSync(path.join(tools, 'gh'));
@@ -2206,7 +1761,7 @@ system_sudo=fixture_sudo
     const result = run('y\ny\n', { FAKE_MISSING_NODE: '1' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.notInclude(readLog(), 'sudo:');
-    assert.equal(fs.readlinkSync(path.join(home, '.local/share/ballin-quickstart/bin/node')), path.join(systemNode, 'node'));
+    assert.isFalse(fs.existsSync(path.join(home, '.local/share/ballin-quickstart')));
   });
   it('passes stdin to native browser login', () => {
     const result = run('y\ndevice-code\ny\n', { FAKE_AUTH: 'missing' });
@@ -2490,7 +2045,7 @@ main
     assert.include(result.stdout, `Installation will:
   - Install Xcode Command Line Tools.
   - Install Node.js 24 in ${systemNode}.
-  - Install GitHub CLI in ~/.local/share/ballin-quickstart.
+  - Install GitHub CLI in ~/.local/bin/gh.
   - Create Ballin and its settings in ~/.ballin-scripts.
   - Link the ballin command at ~/.local/bin/ballin.
 Administrator access is required.
@@ -2835,13 +2390,11 @@ Proceed with installation? [y/N] `);
   const runPathSetup = (input: string, overrides: NodeJS.ProcessEnv = {}) => spawnSync('/bin/bash', ['-c', `
     source "$FAKE_SOURCE"
     node_tool="$TEST_NODE_RUNTIME"
-    quick_bin="$HOME/.local/share/ballin-quickstart/bin"
     command_path="$HOME/.local/bin"
     git_tool="$HOME/selected/git"; gh_tool=''; npm_tool=''
     original_normalized_path=$PATH
     scratch=$(mktemp -d "$TMPDIR/path-only.XXXXXX")
     trap cleanup EXIT
-    tools_need_helper() { return 1; }
     configure_path
   `], { encoding: 'utf8', input, cwd: home, env: testChildEnvironment({
     HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
@@ -3462,10 +3015,9 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       assert.notInclude(retry.stdout, 'PATH entry already present');
       assert.include(retry.stdout, '\nValidated private backup:');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);
-      const managedGit = path.join(sandbox.home, '.local/share/ballin-quickstart/bin/git');
-      fs.unlinkSync(managedGit);
-      fs.symlinkSync(path.join(sandbox.tools, 'node'), managedGit);
-      assert.throws(() => sandboxEnvironment(sandbox), /Quickstart tool was changed/u);
+      const fixtureGit = path.join(sandbox.tools, 'git');
+      fs.appendFileSync(fixtureGit, '\n# altered\n');
+      assert.throws(() => sandboxEnvironment(sandbox), /Sandbox safeguard was changed/u);
     } finally { cleanupSandbox(sandbox.root); }
   });
 });
