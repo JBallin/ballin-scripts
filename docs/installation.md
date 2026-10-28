@@ -169,9 +169,9 @@ Later `ballin backup setup` checks current prerequisites and GitHub access.
 Compatible existing Git, Node.js and (when selected) GitHub CLI are reused.
 Node must meet the [package requirement](../package.json), currently >=24.12;
 a newer compatible major is accepted. An incompatible or unverifiable existing
-Node requires manual attention. For a compatible installed Node outside PATH,
-activate it or add its bin directory to PATH instead of installing another copy.
-Follow the reported guidance and your existing installation method, or the
+Node requires manual attention. Quickstart can add the normal Node installer
+directory to PATH; activate a hidden version manager yourself. Follow the
+reported guidance and your existing installation method, or the
 [Node guidance](optional-capabilities.md#nodejs), then rerun Quickstart.
 Quickstart never automatically upgrades or switches an existing incompatible
 Node, installs nvm, or bootstraps Homebrew.
@@ -209,13 +209,17 @@ and publisher are checked before administrator access and again before installat
 A failed operation can leave completed prerequisite work: inspect its output
 before retrying.
 
-Managed helper files/links live in `~/.local/share/ballin-quickstart/`. Compatible
-Node already first on PATH stays under its current manager. If the original PATH
-supplies the selected tools and command directory, Quickstart skips PATH setup.
-Otherwise it asks before adding only the needed directories. It never
-executes startup files or performs a final PATH recheck. Existing exact lines prevent
-duplicate edits, but are not proof the line executes. Unsafe/ambiguous files and
-write failures retain specific recovery guidance. Declines leave files unchanged.
+The direct GitHub CLI route installs the executable at `~/.local/bin/gh`. Quickstart reuses compatible tools, including an active Node
+version manager, and leaves their updates and removal to their existing owners.
+If an earlier command is broken or unsupported, repair it or your PATH before
+retrying. Quickstart does not replace an occupied GitHub CLI destination.
+
+If the original PATH supplies the selected tools and command directory,
+Quickstart skips PATH setup. Otherwise it asks before adding the needed native
+directories. It never executes startup files or verifies a new shell. Existing
+exact lines prevent duplicate edits, but are not proof the line executes.
+Unsafe or ambiguous files and write failures retain specific recovery guidance.
+Declines leave files unchanged; the current run can still use its adjusted PATH.
 
 When backups are selected, Quickstart reuses active GitHub CLI authentication or
 starts gh's native browser sign-in. “Authenticate Git” controls Git credentials;
@@ -240,9 +244,11 @@ otherwise `$HOME/.local/bin`. For example, without Homebrew:
 export PATH="$PATH:$HOME/.local/bin"
 ```
 
-If selected prerequisite tools need Quickstart's managed links, also add
-`$HOME/.local/share/ballin-quickstart/bin` to PATH. Keep an existing version
-manager's working Node ahead of these fallback links. Open a new Terminal and check
+If Node.js or Git was installed in a directory outside your PATH, also add its
+native bin directory, such as `/usr/local/bin` for the official Node installer.
+If GitHub CLI is installed at `~/.local/bin/gh`, also add `$HOME/.local/bin`,
+even when Homebrew supplies the Ballin command directory. Keep your existing
+Node version manager active. Open a new Terminal and check
 `command -v node git ballin` (and `gh` for backups), then `ballin help`.
 Inspect unexpected earlier commands rather than deleting them blindly. Remove
 only the Ballin PATH addition to undo it; prerequisites and other entries remain.
@@ -625,7 +631,7 @@ Completion activation lines remain in shell startup files. Their readability
 guard skips the removed asset; you can remove the displayed activation line
 manually if desired.
 
-Prerequisites, Quickstart helper files, and PATH additions remain in place.
+Prerequisites and PATH additions remain in place.
 
 When analytics remain enabled, uninstall can send its normal final top-level
 command event using state captured before local deletion.
