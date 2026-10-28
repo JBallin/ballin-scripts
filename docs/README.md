@@ -23,6 +23,7 @@ For the project overview, see the [main README](../README.md).
 | Guide | Purpose |
 | --- | --- |
 | [Testing and coverage](testing.md) | Test isolation, coverage comparisons, and runtime and platform limits. |
+| [Installation testing](installation-testing.md) | Test Ballin installation in a macOS VM. |
 | [Code scanning](code-scanning.md) | Advanced CodeQL coverage, fork trust boundary, verification, and recovery. |
 | [Coverage boundaries](coverage-boundaries.md) | Reviewed production gaps and their test, ignore, or measured dispositions. |
 | [Backup design](backup-design.md) | Backup safety model and GitHub constraints. |
