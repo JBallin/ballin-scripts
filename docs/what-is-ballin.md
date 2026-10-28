@@ -7,7 +7,7 @@ and settings. That means less repetitive upkeep and less guesswork when setting
 up another Mac.
 
 ```mermaid
-flowchart LR
+flowchart TB
     Mac["A developer's Mac"] --> Ballin["Ballin"]
     Ballin --> Upkeep["Routine tool maintenance<br/>on that Mac"]
     Ballin -->|"Optional backup"| Saved["Selected tool lists<br/>and settings"]
