@@ -4,15 +4,10 @@
 
 ## Create a test VM
 
-Install [Tart](https://github.com/openai/tart) in **Host Terminal (your Mac)**:
+Install [Tart](https://github.com/openai/tart), then clone and run a test VM from Terminal on your Mac:
 
 ```shell
 brew install openai/tools/tart
-```
-
-Clone and run a test VM:
-
-```shell
 tart clone ghcr.io/cirruslabs/macos-golden-gate-vanilla ballin-test
 tart run ballin-test
 ```
@@ -23,11 +18,11 @@ Follow the [installation instructions](../README.md#installation) in the VM.
 
 ## Clean up
 
-If you signed in to GitHub, run `gh auth logout` in **Guest Terminal (the VM)**.
-Shut down the VM, then delete it in **Host Terminal**:
+If you signed in to GitHub, run `gh auth logout` in Terminal in the VM.
+Shut down the VM, then delete it from Terminal on your Mac:
 
 ```shell
 tart delete ballin-test
 ```
 
-Delete any backup repositories created for testing when no longer needed.
+Delete the test backup repository when no longer needed.
