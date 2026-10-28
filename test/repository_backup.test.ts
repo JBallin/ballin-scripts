@@ -2006,7 +2006,7 @@ describe('repository backup lifecycle', function() {
       });
       ok(result);
       assert.equal(result.stderr, diagnostic);
-      assert.equal(result.stdout, '\x1b[34m==>\x1b[1;39m Updating Ballin\x1b[0m\nBallin updated.\n');
+      assert.equal(result.stdout, 'Ballin updated.\n');
       assert.lengthOf(publications(), 0);
     });
   }
