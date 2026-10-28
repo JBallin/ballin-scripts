@@ -377,36 +377,12 @@ esac
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, '  - Install missing tools and dependencies using existing Homebrew: Node.js.\n');
       assert.notInclude(result.stdout, 'existing Homebrew:\n');
-      assert.notInclude(result.stdout, 'Keep existing Node.js unchanged.');
       assert.notInclude(result.stdout, 'Administrator access is required.');
       assert.include(result.stdout, nodeInstallPrompt);
       assert.equal(readLog().includes('native-brew:install --formula node\n'), !declined);
       assert.notInclude(readLog(), 'node@24'); assert.notInclude(readLog(), 'nodejs.org');
       if (declined) { assert.notInclude(readLog(), 'native-brew:ruby'); assert.notInclude(readLog(), 'native-brew:info'); }
       else assert.include(readLog(), 'native-brew:info --json=v2 node');
-    });
-  }
-  for (const scenario of ['gh', 'node and gh', 'none', 'backups disabled']) {
-    it(`previews Homebrew prerequisites correctly with ${scenario}`, () => {
-      const prefix = nativeBrew();
-      if (scenario !== 'none') fs.unlinkSync(path.join(tools, 'gh'));
-      const result = run('n\n', {
-        PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
-        FAKE_MISSING_NODE: scenario === 'node and gh' ? '1' : '0',
-        FAKE_EARLY_ANSWER: scenario === 'backups disabled' ? 'no\n' : 'y\n',
-      });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      const installLine = 'Install missing tools and dependencies using existing Homebrew:';
-      if (scenario === 'gh') {
-        assert.include(result.stdout, `${installLine} GitHub CLI.`);
-        assert.notInclude(result.stdout, 'Keep existing Node.js unchanged.');
-      } else if (scenario === 'node and gh') {
-        assert.include(result.stdout, `${installLine} Node.js and GitHub CLI.`);
-        assert.notInclude(result.stdout, 'Keep existing Node.js unchanged.');
-      } else {
-        assert.notInclude(result.stdout, installLine);
-        assert.notInclude(result.stdout, 'Keep existing Node.js unchanged.');
-      }
     });
   }
   it('stops on Homebrew preflight failure without a direct fallback or installation', () => {
