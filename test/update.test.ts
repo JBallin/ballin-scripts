@@ -366,7 +366,7 @@ exit 0
     });
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /^==> Updating Homebrew\.\.\.\nvisible Homebrew output\n==> Updating Homebrew packages\n/u);
+    assert.match(result.stdout, /^==> Updating Homebrew\.\.\.\nvisible Homebrew output\n\n==> Updating Homebrew packages\n/u);
     assert.notMatch(result.stdout, /^==> Updating Homebrew$/mu);
     assert.equal(result.stderr, '');
     assert.include(result.stdout, 'visible Homebrew output');
@@ -388,15 +388,26 @@ exit 0
     ]);
   });
 
-  it('adds no refresh heading or leading blank line when Homebrew update is quiet', () => {
+  it('separates the next phase when Homebrew update is quiet', () => {
     installCommandStub('brew');
 
     const result = runUpdate({ TEST_UPDATE_NVM: 'false' });
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, '');
-    assert.equal(result.stdout, '==> Updating Homebrew packages\n\n==> Checking Homebrew installation\n');
+    assert.equal(result.stdout, '\n==> Updating Homebrew packages\n\n==> Checking Homebrew installation\n');
     assert.deepEqual(commandLog(), ['brew|1,1|update', 'brew|1,1|upgrade', 'brew|1,1|doctor']);
+  });
+
+  it('separates the next phase when Homebrew refresh only writes to stderr', () => {
+    writeTestExecutable('brew', `#!/usr/bin/env bash
+if [ "$1" = update ]; then printf 'refresh notice\\n' >&2; fi
+exit 0
+`);
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false' });
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, 'refresh notice\n');
+    assert.equal(result.stdout, '\n==> Updating Homebrew packages\n\n==> Checking Homebrew installation\n');
   });
 
   it('skips package upgrade after a failed Homebrew refresh and continues later stages', () => {
@@ -418,7 +429,7 @@ exit 0
     });
 
     assert.equal(result.status, 42);
-    assert.match(result.stdout, /^simulated refresh failure\n==> Cleaning up Homebrew packages\n/u);
+    assert.match(result.stdout, /^simulated refresh failure\n\n==> Cleaning up Homebrew packages\n/u);
     assert.equal(result.stderr, 'Homebrew refresh diagnostic\n');
     assert.notMatch(result.stdout, /^==> Updating Homebrew$/mu);
     assert.notInclude(result.stdout, 'Updating Homebrew packages');
