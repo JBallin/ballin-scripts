@@ -37,7 +37,7 @@ brew trust --formula openai/tools/softnet
 brew install openai/tools/tart
 ```
 
-Do not automate trust, trust the whole tap, or disable checks. The observed refusal concerned a dependency, not the requested Tart formula.
+Do not automate trust, trust the whole tap, or disable checks.
 
 ## 2. Choose an image and preserve a clean baseline
 
@@ -77,12 +77,7 @@ Record `tart get` resources and any changes. Do not share host folders; clipboar
 
 ### Prepare the guest before Ballin
 
-Confirm the desktop, Terminal, keyboard input, and network work. For the tested
-Cirrus Golden Gate vanilla image, the public guest username and password are
-both `admin`, as defined in its [provisioning template](https://github.com/cirruslabs/macos-image-templates/blob/main/templates/vanilla-golden-gate.pkr.hcl).
-These are image-specific disposable guest defaults, not host, Apple Account,
-personal, or universal macOS credentials. Recheck them when changing images;
-never put custom passwords in evidence.
+Confirm desktop, Terminal, keyboard and network. The tested [Golden Gate template](https://github.com/cirruslabs/macos-image-templates/blob/main/templates/vanilla-golden-gate.pkr.hcl) uses public guest credentials `admin` / `admin`; these are image-specific, not personal credentials. Recheck for other images and never record custom passwords.
 
 **Guest Terminal:**
 
@@ -176,47 +171,14 @@ disposable test repository.
 
 ## Recorded results
 
-These bounded user-led October 2026 results do not qualify newer revisions or every scenario.
+These bounded user-led October 2026 tests do not qualify newer revisions.
 
-### Host route: October 27–28
+- **Host, October 27–28:** Direct checks verified arm64 macOS 27.0.1 / 26A434, Homebrew 7.0.11, Tart 2.41.1 and Softnet 0.24.1 under `/opt/homebrew`, with default `~/.tart`. After formula-only trust, one launch reached the desktop by user report; its exit status is unknown.
+- **Unresized Quickstart, October 27:** `ghcr.io/cirruslabs/macos-golden-gate-vanilla:latest`, digest `sha256:b78a521145ebef24e9916c0b3999e165bb12b587d11524c5fa3ba4fe7bf79bb9`, 50 GB disk. The template and earlier baseline identify 27.0 / 26A428; this run reported macOS 27 without recapturing the build. Initially 11 GiB free, no brew, ballin, node or gh on PATH, no selected CLT, and Gatekeeper disabled by user report. Assessments were later reported enabled; their status before installation is unconfirmed. Output showed `/tmp` Quickstart, backups No, CLT 27.0 and Node 24.22.1 installation, checkout at `$HOME/.ballin-scripts` and setup completion. Fresh-Terminal PATH (`~/.local/bin/ballin`), help, completion and 8.9 GiB free afterward were user-reported. User-read installed prefix `500ce20e34c5a100` matches merge `500ce20e34c5a100af340ff666efdc2dc9dea23a`; full installed SHA and outer/nested download revisions were not captured. The run used standalone Tart 2.41.1.
+- **October 23:** Golden Gate 27.0 / 26A428, Homebrew present (version unknown), Node missing. Setup and first backup reported success; fresh-Terminal help/completion passed by user report. Node 26.12 and gh 2.102.1 were reported; executed revisions and remote contents remain unverified.
+- **October 26–27:** On an enlarged Golden Gate 27.0 / 26A428 baseline, CLI CLT failed; separate recovery and resumed setup succeeded. Help/completion and checkout prefix `4cb3abbc59c7cb3ca` were reported; this was not a clean bootstrap pass.
+- **October 27 lifecycle:** Rerun, uninstall and direct/Quickstart decline and reinstall completed within viewed output and reports. Final SHA, final profile deduplication and direct reinstall fresh-shell function were not independently checked.
+- **October 27 offline:** User reported read-only backup list failure offline and success after reconnect, plus self-update success with final SHA unknown. Offline upload, full update and installation remain unqualified.
+- **October 28 decline:** With Homebrew present and Node missing, the user reported backups No then Proceed No; `command -v node` and `command -v ballin` were empty afterward, and `node -v` was not found. The screenshot shows only the pre-confirmation preview; full filesystem/profile equality and executed SHA are unknown.
 
-Direct checks verified arm64 macOS 27.0.1 / 26A434, Homebrew 7.0.11, Tart 2.41.1 and Softnet 0.24.1 at `/opt/homebrew`, with default `~/.tart`. After formula-only trust, the user reported one clean-template launch reached the desktop; later inventory showed it stopped. Launch exit status was unavailable; Softnet networking and DHCP changes were not exercised.
-
-### Unresized Quickstart: October 27
-
-- **Image:** `ghcr.io/cirruslabs/macos-golden-gate-vanilla:latest`, recorded
-  digest `sha256:b78a521145ebef24e9916c0b3999e165bb12b587d11524c5fa3ba4fe7bf79bb9`;
-  the guest was cloned by digest. The template and earlier prepared baseline
-  identify macOS **27.0 / 26A428**; this run's spoken preflight reported macOS
-  **27**, without independently recapturing the full build.
-- **Baseline:** 50 GB virtual disk, 41 GiB root volume, 11 GiB free; no
-  `brew`, `ballin`, `node`, or `gh` on PATH and no active developer directory
-  by user report. Initial Gatekeeper assessments were disabled; the user
-  subsequently reported them enabled, without a captured timestamp establishing
-  whether restoration preceded Quickstart. This limits security-preflight evidence.
-- **Result:** viewed output shows published Quickstart from `/tmp`, backups No,
-  CLT **27.0** and Node.js **24.22.1** installed, checkout under
-  `$HOME/.ballin-scripts`, profile/completion accepted, setup complete, and the
-  prompt returned in `/tmp`. Fresh-Terminal PATH (`~/.local/bin/ballin`), help,
-  completion, and 8.9 GiB remaining passed by user report. No resize was needed.
-- **Revision:** the user read installed prefix `500ce20e34c5a100`, matching
-  merge revision `500ce20e34c5a100af340ff666efdc2dc9dea23a`; the full installed
-  SHA was not read back. Outer/nested downloads used published `main`; their
-  exact executed revisions were not captured. This was before the later
-  Homebrew Tart migration; guest results used the earlier standalone Tart 2.41.1.
-
-### Other bounded results
-
-- October 23: Golden Gate 27.0 / 26A428, Homebrew present (version unrecorded), missing Node; Quickstart and first backup reported success in output; fresh-Terminal help and tab completion passed by user report. Node 26.12 and GitHub CLI 2.102.1 were reported; executed revisions and remote contents were not verified.
-- October 26–27: on the enlarged Golden Gate 27.0 / 26A428 baseline, a CLI CLT attempt failed; separate CLT recovery and resumed setup succeeded. Help/completion and checkout prefix `4cb3abbc59c7cb3ca` were reported; this was not a clean bootstrap pass.
-- October 27: an installed-guest lifecycle rerun, uninstall and direct/Quickstart decline and reinstall cases completed within viewed output and user reports. Final reinstall SHA and direct reinstall fresh-shell function were not independently checked.
-- October 27: read-only backup list failed offline (exit 1, 0.437 s) and worked after reconnect (exit 0, 2.534 s), by user report. Self-update success was reported but its final SHA is unknown; offline upload, full update and installation were not qualified.
-- October 28: on a Homebrew-present, missing-Node guest, the user reported backups No then Proceed No; afterward `command -v node` and `command -v ballin` were empty and `node -v` was not found. The screenshot showed only the pre-confirmation preview. Full filesystem/profile equality and executed SHA were not established.
-
-The historical Tahoe CLT block required **24.27 GB** with **19.41 GB** available.
-That observation does not establish OS-specific causality. Earlier 100 GB
-preparation supplied headroom; the successful stock 50 GB run rules out a blanket
-100 GB requirement. Exact resource settings were not captured for every later
-clone. Clipboard, all launch modes, all offline routes, and newer images/revisions
-remain unqualified. Keep test metadata here; installation examples should link
-here rather than duplicate this record.
+Historically, Tahoe CLT required 24.27 GB with 19.41 GB available; OS-specific causality is unproven. The stock 50 GB success does not establish a universal minimum. Clipboard and other untested scenarios remain unqualified.
