@@ -1059,7 +1059,6 @@ main() {
     printf 'Installation will:\n'
     if [[ -n "$brew_tool" ]]; then
       printf '  - Install missing tools and dependencies using existing Homebrew: %s.\n' "$prerequisite_names"
-      printf '  - Keep existing Node.js unchanged.\n'
     else
       if "$need_git"; then
         printf '  - Install Xcode Command Line Tools.\n'
