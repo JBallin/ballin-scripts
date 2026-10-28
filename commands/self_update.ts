@@ -2,7 +2,6 @@ const path = require('path');
 const {
   requireUninterrupted,
   rethrowInterruption,
-  progress,
   runCommand,
   runVisibleCommand,
   writeStdoutLine,
@@ -146,7 +145,6 @@ const updateResult = (repoDir: string, before: string | undefined): string => {
 
 const refreshInstalledBallin = (): void => {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
-  if (process.env.BALLIN_DEFER_UPDATE_HEADING !== '1') progress('Updating Ballin', false);
   const previousSources = installedScope(repoDir);
   const previousRevision = installedRevision(repoDir);
 
