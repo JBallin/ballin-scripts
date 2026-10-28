@@ -170,8 +170,9 @@ Compatible existing Git, Node.js and (when selected) GitHub CLI are reused.
 Node must meet the [package requirement](../package.json), currently >=24.12;
 a newer compatible major is accepted. An incompatible or unverifiable existing
 Node requires manual attention. Quickstart can add the normal Node installer
-directory to PATH; activate a hidden version manager yourself. Follow the
-reported guidance and your existing installation method, or the
+directory to PATH. If Node is installed through a version manager, activate it
+before rerunning Quickstart. Follow the reported guidance and your existing
+installation method, or the
 [Node guidance](optional-capabilities.md#nodejs), then rerun Quickstart.
 Quickstart never automatically upgrades or switches an existing incompatible
 Node, installs nvm, or bootstraps Homebrew.
