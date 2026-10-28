@@ -218,6 +218,13 @@ evidence is saved. Preserve clean baselines, evidence guests still needed,
 and any separate browsing VM. Recheck inventory and measured host storage;
 do not infer deletion savings from virtual disk capacities.
 
+Deleting a VM or signing out does not delete a remote backup repository. If a
+private repository was created for testing and is no longer needed, wait until
+testing is complete and evidence is preserved. Verify its exact owner, repository
+identity, and disposable contents, then obtain explicit approval for deletion of
+that exact remote repository. Never infer that a maintainer's real backup is a
+disposable test repository.
+
 ## Recorded results
 
 These bounded user-led tests were recorded in October 2026. Viewed output and
@@ -266,6 +273,7 @@ Neither `--net-softnet` nor a DHCP change was exercised.
 | October 26–27, no-Homebrew setup after CLT recovery | Separate retained-marker CLT recovery succeeded; resumed setup completed. User reports help/completion and checkout prefix `4cb3abbc59c7cb3ca`. | Enlarged 27.0 / 26A428 baseline; original CLI CLT attempt failed. Resumed success is not a clean bootstrap pass; full checkout/download SHAs unknown. |
 | October 27, lifecycle clone of successful stock guest | Viewed rerun completed; user reports help/completion. First uninstall removal was checked by user; direct decline/reinstall and Quickstart decline/reinstall completed within recorded output/reports. Final Quickstart fresh-Terminal help/completion passed by user report. | Reused prerequisites, not fresh missing-tools cases. Final installed SHA unknown; direct reinstall fresh-shell function and final profile deduplication not independently checked. |
 | October 27, read-only offline/reconnect | User reports `ballin backup list` exit 1 in 0.437 s disconnected, then exit 0 in 2.534 s restored. Self-update success also reported. | Final self-update SHA unknown. No offline upload, full update, or bootstrap/install qualification. |
+| October 28, Homebrew present, Node missing, Quickstart declined | User reports choosing backups No and Proceed No; afterward `command -v node` and `command -v ballin` were empty, and `node -v` was not found. | Screenshot showed the preview before confirmation, not the decline. No full filesystem or profile checksum comparison or exact executed SHA was established. |
 
 The historical Tahoe CLT block required **24.27 GB** with **19.41 GB** available.
 That observation does not establish OS-specific causality. Earlier 100 GB
