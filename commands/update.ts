@@ -242,10 +242,10 @@ const runAutomaticStage = (
 };
 
 function runUpdateCommand(): void {
-  let hasOutput = false;
+  let needsPhaseSeparator = false;
   const reportDiagnostic = (text = ''): void => {
     writeStderrLine(text);
-    hasOutput = true;
+    needsPhaseSeparator = true;
   };
 
   let settings: UpdateSettings;
@@ -262,8 +262,8 @@ function runUpdateCommand(): void {
   let exitStatus = 0;
 
   const progress = (text: string): void => {
-    printProgress(text, hasOutput);
-    hasOutput = true;
+    printProgress(text, needsPhaseSeparator);
+    needsPhaseSeparator = true;
   };
 
   const recordFailure = (status: number): void => {
@@ -290,6 +290,7 @@ function runUpdateCommand(): void {
     };
     // Homebrew prints its own update heading.
     const updateStatus = runIntegrationCommand('brew', ['update'], { env: childEnv });
+    needsPhaseSeparator = true;
 
     if (updateStatus === 0) {
       progress('Updating Homebrew packages');
