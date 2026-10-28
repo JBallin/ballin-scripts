@@ -177,7 +177,7 @@ describe('interactive setup with delayed terminal answers', function() {
       ], 'zsh', { columns, term: 'dumb', cwd: launchDirectory });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, '  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the Ballin command in ~/.local/bin.\n');
+      assert.include(output, '  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the Ballin command in ~/.local/bin\n');
       assert.include(output, '$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n');
       assert.include(fs.readFileSync(sandbox.log, 'utf8'), `git:clone https://github.com/JBallin/ballin-scripts.git ${sandbox.repo}\n`);
       assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'ballin.config.json')));

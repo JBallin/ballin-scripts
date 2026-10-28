@@ -191,8 +191,8 @@ if [ "$repo_existed" = false ]; then
   if ! "$install_approved"; then
     command_directory=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).directory)' "$command_preflight") || exit 1
     printf 'Installation will:\n'
-    printf '  - Create Ballin and its settings in %s.\n' "$(display_path "$repo_dir")"
-    printf '  - Link the Ballin command in %s.\n' "$(display_path "$command_directory")"
+    printf '  - Create Ballin and its settings in %s\n' "$(display_path "$repo_dir")"
+    printf '  - Link the Ballin command in %s\n' "$(display_path "$command_directory")"
     printf 'Installation details:\n%s#what-will-installation-change\n' "$docs_url"
   fi
   if ! "$install_approved" && ! confirm 'Proceed with installation?'; then
