@@ -9,11 +9,7 @@ Keep host Terminal commands and guest Terminal commands separate throughout.
 
 ## 1. Prepare Tart on the host
 
-Use an Apple Silicon Mac and check the current [Tart Quick Start](https://github.com/openai/tart/blob/main/docs/quick-start.md)
-and the selected image's host requirements. Before replacing an existing Tart,
-record its path/version, storage location, and VM inventory. Compare the offered
-Homebrew version with the working version: a tap can lag a standalone release.
-Do not downgrade or move existing VM storage during an active test.
+Use an Apple Silicon Mac. Check the current [Tart Quick Start](https://github.com/openai/tart/blob/main/docs/quick-start.md) and image requirements. Before replacing Tart, record its path, version, storage, and VM inventory; compare the offered Homebrew Tart version with the installed Tart version to avoid a downgrade. Do not move storage during testing.
 
 **Host Terminal:**
 
@@ -25,19 +21,7 @@ command -v tart
 tart --version
 ```
 
-If Tart is absent, that last pair will fail; record absence. The current upstream
-Homebrew route is:
-
-```shell
-brew install openai/tools/tart
-```
-
-Review the installation and dependency changes before proceeding. Then verify
-`command -v tart`, `tart --version`, and `brew list --versions tart softnet`.
-An old launcher with an absolute standalone-app path will still use that copy;
-update and verify the intended launcher deliberately. Softnet being installed
-does not mean the VM uses `--net-softnet`. The tested launch below uses default
-networking; no host DHCP changes are part of this procedure.
+If Tart is absent, record that. The upstream Homebrew route is `brew install openai/tools/tart`. Review dependencies first, then verify `command -v tart`, `tart --version`, and `brew list --versions tart softnet`. An absolute-path launcher may still use an older copy. The tested launch uses default networking, without `--net-softnet` or a DHCP change.
 
 ### If Homebrew refuses the Softnet dependency
 
@@ -53,9 +37,7 @@ brew trust --formula openai/tools/softnet
 brew install openai/tools/tart
 ```
 
-Do not grant trust automatically, trust the whole tap for this workaround, or
-disable trust checks. Fully qualified installation normally trusts the requested
-item; this observed refusal concerned its Softnet dependency.
+Do not automate trust, trust the whole tap, or disable checks. The observed refusal concerned a dependency, not the requested Tart formula.
 
 ## 2. Choose an image and preserve a clean baseline
 
@@ -71,12 +53,7 @@ df -h "$HOME"
 du -sh "$HOME/.tart"
 ```
 
-Disabling automatic pruning preserves cached evidence during testing; monitor
-host space and stop if it is insufficient. `tart list` reports virtual capacity
-separately from stored size. APFS clones can share allocated blocks, and a tag
-and digest can name the same cached image. Do not sum capacities or aliases to
-estimate reclaimable space; compare allocated usage and host free space before
-and after deliberate cleanup.
+Keep automatic pruning disabled during testing and monitor host space. APFS clones can share blocks and image tags can alias digests; use allocated usage and free space, not summed virtual capacities, to assess storage.
 
 Select a **vanilla** image from the [vendor image packages](https://github.com/orgs/cirruslabs/packages?tab=packages&q=macos-)
 and check its [provisioning template](https://github.com/cirruslabs/macos-image-templates).
@@ -96,9 +73,7 @@ tart clone "$image_digest" "$baseline" &&
   tart run --no-audio --no-usb-accessories "$baseline"
 ```
 
-Keep the image's CPU, memory, disk, and display settings unless you deliberately
-change them; save `tart get` output and any `tart set` commands. Do not add host
-folder sharing. Clipboard operation in the tested vanilla guests is unverified.
+Record `tart get` resources and any changes. Do not share host folders; clipboard support in these vanilla guests is unverified.
 
 ### Prepare the guest before Ballin
 
@@ -119,12 +94,7 @@ command -v brew ballin node gh
 xcode-select -p
 ```
 
-Missing tools or an unselected developer directory can be expected in a clean
-case. Record those results without installing anything to make preflight pass.
-Also check that `~/.ballin-scripts` is absent and review any preinstalled tools
-or account sessions; no PATH output alone does not prove filesystem absence.
-Start signed out of GitHub CLI/browser and Apple Account. If `gh` exists, use
-`gh auth status` without displaying tokens.
+Record missing tools and developer directory without preinstalling them. Check `~/.ballin-scripts` is absent, inventory other tools and sessions, and start signed out of GitHub and Apple Account. If present, use `gh auth status` without displaying tokens. PATH absence alone does not prove filesystem absence.
 
 A provisioned vanilla VM is not automatically a stock fresh Mac: the tested
 template includes automatic login, passwordless sudo, and disabled Gatekeeper.
@@ -134,13 +104,7 @@ developers**, authenticating with the guest administrator account. Recheck for
 `assessments enabled` before Ballin testing and record the final state. Stop if
 you cannot restore it; do not assume all images start disabled.
 
-Check usable guest space, not only the virtual disk size. Start unresized when
-testing stock-image capacity. If an installer blocks on storage, save the error,
-capacity, and free space before recovery. Stop and plan storage recovery
-separately for that image/version. Before resuming, record the exercised resize
-command on a stopped disposable clone and verify filesystem expansion and usable
-space inside that guest. The older 100 GB preparation did not establish a minimum or a reproducible manual
-partition-edit recipe; none is prescribed here.
+Check usable guest space with `df -h /`, not just virtual capacity. For a stock-capacity test, start unresized. If storage blocks installation, save the error and free space, then plan recovery separately for that image. Record any resize command on a stopped disposable clone and verify guest filesystem expansion before resuming. A 100 GB minimum and manual partition recipe are not established.
 
 Shut down the prepared guest normally. Confirm it is stopped in the host
 inventory and retain it as the **pre-Ballin baseline**. For each fresh case,
@@ -159,11 +123,7 @@ useful for lifecycle checks, but is not a clean first-install case.
 
 ## 3. Follow the published installation in the guest
 
-Identify the scenario first: missing prerequisites or prerequisite-ready,
-Homebrew present or absent, and backups Yes or No. Use disposable data.
-For the clean no-Homebrew case, leave CLT, Node.js, and Homebrew absent and let
-the normal prompts exercise prerequisite installation. Do not silently add tools
-or treat a separately recovered/resumed run as a clean pass.
+Choose a disposable-data scenario: missing or ready prerequisites, Homebrew present or absent, and backups Yes or No. For a clean no-Homebrew case, do not preinstall CLT, Node, or Homebrew; let Quickstart offer missing tools. Record a recovered run as resumed, not clean.
 
 In **guest Terminal**, run `cd /tmp`, then follow the [published Quickstart](quickstart.md)
 in order, using its current command. For a prerequisite-ready direct-installer
@@ -190,18 +150,7 @@ reruns. Expected locations are described in [installation changes](installation.
 
 ## 4. Keep evidence, then clean up deliberately
 
-Record the test date, intended Ballin SHA, actual installed SHA, host/guest
-macOS versions and builds, image tag/digest, Tart/Homebrew/tool versions,
-resources, launch flags, initial/final security and space, scenario, results,
-and departures from the published flow. Distinguish viewed output from a
-tester's report, failures from recoveries, and clean installs from resumed runs.
-
-The checkout SHA identifies only the checkout. Quickstart and its nested
-installer may download moving `main`; retain actual bytes/hashes when available,
-otherwise record **published main; exact executed revision not captured** for
-each. Do not change the normal journey just for instrumentation or infer a
-checkout SHA from a fetch message or backup commit. Exclude tokens, device codes,
-credentials, private backup contents, and personal paths from shared evidence.
+Record date, intended and actual checkout SHA, host/guest OS and build, image tag/digest, tool versions, resources, launch flags, security states, free space, prompts, timings, results, and recovery. Distinguish screenshots from user reports and clean runs from resumed runs. The checkout SHA does not identify the outer Quickstart or nested installer: retain their actual bytes/hashes when available, otherwise record their executed revisions as unknown. Never infer a checkout SHA from a fetch or backup commit. Redact credentials, device codes, private contents, and personal paths.
 
 Save evidence outside the VM before teardown. Inside the **exact selected test
 guest**, log out the intended account with `gh auth logout`, then verify signed
@@ -227,20 +176,11 @@ disposable test repository.
 
 ## Recorded results
 
-These bounded user-led tests were recorded in October 2026. Viewed output and
-direct host checks are identified separately from user reports. They do not
-qualify every scenario or the current moving `main`.
+These bounded user-led October 2026 results do not qualify newer revisions or every scenario.
 
-### Host route: October 27 Pacific / October 28 UTC
+### Host route: October 27–28
 
-Direct checks verified macOS **27.0.1 / 26A434**, arm64, Homebrew **7.0.11**,
-Homebrew Tart **2.41.1**, Softnet **0.24.1**, and the actual `/opt/homebrew`
-binaries. The user installed after granting only formula-level Softnet trust.
-The default `~/.tart` inventory was verified with `TART_HOME` unset; existing
-VMs/caches were preserved. No downgrade occurred. One clean-template launch
-with `--no-audio --no-usb-accessories` reached the desktop by user report;
-later inventory showed it stopped. Its launch-session exit status was unavailable.
-Neither `--net-softnet` nor a DHCP change was exercised.
+Direct checks verified arm64 macOS 27.0.1 / 26A434, Homebrew 7.0.11, Tart 2.41.1 and Softnet 0.24.1 at `/opt/homebrew`, with default `~/.tart`. After formula-only trust, the user reported one clean-template launch reached the desktop; later inventory showed it stopped. Launch exit status was unavailable; Softnet networking and DHCP changes were not exercised.
 
 ### Unresized Quickstart: October 27
 
@@ -265,15 +205,13 @@ Neither `--net-softnet` nor a DHCP change was exercised.
   exact executed revisions were not captured. This was before the later
   Homebrew Tart migration; guest results used the earlier standalone Tart 2.41.1.
 
-### Other bounded results and limitations
+### Other bounded results
 
-| Date / case | Observed result | Limits |
-| --- | --- | --- |
-| October 23, Golden Gate with Homebrew, missing Node, backups Yes | Viewed output reports setup and first backup success; user reports fresh-Terminal help and tab completion. Reported Node 26.12 and GitHub CLI 2.102.1. | Earlier prepared 27.0 / 26A428 baseline; Homebrew version and executed outer/nested/checkout SHAs not captured. Private remote contents not independently verified. |
-| October 26–27, no-Homebrew setup after CLT recovery | Separate retained-marker CLT recovery succeeded; resumed setup completed. User reports help/completion and checkout prefix `4cb3abbc59c7cb3ca`. | Enlarged 27.0 / 26A428 baseline; original CLI CLT attempt failed. Resumed success is not a clean bootstrap pass; full checkout/download SHAs unknown. |
-| October 27, lifecycle clone of successful stock guest | Viewed rerun completed; user reports help/completion. First uninstall removal was checked by user; direct decline/reinstall and Quickstart decline/reinstall completed within recorded output/reports. Final Quickstart fresh-Terminal help/completion passed by user report. | Reused prerequisites, not fresh missing-tools cases. Final installed SHA unknown; direct reinstall fresh-shell function and final profile deduplication not independently checked. |
-| October 27, read-only offline/reconnect | User reports `ballin backup list` exit 1 in 0.437 s disconnected, then exit 0 in 2.534 s restored. Self-update success also reported. | Final self-update SHA unknown. No offline upload, full update, or bootstrap/install qualification. |
-| October 28, Homebrew present, Node missing, Quickstart declined | User reports choosing backups No and Proceed No; afterward `command -v node` and `command -v ballin` were empty, and `node -v` was not found. | Screenshot showed the preview before confirmation, not the decline. No full filesystem or profile checksum comparison or exact executed SHA was established. |
+- October 23: Golden Gate 27.0 / 26A428, Homebrew present (version unrecorded), missing Node; Quickstart and first backup reported success in output; fresh-Terminal help and tab completion passed by user report. Node 26.12 and GitHub CLI 2.102.1 were reported; executed revisions and remote contents were not verified.
+- October 26–27: on the enlarged Golden Gate 27.0 / 26A428 baseline, a CLI CLT attempt failed; separate CLT recovery and resumed setup succeeded. Help/completion and checkout prefix `4cb3abbc59c7cb3ca` were reported; this was not a clean bootstrap pass.
+- October 27: an installed-guest lifecycle rerun, uninstall and direct/Quickstart decline and reinstall cases completed within viewed output and user reports. Final reinstall SHA and direct reinstall fresh-shell function were not independently checked.
+- October 27: read-only backup list failed offline (exit 1, 0.437 s) and worked after reconnect (exit 0, 2.534 s), by user report. Self-update success was reported but its final SHA is unknown; offline upload, full update and installation were not qualified.
+- October 28: on a Homebrew-present, missing-Node guest, the user reported backups No then Proceed No; afterward `command -v node` and `command -v ballin` were empty and `node -v` was not found. The screenshot showed only the pre-confirmation preview. Full filesystem/profile equality and executed SHA were not established.
 
 The historical Tahoe CLT block required **24.27 GB** with **19.41 GB** available.
 That observation does not establish OS-specific causality. Earlier 100 GB
