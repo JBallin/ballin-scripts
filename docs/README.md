@@ -6,7 +6,7 @@ For the project overview, see the [main README](../README.md).
 
 | Guide | Purpose |
 | --- | --- |
-| [What is Ballin?](what-is-ballin.md) | A plain-language introduction for readers who do not build software. |
+| [What is Ballin?](what-is-ballin.md) | A plain-language introduction. |
 | [Choosing Ballin](choosing-ballin.md) | When Ballin fits an existing Mac setup, when another approach is better, and how to use them together. |
 | [Quickstart: Install Ballin](quickstart.md) | Install Ballin with guided setup. |
 | [Command reference](commands.md) | All commands, subcommands, and options, with links to detailed guides. |

@@ -6,14 +6,6 @@ routine updates together and can optionally save a record of some tool lists
 and settings. That means less repetitive upkeep and less guesswork when setting
 up another Mac.
 
-```mermaid
-flowchart TB
-    Mac["A developer's Mac"] --> Ballin["Ballin"]
-    Ballin --> Upkeep["Routine tool maintenance<br/>on that Mac"]
-    Ballin -->|"Optional backup"| Saved["Selected tool lists<br/>and settings"]
-    Saved -->|"Reference for setup"| NewMac["Another Mac"]
-```
-
 Ballin grew from its creator's personal scripts for keeping a Mac's tools current
 and saving its configuration. The creator wanted to share a free, open-source
 tool that others could use and improve.
