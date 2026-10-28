@@ -1676,7 +1676,7 @@ system_sudo=fixture_sudo
     const prefix = path.join(root, 'exposed-brew');
     const result = run('y\nhome\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'no\n', FAKE_RAW_INPUT: '1',
       FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') });
-    assert.include(result.stdout, `Link the ballin command at ${prefix}/bin/ballin.`);
+    assert.include(result.stdout, `Link the Ballin command in ${prefix}/bin.`);
     assert.notInclude(result.stderr, 'The installation plan changed after approval');
     assert.include(readLog(), 'git:clone');
   });
@@ -2008,7 +2008,7 @@ main
       FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
     }, home, 'brew() { touch "$FAKE_ROOT/exported-brew-ran"; printf "/wrong-prefix\\n"; }; export -f brew');
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '  - Link the ballin command at ' + prefix + '/bin/ballin.');
+    assert.include(result.stdout, '  - Link the Ballin command in ' + prefix + '/bin.');
     assert.isFalse(fs.existsSync(path.join(root, 'exported-brew-ran')));
   });
   it('combines missing tools and fresh Ballin consent before PATH setup', () => {
@@ -2022,7 +2022,7 @@ main
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
     assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools.\n");
-    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the ballin command at ~/.local/bin/ballin.\n`);
+    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the Ballin command in ~/.local/bin.\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
     assert.isBelow(preview, approval);
@@ -2045,9 +2045,9 @@ main
     assert.include(result.stdout, `Installation will:
   - Install Xcode Command Line Tools.
   - Install Node.js 24 in ${systemNode}.
-  - Install GitHub CLI in ~/.local/bin/gh.
+  - Install GitHub CLI in ~/.local/bin.
   - Create Ballin and its settings in ~/.ballin-scripts.
-  - Link the ballin command at ~/.local/bin/ballin.
+  - Link the Ballin command in ~/.local/bin.
 Administrator access is required.
 Installation details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
