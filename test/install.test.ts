@@ -232,7 +232,7 @@ esac
     assert.notInclude(result.stdout, 'Detected Node.js');
     assert.notInclude(result.stdout, "let's ball");
     assert.include(result.stdout, 'Installation details:');
-    assert.include(result.stdout, `Installation will:\n  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the ballin command at ~/.local/bin/ballin.\n`);
+    assert.include(result.stdout, `Installation will:\n  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the Ballin command in ~/.local/bin.\n`);
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
@@ -242,6 +242,15 @@ esac
       `git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
       setupCommand('fresh'),
     ]);
+  });
+
+  it('previews the Homebrew command directory with HOME abbreviated', () => {
+    installBaseCommands();
+    writeExecutable('brew', '#!/bin/sh\nprintf "%s\\n" "$HOME/custom-brew"\n');
+    const result = runInstall({ input: 'n\n' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, '  - Link the Ballin command in ~/custom-brew/bin.');
+    assert.isFalse(fs.existsSync(repoDir));
   });
 
   for (const kind of ['file', 'symlink', 'directory-link']) {

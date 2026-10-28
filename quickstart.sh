@@ -1033,7 +1033,7 @@ main() {
         printf '  - Install Node.js 24 in %s.\n' "$(display_path "$system_node_bin")"
       fi
       if "$need_gh"; then
-        printf '  - Install GitHub CLI in %s.\n' "$(display_path "$local_bin/gh")"
+        printf '  - Install GitHub CLI in %s.\n' "$(display_path "$local_bin")"
       fi
     fi
     approved_root=''; approved_command=''; approved_snapshot=''
@@ -1042,7 +1042,7 @@ main() {
       approved_command="$command_bin/ballin"
       approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $(display_path "$approved_command")."
       printf '  - Create Ballin and its settings in %s.\n' "$(display_path "$approved_root")"
-      printf '  - Link the ballin command at %s.\n' "$(display_path "$approved_command")"
+      printf '  - Link the Ballin command in %s.\n' "$(display_path "$command_bin")"
       if [[ "$approved_snapshot" != missing ]]; then
         printf 'Warning: installation will replace the existing command at %s' "$(display_path "$approved_command")"
         if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(display_path "$(readlink "$approved_command")")"; fi
