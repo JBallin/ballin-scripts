@@ -1772,6 +1772,25 @@ system_sudo=fixture_sudo
     assert.include(readLog(), 'gh:auth login --hostname github.com --git-protocol https --web');
     assert.isTrue(fs.existsSync(path.join(root, 'login-complete')));
   });
+  it('reuses the approved PATH line after interrupted authentication and completes on rerun', () => {
+    const profile = path.join(home, '.zshrc');
+    const first = run('\nhome\ny\n', { FAKE_AUTH: 'missing', FAKE_GH_LOGIN_FAILURE: '130', FAKE_RAW_INPUT: '1' });
+    assert.equal(first.status, 130, first.stdout + first.stderr);
+    assert.include(first.stdout, 'Add Ballin setup to ~/.zshrc');
+    assert.equal(fs.readFileSync(profile, 'utf8'), `export PATH=$PATH:'${path.join(home, '.local/bin')}'\n`);
+    const before = fs.statSync(profile);
+    assert.notInclude(readLog(), 'install.sh:');
+    assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+    const retry = run('\nhome\ndevice-code\ny\nn\n', { FAKE_AUTH: 'missing', FAKE_RAW_INPUT: '1' });
+    assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+    assert.include(retry.stdout, 'Zsh settings directory');
+    assert.notInclude(retry.stdout, 'Add Ballin setup to ~/.zshrc');
+    assert.notInclude(retry.stdout, incompletePathGuidance);
+    assert.isTrue(retry.stdout.endsWith(terminalGuidance), retry.stdout);
+    assert.equal(fs.readFileSync(profile, 'utf8'), `export PATH=$PATH:'${path.join(home, '.local/bin')}'\n`);
+    assert.equal(fs.statSync(profile).ino, before.ino);
+    assert.include(readLog(), 'install.sh:');
+  });
   for (const inherited of [undefined, '', 'caller-choice']) {
     it(`suppresses only login update notices and preserves the caller environment: ${JSON.stringify(inherited)}`, () => {
       const result = run('y\ndevice-code\ny\n', {
@@ -2815,8 +2834,29 @@ confirm() {
     const result = run('y\n', { FAKE_CHANGE_PROFILE: '1' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stderr, 'startup file changed during setup');
+    assert.include(result.stdout, incompletePathGuidance);
     assert.notInclude(result.stdout, 'already present');
     assert.equal(fs.readFileSync(profile, 'utf8'), '# Changed while validating\n');
+  });
+  it('retains incomplete PATH guidance for an ambiguous existing directory reference', () => {
+    const profile = path.join(home, '.zshrc');
+    const contents = '# ~/.local/bin requires review\n';
+    fs.writeFileSync(profile, contents);
+    const result = run('y\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stderr, 'already mentions a setup directory');
+    assert.include(result.stdout, incompletePathGuidance);
+    assert.equal(fs.readFileSync(profile, 'utf8'), contents);
+  });
+  it('finishes successfully when the exact managed Bash line already exists', () => {
+    const profile = path.join(home, '.bash_profile');
+    fs.writeFileSync(profile, pathLine() + '\n');
+    const result = run('\ny\nn\n', { SHELL: '/bin/bash', FAKE_RAW_INPUT: '1' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notInclude(result.stdout, 'Which Bash startup file');
+    assert.notInclude(result.stdout, 'Add Ballin setup');
+    assert.isTrue(result.stdout.endsWith(terminalGuidance), result.stdout);
+    assert.equal(fs.readFileSync(profile, 'utf8'), pathLine() + '\n');
   });
   for (const flag of ['FAKE_INSTALL_FAIL', 'FAKE_BACKUP_FAIL']) {
     it(`preserves ${flag} failure status after PATH setup was declined`, () => {
