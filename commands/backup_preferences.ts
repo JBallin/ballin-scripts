@@ -125,7 +125,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('\nBackup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
+  writeStdoutLine('Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
   const includeSensitive = readYesNo(`Review files that may contain credentials or private information for backup inclusion? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `, defaultIncluded);
   if (includeSensitive === null) return null;
   if (includeSensitive) {
@@ -136,7 +136,7 @@ const selectSensitiveSources = (defaultIncluded = false): boolean | null | undef
 };
 
 const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null | undefined => {
-  writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+  writeStdoutLine('\nInventories and filtered preferences can contain private information or secrets even without sensitive sources.');
   const included = selectSensitiveSources(defaultIncluded);
   if (included === null || included === undefined) return included;
   const question = included ? 'Include sensitive sources in future backups?'

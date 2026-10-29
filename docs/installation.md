@@ -351,7 +351,8 @@ custom GitHub Enterprise Server hostname such as `git.example.com`, or pass
 `--hostname <host>` to skip that question. Use a hostname only, without `https://`,
 paths or a port. Backups belong to the authenticated individual account on that
 host. Setup shows that account and the complete destination before final confirmation. A missing
-or inaccessible reconnect candidate never causes replacement creation; a create
+or inaccessible reconnect candidate never causes replacement creation. When
+entering a name interactively, you can try another name; a create
 collision offers a checked available suggestion such as `ballin-backups-2`.
 Accept it or enter another name; setup never silently reconnects to the existing
 repository. A name can become unavailable before creation; follow the reported
@@ -477,9 +478,9 @@ backup during update is enabled, plus the
 [local last-success record](backup-sources.md#last-successful-backup). It then
 offers to review sensitive-source inclusion and automatic backup using your
 current settings as defaults. The sensitive-source choice requires explicit
-confirmation; both choices are saved after the review completes. Cancelling
-leaves these settings unchanged. This review keeps the destination and does not
-run a backup.
+confirmation. Each confirmed choice is saved before the next question; cancelling
+later leaves earlier confirmed choices saved. This review keeps the destination
+and does not run a backup.
 
 To change sensitive-source inclusion or automatic backup during update while
 keeping your destination, run `ballin setup` for

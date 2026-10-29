@@ -214,7 +214,7 @@ fs.readFileSync = (file, ...args) => {
       const before = fs.readFileSync(configPath, 'utf8');
       const result = run(input);
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'Preference review cancelled');
+      assert.include(result.stdout, '\nReview cancelled. Earlier confirmed choices remain saved.\nRun `ballin setup`');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup|analytics.enabled)` (?:set to|unchanged at)/u);
@@ -334,6 +334,7 @@ fs.readFileSync = (file, ...args) => {
     assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Review files that may contain'));
     assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Review files that may contain'));
     const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Review files that may contain'));
+    assert.include(result.stdout, 'Inventories and filtered preferences can contain private information or secrets even without sensitive sources.\nBackup source details:\n');
     assert.include(consent, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\n');
     assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
     assert.notInclude(result.stdout, 'Excluding sources does not remove');
