@@ -2807,7 +2807,7 @@ describe('repository backup lifecycle', function() {
     assert.equal(run().status, 1);
     const disconnected = run(['disconnect']); ok(disconnected);
     assert.deepEqual(config().backup, { ...before.backup, repository: null });
-    assert.equal(disconnected.stdout, 'Backup disconnected. Your remote backup and GitHub authentication are unchanged.\n');
+    assert.equal(disconnected.stdout, 'No backup destination was configured. Automatic backups are disabled.\n');
     assert.isFalse(fs.existsSync(cacheRoot));
     assert.equal(state().requests.length, 0);
   });
@@ -2816,6 +2816,14 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.stdout, 'Backup ballin-backups on github.com disconnected. Your remote backup and GitHub authentication are unchanged.\n');
     assert.isEmpty(state().requests);
     assert.isNull(config().backup.repository);
+  });
+  it('clears invalid local destination configuration without network access', () => {
+    const before = config(); before.backup.repository = { ...fixtureDestination, branch: '' };
+    before.update.backup = 'true'; saveConfig(before);
+    const result = run(['disconnect']); ok(result);
+    assert.equal(result.stdout, 'Invalid local backup destination configuration cleared. Automatic backups are disabled.\n');
+    assert.isNull(config().backup.repository); assert.equal(config().update.backup, 'false');
+    assert.isEmpty(state().requests);
   });
   it('keeps the previous destination and cache when disconnect persistence fails', () => {
     seedCache('zshrc.sh', 'base\n'); const before = config();

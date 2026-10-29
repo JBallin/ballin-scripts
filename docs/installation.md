@@ -351,8 +351,7 @@ custom GitHub Enterprise Server hostname such as `git.example.com`, or pass
 `--hostname <host>` to skip that question. Use a hostname only, without `https://`,
 paths or a port. Backups belong to the authenticated individual account on that
 host. Setup shows that account and the complete destination before final confirmation. A missing
-or inaccessible reconnect candidate never causes replacement creation. When
-entering a name interactively, you can try another name; a create
+or inaccessible reconnect candidate never causes replacement creation. A create
 collision offers a checked available suggestion such as `ballin-backups-2`.
 Accept it or enter another name; setup never silently reconnects to the existing
 repository. A name can become unavailable before creation; follow the reported

@@ -321,8 +321,13 @@ const disconnectBackup = (configPath: string, cacheDir: string): boolean => {
       writeStdoutLine(`Backup disconnected; writes are disabled, but local cache cleanup is incomplete. Rerun ${terminalCommand('ballin backup disconnect')}.`);
       return false;
     }
-    const label = prior.kind === 'repository' ? `Backup ${prior.repository.name} on ${prior.repository.host}` : 'Backup';
-    writeStdoutLine(`${label} disconnected. Your remote backup and GitHub authentication are unchanged.`);
+    if (prior.kind === 'repository') {
+      writeStdoutLine(`Backup ${prior.repository.name} on ${prior.repository.host} disconnected. Your remote backup and GitHub authentication are unchanged.`);
+    } else if (prior.kind === 'unconfigured') {
+      writeStdoutLine('No backup destination was configured. Automatic backups are disabled.');
+    } else {
+      writeStdoutLine('Invalid local backup destination configuration cleared. Automatic backups are disabled.');
+    }
     return true;
   } catch {
     writeStdoutLine('Unable to read local backup configuration; disconnect did not complete.');
