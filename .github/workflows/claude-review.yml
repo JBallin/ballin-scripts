@@ -19,6 +19,6 @@ jobs:
       checks: write
       issues: write
       id-token: write
-    uses: JBallin/claude-review-runtime/.github/workflows/claude-review.yml@fdb26f96afb3ffbee64186561a15b8e9c3f41919
+    uses: JBallin/claude-review-runtime/.github/workflows/claude-review.yml@b9a56eae9db8d11b67f5b6c5682c349146124711
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

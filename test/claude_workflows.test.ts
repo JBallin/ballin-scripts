@@ -8,7 +8,7 @@ const readWorkflow = (name: string): unknown => yaml.load(
   fs.readFileSync(path.join(workflowDirectory, name), 'utf8'),
 );
 const runtime = 'JBallin/claude-review-runtime/.github/workflows/';
-const pin = 'fdb26f96afb3ffbee64186561a15b8e9c3f41919';
+const pin = 'b9a56eae9db8d11b67f5b6c5682c349146124711';
 // Exact full-comment forms accepted by the selected Runtime. Actions contains()
 // compares strings case-insensitively; no trimming or token splitting is added.
 const manualCommands = ['/claude-review', '/claude-review opus'];
