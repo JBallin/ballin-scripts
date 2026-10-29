@@ -4,6 +4,8 @@ People who build software use many tools on their Macs. Keeping those tools
 current and remembering how they were set up can take time. Ballin brings
 routine upkeep together and can save useful information for later.
 
+![A Mac with an update loop and an arrow showing selected settings and tool lists backed up to cloud storage.](assets/docs/ballin-overview.png)
+
 ## Keeping a Mac current
 
 Ballin runs updates for supported tools in one place, reducing repetitive work.
