@@ -17,7 +17,7 @@ Use \`ballin config get/set/reset\` for direct configuration. This review does n
 `;
 
 const cancelSetup = (): void => {
-  writeStdoutLine(`Preference review cancelled; unconfirmed choices are unchanged. Earlier confirmed choices remain saved. Run ${terminalCommand('ballin setup')} to review your preferences again.`);
+  writeStdoutLine(`Preference review cancelled; unconfirmed choices are unchanged. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin setup')} to review your preferences again.`);
   process.exitCode = 0;
 };
 

@@ -215,7 +215,7 @@ fs.readFileSync = (file, ...args) => {
       const result = run(input);
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, 'Preference review cancelled');
-      assert.include(result.stdout, 'Run `ballin setup` to review your preferences again.');
+      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup|analytics.enabled)` (?:set to|unchanged at)/u);
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
@@ -234,7 +234,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(config.update.backup, input.startsWith('n\ny\nn\n') ? 'false' : 'true');
       assert.equal(config.analytics.enabled, 'true');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved');
-      assert.include(result.stdout, 'Run `ballin setup` to review your preferences again.');
+      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       if (!input.startsWith('n\ny\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
     });
