@@ -328,6 +328,7 @@ fs.readFileSync = (file, ...args) => {
     assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Review files that may contain'));
     assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Review files that may contain'));
     const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Review files that may contain'));
+    assert.include(consent, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\n');
     assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
     assert.notInclude(result.stdout, 'Excluding sources does not remove');
     assert.deepEqual(Object.keys(readConfig().backup).sort(), Object.keys(initial.backup).sort());

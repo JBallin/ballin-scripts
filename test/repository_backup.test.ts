@@ -1171,7 +1171,7 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SUPPORT_SECRET');
     const result = run(['setup'], 'y\n\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Backup source details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\nReview files that may contain credentials or private information for backup inclusion? [y/N]');
+    assert.include(result.stdout, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\nReview files that may contain credentials or private information for backup inclusion? [y/N]');
     assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
     assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
     assert.notInclude(result.stdout, 'Your choice also covers future supported sources.');
