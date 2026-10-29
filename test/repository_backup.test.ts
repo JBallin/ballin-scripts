@@ -532,7 +532,7 @@ describe('repository backup lifecycle', function() {
   });
   it('reports unavailable during validated setup without creating status; reads never advance it', () => {
     const before = config(); const setup = run(['setup']); ok(setup);
-    assert.equal(setup.stdout, 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: unavailable\n\nReview backup settings? [y/N] \n');
+    assert.equal(setup.stdout, 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: included\nAutomatic backup during update: disabled\nLast recorded successful backup on this installation: unavailable\n\nReview backup settings? [y/N] \nBackup preferences unchanged. Run `ballin backup setup` to review them later.\n');
     assert.include(setup.stdout, 'on this installation: unavailable'); assert.isFalse(fs.existsSync(statusFile()));
     assert.deepEqual(config(), before);
     saveState(fixtureState({ 'zshrc.sh': 'local\n' })); seedSuccess();
@@ -565,7 +565,7 @@ describe('repository backup lifecycle', function() {
             });
           `;
           const result = run(['setup'], '', {}, noPromptsOrDiscovery); ok(result);
-          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${readableBackupTime(priorSuccess)}\n\nReview backup settings? [y/N] `);
+          assert.equal(result.stdout, `Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: ${sensitive ? 'included' : 'excluded'}\nAutomatic backup during update: ${automatic ? 'enabled' : 'disabled'}\nLast recorded successful backup on this installation: ${readableBackupTime(priorSuccess)}\n\nReview backup settings? [y/N] Backup preferences unchanged. Run \`ballin backup setup\` to review them later.\n`);
           assert.equal(fs.readFileSync(configPath, 'utf8'), configBytes);
           assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
           assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
@@ -584,6 +584,7 @@ describe('repository backup lifecycle', function() {
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const result = run(['setup'], input); ok(result);
       assert.include(result.stdout, '\nReview backup settings? [y/N] ');
+      assert.include(result.stdout, 'Backup preferences unchanged. Run `ballin backup setup` to review them later.');
       assert.notInclude(result.stdout, 'Review files that may contain credentials or private information for backup inclusion?');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.equal(cached(), 'unchanged'); assert.equal(state().head, head);
@@ -633,7 +634,7 @@ describe('repository backup lifecycle', function() {
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const result = run(['setup'], input);
       assert.equal(result.status, ['y\nn\nn\n', 'y\nn\n\n'].includes(input) ? 1 : 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Backup settings review cancelled; existing settings are unchanged.');
+      assert.include(result.stdout, 'Backup settings review cancelled; backup preferences are unchanged. Run `ballin backup setup` to review them again.');
       assert.notInclude(result.stdout, '😎 Backup settings review complete.');
       assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup)` (?:set to|unchanged at)/u); assert.notInclude(result.stderr, 'setup incomplete');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
@@ -2320,7 +2321,10 @@ describe('repository backup lifecycle', function() {
     it(`defaults automatic backups off unless explicitly enabled after reconnect: ${JSON.stringify(automatic)}`, () => {
       unconfigured(); const result = run(['setup', 'ballin-backups'], `y\n\nreconnect\nn\ny\n${automatic}`); ok(result);
       assert.equal(config().update.backup, ['y\n', 'Y\n'].includes(automatic) ? 'true' : 'false');
-      if (['', 'y'].includes(automatic)) assert.notInclude(result.stdout, '😎 Backup setup complete.');
+      if (['', 'y'].includes(automatic)) {
+        assert.notInclude(result.stdout, '😎 Backup setup complete.');
+        assert.include(result.stdout, 'Backup destination saved; automatic-backup preference unchanged. Run `ballin backup setup` to review it later.');
+      }
       else assert.include(result.stdout, '\n\n😎 Backup setup complete.\n');
     });
   });

@@ -203,7 +203,7 @@ fs.readFileSync = (file, ...args) => {
     assert.notInclude(result.stdout, 'Review files that may contain');
     assert.notInclude(result.stdout, 'Automatically run');
     assert.include(result.stdout, 'Run `ballin backup setup`');
-    assert.include(result.stdout, 'Share command and backup results with a random install ID.\nNo backup contents, destination identities, configuration values,\nor raw errors are sent.\nAnalytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
+    assert.include(result.stdout, 'Share command and backup results with a random install ID.\nNo backup contents, destination identities, configuration values, or raw errors are sent.\nAnalytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
     assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
     assert.equal(readConfig().update.backup, 'false');
     assert.equal(readConfig().analytics.enabled, 'true');
@@ -215,6 +215,7 @@ fs.readFileSync = (file, ...args) => {
       const result = run(input);
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, 'Preference review cancelled');
+      assert.include(result.stdout, 'Run `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup|analytics.enabled)` (?:set to|unchanged at)/u);
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
@@ -233,6 +234,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(config.update.backup, input.startsWith('n\ny\nn\n') ? 'false' : 'true');
       assert.equal(config.analytics.enabled, 'true');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved');
+      assert.include(result.stdout, 'Run `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       if (!input.startsWith('n\ny\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
     });
