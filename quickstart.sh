@@ -776,7 +776,7 @@ check_existing_path() {
     return 0
   fi
   if [[ "$status" == 0 ]]; then
-    path_setup_complete=false
+    path_setup_complete=true
   else
     path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
   fi

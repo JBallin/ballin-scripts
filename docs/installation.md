@@ -217,8 +217,9 @@ retrying. Quickstart does not replace an occupied GitHub CLI destination.
 
 If the original PATH supplies the selected tools and command directory,
 Quickstart skips PATH setup. Otherwise it asks before adding the needed native
-directories. It never executes startup files or verifies a new shell. Existing
-exact lines prevent duplicate edits, but are not proof the line executes.
+directories. An existing exact line completes PATH configuration without a
+duplicate edit. Quickstart never executes startup files or verifies that a new
+shell reads the line.
 Unsafe or ambiguous files and write failures retain specific recovery guidance.
 Declines leave files unchanged; the current run can still use its adjusted PATH.
 
