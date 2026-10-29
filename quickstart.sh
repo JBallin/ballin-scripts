@@ -813,9 +813,9 @@ configure_path() {
         show_cancel_hint
         printf 'Zsh settings directory [Enter for %s, another absolute directory, or skip]: ' "$(display_path "$default_directory")"
       fi
-      if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
+      if ! read_prompt_answer; then path_setup_complete=false; printf 'ℹ️  PATH setup skipped.\n'; return; fi
       choice=$prompt_answer
-      [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }
+      [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'ℹ️  PATH setup skipped.\n'; return; }
       [[ -n "$choice" ]] || choice="$default_directory"
       [[ "$choice" != home ]] || choice="$HOME"
       if [[ "$choice" != /* || "$choice" == *$'\n'* || "$choice" == *$'\r'* ]]; then path_incomplete 'No absolute zsh startup directory selected.'; return; fi
@@ -838,7 +838,7 @@ configure_path() {
       case "$choice" in
         bashrc) profile="$HOME/.bashrc" ;;
         login) ;; # First existing login file selected above.
-        '') path_setup_complete=false; printf 'PATH setup skipped.\n'; return ;;
+        '') path_setup_complete=false; printf 'ℹ️  PATH setup skipped.\n'; return ;;
         *) path_incomplete 'No Bash startup file selected.'; return ;;
       esac
       ;;
@@ -894,7 +894,7 @@ configure_path() {
     path_incomplete 'The startup file may end at an unfinished heredoc.'; return
   fi
   if ! confirm "Add Ballin setup to $(display_path "$profile") so it works in new Terminal windows?"; then
-    path_setup_complete=false; printf 'PATH setup skipped.\n'; return
+    path_setup_complete=false; printf 'ℹ️  PATH setup skipped.\n'; return
   fi
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
   if ! profile_temp=$(mktemp "$profile.ballin-quickstart.XXXXXX"); then
@@ -939,9 +939,9 @@ main() {
   phase 'Setting up Ballin'
   backup_choice=no
   if confirm 'Set up backups to GitHub?' y; then backup_choice=yes
-  elif "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0
+  elif "$input_ended"; then printf "ℹ️  Quickstart stopped. Rerun it when you’re ready.\n"; return 0
   else
-    printf 'Backup setup skipped. Run '
+    printf 'ℹ️  Backup setup skipped. Run '
     command_reference 'ballin backup setup'
     printf " when you’re ready.\n"
   fi
@@ -1068,7 +1068,7 @@ main() {
     printf '🔗 Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
-      printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
+      printf "ℹ️  Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
       return 0
     fi
   fi
@@ -1098,14 +1098,14 @@ main() {
     if [[ -z "$backup_hostname" ]]; then
       show_cancel_hint
       printf 'GitHub hostname [github.com]: '
-      if ! read_prompt_answer; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
+      if ! read_prompt_answer; then printf "ℹ️  Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
       backup_hostname=$(backup_setup_host "${prompt_answer:-github.com}") || return $?
     fi
   fi
   if ! original_path_sufficient; then
     configure_path
   fi
-  if "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
+  if "$input_ended"; then printf "ℹ️  Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
   if [[ "$backup_choice" == yes ]]; then
     auth_status=0
     "$gh_tool" auth status --active --hostname "$backup_hostname" >/dev/null 2>&1 || auth_status=$?
@@ -1139,7 +1139,7 @@ main() {
     command_reference 'ballin help'
     printf '.\n'
   else
-    printf "\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
+    printf "\nℹ️  Ballin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
   fi
 }
 

@@ -236,7 +236,7 @@ describe('interactive setup with delayed terminal answers', function() {
         assert.equal(result.stdout.split(backupAnswers[0].prompt).length - 1, 1, 'Quickstart selects the host once');
         assert.isBelow(result.stdout.indexOf(backupAnswers[0].prompt), result.stdout.indexOf(startup.prompt));
         const output = result.stdout.replace(/\r\n/gu, '\n');
-        const reminder = 'Ballin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup';
+        const reminder = 'ℹ️  Ballin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup';
         assert.include(output, reminder + '\n', output);
         assert.equal(output.split(reminder).length - 1, 1);
         assert.notInclude(output, '😎 Setup complete!');
