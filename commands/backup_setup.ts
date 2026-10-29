@@ -138,12 +138,23 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         const included = confirmSensitiveSourceChoice(sensitive);
         if (included === null) return cancelReview();
         if (included === undefined) return false;
-        const previousSensitive = candidate.backup.includeSensitive;
-        candidate.backup.includeSensitive = String(included);
-        if (!saveBackupConfig(configPath, candidate)) return false;
+        const expectedDestination = JSON.stringify(candidate.backup.repository);
+        const validateReview = (current: typeof candidate, key: 'sensitive' | 'automatic'): boolean => {
+          const unchanged = JSON.stringify(current.backup.repository) === expectedDestination
+            && (key === 'sensitive' ? current.backup.includeSensitive === candidate.backup.includeSensitive
+              : current.update.backup === candidate.update.backup);
+          if (!unchanged) writeStdoutLine(`Backup configuration changed during review. Run ${terminalCommand('ballin backup setup')} again.`);
+          return unchanged;
+        };
+        const current = readSetupConfigContext(configPath);
+        if (!validateReview(current, 'sensitive')) return false;
+        const previousSensitive = current.backup.includeSensitive;
+        current.backup.includeSensitive = String(included);
+        if (!saveBackupConfig(configPath, current)) return false;
         writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previousSensitive));
         const { reviewAutomaticUpdateBackup } = require('./backup_preferences.ts');
-        const outcome = reviewAutomaticUpdateBackup(configPath, { defaultEnabled: automatic, cancelOnEof: true });
+        const outcome = reviewAutomaticUpdateBackup(configPath, { defaultEnabled: automatic, cancelOnEof: true,
+          validateConfig: (config: typeof candidate) => validateReview(config, 'automatic') });
         if (outcome === 'cancelled') return cancelReview();
         if (outcome === 'failed') return false;
         writeStdoutLine('\n😎 Backup settings review complete.');
@@ -188,18 +199,10 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       if (nameLine.eof) return cancelled();
       name = nameLine.text || suggested || '';
       if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
-      try {
-        found = checkSetup(() => candidateRepository(name, account));
-        if (mode === 'reconnect' && found && !found.redirected) {
-          const selected = found;
-          previous = checkSetup(() => requireRepositoryRead(inspectRepository(selected)));
-        }
-      } catch (error) {
-        const failure = error as RepositoryError;
-        if (mode !== 'reconnect' || repositoryName !== undefined || !(error instanceof RepositoryLookupError)
-          || failure.problem !== 'unavailable' || failure.cleanupFailed) throw error;
-        writeStdoutLine(formatRepositoryMessage('unavailable'));
-        continue;
+      found = checkSetup(() => candidateRepository(name, account));
+      if (mode === 'reconnect' && found && !found.redirected) {
+        const selected = found;
+        previous = checkSetup(() => requireRepositoryRead(inspectRepository(selected)));
       }
       if (mode === 'reconnect' && (!found || found.redirected)) {
         writeStdoutLine(formatRepositoryMessage('unavailable'));

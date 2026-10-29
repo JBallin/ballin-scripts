@@ -34,7 +34,7 @@ const preferenceBoolean = (value: unknown, key: string): boolean => {
   if (value === false || value === 'false') return false;
   throw new Error(`Invalid \`${key}\`; expected true or false.`);
 };
-type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone' };
+type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone'; validateConfig?: (config: ReturnType<typeof readSetupConfigContext>) => boolean };
 const selectAutomaticUpdateBackup = (options: AutomaticBackupOptions = {}): boolean | null => {
   const defaultEnabled = options.defaultEnabled ?? false;
   return readYesNo(`\n🔄 Automatically run ${terminalCommand('ballin backup')} as part of ${terminalCommand('ballin update')}? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
@@ -48,6 +48,7 @@ const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBacku
   if (createConfigStore({ configPath }).readLeafValue('update.backup') !== undefined) {
     try {
       const config = readSetupConfigContext(configPath);
+      if (options.validateConfig && !options.validateConfig(config)) return 'failed';
       previous = config.update.backup;
       config.update.backup = preference;
       saved = saveBackupConfig(configPath, config);

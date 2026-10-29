@@ -648,6 +648,33 @@ describe('repository backup lifecycle', function() {
       assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
     });
   }
+  for (const change of ['unrelated', 'disconnect', 'destination', 'automatic-destination']) {
+    it(`handles a concurrent ${change} configuration change during review`, () => {
+      const preload = `const fs = require('fs'); const write = process.stdout.write; let changed = false;
+        process.stdout.write = function(chunk, ...args) {
+          const text = String(chunk);
+          if (!changed && text.includes(${JSON.stringify(change === 'automatic-destination' ? 'Automatically run' : 'Exclude sensitive sources')})) {
+            changed = true; const file = ${JSON.stringify(configPath)}; const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const change = ${JSON.stringify(change)};
+            if (change === 'unrelated') config.analytics.enabled = 'true';
+            else if (change === 'disconnect' || change === 'automatic-destination') config.backup.repository = null;
+            else config.backup.repository.id = 'R_changed';
+            fs.writeFileSync(file, JSON.stringify(config));
+          }
+          return write.call(this, chunk, ...args);
+        };`;
+      const result = run(['setup'], 'y\nn\ny\ny\n', {}, preload);
+      if (change === 'unrelated') {
+        ok(result); assert.equal(config().analytics.enabled, 'true'); assert.equal(config().backup.includeSensitive, 'false');
+      } else {
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stdout, 'Backup configuration changed during review.');
+        assert.notInclude(result.stdout, '😎 Backup settings review complete.');
+        if (change === 'automatic-destination') assert.equal(config().backup.includeSensitive, 'false');
+        else assert.notInclude(result.stdout, 'Sensitive sources in backups: excluded');
+      }
+    });
+  }
   it('retains and acknowledges the first preference if the second save fails', () => {
     const before = config();
     const preload = `const fs = require('fs'); const rename = fs.renameSync; let saves = 0;
@@ -2449,17 +2476,28 @@ describe('repository backup lifecycle', function() {
     assert.lengthOf(publications(), 0);
   });
   for (const problem of ['unavailable', 'connection', 'authentication']) {
-    it(`retries only an interactive reconnect ${problem} failure`, () => {
+    it(`does not retry an unclassified interactive reconnect ${problem} failure`, () => {
       unconfigured();
       const preload = `const repository = require(${JSON.stringify(path.join(repoRoot, 'commands', 'backup_repository.ts'))});
         const candidate = repository.candidateRepository; let calls = 0;
         repository.candidateRepository = (...args) => { if (++calls === 1) throw new repository.RepositoryError('${problem}'); return candidate(...args); };`;
       const result = run(['setup'], 'y\n\nreconnect\nballin-backups\nballin-backups\nn\ny\nn\n', {}, preload);
-      assert.equal(result.status, problem === 'unavailable' ? 0 : 1, result.stdout + result.stderr);
-      assert.equal(result.stdout.split('Repository name').length - 1, problem === 'unavailable' ? 2 : 1);
-      if (problem === 'unavailable') assert.deepEqual(config().backup.repository, fixtureDestination);
-      else assert.isNull(config().backup.repository);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(result.stdout.split('Repository name').length - 1, 1);
+      assert.isNull(config().backup.repository);
       assert.isEmpty(publications());
+    });
+  }
+  for (const fault of ['server', 'graphql']) {
+    it(`does not reprompt after an interactive reconnect ${fault} transport failure`, () => {
+      unconfigured(); const value = state();
+      if (fault === 'server') value.faults.transport = { target: 'repos/fixture-user/ballin-backups', response: { status: 1, stdout: '{"status":"500"}', stderr: '', signal: null } };
+      else value.faults.query = 'errors';
+      saveState(value);
+      const result = run(['setup'], 'y\n\nreconnect\nballin-backups\nballin-backups\n');
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(result.stdout.split('Repository name').length - 1, 1);
+      assert.isNull(config().backup.repository); assert.isEmpty(publications());
     });
   }
   it('stops an interactive reconnect retry on Ctrl-C without a replacement', async () => {
