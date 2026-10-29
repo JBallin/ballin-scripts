@@ -139,7 +139,9 @@ const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null 
   writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
   const included = selectSensitiveSources(defaultIncluded);
   if (included === null || included === undefined) return included;
-  if (readYesNo('Save this sensitive-source choice for future backups? [y/N] ') !== true) return null;
+  const question = included ? 'Include sensitive sources in future backups?'
+    : 'Exclude sensitive sources from future backups?';
+  if (readYesNo(`${question} [y/N] `) !== true) return null;
   return included;
 };
 

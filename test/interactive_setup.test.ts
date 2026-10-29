@@ -307,7 +307,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assertBackupHeading(result.stdout);
     assert.include(result.stdout, 'Creating private backup…');
     assert.include(result.stdout, 'Automatic backup during updates: enabled (`update.backup` set to `true`).');
-    assert.include(result.stdout, 'Backup setup complete.');
+    assert.include(result.stdout.replace(/\r\n/gu, '\n'), '\n\n😎 Backup setup complete.');
     assertInitializedOnly();
   });
 });

@@ -60,7 +60,7 @@ const runSetupCommand = (): void => {
       return;
     }
     if (cancelled) { cancelSetup(); return; }
-    writeStdoutLine('Ballin preference review complete.');
+    writeStdoutLine('\n😎 Ballin preference review complete.');
     process.exitCode = 0;
   } catch (error) {
     rethrowInterruption(error);

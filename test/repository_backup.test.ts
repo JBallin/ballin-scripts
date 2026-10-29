@@ -604,8 +604,8 @@ describe('repository backup lifecycle', function() {
         const suffix = enabled ? '[Y/n]' : '[y/N]';
         assert.include(result.stdout, `Review files that may contain credentials or private information for backup inclusion? ${suffix}`);
         assert.include(result.stdout, `Automatically run \`ballin backup\` as part of \`ballin update\`? ${suffix}`);
-        assert.include(result.stdout, 'Save this sensitive-source choice for future backups? [y/N]');
-        assert.include(result.stdout, 'Backup settings review complete.');
+        assert.include(result.stdout, enabled ? 'Include sensitive sources in future backups? [y/N]' : 'Exclude sensitive sources from future backups? [y/N]');
+        assert.include(result.stdout, '\n\n😎 Backup settings review complete.\n');
         for (const key of ['backup.includeSensitive', 'update.backup']) assert.lengthOf(result.stdout.split('`' + key + '` unchanged at `' + enabled + '`'), 2);
         assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: String(enabled) },
           update: { ...before.update, backup: String(enabled) } });
@@ -634,6 +634,7 @@ describe('repository backup lifecycle', function() {
       const result = run(['setup'], input);
       assert.equal(result.status, ['y\nn\nn\n', 'y\nn\n\n'].includes(input) ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Backup settings review cancelled; existing settings are unchanged.');
+      assert.notInclude(result.stdout, '😎 Backup settings review complete.');
       assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup)` (?:set to|unchanged at)/u); assert.notInclude(result.stderr, 'setup incomplete');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.equal(cached(), 'unchanged'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
@@ -2116,7 +2117,7 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
     assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups\n\nBackup source details:');
     assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups\n');
-    assert.include(result.stdout, 'Automatic backup during updates: disabled (`update.backup` unchanged at `false`).\nBackup setup complete.\n');
+    assert.include(result.stdout, 'Automatic backup during updates: disabled (`update.backup` unchanged at `false`).\n\n😎 Backup setup complete.\n');
     assertSavedSensitiveChoice(result, 'false');
     assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 4);
@@ -2201,6 +2202,7 @@ describe('repository backup lifecycle', function() {
       const before = fs.readFileSync(configPath, 'utf8'); const result = run(['setup'], input);
       assert.equal(result.status, input === 'y\n\ncreate\n\nn\nn\n' ? 1 : 0); assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.include(result.stdout, 'Backup setup cancelled.');
+      assert.notInclude(result.stdout, '😎 Backup setup complete.');
       assert.equal(result.stderr, '');
       assert.notMatch(result.stdout, /Sensitive sources in backups: (included|excluded) /u);
       assert.equal(mutations().length, 0); assert.equal(cached(), 'untrusted\n');
@@ -2316,14 +2318,17 @@ describe('repository backup lifecycle', function() {
   });
   ['n\n', '', 'y', 'y\n', 'Y\n', '\n'].forEach((automatic) => {
     it(`defaults automatic backups off unless explicitly enabled after reconnect: ${JSON.stringify(automatic)}`, () => {
-      unconfigured(); ok(run(['setup', 'ballin-backups'], `y\n\nreconnect\nn\ny\n${automatic}`));
+      unconfigured(); const result = run(['setup', 'ballin-backups'], `y\n\nreconnect\nn\ny\n${automatic}`); ok(result);
       assert.equal(config().update.backup, ['y\n', 'Y\n'].includes(automatic) ? 'true' : 'false');
+      if (['', 'y'].includes(automatic)) assert.notInclude(result.stdout, '😎 Backup setup complete.');
+      else assert.include(result.stdout, '\n\n😎 Backup setup complete.\n');
     });
   });
   it('retains a configured destination when the subsequent automatic preference save fails', () => {
     unconfigured(); const value = config(); value.update.backup = {}; saveConfig(value);
     const result = run(['setup'], 'y\n\nreconnect\n\nn\ny\n\n'); assert.equal(result.status, 1);
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.include(result.stdout, 'preference was not saved');
+    assert.notInclude(result.stdout, '😎 Backup setup complete.');
     assert.equal(config().backup.includeSensitive, 'false');
     assertSavedSensitiveChoice(result, 'false');
   });
