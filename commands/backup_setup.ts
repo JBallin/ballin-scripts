@@ -141,7 +141,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (!saveBackupConfig(configPath, candidate)) return false;
         writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previousSensitive));
         writeStdoutLine(savedPreferenceLine('update.backup', enabled, previousAutomatic));
-        writeStdoutLine('Backup settings review complete.');
+        writeStdoutLine('\n😎 Backup settings review complete.');
         return true;
       };
       return maintain();
@@ -249,8 +249,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     writeStdoutLine(`Private backup ${previous ? 'reconnected' : 'created'}: ${recoveryUrl}`);
     if (options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('backup.includeSensitive', includeSensitive, previousSensitive));
     const { reviewAutomaticUpdateBackup } = require('./backup_preferences.ts');
-    if (reviewAutomaticUpdateBackup(configPath, { presentation: options.presentation }) === 'failed') return false;
-    if (options.presentation !== 'installation') writeStdoutLine('Backup setup complete.');
+    const automaticOutcome = reviewAutomaticUpdateBackup(configPath, { presentation: options.presentation });
+    if (automaticOutcome === 'failed') return false;
+    if (automaticOutcome === 'confirmed' && options.presentation !== 'installation') writeStdoutLine('\n😎 Backup setup complete.');
     return true;
   } catch (error) {
     const interruptedUrl = configuredRecoveryUrl ?? (remoteMayExist ? recoveryUrl : undefined);
