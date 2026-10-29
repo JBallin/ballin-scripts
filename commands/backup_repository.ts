@@ -51,6 +51,7 @@ class RepositoryError extends Error {
   readonly problem: RepositoryProblem;
   completedStage?: 'repository-created';
   cleanupFailed?: boolean;
+  missingRepositoryNode?: boolean;
   reconciliationFailed?: boolean;
   publicationConfirmed?: boolean;
   constructor(problem: RepositoryProblem) {
@@ -119,7 +120,7 @@ type ManagedBranchRulesetOutcome =
   | { status: 'ambiguous'; reason: 'unconfirmed' | 'mismatch' | 'duplicate' };
 type RepositoryInspection =
   | { status: 'complete'; read: RepositoryRead }
-  | { status: 'incomplete'; problem: RepositoryProblem; inspected?: RepositoryRead; cleanupFailed?: boolean };
+  | { status: 'incomplete'; problem: RepositoryProblem; inspected?: RepositoryRead; cleanupFailed?: boolean; missingRepositoryNode?: boolean };
 type RepositoryInfo = { destination: RepositoryDestination; login: string; revision: Revision };
 type ApiResult = { ok: boolean; body: Record<string, unknown>; items?: unknown[]; problem?: RepositoryProblem; cleanupFailed?: boolean };
 // Reduce private provider output to a fixed classification; never retain or display raw stderr.
@@ -268,7 +269,9 @@ const readInfo = (
   const data = query(destination.host, `query BallinRepository($id: ID!, $branch: String!) {
     node(id: $id) { ... on Repository { ${repositoryFields} } }
   }`, { id: destination.id, branch: `refs/heads/${destination.branch}` }, options);
-  if (!data.node) throw new RepositoryError('unavailable');
+  if (data.node === null) {
+    const error = new RepositoryError('unavailable'); error.missingRepositoryNode = true; throw error;
+  }
   const node = object(data.node);
   const owner = object(node.owner);
   if (account.host !== destination.host || node.id !== destination.id || owner.id !== destination.ownerId || owner.id !== account.id || owner.__typename !== 'User') {
@@ -425,7 +428,8 @@ const inspect = (
   } catch (error) {
     rethrowInterruption(error);
     return { status: 'incomplete', inspected, problem: error instanceof RepositoryError ? error.problem : 'local-io',
-      cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
+      cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined,
+      missingRepositoryNode: error instanceof RepositoryError ? error.missingRepositoryNode : undefined };
   }
 };
 const inspectRepository = (destination: RepositoryDestination, options: RepositoryOptions = {}): RepositoryInspection => {
@@ -433,7 +437,8 @@ const inspectRepository = (destination: RepositoryDestination, options: Reposito
   try { return inspect(destination, readRepositoryAccount(destination.host, options), options, false); } catch (error) {
     rethrowInterruption(error);
     return { status: 'incomplete', problem: error instanceof RepositoryError ? error.problem : 'local-io',
-      cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined };
+      cleanupFailed: error instanceof RepositoryError ? error.cleanupFailed : undefined,
+      missingRepositoryNode: error instanceof RepositoryError ? error.missingRepositoryNode : undefined };
   }
 };
 const requireRepositoryRead = (inspection: RepositoryInspection): RepositoryRead => {

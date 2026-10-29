@@ -2377,7 +2377,7 @@ describe('repository backup lifecycle', function() {
       assert.include(result.stdout, 'Private backup reconnected: https://github.com/fixture-user/ballin-backups\n');
       assert.notInclude(result.stdout, 'Unrecognized backup entries:');
       assert.include(result.stdout, 'Stop backups from other installations before running `ballin backup` here.');
-      assert.include(result.stdout, 'Reconnect does not authorize overwriting different saved data.');
+      assert.include(result.stdout, 'Reconnect does not restore dotfiles or reinstall packages. A backup reports conflicts when local and saved snapshots differ without a shared baseline.');
       assert.include(result.stdout, 'Backup setup complete.');
     });
   });
@@ -2500,6 +2500,27 @@ describe('repository backup lifecycle', function() {
       assert.isNull(config().backup.repository); assert.isEmpty(publications());
     });
   }
+  it('reprompts when a selected repository node becomes inaccessible, then accepts a corrected name', () => {
+    unconfigured(); const value = state(); value.faults.query = 'missing'; saveState(value);
+    const preload = `const fs = require('fs'); const write = process.stdout.write; let prompts = 0;
+      process.stdout.write = function(chunk, ...args) {
+        if (String(chunk).includes('Repository name') && ++prompts === 2) {
+          const file = ${JSON.stringify(statePath)}; const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+          delete state.faults.query; fs.writeFileSync(file, JSON.stringify(state));
+        }
+        return write.call(this, chunk, ...args);
+      };`;
+    const result = run(['setup'], 'y\n\nreconnect\nballin-backups\nballin-backups\nn\ny\nn\n', {}, preload);
+    ok(result); assert.equal(result.stdout.split('Repository name').length - 1, 2);
+    assert.include(result.stdout, 'The backup repository is missing or inaccessible.');
+    assert.deepEqual(config().backup.repository, fixtureDestination); assert.isEmpty(publications());
+  });
+  it('does not reprompt for an explicit repository whose node is inaccessible', () => {
+    unconfigured(); const value = state(); value.faults.query = 'missing'; saveState(value);
+    const result = run(['setup', 'ballin-backups'], 'y\n\nreconnect\n');
+    assert.equal(result.status, 1); assert.notInclude(result.stdout, 'Repository name');
+    assert.isNull(config().backup.repository); assert.isEmpty(publications());
+  });
   it('stops an interactive reconnect retry on Ctrl-C without a replacement', async () => {
     unconfigured(); const before = fs.readFileSync(configPath, 'utf8');
     const child = spawn(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'backup', 'setup'], {

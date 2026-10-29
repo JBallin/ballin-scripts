@@ -202,7 +202,13 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       found = checkSetup(() => candidateRepository(name, account));
       if (mode === 'reconnect' && found && !found.redirected) {
         const selected = found;
-        previous = checkSetup(() => requireRepositoryRead(inspectRepository(selected)));
+        const inspection = checkSetup(() => inspectRepository(selected));
+        if (inspection.status === 'incomplete' && inspection.missingRepositoryNode
+          && !inspection.cleanupFailed && repositoryName === undefined) {
+          writeStdoutLine(formatRepositoryMessage('unavailable'));
+          continue;
+        }
+        previous = requireRepositoryRead(inspection);
       }
       if (mode === 'reconnect' && (!found || found.redirected)) {
         writeStdoutLine(formatRepositoryMessage('unavailable'));
@@ -229,8 +235,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         candidate = restorePortablePreferences(candidate, originalConfig, remote);
       }
       writeStdoutLine(`Stop backups from other installations before running ${terminalCommand('ballin backup')} here.`);
-      writeStdoutLine('Reconnect can recover supported Ballin preferences; existing local choices take precedence.');
-      writeStdoutLine('Reconnect does not authorize overwriting different saved data.');
+      writeStdoutLine('Reconnect can recover supported Ballin preferences that are not set locally.');
+      writeStdoutLine('Reconnect does not restore dotfiles or reinstall packages. A backup reports conflicts when local and saved snapshots differ without a shared baseline.');
     } else if (found && !found.redirected) {
       writeStdoutLine('That repository name is already in use. Reconnect to a valid backup, or explicitly choose another name.');
       return false;
