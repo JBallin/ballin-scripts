@@ -14,6 +14,7 @@ preferences in a private GitHub repository; a separate opt-in adds supported
 shell, Git, editor, Codex, and Claude Code configuration. You can use maintenance
 alone without configuring backups.
 
+Read the [plain-language introduction](docs/what-is-ballin.md).
 See [Choosing Ballin](docs/choosing-ballin.md) for when it fits and how to use it
 alongside other tools.
 
