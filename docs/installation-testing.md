@@ -18,7 +18,6 @@ Follow the [installation instructions](../README.md#installation) in the VM.
 
 ## Clean up
 
-If you signed in to GitHub, run `gh auth logout` in Terminal in the VM.
 Shut down the VM, then delete it from Terminal on your Mac:
 
 ```shell
