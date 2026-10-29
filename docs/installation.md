@@ -476,8 +476,7 @@ destination, whether sensitive sources are included, and whether automatic
 backup during update is enabled, plus the
 [local last-success record](backup-sources.md#last-successful-backup). It then
 offers to review sensitive-source inclusion and automatic backup using your
-current settings as defaults. The sensitive-source choice requires explicit
-confirmation. Each confirmed choice is saved before the next question; cancelling
+current settings as defaults. Each answered choice is saved before the next question; cancelling
 later leaves earlier confirmed choices saved. This review keeps the destination
 and does not run a backup.
 

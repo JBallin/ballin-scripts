@@ -1,4 +1,4 @@
-const { terminalCommand } = require('./terminalStyle.ts');
+const { terminalCommand, terminalHeading } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
@@ -6,7 +6,7 @@ const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configureAnalyticsPreference } = require('./analytics.ts');
 const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
-const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
+const { enableSetupCancelHint, rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
 const setupHelp = `Usage:
     ballin setup
@@ -17,7 +17,7 @@ Use \`ballin config get/set/reset\` for direct configuration. This review does n
 `;
 
 const cancelSetup = (): void => {
-  writeStdoutLine(`\nReview cancelled. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin setup')} to review your preferences again.`);
+  writeStdoutLine(`\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin setup')} to review your preferences again.`);
   process.exitCode = 0;
 };
 
@@ -35,7 +35,8 @@ const runSetupCommand = (): void => {
     const analytics = preferenceBoolean(config.analytics?.enabled, 'analytics.enabled');
 
     reviewing = true;
-    writeStdoutLine('Review your Ballin preferences. Each confirmed choice is saved locally.');
+    enableSetupCancelHint();
+    writeStdoutLine(terminalHeading('Backup preferences'));
     if (destination.kind === 'repository') {
       const included = confirmSensitiveSourceChoice(sensitive);
       if (included === null) { cancelSetup(); return; }
@@ -46,7 +47,7 @@ const runSetupCommand = (): void => {
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
       writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previous));
     } else {
-      writeStdoutLine(`No backup is configured. Run ${terminalCommand('ballin backup setup')} to choose a destination.`);
+      writeStdoutLine(`ℹ️  No backup is configured.\nℹ️  Run ${terminalCommand('ballin backup setup')} to choose a destination.`);
     }
 
     if (destination.kind !== 'unconfigured') {

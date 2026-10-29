@@ -128,7 +128,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
   const write = options.write ?? writeStdoutLine;
   const fallback = (needsContext = false): void => {
     if (needsContext) write();
-    write(`Tab completion skipped. Enable it later: ${docsUrl}#startup-files-and-manual-activation`);
+    write(`ℹ️  Tab completion skipped.\n🔗 Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
   };
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
   const prompt = options.prompt ?? readPromptLine;
@@ -171,7 +171,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     rethrowInterruption(error);
     if (error instanceof CompletionProfileError) write(error.message);
     write('Tab completion setup could not finish. Ballin remains installed.');
-    write(`Manual setup: ${docsUrl}#startup-files-and-manual-activation`);
+    write(`🔗 Manual setup:\n${docsUrl}#startup-files-and-manual-activation`);
   }
 };
 

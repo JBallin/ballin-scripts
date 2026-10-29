@@ -48,10 +48,12 @@ select plugin packages. It checks selected file readability without reading
 their contents or creating backup snapshots. Codex and Claude Code directory
 discovery recursively inspects names and file types to identify
 nonempty sources. The preview lists detected sources; missing/unavailable
-sources are omitted. Access or resolution errors prevent confirmation. Closing input or declining final
-confirmation cancels without saving consent or changing destination, cache, or
-remote state. Excluded
-sensitive sources are not inspected just to verify them.
+sources are omitted. Access or resolution errors prevent inclusion; you can still
+choose to exclude the sources. Closing input leaves the pending choice unchanged.
+During creation or reconnect, the choice is staged until the separate destination
+confirmation; declining it changes no destination, cache, or remote state.
+Outside the explicit setup preview, excluded sensitive sources are not inspected
+just to verify them.
 
 Consent covers later captures as files, symlink targets, and installed-tool
 metadata change. It does not certify future contents or require repeated review

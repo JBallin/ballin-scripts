@@ -20,7 +20,7 @@ configured, use `ballin backup setup` first if you want backups.
 
 Review [what Ballin will back up](backup-sources.md#what-will-ballin-back-up)
 before changing the sensitive-source choice. Ballin previews local paths and
-readability. Final confirmation saves the choice for future backups.
+readability before asking whether to include the sources. Your answer saves the choice for future backups.
 
 Each confirmed choice is saved locally. Cancelling or closing input leaves the
 pending choice unchanged; earlier confirmed choices remain saved. Invalid

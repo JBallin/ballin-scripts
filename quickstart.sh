@@ -85,8 +85,15 @@ read_prompt_answer() {
   [[ -t 0 ]] || printf '\n'
   prompt_answer=''; input_ended=true; return 1
 }
+show_cancel_hint() {
+  if [[ -t 0 && "${BALLIN_CANCEL_HINT_SHOWN:-}" != 1 ]]; then
+    printf "ℹ️  Ctrl-C to cancel\n"
+    export BALLIN_CANCEL_HINT_SHOWN=1
+  fi
+}
 confirm() {
   local default=${2:-n} normalized
+  show_cancel_hint
   while :; do
     if [[ "$default" == y ]]; then printf '%s [Y/n] ' "$1"; else printf '%s [y/N] ' "$1"; fi
     read_prompt_answer || return 1
@@ -600,6 +607,7 @@ install_command_line_tools() {
     fi
     printf '$ xcode-select --install\n'
     probe_tool "$system_xcode_select" --install || fail 'Apple could not start Xcode Command Line Tools installation. Finish any pending installation, then rerun Quickstart.'
+    show_cancel_hint
     printf 'Finish installing Xcode Command Line Tools, then press Return here: '
     read_prompt_answer || fail 'Git setup did not complete.'
   fi
@@ -778,7 +786,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=true
   else
-    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
+    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\n🔗 Manual setup:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
   fi
   return 0
 }
@@ -799,8 +807,10 @@ configure_path() {
         default_directory="$ZDOTDIR"
       fi
       if [[ "$default_directory" == "$HOME" ]]; then
+        show_cancel_hint
         printf 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: '
       else
+        show_cancel_hint
         printf 'Zsh settings directory [Enter for %s, another absolute directory, or skip]: ' "$(display_path "$default_directory")"
       fi
       if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
@@ -821,6 +831,7 @@ configure_path() {
       profile="$HOME/.bashrc"
       if check_existing_path; then return; fi
       profile="$login_profile"
+      show_cancel_hint
       printf 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] '
       read_prompt_answer || prompt_answer=''
       choice=$prompt_answer
@@ -1054,7 +1065,7 @@ main() {
         printf '.\n'
       fi
     fi
-    printf 'Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
+    printf '🔗 Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
@@ -1085,6 +1096,7 @@ main() {
   if [[ "$backup_choice" == yes ]]; then
     backup_hostname=$(backup_setup_host) || return $?
     if [[ -z "$backup_hostname" ]]; then
+      show_cancel_hint
       printf 'GitHub hostname [github.com]: '
       if ! read_prompt_answer; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
       backup_hostname=$(backup_setup_host "${prompt_answer:-github.com}") || return $?
@@ -1127,7 +1139,7 @@ main() {
     command_reference 'ballin help'
     printf '.\n'
   else
-    printf "\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
+    printf "\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
   fi
 }
 

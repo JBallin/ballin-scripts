@@ -709,6 +709,7 @@ function runBackupCommand(args = process.argv.slice(2)): void {
     }
     if (!configExisted) writeStdoutLine();
     let cancelled = false;
+    require('./commandHelpers.ts').enableSetupCancelHint();
     const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
       configPath,

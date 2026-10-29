@@ -18,6 +18,7 @@ const {
   resolveBackupSetupHost,
 } = require('./backup_config.ts');
 const {
+  enableSetupCancelHint,
   promptInputState,
   CommandInterrupted,
   rethrowInterruption,
@@ -293,6 +294,7 @@ const setup = (
   }
 
   if (mode === 'fresh') {
+    enableSetupCancelHint();
     try {
       configureAnalyticsPreference({
         configPath: configPathFor(repoDir),

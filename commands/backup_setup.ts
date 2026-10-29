@@ -28,18 +28,18 @@ const invalidateBackupCache = (cacheDir: string): boolean => {
 const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome, installation = false): void => {
   if (outcome.status === 'present' || outcome.status === 'unsupported') return;
   if (outcome.status === 'enabled') {
-    if (!installation) writeStdoutLine('GitHub branch protection enabled.');
+    if (!installation) writeStdoutLine('ℹ️  GitHub branch protection enabled.');
     return;
   }
   if (outcome.status === 'permission-denied') {
-    writeStdoutLine(`Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun ${terminalCommand('ballin backup setup')} after updating GitHub access.`);
+    writeStdoutLine(`ℹ️  Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun ${terminalCommand('ballin backup setup')} after updating GitHub access.`);
     return;
   }
   if (outcome.status === 'unexpected') {
-    writeStdoutLine('Backup setup can continue normally, but optional GitHub branch protection could not be confirmed.');
+    writeStdoutLine('ℹ️  Backup setup can continue normally, but optional GitHub branch protection could not be confirmed.');
     return;
   }
-  writeStdoutLine('Backup setup can continue normally, but optional GitHub branch protection is unconfirmed. Inspect the Ballin-named repository ruleset before retrying setup.');
+  writeStdoutLine('ℹ️  Backup setup can continue normally, but optional GitHub branch protection is unconfirmed. Inspect the Ballin-named repository ruleset before retrying setup.');
 };
 type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig: Record<string, unknown>; repositoryName?: string;
@@ -56,7 +56,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   const checkSetup = <T>(action: () => T): T => (options.reviewExistingSettings || options.presentation === 'installation')
     ? withTemporaryStatus('Checking backup setup…', action) : action();
   const cancelled = (): boolean => {
-    writeStdoutLine(`\nBackup setup cancelled.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
+    writeStdoutLine(`\nℹ️  Backup setup cancelled.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
     options.onCancelled?.();
     return promptInputState() === 'ended' ? true : false;
   };
@@ -78,10 +78,10 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return false;
     }
     if (configured.kind === 'unconfigured') {
-      if (!options.initialConsent) {
-        writeStdoutLine('Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
+      if (!options.initialConsent && !options.reviewExistingSettings) {
+        writeStdoutLine('🔗 Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
         if (readYesNo('Set up private backups to GitHub? [y/N] ') !== true) {
-          writeStdoutLine(`\nBackup setup skipped.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
+          writeStdoutLine(`\nℹ️  Backup setup skipped.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
           return true;
         }
       }
@@ -120,18 +120,15 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         reportManagedBranchProtection(checkSetup(() => ensureManagedBranchRuleset(read)), options.presentation === 'installation');
         const showSummary = options.showValidationSummary !== false;
         const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
-        if (summary) writeStdoutLine(summary);
-        if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
+        if (summary) writeStdoutLine(summary.split('\n').map((line: string) => `ℹ️  ${line}`).join('\n'));
+        if (showSummary) writeStdoutLine(`ℹ️  ${lastBackupSuccessLine(backupCacheDir, read.destination)}`);
         if (!options.reviewExistingSettings) return true;
-        if (readYesNo('\nReview backup settings? [y/N] ') !== true) {
-          writeStdoutLine(`\nBackup preferences unchanged.\nRun ${terminalCommand('ballin backup setup')} to review them later.`);
-          return true;
-        }
+        writeStdoutLine(`\n${terminalHeading('Backup preferences')}`);
         const sensitive = sensitiveSourceConsent(candidate);
         if (sensitive === null) throw new PortableConfigError('Invalid `backup.includeSensitive`; expected true or false.');
         const automatic = preferenceBoolean(candidate.update.backup, 'update.backup');
         const cancelReview = (): boolean => {
-          writeStdoutLine(`\nReview cancelled. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin backup setup')} to review them again.`);
+          writeStdoutLine(`\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin backup setup')} to review them again.`);
           options.onCancelled?.();
           return promptInputState() === 'ended' ? true : false;
         };
@@ -188,8 +185,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         writeStdoutLine(formatRepositoryMessage(failure.problem, process.stdout, host));
         suggested = undefined;
       }
-      if (suggested === undefined) writeStdoutLine('Unable to suggest an available name. Enter a repository name to check.');
-      else if (suggested !== 'ballin-backups') writeStdoutLine(`ballin-backups is already in use. Available suggestion: ${suggested}.`);
+      if (suggested === undefined) writeStdoutLine('ℹ️  Unable to suggest an available name. Enter a repository name to check.');
+      else if (suggested !== 'ballin-backups') writeStdoutLine(`ℹ️  ballin-backups is already in use. Available suggestion: ${suggested}.`);
     }
     let name: string;
     let previous: RepositoryRead | undefined;
@@ -220,11 +217,11 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       if (repositoryName !== undefined) return false;
     }
     recoveryUrl = repositoryUrl({ host, ownerId: account.id, name }, account);
-    writeStdoutLine(`Proposed backup: ${recoveryUrl}`);
+    writeStdoutLine(`ℹ️  Proposed backup: ${recoveryUrl}`);
     if (mode === 'reconnect' && previous) {
       const existing = previous;
       const unexpected = unexpectedRepositoryEntries(existing);
-      if (unexpected) writeStdoutLine(`Unrecognized backup entries: ${unexpected}. Ballin will leave them unchanged.`);
+      if (unexpected) writeStdoutLine(`ℹ️  Unrecognized backup entries: ${unexpected}. Ballin will leave them unchanged.`);
       previous = existing;
       const bytes = existing.snapshots.get(configSnapshotFileName);
       if (bytes !== undefined) {
@@ -234,15 +231,15 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         }
         candidate = restorePortablePreferences(candidate, originalConfig, remote);
       }
-      writeStdoutLine(`Stop backups from other installations before running ${terminalCommand('ballin backup')} here.`);
-      writeStdoutLine('Reconnect can recover supported Ballin preferences that are not set locally.');
-      writeStdoutLine('Reconnect does not restore dotfiles or reinstall packages. A backup reports conflicts when local and saved snapshots differ without a shared baseline.');
+      writeStdoutLine(`ℹ️  Stop backups from other installations before running ${terminalCommand('ballin backup')} here.`);
+      writeStdoutLine('ℹ️  Reconnect can recover supported preferences not set locally; it does not restore files or install packages.');
+      writeStdoutLine('🔗 Reconnect details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     } else if (found && !found.redirected) {
       writeStdoutLine('That repository name is already in use. Reconnect to a valid backup, or explicitly choose another name.');
       return false;
     }
     if (found?.redirected) {
-      writeStdoutLine('This name redirects to a renamed repository. Creating a backup here ends that redirect; links and clones using the old URL will no longer reach the renamed repository.');
+      writeStdoutLine('ℹ️  This name redirects to a renamed repository. Creating a backup here ends that redirect; links and clones using the old URL will no longer reach the renamed repository.');
     }
     writeStdoutLine();
     const includeSensitive = selectSensitiveSources();
@@ -280,13 +277,13 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     linkageSaved = true;
     if (previous && options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('backup.includeSensitive', includeSensitive, previousSensitive));
-    writeStdoutLine(`Private backup ${previous ? 'reconnected' : 'created'}: ${recoveryUrl}`);
+    writeStdoutLine(`ℹ️  Private backup ${previous ? 'reconnected' : 'created'}: ${recoveryUrl}`);
     if (!previous && options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('backup.includeSensitive', includeSensitive, previousSensitive));
     const { reviewAutomaticUpdateBackup } = require('./backup_preferences.ts');
     const automaticOutcome = reviewAutomaticUpdateBackup(configPath, { presentation: options.presentation });
     if (automaticOutcome === 'failed') return false;
     if (automaticOutcome === 'cancelled' && options.presentation !== 'installation') {
-      writeStdoutLine(`\nBackup destination saved; automatic-backup preference unchanged.\nRun ${terminalCommand('ballin backup setup')} to review it later.`);
+      writeStdoutLine(`\nℹ️  Backup destination saved; automatic-backup preference unchanged.\nRun ${terminalCommand('ballin backup setup')} to review it later.`);
     }
     if (automaticOutcome === 'confirmed' && options.presentation !== 'installation') writeStdoutLine('\n😎 Backup setup complete.');
     return true;

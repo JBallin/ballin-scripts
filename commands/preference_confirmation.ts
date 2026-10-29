@@ -8,7 +8,7 @@ const preferences = {
 const savedPreferenceLine = (key: keyof typeof preferences, enabled: boolean, previous: unknown): string => {
   const [description, yes, no] = preferences[key];
   const unchanged = previous === enabled || previous === String(enabled);
-  return `${description}: ${enabled ? yes : no} (\`${key}\` ${unchanged ? 'unchanged at' : 'set to'} \`${enabled}\`).`;
+  return `${unchanged ? '✓' : '+'} ${description}: ${enabled ? yes : no} (\`${key}\` ${unchanged ? 'unchanged at' : 'set to'} \`${enabled}\`).`;
 };
 
 module.exports = { savedPreferenceLine };

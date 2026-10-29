@@ -37,7 +37,7 @@ const preferenceBoolean = (value: unknown, key: string): boolean => {
 type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone'; validateConfig?: (config: ReturnType<typeof readSetupConfigContext>) => boolean };
 const selectAutomaticUpdateBackup = (options: AutomaticBackupOptions = {}): boolean | null => {
   const defaultEnabled = options.defaultEnabled ?? false;
-  return readYesNo(`\n🔄 Automatically run ${terminalCommand('ballin backup')} as part of ${terminalCommand('ballin update')}? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
+  return readYesNo(`\nAutomatically run ${terminalCommand('ballin backup')} as part of ${terminalCommand('ballin update')}? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
 };
 const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
   const enabled = selectAutomaticUpdateBackup(options);
@@ -120,31 +120,25 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     }
   }
   writeStdoutLine();
-  writeStdoutLine(available.length ? 'Sensitive sources available now:' : 'Sensitive sources available now: none.');
+  writeStdoutLine(available.length ? 'ℹ️  Sensitive sources available now:' : 'ℹ️  Sensitive sources available now: none.');
   available.forEach((line) => writeStdoutLine(`  ${line}`));
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
-  const includeSensitive = readYesNo(`Review files that may contain credentials or private information for backup inclusion? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `, defaultIncluded);
-  if (includeSensitive === null) return null;
-  if (includeSensitive) {
-    if (!process.env.HOME) { writeStdoutLine('HOME is required to review sensitive sources.'); return undefined; }
-    if (!reviewSensitiveSources(process.env.HOME, process.env)) return undefined;
-  }
-  return includeSensitive;
-};
-
-const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null | undefined => {
-  writeStdoutLine('\nInventories and filtered preferences can contain private information or secrets even without sensitive sources.');
-  const included = selectSensitiveSources(defaultIncluded);
-  if (included === null || included === undefined) return included;
-  const question = included ? 'Include sensitive sources in future backups?'
-    : 'Exclude sensitive sources from future backups?';
-  if (readYesNo(`${question} [y/N] `) !== true) return null;
+  writeStdoutLine('ℹ️  Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+  writeStdoutLine('🔗 Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
+  let reviewSucceeded = false;
+  if (!process.env.HOME) writeStdoutLine('HOME is required to review sensitive sources.');
+  else reviewSucceeded = reviewSensitiveSources(process.env.HOME, process.env);
+  const included = readYesNo(`Include sensitive sources in future backups? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `, defaultIncluded);
+  if (included === true && !reviewSucceeded) return undefined;
   return included;
 };
+
+const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null | undefined => (
+  selectSensitiveSources(defaultIncluded)
+);
 
 module.exports = {
   saveBackupConfig, offerAutomaticUpdateBackup, reviewAutomaticUpdateBackup, selectSensitiveSources,
