@@ -609,7 +609,7 @@ install_command_line_tools() {
 
 install_node() {
   phase 'Installing Node.js'
-  local package version minor expected
+  local package version minor expected status=0
   download 'https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
   package=$(awk '$2 ~ /^node-v24[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
   [[ "$package" =~ ^node-v24\.[0-9]+\.[0-9]+\.pkg$ ]] || fail 'Unable to identify the official Node.js 24 macOS package.'
@@ -652,7 +652,12 @@ install_node() {
       printf "Quickstart: The staged Node.js package has an unexpected publisher.\n" >&2; exit 1;
     }
     /usr/sbin/installer -pkg "$stage/node.pkg" -target /
-  ' ballin-node-install "$scratch/$package" "$expected"
+  ' ballin-node-install "$scratch/$package" "$expected" || status=$?
+  if [[ "$status" != 0 ]]; then
+    case "$status" in 129|130|143) return "$status" ;; esac
+    printf 'Quickstart: Node.js installation failed (status %s). Check the output and administrator authorization, then rerun Quickstart.\n' "$status" >&2
+    return "$status"
+  fi
   node_compatible "$system_node_bin/node" || fail "Node.js installation did not provide a working Node.js $required_node_version or newer."
   node_tool="$system_node_bin/node"
 }
@@ -1024,16 +1029,16 @@ main() {
     fi
     printf 'Installation will:\n'
     if [[ -n "$brew_tool" ]]; then
-      printf '  - Install missing tools and dependencies using existing Homebrew: %s.\n' "$prerequisite_names"
+      printf '  - Install missing tools and dependencies using existing Homebrew: %s\n' "$prerequisite_names"
     else
       if "$need_git"; then
-        printf '  - Install Xcode Command Line Tools.\n'
+        printf '  - Install Xcode Command Line Tools\n'
       fi
       if "$need_node"; then
-        printf '  - Install Node.js 24 in %s.\n' "$(display_path "$system_node_bin")"
+        printf '  - Install Node.js 24 in %s\n' "$(display_path "$system_node_bin")"
       fi
       if "$need_gh"; then
-        printf '  - Install GitHub CLI in %s.\n' "$(display_path "$local_bin")"
+        printf '  - Install GitHub CLI in %s\n' "$(display_path "$local_bin")"
       fi
     fi
     approved_root=''; approved_command=''; approved_snapshot=''
@@ -1041,16 +1046,13 @@ main() {
       approved_root="$HOME/.ballin-scripts"
       approved_command="$command_bin/ballin"
       approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $(display_path "$approved_command")."
-      printf '  - Create Ballin and its settings in %s.\n' "$(display_path "$approved_root")"
-      printf '  - Link the Ballin command in %s.\n' "$(display_path "$command_bin")"
+      printf '  - Create Ballin and its settings in %s\n' "$(display_path "$approved_root")"
+      printf '  - Link the Ballin command in %s\n' "$(display_path "$command_bin")"
       if [[ "$approved_snapshot" != missing ]]; then
         printf 'Warning: installation will replace the existing command at %s' "$(display_path "$approved_command")"
         if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(display_path "$(readlink "$approved_command")")"; fi
         printf '.\n'
       fi
-    fi
-    if [[ -z "$brew_tool" ]] && { "$need_git" || "$need_node"; }; then
-      printf 'Administrator access is required.\n'
     fi
     printf 'Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
     if ! confirm 'Proceed with installation?'; then

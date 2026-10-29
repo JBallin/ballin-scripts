@@ -381,7 +381,7 @@ esac
         FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, '  - Install missing tools and dependencies using existing Homebrew: Node.js.\n');
+      assert.include(result.stdout, '  - Install missing tools and dependencies using existing Homebrew: Node.js\n');
       assert.notInclude(result.stdout, 'existing Homebrew:\n');
       assert.notInclude(result.stdout, 'Administrator access is required.');
       assert.include(result.stdout, nodeInstallPrompt);
@@ -639,6 +639,8 @@ printf '0\\n'
     it(`fails closed and cleans Node staging after ${failure}`, () => {
       const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', [failure]: '1' });
       assert.equal(result.status, status, result.stdout + result.stderr);
+      if (status === 130 || status === 143) assert.notInclude(result.stderr, 'Node.js installation failed');
+      else assert.include(result.stderr, `Node.js installation failed (status ${status}).`);
       if (next) assert.notInclude(readLog(), `privileged-${next}:`);
       for (const forbidden of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), forbidden);
       assert.isFalse(fs.existsSync(path.join(root, 'installed.pkg')));
@@ -1676,7 +1678,7 @@ system_sudo=fixture_sudo
     const prefix = path.join(root, 'exposed-brew');
     const result = run('y\nhome\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'no\n', FAKE_RAW_INPUT: '1',
       FAKE_BREW_PREFIX: prefix, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') });
-    assert.include(result.stdout, `Link the Ballin command in ${prefix}/bin.`);
+    assert.include(result.stdout, `Link the Ballin command in ${prefix}/bin\n`);
     assert.notInclude(result.stderr, 'The installation plan changed after approval');
     assert.include(readLog(), 'git:clone');
   });
@@ -1836,6 +1838,7 @@ system_sudo=fixture_sudo
     it(`stops Node setup safely after ${flag}`, () => {
       const result = run('y\n', { FAKE_MISSING_NODE: '1', [flag]: '1' });
       assert.equal(result.status, 1);
+      if (flag === 'FAKE_SUDO_FAIL') assert.include(result.stderr, 'Node.js installation failed (status 1). Check the output and administrator authorization, then rerun Quickstart.');
       assert.notInclude(readLog(), 'install.sh:');
       assert.notInclude(readLog(), 'ballin:');
       if (flag !== 'FAKE_SUDO_FAIL') assert.notInclude(readLog(), 'sudo:');
@@ -2008,7 +2011,7 @@ main
       FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
     }, home, 'brew() { touch "$FAKE_ROOT/exported-brew-ran"; printf "/wrong-prefix\\n"; }; export -f brew');
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '  - Link the Ballin command in ' + prefix + '/bin.');
+    assert.include(result.stdout, '  - Link the Ballin command in ' + prefix + '/bin\n');
     assert.isFalse(fs.existsSync(path.join(root, 'exported-brew-ran')));
   });
   it('combines missing tools and fresh Ballin consent before PATH setup', () => {
@@ -2021,13 +2024,13 @@ main
     const detection = result.stdout.indexOf('Checking required tools');
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
-    assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools.\n");
-    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts.\n  - Link the Ballin command in ~/.local/bin.\n`);
+    assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools\n");
+    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the Ballin command in ~/.local/bin\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
     assert.isBelow(preview, approval);
     const plan = result.stdout.slice(preview, approval);
-    assert.equal(plan.split('Administrator access is required.').length - 1, 1);
+    assert.notInclude(plan, 'Administrator access is required.');
     assert.notInclude(plan, 'graphical');
     assert.notInclude(plan, 'verified official');
     assert.isBelow(approval, result.stdout.indexOf('$ sudo softwareupdate --install'));
@@ -2038,26 +2041,39 @@ main
     assert.notInclude(readLog(), 'xcode-select:--install');
     assert.isBelow(result.stdout.indexOf('Setting up PATH'), result.stdout.indexOf('==> Installing Ballin'));
   });
-  it('previews all missing prerequisites in one-line bullets with one administrator notice', () => {
+  it('previews all missing prerequisites in one-line bullets without an administrator notice', () => {
     fs.unlinkSync(path.join(tools, 'gh'));
     const result = run('n\n', { FAKE_GIT: 'missing', FAKE_MISSING_NODE: '1', FAKE_RAW_INPUT: '1' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `Installation will:
-  - Install Xcode Command Line Tools.
-  - Install Node.js 24 in ${systemNode}.
-  - Install GitHub CLI in ~/.local/bin.
-  - Create Ballin and its settings in ~/.ballin-scripts.
-  - Link the Ballin command in ~/.local/bin.
-Administrator access is required.
+  - Install Xcode Command Line Tools
+  - Install Node.js 24 in ${systemNode}
+  - Install GitHub CLI in ~/.local/bin
+  - Create Ballin and its settings in ~/.ballin-scripts
+  - Link the Ballin command in ~/.local/bin
 Installation details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
 Proceed with installation? [y/N] `);
     assert.notInclude(result.stdout, 'graphical');
     assert.notInclude(result.stdout, 'verified official');
-    assert.equal(result.stdout.split('Administrator access').length - 1, 1);
+    assert.notInclude(result.stdout, 'Administrator access is required.');
     assert.isEmpty(fs.readdirSync(home));
     for (const forbidden of ['sudo:', 'curl:', 'xcode-select:--install', 'install.sh:']) assert.notInclude(readLog(), forbidden);
   });
+  for (const tool of ['Node', 'CLT']) {
+    it(`preserves sudo error output when ${tool} setup fails`, () => {
+      const sudo = path.join(root, 'denied-sudo');
+      fs.writeFileSync(sudo, '#!/bin/sh\nprintf "sudo: permission denied (fixture)\\n" >&2\nexit 1\n', { mode: 0o755 });
+      const result = run(tool === 'Node' ? 'y\n' : 'y\nn\n', {
+        FAKE_SYSTEM_SUDO: sudo, FAKE_RAW_INPUT: '1',
+        ...(tool === 'Node' ? { FAKE_MISSING_NODE: '1' } : { FAKE_GIT: 'missing' }),
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'sudo: permission denied (fixture)');
+      if (tool === 'Node') assert.include(result.stderr, 'Node.js installation failed (status 1).');
+      assert.notInclude(readLog(), 'install.sh:');
+    });
+  }
   for (const answer of ['', 'yes', 'no\n', '\n']) {
     it(`makes no installation changes after combined-consent ${JSON.stringify(answer)}`, () => {
       const result = run(answer, { FAKE_MISSING_NODE: '1', FAKE_RAW_INPUT: '1' });
