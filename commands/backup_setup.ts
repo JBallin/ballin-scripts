@@ -119,12 +119,15 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (summary) writeStdoutLine(summary);
         if (showSummary) writeStdoutLine(lastBackupSuccessLine(backupCacheDir, read.destination));
         if (!options.reviewExistingSettings) return true;
-        if (readYesNo('\nReview backup settings? [y/N] ') !== true) return true;
+        if (readYesNo('\nReview backup settings? [y/N] ') !== true) {
+          writeStdoutLine(`Backup preferences unchanged. Run ${terminalCommand('ballin backup setup')} to review them later.`);
+          return true;
+        }
         const sensitive = sensitiveSourceConsent(candidate);
         if (sensitive === null) throw new PortableConfigError('Invalid `backup.includeSensitive`; expected true or false.');
         const automatic = preferenceBoolean(candidate.update.backup, 'update.backup');
         const cancelReview = (): boolean => {
-          writeStdoutLine('Backup settings review cancelled; existing settings are unchanged.');
+          writeStdoutLine(`Backup settings review cancelled; backup preferences are unchanged. Run ${terminalCommand('ballin backup setup')} to review them again.`);
           options.onCancelled?.();
           return promptInputState() === 'ended' ? true : false;
         };
@@ -251,6 +254,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const { reviewAutomaticUpdateBackup } = require('./backup_preferences.ts');
     const automaticOutcome = reviewAutomaticUpdateBackup(configPath, { presentation: options.presentation });
     if (automaticOutcome === 'failed') return false;
+    if (automaticOutcome === 'cancelled' && options.presentation !== 'installation') {
+      writeStdoutLine(`Backup destination saved; automatic-backup preference unchanged. Run ${terminalCommand('ballin backup setup')} to review it later.`);
+    }
     if (automaticOutcome === 'confirmed' && options.presentation !== 'installation') writeStdoutLine('\n😎 Backup setup complete.');
     return true;
   } catch (error) {

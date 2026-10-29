@@ -130,8 +130,8 @@ const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
   'Share command and backup results with a random install ID.\n'
-  + 'No backup contents, destination identities, configuration values,\n'
-  + 'or raw errors are sent.\nAnalytics details:\n' + docsUrl
+  + 'No backup contents, destination identities, configuration values, or raw errors are sent.\n'
+  + 'Analytics details:\n' + docsUrl
 );
 const analyticsPromptFor = (defaultEnabled = false): string => (
   `Share usage analytics to help improve Ballin? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `
