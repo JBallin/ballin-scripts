@@ -32,7 +32,7 @@ Backups use a private repository owned by your user account on
 Open Terminal and run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
 ```shell
-bash -c 's=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh -o -) && export -n s && bash /dev/fd/3 3<<<"$s"'
+/bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)"
 ```
 
 Backups are optional; you can configure them later with `ballin backup setup`.

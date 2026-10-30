@@ -215,6 +215,12 @@ GitHub service. Quickstart's OS/tool-discovery stubs do not emulate macOS kernel
 or terminal behavior. A clean macOS VM retest is still needed for real
 prerequisites, authentication, shell activation, and the full published journey.
 
+The public install commands pass downloaded script text to `bash -c`, so they
+are intended for the current published scripts, within the host's argument-size
+limit. Copied-command fixtures cover current script sizes, inherited settings,
+prompt input, empty downloads, and incomplete bodies. This contract does not
+include arbitrary multi-megabyte script payloads.
+
 ## Test environment and analytics safety
 
 Neither command needs an analytics opt-out or `CI=true` in your shell.

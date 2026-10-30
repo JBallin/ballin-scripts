@@ -167,6 +167,8 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
         uname: 'if (process.argv[2] === "-s") console.log("Darwin"); else if (process.argv[2] === "-m") console.log("arm64"); else process.exit(97);',
         sw_vers: 'if (process.argv.slice(2).join(" ") !== "-productVersion") process.exit(97); console.log("13.5");',
         curl: `const fs = require('fs'); const args = process.argv.slice(2);\n`
+          + `const publicScripts = new Map(['install.sh', 'quickstart.sh'].map(file => ['https://raw.githubusercontent.com/JBallin/ballin-scripts/main/' + file, file]));\n`
+          + `if (args.length === 3 && args[0] === '-q' && args[1] === '-fsSL' && publicScripts.has(args[2])) { fs.writeFileSync(1, fs.readFileSync(${JSON.stringify(source)} + '/' + publicScripts.get(args[2]))); process.exit(0); }\n`
           + `const url=args.at(-3); const file=url==='https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh'?'install.sh':null; if(!file || JSON.stringify(args.slice(0,-3))!==JSON.stringify(['-q','-fsSL','--proto','=https','--proto-redir','=https','--tlsv1.2'])) process.exit(97);\n`
           + `const target = args.at(-1); if (!target.startsWith(${JSON.stringify(sandbox.scratch + '/ballin-quickstart.')})) process.exit(97);\n`
           + `fs.copyFileSync(${JSON.stringify(source)} + '/' + file, target);`,

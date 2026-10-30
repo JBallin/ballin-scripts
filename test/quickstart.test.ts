@@ -157,7 +157,7 @@ ${afterMain}
     log = path.join(root, 'commands.log');
     [home, tools, systemNode, path.join(root, 'tmp')].forEach((dir) => fs.mkdirSync(dir));
     fs.writeFileSync(log, '');
-    fs.writeFileSync(path.join(root, 'quickstart-entrypoint'), '#!/bin/bash\n'
+    fs.writeFileSync(path.join(root, 'quickstart-entrypoint'), '#!/bin/bash\n{\n'
       + 'set -euo pipefail\n'
       + 'printf "downloaded-quickstart:started\\n" >> "$FAKE_COMMAND_LOG"\n'
       + 'touch "$FAKE_ROOT/entrypoint-ran"\n'
@@ -165,8 +165,8 @@ ${afterMain}
       + 'IFS= read -r answer\n'
       + '[[ "$answer" == device-code ]] || exit 91\n'
       + 'printf "downloaded-quickstart:stdin-preserved\\n" >> "$FAKE_COMMAND_LOG"\n'
-      + 'exit "$FAKE_QUICKSTART_EXIT"\n');
-    for (const name of ['awk', 'bash', 'cat', 'chmod', 'cmp', 'cp', 'grep', 'ln', 'mkdir', 'mktemp', 'mv', 'readlink', 'rm', 'shasum', 'touch', 'zsh']) {
+      + 'exit "$FAKE_QUICKSTART_EXIT"\n}\n');
+    for (const name of ['awk', 'bash', 'cat', 'chmod', 'cmp', 'cp', 'grep', 'ln', 'mkdir', 'mktemp', 'mv', 'readlink', 'rm', 'shasum', 'sed', 'touch', 'zsh']) {
       const target = ['/bin', '/usr/bin'].map((dir) => path.join(dir, name)).find((file) => fs.existsSync(file));
       assert.exists(target, `Fixture requires ${name}`);
       fs.symlinkSync(target, path.join(tools, name));
@@ -305,9 +305,13 @@ case "$name" in
         cp "$FAKE_ROOT/gh.zip" "$target"; if [[ "\${FAKE_CORRUPT_GH:-0}" == 1 ]]; then printf 'corruption' >> "$target"; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)
         if [[ "$FAKE_QUICK_DOWNLOAD" == empty ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi
-        if [[ -n "$target" && "$target" != - ]]; then cp "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}" "$target"
-        else cat "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}"; fi
-        if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
+        payload="\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}"
+        if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then
+          sed '$d' "$payload"; printf 'Fixture curl failure\\n' >&2; exit 22
+        fi
+        if [[ -n "$target" && "$target" != - ]]; then cp "$payload" "$target"
+        else cat "$payload"; fi
+        if [[ "$FAKE_QUICK_DOWNLOAD" == complete-error ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
         cp "\${FAKE_CORE_INSTALL_SOURCE:-$FAKE_ROOT/fake-tool}" "$target" ;;
@@ -2306,21 +2310,21 @@ Proceed with installation? [y/N] `);
     assert.equal(minimum.split('.')[0], selectedMajor);
   });
   for (const shell of ['bash', 'zsh']) {
-    for (const failure of ['empty', 'partial', 'helper', 'eof', 'none']) {
+    for (const failure of ['empty', 'partial', 'complete-error', 'helper', 'eof', 'none']) {
       it('preserves the copied command status, stdin and cleanup in ' + shell + ' after ' + failure, () => {
         const result = runCopiedCommand(shell, failure === 'eof' ? '' : 'device-code\n', {
-          FAKE_QUICK_DOWNLOAD: ['empty', 'partial'].includes(failure) ? failure : 'success',
+          FAKE_QUICK_DOWNLOAD: ['empty', 'partial', 'complete-error'].includes(failure) ? failure : 'success',
           FAKE_QUICKSTART_EXIT: failure === 'helper' ? '7' : '0',
         });
-        const expected = ['empty', 'partial'].includes(failure) ? 22 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
+        const expected = failure === 'empty' ? 0 : failure === 'partial' ? 2 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
         assert.equal(result.status, expected, result.stdout + result.stderr);
-        const executed = ['helper', 'eof', 'none'].includes(failure);
+        const executed = ['complete-error', 'helper', 'eof', 'none'].includes(failure);
         assert.equal(fs.existsSync(path.join(root, 'entrypoint-ran')), executed);
         if (executed) {
           assert.include(result.stdout, 'Native fixture prompt:');
           if (failure !== 'eof') assert.include(readLog(), 'downloaded-quickstart:stdin-preserved');
         } else assert.notInclude(readLog(), 'downloaded-quickstart:started');
-        if (['empty', 'partial'].includes(failure)) assert.include(result.stderr, 'Fixture curl failure');
+        if (['empty', 'partial', 'complete-error'].includes(failure)) assert.include(result.stderr, 'Fixture curl failure');
         assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
         assert.isEmpty(fs.readdirSync(home));
         for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
@@ -2339,15 +2343,16 @@ Proceed with installation? [y/N] `);
         FAKE_QUICK_DOWNLOAD: 'partial', s: 'inherited value',
         SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail',
       });
-      assert.equal(result.status, 22, result.stdout + result.stderr);
+      assert.equal(result.status, 2, result.stdout + result.stderr);
       assert.notInclude(readLog(), 'downloaded-quickstart:started');
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
       assert.isEmpty(fs.readdirSync(home));
     });
     for (const inherited of ['none', 'exported buffer', 'shell options']) {
-      it(`buffers a large copied-command download in ${shell} with ${inherited}`, () => {
+      it(`runs a current-script-sized copied command in ${shell} with ${inherited}`, () => {
         const payload = path.join(root, 'quickstart-entrypoint');
-        fs.appendFileSync(payload, '# Large valid script content.\n'.repeat(120000));
+        // The public command passes current script text as one argument, not arbitrary multi-megabyte payloads.
+        fs.appendFileSync(payload, '# Current script size.\n'.repeat(Math.ceil(fs.statSync(source).size / 23)));
         const overrides = inherited === 'exported buffer' ? { s: 'inherited value' }
           : inherited === 'shell options' ? { SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail' } : {};
         const result = runCopiedCommand(shell, 'device-code\n', overrides);
