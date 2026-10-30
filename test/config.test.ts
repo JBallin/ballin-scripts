@@ -466,6 +466,9 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       { args: ['reset', ''], message: configMessages.resetArgsErr },
       { args: ['help', 'extra'], message: configMessages.actionErr },
       { args: ['--help', 'extra'], message: configMessages.actionErr },
+      { args: ['get', '--help', 'extra'], message: configMessages.getArgsErr },
+      { args: ['set', '--help', 'value', 'extra'], message: configMessages.setArgsErr },
+      { args: ['reset', '--help', 'extra'], message: configMessages.resetArgsErr },
     ];
 
     usageCases.forEach(({ args, message }) => {
@@ -481,14 +484,14 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       });
     });
 
-    ['help', '--help'].forEach((action) => {
-      it(`prints ${action} without reading missing, malformed, or unreadable config`, () => {
+    [['help'], ['--help'], ['get', '--help'], ['set', '--help'], ['reset', '--help']].forEach((args) => {
+      it(`prints ${args.join(' ')} without reading missing, malformed, or unreadable config`, () => {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-config-help-read-'));
         const malformedPath = path.join(tempDir, 'malformed.json');
         fs.writeFileSync(malformedPath, '{not json');
         try {
           for (const fixturePath of [path.join(tempDir, 'missing.json'), malformedPath, tempDir]) {
-            const result = runConfigCli([action], { BALLIN_TEST_CONFIG_PATH: fixturePath });
+            const result = runConfigCli(args, { BALLIN_TEST_CONFIG_PATH: fixturePath });
             assert.equal(result.status, 0);
             assert.equal(result.stdout, formatHelp(configHelp));
             assert.equal(result.stderr, '');
@@ -497,6 +500,16 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
           fs.rmSync(tempDir, { recursive: true, force: true });
         }
       });
+    });
+
+    it('keeps --help literal when it is a configuration value', () => {
+      const result = runConfigCli(['set', 'update.cleanup', '--help']);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(getConfig('update.cleanup'), '--help');
+      const before = fs.readFileSync(configPath);
+      const invalid = runConfigCli(['get', 'update.cleanup', '--help']);
+      assert.equal(invalid.status, 2);
+      assert.deepEqual(fs.readFileSync(configPath), before);
     });
 
     [

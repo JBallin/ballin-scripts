@@ -46,7 +46,7 @@ describe('command references at prose output boundaries', () => {
     it(`preserves backup help roles and alias output on ${mode.name}`, () => {
       const backup = cli(['backup', '--help']);
       assert.equal(backup.status, 0, backup.stderr);
-      assert.include(backup.stdout.replace(/\s+/gu, ' '), '`setup` creates or reconnects');
+      assert.include(backup.stdout.replace(/\s+/gu, ' '), 'setup create, reconnect to, or validate a backup');
       assert.include(backup.stdout.replace(/\s+/gu, ' '), `review them with ${command('ballin setup')}.`);
       assert.include(backup.stdout.replace(/\s+/gu, ' '), `Run ${command('ballin help backup <subcommand>')} for subcommand-specific help.`);
       const backupAlias = cli(['help', 'backup']);

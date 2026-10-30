@@ -169,8 +169,10 @@ describe('shell completions', () => {
       try {
         const before = fixtureState(fixture);
         const names = configCompletionNames();
-        assert.deepEqual(complete(['ballin', 'config', 'get', '']), names.readable);
-        assert.deepEqual(complete(['ballin', 'config', 'set', '']), names.leaves);
+        assert.deepEqual(complete(['ballin', 'config', 'get', '']), [...names.readable, commandHelpOptionName]);
+        assert.deepEqual(complete(['ballin', 'config', 'set', '']), [...names.leaves, commandHelpOptionName]);
+        assert.deepEqual(complete(['ballin', 'config', 'reset', '']), [commandHelpOptionName]);
+        assert.deepEqual(complete(['ballin', 'help', 'config', '']), [...configOperationNames]);
         assert.deepEqual(complete(['ballin', 'config', 'get', 'up']), names.readable.filter((name: string) => name.startsWith('up')));
         for (const key of names.booleans) {
           assert.deepEqual(complete(['ballin', 'config', 'set', key, '']), ['true', 'false']);
@@ -178,7 +180,7 @@ describe('shell completions', () => {
         }
         for (const words of [
           ['ballin', 'config', 'set', 'backup.repository', ''], ['ballin', 'config', 'set', 'unknown', ''],
-          ['ballin', 'config', 'set', 'update', ''], ['ballin', 'config', 'reset', ''],
+          ['ballin', 'config', 'set', 'update', ''],
           ['ballin', 'config', 'get', 'update', ''], ['ballin', 'config', 'set', 'update.cleanup', 'true', ''],
           ['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--list', ''],
           ['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--file', 'other/readme.md', ''],
@@ -196,7 +198,7 @@ describe('shell completions', () => {
         assert.deepEqual(complete(['ballin', 'help', 'backup', '']), [...backupCommandNames]);
         assert.deepEqual(complete(['ballin', 'help', 'backup', 're']), ['read']);
         for (const words of [
-          ['ballin', 'help', 'config', ''], ['ballin', 'help', 'missing', ''],
+          ['ballin', 'help', 'config', 'get', ''], ['ballin', 'help', 'missing', ''],
           ['ballin', 'help', 'backup', 'read', ''], ['ballin', 'help', 'backup', 'read', '--h'],
         ]) assert.deepEqual(complete(words), [], words.join(' '));
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_user_sk']), ['codex_user_skills.bundle.json']);
@@ -215,7 +217,7 @@ describe('shell completions', () => {
         fs.unlinkSync(path.join(fixture, 'node'));
         fs.writeFileSync(files.config, 'unusable saved config');
         const unavailable = fixtureState(fixture);
-        assert.deepEqual(complete(['ballin', 'config', 'get', '']), names.readable);
+        assert.deepEqual(complete(['ballin', 'config', 'get', '']), [...names.readable, commandHelpOptionName]);
         assert.deepEqual(complete(['ballin', 'config', 'set', 'update.cleanup', 'f']), ['false']);
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_user_sk']), ['codex_user_skills.bundle.json']);
         assert.deepEqual(complete(['ballin', 'backup', 'read', 'codex_skills.bundle.json', '--file', '']), []);

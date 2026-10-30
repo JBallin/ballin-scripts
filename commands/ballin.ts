@@ -12,7 +12,9 @@ const { runSetupCommand, setupHelp } = require('./setup.ts');
 const { configPath, fetchConfig } = require('../config/index.ts');
 const {
   runConfigCli,
+  isConfigHelp,
 } = require('../config/cli.ts');
+const { isConfigOperationName } = require('../config/commands.ts');
 const {
   runSelfUpdateCommand,
 } = require('./self_update.ts');
@@ -50,29 +52,27 @@ import type { DoctorReport } from './doctor_report.ts';
 
 const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
 
-const ballinHelp = `
-Ballin
+const ballinHelp = `Ballin
 Back up your dotfiles and update your macOS development environment.
-https://github.com/JBallin/ballin-scripts
 
 Usage:
-
     ballin <command> [options]
     ballin help [command...]
 
 Commands:
-
-    update                update the Ballin-managed macOS development environment
+    update                update configured tools and run enabled backups
     backup                back up Ballin-managed environment state
-    doctor                check whether the Ballin-managed environment is healthy
+    doctor                check tools, configuration, and backup readiness
     config                view or change Ballin configuration
-    setup                 review local onboarding preferences
+    setup                 review local backup and analytics preferences
     self-update           update Ballin itself
     uninstall             remove Ballin
 
 Run \`ballin help <command...>\` for command or subcommand help.
 You can also append \`--help\` to a command.
 
+🔗 Project and documentation:
+https://github.com/JBallin/ballin-scripts
 `;
 const updateHelp = `Usage:
     ballin update
@@ -82,17 +82,16 @@ Update the Ballin-managed macOS development environment. Configured stages can u
 
 const backupHelp = `Usage:
     ballin backup
-    ballin backup setup [repository-name] [--hostname <host>]
-    ballin backup open
-    ballin backup list
-    ballin backup read <snapshot>
-    ballin backup read <snapshot> --list
-    ballin backup read <snapshot> --file <path>
-    ballin backup disconnect
+    ballin backup <command>
 
-Back up Ballin-managed environment state to the configured backup. \`setup\` creates or reconnects to an optional backup; \`open\` opens it in a browser. \`list\` finds saved snapshots; \`read\` prints one supported snapshot.
+Back up Ballin-managed environment state to the configured backup.
 
-For bundle snapshots, append \`--list\` to list their files or \`--file <path>\` to print one file’s contents. Without a snapshot selector, \`read\` shows usage and lists saved options when readable. \`disconnect\` stops local backups and clears comparison state.
+Commands:
+    setup                 create, reconnect to, or validate a backup
+    open                  open the backup and its history in a browser
+    list                  list supported saved snapshots
+    read                  print a snapshot or inspect files in a bundle
+    disconnect            disconnect this Mac and disable automatic backups
 
 Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`. Run \`ballin help backup <subcommand>\` for subcommand-specific help.
 `;
@@ -101,10 +100,19 @@ const backupSubcommandHelp: Record<BackupCommandName, string> = {
   setup: `Usage:
     ballin backup setup [repository-name] [--hostname <host>]
 
-Create or reconnect to an optional private GitHub backup repository owned by your account. Omit the repository name to choose it during setup. New setup asks for the GitHub hostname (default: github.com); --hostname skips that question. Configured backups keep their selected host. Authenticate gh for that host before setup. Setup asks for confirmation and reviews sensitive-source and automatic-backup choices.
+Create, reconnect to, or validate a private GitHub backup repository owned by your account.
 
-Setup and recovery: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
-Backup sources and sensitivity: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
+New setup: Choose Create or Reconnect. Omit the repository name to choose it during setup. Choose whether to include sensitive sources, confirm the destination, then choose whether updates should run backups automatically.
+
+Existing backup: Validate the saved repository and review backup preferences. The saved host is retained; disconnect before choosing a different destination. For local backup and analytics preferences, use \`ballin setup\`.
+
+New setup asks for a GitHub hostname (default: github.com); \`--hostname <host>\` skips that question. Use a hostname, not a URL. Authenticate gh for the selected host before setup.
+
+🔗 Setup and recovery:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
+
+🔗 Backup sources and sensitivity:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
 `,
   open: `Usage:
     ballin backup open
@@ -121,9 +129,17 @@ List supported snapshots saved in the configured backup. Requires remote read ac
     ballin backup read <snapshot> --list
     ballin backup read <snapshot> --file <path>
 
-Print a supported saved snapshot's original bytes without restoring or executing it. For bundle snapshots, \`--list\` lists saved files; \`--file <path>\` prints one file's original bytes. Without a snapshot selector, show usage and list saved options when readable. Requires remote read access.
+Print a supported saved snapshot's original bytes without restoring or executing it. Requires remote read access. Use \`ballin backup list\` to find snapshot names.
 
-Inspect saved backups: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#inspect-saved-backups
+For bundle snapshots, \`--list\` lists saved files; \`--file <path>\` prints one file's original bytes. Without a snapshot selector, report the missing argument and list saved options when readable.
+
+Examples:
+    ballin backup read zshrc.sh
+    ballin backup read codex_skills.bundle.json --list
+    ballin backup read codex_skills.bundle.json --file example/SKILL.md
+
+🔗 Inspect saved backups:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#inspect-saved-backups
 `,
   disconnect: `Usage:
     ballin backup disconnect
@@ -148,6 +164,9 @@ const uninstallHelp = `Usage:
     ballin uninstall
 
 Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
+
+🔗 Removal details:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall
 `;
 
 const isCommandHelp = (args: string[]): boolean => (
@@ -162,6 +181,10 @@ const backupHelpCommand = (args: string[]): BackupCommandName | undefined => (
 
 const isPositionalHelp = (args: string[]): boolean => (
   args.length === 2 && ['backup', 'config'].includes(args[0]) && args[1] === 'help'
+);
+
+const isConfigCommandHelp = (args: string[]): boolean => (
+  args[0] === 'config' && isConfigHelp(args.slice(1))
 );
 
 const writeStdout = (text: string): void => {
@@ -257,12 +280,12 @@ function runBallinCommand(args = process.argv.slice(2)): void {
         return;
       }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
-        writeStdout(terminalCommandReferences(formatHelp(ballinHelp), ['ballin help <command...>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
         return;
       }
       const helpCommand = backupHelpCommand(args);
       if (helpCommand !== undefined) {
-        writeStdout(formatHelp(backupSubcommandHelp[helpCommand]));
+        writeStdout(terminalCommandReferences(formatHelp(backupSubcommandHelp[helpCommand]), ['ballin setup', 'ballin backup list']));
         return;
       }
       runBackupCommand(commandArgs);
@@ -280,7 +303,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       return;
     case 'setup':
       if (commandArgs.length === 1 && commandArgs[0] === commandHelpOptionName) {
-        writeStdout(formatHelp(setupHelp));
+        writeStdout(terminalCommandReferences(formatHelp(setupHelp), ['ballin backup setup']));
         return;
       }
       runNoArgCommand('ballin setup', commandArgs, () => {
@@ -325,12 +348,13 @@ const runBallinCli = (): void => {
   if (args[0] === 'help') {
     if (args.length === 2 && isTopLevelCommandName(args[1])) {
       args = [args[1], commandHelpOptionName];
-    } else if (args.length === 3 && args[1] === 'backup' && isBackupCommandName(args[2])) {
-      args = ['backup', args[2], commandHelpOptionName];
+    } else if (args.length === 3 && ((args[1] === 'backup' && isBackupCommandName(args[2]))
+      || (args[1] === 'config' && isConfigOperationName(args[2])))) {
+      args = [args[1], args[2], commandHelpOptionName];
     }
   }
   if (args.length === 0 || (args.length === 1 && ['help', commandHelpOptionName].includes(args[0]))
-    || isCommandHelp(args) || backupHelpCommand(args) !== undefined || isPositionalHelp(args)) {
+    || isCommandHelp(args) || backupHelpCommand(args) !== undefined || isPositionalHelp(args) || isConfigCommandHelp(args)) {
     runBallinCommand(args);
     return;
   }
