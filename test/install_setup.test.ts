@@ -784,8 +784,7 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'ℹ️  Optional analytics share command and backup results with a random install ID.\n'
-      + 'No backup contents, destination identities, configuration values, or raw errors are sent.\n'
+      'ℹ️  Optional analytics report command results, not backup contents.\n'
       + '🔗 Analytics details:\nhttps://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');

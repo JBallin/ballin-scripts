@@ -164,7 +164,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, `Include sensitive sources in future backups? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
+      assert.notInclude(result.stdout, 'Usage analytics are currently');
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics: ${enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` unchanged at \`${enabled}\`).`);
       assert.include(result.stdout, `Automatic backup during updates: ${enabled ? 'enabled' : 'disabled'} (\`update.backup\` unchanged at \`${enabled}\`).`);
@@ -197,13 +197,13 @@ fs.readFileSync = (file, ...args) => {
   it('renders the single sensitive question and saves No before the next question', () => {
     writeConfig(configFor('repository', true));
     const result = run('n\n\n\n'); assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /^\n==> Backup preferences\nℹ️  Inventories/u);
+    assert.match(result.stdout, /^==> Backup preferences\nℹ️  Inventories/u);
     assert.include(result.stdout, '🔗 Backup source details:\nhttps://');
     assert.equal(result.stdout.split('Include sensitive sources in future backups?').length - 1, 1);
     assert.notInclude(result.stdout, 'Review files that may contain');
     assert.include(result.stdout, '+ Sensitive sources in backups: excluded');
     assert.isBelow(result.stdout.indexOf('+ Sensitive sources in backups: excluded'), result.stdout.indexOf('Automatically run'));
-    assert.include(result.stdout, '==> Analytics\nℹ️  Optional analytics share command');
+    assert.include(result.stdout, '==> Analytics\nℹ️  Optional analytics report command');
     assert.include(result.stdout, '✓ Automatic backup during updates: enabled');
     assert.notInclude(result.stdout, '🔄 Automatically'); assert.notInclude(result.stdout, 'Ctrl-C to cancel');
     assert.equal(readConfig().backup.includeSensitive, 'false'); assert.equal(readConfig().update.backup, 'true');
@@ -221,7 +221,7 @@ fs.readFileSync = (file, ...args) => {
     assert.notInclude(result.stdout, 'Include sensitive sources in future backups?');
     assert.notInclude(result.stdout, 'Automatically run');
     assert.include(result.stdout, 'Run `ballin backup setup`');
-    assert.include(result.stdout, 'ℹ️  Optional analytics share command and backup results with a random install ID.\nNo backup contents, destination identities, configuration values, or raw errors are sent.\n🔗 Analytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
+    assert.include(result.stdout, 'ℹ️  Optional analytics report command results, not backup contents.\n🔗 Analytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
     assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
     assert.equal(readConfig().update.backup, 'false');
     assert.equal(readConfig().analytics.enabled, 'true');

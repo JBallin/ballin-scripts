@@ -372,11 +372,12 @@ not read selected file contents or create backup snapshots during this preview.
 Access or resolution errors prevent inclusion, but you can still choose exclusion.
 See [source preview](backup-sources.md#repository-inclusion).
 
-Final confirmation covers the destination and source selection. If you decline,
-Ballin makes no backup-specific changes. If you approve, it revalidates the
+Ballin saves your answered sensitive-source choice immediately, even if you later
+decline or cancel. Final confirmation covers the destination. If you decline,
+Ballin does not create or connect a repository. If you approve, it revalidates the
 destination, creates or reconnects to the repository, attempts optional branch
-protection, clears local backup comparison state, and then saves the destination,
-sensitive-source choice, and any supported preferences recovered from the backup.
+protection, clears local backup comparison state, and then saves the destination
+and any supported preferences recovered from the backup.
 Successful new protection gets one concise confirmation during standalone setup;
 installation keeps that success silent. Unsupported protection is silent. A permission note or warning about unconfirmed protection is nonfatal
 and does not mean backup

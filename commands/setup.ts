@@ -35,7 +35,7 @@ const runSetupCommand = (): void => {
     const analytics = preferenceBoolean(config.analytics?.enabled, 'analytics.enabled');
 
     reviewing = true;
-    writeStdoutLine(`\n${terminalHeading('Backup preferences')}`);
+    writeStdoutLine(terminalHeading('Backup preferences'));
     if (destination.kind === 'repository') {
       const included = confirmSensitiveSourceChoice(sensitive);
       if (included === null) { cancelSetup(); return; }
@@ -55,7 +55,7 @@ const runSetupCommand = (): void => {
       if (outcome === 'failed') { process.exitCode = 1; return; }
     }
     let cancelled = false;
-    if (!configureAnalyticsPreference({ configPath, defaultEnabled: analytics, currentEnabled: analytics, onCancelled: () => { cancelled = true; } })) {
+    if (!configureAnalyticsPreference({ configPath, defaultEnabled: analytics, onCancelled: () => { cancelled = true; } })) {
       process.exitCode = 1;
       return;
     }

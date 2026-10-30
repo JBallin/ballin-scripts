@@ -50,8 +50,8 @@ discovery recursively inspects names and file types to identify
 nonempty sources. The preview lists detected sources; missing/unavailable
 sources are omitted. Access or resolution errors prevent inclusion; you can still
 choose to exclude the sources. Closing input leaves the pending choice unchanged.
-During creation or reconnect, the choice is staged until the separate destination
-confirmation; declining it changes no destination, cache, or remote state.
+During creation or reconnect, an answered choice is saved immediately. Declining
+the separate destination confirmation changes no destination, cache, or remote state.
 Outside the explicit setup preview, excluded sensitive sources are not inspected
 just to verify them.
 
