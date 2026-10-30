@@ -187,16 +187,22 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
     }
   }
 
-  it('labels documentation links on a separate line and keeps examples concrete', () => {
-    for (const args of [[], ['setup'], ['backup', 'setup'], ['backup', 'read'], ['config'], ['uninstall']]) {
+  for (const args of [[], ['setup'], ['backup', 'setup'], ['backup', 'read'], ['config'], ['uninstall']]) {
+    it(`labels documentation links on a separate line for ${['help', ...args].join(' ')}`, () => {
       const result = run(['help', ...args]);
       assert.equal(result.status, 0, result.stderr);
       const links = result.stdout.match(/🔗 [^\n]+:\nhttps:\/\/[^\n]+/gu) ?? [];
       assert.lengthOf(links, args.join(' ') === 'backup setup' ? 2 : 1);
-    }
+    });
+  }
+
+  it('keeps configuration examples concrete and explains reset scope', () => {
     const config = run(['config', '--help']).stdout.replace(/\s+/gu, ' ');
     assert.include(config, 'replaces all saved settings with defaults, including backup linkage; remote backups remain unchanged.');
     assert.include(config, 'ballin config set update.backup false');
+  });
+
+  it('keeps overview headings compact', () => {
     const overview = run(['help']).stdout;
     assert.isFalse(overview.startsWith('\n'));
     assert.notInclude(overview, 'Usage:\n\n');
