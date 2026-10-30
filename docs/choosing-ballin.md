@@ -47,6 +47,11 @@ even inventories can contain private names, paths, and URLs.
 
 ## Other useful workflows
 
+- **[Topgrade](https://github.com/topgrade-rs/topgrade):** Choose it when your
+  main need is one update command across macOS, Linux, or Windows. It detects
+  supported tools and runs their update commands, with configurable steps and
+  custom commands. It can fill the maintenance role alongside a separate
+  backup workflow.
 - **[Homebrew Bundle](https://docs.brew.sh/Brew-Bundle-and-Brewfile):** Save
   supported installed packages with `brew bundle dump`, review a Brewfile, and
   use it to install or upgrade packages on another machine. Bundle can start
@@ -74,6 +79,23 @@ even inventories can contain private names, paths, and URLs.
   Use your editor's own workflow for supported settings and extensions across
   devices. For example, VS Code offers sync and conflict handling. Ballin's
   editor snapshots are saved references, not an editor sync service.
+- **[Cross-Code Organizer](https://github.com/mcpware/cross-code-organizer):**
+  Use its local dashboard to inspect AI coding-tool configuration across Claude
+  Code, Codex CLI, OpenCode, and DeepSeek Harness. It offers effective
+  configuration views where supported, Markdown editing, and duplicate cleanup
+  with undo; available actions vary by tool. Its Backup Center saves selected
+  AI-tool files and MCP definitions in local Git repositories with optional
+  remote pushes. Skill migration previews and copies portable `SKILL.md`
+  bundles between tools. Consider it for organizing configuration, skills, and
+  memories, alone or alongside Ballin. Ballin overlaps in selected Claude Code
+  and Codex configuration and skill snapshots, enabled through the
+  [sensitive-source opt-in](backup-sources.md), while also covering broader
+  macOS development-environment snapshots and maintenance.
+- **[skillshare](https://github.com/runkids/skillshare):** Choose it when you
+  want a maintained source of skills shared across coding tools. It distributes
+  skills from a source directory through symlinks or copies and supports Git
+  versioning for use on another machine. Use it to apply and synchronize skills;
+  Ballin's selected skill snapshots are backup references for manual recovery.
 
 A realistic alternative is **Homebrew Bundle + chezmoi or yadm + editor sync
 or Mackup + a small maintenance/setup script**. This gives you an explicit
