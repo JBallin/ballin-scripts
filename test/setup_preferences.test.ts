@@ -197,7 +197,7 @@ fs.readFileSync = (file, ...args) => {
   it('renders the single sensitive question and saves No before the next question', () => {
     writeConfig(configFor('repository', true));
     const result = run('n\n\n\n'); assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, '==> Backup preferences\nℹ️  Inventories');
+    assert.match(result.stdout, /^\n==> Backup preferences\nℹ️  Inventories/u);
     assert.include(result.stdout, '🔗 Backup source details:\nhttps://');
     assert.equal(result.stdout.split('Include sensitive sources in future backups?').length - 1, 1);
     assert.notInclude(result.stdout, 'Review files that may contain');

@@ -35,7 +35,7 @@ const runSetupCommand = (): void => {
     const analytics = preferenceBoolean(config.analytics?.enabled, 'analytics.enabled');
 
     reviewing = true;
-    writeStdoutLine(terminalHeading('Backup preferences'));
+    writeStdoutLine(`\n${terminalHeading('Backup preferences')}`);
     if (destination.kind === 'repository') {
       const included = confirmSensitiveSourceChoice(sensitive);
       if (included === null) { cancelSetup(); return; }
