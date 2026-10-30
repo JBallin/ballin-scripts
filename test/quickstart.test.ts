@@ -2964,8 +2964,12 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         const maintenance = runSandbox(sandbox, ['quickstart'], 'no\nlogin\nyes\nyes\nno\nlogin\nno\n');
         assert.equal(maintenance.status, 0, maintenance.stdout + maintenance.stderr);
         const configPath = path.join(sandbox.repo, 'ballin.config.json');
-        const previousConfig = fs.readFileSync(configPath, 'utf8');
-        assert.isUndefined(JSON.parse(previousConfig).backup.repository);
+        const previousConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        assert.isUndefined(previousConfig.backup.repository);
+        const remotePath = path.join(sandbox.remote, 'repository.json');
+        const previousRemote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+        const cachePath = path.join(sandbox.repo, '.backup-cache');
+        assert.isFalse(fs.existsSync(cachePath));
         const result = runSandbox(sandbox, ['quickstart'], `yes\n\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.include(result.stdout, '\n==> Updating Ballin\n');
@@ -2975,14 +2979,19 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]', result.stdout + result.stderr);
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        const remote = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
+        const remote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
         assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'open').length, 0);
         if (configure) {
           assert.isObject(config.backup.repository); assert.isTrue(remote.exists);
           assert.include(result.stdout, 'Run a backup now and open');
           assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 1);
         } else {
-          assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+          assert.deepEqual(config, { ...previousConfig, backup: { ...previousConfig.backup, includeSensitive: 'false' } });
+          assert.isUndefined(config.backup.repository);
+          assert.equal(remote.head, previousRemote.head); assert.deepEqual(remote.commits, previousRemote.commits);
+          assert.deepEqual(remote.rulesets, previousRemote.rulesets); assert.isFalse(fs.existsSync(cachePath));
+          assert.isTrue(remote.requests.every((request: { method: string }) => request.method === 'GET'));
+          assert.notInclude(result.stdout, 'Sensitive sources in backups:');
           assert.isFalse(remote.exists);
           assert.notInclude(result.stdout, 'Run a backup now and open');
           assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 0);

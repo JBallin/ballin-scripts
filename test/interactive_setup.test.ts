@@ -277,7 +277,7 @@ describe('interactive setup with delayed terminal answers', function() {
     sandbox = createSandbox();
     const installed = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
     assert.equal(installed.status, 0, installed.stdout + installed.stderr);
-    const configPath = path.join(sandbox.repo, 'ballin.config.json'); const before = fs.readFileSync(configPath, 'utf8');
+    const configPath = path.join(sandbox.repo, 'ballin.config.json'); const before = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     const remotePath = path.join(sandbox.remote, 'repository.json'); const remote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
     remote.faults.candidate = 'redirect'; remote.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } };
     fs.writeFileSync(remotePath, JSON.stringify(remote));
@@ -291,9 +291,14 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/fresh-name');
     assert.include(result.stdout, 'Backup setup cancelled.'); assert.notInclude(result.stdout, 'Available suggestion:');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    const afterConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.deepEqual(afterConfig, { ...before, backup: { ...before.backup, includeSensitive: 'false' } });
+    assert.isUndefined(afterConfig.backup.repository);
+    assert.include(result.stdout, 'Sensitive sources in backups: excluded');
+    assert.isBelow(result.stdout.indexOf('Sensitive sources in backups: excluded'), result.stdout.indexOf('private GitHub backup '));
     const after = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
     assert.equal(after.head, remote.head); assert.equal(after.exists, remote.exists);
+    assert.deepEqual(after.commits, remote.commits); assert.deepEqual(after.rulesets, remote.rulesets);
     assert.isTrue(after.requests.every((request: { method: string }) => request.method === 'GET'));
     assert.isFalse(fs.existsSync(path.join(sandbox.repo, '.backup-cache')));
   });
