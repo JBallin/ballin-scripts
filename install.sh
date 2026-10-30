@@ -43,7 +43,7 @@ setup_mode='refresh'
 print_stale_checkout_guidance() {
   printf '\n⚠️  ERROR: Unable to update %s before setup.\n' "$(display_path "$repo_dir")"
   printf 'Update or delete %s, then run this installer again.\n' "$(display_path "$repo_dir")"
-  printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
+  printf '🔗 Troubleshooting:\n%s#health-and-recovery\n' "$docs_url"
 }
 
 ############################### CHECK PREREQUISITES ############################
@@ -193,7 +193,7 @@ if [ "$repo_existed" = false ]; then
     printf 'Installation will:\n'
     printf '  - Create Ballin and its settings in %s\n' "$(display_path "$repo_dir")"
     printf '  - Link the Ballin command in %s\n' "$(display_path "$command_directory")"
-    printf 'Installation details:\n%s#what-will-installation-change\n' "$docs_url"
+    printf '🔗 Installation details:\n%s#what-will-installation-change\n' "$docs_url"
   fi
   if ! "$install_approved" && ! confirm 'Proceed with installation?'; then
     if "$input_ended"; then
@@ -219,7 +219,7 @@ else
   prepare_status=$?
   [[ "$prepare_status" != 130 && "$prepare_status" != 143 ]] || exit "$prepare_status"
   printf '\n⚠️  ERROR: Unable to prepare %s\n' "$(display_path "$repo_dir")"
-  printf 'Troubleshooting: %s#health-and-recovery\n' "$docs_url"
+  printf '🔗 Troubleshooting:\n%s#health-and-recovery\n' "$docs_url"
   exit 1
 fi
 
@@ -262,7 +262,7 @@ if [ "$repo_existed" = false ]; then
 fi
 
 if [ "$repo_existed" = true ] && [ "$setup_mode" = fresh ]; then
-  printf '\nInitial configuration\n%s#what-will-installation-change\n' "$docs_url"
+  printf '\nInitial configuration\n🔗 Installation details:\n%s#what-will-installation-change\n' "$docs_url"
 fi
 
 (

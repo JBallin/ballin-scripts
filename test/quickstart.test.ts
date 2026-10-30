@@ -19,7 +19,7 @@ describe('beginner quickstart bootstrap', function() {
   const nodeInstallPrompt = 'Proceed with installation? [y/N]';
   const cltInstallQuestion = 'Proceed with installation?';
   const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
-  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
+  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
   printf 'brew-interruption:%s:%s\\n' "$stage" "$FAKE_BREW_INTERRUPTION" >> "$FAKE_COMMAND_LOG"
@@ -503,6 +503,9 @@ printf '0\\n'
       else if (state === 'unknown') {
         assert.include(result.stderr, 'could not be verified.');
         assert.notInclude(result.stderr, 'brew upgrade node');
+      }
+      if (!['130', '143'].includes(state)) {
+        assert.include(result.stderr, '\n🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
       }
       assert.equal(fs.readFileSync(installed, 'utf8'), contents);
       assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
@@ -2070,7 +2073,7 @@ main
   - Install GitHub CLI in ~/.local/bin
   - Create Ballin and its settings in ~/.ballin-scripts
   - Link the Ballin command in ~/.local/bin
-Installation details:
+🔗 Installation details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
 Proceed with installation? [y/N] `);
     assert.notInclude(result.stdout, 'graphical');
@@ -2485,7 +2488,7 @@ Proceed with installation? [y/N] `);
       const result = runPathSetup('home\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'already mentions a setup directory');
       assert.include(result.stderr, 'Review its PATH entries before changing PATH.');
-      assert.include(result.stderr, 'Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
+      assert.include(result.stderr, '\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
       assert.notInclude(result.stderr, 'command below');
       assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
       assert.notInclude(result.stderr, pathLine());
@@ -2961,8 +2964,12 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         const maintenance = runSandbox(sandbox, ['quickstart'], 'no\nlogin\nyes\nyes\nno\nlogin\nno\n');
         assert.equal(maintenance.status, 0, maintenance.stdout + maintenance.stderr);
         const configPath = path.join(sandbox.repo, 'ballin.config.json');
-        const previousConfig = fs.readFileSync(configPath, 'utf8');
-        assert.isUndefined(JSON.parse(previousConfig).backup.repository);
+        const previousConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        assert.isUndefined(previousConfig.backup.repository);
+        const remotePath = path.join(sandbox.remote, 'repository.json');
+        const previousRemote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+        const cachePath = path.join(sandbox.repo, '.backup-cache');
+        assert.isFalse(fs.existsSync(cachePath));
         const result = runSandbox(sandbox, ['quickstart'], `yes\n\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.include(result.stdout, '\n==> Updating Ballin\n');
@@ -2972,14 +2979,19 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]', result.stdout + result.stderr);
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        const remote = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
+        const remote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
         assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'open').length, 0);
         if (configure) {
           assert.isObject(config.backup.repository); assert.isTrue(remote.exists);
           assert.include(result.stdout, 'Run a backup now and open');
           assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 1);
         } else {
-          assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+          assert.deepEqual(config, { ...previousConfig, backup: { ...previousConfig.backup, includeSensitive: 'false' } });
+          assert.isUndefined(config.backup.repository);
+          assert.equal(remote.head, previousRemote.head); assert.deepEqual(remote.commits, previousRemote.commits);
+          assert.deepEqual(remote.rulesets, previousRemote.rulesets); assert.isFalse(fs.existsSync(cachePath));
+          assert.isTrue(remote.requests.every((request: { method: string }) => request.method === 'GET'));
+          assert.notInclude(result.stdout, 'Sensitive sources in backups:');
           assert.isFalse(remote.exists);
           assert.notInclude(result.stdout, 'Run a backup now and open');
           assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 0);

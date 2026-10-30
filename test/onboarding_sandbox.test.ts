@@ -99,7 +99,7 @@ describe('onboarding sandbox', function() {
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
       assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'ballin.config.json')));
       selectScenario(sandbox, 'none');
-      const retry = runSandbox(sandbox, ['backup', 'setup'], 'y\n\ncreate\n\ny\ny\ny\n');
+      const retry = runSandbox(sandbox, ['backup', 'setup'], '\ncreate\n\ny\ny\ny\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
       assert.lengthOf(remote().requests.filter((request: { endpoint: string }) => request.endpoint === 'user/repos'), 1);
     });
@@ -366,7 +366,7 @@ describe('onboarding sandbox', function() {
   it('reuses an install for later opt-in and clean create/reconnect walkthrough resets', () => {
     assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
     assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'completions/_ballin')));
-    const setup = runSandbox(sandbox, ['backup', 'setup'], 'y\n\ncreate\n\ny\ny\n\n');
+    const setup = runSandbox(sandbox, ['backup', 'setup'], '\ncreate\n\ny\ny\n\n');
     assert.equal(setup.status, 0, setup.stdout + setup.stderr);
     assert.include(setup.stdout, 'sensitive sources');
     assert.include(setup.stdout, 'Automatically');
@@ -375,7 +375,7 @@ describe('onboarding sandbox', function() {
     const config = () => JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.isNull(config().backup.repository);
     assert.equal(config().backup.includeSensitive, 'false');
-    const reconnect = runSandbox(sandbox, ['backup', 'setup'], 'y\n\nreconnect\n\nn\ny\nn\n');
+    const reconnect = runSandbox(sandbox, ['backup', 'setup'], '\nreconnect\n\nn\ny\nn\n');
     assert.equal(reconnect.status, 0, reconnect.stdout + reconnect.stderr);
     assert.isNotNull(config().backup.repository);
     assert.isFalse(remote().requests.some((request: { endpoint: string }) => request.endpoint === 'user/repos'));
@@ -551,7 +551,7 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.include(retry.stdout, "You're ballin.");
   });
   it('runs actual installer and setup prompts, inspects fake state, and preserves explicitly', () => {
-    const result = run('y\nn\nn\nballin backup setup\ny\n\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\ny\n\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);
+    const result = run('y\nn\nn\nballin backup setup\n\ncreate\n\nn\ny\nn\ninspect\nreset reconnect\nballin backup setup\n\nreconnect\n\nn\ny\nn\nexit\n', ['--keep']);
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Proceed with installation? [y/N]');
@@ -602,7 +602,7 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.isFalse(fs.existsSync(path.join(root, 'home/.ballin-scripts')));
   });
   it('explicitly preserves optional EOF cancellation without creating a fake destination', () => {
-    const result = run('y\nn\nn\nballin backup setup\ny\n\ncreate\n\n', ['--keep']);
+    const result = run('y\nn\nn\nballin backup setup\n\ncreate\n\n', ['--keep']);
     const root = findRoot(result.stdout);
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'Backup setup cancelled');
@@ -714,7 +714,7 @@ describe('interactive onboarding QA lifecycle', function() {
       assert.equal(actualPath.stdout.trim(), interpreter);
       const result = spawnSync(interpreter, [cli, '--keep'], {
         env, encoding: 'utf8', timeout: 240000,
-        input: 'y\nn\nn\nballin backup setup\ny\n\ncreate\n\nn\ny\ny\nballin update\nexit\n',
+        input: 'y\nn\nn\nballin backup setup\n\ncreate\n\nn\ny\ny\nballin update\nexit\n',
       });
       root = findRoot(result.stdout);
       assert.equal(result.status, 0, result.stdout + result.stderr);

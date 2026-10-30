@@ -81,7 +81,7 @@ describe('command references at prose output boundaries', () => {
       const recovery = cli(['setup']);
       assert.equal(recovery.status, 1);
       assert.equal(recovery.stdout, '');
-      assert.include(recovery.stderr, `Use ${command('ballin config get')} to inspect it or ${command('ballin config reset')} to restore defaults.`);
+      assert.equal(recovery.stderr, `ballin setup: Local config is invalid.\nRepair the file, or run ${command('ballin config reset')} to replace it with defaults.\n`);
       assert.equal(fs.readFileSync(config, 'utf8'), '{invalid');
     });
   }
