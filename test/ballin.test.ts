@@ -643,7 +643,7 @@ require('https').request = () => {
       const ordinary = runBallin(args);
       const result = runBallin(args, interactiveEnv());
       assert.equal(result.status, ordinary.status);
-      assert.equal(result.stdout, ordinary.stdout);
+      assert.equal(result.stdout.replace(/\x1b\[[0-9;]*m/gu, ''), ordinary.stdout);
       assert.equal(result.stderr, ordinary.stderr);
     }
   });

@@ -10,14 +10,15 @@ const { configureAnalyticsPreference } = require('./analytics.ts');
 const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
 const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
-const setupHelp = `Usage:
-    ballin setup
+const setupHelp = `Usage: ballin setup
 
-Review local sensitive-source, automatic-backup, and analytics preferences. Backup choices appear when a backup is configured; sensitive-source review applies to repository backups.
+Review local backup and analytics preferences.
 
-Use \`ballin config get/set/reset\` for direct configuration. This review does not reinstall Ballin, change backup destinations, or run backup/update.
+Backup choices cover sensitive-source inclusion and automatic backups, and appear when a backup is configured. Sensitive-source review applies to repository backups.
 
-To create, reconnect to, or validate a backup destination, use \`ballin backup setup\`.
+Use \`ballin backup setup\` to create, reconnect to, or validate a backup destination. Use \`ballin config get/set/reset\` for direct configuration.
+
+This review does not reinstall Ballin, change backup destinations, or run backup/update.
 
 🔗 Preference review:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#guided-preference-review

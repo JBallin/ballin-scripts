@@ -360,8 +360,13 @@ Use Homebrew-style phase headings throughout setup and update: a blue
 terminal's default foreground (`SGR 1;39`), then a reset (`SGR 0`). Keep this
 color accent limited to phase markers.
 
-Use sparse bold emphasis for changed backup entries. Existing help terms may
-use bold or underline. Other output keeps the terminal's default foreground;
+Use sparse bold emphasis for changed backup entries. Help uses bold for command
+synopses, command and option table terms, and section headings, with plain
+descriptions. Put `Usage:` and the synopsis on one line when it fits, then a short
+description; keep longer caveats after the essentials. Wrap narrow synopses at
+argument boundaries and keep wrapped examples copyable. Documentation-link labels
+keep their sparse `🔗 ` prefix and put the URL on the next line.
+Other output keeps the terminal's default foreground;
 do not add colors elsewhere or dim unchanged entries. Backup symbols and phase
 labels carry meaning even when emphasis is unavailable.
 

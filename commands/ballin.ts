@@ -52,12 +52,10 @@ import type { DoctorReport } from './doctor_report.ts';
 
 const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
 
-const ballinHelp = `Ballin
-Back up your dotfiles and update your macOS development environment.
+const ballinHelp = `Usage: ballin <command> [options]
+       ballin help [command...]
 
-Usage:
-    ballin <command> [options]
-    ballin help [command...]
+Back up your dotfiles and update your macOS development environment.
 
 Commands:
     update                update configured tools and run enabled backups
@@ -74,15 +72,15 @@ You can also append \`--help\` to a command.
 🔗 Project and documentation:
 https://github.com/JBallin/ballin-scripts
 `;
-const updateHelp = `Usage:
-    ballin update
+const updateHelp = `Usage: ballin update
 
-Update the Ballin-managed macOS development environment. Configured stages can update Homebrew, Node.js LTS, global npm packages, macOS, and Ballin, then back up environment state. Use \`ballin config get update\` to inspect settings.
+Update the Ballin-managed macOS development environment.
+
+Configured stages can update Homebrew, Node.js LTS, global npm packages, macOS, and Ballin, then back up environment state. Use \`ballin config get update\` to inspect settings.
 `;
 
-const backupHelp = `Usage:
-    ballin backup
-    ballin backup <command>
+const backupHelp = `Usage: ballin backup
+       ballin backup <command>
 
 Back up Ballin-managed environment state to the configured backup.
 
@@ -97,16 +95,18 @@ Repository backups include only locally approved sensitive sources; review them 
 `;
 
 const backupSubcommandHelp: Record<BackupCommandName, string> = {
-  setup: `Usage:
-    ballin backup setup [repository-name] [--hostname <host>]
+  setup: `Usage: ballin backup setup [repository-name] [--hostname <host>]
 
-Create, reconnect to, or validate a private GitHub backup repository owned by your account.
+Create, reconnect to, or validate a private GitHub backup repository.
+
+Options:
+    --hostname <host>  skip the new-setup host question (default: github.com)
 
 New setup: Choose Create or Reconnect. Omit the repository name to choose it during setup. Choose whether to include sensitive sources, confirm the destination, then choose whether updates should run backups automatically.
 
-Existing backup: Validate the saved repository and review backup preferences. The saved host is retained; disconnect before choosing a different destination. For local backup and analytics preferences, use \`ballin setup\`.
+Existing backup: Validate the saved repository and review backup preferences. The saved host is retained; disconnect before choosing a different destination.
 
-New setup asks for a GitHub hostname (default: github.com); \`--hostname <host>\` skips that question. Use a hostname, not a URL. Authenticate gh for the selected host before setup.
+Authenticate gh for the selected host before setup. Backups belong to your individual account on that host. Use a hostname, not a URL. For local backup and analytics preferences, use \`ballin setup\`.
 
 🔗 Setup and recovery:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
@@ -114,54 +114,58 @@ https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optiona
 🔗 Backup sources and sensitivity:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
 `,
-  open: `Usage:
-    ballin backup open
+  open: `Usage: ballin backup open
 
-Open the configured backup in your browser, including its saved history. Requires authentication for the selected GitHub host and remote access.
+Open the configured backup and its saved history in your browser.
+
+Requires authentication for the selected GitHub host and remote access.
 `,
-  list: `Usage:
-    ballin backup list
+  list: `Usage: ballin backup list
 
-List supported snapshots saved in the configured backup. Requires remote read access; does not collect local backup sources.
+List supported snapshots saved in the configured backup.
+
+Requires remote read access; does not collect local backup sources.
 `,
-  read: `Usage:
-    ballin backup read <snapshot>
-    ballin backup read <snapshot> --list
-    ballin backup read <snapshot> --file <path>
+  read: `Usage: ballin backup read <snapshot> [--list | --file <path>]
 
-Print a supported saved snapshot's original bytes without restoring or executing it. Requires remote read access. Use \`ballin backup list\` to find snapshot names.
+Print a saved snapshot's original bytes without restoring or executing it.
 
-For bundle snapshots, \`--list\` lists saved files; \`--file <path>\` prints one file's original bytes. Without a snapshot selector, report the missing argument and list saved options when readable.
+Options for bundle snapshots:
+    --list         list saved file paths
+    --file <path>  print one saved file's original bytes
 
 Examples:
     ballin backup read zshrc.sh
     ballin backup read codex_skills.bundle.json --list
     ballin backup read codex_skills.bundle.json --file example/SKILL.md
 
+Requires remote read access. Use \`ballin backup list\` to find supported snapshot names. Without a snapshot selector, report the missing argument and list saved options when readable.
+
 🔗 Inspect saved backups:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#inspect-saved-backups
 `,
-  disconnect: `Usage:
-    ballin backup disconnect
+  disconnect: `Usage: ballin backup disconnect
 
-Clear local backup linkage and comparison state, and disable automatic backup during updates. Preserve remote history, shared GitHub CLI authentication, and sensitive-source preferences. Requires no authentication or network access.
+Disconnect this Mac from its backup and disable automatic backups during updates.
+
+Clear local backup linkage and comparison state. Preserve remote history, shared GitHub CLI authentication, and sensitive-source preferences. Requires no authentication or network access.
 `,
 };
 
-const doctorHelp = `Usage:
-    ballin doctor [--verbose]
+const doctorHelp = `Usage: ballin doctor [--verbose]
 
-Check whether the Ballin-managed environment is healthy. Use \`--verbose\` to show full readiness details.
+Check whether the Ballin-managed environment is healthy.
+
+Options:
+    --verbose  show full readiness details
 `;
 
-const selfUpdateHelp = `Usage:
-    ballin self-update
+const selfUpdateHelp = `Usage: ballin self-update
 
 Update the local \`ballin-scripts\` checkout, command shims, and configuration.
 `;
 
-const uninstallHelp = `Usage:
-    ballin uninstall
+const uninstallHelp = `Usage: ballin uninstall
 
 Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
 

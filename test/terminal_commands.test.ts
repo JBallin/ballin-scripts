@@ -40,13 +40,13 @@ describe('command references at prose output boundaries', () => {
     it(`preserves update help roles on ${mode.name}`, () => {
       const help = cli(['update', '--help']);
       assert.equal(help.status, 0, help.stderr);
-      assert.include(help.stdout, `Use ${command('ballin config get update')} to inspect settings.`);
-      assert.include(help.stdout, '    ballin update\n');
+      assert.include(help.stdout.replace(/\s+/gu, ' '), `Use ${command('ballin config get update')} to inspect settings.`);
+      assert.include(help.stdout, mode.styled ? 'Usage: \x1b[1mballin update\x1b[0m\n' : 'Usage: ballin update\n');
     });
     it(`preserves backup help roles and alias output on ${mode.name}`, () => {
       const backup = cli(['backup', '--help']);
       assert.equal(backup.status, 0, backup.stderr);
-      assert.include(backup.stdout.replace(/\s+/gu, ' '), 'setup create, reconnect to, or validate a backup');
+      assert.include(backup.stdout.replace(/\x1b\[[0-9;]*m/gu, '').replace(/\s+/gu, ' '), 'setup create, reconnect to, or validate a backup');
       assert.include(backup.stdout.replace(/\s+/gu, ' '), `review them with ${command('ballin setup')}.`);
       assert.include(backup.stdout.replace(/\s+/gu, ' '), `Run ${command('ballin help backup <subcommand>')} for subcommand-specific help.`);
       const backupAlias = cli(['help', 'backup']);
@@ -56,12 +56,13 @@ describe('command references at prose output boundaries', () => {
     it(`preserves setup help notation on ${mode.name}`, () => {
       const shorthand = cli(['setup', '--help']);
       assert.equal(shorthand.status, 0, shorthand.stderr);
-      assert.include(shorthand.stdout, 'Use `ballin config get/set/reset` for direct configuration.');
+      assert.include(shorthand.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
     });
     it(`preserves config help notation on ${mode.name}`, () => {
       const configHelp = cli(['config', '--help']);
       assert.include(configHelp.stdout, '`update.cleanup`');
-      assert.notInclude(configHelp.stdout, '\x1b');
+      assert.equal(configHelp.stdout.includes('\x1b'), mode.styled);
+      assert.include(configHelp.stdout, mode.styled ? 'Usage: \x1b[1mballin config [get [key]]\x1b[0m\n' : 'Usage: ballin config [get [key]]\n');
     });
     it(`preserves literal config bytes on ${mode.name}`, () => {
       const value = cli(['config', 'get', 'literal']);
