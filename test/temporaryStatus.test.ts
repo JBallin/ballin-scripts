@@ -108,21 +108,72 @@ describe('temporary terminal status', () => {
       assert.equal(output, 'Opening...\n');
     });
   }
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    it(`preserves native ${signal} during synchronous child work`, () => {
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) for (const pauseStartup of [false, true]) {
+    it(`preserves native ${signal} during synchronous child work${pauseStartup ? ' after paused startup' : ''}`, async () => {
+      const { spawn } = require('child_process');
       const script = `
+        (async () => {
+        ${pauseStartup ? `await new Promise((resolve) => {
+          process.once('message', resolve);
+          process.send('starting');
+        });` : ''}
+        process.disconnect();
         require('tty').isatty = (fd) => fd === 0;
         for (const stream of [process.stdout, process.stderr]) Object.defineProperty(stream, 'isTTY', { value: true });
-        const { spawn, spawnSync } = require('child_process');
-        spawn(process.execPath, ['-e', 'setTimeout(() => process.kill(' + process.pid + ', ${JSON.stringify(signal)}), 50)'], { stdio: 'ignore' });
         require(${JSON.stringify(require.resolve('../commands/temporaryStatus.ts'))}).withTemporaryStatus('Working...', () => {
-          spawnSync(process.execPath, ['-e', 'setTimeout(() => {}, 150)']);
+          require('child_process').spawnSync(process.execPath, ['-e', ${JSON.stringify('require("fs").writeSync(1, "ready\\n"); setInterval(() => {}, 1000)')}], { stdio: ['ignore', 'inherit', 'ignore'] });
           process.stderr.write('continued after interruption');
         });
-        setTimeout(() => {}, 250);
+        })().catch((error) => { console.error(error); process.exitCode = 1; });
       `;
-      const result = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', env: testChildEnvironment({ TERM: 'xterm' }) });
-      assert.equal(result.signal, signal); assert.equal(result.stderr, 'Working...');
+      const child = spawn(process.execPath, ['-e', script], {
+        detached: true, env: testChildEnvironment({ TERM: 'xterm' }), stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      });
+      let stdout = ''; let stderr = ''; let signalled = false; let startupPaused = false; let closed = false;
+      let cleanupRequested = false;
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      const killGroup = (): void => {
+        if (!child.pid || cleanupRequested) return;
+        try { process.kill(-child.pid, 'SIGKILL'); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+        cleanupRequested = true;
+      };
+      child.once('close', () => { closed = true; });
+      try {
+        const result = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+          child.once('error', reject);
+          child.once('close', (code: number | null, signal: string | null) => resolve({ code, signal }));
+          // Parent-only termination leaves its synchronous child alive with an
+          // inherited stdout pipe. Stop that child before awaiting close.
+          child.once('exit', () => { try { killGroup(); } catch (error) { reject(error); } });
+          child.on('message', (message: unknown) => {
+            if (message !== 'starting' || !pauseStartup) { reject(new Error('Unexpected startup handshake')); return; }
+            startupPaused = true;
+            child.send('continue', (error: Error | null) => { if (error) reject(error); });
+          });
+          child.stdout.on('data', (chunk: Buffer) => {
+            stdout += chunk.toString();
+            // Readiness comes from inside the actual synchronous child, after
+            // the status is printed. Startup messages never trigger a signal.
+            if (!signalled && stdout.includes('ready\n')) {
+              signalled = true;
+              try { process.kill(child.pid, signal); } catch (error) { reject(error); }
+            }
+          });
+          child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+          watchdog = setTimeout(() => {
+            try { killGroup(); } catch (error) { reject(error); return; }
+            reject(new Error(`Status fixture watchdog expired. stdout: ${stdout} stderr: ${stderr}`));
+          }, 1000);
+        });
+        assert.equal(startupPaused, pauseStartup); assert.isTrue(signalled);
+        assert.equal(stdout, 'ready\n'); assert.isNull(result.code);
+        assert.equal(result.signal, signal); assert.equal(stderr, 'Working...');
+      } finally {
+        clearTimeout(watchdog);
+        killGroup();
+        if (!closed) await new Promise<void>((resolve) => child.once('close', resolve));
+      }
     });
   }
   it('preserves native group interruption of synchronous child work', async () => {
