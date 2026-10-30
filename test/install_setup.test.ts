@@ -1126,7 +1126,7 @@ require('https').request = () => {
     assert.include(result.stdout, 'Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n🔗 Backup details:`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
-    assert.include(result.stdout, 'Backup setup skipped.\nRun `ballin backup setup`');
+    assert.include(result.stdout, 'Backup setup skipped.\nℹ️  Run `ballin backup setup`');
     assert.notInclude(result.stdout, '😎 ballin!');
     assert.notInclude(result.stdout, 'symlinked binaries');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
@@ -1243,7 +1243,7 @@ require('https').request = () => {
       encoding: 'utf8', input: 'n\ny\n\ncreate\n\nn\nn\n', env: childEnvironment(),
     });
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Backup setup cancelled.\nRun `ballin backup setup` when you’re ready.');
+    assert.include(result.stdout, 'Backup setup cancelled.\nℹ️  Run `ballin backup setup` when you’re ready.');
     assert.notInclude(result.stdout + result.stderr, 'ERROR:');
     assert.notInclude(result.stdout, 'Backup setup complete.');
     assert.isNull(readRepoConfig().backup.repository ?? null);

@@ -402,9 +402,9 @@ existing_hidden_node() {
 manual_node_guidance() {
   local candidate=$1 state=${2:-incompatible} owner='its existing installation method' resolved=$1 target hops=0
   if [[ "$state" == compatible ]]; then
-    fail "Existing compatible Node.js at $(display_path "$candidate") is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+    fail "Existing compatible Node.js at $(display_path "$candidate") is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
   elif [[ "$state" == unknown ]]; then
-    fail "Existing Node.js at $(display_path "$candidate") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+    fail "Existing Node.js at $(display_path "$candidate") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
   fi
   while [[ -L "$resolved" && $hops -lt 40 ]]; do
     target=$(readlink "$resolved") || break
@@ -430,7 +430,7 @@ manual_node_guidance() {
       fi
       ;;
   esac
-  fail "Existing Node.js at $(display_path "$candidate") needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fail "Existing Node.js at $(display_path "$candidate") needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
 }
 
 brew_checked() {

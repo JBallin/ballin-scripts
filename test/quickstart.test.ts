@@ -504,6 +504,9 @@ printf '0\\n'
         assert.include(result.stderr, 'could not be verified.');
         assert.notInclude(result.stderr, 'brew upgrade node');
       }
+      if (!['130', '143'].includes(state)) {
+        assert.include(result.stderr, '\n🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+      }
       assert.equal(fs.readFileSync(installed, 'utf8'), contents);
       assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
       for (const forbidden of ['native-brew:install', 'native-brew:info', 'native-brew:ruby', 'nodejs.org', 'auth status --active', 'install.sh:', 'sudo:']) assert.notInclude(readLog(), forbidden);

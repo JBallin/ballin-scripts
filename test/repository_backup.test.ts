@@ -625,7 +625,7 @@ describe('repository backup lifecycle', function() {
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const result = run(['setup'], input);
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, '\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nRun `ballin backup setup` to review them again.');
+      assert.include(result.stdout, '\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nℹ️  Run `ballin backup setup` to review them again.');
       assert.notInclude(result.stdout, '😎 Backup settings review complete.');
       const saved = input.startsWith('n\n');
       if (saved) {
@@ -2397,7 +2397,7 @@ describe('repository backup lifecycle', function() {
       assert.equal(config().update.backup, ['y\n', 'Y\n'].includes(automatic) ? 'true' : 'false');
       if (['', 'y'].includes(automatic)) {
         assert.notInclude(result.stdout, '😎 Backup setup complete.');
-        assert.include(result.stdout, 'Backup destination saved; automatic-backup preference unchanged.\nRun `ballin backup setup` to review it later.');
+        assert.include(result.stdout, 'Backup destination saved; automatic-backup preference unchanged.\nℹ️  Run `ballin backup setup` to review it later.');
       }
       else assert.include(result.stdout, '\n\n😎 Backup setup complete.\n');
     });

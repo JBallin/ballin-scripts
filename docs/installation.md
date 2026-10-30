@@ -361,16 +361,15 @@ Issues, Wiki, Projects and pull requests. These optional housekeeping settings
 may remain enabled when the service or credential does not permit the update;
 backup setup can still complete. Reconnect leaves existing settings unchanged.
 
-Fresh create or reconnect setup asks whether to review sensitive sources for
-inclusion, with “No” as the default. Final confirmation saves the selection. Review
+Fresh create or reconnect setup previews sensitive sources, then asks whether to
+include them, defaulting to “No.” Choosing No excludes them and continues. Review
 [what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
 baseline, sensitive-source scope, and privacy limitations.
 
-Reconnect inspects the existing backup before asking. Declining skips
-sensitive-source discovery. Selecting it reviews paths, resolved targets, and
-availability. For synced Claude skills, Ballin reads local collection manifests
-to select plugin packages; it does not read selected file contents or create
-backup snapshots during this preview. Access or resolution errors stop setup.
+The preview shows paths, resolved targets, and availability. For synced Claude
+skills, Ballin reads local collection manifests to select plugin packages; it does
+not read selected file contents or create backup snapshots during this preview.
+Access or resolution errors prevent inclusion, but you can still choose exclusion.
 See [source preview](backup-sources.md#repository-inclusion).
 
 Final confirmation covers the destination and source selection. If you decline,

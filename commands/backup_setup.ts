@@ -56,7 +56,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   const checkSetup = <T>(action: () => T): T => (options.reviewExistingSettings || options.presentation === 'installation')
     ? withTemporaryStatus('Checking backup setup…', action) : action();
   const cancelled = (): boolean => {
-    writeStdoutLine(`\nℹ️  Backup setup cancelled.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
+    writeStdoutLine(`\nℹ️  Backup setup cancelled.\nℹ️  Run ${terminalCommand('ballin backup setup')} when you’re ready.`);
     options.onCancelled?.();
     return promptInputState() === 'ended' ? true : false;
   };
@@ -81,7 +81,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       if (!options.initialConsent && !options.reviewExistingSettings) {
         writeStdoutLine('🔗 Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
         if (readYesNo('Set up private backups to GitHub? [y/N] ') !== true) {
-          writeStdoutLine(`\nℹ️  Backup setup skipped.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
+          writeStdoutLine(`\nℹ️  Backup setup skipped.\nℹ️  Run ${terminalCommand('ballin backup setup')} when you’re ready.`);
           return true;
         }
       }
@@ -128,7 +128,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         if (sensitive === null) throw new PortableConfigError('Invalid `backup.includeSensitive`; expected true or false.');
         const automatic = preferenceBoolean(candidate.update.backup, 'update.backup');
         const cancelReview = (): boolean => {
-          writeStdoutLine(`\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin backup setup')} to review them again.`);
+          writeStdoutLine(`\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nℹ️  Run ${terminalCommand('ballin backup setup')} to review them again.`);
           options.onCancelled?.();
           return promptInputState() === 'ended' ? true : false;
         };
@@ -283,7 +283,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const automaticOutcome = reviewAutomaticUpdateBackup(configPath, { presentation: options.presentation });
     if (automaticOutcome === 'failed') return false;
     if (automaticOutcome === 'cancelled' && options.presentation !== 'installation') {
-      writeStdoutLine(`\nℹ️  Backup destination saved; automatic-backup preference unchanged.\nRun ${terminalCommand('ballin backup setup')} to review it later.`);
+      writeStdoutLine(`\nℹ️  Backup destination saved; automatic-backup preference unchanged.\nℹ️  Run ${terminalCommand('ballin backup setup')} to review it later.`);
     }
     if (automaticOutcome === 'confirmed' && options.presentation !== 'installation') writeStdoutLine('\n😎 Backup setup complete.');
     return true;
