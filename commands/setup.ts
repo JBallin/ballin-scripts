@@ -6,7 +6,7 @@ const { readSetupConfigContext } = require('../config/portable.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configureAnalyticsPreference } = require('./analytics.ts');
 const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
-const { enableSetupCancelHint, rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
+const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
 const setupHelp = `Usage:
     ballin setup
@@ -17,7 +17,7 @@ Use \`ballin config get/set/reset\` for direct configuration. This review does n
 `;
 
 const cancelSetup = (): void => {
-  writeStdoutLine(`\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nℹ️  Run ${terminalCommand('ballin setup')} to review your preferences again.`);
+  writeStdoutLine(`\nReview cancelled. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin setup')} to review your preferences again.`);
   process.exitCode = 0;
 };
 
@@ -35,7 +35,6 @@ const runSetupCommand = (): void => {
     const analytics = preferenceBoolean(config.analytics?.enabled, 'analytics.enabled');
 
     reviewing = true;
-    enableSetupCancelHint();
     writeStdoutLine(terminalHeading('Backup preferences'));
     if (destination.kind === 'repository') {
       const included = confirmSensitiveSourceChoice(sensitive);
@@ -47,7 +46,7 @@ const runSetupCommand = (): void => {
       if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
       writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previous));
     } else {
-      writeStdoutLine(`ℹ️  No backup is configured.\nℹ️  Run ${terminalCommand('ballin backup setup')} to choose a destination.`);
+      writeStdoutLine(`No backup is configured.\nRun ${terminalCommand('ballin backup setup')} to choose a destination.`);
     }
 
     if (destination.kind !== 'unconfigured') {

@@ -130,8 +130,8 @@ const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
-  'ℹ️  Share command and backup results with a random install ID.\n'
-  + 'ℹ️  No backup contents, destination identities, configuration values, or raw errors are sent.\n'
+  'ℹ️  Optional analytics share command and backup results with a random install ID.\n'
+  + 'No backup contents, destination identities, configuration values, or raw errors are sent.\n'
   + '🔗 Analytics details:\n' + docsUrl
 );
 const analyticsPromptFor = (defaultEnabled = false): string => (
@@ -309,7 +309,7 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
     ? `\n${terminalHeading('Analytics')}\n🔗 Analytics details:\n${options.docsUrl || defaultAnalyticsDocsUrl}`
     : `\n${terminalHeading('Analytics')}\n${analyticsDisclosureFor(options.docsUrl)}`);
   if (options.currentEnabled !== undefined) {
-    writeStdoutLine(`ℹ️  Usage analytics are currently ${options.currentEnabled ? 'enabled' : 'disabled'}.`);
+    writeStdoutLine(`Usage analytics are currently ${options.currentEnabled ? 'enabled' : 'disabled'}.`);
   }
   const defaultEnabled = options.defaultEnabled ?? false;
   let enabled: boolean | null;

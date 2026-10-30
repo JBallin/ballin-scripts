@@ -20,8 +20,6 @@ type SpawnOptions = Omit<SpawnSyncOptionsWithStringEncoding, 'encoding' | 'shell
 type PromptLine = { text: string; eof: boolean };
 type PromptInputState = 'open' | 'ended' | 'failed';
 let inputState: PromptInputState = 'open';
-let setupHintPending = false;
-const enableSetupCancelHint = (): void => { setupHintPending = true; };
 const promptInputState = (): PromptInputState => inputState;
 
 // A complete answer is distinct from EOF, including EOF after partial input.
@@ -114,13 +112,6 @@ const writeStderrLine = (text = ''): void => {
 };
 
 const readPromptLine = (prompt: string): PromptLine => {
-  if (setupHintPending) {
-    setupHintPending = false;
-    if (tty.isatty(0) && process.env.BALLIN_CANCEL_HINT_SHOWN !== '1') {
-      writeStdoutLine('ℹ️  Ctrl-C to cancel');
-      process.env.BALLIN_CANCEL_HINT_SHOWN = '1';
-    }
-  }
   process.stdout.write(prompt);
   const bytes: number[] = [];
   const byte = Buffer.alloc(1);
@@ -233,7 +224,6 @@ module.exports = {
   makeTempFile,
   progress,
   readCommandOutput,
-  enableSetupCancelHint,
   readPromptLine,
   readYesNo,
   parseYesNo,

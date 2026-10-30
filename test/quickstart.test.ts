@@ -19,7 +19,7 @@ describe('beginner quickstart bootstrap', function() {
   const nodeInstallPrompt = 'Proceed with installation? [y/N]';
   const cltInstallQuestion = 'Proceed with installation?';
   const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
-  const incompletePathGuidance = '\nℹ️  Ballin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
+  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
   printf 'brew-interruption:%s:%s\\n' "$stage" "$FAKE_BREW_INTERRUPTION" >> "$FAKE_COMMAND_LOG"
@@ -3072,7 +3072,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       const retry = runSandbox(sandbox, ['quickstart'], 'yes\nno\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
       assert.notInclude(retry.stdout, 'PATH entry already present');
-      assert.include(retry.stdout, '\nℹ️  Validated private backup:');
+      assert.include(retry.stdout, '\nValidated private backup:');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       const fixtureGit = path.join(sandbox.tools, 'git');
       fs.appendFileSync(fixtureGit, '\n# altered\n');

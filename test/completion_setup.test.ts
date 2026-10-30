@@ -30,7 +30,7 @@ describe('optional completion setup', () => {
     assert.include(output, '~/.zshrc');
     assert.notInclude(output, activationLine('zsh'));
     assert.isFalse(fs.existsSync(profile));
-    assert.include(offer([], false), 'ℹ️  Tab completion skipped.\n🔗 Enable it later:\nhttps://example.test/install#startup-files-and-manual-activation');
+    assert.include(offer([], false), 'Tab completion skipped.\n🔗 Enable it later:\nhttps://example.test/install#startup-files-and-manual-activation');
     offer([]);
     assert.isFalse(fs.existsSync(profile));
   });

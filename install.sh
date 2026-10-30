@@ -119,15 +119,8 @@ read_prompt_answer() {
   [[ -t 0 ]] || printf '\n'
   prompt_answer=''; input_ended=true; return 1
 }
-show_cancel_hint() {
-  if [[ -t 0 && "${BALLIN_CANCEL_HINT_SHOWN:-}" != 1 ]]; then
-    printf "ℹ️  Ctrl-C to cancel\n"
-    export BALLIN_CANCEL_HINT_SHOWN=1
-  fi
-}
 confirm() {
   local default=${2:-n} normalized
-  show_cancel_hint
   while :; do
     if [[ "$default" == y ]]; then printf '%s [Y/n] ' "$1"; else printf '%s [y/N] ' "$1"; fi
     read_prompt_answer || return 1

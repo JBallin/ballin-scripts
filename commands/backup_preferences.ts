@@ -120,7 +120,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     }
   }
   writeStdoutLine();
-  writeStdoutLine(available.length ? 'ℹ️  Sensitive sources available now:' : 'ℹ️  Sensitive sources available now: none.');
+  writeStdoutLine(available.length ? 'Sensitive sources available now:' : 'Sensitive sources available now: none.');
   available.forEach((line) => writeStdoutLine(`  ${line}`));
   return true;
 };

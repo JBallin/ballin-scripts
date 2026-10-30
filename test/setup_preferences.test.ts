@@ -203,16 +203,15 @@ fs.readFileSync = (file, ...args) => {
     assert.notInclude(result.stdout, 'Review files that may contain');
     assert.include(result.stdout, '+ Sensitive sources in backups: excluded');
     assert.isBelow(result.stdout.indexOf('+ Sensitive sources in backups: excluded'), result.stdout.indexOf('Automatically run'));
-    assert.include(result.stdout, '==> Analytics\nℹ️  Share command');
+    assert.include(result.stdout, '==> Analytics\nℹ️  Optional analytics share command');
     assert.include(result.stdout, '✓ Automatic backup during updates: enabled');
     assert.notInclude(result.stdout, '🔄 Automatically'); assert.notInclude(result.stdout, 'Ctrl-C to cancel');
     assert.equal(readConfig().backup.includeSensitive, 'false'); assert.equal(readConfig().update.backup, 'true');
   });
-  it('shows one cancellation hint before the first interactive preference prompt', () => {
+  it('omits the cancellation hint in interactive preference review', () => {
     fs.appendFileSync(guardPath, "require('tty').isatty = (fd) => fd === 0;\n");
     const result = run('n\nn\nn\n'); assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout.split('Ctrl-C to cancel').length - 1, 1);
-    assert.isBelow(result.stdout.indexOf('Ctrl-C to cancel'), result.stdout.indexOf('Include sensitive sources in future backups?'));
+    assert.notInclude(result.stdout, 'Ctrl-C to cancel');
   });
   it('reviews only analytics when unconfigured', () => {
     const initial = configFor('unconfigured');
@@ -222,7 +221,7 @@ fs.readFileSync = (file, ...args) => {
     assert.notInclude(result.stdout, 'Include sensitive sources in future backups?');
     assert.notInclude(result.stdout, 'Automatically run');
     assert.include(result.stdout, 'Run `ballin backup setup`');
-    assert.include(result.stdout, 'ℹ️  Share command and backup results with a random install ID.\nℹ️  No backup contents, destination identities, configuration values, or raw errors are sent.\n🔗 Analytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
+    assert.include(result.stdout, 'ℹ️  Optional analytics share command and backup results with a random install ID.\nNo backup contents, destination identities, configuration values, or raw errors are sent.\n🔗 Analytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
     assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
     assert.equal(readConfig().update.backup, 'false');
     assert.equal(readConfig().analytics.enabled, 'true');
@@ -233,8 +232,8 @@ fs.readFileSync = (file, ...args) => {
       const before = fs.readFileSync(configPath, 'utf8');
       const result = run(input);
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, '\nℹ️  Review cancelled. Earlier confirmed choices remain saved.\nℹ️  Run `ballin setup`');
-      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nℹ️  Run `ballin setup` to review your preferences again.');
+      assert.include(result.stdout, '\nReview cancelled. Earlier confirmed choices remain saved.\nRun `ballin setup`');
+      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup|analytics.enabled)` (?:set to|unchanged at)/u);
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
@@ -253,7 +252,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(config.update.backup, input.startsWith('n\nn\n') ? 'false' : 'true');
       assert.equal(config.analytics.enabled, 'true');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved');
-      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nℹ️  Run `ballin setup` to review your preferences again.');
+      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       if (!input.startsWith('n\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
     });

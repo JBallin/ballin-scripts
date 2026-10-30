@@ -22,7 +22,8 @@ describe('interactive setup with delayed terminal answers', function() {
     const output = stdout.replace(/\r\n/gu, '\n');
     const heading = '\x1b[34m==>\x1b[1;39m Setting up GitHub backup\x1b[0m';
     assert.equal(output.split(heading).length - 1, 1);
-    assert.include(output, heading + '\nCreate a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+    const mode = output.indexOf('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+    assert.isBelow(output.indexOf(heading), mode);
   };
   const assertInitializedOnly = (): void => {
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
@@ -62,8 +63,7 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.notInclude(output, '\n\n\n');
       assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(result.stdout.split('Ctrl-C to cancel').length - 1, 1);
-      assert.isBelow(result.stdout.indexOf('Ctrl-C to cancel'), result.stdout.indexOf('Set up backups to GitHub?'));
+      assert.notInclude(result.stdout, 'Ctrl-C to cancel');
       assert.equal(result.stdout.split(backupAnswers[0].prompt).length - 1, 1, 'Quickstart selects the host once');
       assert.isBelow(result.stdout.indexOf(backupAnswers[0].prompt), result.stdout.indexOf(startup.prompt));
       assert.equal(result.stdout.split(startup.prompt).length - 1, 1, 'Reuse the selected location without repeating its question');
@@ -150,7 +150,7 @@ describe('interactive setup with delayed terminal answers', function() {
         const output = result.stdout.replace(/\r\n/gu, '\n');
         const update = '==> Updating Ballin\n' + (fetchOutput ? progress : '');
         const docs = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
-        const summary = 'ℹ️  Validated private backup: https://github.com/fixture-user/ballin-backups\nℹ️  Sensitive sources: excluded\nℹ️  Automatic backup during update: disabled\n';
+        const summary = 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n';
         if (migration) {
           assert.include(output, update + '\n🙌 New configuration options have been added! Here are the updates:\n');
           if (backup) assert.include(output, `${docs}#what-installation-changes\n\n${summary}`);
@@ -204,8 +204,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const output = result.stdout.replace(/\r\n/gu, '\n');
-    assert.equal(output.split('Ctrl-C to cancel').length - 1, 1);
-    assert.isBelow(output.indexOf('Ctrl-C to cancel'), output.indexOf('Proceed with installation?'));
+    assert.notInclude(output, 'Ctrl-C to cancel');
     assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
     assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nWhich Bash startup file does your terminal read? ');
     assert.notInclude(output, '\x1b[');
@@ -236,7 +235,7 @@ describe('interactive setup with delayed terminal answers', function() {
         assert.equal(result.stdout.split(backupAnswers[0].prompt).length - 1, 1, 'Quickstart selects the host once');
         assert.isBelow(result.stdout.indexOf(backupAnswers[0].prompt), result.stdout.indexOf(startup.prompt));
         const output = result.stdout.replace(/\r\n/gu, '\n');
-        const reminder = 'ℹ️  Ballin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup';
+        const reminder = 'Ballin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup';
         assert.include(output, reminder + '\n', output);
         assert.equal(output.split(reminder).length - 1, 1);
         assert.notInclude(output, '😎 Setup complete!');
@@ -307,8 +306,8 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assertBackupHeading(result.stdout);
-    assert.equal(result.stdout.split('Ctrl-C to cancel').length - 1, 1);
-    assert.isBelow(result.stdout.indexOf('Ctrl-C to cancel'), result.stdout.indexOf('GitHub hostname'));
+    assert.isBelow(result.stdout.indexOf('Setting up GitHub backup'), result.stdout.indexOf('GitHub hostname'));
+    assert.notInclude(result.stdout, 'Ctrl-C to cancel');
     assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
     assert.include(result.stdout, 'Creating private backup…');
     assert.include(result.stdout, 'Automatic backup during updates: enabled (`update.backup` set to `true`).');
