@@ -88,7 +88,7 @@ describe('install setup', () => {
 
   const installConfigSources = () => {
     fs.mkdirSync(path.join(repoDir, 'config'), { recursive: true });
-    ['.defaultConfig.json', 'commands.ts', 'index.ts', 'store.ts', 'updateConfig.ts'].forEach((fileName) => {
+    ['.defaultConfig.json', 'commands.ts', 'index.ts', 'store.ts', 'updateConfig.ts', 'writeConfigFile.ts'].forEach((fileName) => {
       fs.copyFileSync(
         path.join(repoRoot, 'config', fileName),
         path.join(repoDir, 'config', fileName),
@@ -921,8 +921,15 @@ process.exitCode = configureAnalyticsPreference({
     const preloadPath = path.join(testDir, 'fail-analytics-preference.cjs');
     fs.writeFileSync(preloadPath, `const fs = require('fs');
 const original = fs.writeFileSync;
+const open = fs.openSync;
+const staging = new Set();
+fs.openSync = function(file, ...args) {
+  const fd = open.call(this, file, ...args);
+  if (String(file).includes('.analytics.tmp')) staging.add(fd);
+  return fd;
+};
 fs.writeFileSync = function(file, contents, ...args) {
-  if (String(file).endsWith('.analytics.tmp') && String(contents).includes('"enabled": "true"')) {
+  if (staging.has(file) && String(contents).includes('"enabled": "true"')) {
     original.call(this, file, '{"analytics":', ...args);
     throw new Error('simulated analytics preference failure');
   }

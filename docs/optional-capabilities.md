@@ -51,6 +51,13 @@ Use `ballin config reset` to recover a missing or malformed config file. This
 restores defaults and replaces saved settings. For read or save errors, check
 the config file's permissions and its parent directory before retrying.
 
+Direct config changes and installation migrations replace the file only after
+the new contents have been written successfully. They retain existing file
+Unix permission bits and follow existing symlinks. Custom file ACLs and ownership
+metadata are not copied. Hard-linked config files and dangling
+symlinks must be replaced with a regular file before saving; this avoids breaking
+links or updating only one alias. A recreated config is readable only by its owner.
+
 ## Node.js
 
 Node.js 24.12 or newer is required by Ballin; install it using whichever method
