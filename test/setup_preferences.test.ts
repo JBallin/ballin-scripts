@@ -627,18 +627,57 @@ fs.readFileSync = (file, ...args) => {
       const result = run('y\ny\ny\ny\n');
       assert.equal(result.status, 1);
       const key = ({ sensitive: 'backup.includeSensitive', automatic: 'update.backup', analytics: 'analytics.enabled', 'missing analytics': 'analytics.enabled' } as Record<string, string>)[name];
-      if (key) assert.equal(result.stderr, `ballin setup: Invalid \`${key}\`; expected true or false.\nRepair the local configuration before retrying. Use \`ballin config get\` to inspect it or \`ballin config reset\` to restore defaults.\n`);
-      assert.include(result.stderr, 'Repair the local configuration');
+      if (key) assert.equal(result.stderr, `ballin setup: Invalid \`${key}\`; expected true or false.\nRepair the file, or run \`ballin config reset\` to replace it with defaults.\n`);
+      if (name === 'JSON' || name === 'root') assert.equal(result.stderr, 'ballin setup: Local config is invalid.\nRepair the file, or run `ballin config reset` to replace it with defaults.\n');
+      assert.include(result.stderr, 'Repair the file');
       assert.notInclude(result.stdout, 'Review your Ballin');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     });
   });
-  it('does not create missing config', () => {
+  it('creates missing config and continues preference review', () => {
     fs.rmSync(configPath);
-    const result = run('y\n');
+    const result = run('n\n');
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, '⚙️  Created config: ~/ballin.config.json\n');
+    assert.include(result.stdout, 'No backup is configured.');
+    assert.include(result.stdout, '😎 Ballin preference review complete.');
+    assert.equal(readConfig().analytics.enabled, 'false');
+    assert.isNull(readConfig().backup.repository);
+  });
+  it('preserves an unreadable config and reports access guidance', () => {
+    const before = fs.readFileSync(configPath, 'utf8');
+    fs.appendFileSync(guardPath, `const guardedRead = fs.readFileSync; fs.readFileSync = (file, ...args) => {
+      if (file === ${JSON.stringify(configPath)}) { const error = new Error('fixture access denied'); error.code = 'EACCES'; throw error; }
+      return guardedRead(file, ...args);
+    };\n`);
+    const result = run('n\n');
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'ballin setup: Local config is missing.\nRepair the local configuration before retrying. Use `ballin config get` to inspect it or `ballin config reset` to restore defaults.\n');
-    assert.isFalse(fs.existsSync(configPath));
+    assert.equal(result.stderr, 'ballin setup: Unable to read local config.\nCheck that the config file and its parent directory are accessible and readable.\n');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+  });
+  it('preserves a dangling config symlink and reports access guidance', () => {
+    fs.rmSync(configPath);
+    const target = path.join(root, 'missing-target');
+    fs.symlinkSync(target, configPath);
+    const result = run('n\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to read local config.');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readlinkSync(configPath), target);
+    assert.isFalse(fs.existsSync(target));
+  });
+  it('does not overwrite a config created concurrently', () => {
+    fs.rmSync(configPath);
+    fs.appendFileSync(guardPath, `const copy = fs.copyFileSync; fs.copyFileSync = (source, target, flags) => {
+      if (target === ${JSON.stringify(configPath)}) fs.writeFileSync(target, 'concurrent config');
+      return copy(source, target, flags);
+    };\n`);
+    const result = run('n\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to create local config');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), 'concurrent config');
   });
 
   ['missing', 'malformed', 'enabled'].forEach((state) => {

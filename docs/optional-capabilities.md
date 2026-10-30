@@ -24,7 +24,8 @@ readability before asking whether to include the sources. Your answer saves the 
 
 Each confirmed choice is saved locally. Cancelling or closing input leaves the
 pending choice unchanged; earlier confirmed choices remain saved. Invalid
-configuration must be repaired before review. The command does not reinstall
+configuration must be repaired before review; a missing config is created with
+defaults. The command does not reinstall
 Ballin, change or validate remote destinations, or run backup/update operations.
 
 Use `ballin config get/set/reset` for direct configuration. Guided

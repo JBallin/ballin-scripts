@@ -1,8 +1,10 @@
 const { terminalCommand, terminalHeading } = require('./terminalStyle.ts');
 const fs = require('fs');
+const path = require('path');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
-const { readSetupConfigContext } = require('../config/portable.ts');
+const { PortableConfigError, readSetupConfigContext } = require('../config/portable.ts');
+const { createDefaultConfig } = require('./install_setup.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
 const { configureAnalyticsPreference } = require('./analytics.ts');
 const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
@@ -23,9 +25,27 @@ const cancelSetup = (): void => {
 
 const runSetupCommand = (): void => {
   let reviewing = false;
+  let validating = false;
   try {
-    if (!fs.existsSync(configPath)) throw new Error('Local config is missing.');
+    try {
+      const entry = fs.lstatSync(configPath);
+      // A dangling link is an existing, unreadable entry, not a missing config.
+      if (entry.isSymbolicLink()) {
+        try { fs.statSync(configPath); } catch {
+          throw new Error('Unable to read config.');
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
+      if (!createDefaultConfig(repoDir, configPath)) {
+        writeStderrLine('ballin setup: Unable to create local config. Check the installation and config directory, then retry.');
+        process.exitCode = 1;
+        return;
+      }
+    }
     const config = readSetupConfigContext(configPath);
+    validating = true;
     const destination = configuredBackupDestination(config);
     if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
     const sensitive = destination.kind === 'repository' ? sensitiveSourceConsent(config) : false;
@@ -64,10 +84,18 @@ const runSetupCommand = (): void => {
     process.exitCode = 0;
   } catch (error) {
     rethrowInterruption(error);
-    writeStderrLine(`ballin setup: ${(error as Error).message}`);
-    writeStderrLine(reviewing
-      ? 'Unable to complete preference review; unconfirmed choices are unchanged.'
-      : `Repair the local configuration before retrying. Use ${terminalCommand('ballin config get', process.stderr)} to inspect it or ${terminalCommand('ballin config reset', process.stderr)} to restore defaults.`);
+    const message = (error as Error).message;
+    if (reviewing) {
+      writeStderrLine(`ballin setup: ${message}`);
+      writeStderrLine('Unable to complete preference review; unconfirmed choices are unchanged.');
+    } else if (validating || (error instanceof PortableConfigError && message !== 'Unable to read config.')) {
+      const detail = message === 'Config is not valid JSON.' || message === 'Invalid config; expected a JSON object.' ? 'Local config is invalid.' : message;
+      writeStderrLine(`ballin setup: ${detail}`);
+      writeStderrLine(`Repair the file, or run ${terminalCommand('ballin config reset', process.stderr)} to replace it with defaults.`);
+    } else {
+      writeStderrLine('ballin setup: Unable to read local config.');
+      writeStderrLine('Check that the config file and its parent directory are accessible and readable.');
+    }
     process.exitCode = 1;
   }
 };

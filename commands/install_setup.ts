@@ -135,24 +135,24 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
   return true;
 };
 
-const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(repoDir), deferBackupSelection = false): boolean => {
+const createDefaultConfig = (repoDir: string, configPath: string, deferBackupSelection = false): boolean => {
   const defaultConfigPath = path.join(repoDir, 'config', '.defaultConfig.json');
-
-  if (!fs.existsSync(configPath)) {
-    try {
-      if (deferBackupSelection) {
-        const defaults = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
-        delete defaults.backup.repository;
-        delete defaults.backup.includeSensitive;
-        fs.writeFileSync(configPath, stringify(defaults));
-      } else fs.copyFileSync(defaultConfigPath, configPath);
-    } catch {
-      return false;
-    }
-    writeStdoutLine(`⚙️  Created config: ${terminalPath(configPath)}`);
-    return true;
+  try {
+    if (deferBackupSelection) {
+      const defaults = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
+      delete defaults.backup.repository;
+      delete defaults.backup.includeSensitive;
+      fs.writeFileSync(configPath, stringify(defaults), { flag: 'wx' });
+    } else fs.copyFileSync(defaultConfigPath, configPath, fs.constants.COPYFILE_EXCL);
+  } catch {
+    return false;
   }
+  writeStdoutLine(`⚙️  Created config: ${terminalPath(configPath)}`);
+  return true;
+};
 
+const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(repoDir), deferBackupSelection = false): boolean => {
+  if (!fs.existsSync(configPath)) return createDefaultConfig(repoDir, configPath, deferBackupSelection);
   return updateConfig(repoDir, docsUrl, configPath, deferBackupSelection);
 };
 
@@ -410,6 +410,7 @@ if (require.main === module) {
 
 module.exports = {
   configure,
+  createDefaultConfig,
   configureBackup,
   disconnectBackup,
   readOriginalSetupConfig,
