@@ -11,11 +11,10 @@ describe('interactive setup with delayed terminal answers', function() {
   afterEach(() => { if (sandbox && fs.existsSync(sandbox.root)) cleanupSandbox(sandbox.root); });
 
   const backupAnswers = [
-    { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
     { prompt: 'GitHub hostname [github.com]: ', answer: '' },
     { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
     { prompt: 'Repository name [ballin-backups]: ', answer: 'interactive-test' },
-    { prompt: 'Review files that may contain credentials or private information for backup inclusion? [y/N] ', answer: 'y' },
+    { prompt: 'Include sensitive sources in future backups? [y/N] ', answer: 'y' },
     { prompt: 'private GitHub backup ', answer: 'y' },
     { prompt: 'Automatically run \x1b[1mballin backup\x1b[0m as part of \x1b[1mballin update\x1b[0m? [y/N] ', answer: 'y' },
   ];
@@ -23,7 +22,8 @@ describe('interactive setup with delayed terminal answers', function() {
     const output = stdout.replace(/\r\n/gu, '\n');
     const heading = '\x1b[34m==>\x1b[1;39m Setting up GitHub backup\x1b[0m';
     assert.equal(output.split(heading).length - 1, 1);
-    assert.include(output, heading + '\nCreate a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+    const mode = output.indexOf('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+    assert.isBelow(output.indexOf(heading), mode);
   };
   const assertInitializedOnly = (): void => {
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
@@ -47,13 +47,13 @@ describe('interactive setup with delayed terminal answers', function() {
         : { prompt: `Zsh settings directory [Enter for home (~), an absolute directory, or skip]: `, answer: '' };
       const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
         { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
-        backupAnswers[1],
+        backupAnswers[0],
         startup,
         { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
         { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
         { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
         { prompt: 'Enable tab completion in ', answer: 'y' },
-        ...backupAnswers.slice(2),
+        ...backupAnswers.slice(1),
         { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'n' },
       ], shell);
       assert.isUndefined(result.error, result.stderr);
@@ -63,8 +63,9 @@ describe('interactive setup with delayed terminal answers', function() {
       assert.notInclude(output, '\n\n\n');
       assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Setting up Ballin\x1b[0m');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(result.stdout.split(backupAnswers[1].prompt).length - 1, 1, 'Quickstart selects the host once');
-      assert.isBelow(result.stdout.indexOf(backupAnswers[1].prompt), result.stdout.indexOf(startup.prompt));
+      assert.notInclude(result.stdout, 'Ctrl-C to cancel');
+      assert.equal(result.stdout.split(backupAnswers[0].prompt).length - 1, 1, 'Quickstart selects the host once');
+      assert.isBelow(result.stdout.indexOf(backupAnswers[0].prompt), result.stdout.indexOf(startup.prompt));
       assert.equal(result.stdout.split(startup.prompt).length - 1, 1, 'Reuse the selected location without repeating its question');
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.notInclude(result.stdout, 'Usage analytics:');
@@ -102,7 +103,7 @@ describe('interactive setup with delayed terminal answers', function() {
     const output = result.stdout.replace(/\r\n/gu, '\n');
     assert.include(output, `Enable tab completion in ~/.bash_profile? [y/N] y\n\n😎 Setup complete!`);
     assert.include(output, 'Proceed with installation? [y/N] y\n\x1b[34m==>\x1b[1;39m Installing Ballin\x1b[0m\n');
-    assert.include(output, '⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n\nAnalytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\nShare usage analytics to help improve Ballin? [y/N] n\n\nEnable tab completion in ');
+    assert.include(output, '⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n\n\x1b[34m==>\x1b[1;39m Analytics\x1b[0m\n🔗 Analytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\nShare usage analytics to help improve Ballin? [y/N] n\n\nEnable tab completion in ');
     assert.notInclude(output, '\n\n\n');
     assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
   });
@@ -156,7 +157,7 @@ describe('interactive setup with delayed terminal answers', function() {
           else assert.include(output, `${docs}#what-installation-changes\n\n😎 Setup complete!`);
         } else if (backup) assert.include(output, update + '\n' + summary);
         else if (scenario === 'quiet') assert.include(output, update + '\n😎 Setup complete!');
-        else assert.include(output, update + `\nInitial configuration\n${docs}#what-will-installation-change\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
+        else assert.include(output, update + `\nInitial configuration\n🔗 Installation details:\n${docs}#what-will-installation-change\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
         assert.notInclude(output, '\n\n\n');
       });
     }
@@ -203,6 +204,7 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const output = result.stdout.replace(/\r\n/gu, '\n');
+    assert.notInclude(output, 'Ctrl-C to cancel');
     assert.include(output, `$ git clone https://github.com/JBallin/ballin-scripts.git ~/.ballin-scripts\n\n⚙️  Created config: ~/.ballin-scripts/ballin.config.json\n`);
     assert.include(output, 'Share usage analytics to help improve Ballin? [y/N] \n\nWhich Bash startup file does your terminal read? ');
     assert.notInclude(output, '\x1b[');
@@ -216,10 +218,10 @@ describe('interactive setup with delayed terminal answers', function() {
         const startup = shell === 'bash'
           ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
           : { prompt: `Zsh settings directory [Enter for home (~), an absolute directory, or skip]: `, answer: '' };
-        const backupSetup = backupAnswers.slice(2, 5).map(a => ({ ...a, answer: a.prompt.startsWith('Review ') ? 'no' : a.answer }));
+        const backupSetup = backupAnswers.slice(1, 4).map(a => ({ ...a, answer: a.prompt.startsWith('Include sensitive ') ? 'no' : a.answer }));
         const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
           { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
-          backupAnswers[1],
+          backupAnswers[0],
           startup,
           { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
           { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
@@ -230,10 +232,10 @@ describe('interactive setup with delayed terminal answers', function() {
         ], shell, { columns: 200 });
         assert.isUndefined(result.error, result.stderr);
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.equal(result.stdout.split(backupAnswers[1].prompt).length - 1, 1, 'Quickstart selects the host once');
-        assert.isBelow(result.stdout.indexOf(backupAnswers[1].prompt), result.stdout.indexOf(startup.prompt));
+        assert.equal(result.stdout.split(backupAnswers[0].prompt).length - 1, 1, 'Quickstart selects the host once');
+        assert.isBelow(result.stdout.indexOf(backupAnswers[0].prompt), result.stdout.indexOf(startup.prompt));
         const output = result.stdout.replace(/\r\n/gu, '\n');
-        const reminder = 'Ballin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup';
+        const reminder = 'Ballin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup';
         assert.include(output, reminder + '\n', output);
         assert.equal(output.split(reminder).length - 1, 1);
         assert.notInclude(output, '😎 Setup complete!');
@@ -275,24 +277,28 @@ describe('interactive setup with delayed terminal answers', function() {
     sandbox = createSandbox();
     const installed = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
     assert.equal(installed.status, 0, installed.stdout + installed.stderr);
-    const configPath = path.join(sandbox.repo, 'ballin.config.json'); const before = fs.readFileSync(configPath, 'utf8');
+    const configPath = path.join(sandbox.repo, 'ballin.config.json'); const before = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     const remotePath = path.join(sandbox.remote, 'repository.json'); const remote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
     remote.faults.candidate = 'redirect'; remote.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } };
     fs.writeFileSync(remotePath, JSON.stringify(remote));
     const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
-      { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
       { prompt: 'GitHub hostname [github.com]: ', answer: '' },
       { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
       { prompt: 'Repository name: ', answer: 'fresh-name' },
-      { prompt: 'Review files that may contain credentials or private information for backup inclusion? [y/N] ', answer: 'n' },
+      { prompt: 'Include sensitive sources in future backups? [y/N] ', answer: 'n' },
       { prompt: 'private GitHub backup ', answer: 'n' },
     ]);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/fresh-name');
     assert.include(result.stdout, 'Backup setup cancelled.'); assert.notInclude(result.stdout, 'Available suggestion:');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    const afterConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.deepEqual(afterConfig, { ...before, backup: { ...before.backup, includeSensitive: 'false' } });
+    assert.isUndefined(afterConfig.backup.repository);
+    assert.include(result.stdout, 'Sensitive sources in backups: excluded');
+    assert.isBelow(result.stdout.indexOf('Sensitive sources in backups: excluded'), result.stdout.indexOf('private GitHub backup '));
     const after = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
     assert.equal(after.head, remote.head); assert.equal(after.exists, remote.exists);
+    assert.deepEqual(after.commits, remote.commits); assert.deepEqual(after.rulesets, remote.rulesets);
     assert.isTrue(after.requests.every((request: { method: string }) => request.method === 'GET'));
     assert.isFalse(fs.existsSync(path.join(sandbox.repo, '.backup-cache')));
   });
@@ -305,6 +311,9 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isUndefined(result.error, result.stderr);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assertBackupHeading(result.stdout);
+    assert.isBelow(result.stdout.indexOf('Setting up GitHub backup'), result.stdout.indexOf('GitHub hostname'));
+    assert.notInclude(result.stdout, 'Ctrl-C to cancel');
+    assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
     assert.include(result.stdout, 'Creating private backup…');
     assert.include(result.stdout, 'Automatic backup during updates: enabled (`update.backup` set to `true`).');
     assert.include(result.stdout.replace(/\r\n/gu, '\n'), '\n\n😎 Backup setup complete.');

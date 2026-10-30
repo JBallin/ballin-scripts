@@ -351,7 +351,7 @@ custom GitHub Enterprise Server hostname such as `git.example.com`, or pass
 `--hostname <host>` to skip that question. Use a hostname only, without `https://`,
 paths or a port. Backups belong to the authenticated individual account on that
 host. Setup shows that account and the complete destination before final confirmation. A missing
-or inaccessible reconnect candidate never causes replacement creation; a create
+or inaccessible reconnect candidate never causes replacement creation. A create
 collision offers a checked available suggestion such as `ballin-backups-2`.
 Accept it or enter another name; setup never silently reconnects to the existing
 repository. A name can become unavailable before creation; follow the reported
@@ -361,23 +361,23 @@ Issues, Wiki, Projects and pull requests. These optional housekeeping settings
 may remain enabled when the service or credential does not permit the update;
 backup setup can still complete. Reconnect leaves existing settings unchanged.
 
-Fresh create or reconnect setup asks whether to review sensitive sources for
-inclusion, with “No” as the default. Final confirmation saves the selection. Review
+Fresh create or reconnect setup previews sensitive sources, then asks whether to
+include them, defaulting to “No.” Choosing No excludes them and continues. Review
 [what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
 baseline, sensitive-source scope, and privacy limitations.
 
-Reconnect inspects the existing backup before asking. Declining skips
-sensitive-source discovery. Selecting it reviews paths, resolved targets, and
-availability. For synced Claude skills, Ballin reads local collection manifests
-to select plugin packages; it does not read selected file contents or create
-backup snapshots during this preview. Access or resolution errors stop setup.
+The preview shows available resolved source paths. For synced Claude
+skills, Ballin reads local collection manifests to select plugin packages; it does
+not read selected file contents or create backup snapshots during this preview.
+Access or resolution errors prevent inclusion, but you can still choose exclusion.
 See [source preview](backup-sources.md#repository-inclusion).
 
-Final confirmation covers the destination and source selection. If you decline,
-Ballin makes no backup-specific changes. If you approve, it revalidates the
+Ballin saves your answered sensitive-source choice immediately, even if you later
+decline or cancel. Final confirmation covers the destination. If you decline,
+Ballin does not create or connect a repository. If you approve, it revalidates the
 destination, creates or reconnects to the repository, attempts optional branch
-protection, clears local backup comparison state, and then saves the destination,
-sensitive-source choice, and any supported preferences recovered from the backup.
+protection, clears local backup comparison state, and then saves the destination
+and any supported preferences recovered from the backup.
 Successful new protection gets one concise confirmation during standalone setup;
 installation keeps that success silent. Unsupported protection is silent. A permission note or warning about unconfirmed protection is nonfatal
 and does not mean backup
@@ -476,10 +476,9 @@ destination, whether sensitive sources are included, and whether automatic
 backup during update is enabled, plus the
 [local last-success record](backup-sources.md#last-successful-backup). It then
 offers to review sensitive-source inclusion and automatic backup using your
-current settings as defaults. The sensitive-source choice requires explicit
-confirmation; both choices are saved after the review completes. Cancelling
-leaves these settings unchanged. This review keeps the destination and does not
-run a backup.
+current settings as defaults. Each answered choice is saved before the next question; cancelling
+later leaves earlier confirmed choices saved. This review keeps the destination
+and does not run a backup.
 
 To change sensitive-source inclusion or automatic backup during update while
 keeping your destination, run `ballin setup` for

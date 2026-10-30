@@ -93,7 +93,7 @@ fs.readFileSync = (file, ...args) => {
     fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
     const result = run('y\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, `Sensitive sources available now:\n  pipx: installation metadata\n  zshrc.sh: ${JSON.stringify(path.join(root, '.zshrc'))}\n`);
+    assert.include(result.stdout, 'Sensitive source paths available now:\n  ~/.zshrc\npipx installation metadata is also available.\n');
     assert.notInclude(result.stdout, ' -> ');
     assert.notInclude(result.stdout, 'Sources not found now:');
     assert.notInclude(result.stdout, 'Unavailable now:');
@@ -103,7 +103,7 @@ fs.readFileSync = (file, ...args) => {
   });
 
   [false, true].forEach((included) => {
-    it(`reviews the override instruction source only after sensitive opt-in: ${included}`, () => {
+    it(`reviews the override instruction source before the inclusion question: ${included}`, () => {
       const codex = path.join(root, '.codex'); fs.mkdirSync(codex);
       const override = path.join(codex, 'AGENTS.override.md');
       fs.writeFileSync(override, 'SYNTHETIC_OVERRIDE_CONTENT');
@@ -116,20 +116,19 @@ fs.readFileSync = (file, ...args) => {
           fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
           return discoverOverride(context);
         };\n`);
-      const result = run(`${included ? 'y' : 'n'}\ny\nn\nn\n`);
+      const result = run(`${included ? 'y' : 'n'}\nn\nn\n`);
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(fs.existsSync(probes), included);
+      assert.isTrue(fs.existsSync(probes));
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
-      if (included) assert.include(result.stdout, `codex_AGENTS.override.md: ${JSON.stringify(override)}\n`);
-      else assert.notInclude(result.stdout, 'codex_AGENTS.override.md:');
+      assert.include(result.stdout, '~/.codex/AGENTS.override.md\n');
       assert.include(result.stdout, 'docs/backup-sources.md#what-will-ballin-back-up');
       assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
     });
   });
 
   [false, true].forEach((included) => {
-    it(`reviews fixed HOME user skills independently of CODEX_HOME only after opt-in: ${included}`, () => {
+    it(`reviews fixed HOME user skills independently of CODEX_HOME before the inclusion question: ${included}`, () => {
       const skills = path.join(root, '.agents', 'skills');
       fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
       fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_USER_SKILL_CONTENT');
@@ -143,16 +142,16 @@ fs.readFileSync = (file, ...args) => {
           fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
           return discoverUserSkills(context);
         };\n`);
-      const result = run(`${included ? 'y' : 'n'}\ny\nn\nn\n`, ['setup'], { CODEX_HOME: active });
+      const result = run(`${included ? 'y' : 'n'}\nn\nn\n`, ['setup'], { CODEX_HOME: active });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(fs.existsSync(probes), included);
+      assert.isTrue(fs.existsSync(probes));
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
-      if (included) {
-        assert.include(result.stdout, `codex_user_skills.bundle.json: ${JSON.stringify(skills)}\n`);
+      {
+        assert.include(result.stdout, '~/.agents/skills\n');
         assert.notInclude(result.stdout, 'Sources not found now:');
         assert.notInclude(result.stdout, 'codex_skills.bundle.json');
-      } else assert.notInclude(result.stdout, 'codex_user_skills.bundle.json:');
+      }
     });
   });
 
@@ -161,11 +160,11 @@ fs.readFileSync = (file, ...args) => {
       const initial = configFor('repository', enabled);
       writeConfig(initial);
       fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
-      const result = run('\ny\n\n\n');
+      const result = run('\n\n\n');
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, `Review files that may contain credentials or private information for backup inclusion? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.include(result.stdout, `Include sensitive sources in future backups? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `Usage analytics are currently ${enabled ? 'enabled' : 'disabled'}.`);
+      assert.notInclude(result.stdout, 'Usage analytics are currently');
       assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
       assert.include(result.stdout, `Usage analytics: ${enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` unchanged at \`${enabled}\`).`);
       assert.include(result.stdout, `Automatic backup during updates: ${enabled ? 'enabled' : 'disabled'} (\`update.backup\` unchanged at \`${enabled}\`).`);
@@ -174,16 +173,16 @@ fs.readFileSync = (file, ...args) => {
       assert.deepEqual(readConfig(), initial);
       assert.include(result.stdout, '\n\n😎 Ballin preference review complete.\n');
       if (enabled) {
-        assert.include(result.stdout, 'pipx: installation metadata');
-        assert.include(result.stdout, JSON.stringify(path.join(root, '.zshrc')));
-      } else assert.notInclude(result.stdout, 'pipx:');
+        assert.include(result.stdout, 'pipx installation metadata is also available.');
+        assert.include(result.stdout, '~/.zshrc');
+      } else assert.include(result.stdout, 'pipx installation metadata is also available.');
     });
     it(`changes all ${enabled} choices through the existing owners`, () => {
       writeConfig(configFor('repository', enabled));
       const answer = enabled ? 'n' : 'y';
-      const result = run(`${answer}\ny\n${answer}\n${answer}\n`);
+      const result = run(`${answer}\n${answer}\n${answer}\n`);
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, enabled ? 'Exclude sensitive sources from future backups? [y/N]' : 'Include sensitive sources in future backups? [y/N]');
+      assert.include(result.stdout, enabled ? 'Include sensitive sources in future backups? [Y/n]' : 'Include sensitive sources in future backups? [y/N]');
       const config = readConfig();
       assert.equal(config.backup.includeSensitive, String(!enabled));
       assert.equal(config.update.backup, String(!enabled));
@@ -195,26 +194,45 @@ fs.readFileSync = (file, ...args) => {
     });
   });
 
+  it('renders the single sensitive question and saves No before the next question', () => {
+    writeConfig(configFor('repository', true));
+    const result = run('n\n\n\n'); assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^==> Backup preferences\nℹ️  Inventories/u);
+    assert.include(result.stdout, '🔗 Backup source details:\nhttps://');
+    assert.equal(result.stdout.split('Include sensitive sources in future backups?').length - 1, 1);
+    assert.notInclude(result.stdout, 'Review files that may contain');
+    assert.include(result.stdout, '+ Sensitive sources in backups: excluded');
+    assert.isBelow(result.stdout.indexOf('+ Sensitive sources in backups: excluded'), result.stdout.indexOf('Automatically run'));
+    assert.include(result.stdout, '==> Analytics\nℹ️  Optional analytics report command');
+    assert.include(result.stdout, '✓ Automatic backup during updates: enabled');
+    assert.notInclude(result.stdout, '🔄 Automatically'); assert.notInclude(result.stdout, 'Ctrl-C to cancel');
+    assert.equal(readConfig().backup.includeSensitive, 'false'); assert.equal(readConfig().update.backup, 'true');
+  });
+  it('omits the cancellation hint in interactive preference review', () => {
+    fs.appendFileSync(guardPath, "require('tty').isatty = (fd) => fd === 0;\n");
+    const result = run('n\nn\nn\n'); assert.equal(result.status, 0, result.stderr);
+    assert.notInclude(result.stdout, 'Ctrl-C to cancel');
+  });
   it('reviews only analytics when unconfigured', () => {
     const initial = configFor('unconfigured');
     writeConfig(initial);
     const result = run('y\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Review files that may contain');
+    assert.notInclude(result.stdout, 'Include sensitive sources in future backups?');
     assert.notInclude(result.stdout, 'Automatically run');
     assert.include(result.stdout, 'Run `ballin backup setup`');
-    assert.include(result.stdout, 'Share command and backup results with a random install ID.\nNo backup contents, destination identities, configuration values, or raw errors are sent.\nAnalytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
+    assert.include(result.stdout, 'ℹ️  Optional analytics report command results, not backup contents.\n🔗 Analytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
     assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
     assert.equal(readConfig().update.backup, 'false');
     assert.equal(readConfig().analytics.enabled, 'true');
   });
 
-  ['', 'y', 'y\n', 'y\ny', 'y\nn\n'].forEach((input) => {
+  ['', 'y'].forEach((input) => {
     it(`leaves unconfirmed sensitive choice unchanged on ${JSON.stringify(input)}`, () => {
       const before = fs.readFileSync(configPath, 'utf8');
       const result = run(input);
       assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'Preference review cancelled');
+      assert.include(result.stdout, '\nReview cancelled. Earlier confirmed choices remain saved.\nRun `ballin setup`');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
       assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup|analytics.enabled)` (?:set to|unchanged at)/u);
@@ -224,19 +242,19 @@ fs.readFileSync = (file, ...args) => {
     });
   });
 
-  ['n\ny\n', 'n\ny\nn', 'n\ny\nn\n', 'n\ny\nn\nn'].forEach((input) => {
+  ['n\n', 'n\nn', 'n\nn\n', 'n\nn\nn'].forEach((input) => {
     it(`stops at EOF and retains only confirmed choices: ${JSON.stringify(input)}`, () => {
       writeConfig(configFor('repository', true));
       const result = run(input);
       assert.equal(result.status, 0, result.stderr);
       const config = readConfig();
       assert.equal(config.backup.includeSensitive, 'false');
-      assert.equal(config.update.backup, input.startsWith('n\ny\nn\n') ? 'false' : 'true');
+      assert.equal(config.update.backup, input.startsWith('n\nn\n') ? 'false' : 'true');
       assert.equal(config.analytics.enabled, 'true');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved');
       assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
       assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
-      if (!input.startsWith('n\ny\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
+      if (!input.startsWith('n\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
     });
   });
 
@@ -273,10 +291,10 @@ fs.readFileSync = (file, ...args) => {
       let signalled = false;
       child.stdout.on('data', (chunk: Buffer) => {
         output += chunk.toString();
-        const prompt = choice === 'sensitive' ? 'Review files that may contain' : 'Automatically run';
+        const prompt = choice === 'sensitive' ? 'Include sensitive sources in future backups?' : 'Automatically run';
         if (!signalled && output.includes(prompt)) { signalled = true; child.kill('SIGINT'); }
       });
-      if (choice === 'automatic') child.stdin.write('n\ny\n');
+      if (choice === 'automatic') child.stdin.write('n\n');
       const result = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
         const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('fixture prompt timeout')); }, 3000);
         child.once('error', (error: Error) => { clearTimeout(timer); reject(error); });
@@ -305,7 +323,7 @@ fs.readFileSync = (file, ...args) => {
   }
   it('accepts full words, mixed case and whitespace while reprompting invalid complete answers', () => {
     writeConfig(configFor('repository', true));
-    const result = run('private invalid answer\n  nO \n YES\n\tno\t\n YeS \n');
+    const result = run('private invalid answer\n  nO \n\tno\t\n YeS \n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, 'Please enter yes or no.');
     assert.notInclude(result.stdout, 'private invalid answer');
@@ -317,7 +335,7 @@ fs.readFileSync = (file, ...args) => {
   it('accepts native boolean choices', () => {
     const config = configFor('repository');
     writeConfig({ ...config, backup: { ...config.backup, includeSensitive: true }, update: { backup: false }, analytics: { enabled: true } });
-    const result = run('\ny\n\n\n');
+    const result = run('\n\n\n');
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readConfig().backup.includeSensitive, 'true');
     assert.equal(readConfig().update.backup, 'false');
@@ -327,13 +345,14 @@ fs.readFileSync = (file, ...args) => {
   it('discloses current and future sensitive sources before acceptance without adding consent state', () => {
     const initial = configFor('repository', false);
     writeConfig(initial);
-    const result = run('n\ny\nn\nn\n');
+    const result = run('n\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
     const disclosure = 'Backup source details:';
     assert.isAtLeast(result.stdout.indexOf(disclosure), 0);
-    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Review files that may contain'));
-    assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Review files that may contain'));
-    const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Review files that may contain'));
+    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Include sensitive sources in future backups?'));
+    assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Include sensitive sources in future backups?'));
+    const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Include sensitive sources in future backups?'));
+    assert.include(result.stdout, 'Inventories and filtered preferences can contain private information or secrets even without sensitive sources.\n🔗 Backup source details:\n');
     assert.include(consent, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\n');
     assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
     assert.notInclude(result.stdout, 'Excluding sources does not remove');
@@ -353,6 +372,20 @@ fs.readFileSync = (file, ...args) => {
     assert.include(result.stdout, 'Unable to review');
     assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     assert.notInclude(result.stdout, 'Automatically run');
+  });
+
+  it('allows exclusion after source review fails without saving inclusion', () => {
+    fs.writeFileSync(path.join(root, '.zshrc'), 'fixture content');
+    fs.appendFileSync(guardPath, `const realpath = fs.realpathSync; fs.realpathSync = (file, ...args) => {
+      if (file === ${JSON.stringify(path.join(root, '.zshrc'))}) throw new Error('fixture resolution failure');
+      return realpath(file, ...args);
+    };\n`);
+    writeConfig(configFor('repository', true));
+    const result = run('n\n\n\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Unable to review'); assert.include(result.stdout, '+ Sensitive sources in backups: excluded');
+    assert.equal(readConfig().backup.includeSensitive, 'false');
+    assert.include(result.stdout, '😎 Ballin preference review complete.');
   });
 
   const denyReadAccess = (file: string): string => {
@@ -438,8 +471,8 @@ fs.readFileSync = (file, ...args) => {
     const alias = path.join(root, 'codex-alias'); fs.symlinkSync(codex, alias);
     const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
-    assert.include(result.stdout, `codex_skills.bundle.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.include(result.stdout, '~/.codex/config.toml');
+    assert.include(result.stdout, '~/.codex/skills');
     assert.equal(readConfig().backup.includeSensitive, 'true');
   });
 
@@ -463,29 +496,72 @@ fs.readFileSync = (file, ...args) => {
       }\n`);
     const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, `codex_config.toml: ${JSON.stringify(path.join(alias, 'config.toml'))} -> ${JSON.stringify(path.join(codex, 'config.toml'))}`);
-    assert.include(result.stdout, `codex_skills.bundle.json: ${JSON.stringify(path.join(alias, 'skills'))} -> ${JSON.stringify(path.join(codex, 'skills'))}`);
+    assert.include(result.stdout, '~/.codex/config.toml');
+    assert.include(result.stdout, '~/.codex/skills');
     assert.equal(readConfig().backup.includeSensitive, 'true');
   });
 
+  it('shows distinct resolved files and directories outside HOME without shortening their prefix', () => {
+    const outside = fs.mkdtempSync(`${root}-outside-`);
+    try {
+      const actual = fs.realpathSync(outside);
+      fs.mkdirSync(path.join(outside, 'skills', 'one'), { recursive: true });
+      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
+      fs.writeFileSync(path.join(outside, 'AGENTS.md'), 'fixture');
+      fs.writeFileSync(path.join(outside, 'skills', 'one', 'SKILL.md'), 'fixture');
+      fs.writeFileSync(path.join(root, '.zshrc'), 'fixture');
+      const result = run('y\nn\nn\n', ['setup'], { CODEX_HOME: outside });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      for (const suffix of ['config.toml', 'AGENTS.md', 'skills']) {
+        assert.include(result.stdout, `  ${path.join(actual, suffix)}\n`);
+      }
+      assert.include(result.stdout, '  ~/.zshrc\n');
+      assert.notInclude(result.stdout, 'codex_config.toml:');
+      assert.notInclude(result.stdout, `~${actual.slice(root.length)}`);
+    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
+  });
+  it('shows printable paths with spaces, quotes, and backslashes without added delimiters', () => {
+    const outside = fs.mkdtempSync(`${root}-space \"quote\" \\slash-`);
+    try {
+      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
+      const result = run('n\nn\nn\n', ['setup'], { CODEX_HOME: outside });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, `  ${path.join(fs.realpathSync(outside), 'config.toml')}\n`);
+    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
+  });
+  it('escapes terminal controls and line separators in resolved paths', () => {
+    const outside = fs.mkdtempSync(`${root}-line\nreturn\r${String.fromCharCode(27)}[31m\u0085\u202e\u2028-`);
+    try {
+      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
+      const result = run('n\nn\nn\n', ['setup'], { CODEX_HOME: outside });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const actual = path.join(fs.realpathSync(outside), 'config.toml');
+      const expected = JSON.stringify(actual).replace(/\u0085/gu, '\\u0085').replace(/\u202e/gu, '\\u202e').replace(/\u2028/gu, '\\u2028');
+      assert.include(result.stdout, `  ${expected}\n`);
+      for (const unsafe of ['\r', String.fromCharCode(27), '\u0085', '\u202e', '\u2028']) assert.notInclude(result.stdout, unsafe);
+      assert.notInclude(result.stdout, actual);
+    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
+  });
   it('reviews recursive Codex directories with metadata without collecting their contents', () => {
     const skills = path.join(root, '.codex', 'skills');
     fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
     fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_PRIVATE_CONTENT');
     const result = run('y\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'codex_skills.bundle.json:');
-    assert.include(result.stdout, JSON.stringify(skills));
+    assert.include(result.stdout, '~/.codex/skills');
+    assert.notInclude(result.stdout, 'codex_skills.bundle.json:');
     assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
   });
 
-  it('preserves the existing sensitive choice when final confirmation is cancelled', () => {
+  it('retains the confirmed sensitive choice when the next prompt ends', () => {
     const initial = configFor('repository', true);
     writeConfig(initial);
     const before = fs.readFileSync(configPath, 'utf8');
     const result = run('y\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+    assert.equal(readConfig().backup.includeSensitive, 'true');
+    assert.equal(readConfig().update.backup, 'false');
+    assert.notEqual(fs.readFileSync(configPath, 'utf8'), before);
   });
 
   it('reports prompt input failure without changing pending choices', () => {
@@ -551,18 +627,57 @@ fs.readFileSync = (file, ...args) => {
       const result = run('y\ny\ny\ny\n');
       assert.equal(result.status, 1);
       const key = ({ sensitive: 'backup.includeSensitive', automatic: 'update.backup', analytics: 'analytics.enabled', 'missing analytics': 'analytics.enabled' } as Record<string, string>)[name];
-      if (key) assert.equal(result.stderr, `ballin setup: Invalid \`${key}\`; expected true or false.\nRepair the local configuration before retrying. Use \`ballin config get\` to inspect it or \`ballin config reset\` to restore defaults.\n`);
-      assert.include(result.stderr, 'Repair the local configuration');
+      if (key) assert.equal(result.stderr, `ballin setup: Invalid \`${key}\`; expected true or false.\nRepair the file, or run \`ballin config reset\` to replace it with defaults.\n`);
+      if (name === 'JSON' || name === 'root') assert.equal(result.stderr, 'ballin setup: Local config is invalid.\nRepair the file, or run `ballin config reset` to replace it with defaults.\n');
+      assert.include(result.stderr, 'Repair the file');
       assert.notInclude(result.stdout, 'Review your Ballin');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     });
   });
-  it('does not create missing config', () => {
+  it('creates missing config and continues preference review', () => {
     fs.rmSync(configPath);
-    const result = run('y\n');
+    const result = run('n\n');
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, '⚙️  Created config: ~/ballin.config.json\n');
+    assert.include(result.stdout, 'No backup is configured.');
+    assert.include(result.stdout, '😎 Ballin preference review complete.');
+    assert.equal(readConfig().analytics.enabled, 'false');
+    assert.isNull(readConfig().backup.repository);
+  });
+  it('preserves an unreadable config and reports access guidance', () => {
+    const before = fs.readFileSync(configPath, 'utf8');
+    fs.appendFileSync(guardPath, `const guardedRead = fs.readFileSync; fs.readFileSync = (file, ...args) => {
+      if (file === ${JSON.stringify(configPath)}) { const error = new Error('fixture access denied'); error.code = 'EACCES'; throw error; }
+      return guardedRead(file, ...args);
+    };\n`);
+    const result = run('n\n');
     assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'ballin setup: Local config is missing.\nRepair the local configuration before retrying. Use `ballin config get` to inspect it or `ballin config reset` to restore defaults.\n');
-    assert.isFalse(fs.existsSync(configPath));
+    assert.equal(result.stderr, 'ballin setup: Unable to read local config.\nCheck that the config file and its parent directory are accessible and readable.\n');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+  });
+  it('preserves a dangling config symlink and reports access guidance', () => {
+    fs.rmSync(configPath);
+    const target = path.join(root, 'missing-target');
+    fs.symlinkSync(target, configPath);
+    const result = run('n\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to read local config.');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readlinkSync(configPath), target);
+    assert.isFalse(fs.existsSync(target));
+  });
+  it('does not overwrite a config created concurrently', () => {
+    fs.rmSync(configPath);
+    fs.appendFileSync(guardPath, `const copy = fs.copyFileSync; fs.copyFileSync = (source, target, flags) => {
+      if (target === ${JSON.stringify(configPath)}) fs.writeFileSync(target, 'concurrent config');
+      return copy(source, target, flags);
+    };\n`);
+    const result = run('n\n');
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to create local config');
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), 'concurrent config');
   });
 
   ['missing', 'malformed', 'enabled'].forEach((state) => {

@@ -213,7 +213,7 @@ esac
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.isTrue(result.stdout.startsWith("==> Setting up Ballin\n"), result.stdout);
         const separator = scenario === 'initial configuration'
-          ? `\nInitial configuration\n${docsUrl}#what-will-installation-change\n`
+          ? `\nInitial configuration\n🔗 Installation details:\n${docsUrl}#what-will-installation-change\n`
           : existing ? '' : '\n';
         assert.include(result.stdout, `Git output fixture.\n${separator}Typed setup fixture.\n\n${terminalGuidance}\n`);
         assert.notInclude(result.stdout, '\n\n\n');

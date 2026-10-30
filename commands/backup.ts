@@ -701,13 +701,11 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       process.exitCode = 1;
       return;
     }
-    const configExisted = fs.existsSync(configPath);
     if (!configure(repoDir, backupSetupDocsUrl, configPath, true)) {
       writeStderrLine('ballin backup setup: unable to create or update config');
       process.exitCode = 1;
       return;
     }
-    if (!configExisted) writeStdoutLine();
     let cancelled = false;
     const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
