@@ -379,7 +379,7 @@ describe('saved backup discovery', function() {
     fs.writeFileSync(configPath, '{broken');
     for (const args of [['read'], ['list', 'extra'], ['list', '--verbose'], ['--help']]) {
       const result = run(args); assert.equal(result.status, args[0] === '--help' ? 0 : 1);
-      assert.include(result.stdout + result.stderr, args[0] === '--help' ? 'ballin backup list' : args[0] === 'read' ? 'expected one snapshot' : 'expected no arguments');
+      assert.include(result.stdout + result.stderr, args[0] === '--help' ? 'ballin backup <command>' : args[0] === 'read' ? 'expected one snapshot' : 'expected no arguments');
       assert.notInclude(result.stdout + result.stderr, 'Options:');
       assert.deepEqual(state().requests, []);
       assert.equal(fs.readFileSync(configPath, 'utf8'), '{broken');

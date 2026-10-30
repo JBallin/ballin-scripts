@@ -364,7 +364,7 @@ require(${JSON.stringify(ballinPath)});
       });
       assert.equal(result.status, 0, result.stderr);
       assert.include(result.stdout, 'back up Ballin-managed environment state');
-      assert.include(result.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
+      assert.include(result.stdout, 'ballin help [command...]');
       assert.equal(result.stderr, '');
       assert.deepEqual(state().requests, []);
     });

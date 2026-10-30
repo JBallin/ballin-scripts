@@ -87,10 +87,10 @@ Saved snapshots of your tools and configuration give you a reference when
 | Command | Purpose |
 | --- | --- |
 | `ballin help [command...]` | Shows available commands or help for a command or subcommand. |
-| [`ballin update`](docs/capabilities.md#ballin-update) | Runs configured update tasks. |
+| [`ballin update`](docs/capabilities.md#ballin-update) | Updates your development environment. |
 | [`ballin backup`](docs/capabilities.md#ballin-backup) | Updates snapshots in the configured backup. |
-| [`ballin doctor`](docs/capabilities.md#ballin-doctor) | Checks the managed environment. |
-| [`ballin setup`](docs/optional-capabilities.md#guided-preference-review) | Reviews local onboarding preferences. |
+| [`ballin doctor`](docs/capabilities.md#ballin-doctor) | Checks the Ballin-managed environment. |
+| [`ballin setup`](docs/optional-capabilities.md#guided-preference-review) | Reviews local Ballin preferences. |
 | [`ballin config`](docs/optional-capabilities.md#working-with-settings) | Reads and updates local Ballin settings. |
 | `ballin self-update` | Updates Ballin itself. |
 | [`ballin uninstall`](docs/installation.md#uninstall) | Removes Ballin. |

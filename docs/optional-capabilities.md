@@ -7,7 +7,7 @@ keep updates predictable while letting you opt in to broader automation.
 
 ## Guided preference review
 
-Run `ballin setup` to review onboarding choices again without reinstalling:
+Run `ballin setup` to review local Ballin preferences without reinstalling:
 
 ```shell
 ballin setup
