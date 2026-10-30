@@ -4,7 +4,6 @@ Use `ballin help` to see available commands, or `ballin help <command...>` for
 syntax and options, such as `ballin help backup read`.
 
 You can also append `--help` to a command, such as `ballin backup setup --help`.
-Config operations share one help page.
 
 *Square brackets mark optional arguments; angle brackets mark required values.*
 
