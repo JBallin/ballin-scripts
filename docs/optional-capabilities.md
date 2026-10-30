@@ -48,8 +48,14 @@ an existing setting. Use `ballin help config` for usage, even if the config
 file is missing or unreadable.
 
 Use `ballin config reset` to recover a missing or malformed config file. This
-restores defaults and replaces saved settings. For read or save errors, check
-the config file's permissions and its parent directory before retrying.
+restores defaults and replaces saved settings. If the file is missing, reset
+creates one readable only by its owner. For read or save errors, check the config
+file's permissions and its parent directory before retrying.
+
+For custom config files, Ballin retains Unix permission bits and follows working
+symlinks. Custom ACLs and ownership metadata are not copied. Replace hard-linked
+configs with a regular file before saving. For a broken symlink, restore its target
+or replace the link with a regular file.
 
 ## Node.js
 
