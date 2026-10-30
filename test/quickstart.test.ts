@@ -1338,7 +1338,7 @@ system_sudo=fixture_sudo
       assert.notInclude(readLog(), 'core-startup-reloaded');
       assert.notInclude(result.stdout, 'Missing prerequisites:');
       assert.include(result.stdout, 'Proceed with installation? [y/N]');
-      assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
+      assert.include(result.stdout, '\n\nBallin installation cancelled.\nRerun the installer when you’re ready.\n');
       const childEnv = JSON.parse(fs.readFileSync(path.join(root, 'core-env.json'), 'utf8'));
       const parentEnv = JSON.parse(fs.readFileSync(path.join(root, 'parent-env.json'), 'utf8'));
       assert.equal(childEnv.BASH_ENV, '');
@@ -1372,7 +1372,7 @@ system_sudo=fixture_sudo
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'Missing prerequisites:');
       assert.include(result.stdout, 'Proceed with installation? [y/N]');
-      assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
+      assert.include(result.stdout, '\n\nBallin installation cancelled.\nRerun the installer when you’re ready.\n');
       assert.notInclude(readLog(), `exported-${name}:called`);
       assert.include(readLog(), 'parent-function-preserved');
       assert.include(readLog(), 'git:--version');
@@ -2663,6 +2663,7 @@ Proceed with installation? [y/N] `);
     // No startup selection is reached when prerequisite installation is declined.
     const declined = run('n\n', { FAKE_PROFILE_TARGET: 'n' });
     assert.equal(declined.status, 0, declined.stdout + declined.stderr);
+    assert.isTrue(declined.stdout.endsWith('Proceed with installation? [y/N] \n\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n'), declined.stdout);
     assert.isFalse(fs.existsSync(path.join(home, '.local')));
     linkFake('gh');
     const profile = path.join(home, '.zshrc');

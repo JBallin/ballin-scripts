@@ -73,7 +73,7 @@ fi
 if [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
   printf "\nInstall supported Node.js, then run this installer again.\n"
-  printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
+  printf '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
   exit 1
 else
   node_check=$(node -p "
@@ -92,7 +92,7 @@ else
     fi
     printf '\n'
     printf "\nUpdate or activate Node.js using your existing installation method, then run this installer again.\n"
-    printf 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
+    printf '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
     exit 1
   fi
 fi
@@ -200,7 +200,7 @@ if [ "$repo_existed" = false ]; then
       printf '\nNo answer received. Ballin installation stopped before installing Ballin.\n' >&2
       exit 1
     fi
-    printf "Ballin installation cancelled. Rerun the installer when you’re ready.\n"
+    printf "\nBallin installation cancelled.\nRerun the installer when you’re ready.\n"
     write_install_cancelled || exit 1
     exit 0
   fi

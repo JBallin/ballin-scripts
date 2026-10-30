@@ -10,6 +10,19 @@ describe('interactive setup with delayed terminal answers', function() {
   let sandbox: Sandbox;
   afterEach(() => { if (sandbox && fs.existsSync(sandbox.root)) cleanupSandbox(sandbox.root); });
 
+  it('separates the direct installer cancellation outcome from its rerun guidance', () => {
+    sandbox = createSandbox();
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], [
+      { prompt: 'Proceed with installation? [y/N] ', answer: 'n' },
+    ]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const output = result.stdout.replace(/\r\n/gu, '\n');
+    assert.include(output, 'Proceed with installation? [y/N] n\n\nBallin installation cancelled.\nRerun the installer when you’re ready.\n');
+    assert.notInclude(output, 'Setup complete!');
+    assert.isFalse(fs.existsSync(sandbox.repo));
+    assert.notInclude(fs.readFileSync(sandbox.log, 'utf8'), 'git:clone');
+  });
+
   const backupAnswers = [
     { prompt: 'GitHub hostname [github.com]: ', answer: '' },
     { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
