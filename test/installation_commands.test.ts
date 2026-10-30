@@ -24,6 +24,35 @@ describe('canonical installation commands', () => {
     assert.include(quick, 'only if you choose to set up backups'); assert.include(details, 'Ballin can be installed for maintenance without configuring backups.');
   });
   for (const shell of ['bash', 'zsh']) {
+    for (const partial of [false, true]) {
+      it(`does not execute ${partial ? 'a partial' : 'an empty'} failed download in ${shell}`, () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-doc-command-'));
+        try {
+          fs.writeFileSync(path.join(root, 'curl'), `#!/bin/sh
+${partial ? "printf '%s\\n' 'printf partial-script-executed; touch executed'" : ''}
+exit 22
+`, { mode: 0o755 });
+          const result = spawnSync('/bin/' + shell, ['-f', '-c', command('README.md')], {
+            encoding: 'utf8', cwd: root,
+            env: testChildEnvironment({ HOME: root, PATH: root + ':/bin:/usr/bin', SHELL: '/bin/' + shell }), timeout: 5000,
+          });
+          assert.equal(result.status, 22, result.stderr);
+          assert.equal(result.stdout, '');
+          assert.isFalse(fs.existsSync(path.join(root, 'executed')));
+        } finally { fs.rmSync(root, { recursive: true, force: true }); }
+      });
+    }
+    it(`preserves the downloaded installer's failure status in ${shell}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-doc-command-'));
+      try {
+        fs.writeFileSync(path.join(root, 'curl'), "#!/bin/sh\nprintf '%s\\n' 'exit 71'\n", { mode: 0o755 });
+        const result = spawnSync('/bin/' + shell, ['-f', '-c', command('README.md')], {
+          encoding: 'utf8', cwd: root,
+          env: testChildEnvironment({ HOME: root, PATH: root + ':/bin:/usr/bin', SHELL: '/bin/' + shell }), timeout: 5000,
+        });
+        assert.equal(result.status, 71, result.stderr);
+      } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    });
     it(`runs the actual README command with untouched prompt stdin in ${shell}`, () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-doc-command-'));
       try {
