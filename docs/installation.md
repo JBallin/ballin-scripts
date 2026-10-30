@@ -366,7 +366,7 @@ include them, defaulting to “No.” Choosing No excludes them and continues. R
 [what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
 baseline, sensitive-source scope, and privacy limitations.
 
-The preview shows paths, resolved targets, and availability. For synced Claude
+The preview shows available resolved source paths. For synced Claude
 skills, Ballin reads local collection manifests to select plugin packages; it does
 not read selected file contents or create backup snapshots during this preview.
 Access or resolution errors prevent inclusion, but you can still choose exclusion.
