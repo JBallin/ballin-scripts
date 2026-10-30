@@ -2464,7 +2464,7 @@ describe('repository backup lifecycle', function() {
     value.rulesets = [fixtureRuleset({ source: 'renamed-user/renamed' })];
     saveState(value); seedCache('zshrc.sh', 'base\n');
     const result = run(['setup', 'renamed']); ok(result); assert.equal(config().backup.repository.name, 'renamed');
-    assert.include(result.stdout, 'Validated private backup: https://github.com/renamed-user/renamed\nSensitive sources: included\nAutomatic backup during update: disabled\n');
+    assert.include(result.stdout, 'Validated private backup: https://github.com/renamed-user/renamed\nℹ️  Sensitive sources: included\nℹ️  Automatic backup during update: disabled\n');
     assert.notInclude(result.stdout, 'https://github.com/fixture-user/ballin-backups');
     assert.notMatch(result.stdout, /Sensitive sources in backups: (included|excluded) /u);
     assert.notInclude(result.stdout, 'Review files that may contain');
@@ -2729,7 +2729,7 @@ describe('repository backup lifecycle', function() {
     it(`defaults Enter to create while retaining final ${confirmation} consent`, () => {
       unconfigured(); const value = state(); value.exists = false; saveState(value);
       const before = fs.readFileSync(configPath, 'utf8');
-      const result = run(['setup'], 'y\n\n\n\nn\n' + (confirmation === 'eof' ? '' : `${confirmation}\nn\n`));
+      const result = run(['setup'], '\n\n\nn\n' + (confirmation === 'eof' ? '' : `${confirmation}\nn\n`));
       assert.equal(result.status, confirmation === 'no' ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, '==> Setting up GitHub backup\nCreate a new backup or reconnect to an existing one? [CREATE/reconnect] ');
       assert.include(result.stdout, 'Repository name [ballin-backups]: ');
@@ -2749,7 +2749,7 @@ describe('repository backup lifecycle', function() {
   for (const input of ['', 'invalid\n']) {
     it(`cancels EOF or invalid mode without defaulting to creation: ${JSON.stringify(input)}`, () => {
       unconfigured(); const before = fs.readFileSync(configPath, 'utf8');
-      const result = run(['setup'], 'y\n\n' + input);
+      const result = run(['setup'], '\n' + input);
       assert.equal(result.status, input ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Backup setup cancelled.');
       assert.notInclude(result.stdout, 'Repository name'); assert.isEmpty(mutations());

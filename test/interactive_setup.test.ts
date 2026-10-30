@@ -150,7 +150,7 @@ describe('interactive setup with delayed terminal answers', function() {
         const output = result.stdout.replace(/\r\n/gu, '\n');
         const update = '==> Updating Ballin\n' + (fetchOutput ? progress : '');
         const docs = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
-        const summary = 'Validated private backup: https://github.com/fixture-user/ballin-backups\nSensitive sources: excluded\nAutomatic backup during update: disabled\n';
+        const summary = 'ℹ️  Validated private backup: https://github.com/fixture-user/ballin-backups\nℹ️  Sensitive sources: excluded\nℹ️  Automatic backup during update: disabled\n';
         if (migration) {
           assert.include(output, update + '\n🙌 New configuration options have been added! Here are the updates:\n');
           if (backup) assert.include(output, `${docs}#what-installation-changes\n\n${summary}`);

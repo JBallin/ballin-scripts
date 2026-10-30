@@ -3072,7 +3072,7 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
       const retry = runSandbox(sandbox, ['quickstart'], 'yes\nno\n');
       assert.equal(retry.status, 0, retry.stdout + retry.stderr);
       assert.notInclude(retry.stdout, 'PATH entry already present');
-      assert.include(retry.stdout, '\nValidated private backup:');
+      assert.include(retry.stdout, '\nℹ️  Validated private backup:');
       assert.equal(fs.readFileSync(profile, 'utf8'), contents);
       const fixtureGit = path.join(sandbox.tools, 'git');
       fs.appendFileSync(fixtureGit, '\n# altered\n');
