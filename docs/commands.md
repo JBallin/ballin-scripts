@@ -3,9 +3,8 @@
 Use `ballin help` to see available commands, or `ballin help <command...>` for
 syntax and options, such as `ballin help backup read`.
 
-You can also append `--help` to a command, such as `ballin backup setup --help`
-or `ballin config set --help`. Config operations share one help page.
-The alias `ballin backup help` shows the backup command index.
+You can also append `--help` to a command, such as `ballin backup setup --help`.
+Config operations share one help page.
 
 *Square brackets mark optional arguments; angle brackets mark required values.*
 
@@ -13,7 +12,7 @@ The alias `ballin backup help` shows the backup command index.
 | --- | --- |
 | `ballin help [command...]` | Shows available commands or help for a command or subcommand. |
 | [`ballin update`](capabilities.md#ballin-update) | Updates your development environment. |
-| [`ballin backup`](capabilities.md#ballin-backup) | Updates snapshots in the configured backup. |
+| [`ballin backup`](capabilities.md#ballin-backup) | Back up selected development-environment state. |
 | [`ballin backup setup [repository-name] [--hostname <host>]`](installation.md#optional-backup-setup-and-reconnect) | Creates, reconnects to, or revalidates a private backup repository. |
 | [`ballin backup open`](installation.md#inspect-saved-backups) | Opens the backup and its history in your browser. |
 | [`ballin backup list`](installation.md#inspect-saved-backups) | Lists supported saved snapshots. |
