@@ -47,11 +47,6 @@ even inventories can contain private names, paths, and URLs.
 
 ## Other useful workflows
 
-- **[Topgrade](https://github.com/topgrade-rs/topgrade):** Choose it when your
-  main need is one update command across macOS, Linux, or Windows. It detects
-  supported tools and runs their update commands, with configurable steps and
-  custom commands. It can fill the maintenance role alongside a separate
-  backup workflow.
 - **[Homebrew Bundle](https://docs.brew.sh/Brew-Bundle-and-Brewfile):** Save
   supported installed packages with `brew bundle dump`, review a Brewfile, and
   use it to install or upgrade packages on another machine. Bundle can start
@@ -79,23 +74,6 @@ even inventories can contain private names, paths, and URLs.
   Use your editor's own workflow for supported settings and extensions across
   devices. For example, VS Code offers sync and conflict handling. Ballin's
   editor snapshots are saved references, not an editor sync service.
-- **[Cross-Code Organizer](https://github.com/mcpware/cross-code-organizer):**
-  Use its local dashboard to inspect AI coding-tool configuration across Claude
-  Code, Codex CLI, OpenCode, and DeepSeek Harness. It offers effective
-  configuration views where supported, Markdown editing, and duplicate cleanup
-  with undo; available actions vary by tool. Its Backup Center saves selected
-  AI-tool files and MCP definitions in local Git repositories with optional
-  remote pushes. Skill migration previews and copies portable `SKILL.md`
-  bundles between tools. Consider it for organizing configuration, skills, and
-  memories, alone or alongside Ballin. Ballin overlaps in selected Claude Code
-  and Codex configuration and skill snapshots, enabled through the
-  [sensitive-source opt-in](backup-sources.md), while also covering broader
-  macOS development-environment snapshots and maintenance.
-- **[skillshare](https://github.com/runkids/skillshare):** Choose it when you
-  want a maintained source of skills shared across coding tools. It distributes
-  skills from a source directory through symlinks or copies and supports Git
-  versioning for use on another machine. Use it to apply and synchronize skills;
-  Ballin's selected skill snapshots are backup references for manual recovery.
 
 A realistic alternative is **Homebrew Bundle + chezmoi or yadm + editor sync
 or Mackup + a small maintenance/setup script**. This gives you an explicit
@@ -131,6 +109,22 @@ or executing them.
 Snapshots can also help you select files for a future chezmoi or yadm repository.
 The saved text remains useful outside Ballin, but moving to a dotfile manager
 requires deciding which configuration to manage and how to apply it.
+
+## Related tools
+
+These options cover specific jobs that may overlap with or complement Ballin.
+
+| Tool | Useful for | Relationship to Ballin |
+| --- | --- | --- |
+| [Topgrade](https://github.com/topgrade-rs/topgrade) | Supported updates across macOS, Linux, and Windows. | Alternative for maintenance; choose one tool to own overlapping stages. |
+| [restic](https://github.com/restic/restic) | Encrypted file snapshots and restores using local or remote storage. | Adds broader file recovery alongside Ballin's selected snapshots. |
+| [Dotbot](https://github.com/anishathalye/dotbot) | Bootstrapping your dotfile repository with links and setup commands. | Applies your setup; Ballin captures selected existing state. |
+| [Home Manager](https://github.com/nix-community/home-manager) | Declaring user packages and dotfiles with Nix. | Applies a desired configuration on macOS or Linux. |
+| [Cross-Code Organizer](https://github.com/mcpware/cross-code-organizer) | Inspecting AI-tool configuration, skills, memories, and MCP servers; previewing portable skill copies. | Adds a dashboard and cleanup; selected backups use local Git with optional remote pushes. Actions vary by tool. |
+| [skillshare](https://github.com/runkids/skillshare) | Distributing one skill source through symlinks or copies. | Applies skills across tools; Ballin's snapshots are recovery references. |
+
+Ballin's selected [Claude Code and Codex snapshots](backup-sources.md) require
+sensitive-source opt-in and remain references for manual recovery.
 
 Missing a capability you need? [Start a discussion](https://github.com/JBallin/ballin-scripts/discussions)
 or propose a change through a [pull request](../CONTRIBUTING.md).
