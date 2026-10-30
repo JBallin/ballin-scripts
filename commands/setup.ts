@@ -12,7 +12,7 @@ const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./com
 
 const setupHelp = `Usage: ballin setup
 
-Review local backup and analytics preferences.
+Review local Ballin preferences.
 
 Backup choices cover sensitive-source inclusion and automatic backups, and appear when a backup is configured. Sensitive-source review applies to repository backups.
 

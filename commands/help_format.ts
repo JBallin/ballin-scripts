@@ -47,9 +47,9 @@ const formatHelp = (
     if (usage) {
       inUsage = true;
       usageIndent = width >= 'Usage: ballin'.length ? '       ' : '    ';
-      if (usageIndent.length === 4) return `Usage:\n${emphasizeIndented(wrapHelpWords(synopsisWords(usage[1]), width, usageIndent))}`;
+      if (usageIndent.length === 4) return `${bold('Usage:')}\n${emphasizeIndented(wrapHelpWords(synopsisWords(usage[1]), width, usageIndent))}`;
       const wrapped = wrapHelpWords(synopsisWords(usage[1]), width, 'Usage: ', usageIndent).split('\n');
-      return `Usage: ${bold(wrapped[0].slice(7))}${wrapped.length > 1 ? '\n' + emphasizeIndented(wrapped.slice(1).join('\n')) : ''}`;
+      return `${bold('Usage:')} ${bold(wrapped[0].slice(7))}${wrapped.length > 1 ? '\n' + emphasizeIndented(wrapped.slice(1).join('\n')) : ''}`;
     }
     if (!line) { inUsage = false; return line; }
     // Wrap syntax at argument boundaries. Shell continuations keep concrete
@@ -57,9 +57,9 @@ const formatHelp = (
     if (/^ +ballin(?: |$)/u.test(line)) {
       const indent = inUsage ? usageIndent : line.match(/^ +/u)![0];
       const text = line.trimStart();
-      return emphasizeIndented(inUsage
-        ? wrapHelpWords(synopsisWords(text), width, indent)
-        : wrapHelpWords(text.match(/'[^']*'|"[^"]*"|\S+/gu) ?? [], width, indent, indent + '    ', ' \\'));
+      return inUsage
+        ? emphasizeIndented(wrapHelpWords(synopsisWords(text), width, indent))
+        : wrapHelpWords(text.match(/'[^']*'|"[^"]*"|\S+/gu) ?? [], width, indent, indent + '    ', ' \\');
     }
     inUsage = false;
     // Table terms may include argument syntax. Descriptions align at their

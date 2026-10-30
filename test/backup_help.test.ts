@@ -146,8 +146,8 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
     const result = run(['help']);
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'ballin help [command...]');
-    assert.include(result.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
-    assert.include(result.stdout, 'You can also append `--help` to a command.');
+    assert.notInclude(result.stdout, 'Run `ballin help');
+    assert.include(result.stdout, 'You can also append `--help` to any command.');
     assert.lengthOf([...result.stdout.matchAll(/--help/gu)], 1);
   });
 

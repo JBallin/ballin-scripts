@@ -14,7 +14,9 @@ describe('help layout', () => {
   it('emphasizes help structure without styling descriptions or documentation labels', () => {
     const text = 'Usage: ballin doctor [--verbose]\n\nCheck readiness.\n\nOptions:\n    --verbose  show full details\n\nExisting backup: Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n';
     assert.equal(formatHelp(text, { columns: 80, isTTY: true }, { TERM: 'xterm' }),
-      'Usage: \x1b[1mballin doctor [--verbose]\x1b[0m\n\nCheck readiness.\n\n\x1b[1mOptions:\x1b[0m\n    \x1b[1m--verbose\x1b[0m  show full details\n\n\x1b[1mExisting backup:\x1b[0m Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n');
+      '\x1b[1mUsage:\x1b[0m \x1b[1mballin doctor [--verbose]\x1b[0m\n\nCheck readiness.\n\n\x1b[1mOptions:\x1b[0m\n    \x1b[1m--verbose\x1b[0m  show full details\n\n\x1b[1mExisting backup:\x1b[0m Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n');
+    assert.equal(formatHelp('Usage: ballin setup', { columns: 12, isTTY: true }, { TERM: 'xterm' }),
+      '\x1b[1mUsage:\x1b[0m\n    \x1b[1mballin\x1b[0m\n    \x1b[1msetup\x1b[0m');
     for (const mode of [
       { isTTY: false, env: { TERM: 'xterm', FORCE_COLOR: '1' } },
       { isTTY: true, env: { TERM: 'dumb', FORCE_COLOR: '1' } },
@@ -22,11 +24,11 @@ describe('help layout', () => {
     ]) assert.equal(formatHelp(text, { columns: 80, isTTY: mode.isTTY }, mode.env), text);
   });
 
-  it('aligns multiword table terms and styles copyable examples on supported terminals', () => {
+  it('aligns bold table terms and keeps example command lines plain on supported terminals', () => {
     assert.equal(formatHelp('    --file <path>  print original bytes\n', { columns: 30, isTTY: true }, { TERM: 'xterm' }),
       '    \x1b[1m--file <path>\x1b[0m\n        print original bytes\n');
     assert.equal(formatHelp('Examples:\n    ballin backup read zshrc.sh\n', { columns: 80, isTTY: true }, { TERM: 'xterm' }),
-      '\x1b[1mExamples:\x1b[0m\n    \x1b[1mballin backup read zshrc.sh\x1b[0m\n');
+      '\x1b[1mExamples:\x1b[0m\n    ballin backup read zshrc.sh\n');
   });
 
   it('wraps words and preserves paragraphs and lists', () => {
@@ -41,6 +43,7 @@ describe('help layout', () => {
     const wrapped = formatHelp(example, { columns: 40 });
     assert.equal(wrapped, '    ballin backup read \\\n        codex_skills.bundle.json \\\n        --file example/SKILL.md');
     assert.equal(wrapped.replace(/\\\n */gu, '').trim(), example.trim());
+    assert.equal(formatHelp(example, { columns: 40, isTTY: true }, { TERM: 'xterm' }), wrapped);
     const quoted = formatHelp('    ballin backup read bundle --file "skill name/SKILL.md"', { columns: 40 });
     assert.include(quoted, '"skill name/SKILL.md"');
   });

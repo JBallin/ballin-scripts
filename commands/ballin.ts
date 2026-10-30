@@ -58,25 +58,24 @@ const ballinHelp = `Usage: ballin <command> [options]
 Back up your dotfiles and update your macOS development environment.
 
 Commands:
-    update                update configured tools and run enabled backups
+    update                update your development environment
     backup                back up Ballin-managed environment state
-    doctor                check tools, configuration, and backup readiness
+    doctor                check the Ballin-managed environment
     config                view or change Ballin configuration
-    setup                 review local backup and analytics preferences
+    setup                 review local Ballin preferences
     self-update           update Ballin itself
     uninstall             remove Ballin
 
-Run \`ballin help <command...>\` for command or subcommand help.
-You can also append \`--help\` to a command.
+You can also append \`--help\` to any command.
 
 🔗 Project and documentation:
 https://github.com/JBallin/ballin-scripts
 `;
 const updateHelp = `Usage: ballin update
 
-Update the Ballin-managed macOS development environment.
+Update your development environment.
 
-Configured stages can update Homebrew, Node.js LTS, global npm packages, macOS, and Ballin, then back up environment state. Use \`ballin config get update\` to inspect settings.
+Run available tool updates and enabled maintenance, including backups. Use \`ballin config get update\` to inspect settings.
 `;
 
 const backupHelp = `Usage: ballin backup
@@ -106,7 +105,7 @@ New setup: Choose Create or Reconnect. Omit the repository name to choose it dur
 
 Existing backup: Validate the saved repository and review backup preferences. The saved host is retained; disconnect before choosing a different destination.
 
-Authenticate gh for the selected host before setup. Backups belong to your individual account on that host. Use a hostname, not a URL. For local backup and analytics preferences, use \`ballin setup\`.
+Authenticate gh for the selected host before setup. Backups belong to your individual account on that host. Use a hostname, not a URL. Review local Ballin preferences with \`ballin setup\`.
 
 🔗 Setup and recovery:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
@@ -154,7 +153,7 @@ Clear local backup linkage and comparison state. Preserve remote history, shared
 
 const doctorHelp = `Usage: ballin doctor [--verbose]
 
-Check whether the Ballin-managed environment is healthy.
+Check the Ballin-managed environment.
 
 Options:
     --verbose  show full readiness details
@@ -162,7 +161,7 @@ Options:
 
 const selfUpdateHelp = `Usage: ballin self-update
 
-Update the local \`ballin-scripts\` checkout, command shims, and configuration.
+Update Ballin itself.
 `;
 
 const uninstallHelp = `Usage: ballin uninstall
@@ -260,7 +259,7 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case undefined:
     case commandHelpOptionName:
     case 'help':
-      writeStdout(terminalCommandReferences(formatHelp(ballinHelp), ['ballin help <command...>']));
+      writeStdout(formatHelp(ballinHelp));
       return;
   }
 

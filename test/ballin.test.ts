@@ -39,7 +39,10 @@ describe('ballin', () => {
     assert.sameMembers(documentedCommands, [...topLevelCommandNames]);
     assert.include(result.stdout, 'back up Ballin-managed environment state');
     assert.include(result.stdout, 'view or change Ballin configuration');
-    assert.include(result.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
+    assert.include(result.stdout, 'update your development environment');
+    assert.include(result.stdout, 'check the Ballin-managed environment');
+    assert.include(result.stdout, 'review local Ballin preferences');
+    assert.include(result.stdout, 'ballin help [command...]');
     for (const detail of ['Examples:', '--verbose', 'backup.includeSensitive', 'configured backup',
       '[repository-name]', 'file name', '(ex:', 'local checkout', 'command shims']) {
       assert.notInclude(result.stdout, detail);
@@ -302,7 +305,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         assert.include(result.stdout, `ballin ${command}`);
         assert.notInclude(result.stdout, 'ballin config help');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
-        if (command === 'self-update') assert.include(result.stdout, 'local `ballin-scripts` checkout, command shims, and configuration');
+        if (command === 'self-update') assert.include(result.stdout, 'Update Ballin itself.');
         if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
         if (command === 'update') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get update` to inspect settings.');
         if (command === 'setup') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
