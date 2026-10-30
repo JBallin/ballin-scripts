@@ -1057,7 +1057,7 @@ main() {
     printf '🔗 Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
-      printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
+      printf "\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n"
       return 0
     fi
   fi
