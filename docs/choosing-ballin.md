@@ -112,8 +112,6 @@ requires deciding which configuration to manage and how to apply it.
 
 ## Related tools
 
-These options cover specific jobs that may overlap with or complement Ballin.
-
 | Tool | What it does |
 | --- | --- |
 | [Topgrade](https://github.com/topgrade-rs/topgrade) | Detects supported tools and runs their update commands on macOS, Linux, and Windows. |
