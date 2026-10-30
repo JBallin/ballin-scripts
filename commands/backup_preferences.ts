@@ -1,4 +1,4 @@
-const { terminalCommand } = require('./terminalStyle.ts');
+const { terminalCommand, terminalPath } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { createConfigStore, stringify } = require('../config/store.ts');
@@ -73,8 +73,9 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     .filter((definition) => definition.inclusionGroup === 'sensitive')
     .sort((left, right) => left.name.localeCompare(right.name, 'en'));
   const available: string[] = [];
-  const absent: string[] = [];
-  const unavailable: string[] = [];
+  let pipxAvailable = false;
+  let actualHome = homeDir;
+  try { actualHome = fs.realpathSync(homeDir); } catch { /* Preserve normal source discovery errors. */ }
   for (const definition of sensitiveDefinitions) {
     const observation = definition.discover({ homeDir, env });
     if (observation.status === 'discovery-failed') {
@@ -82,11 +83,10 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
       return false;
     }
     if (observation.status !== 'available') {
-      (observation.status === 'absent' ? absent : unavailable).push(definition.name);
       continue;
     }
     if (definition.name === 'pipx') {
-      available.push('pipx: installation metadata');
+      pipxAvailable = true;
       continue;
     }
     try {
@@ -112,7 +112,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
         if (observation.source.kind === 'directory' ? !stat.isDirectory() : !stat.isFile()) throw new Error('Unsupported source type');
         fs.accessSync(resolved, fs.constants.R_OK);
       }
-      available.push(`${definition.name}: ${displayPath(logical)}${logical === resolved ? '' : ` -> ${displayPath(resolved)}`}`);
+      available.push(displayPath(terminalPath(resolved, actualHome)));
     } catch (error) {
       if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
       writeStdoutLine(`Unable to review ${definition.name}: resolution or read access failed.`);
@@ -120,8 +120,9 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     }
   }
   writeStdoutLine();
-  writeStdoutLine(available.length ? 'Sensitive sources available now:' : 'Sensitive sources available now: none.');
-  available.forEach((line) => writeStdoutLine(`  ${line}`));
+  writeStdoutLine(available.length ? 'Sensitive source paths available now:' : 'Sensitive source paths available now: none.');
+  [...new Set(available)].forEach((line) => writeStdoutLine(`  ${line}`));
+  if (pipxAvailable) writeStdoutLine('pipx installation metadata is also available.');
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.

@@ -39,7 +39,7 @@ Self-update reports changes to supported sources or collection scope, or says wh
 compare them. If sensitive sources are enabled, the notice reminds you that your
 opt-in persists across updates and covers future supported sources.
 
-Ballin previews logical paths and resolved targets for selected regular files,
+Ballin previews resolved paths for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.

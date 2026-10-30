@@ -614,7 +614,7 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], 'y\ny\n'); ok(result);
     assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'true' },
       update: { ...before.update, backup: 'true' } });
-    assert.include(result.stdout, 'Sensitive sources available now:');
+    assert.include(result.stdout, 'Sensitive source paths available now:');
     for (const key of ['backup.includeSensitive', 'update.backup']) assert.lengthOf(result.stdout.split('`' + key + '` set to `true`'), 2);
     assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
     assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
@@ -1219,8 +1219,8 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], '\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
-    assert.include(result.stdout, `claude_agents.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'agents'))}`);
-    assert.include(result.stdout, `claude_skills.bundle.json: ${JSON.stringify(path.join(home, '.claude', 'skills'))}`);
+    assert.include(result.stdout, '"~/.claude/agents"');
+    assert.include(result.stdout, '"~/.claude/skills"');
     assert.notInclude(result.stdout, 'Your choice also covers future supported sources.');
     assert.notInclude(result.stdout, 'This review checks source locations, not selected file contents.');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
@@ -2012,7 +2012,7 @@ describe('repository backup lifecycle', function() {
     });
   }
 
-  const progressPreload = (nonTTY?: 'stdin' | 'stdout' | 'stderr', columns = 80): string => `
+  const progressPreload = (nonTTY?: 'stdin' | 'stdout' | 'stderr', columns = 80, delay = 0): string => `
     require('tty').isatty = (fd) => fd === 0 && ${JSON.stringify(nonTTY ?? '')} !== 'stdin';
     for (const name of ['stdout', 'stderr']) Object.defineProperty(process[name], 'isTTY', { value: name !== ${JSON.stringify(nonTTY ?? '')} });
     Object.defineProperty(process.stderr, 'columns', { value: ${columns} });
@@ -2020,6 +2020,7 @@ describe('repository backup lifecycle', function() {
     let status = '';
     fs.writeSync = function(fd, text, ...rest) { if (fd === 2) status = text === '\\r\\x1b[2K' ? '' : (text.startsWith('\\r\\n') ? text.slice(2) : text); return write.call(this, fd, text, ...rest); };
     child.spawnSync = function(command, args, ...rest) {
+      if (${delay} && args && (args.includes('user') || args.some((arg) => String(arg).startsWith('repos/fixture-user/')))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ${delay});
       fs.appendFileSync(${JSON.stringify(path.join(root, 'progress.log'))}, JSON.stringify({ args, status }) + '\\n');
       return spawn.call(this, command, args, ...rest);
     };
@@ -2105,7 +2106,11 @@ describe('repository backup lifecycle', function() {
   it('shows and clears setup validation status for an existing backup before the review prompt', () => {
     const result = run(['setup'], 'n\n', ttyEnv, progressPreload()); ok(result);
     assert.include(result.stderr, 'Checking backup setup…\r\x1b[2K');
-    assert.isTrue(progressRequests().some((r) => r.status === 'Checking backup setup…'));
+    const requests = progressRequests();
+    assert.equal(requests.find((r) => r.args.includes('user'))?.status, '');
+    assert.isTrue(requests.some((r) => r.status === 'Checking backup setup…' && r.args.some((arg) => String(arg).includes('/git/trees/'))));
+    assert.isTrue(requests.some((r) => r.status === 'Checking backup setup…' && r.args.some((arg) => String(arg).includes('/rulesets'))));
+    assert.equal(result.stderr.split('Checking backup setup…').length - 1, 1);
     assert.include(result.stdout, 'Include sensitive sources in future backups?');
     assert.notInclude(result.stdout, 'Review backup settings?');
   });
@@ -2118,10 +2123,34 @@ describe('repository backup lifecycle', function() {
     const value = state(); value.faults.auth = true; saveState(value);
     const result = run(['setup'], '', ttyEnv, progressPreload());
     assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Checking backup setup…\r\x1b[2K');
+    assert.notInclude(result.stderr, 'Checking backup setup…');
+    assert.isTrue(progressRequests().every((request) => request.status === ''));
     assert.notInclude(result.stdout, 'Review backup settings?');
     assert.isEmpty(mutations());
   });
+  for (const delay of [0, 150]) {
+    it(`keeps account and missing-name lookups quiet with ${delay}ms fixture delay`, () => {
+      unconfigured();
+      const result = run(['setup'], '\nreconnect\nmissing-name\n', ttyEnv, progressPreload(undefined, 80, delay));
+      ok(result); assert.include(result.stdout, 'missing or inaccessible');
+      assert.notInclude(result.stderr, 'Checking backup setup…');
+      const requests = progressRequests().filter((request) => request.args[0] === 'api');
+      assert.isTrue(requests.some((request) => request.args.includes('user')));
+      assert.isTrue(requests.some((request) => request.args.some((arg) => String(arg).includes('missing-name'))));
+      assert.isTrue(requests.every((request) => request.status === ''));
+      assert.isEmpty(mutations());
+    });
+    it(`shows status only after finding a reconnect candidate with ${delay}ms fixture delay`, () => {
+      unconfigured();
+      const result = run(['setup'], '\nreconnect\n\nn\nn\n', ttyEnv, progressPreload(undefined, 80, delay));
+      assert.equal(result.status, 1); assert.include(result.stdout, 'Backup setup cancelled.');
+      const requests = progressRequests().filter((request) => request.args[0] === 'api');
+      assert.equal(requests[0]?.status, ''); assert.isTrue(requests[0]?.args.includes('user'));
+      assert.equal(requests[1]?.status, ''); assert.isTrue(requests[1]?.args.includes('repos/fixture-user/ballin-backups'));
+      assert.isTrue(requests.some((request) => request.status === 'Checking backup setup…'));
+      assert.include(result.stderr, 'Checking backup setup…\r\x1b[2K'); assert.isEmpty(mutations());
+    });
+  }
   it('shows create status before creation and clears before setup results', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
     const result = run(['setup'], '\ncreate\n\nn\ny\nn\n', ttyEnv, progressPreload()); ok(result);
@@ -2424,7 +2453,8 @@ describe('repository backup lifecycle', function() {
           throw new Error('Raw contents must not be read during review');
         return original.call(this,file,...args); }; }`;
     const result = run(['setup'], '\nreconnect\n\ny\nn\n', {}, preload); assert.equal(result.status, 1);
-    assert.include(result.stdout, `${JSON.stringify(path.join(home, '.zshrc'))} -> ${JSON.stringify(fs.realpathSync(external))}`);
+    assert.include(result.stdout, `  ${JSON.stringify(fs.realpathSync(external))}\n`);
+    assert.notInclude(result.stdout, 'zshrc.sh:');
     assert.notInclude(result.stdout, 'Unavailable now:');
     assert.notInclude(result.stdout, 'private-review-secret'); assert.equal(mutations().length, 0);
     assert.include(result.stdout, 'Sensitive sources in backups: included');

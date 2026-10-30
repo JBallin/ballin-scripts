@@ -101,25 +101,28 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     } else host = selectedHost;
     if (configured.kind === 'repository') {
       const maintain = (): boolean => {
-        const account = checkSetup(() => readRepositoryAccount(host));
+        const account = readRepositoryAccount(host);
         if (repositoryName !== undefined) {
-          const found = checkSetup(() => candidateRepository(repositoryName, account));
+          const found = candidateRepository(repositoryName, account);
           if (!found || found.id !== configured.repository.id || found.ownerId !== configured.repository.ownerId) {
             writeStdoutLine('That name does not identify the configured backup. Check access; disconnect before choosing a different destination.');
             return false;
           }
         }
-        const read: RepositoryRead | RepositoryMaintenance = checkSetup(() => (
-          options.maintenanceOnly
+        const checked = checkSetup(() => {
+          const read: RepositoryRead | RepositoryMaintenance = options.maintenanceOnly
             ? inspectRepositoryMaintenance(configured.repository)
-            : requireRepositoryRead(inspectRepository(configured.repository))
-        ));
-        if (read.destination.name !== configured.repository.name) {
-          candidate.backup = { ...candidate.backup, repository: read.destination };
-          if (!saveBackupConfig(configPath, candidate)) return false;
-        }
-        configuredRecoveryUrl = repositoryUrl(read.destination, account);
-        reportManagedBranchProtection(checkSetup(() => ensureManagedBranchRuleset(read)), options.presentation === 'installation');
+            : requireRepositoryRead(inspectRepository(configured.repository));
+          if (read.destination.name !== configured.repository.name) {
+            candidate.backup = { ...candidate.backup, repository: read.destination };
+            if (!saveBackupConfig(configPath, candidate)) return undefined;
+          }
+          configuredRecoveryUrl = repositoryUrl(read.destination, account);
+          return { read, protection: ensureManagedBranchRuleset(read) };
+        });
+        if (!checked) return false;
+        const { read, protection } = checked;
+        reportManagedBranchProtection(protection, options.presentation === 'installation');
         const showSummary = options.showValidationSummary !== false;
         const summary = validatedBackupSummary(repositoryUrl(read.destination, account), candidate, showSummary);
         if (showSummary && options.reviewExistingSettings) writeStdoutLine(terminalHeading('Current backup settings'));
@@ -162,7 +165,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       };
       return maintain();
     }
-    const account = checkSetup(() => readRepositoryAccount(host));
+    const account = readRepositoryAccount(host);
     const choice = readPromptLine('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
     if (choice.eof) return cancelled();
     const mode = choice.text || 'create';
@@ -171,11 +174,11 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     let found: (RepositoryRead['destination'] & { redirected?: true }) | null = null;
     if (mode === 'create' && repositoryName === undefined) {
       try {
-        found = checkSetup(() => candidateRepository(suggested, account));
+        found = candidateRepository(suggested, account);
         // Only suggest names checked as missing. Never reuse a collision or a redirect.
         for (let suffix = 2; found && suffix <= 100; suffix += 1) {
           suggested = `ballin-backups-${suffix}`;
-          found = checkSetup(() => candidateRepository(suggested, account));
+          found = candidateRepository(suggested, account);
         }
         if (found) suggested = undefined;
       } catch (error) {
@@ -199,7 +202,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       if (nameLine.eof) return cancelled();
       name = nameLine.text || suggested || '';
       if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
-      found = checkSetup(() => candidateRepository(name, account));
+      found = candidateRepository(name, account);
       if (mode === 'reconnect' && found && !found.redirected) {
         const selected = found;
         const inspection = checkSetup(() => inspectRepository(selected));
