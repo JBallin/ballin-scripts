@@ -110,5 +110,18 @@ Snapshots can also help you select files for a future chezmoi or yadm repository
 The saved text remains useful outside Ballin, but moving to a dotfile manager
 requires deciding which configuration to manage and how to apply it.
 
-Missing a capability you need? [Start a discussion](https://github.com/JBallin/ballin-scripts/discussions)
+## Related tools
+
+| Tool | What it does |
+| --- | --- |
+| [Topgrade](https://github.com/topgrade-rs/topgrade) | Detects supported tools and runs their update commands on macOS, Linux, and Windows. |
+| [restic](https://github.com/restic/restic) | Creates encrypted file snapshots in local or remote storage and restores files from those snapshots. |
+| [Dotbot](https://github.com/anishathalye/dotbot) | Sets up your dotfiles by linking files, creating directories, and running commands from a configuration file. |
+| [Home Manager](https://github.com/nix-community/home-manager) | Uses Nix to declare and apply user packages and dotfiles on macOS or Linux. |
+| [Cross-Code Organizer](https://github.com/mcpware/cross-code-organizer) | Provides a local dashboard to inspect coding-tool configuration, skills, memories, and MCP servers, clean up supported items, preview and copy portable skills, and save selected backups in Git. |
+| [skillshare](https://github.com/runkids/skillshare) | Keeps a shared collection of AI-agent skills and installs them across supported coding tools using symlinks or copies. |
+
+## Missing a capability?
+
+[Start a discussion](https://github.com/JBallin/ballin-scripts/discussions)
 or propose a change through a [pull request](../CONTRIBUTING.md).
