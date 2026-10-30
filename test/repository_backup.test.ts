@@ -862,19 +862,24 @@ describe('repository backup lifecycle', function() {
         const sensitive = preference === 'sensitive';
         if (sensitive) before.backup.includeSensitive = invalid;
         else before.update.backup = invalid;
-        saveConfig(before); seedSuccess();
-        const result = run(['setup']); ok(result);
-        assert.include(result.stdout, sensitive
-          ? 'Sensitive sources: invalid `backup.includeSensitive` (expected true or false)\n'
-          : 'Automatic backup during update: invalid `update.backup` (expected true or false)\n');
-        assert.deepEqual(config(), before); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
-        assert.lengthOf(mutations(), 0);
+        saveConfig(before); seedSuccess(); seedCache('zshrc.sh', 'unchanged\n');
+        const head = state().head; const originalBytes = fs.readFileSync(configPath, 'utf8');
+        const invalidSummary = sensitive
+          ? 'ℹ️  Sensitive sources: invalid `backup.includeSensitive` (expected true or false)\n'
+          : 'ℹ️  Automatic backup during update: invalid `update.backup` (expected true or false)\n';
+        const result = run(['setup']);
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.include(result.stdout, invalidSummary);
+        assert.notInclude(result.stdout, 'Include sensitive sources in future backups?');
+        assert.notInclude(result.stdout, 'Automatically run');
+        assert.equal(fs.readFileSync(configPath, 'utf8'), originalBytes);
+        assert.equal(cached(), 'unchanged\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
         const embedded = runSetup(); ok(embedded);
-        assert.equal(embedded.stdout, sensitive
-          ? 'Sensitive sources: invalid `backup.includeSensitive` (expected true or false)\n'
-          : 'Automatic backup during update: invalid `update.backup` (expected true or false)\n');
-        assert.deepEqual(config(), before); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
-        assert.lengthOf(mutations(), 0);
+        assert.equal(embedded.stdout, invalidSummary);
+        assert.equal(fs.readFileSync(configPath, 'utf8'), originalBytes);
+        assert.equal(cached(), 'unchanged\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
+        assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
       });
     }
   }
