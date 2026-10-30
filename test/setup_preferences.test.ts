@@ -93,7 +93,7 @@ fs.readFileSync = (file, ...args) => {
     fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
     const result = run('y\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Sensitive source paths available now:\n  "~/.zshrc"\npipx installation metadata is also available.\n');
+    assert.include(result.stdout, 'Sensitive source paths available now:\n  ~/.zshrc\npipx installation metadata is also available.\n');
     assert.notInclude(result.stdout, ' -> ');
     assert.notInclude(result.stdout, 'Sources not found now:');
     assert.notInclude(result.stdout, 'Unavailable now:');
@@ -121,7 +121,7 @@ fs.readFileSync = (file, ...args) => {
       assert.isTrue(fs.existsSync(probes));
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
-      assert.include(result.stdout, '"~/.codex/AGENTS.override.md"\n');
+      assert.include(result.stdout, '~/.codex/AGENTS.override.md\n');
       assert.include(result.stdout, 'docs/backup-sources.md#what-will-ballin-back-up');
       assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
     });
@@ -148,7 +148,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
       {
-        assert.include(result.stdout, '"~/.agents/skills"\n');
+        assert.include(result.stdout, '~/.agents/skills\n');
         assert.notInclude(result.stdout, 'Sources not found now:');
         assert.notInclude(result.stdout, 'codex_skills.bundle.json');
       }
@@ -174,7 +174,7 @@ fs.readFileSync = (file, ...args) => {
       assert.include(result.stdout, '\n\n😎 Ballin preference review complete.\n');
       if (enabled) {
         assert.include(result.stdout, 'pipx installation metadata is also available.');
-        assert.include(result.stdout, '"~/.zshrc"');
+        assert.include(result.stdout, '~/.zshrc');
       } else assert.include(result.stdout, 'pipx installation metadata is also available.');
     });
     it(`changes all ${enabled} choices through the existing owners`, () => {
@@ -471,8 +471,8 @@ fs.readFileSync = (file, ...args) => {
     const alias = path.join(root, 'codex-alias'); fs.symlinkSync(codex, alias);
     const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '"~/.codex/config.toml"');
-    assert.include(result.stdout, '"~/.codex/skills"');
+    assert.include(result.stdout, '~/.codex/config.toml');
+    assert.include(result.stdout, '~/.codex/skills');
     assert.equal(readConfig().backup.includeSensitive, 'true');
   });
 
@@ -496,8 +496,8 @@ fs.readFileSync = (file, ...args) => {
       }\n`);
     const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '"~/.codex/config.toml"');
-    assert.include(result.stdout, '"~/.codex/skills"');
+    assert.include(result.stdout, '~/.codex/config.toml');
+    assert.include(result.stdout, '~/.codex/skills');
     assert.equal(readConfig().backup.includeSensitive, 'true');
   });
 
@@ -513,11 +513,33 @@ fs.readFileSync = (file, ...args) => {
       const result = run('y\nn\nn\n', ['setup'], { CODEX_HOME: outside });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       for (const suffix of ['config.toml', 'AGENTS.md', 'skills']) {
-        assert.include(result.stdout, `  ${JSON.stringify(path.join(actual, suffix))}\n`);
+        assert.include(result.stdout, `  ${path.join(actual, suffix)}\n`);
       }
-      assert.include(result.stdout, '  "~/.zshrc"\n');
+      assert.include(result.stdout, '  ~/.zshrc\n');
       assert.notInclude(result.stdout, 'codex_config.toml:');
       assert.notInclude(result.stdout, `~${actual.slice(root.length)}`);
+    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
+  });
+  it('shows printable paths with spaces, quotes, and backslashes without added delimiters', () => {
+    const outside = fs.mkdtempSync(`${root}-space \"quote\" \\slash-`);
+    try {
+      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
+      const result = run('n\nn\nn\n', ['setup'], { CODEX_HOME: outside });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, `  ${path.join(fs.realpathSync(outside), 'config.toml')}\n`);
+    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
+  });
+  it('escapes terminal controls and line separators in resolved paths', () => {
+    const outside = fs.mkdtempSync(`${root}-line\nreturn\r${String.fromCharCode(27)}[31m\u0085\u202e\u2028-`);
+    try {
+      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
+      const result = run('n\nn\nn\n', ['setup'], { CODEX_HOME: outside });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const actual = path.join(fs.realpathSync(outside), 'config.toml');
+      const expected = JSON.stringify(actual).replace(/\u0085/gu, '\\u0085').replace(/\u202e/gu, '\\u202e').replace(/\u2028/gu, '\\u2028');
+      assert.include(result.stdout, `  ${expected}\n`);
+      for (const unsafe of ['\r', String.fromCharCode(27), '\u0085', '\u202e', '\u2028']) assert.notInclude(result.stdout, unsafe);
+      assert.notInclude(result.stdout, actual);
     } finally { fs.rmSync(outside, { recursive: true, force: true }); }
   });
   it('reviews recursive Codex directories with metadata without collecting their contents', () => {
@@ -526,7 +548,7 @@ fs.readFileSync = (file, ...args) => {
     fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_PRIVATE_CONTENT');
     const result = run('y\ny\nn\nn\n');
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, '"~/.codex/skills"');
+    assert.include(result.stdout, '~/.codex/skills');
     assert.notInclude(result.stdout, 'codex_skills.bundle.json:');
     assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
   });

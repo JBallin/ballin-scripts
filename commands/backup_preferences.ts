@@ -67,7 +67,14 @@ const offerAutomaticUpdateBackup = (configPath: string): boolean => (
   reviewAutomaticUpdateBackup(configPath) !== 'failed'
 );
 
-const displayPath = (value: string): string => JSON.stringify(value);
+// Quote unusual paths so control sequences cannot alter the terminal or impersonate another line.
+const displayPath = (value: string): string => {
+  const unsafe = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
+  if (!unsafe.test(value)) return value;
+  return JSON.stringify(value).replace(/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu, (character) => (
+    Array.from({ length: character.length }, (_, index) => `\\u${character.charCodeAt(index).toString(16).padStart(4, '0')}`).join('')
+  ));
+};
 const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolean => {
   const sensitiveDefinitions = (snapshotDefinitions as readonly SnapshotDefinition[])
     .filter((definition) => definition.inclusionGroup === 'sensitive')

@@ -1219,8 +1219,8 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], '\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
-    assert.include(result.stdout, '"~/.claude/agents"');
-    assert.include(result.stdout, '"~/.claude/skills"');
+    assert.include(result.stdout, '~/.claude/agents');
+    assert.include(result.stdout, '~/.claude/skills');
     assert.notInclude(result.stdout, 'Your choice also covers future supported sources.');
     assert.notInclude(result.stdout, 'This review checks source locations, not selected file contents.');
     assert.notInclude(result.stdout + result.stderr, 'DUMMY_');
@@ -2453,7 +2453,7 @@ describe('repository backup lifecycle', function() {
           throw new Error('Raw contents must not be read during review');
         return original.call(this,file,...args); }; }`;
     const result = run(['setup'], '\nreconnect\n\ny\nn\n', {}, preload); assert.equal(result.status, 1);
-    assert.include(result.stdout, `  ${JSON.stringify(fs.realpathSync(external))}\n`);
+    assert.include(result.stdout, `  ${fs.realpathSync(external)}\n`);
     assert.notInclude(result.stdout, 'zshrc.sh:');
     assert.notInclude(result.stdout, 'Unavailable now:');
     assert.notInclude(result.stdout, 'private-review-secret'); assert.equal(mutations().length, 0);
