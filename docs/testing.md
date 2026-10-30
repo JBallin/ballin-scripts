@@ -218,8 +218,12 @@ prerequisites, authentication, shell activation, and the full published journey.
 The public install commands pass downloaded script text to `bash -c`, so they
 are intended for the current published scripts, within the host's argument-size
 limit. Copied-command fixtures cover current script sizes, inherited settings,
-prompt input, empty downloads, and incomplete bodies. This contract does not
-include arbitrary multi-megabyte script payloads.
+prompt input, empty downloads, and incomplete bodies.
+
+Each script's outer brace group must parse before its executable contents run,
+so a syntactically incomplete body is refused. This does not verify integrity or
+require curl to succeed: an empty failed download can return 0, and a complete
+script can run even if curl reports a transfer error.
 
 ## Test environment and analytics safety
 

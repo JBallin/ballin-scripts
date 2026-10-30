@@ -302,11 +302,7 @@ tools, or change GitHub CLI authentication.
 ## Commands and services contacted
 
 The linked installation commands download scripts from GitHub for interactive
-use. Each script waits until its complete outer brace group can be parsed before
-starting, so an incomplete body is refused. This is not integrity verification
-or a check that curl succeeded: an empty failed download can return success, and
-a complete script can run even if curl reports a transfer error. Check Terminal’s
-output before continuing or retrying.
+use.
 
 Quickstart’s selected prerequisite routes may also contact Apple's Xcode Command Line Tools service,
 Homebrew's formula/bottle services, Node.js releases, or GitHub CLI releases.
