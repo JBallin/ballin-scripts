@@ -76,10 +76,6 @@ It runs `nvm install --lts`; it does not update nvm itself or migrate globally
 installed npm packages to the new Node.js version. Other Node installations
 remain managed by their existing installation method.
 
-If nvm cannot be loaded, `ballin update` reports the failure and
-continues with its remaining updates. A failure to capture nvm's updated
-environment is handled the same way; later stages use the previous environment.
-
 ## Mac App Store apps
 
 Install [`mas`](https://github.com/mas-cli/mas) with Homebrew to add Mac App
