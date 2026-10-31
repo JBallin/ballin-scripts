@@ -17,6 +17,11 @@ For the default full run with two workers, it queues the repository backup
 lifecycle file first to reduce the final-file tail. Explicit Mocha arguments
 and `MOCHA_OPTIONS` retain native selection and ordering; serial runs are unchanged.
 
+CI also runs a small, dependency-free smoke on exact Node.js 24.12.0 in parallel
+with the full Node 26 checks. It exercises CLI startup, direct TypeScript imports,
+and basic runtime paths in an isolated environment. Run it locally with
+`node test/ci/minimum_node_smoke.ts`; it reports the runtime actually used.
+
 The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;
 unexecuted included files still count as uncovered. Use the same wrapper when
