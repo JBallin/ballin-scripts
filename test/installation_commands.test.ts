@@ -52,16 +52,18 @@ exit ${status}
         assert.equal(result.stdout, '');
         assert.include(result.stderr, 'Fixture curl failure');
       });
-      for (const cut of ['first function', 'middle', 'final brace']) {
+      for (const cut of ['first function', 'middle', 'quoted value', 'final brace']) {
         it(`refuses the actual ${script} truncated at ${cut} in ${shell}`, () => {
           const body = read(script).replace('{ # Parse the complete body before starting installation.\n',
             '{ # Parse the complete body before starting installation.\n: > executed\n');
           const end = cut === 'first function' ? body.indexOf('\n}\n') + 3
-            : cut === 'middle' ? Math.floor(body.length / 2) : body.lastIndexOf('}');
+            : cut === 'middle' ? Math.floor(body.length / 2)
+              : cut === 'quoted value' ? body.indexOf("required_node_version='") + "required_node_version='".length + 1
+                : body.lastIndexOf('}');
           const result = runDownloaded(body.slice(0, end), 22);
           assert.equal(result.status, 2, result.stderr);
           assert.equal(result.stdout, '');
-          assert.include(result.stderr, 'syntax error');
+          assert.match(result.stderr, /syntax error|unexpected EOF/u);
         });
       }
       it(`refuses a malformed ${script} body before executing in ${shell}`, () => {
