@@ -3,10 +3,10 @@ const crypto = require('crypto');
 const https = require('https');
 const os = require('os');
 const path = require('path');
-const { terminalHeading } = require('./terminalStyle.ts');
+const { terminalHeading, terminalProse } = require('./terminalStyle.ts');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { fetchConfig } = require('../config/index.ts');
-const { createConfigStore } = require('../config/store.ts');
+const { saveSetupPreference } = require('../config/setup.ts');
 const { readCommandOutput, readYesNo, writeStdoutLine, CommandInterrupted } = require('./commandHelpers.ts');
 const {
   topLevelCommandNames,
@@ -105,6 +105,8 @@ type AnalyticsPreferenceOptions = {
   defaultEnabled?: boolean;
   onCancelled?: () => void;
   docsUrl?: string;
+  detailsLink?: boolean;
+  reportFailure?: boolean;
   presentation?: 'installation' | 'standalone';
 };
 
@@ -279,31 +281,14 @@ const writeLocalInstallId = (installId: string, installIdPath = installIdPathFor
 };
 
 const writeAnalyticsPreference = (configPath: string, enabled: boolean): { previous: unknown } | null => {
-  const temporary = `${configPath}.${process.pid}.analytics.tmp`;
-  let created = false;
-  try {
-    const config = fs.readFileSync(configPath);
-    const fd = fs.openSync(temporary, 'wx', 0o600);
-    created = true;
-    try { fs.writeFileSync(fd, config); } finally { fs.closeSync(fd); }
-    const store = createConfigStore({ configPath: temporary });
-    const previous = store.readLeafValue('analytics.enabled');
-    if (!store.writeLeafValue('analytics.enabled', String(enabled))) {
-      return null;
-    }
-    fs.renameSync(temporary, configPath);
-    return { previous };
-  } catch {
-    return null;
-  } finally {
-    if (created) {
-      try { fs.rmSync(temporary, { force: true }); } catch { /* Best-effort private staging cleanup. */ }
-    }
-  }
+  try { return { previous: saveSetupPreference(configPath, 'analytics', 'enabled', enabled) }; }
+  catch { return null; }
 };
 
 const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
-  writeStdoutLine(options.presentation === 'installation'
+  writeStdoutLine(options.detailsLink === false
+    ? `\n${terminalHeading('Analytics')}\n${terminalProse('ℹ️  Optional analytics report command results, not backup contents.')}`
+    : options.presentation === 'installation'
     ? `\n${terminalHeading('Analytics')}\n🔗 Analytics details:\n${options.docsUrl || defaultAnalyticsDocsUrl}`
     : `\n${terminalHeading('Analytics')}\n${analyticsDisclosureFor(options.docsUrl)}`);
   const defaultEnabled = options.defaultEnabled ?? false;
@@ -312,7 +297,8 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
     enabled = readYesNo(options.presentation === 'installation'
       ? 'Share usage analytics to help improve Ballin? [y/N] '
       : analyticsPromptFor(defaultEnabled), defaultEnabled);
-  } catch {
+  } catch (error) {
+    if (error instanceof CommandInterrupted) throw error;
     return false;
   }
   if (enabled === null) {
@@ -325,7 +311,7 @@ const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): bool
     if (options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('analytics.enabled', enabled, saved.previous));
     return true;
   }
-  writeStdoutLine('\nUnable to save the analytics preference; the existing local setting is unchanged.');
+  if (options.reportFailure !== false) writeStdoutLine('\nUnable to save the analytics preference; the existing local setting is unchanged.');
   return false;
 };
 

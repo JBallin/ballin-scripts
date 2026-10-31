@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
-const terminalGuidance = '😎 Setup complete! Open a new Terminal and run `ballin help`.';
+const terminalGuidance = '😎 Setup complete. Open a new Terminal and run `ballin help`.';
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
@@ -127,6 +127,7 @@ esac
 
   const installBaseCommands = () => {
     linkCommand('bash');
+    linkCommand('uname');
     linkCommand('mkdir');
     linkCommand('mktemp');
     linkCommand('rm');
@@ -217,7 +218,7 @@ esac
           : existing ? '' : '\n';
         assert.include(result.stdout, `Git output fixture.\n${separator}Typed setup fixture.\n\n${terminalGuidance}\n`);
         assert.notInclude(result.stdout, '\n\n\n');
-        assert.equal(result.stdout.split('Setup complete!').length - 1, 1);
+        assert.equal(result.stdout.split('Setup complete.').length - 1, 1);
       });
     }
   }
@@ -322,7 +323,7 @@ esac
       assert.include(result.stderr, 'No answer received. Ballin installation stopped before installing Ballin.');
       assert.deepEqual(commandLog(), []);
       assert.isFalse(fs.existsSync(repoDir));
-      assert.notInclude(result.stdout, 'Setup complete!');
+      assert.notInclude(result.stdout, 'Setup complete.');
     });
   }
 
@@ -435,6 +436,7 @@ esac
   }
   it('stops with guidance when Node.js is unavailable', () => {
     linkCommand('bash');
+    linkCommand('uname');
     installGitStub();
 
     const result = runInstall();
@@ -466,7 +468,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       assert.equal(result.status, outcome === '130' || outcome === 'INT' ? 130 : 143, result.stdout + result.stderr);
       assert.deepEqual(commandLog(), ['brew:--prefix']);
       assert.equal(fs.readFileSync(path.join(homeDir, 'node-probes'), 'utf8'), 'probe\n');
-      for (const later of ['Install Ballin in', 'Analytics details:', 'Backup details:', 'Setup complete!']) {
+      for (const later of ['Install Ballin in', 'Analytics details:', 'Backup details:', 'Setup complete.']) {
         assert.notInclude(result.stdout, later);
       }
       assert.isFalse(fs.existsSync(repoDir));
@@ -511,6 +513,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
 
   it('stops with guidance before clone or update when Git is unavailable', () => {
     linkCommand('bash');
+    linkCommand('uname');
 
     const result = runInstall();
 
@@ -526,15 +529,15 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
 
   it('stops with guidance before clone or update when Git cannot run', () => {
     linkCommand('bash');
+    linkCommand('uname');
     installGitStub();
 
     const result = runInstall({ env: { FAKE_GIT_VERSION_STATUS: '69' } });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Git is required before install can continue');
+    assert.include(result.stdout, 'Git was found but could not run');
     assert.notInclude(result.stdout, troubleshootingUrl);
-    assert.include(result.stdout, 'Install Git, then run this installer again');
-    assert.include(result.stdout, 'run this installer again');
+    assert.include(result.stdout, 'Make sure `git --version` works, then rerun this installer.');
     assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), []);
     assert.isFalse(fs.existsSync(repoDir));
@@ -620,7 +623,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       assert.equal(result.status, interruption === 'SIGINT' || interruption === 130 ? 130 : 143, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'Unable to prepare');
       assert.notInclude(result.stdout, troubleshootingUrl);
-      assert.notInclude(result.stdout, 'Setup complete!');
+      assert.notInclude(result.stdout, 'Setup complete.');
       assert.deepEqual(commandLog(), [`git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`]);
       assert.isTrue(fs.existsSync(path.join(repoDir, 'commands', 'install_setup.ts')), 'partial checkout remains');
       assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -664,4 +667,36 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       setupCommand(),
     ]);
   });
+  for (const spelling of ['direct', 'symlink', 'hardlink']) for (const toolsReady of [false, true]) {
+    it(`guards Apple Git before execution through a ${spelling} (tools available: ${toolsReady})`, () => {
+      installBaseCommands();
+      const apple = spelling === 'direct' ? path.join(toolDir, 'git') : path.join(homeDir, 'apple-git'); const xcode = path.join(homeDir, 'system-xcode-select');
+      const calls = path.join(homeDir, 'guard-calls');
+      fs.writeFileSync(apple, `#!/bin/sh\nprintf 'git:%s\\n' "$*" >> '${calls}'\nexit 0\n`, { mode: 0o700 });
+      fs.writeFileSync(xcode, `#!/bin/sh\nprintf 'tools:%s\\n' "$*" >> '${calls}'\nexit ${toolsReady ? 0 : 2}\n`, { mode: 0o700 });
+      if (spelling !== 'direct') fs.unlinkSync(path.join(toolDir, 'git'));
+      if (spelling === 'hardlink') fs.linkSync(apple, path.join(toolDir, 'git'));
+      else if (spelling !== 'direct') fs.symlinkSync(apple, path.join(toolDir, 'git'));
+      fs.unlinkSync(path.join(toolDir, 'uname'));
+      writeExecutable('uname', '#!/bin/sh\nprintf Darwin\n');
+      const script = path.join(homeDir, 'install-guard.sh');
+      fs.writeFileSync(script, fs.readFileSync(installPath, 'utf8').replace("system_git='/usr/bin/git'", `system_git='${apple}'`).replace("system_xcode_select='/usr/bin/xcode-select'", `system_xcode_select='${xcode}'`));
+      // Refuse further installation so this case tests only the preclone guard.
+      const result = spawnSync('/bin/bash', [script], { encoding: 'utf8', input: 'n\n', env: { HOME: homeDir, PATH: toolDir, FAKE_COMMAND_LOG: commandLogPath, TEST_NODE_RUNTIME: process.execPath, FAKE_NODE_VERSION: '24.12.0', FAKE_NODE_PROBE_STATUS: '0', FAKE_NODE_PROBE_LOG: path.join(homeDir, 'node-probes') } });
+      assert.equal(result.status, toolsReady ? 0 : 1, result.stdout + result.stderr);
+      const log = fs.readFileSync(calls, 'utf8'); assert.isTrue(log.startsWith('tools:-p\n'));
+      assert.equal(log.includes('git:--version'), toolsReady);
+      if (!toolsReady) {
+        assert.include(result.stdout, '\n❌ Xcode Command Line Tools are required to use Apple’s Git.\nRun `xcode-select --install`, finish installation, then rerun this installer.\n');
+        assert.isFalse(fs.existsSync(repoDir));
+      }
+    });
+  }
+  it('prints actual Git failure diagnostics before the final recovery block', () => {
+    installBaseCommands(); writeExecutable('git', '#!/bin/sh\nprintf "Actual fixture Git diagnostic\\n" >&2\nexit 69\n');
+    const result = runInstall(); assert.equal(result.status, 1);
+    assert.isTrue(result.stdout.endsWith('Actual fixture Git diagnostic\n\n❌ Git was found but could not run.\nMake sure `git --version` works, then rerun this installer.\n'));
+    assert.notInclude(result.stdout, 'xcode-select --install'); assert.isFalse(fs.existsSync(repoDir));
+  });
+
 });

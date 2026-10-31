@@ -13,23 +13,24 @@ Run `ballin setup` to review local Ballin preferences without reinstalling:
 ballin setup
 ```
 
-Your current valid choices are the prompt defaults. Repository backups offer
-the single sensitive-source choice; any configured backup offers automatic
-backup after `ballin update`. Analytics can always be reviewed. With no backup
-configured, use `ballin backup setup` first if you want backups.
+Review global npm updates, Ballin self-updates, Homebrew cleanup, macOS updates,
+and analytics using your saved choices as defaults. Answering a question saves
+that preference; it does not run an update.
 
-Review [what Ballin will back up](backup-sources.md#what-will-ballin-back-up)
-before changing the sensitive-source choice. Ballin previews local paths and
-readability before asking whether to include the sources. Your answer saves the choice for future backups.
+The NVM question appears when NVM can load and its default follows latest LTS,
+or when NVM updates are already enabled. A default pinned to one version or
+one named LTS line does not follow future LTS releases. New installations
+recommend Yes on the first eligible review, even if NVM becomes eligible later.
+A confirmed No remains No on reruns. Existing saved values stay authoritative.
 
-Each confirmed choice is saved locally. Cancelling or closing input leaves the
-pending choice unchanged; earlier confirmed choices remain saved. Invalid
-configuration must be repaired before review; a missing config is created with
-defaults. The command does not reinstall
-Ballin, change or validate remote destinations, or run backup/update operations.
+The automatic-backup question appears when a valid backup is configured or the
+setting is already enabled. Use `ballin backup setup` to choose or validate a
+destination and review sensitive sources; general setup does not do that work.
 
-Use `ballin config get/set/reset` for direct configuration. Guided
-review covers these onboarding choices rather than every setting.
+Each confirmed choice is saved locally. Closing input or interrupting leaves the
+pending choice unchanged and retains earlier confirmed choices. Repair invalid
+configuration before reviewing it; missing config is created with defaults.
+Use `ballin config get/set/reset` for direct configuration.
 
 ## Working with settings
 
@@ -63,14 +64,17 @@ Ballin requires Node.js 24.12 or newer to run its TypeScript directly with
 [stable built-in type stripping](https://nodejs.org/api/typescript.html#type-stripping).
 We recommend the latest Node.js long-term support (LTS) release.
 
-Consider [nvm](https://github.com/nvm-sh/nvm) if you want Ballin to install newer
-LTS releases during `ballin update`. For installation choices, see
+[Quickstart](quickstart.md) offers [NVM](https://github.com/nvm-sh/nvm) and latest
+LTS Node. With compatible existing Node, keeping your setup is the default.
+A consented switch activates LTS and makes it the future default, retaining
+older versions and installations. Global npm tools may need reinstalling under
+the selected version. Other installation choices remain available through
 [Node.js downloads](https://nodejs.org/en/download).
 
 Installed commands use the `node` found on your shell `PATH`, so make sure new
 terminal sessions use a supported Node.js version too.
 
-Enable optional nvm updates with `ballin config set update.nvm true`.
+Review optional NVM updates with `ballin setup`, or enable them with `ballin config set update.nvm true`.
 `update.nvm` defaults to `false` and applies only to an existing nvm installation.
 It runs `nvm install --lts`; it does not update nvm itself or migrate globally
 installed npm packages to the new Node.js version. Other Node installations
@@ -128,8 +132,8 @@ ballin config set backup.includeSensitive true
 ballin config set backup.includeSensitive false
 ```
 
-After new linkage, setup asks whether updates should run backups automatically,
-with “No” as the default. Change that independent choice later with:
+Use `ballin setup` to review automatic backup during updates, defaulting to No
+unless you have saved another choice. You can also change it directly:
 
 ```shell
 ballin config set update.backup true

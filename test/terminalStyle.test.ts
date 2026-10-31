@@ -102,3 +102,42 @@ describe('terminal emphasis', () => {
     }
   });
 });
+
+describe('setup presentation roles', () => {
+  const { terminalUrls, terminalPrompt, terminalProse, terminalError, terminalComplete, visibleWidth } = require('../commands/terminalStyle.ts');
+  const tty = { isTTY: true, columns: 80 };
+  it('colors URLs while keeping labels and punctuation neutral and styling idempotent', () => {
+    const text = '🔗 Details:\nVisit https://example.com/guide, then https://example.com/next.';
+    const styled = terminalUrls(text, tty, {});
+    assert.equal(styled, '🔗 Details:\nVisit \x1b[34mhttps://example.com/guide\x1b[0m, then \x1b[34mhttps://example.com/next\x1b[0m.');
+    assert.equal(terminalUrls(styled, tty, {}), styled);
+  });
+  it('keeps questions neutral and bolds the uppercase default inside blue brackets', () => {
+    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), 'Continue? \x1b[34m[y/\x1b[1mN\x1b[22m]\x1b[0m ');
+    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), 'Mode? \x1b[34m[\x1b[1mCREATE\x1b[22m/reconnect]\x1b[0m ');
+    assert.equal(terminalPrompt('Host [github.com]: ', tty, {}), 'Host \x1b[34m[github.com]\x1b[0m: ');
+  });
+  for (const env of [{ TERM: 'dumb' }, { NO_COLOR: '0', FORCE_COLOR: '1' }, { NO_COLOR: 'yes' }]) {
+    it(`respects all emphasis guards: ${JSON.stringify(env)}`, () => {
+      assert.equal(terminalPrompt('Continue? [Y/n]', tty, env), 'Continue? [Y/n]');
+      assert.equal(terminalUrls('https://example.com', tty, env), 'https://example.com');
+      assert.equal(terminalError('Failed.', tty, env), '❌ Failed.');
+      assert.equal(terminalComplete('Setup complete.', tty, env), 'Setup complete.');
+    });
+  }
+  it('uses the receiving stream, red error icons, and green final completion', () => {
+    assert.equal(terminalError('Failed.', tty, {}), '\x1b[31m❌\x1b[0m Failed.');
+    assert.equal(terminalError('Failed.', {}, { FORCE_COLOR: '1' }), '❌ Failed.');
+    assert.equal(terminalComplete('Setup complete.', tty, {}), '\x1b[32mSetup complete.\x1b[0m');
+  });
+  it('wraps host-specific recovery commands using visible Unicode/ANSI columns', () => {
+    assert.equal(visibleWidth('A😎⚠️中e\u0301'), 8);
+    const command = terminalCommand('gh auth login --hostname ' + 'enterprise.'.repeat(3) + 'example.com', tty, {});
+    for (const columns of [80, 47]) {
+      const text = terminalProse(`❌ GitHub CLI authentication is required.\nRun ${command}, then run ${terminalCommand('ballin backup setup', tty, {})}.`, { ...tty, columns }, {});
+      for (const line of text.split('\n')) assert.isAtMost(visibleWidth(line), columns);
+      assert.notInclude(text, '\n\n'); assert.include(stripAnsi(text).replaceAll('\n', ' '), 'gh auth login --hostname');
+    }
+    assert.equal(terminalProse('\n'), '\n');
+  });
+});

@@ -14,7 +14,7 @@ describe('help layout', () => {
   it('emphasizes help structure without styling descriptions or documentation labels', () => {
     const text = 'Usage: ballin doctor [--verbose]\n\nCheck readiness.\n\nOptions:\n    --verbose  show full details\n\nExisting backup: Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n';
     assert.equal(formatHelp(text, { columns: 80, isTTY: true }, { TERM: 'xterm' }),
-      '\x1b[1mUsage:\x1b[0m \x1b[1mballin doctor [--verbose]\x1b[0m\n\nCheck readiness.\n\n\x1b[1mOptions:\x1b[0m\n    \x1b[1m--verbose\x1b[0m  show full details\n\n\x1b[1mExisting backup:\x1b[0m Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n');
+      '\x1b[1mUsage:\x1b[0m \x1b[1mballin doctor [--verbose]\x1b[0m\n\nCheck readiness.\n\n\x1b[1mOptions:\x1b[0m\n    \x1b[1m--verbose\x1b[0m  show full details\n\n\x1b[1mExisting backup:\x1b[0m Keep the saved destination.\n\n🔗 Details:\n\x1b[34mhttps://example.com/guide\x1b[0m\n');
     assert.equal(formatHelp('Usage: ballin setup', { columns: 12, isTTY: true }, { TERM: 'xterm' }),
       '\x1b[1mUsage:\x1b[0m\n    \x1b[1mballin\x1b[0m\n    \x1b[1msetup\x1b[0m');
     for (const mode of [

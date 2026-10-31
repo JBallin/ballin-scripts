@@ -40,7 +40,7 @@ describe('first-run onboarding walkthroughs', function() {
   });
 
   it('preserves one maintenance-only install through doctor, update, self-update, and backup guidance', () => {
-    const installResult = runInstaller('y\nn\nn\n');
+    const installResult = runInstaller('y\nn\ny\n\n\n\n\nn\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     assert.include(installResult.stdout, 'Installation details:');
@@ -82,7 +82,7 @@ describe('first-run onboarding walkthroughs', function() {
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
     resetRemote(sandbox);
-    const installResult = runInstaller('y\nn\ny\n\ncreate\n\ny\ny\ny\n');
+    const installResult = runInstaller('y\ny\n\ncreate\n\ny\ny\ny\n\n\n\n\ny\nn\n');
 
     assert.equal(installResult.status, 0, installResult.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8'));

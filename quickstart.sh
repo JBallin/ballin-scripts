@@ -15,6 +15,39 @@ command_reference() {
   else printf "\`%s\`" "$1"; fi
 }
 
+url_reference() {
+  if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[34m%s\033[0m' "$1"
+  else printf '%s' "$1"; fi
+}
+documentation_pointer() {
+  printf '🔗 %s:\n' "$1"
+  url_reference "$2"
+  printf '\n'
+}
+error_icon() {
+  if [[ -t "${1:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[31m❌\033[0m'
+  else printf '❌'; fi
+}
+setup_complete() {
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[32m😎 Setup complete.\033[0m'
+  else printf '😎 Setup complete.'; fi
+}
+prompt_options() {
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[34m[%s]\033[0m' "$1"
+  else printf '[%s]' "$1"; fi
+}
+prompt_choices() {
+  local choices=$1 default=$2
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    if [[ "$default" == y ]]; then printf '\033[34m[\033[1mY\033[22m/n]\033[0m '
+    else printf '\033[34m[y/\033[1mN\033[22m]\033[0m '; fi
+  else printf '%s ' "$choices"; fi
+}
+
 # Abbreviate only paths inside HOME for display; filesystem operations stay absolute.
 display_path() {
   local home_path=${HOME%/}
@@ -41,7 +74,6 @@ system_brew_arm='/opt/homebrew'
 system_brew_intel='/usr/local'
 system_git='/usr/bin/git'
 system_xcode_select='/usr/bin/xcode-select'
-system_pkgutil='/usr/sbin/pkgutil'
 system_sudo='/usr/bin/sudo'
 system_sysctl='/usr/sbin/sysctl'
 system_file='/usr/bin/file'
@@ -89,7 +121,8 @@ read_prompt_answer() {
 confirm() {
   local default=${2:-n} normalized
   while :; do
-    if [[ "$default" == y ]]; then printf '%s [Y/n] ' "$1"; else printf '%s [y/N] ' "$1"; fi
+    printf '%s ' "$1"
+    if [[ "$default" == y ]]; then prompt_choices '[Y/n]' y; else prompt_choices '[y/N]' n; fi
     read_prompt_answer || return 1
     normalized=$prompt_answer
     normalized="${normalized#"${normalized%%[![:space:]]*}"}"
@@ -394,37 +427,7 @@ existing_hidden_node() {
 }
 
 manual_node_guidance() {
-  local candidate=$1 state=${2:-incompatible} owner='its existing installation method' resolved=$1 target hops=0
-  if [[ "$state" == compatible ]]; then
-    fail "Existing compatible Node.js at $(display_path "$candidate") is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
-  elif [[ "$state" == unknown ]]; then
-    fail "Existing Node.js at $(display_path "$candidate") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
-  fi
-  while [[ -L "$resolved" && $hops -lt 40 ]]; do
-    target=$(readlink "$resolved") || break
-    if [[ "$target" == /* ]]; then resolved=$target; else resolved="${resolved%/*}/$target"; fi
-    (( hops += 1 ))
-  done
-  # Match actual known binaries, not manager directories or guessed command names.
-  case "$resolved" in
-    "$HOME"/.nvm/versions/node/*/bin/node|"${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin/node) owner='nvm (select a supported version in your shell)' ;;
-    *)
-      if [[ ! -L "$resolved" && -f "$resolved" ]]; then
-        local directory='' prefix cellar_root
-        directory=$(cd -P -- "${resolved%/*}" 2>/dev/null && pwd -P) || directory=''
-        for prefix in "$system_brew_arm" "$system_brew_intel"; do
-          cellar_root=$(cd -P -- "$prefix" 2>/dev/null && pwd -P) || continue
-          case "$directory/${resolved##*/}" in
-            "$cellar_root"/Cellar/node/*/bin/node)
-              owner="Homebrew (review $(command_reference 'brew upgrade node' 2) yourself)"
-              break
-              ;;
-          esac
-        done
-      fi
-      ;;
-  esac
-  fail "Existing Node.js at $(display_path "$candidate") needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
 }
 
 brew_checked() {
@@ -438,7 +441,6 @@ brew_checked() {
 install_brew_tools() {
   local formulas=() formula
   "$need_git" && formulas+=(git)
-  "$need_node" && formulas+=(node)
   "$need_gh" && formulas+=(gh)
   # Suppress automatic updates, installed-formula upgrades and cleanup;
   # preserve Homebrew's ordinary dependency and installed-dependent checks.
@@ -608,63 +610,203 @@ install_command_line_tools() {
   [[ -n "$git_tool" ]] || fail 'Git is still unavailable. Finish Xcode Command Line Tools installation, then rerun Quickstart.'
 }
 
-install_node() {
-  phase 'Installing Node.js'
-  local package version major minor expected status=0
-  download 'https://nodejs.org/dist/latest-v26.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
-  package=$(awk '$2 ~ /^node-v26[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
-  [[ "$package" =~ ^node-v26\.[0-9]+\.[0-9]+\.pkg$ ]] || fail 'Unable to identify the official Node.js 26 macOS package.'
-  version=${package#node-}
-  version=${version%.pkg}
-  major=${version#v}
-  major=${major%%.*}
-  minor=${version#v*.}
-  minor=${minor%%.*}
-  (( 10#$major > ${required_node_version%%.*} ||
-    (10#$major == ${required_node_version%%.*} && 10#$minor >= ${required_node_version#*.}) )) \
-    || fail "The official Node.js package is older than the required $required_node_version; it was not installed."
-  printf 'Downloading Node.js %s...\n' "$version"
-  download "https://nodejs.org/dist/$version/$package" "$scratch/$package" progress
-  expected=$(checksum "$scratch/node-checksums.txt" "$package")
-  "$system_pkgutil" --check-signature "$scratch/$package" > "$scratch/node-signature.txt" \
-    || fail 'The Node.js package signature could not be verified.'
-  grep -Fq 'Developer ID Installer: Node.js Foundation (HX7739G8FX)' "$scratch/node-signature.txt" \
-    || fail 'The Node.js package has an unexpected publisher; it was not installed.'
-  # Capture the digest before sudo. Only the private staged copy is verified
-  # and installed across the privilege boundary; never reread the manifest.
-  # shellcheck disable=SC2016 # Expand only in the clean privileged shell.
-  "$system_sudo" /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c '
-    set -euo pipefail
-    umask 077
-    stage=$(/usr/bin/mktemp -d /private/var/root/ballin-node.XXXXXX)
-    cleanup_stage() {
-      local status=$?
-      /bin/rm -rf -- "$stage" || { [[ "$status" != 0 ]] || status=1; }
-      exit "$status"
-    }
-    trap cleanup_stage EXIT
-    trap "exit 130" INT
-    trap "exit 143" TERM
-    /bin/cat "$1" > "$stage/node.pkg"
-    actual=$(/usr/bin/shasum -a 256 "$stage/node.pkg")
-    [[ "$2" =~ ^[0-9a-f]{64}$ && "${actual%% *}" == "$2" ]] || {
-      printf "Quickstart: The staged Node.js package checksum could not be verified.\n" >&2; exit 1;
-    }
-    /usr/sbin/pkgutil --check-signature "$stage/node.pkg" > "$stage/signature.txt" || {
-      printf "Quickstart: The staged Node.js package signature could not be verified.\n" >&2; exit 1;
-    }
-    /usr/bin/grep -Fq "Developer ID Installer: Node.js Foundation (HX7739G8FX)" "$stage/signature.txt" || {
-      printf "Quickstart: The staged Node.js package has an unexpected publisher.\n" >&2; exit 1;
-    }
-    /usr/sbin/installer -pkg "$stage/node.pkg" -target /
-  ' ballin-node-install "$scratch/$package" "$expected" || status=$?
-  if [[ "$status" != 0 ]]; then
-    case "$status" in 129|130|143) return "$status" ;; esac
-    printf 'Quickstart: Node.js installation failed (status %s). Check the output and administrator authorization, then rerun Quickstart.\n' "$status" >&2
-    return "$status"
+# Resolve existing parents without executing startup code. NVM's writable tree
+# must remain user-owned and outside Cellar, including indirect parent aliases.
+validate_nvm_directory() {
+  local ancestor="$nvm_directory" physical suffix=''
+  [[ "$nvm_directory" == /* && "$nvm_directory" != *:* && "$nvm_directory" != *$'\n'* && "$nvm_directory" != *$'\r'* ]] || fail 'NVM_DIR must be a safe absolute directory.'
+  normalize_absolute "$nvm_directory"; nvm_directory=$normalized; ancestor=$normalized
+  [[ ! -L "$nvm_directory" ]] || fail 'NVM_DIR is a directory symlink. Review it before configuring NVM.'
+  while [[ ! -e "$ancestor" && ! -L "$ancestor" ]]; do
+    suffix="/${ancestor##*/}$suffix"; ancestor=${ancestor%/*}; ancestor=${ancestor:-/}
+  done
+  [[ -d "$ancestor" && -O "$ancestor" && -w "$ancestor" && -x "$ancestor" ]] || fail 'NVM_DIR needs an accessible user-owned directory. Review it before configuring NVM.'
+  physical=$(cd -P -- "$ancestor" && pwd -P) || fail 'Unable to resolve the NVM working directory.'
+  case "$physical$suffix/" in */Cellar/*) fail 'NVM_DIR must be a user-owned directory outside Homebrew Cellar.' ;; esac
+}
+validate_nvm_alias_targets() {
+  local entry links
+  for entry in "$nvm_directory/alias" "$nvm_directory/alias/lts"; do
+    [[ ! -L "$entry" && ( ! -e "$entry" || -d "$entry" ) ]] || fail 'NVM alias directories need manual repair before installation.'
+  done
+  for entry in "$nvm_directory/alias/default" "$nvm_directory"/alias/lts/*; do
+    [[ -e "$entry" || -L "$entry" ]] || continue
+    [[ -f "$entry" && ! -L "$entry" ]] || fail 'An NVM alias target is linked or unsafe. Repair it before changing the default.'
+    links=$(/usr/bin/stat -f '%l' "$entry" 2>/dev/null) || links=$(/usr/bin/stat -c '%h' "$entry")
+    [[ "$links" == 1 ]] || fail 'An NVM alias target has multiple hard links. Repair it before changing the default.'
+  done
+}
+
+# NVM discovery is read-only. Never source Homebrew's outer nvm.sh wrapper:
+# it creates the working directory and compatibility links even with --no-use.
+discover_nvm() {
+  local directory source candidate prefix='' status=0
+  nvm_source=''; nvm_method='official'; nvm_loadable=false; nvm_follows_lts=false
+  nvm_directory=${NVM_DIR:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}}
+  nvm_directory=${nvm_directory:-$HOME/.nvm}
+  validate_nvm_directory
+  for directory in "$nvm_directory" "$HOME/.nvm"; do
+    source="$directory/nvm.sh"
+    if [[ -f "$source" && -r "$source" ]]; then
+      candidate=$source
+      local hops=0 target
+      while [[ -L "$candidate" && $hops -lt 40 ]]; do
+        target=$(readlink "$candidate") || fail 'Unable to resolve existing NVM.'
+        if [[ "$target" == /* ]]; then candidate=$target; else candidate="${candidate%/*}/$target"; fi
+        (( hops += 1 ))
+      done
+      [[ ! -L "$candidate" ]] || fail 'Existing NVM source has a symlink cycle.'
+      if grep -q 'libexec/nvm.sh' "$candidate" && ! grep -q 'nvm_process_parameters' "$candidate"; then continue; fi
+      nvm_directory=$directory; nvm_source=$source
+      case "$candidate" in */libexec/nvm.sh) nvm_source=$candidate; nvm_method=homebrew ;; esac
+      break
+    fi
+  done
+  if [[ -z "$nvm_source" ]]; then
+    candidate=$(type -P brew) || candidate=''
+    if [[ -n "$candidate" ]]; then
+      prefix=$(HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 probe_tool "$candidate" --prefix 2>/dev/null) || status=$?
+      stop_if_interrupted "$status"
+      if [[ "$status" == 0 && "$prefix" == /* && "$prefix" != *$'\n'* && -r "$prefix/opt/nvm/libexec/nvm.sh" ]]; then
+        nvm_source="$prefix/opt/nvm/libexec/nvm.sh"; nvm_method=homebrew
+      fi
+    fi
   fi
-  node_compatible "$system_node_bin/node" || fail "Node.js installation did not provide a working Node.js $required_node_version or newer."
-  node_tool="$system_node_bin/node"
+  validate_nvm_directory
+  nvm_default_exists=false
+  [[ ! -e "$nvm_directory/alias/default" && ! -L "$nvm_directory/alias/default" ]] || nvm_default_exists=true
+  [[ -n "$nvm_source" ]] || return 0
+  local probe="$scratch/nvm-probe" version alias='default' seen=':' target
+  mkdir -p "$probe/versions/node"
+  mkdir -p "$probe/alias/lts"
+  local entry count=0
+  for entry in "$nvm_directory"/alias/* "$nvm_directory"/alias/.[!.]* "$nvm_directory"/alias/..?*; do
+    [[ -f "$entry" && ! -L "$entry" ]] || continue
+    (( count += 1 )); (( count <= 1000 )) || break
+    local bytes
+    bytes=$(/usr/bin/stat -f '%z' "$entry" 2>/dev/null) || bytes=$(/usr/bin/stat -c '%s' "$entry")
+    (( bytes <= 4096 )) || continue
+    cp "$entry" "$probe/alias/${entry##*/}"
+  done
+  if [[ ! -L "$nvm_directory/alias/lts" ]]; then
+    for entry in "$nvm_directory"/alias/lts/*; do
+      [[ -f "$entry" && ! -L "$entry" ]] || continue
+      (( count += 1 )); (( count <= 1000 )) || break
+      bytes=$(/usr/bin/stat -f '%z' "$entry" 2>/dev/null) || bytes=$(/usr/bin/stat -c '%s' "$entry")
+      (( bytes <= 4096 )) || continue
+      cp "$entry" "$probe/alias/lts/${entry##*/}"
+    done
+  fi
+  for version in "$nvm_directory"/versions/node/v*; do
+    [[ -f "$version/bin/node" ]] || continue
+    mkdir -p "$probe/versions/node/${version##*/}/bin"
+    printf '#!/bin/sh\nexit 97\n' > "$probe/versions/node/${version##*/}/bin/node"
+    chmod 700 "$probe/versions/node/${version##*/}/bin/node"
+  done
+  local result=''
+  result=$(HOME="$scratch" NVM_DIR="$probe" BASH_ENV='' ENV='' /bin/bash --noprofile --norc -c \
+    '. "$1" --no-use >/dev/null && declare -F nvm >/dev/null || exit 1; printf "loadable\n"; nvm version default' ballin-nvm-probe "$nvm_source") || status=$?
+  stop_if_interrupted "$status"
+  [[ "$result" == loadable || "$result" == loadable$'\n'* ]] || fail 'Existing NVM could not be loaded. Repair its source before retrying Quickstart.'
+  nvm_loadable=true
+  for (( hops=0; hops<40; hops++ )); do
+    if [[ "$alias" == 'lts/*' ]]; then
+      [[ "$status" != 0 ]] || nvm_follows_lts=true
+      break
+    fi
+    [[ "$alias" =~ ^[a-zA-Z0-9_.-]+$ && "$alias" != . && "$alias" != .. && "$seen" != *":$alias:"* ]] || break
+    seen+="$alias:"
+    [[ -f "$probe/alias/$alias" && ! -L "$probe/alias/$alias" ]] || break
+    target=$(cat "$probe/alias/$alias") || break
+    alias=$target
+  done
+}
+
+plan_nvm() {
+  local compatible=$1
+  use_nvm=false; nvm_profile_needed=false
+  discover_nvm
+  if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
+  validate_nvm_alias_targets
+  printf '\nNVM can install and maintain latest LTS Node.\n'
+  if [[ "$nvm_loadable" != true ]]; then
+    if [[ -n "$brew_tool" ]]; then printf '$ brew install --formula nvm\n'
+    else printf '$ PROFILE=/dev/null bash <downloaded official NVM v0.40.8 installer>\n'; fi
+  fi
+  printf '$ nvm install --lts\n'
+  if "$nvm_default_exists"; then printf 'The existing NVM default will be changed to follow latest LTS.\n'; printf "$ nvm alias default 'lts/*'\n"; fi
+  printf 'This activates LTS here and makes it the default for future terminals.\n'
+  printf 'Older Node installations and versions remain installed. Global npm packages\nmay need to be reinstalled for the selected Node version.\n'
+  printf 'Shell startup changes require separate permission.\n'
+  if ! confirm 'Use NVM and latest LTS Node?'; then
+    if [[ "$compatible" != true ]]; then
+      "$input_ended" && fail 'No answer received. Node.js setup stopped.'
+      fail 'A compatible Node.js is required. Activate or install one, then rerun Quickstart.'$'\n🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+    fi
+    return
+  fi
+  use_nvm=true; nvm_profile_needed=true
+}
+
+install_nvm_lts() {
+  phase 'Setting up NVM and LTS Node'
+  validate_nvm_directory
+  validate_nvm_alias_targets
+  if [[ -z "$nvm_source" ]]; then
+    # Existing unrelated content is not consent to replace an installation.
+    if [[ -e "$nvm_directory" ]] && [[ -n "$(ls -A "$nvm_directory")" ]]; then
+      fail 'The NVM directory is occupied without a loadable NVM installation. Inspect it before retrying.'
+    fi
+    if [[ -n "$brew_tool" ]]; then
+      printf '$ brew install --formula nvm\n'
+      HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew_checked install --formula nvm
+      nvm_source="$brew_prefix/opt/nvm/nvm.sh"; nvm_method=homebrew
+      [[ -r "$brew_prefix/opt/nvm/libexec/nvm.sh" ]] || fail 'Homebrew NVM source was not installed at its stable prefix.'
+    else
+      mkdir -p "$nvm_directory"
+      download 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh' "$scratch/nvm-install.sh"
+      if [[ ! -s "$scratch/nvm-install.sh" ]] || ! /bin/bash -n "$scratch/nvm-install.sh"; then
+        fail 'The official NVM installer is empty or incomplete.'
+      fi
+      printf '$ PROFILE=/dev/null NVM_DIR=%q bash %q\n' "$nvm_directory" "$scratch/nvm-install.sh"
+      # NVM installer overrides must not redirect the promised source or install
+      # an inherited NODE_VERSION. Keep unrelated caller/auth environment intact.
+      ( unset NVM_SOURCE NVM_INSTALL_VERSION NVM_INSTALL_GITHUB_REPO NODE_VERSION NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER NVM_METHOD NVM_ENV NVM_CD_FLAGS
+        PROFILE=/dev/null NVM_DIR="$nvm_directory" METHOD=git BASH_ENV='' ENV='' /bin/bash "$scratch/nvm-install.sh" )
+      nvm_source="$nvm_directory/nvm.sh"
+    fi
+  fi
+  export NVM_DIR="$nvm_directory"
+  # Activation must occur in this Bash process, never a subshell or user profile.
+  unset -f nvm
+  local nvm_status=0
+  # The selected source is discovered and checked before consented activation.
+  # shellcheck source=/dev/null
+  . "$nvm_source" --no-use || nvm_status=$?
+  stop_if_interrupted "$nvm_status"
+  [[ "$nvm_status" == 0 ]] || fail 'Unable to load NVM. Repair its source before retrying Quickstart.'
+  declare -F nvm >/dev/null || fail 'The installed NVM source did not define nvm.'
+  printf '$ nvm install --lts\n'
+  unset NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER
+  nvm install --lts || nvm_status=$?
+  stop_if_interrupted "$nvm_status"
+  if [[ "$nvm_status" != 0 ]]; then
+    printf '\nQuickstart: NVM LTS installation did not finish. Inspect its output, then rerun Quickstart.\n' >&2
+    return "$nvm_status"
+  fi
+  if "$nvm_default_exists"; then
+    printf "$ nvm alias default 'lts/*'\n"
+    nvm alias default 'lts/*'
+  fi
+  node_tool=$(type -P node) || fail 'NVM did not activate Node.'
+  node_compatible "$node_tool" || fail "Latest NVM LTS does not satisfy Ballin's Node.js requirement."
+  npm_tool=$(type -P npm) || fail 'NVM did not provide npm.'
+  npm_compatible "$npm_tool" || fail 'NVM npm could not run.'
+  local resolved_default current
+  resolved_default=$(nvm version default)
+  current=$(node --version)
+  [[ "$resolved_default" == "$current" ]] || fail 'NVM default and active Node differ. Inspect them before retrying.'
+  # Do not add this version-specific bin directory to persistent command_path.
 }
 
 install_gh() {
@@ -789,10 +931,25 @@ check_existing_path() {
 }
 
 configure_path() {
-  phase 'Setting up PATH'
+  phase 'Setting up shell startup'
   local command_escaped line choice candidate original default_directory login_profile
   command_escaped=${command_path//\'/\'\\\'\'}
   line="export PATH=\$PATH:'$command_escaped'"
+  local nvm_block='' nvm_escaped source_escaped completion_escaped append_path=true
+  if [[ "${nvm_profile_needed:-false}" == true ]]; then
+    nvm_escaped=${nvm_directory//\'/\'\\\'\'}
+    source_escaped=${nvm_source//\'/\'\\\'\'}
+    local completion="$nvm_directory/bash_completion"
+    if [[ "$nvm_method" == homebrew ]]; then
+      completion="${nvm_source%/nvm.sh}/etc/bash_completion.d/nvm"
+      [[ "$nvm_source" != */libexec/nvm.sh ]] || completion="${nvm_source%/libexec/nvm.sh}/etc/bash_completion.d/nvm"
+    fi
+    completion_escaped=${completion//\'/\'\\\'\'}
+    printf -v nvm_block '%s\n' '# NVM (Ballin Quickstart)' "export NVM_DIR='$nvm_escaped'" \
+      "[ ! -s '$source_escaped' ] || . '$source_escaped' --no-use" \
+      'if command -v nvm >/dev/null 2>&1; then nvm use --silent default; fi' \
+      "if [ -n \"\${BASH_VERSION:-}\" ] && [ -r '$completion_escaped' ]; then . '$completion_escaped'; fi"
+  fi
   profile_shell=${SHELL:-}
   if [[ "$profile_shell" != /* || ! -f "$profile_shell" || ! -x "$profile_shell" ]]; then
     path_incomplete 'Select an executable Bash or zsh in SHELL before retrying.'; return
@@ -804,9 +961,9 @@ configure_path() {
         default_directory="$ZDOTDIR"
       fi
       if [[ "$default_directory" == "$HOME" ]]; then
-        printf 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: '
+        printf 'Zsh settings directory '; prompt_options 'Enter for home (~), an absolute directory, or skip'; printf ': '
       else
-        printf 'Zsh settings directory [Enter for %s, another absolute directory, or skip]: ' "$(display_path "$default_directory")"
+        printf 'Zsh settings directory '; prompt_options "Enter for $(display_path "$default_directory"), another absolute directory, or skip"; printf ': '
       fi
       if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
       choice=$prompt_answer
@@ -821,12 +978,12 @@ configure_path() {
       for candidate in .bash_profile .bash_login .profile; do
         if [[ -e "$HOME/$candidate" || -L "$HOME/$candidate" ]]; then profile="$HOME/$candidate"; break; fi
       done
-      if check_existing_path; then return; fi
+      if [[ "${nvm_profile_needed:-false}" != true ]] && check_existing_path; then return; fi
       login_profile="$profile"
       profile="$HOME/.bashrc"
-      if check_existing_path; then return; fi
+      if [[ "${nvm_profile_needed:-false}" != true ]] && check_existing_path; then return; fi
       profile="$login_profile"
-      printf 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] '
+      printf 'Which Bash startup file does your terminal read? '; prompt_options 'login/bashrc; Enter to skip'; printf ' '
       read_prompt_answer || prompt_answer=''
       choice=$prompt_answer
       case "$choice" in
@@ -874,7 +1031,32 @@ configure_path() {
   # Reuse the explicit location choice later, with separate completion permission.
   selected_profile="$profile"
   # Literal presence is not evidence that the shell executes this line.
-  if check_existing_path selected; then return; fi
+  if [[ "${nvm_profile_needed:-false}" != true ]]; then
+    if check_existing_path selected; then return; fi
+  else
+    # A recognizable managed block may be reused; arbitrary personal NVM code
+    # needs manual review rather than a second conflicting initialization.
+    local nvm_profile_status=0
+    "$node_tool" -e '
+      const fs = require("fs"); const [file, block] = process.argv.slice(1);
+      const text = fs.readFileSync(file, "utf8");
+      const managed = text.includes(block);
+      const remainder = managed ? text.replace(block, "") : text;
+      if (/NVM_DIR|nvm\.sh|nvm use|versions\/node\//u.test(remainder)) process.exit(2);
+      process.exit(managed ? 0 : 1);
+    ' "$original" "$nvm_block" || nvm_profile_status=$?
+    if [[ "$nvm_profile_status" == 2 ]]; then
+      path_incomplete 'Existing NVM startup code needs manual review. Load NVM with --no-use, then select its default after earlier startup selections.'; return
+    fi
+    local existing_path_status=0
+    profile_has_path "$profile" || existing_path_status=$?
+    if [[ "$existing_path_status" == 2 ]]; then
+      path_incomplete 'Existing Ballin PATH entries need manual review before adding NVM startup.'; return
+    fi
+    [[ "$nvm_profile_status" != 0 ]] || nvm_block=''
+    if grep -Fxq -- "$line" "$original" || [[ -z "$command_path" ]]; then append_path=false; fi
+    if [[ -z "$nvm_block" && "$append_path" == false ]]; then return; fi
+  fi
   # Small append-boundary checks: syntax must parse, a trailing backslash must
   # be inert (for example in a comment), and EOF must expose an invalid token.
   if ! "${syntax_check[@]}" "$original" >/dev/null 2>&1; then
@@ -902,8 +1084,12 @@ configure_path() {
   if [[ -s "$original" ]] && ! printf '\n' >> "$profile_temp"; then
     path_incomplete 'The proposed append could not be written.'; return
   fi
-  if ! printf '%s\n' "$line" >> "$profile_temp" \
-    || ! "${syntax_check[@]}" "$profile_temp" >/dev/null 2>&1; then
+  if [[ -n "$nvm_block" ]]; then printf '%s\n\n' "$nvm_block" >> "$profile_temp"; fi
+  if ! grep -Fxq '# https://github.com/JBallin/ballin-scripts' "$original"; then
+    printf '# Ballin\n# https://github.com/JBallin/ballin-scripts\n' >> "$profile_temp"
+  fi
+  if "$append_path"; then printf '%s\n' "$line" >> "$profile_temp"; fi
+  if ! "${syntax_check[@]}" "$profile_temp" >/dev/null 2>&1; then
     path_incomplete 'The proposed append could not be checked.'; return
   fi
   if ! profile_unchanged; then path_incomplete 'The startup file changed during setup. Review it before retrying.'; return; fi
@@ -927,7 +1113,7 @@ main() {
   esac
   normalize_process_path
   # Select executable tools and keep child installers from importing overrides.
-  unset -f git node gh
+  unset -f git node npm gh nvm
   normalize_absolute "$HOME/.local/bin"
   local_bin="$normalized"
   phase 'Setting up Ballin'
@@ -940,53 +1126,45 @@ main() {
     printf " when you’re ready.\n"
   fi
   phase 'Checking required tools'
+  scratch=$(mktemp -d "${TMPDIR:-/tmp}/ballin-quickstart.XXXXXX")
   active_node=$(type -P node) || active_node=''
-  local active_node_status=0
+  local active_node_status=0 compatible=false
+  node_tool="$active_node"
   if [[ -n "$active_node" ]]; then
     node_compatible "$active_node" || active_node_status=$?
-    case "$active_node_status" in
-      1) manual_node_guidance "$active_node" incompatible ;;
-      2) manual_node_guidance "$active_node" unknown ;;
-    esac
+    [[ "$active_node_status" != 2 ]] || manual_node_guidance "$active_node"
+    [[ "$active_node_status" != 0 ]] || compatible=true
+  else
+    node_tool=$(find_node '')
+    if [[ -n "$node_tool" ]]; then compatible=true
+    else
+      hidden_node=$(existing_hidden_node)
+      if [[ -n "$hidden_node" ]]; then
+        local hidden_status=0
+        node_compatible "$hidden_node" || hidden_status=$?
+        [[ "$hidden_status" != 2 ]] || manual_node_guidance "$hidden_node"
+      fi
+    fi
   fi
   path_node="$active_node"
   find_suitable_brew
-  if [[ -n "$path_node" ]]; then
-    local path_node_status=0
-    node_compatible "$path_node" || path_node_status=$?
-    case "$path_node_status" in
-      1) manual_node_guidance "$path_node" incompatible ;;
-      2) manual_node_guidance "$path_node" unknown ;;
-    esac
-    node_tool="$path_node"
-  else
-    node_tool=$(find_node '')
+  if [[ -n "$path_node" && "$compatible" == true ]]; then
+    local recheck=0
+    node_compatible "$path_node" || recheck=$?
+    [[ "$recheck" != 2 ]] || manual_node_guidance "$path_node"
+    [[ "$recheck" != 1 ]] || compatible=false
   fi
-  if [[ -z "$node_tool" ]]; then
-    hidden_node=$(existing_hidden_node)
-    if [[ -n "$hidden_node" ]]; then
-      local hidden_status=0
-      node_compatible "$hidden_node" || hidden_status=$?
-      case "$hidden_status" in
-        0) manual_node_guidance "$hidden_node" compatible ;;
-        1) manual_node_guidance "$hidden_node" incompatible ;;
-        *) manual_node_guidance "$hidden_node" unknown ;;
-      esac
-    fi
-  fi
+  plan_nvm "$compatible"
+  if "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
   gh_tool=''
   [[ "$backup_choice" != yes ]] || gh_tool=$(find_gh)
   git_tool=$(find_git)
   need_git=false; need_node=false; need_gh=false
   [[ -n "$git_tool" ]] || need_git=true
-  [[ -n "$node_tool" ]] || need_node=true
+  [[ "$use_nvm" != true ]] || need_node=true
   [[ "$backup_choice" != yes || -n "$gh_tool" ]] || need_gh=true
   # Compute the complete child PATH before previewing the core installer target.
-  if [[ -n "$node_tool" && "$node_tool" != "$path_node" ]]; then add_path_directory "${node_tool%/*}"; fi
-  if "$need_node"; then
-    if [[ -n "$brew_tool" ]]; then add_path_directory "$brew_prefix/bin"
-    else add_path_directory "$system_node_bin"; fi
-  fi
+  if [[ -n "$node_tool" && "$node_tool" != "$path_node" && "$use_nvm" != true ]]; then add_path_directory "${node_tool%/*}"; fi
   if [[ -n "$git_tool" ]]; then add_path_directory "${git_tool%/*}"
   elif "$need_git" && [[ -z "$brew_tool" ]]; then add_path_directory "${system_git%/*}"; fi
   if [[ -n "$gh_tool" ]]; then add_path_directory "${gh_tool%/*}"
@@ -1002,7 +1180,7 @@ main() {
     if "$need_git"; then
       if [[ -n "$brew_tool" ]]; then prerequisite_list+=(Git); else prerequisite_list+=('Xcode Command Line Tools'); fi
     fi
-    "$need_node" && prerequisite_list+=('Node.js')
+    "$need_node" && prerequisite_list+=('NVM and latest LTS Node')
     "$need_gh" && prerequisite_list+=('GitHub CLI')
     for (( index=0; index<${#prerequisite_list[@]}; index++ )); do
       if (( index > 0 )); then
@@ -1013,25 +1191,6 @@ main() {
       fi
       prerequisite_names+=${prerequisite_list[index]}
     done
-    if "$need_node"; then
-      local replacement_bin=$system_node_bin replacement_method='the official Node installer'
-      if [[ -n "$brew_tool" ]]; then
-        replacement_bin="$brew_prefix/bin"; replacement_method="Homebrew’s Node installer"
-        # The formula's npm post-install can remove this tree. Do not authorize
-        # directory replacement through a prerequisite yes/no question.
-        if [[ -e "$brew_prefix/lib/node_modules/npm" || -L "$brew_prefix/lib/node_modules/npm" ]]; then
-          fail "Existing npm data at $(display_path "$brew_prefix/lib/node_modules/npm") needs manual attention before installing Node."
-        fi
-      fi
-      for replacement in "$replacement_bin/node" "$replacement_bin/npm" "$replacement_bin/npx"; do
-        [[ ! -d "$replacement" ]] || fail "Refusing to replace a directory at $(display_path "$replacement")."
-        if [[ -e "$replacement" || -L "$replacement" ]]; then
-          printf 'Warning: %s may replace %s' "$replacement_method" "$(display_path "$replacement")"
-          if [[ -L "$replacement" ]]; then printf ' (link to %s)' "$(display_path "$(readlink "$replacement")")"; fi
-          printf '.\n'
-        fi
-      done
-    fi
     printf 'Installation will:\n'
     if [[ -n "$brew_tool" ]]; then
       printf '  - Install missing tools and dependencies using existing Homebrew: %s\n' "$prerequisite_names"
@@ -1040,7 +1199,7 @@ main() {
         printf '  - Install Xcode Command Line Tools\n'
       fi
       if "$need_node"; then
-        printf '  - Install Node.js 26 in %s\n' "$(display_path "$system_node_bin")"
+        printf '  - Set up NVM and latest LTS Node in %s\n' "$(display_path "$nvm_directory")"
       fi
       if "$need_gh"; then
         printf '  - Install GitHub CLI in %s\n' "$(display_path "$local_bin")"
@@ -1059,23 +1218,22 @@ main() {
         printf '.\n'
       fi
     fi
-    printf '🔗 Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
+    documentation_pointer 'Installation details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n"
       return 0
     fi
   fi
-  scratch=$(mktemp -d "${TMPDIR:-/tmp}/ballin-quickstart.XXXXXX")
-  if [[ -n "$brew_tool" ]] && { "$need_git" || "$need_node" || "$need_gh"; }; then
+  if [[ -n "$brew_tool" ]] && { "$need_git" || "$need_gh"; }; then
     install_brew_tools
   else
   if "$need_git"; then
     install_command_line_tools
   fi
-  "$need_node" && install_node
-  "$need_gh" && install_gh
   fi
+  "$use_nvm" && install_nvm_lts
+  if [[ -z "$brew_tool" ]] && "$need_gh"; then install_gh; fi
   # Validate what all child processes will actually resolve after every PATH addition.
   qualify_tool node node_compatible
   node_tool=$(type -P node)
@@ -1090,12 +1248,12 @@ main() {
   if [[ "$backup_choice" == yes ]]; then
     backup_hostname=$(backup_setup_host) || return $?
     if [[ -z "$backup_hostname" ]]; then
-      printf 'GitHub hostname [github.com]: '
+      printf 'GitHub hostname '; prompt_options 'github.com'; printf ': '
       if ! read_prompt_answer; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
       backup_hostname=$(backup_setup_host "${prompt_answer:-github.com}") || return $?
     fi
   fi
-  if ! original_path_sufficient; then
+  if [[ "$nvm_profile_needed" == true ]] || ! original_path_sufficient; then
     configure_path
   fi
   if "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
@@ -1128,7 +1286,7 @@ main() {
     fi
   fi
   if "$path_setup_complete"; then
-    printf '\n😎 Setup complete! Open a new Terminal and run '
+    printf '\n'; setup_complete; printf ' Open a new Terminal and run '
     command_reference 'ballin help'
     printf '.\n'
   else
