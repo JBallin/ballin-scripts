@@ -135,7 +135,10 @@ describe('setup presentation roles', () => {
     const command = terminalCommand('gh auth login --hostname ' + 'enterprise.'.repeat(3) + 'example.com', tty, {});
     for (const columns of [80, 47]) {
       const text = terminalProse(`❌ GitHub CLI authentication is required.\nRun ${command}, then run ${terminalCommand('ballin backup setup', tty, {})}.`, { ...tty, columns }, {});
-      for (const line of text.split('\n')) assert.isAtMost(visibleWidth(line), columns);
+      assert.include(text, command + ',');
+      for (const line of text.split('\n')) {
+        if (visibleWidth(line) > columns) assert.equal(line, command + ',');
+      }
       assert.notInclude(text, '\n\n'); assert.include(stripAnsi(text).replaceAll('\n', ' '), 'gh auth login --hostname');
     }
     assert.equal(terminalProse('\n'), '\n');
@@ -145,5 +148,10 @@ describe('setup presentation roles', () => {
     assert.equal(visibleWidth('\u200d\u0301'), 0);
     assert.equal(visibleWidth('Ａ！𠀀'), 6);
     assert.equal(terminalProse('汉字 한글 e\u0301', { columns: 5 }, {}), '汉字\n한글\ne\u0301');
+  });
+  for (const styled of [false, true]) it(`keeps command references and adjoining punctuation copyable (styled=${styled})`, () => {
+    const stream = { isTTY: styled, columns: 18 };
+    const reference = terminalCommand('ballin backup setup', stream, {});
+    assert.equal(terminalProse(`Run (${reference}), then retry.`, stream, {}), `Run\n(${reference}),\nthen retry.`);
   });
 });

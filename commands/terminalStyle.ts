@@ -90,7 +90,10 @@ const terminalProse = (text: string, stream: { isTTY?: boolean; columns?: number
   return terminalUrls(text, stream, env).split('\n').map((paragraph) => {
     const lines: string[] = [];
     let line = '';
-    for (const word of paragraph.split(' ')) {
+    // Explicit references and adjacent punctuation stay copyable, even when one
+    // complete reference is wider than the terminal, as in help output.
+    const words = paragraph.match(/(?:`[^`]*`|\x1b\[1m[^\x1b]*\x1b\[0m|\S)+/gu) ?? [];
+    for (const word of words) {
       if (line && visibleWidth(`${line} ${word}`) > width) { lines.push(line); line = ''; }
       line += `${line ? ' ' : ''}${word}`;
     }

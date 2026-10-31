@@ -268,6 +268,27 @@ describe('repository backup lifecycle', function() {
     });
   });
 
+  for (const styled of [false, true]) for (const columns of [80, 40, 24]) {
+    it(`keeps real custom-host authentication recovery commands copyable (styled=${styled}, width=${columns})`, () => {
+      const host = 'git.enterprise.example.com'; const current = config(); current.backup.repository.host = host; saveConfig(current);
+      const remote = state(); remote.host = host; remote.faults.auth = true; saveState(remote);
+      const before = fs.readFileSync(configPath);
+      const preload = `Object.defineProperty(process.stdout,'isTTY',{value:${styled}}); Object.defineProperty(process.stdout,'columns',{value:${columns}});`;
+      const result = run(['setup', '--hostname', host], '', { TERM: 'xterm', FORCE_COLOR: '1' }, preload);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      const reference = (command: string) => styled ? `\x1b[1m${command}\x1b[0m` : `\`${command}\``;
+      const login = reference(`gh auth login --hostname ${host}`); const setup = reference('ballin backup setup');
+      const icon = styled ? '\x1b[31m❌\x1b[0m' : '❌';
+      const recovery = result.stdout.slice(result.stdout.indexOf(icon));
+      assert.equal(compact(recovery), `${icon} GitHub CLI authentication is required. Run ${login}, then run ${setup}.`);
+      assert.include(recovery, login + ','); assert.include(recovery, setup + '.');
+      for (const line of recovery.trimEnd().split('\n')) {
+        if (require('../commands/terminalStyle.ts').visibleWidth(line) > columns) assert.include([login + ',', setup + '.'], line);
+      }
+      assert.deepEqual(fs.readFileSync(configPath), before); assert.isEmpty(mutations());
+      assert.isTrue(state().requests.every(request => request.host === host));
+    });
+  }
   for (const prerequisite of ['missing gh', 'unauthenticated gh']) {
     it(`stops later backup enablement with actionable recovery for ${prerequisite}`, () => {
       const value = config();

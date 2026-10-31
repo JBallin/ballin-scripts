@@ -447,6 +447,58 @@ esac
       assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr); assert.include(fresh.stdout, path.join(nvm, 'versions/node/v26.13.0/bin/node'));
     });
   }
+  for (const shell of ['bash', 'zsh']) {
+    it(`keeps Homebrew NVM startup working after replacing its keg in a fresh ${shell}`, () => {
+      const prefix = nativeBrew();
+      const oldKeg = path.join(prefix, 'Cellar/nvm/0.40.8'); const nextKeg = path.join(prefix, 'Cellar/nvm/0.40.9');
+      for (const [keg, label] of [[oldKeg, 'old-keg'], [nextKeg, 'new-keg']]) {
+        fs.mkdirSync(path.join(keg, 'libexec'), { recursive: true });
+        fs.writeFileSync(path.join(keg, 'libexec/nvm.sh'), fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8') + `\nexport FAKE_LOADED_NVM=${label}\n`);
+      }
+      const opt = path.join(prefix, 'opt/nvm'); fs.symlinkSync(oldKeg, opt);
+      const nvm = path.join(home, '.nvm'); fs.mkdirSync(path.join(nvm, 'alias'), { recursive: true });
+      fs.symlinkSync(path.join(oldKeg, 'libexec/nvm.sh'), path.join(nvm, 'nvm.sh'));
+      fs.writeFileSync(path.join(nvm, 'alias/default'), 'v22.0.0');
+      const oldNode = path.join(nvm, 'versions/node/v22.0.0/bin'); fs.mkdirSync(oldNode, { recursive: true });
+      fs.writeFileSync(path.join(oldNode, 'node'), '#!/bin/sh\nexit 95\n', { mode: 0o700 });
+      const result = run('y\ny\ny\n', { SHELL: '/bin/' + shell, PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix,
+        NVM_DIR: nvm, FAKE_NVM_ANSWER: 'y\n', FAKE_EARLY_ANSWER: 'n\n' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      const contents = fs.readFileSync(profile, 'utf8');
+      assert.include(contents, path.join(opt, 'libexec/nvm.sh')); assert.notInclude(contents, oldKeg);
+      assert.notInclude(readLog(), 'native-brew:install');
+      fs.unlinkSync(opt); fs.symlinkSync(nextKeg, opt); fs.rmSync(oldKeg, { recursive: true });
+      assert.isFalse(fs.existsSync(path.join(nvm, 'nvm.sh')));
+      const fresh = spawnSync('/bin/' + shell, shell === 'bash'
+        ? ['--noprofile', '--norc', '-c', 'source "$HOME/.bash_profile"; printf "%s\\n" "$FAKE_LOADED_NVM"; command -v node']
+        : ['-d', '-f', '-c', 'source "$HOME/.zshrc"; printf "%s\\n" "$FAKE_LOADED_NVM"; command -v node'], {
+        encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: `${oldNode}:${tools}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+      });
+      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+      assert.include(fresh.stdout, 'new-keg\n'); assert.include(fresh.stdout, path.join(nvm, 'versions/node/v26.13.0/bin/node'));
+    });
+  }
+  for (const stable of ['missing', 'different']) {
+    it(`leaves Homebrew NVM startup unverified when its stable source is ${stable}`, () => {
+      const prefix = nativeBrew(); const keg = path.join(prefix, 'Cellar/nvm/0.40.8');
+      fs.mkdirSync(path.join(keg, 'libexec'), { recursive: true });
+      const source = path.join(keg, 'libexec/nvm.sh'); fs.copyFileSync(path.join(root, 'nvm-source.sh'), source);
+      if (stable === 'different') {
+        fs.mkdirSync(path.join(prefix, 'opt/nvm/libexec'), { recursive: true });
+        fs.writeFileSync(path.join(prefix, 'opt/nvm/libexec/nvm.sh'), 'touch "$HOME/UNSAFE"\n');
+      }
+      const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+      fs.symlinkSync(source, path.join(nvm, 'nvm.sh'));
+      const result = run('y\n', { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix, NVM_DIR: nvm,
+        FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n', FAKE_RAW_INPUT: '1' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'no verified stable path'); assert.include(result.stdout, incompletePathGuidance);
+      assert.isFalse(fs.existsSync(path.join(home, '.zshrc'))); assert.isFalse(fs.existsSync(path.join(home, 'UNSAFE')));
+      assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'native-brew:install');
+      assert.equal(fs.readlinkSync(path.join(nvm, 'nvm.sh')), source);
+    });
+  }
   for (const unsafe of ['default symlink', 'default hardlink', 'alias directory link', 'Cellar parent link', 'fallback directory link']) {
     it(`refuses unsafe NVM targets before mutation: ${unsafe}`, () => {
       const outside = path.join(root, 'Cellar/package/nvm'); fs.mkdirSync(path.join(outside, 'alias'), { recursive: true });

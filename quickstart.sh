@@ -659,6 +659,14 @@ discover_nvm() {
         (( hops += 1 ))
       done
       [[ ! -L "$candidate" ]] || fail 'Existing NVM source has a symlink cycle.'
+      case "$candidate" in
+        */Cellar/nvm/*/libexec/nvm.sh)
+          local stable="${candidate%%/Cellar/nvm/*}/opt/nvm/libexec/nvm.sh"
+          # Persist the stable source only when it identifies this installation.
+          # Never load the mutating Homebrew wrapper during discovery.
+          if [[ -r "$stable" && "$stable" -ef "$candidate" ]]; then candidate=$stable; fi
+          ;;
+      esac
       if grep -q 'libexec/nvm.sh' "$candidate" && ! grep -q 'nvm_process_parameters' "$candidate"; then continue; fi
       nvm_directory=$directory; nvm_source=$source
       case "$candidate" in */libexec/nvm.sh) nvm_source=$candidate; nvm_method=homebrew ;; esac
@@ -941,6 +949,10 @@ configure_path() {
   line="export PATH=\$PATH:'$command_escaped'"
   local nvm_block='' nvm_escaped source_escaped completion_escaped append_path=true
   if [[ "${nvm_profile_needed:-false}" == true ]]; then
+    if [[ "$nvm_method" == homebrew && "$nvm_source" == */Cellar/nvm/*/libexec/nvm.sh ]]; then
+      path_incomplete 'The Homebrew NVM source has no verified stable path. Review NVM startup before changing shell settings.'
+      return
+    fi
     nvm_escaped=${nvm_directory//\'/\'\\\'\'}
     source_escaped=${nvm_source//\'/\'\\\'\'}
     local completion="$nvm_directory/bash_completion"

@@ -383,8 +383,9 @@ Use these status meanings in setup prose:
 
 Separate a final error/recovery block from preceding output with one blank line.
 Keep the error and next action consecutive, without duplicate generic footers.
-Wrap affected prose at 80 visible columns, excluding ANSI codes, and keep
-commands and URLs copyable. Retain meaningful internal headings such as Update
+Wrap affected prose at 80 visible columns, excluding ANSI codes. Keep complete
+command references and URLs intact, even when one is wider than the terminal.
+Retain meaningful internal headings such as Update
 preferences, Analytics and Backup preferences without labeling every gap.
 
 Ballin adds emphasis only on a TTY when `TERM` is not `dumb` and `NO_COLOR` is
