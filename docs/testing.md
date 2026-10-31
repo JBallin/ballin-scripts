@@ -66,8 +66,10 @@ CI additionally runs `npm run test:claude-preflight` with Bash, `jq`, and GNU
 `ubuntu-26.04`, install Ubuntu's `gnu-coreutils` package, and explicitly select
 `/usr/bin/gnutimeout`. Installing `coreutils` alone does not select GNU on Ubuntu
 26.04. The manual script verifies GNU identity before making its bounded request.
-The package and executable versions appear in job logs; the runner's setup log
-records the actual image version behind the fixed OS label.
+Permanent diagnostics report the image identifier and version, OS release, and
+relevant tool paths and versions in CI and manual eligibility logs. The GNU
+package version is recorded too. These identify the actual environment behind
+the fixed OS label without dumping unrelated environment variables.
 
 That bounded test executes the workflow's actual preflight script in a temporary
 directory with a stub `gh` and fixture responses, covering eligible/ineligible

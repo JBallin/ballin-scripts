@@ -66,8 +66,13 @@ const contracts = {
           run: [
             'sudo apt-get update',
             'sudo apt-get install --yes gnu-coreutils',
+            'printf \'Runner image: %s (%s)\\n\' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"',
+            'cat /etc/os-release',
             'dpkg-query --show gnu-coreutils',
-            '/usr/bin/gnutimeout --version',
+            'for tool in bash jq gh /usr/bin/gnutimeout; do',
+            '  command -v "$tool"',
+            '  "$tool" --version',
+            'done',
             '',
           ].join('\n'),
         }, {

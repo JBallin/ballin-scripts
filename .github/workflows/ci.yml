@@ -51,6 +51,15 @@ jobs:
           check-latest: true
           cache: npm
 
+      - name: Report runner and tool versions
+        run: |
+          printf 'Runner image: %s (%s)\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+          cat /etc/os-release
+          for tool in bash jq /usr/bin/gnutimeout shellcheck zsh docker node npm; do
+            command -v "$tool"
+            "$tool" --version
+          done
+
       - name: Install dependencies
         run: npm ci
 

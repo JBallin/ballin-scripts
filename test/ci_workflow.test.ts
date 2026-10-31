@@ -33,4 +33,17 @@ describe('Ubuntu CI prerequisites', () => {
     assert.include(step.run, 'rhysd/actionlint:1.7.12');
     assert.notInclude(step.run, '-ignore');
   });
+
+  it('reports the actual image, OS and relevant tool paths and versions after Node setup', () => {
+    const steps = workflow.jobs.test.steps;
+    const report = steps.findIndex((step: { name: string }) => step.name === 'Report runner and tool versions');
+    const node = steps.findIndex((step: { name: string }) => step.name === 'Set up Node.js');
+    assert.isAbove(report, node);
+    assert.include(steps[report].run, '${ImageOS:-unknown}');
+    assert.include(steps[report].run, '${ImageVersion:-unknown}');
+    assert.include(steps[report].run, 'cat /etc/os-release');
+    assert.include(steps[report].run, 'for tool in bash jq /usr/bin/gnutimeout shellcheck zsh docker node npm; do');
+    assert.include(steps[report].run, 'command -v "$tool"');
+    assert.include(steps[report].run, '"$tool" --version');
+  });
 });
