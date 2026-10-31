@@ -57,7 +57,7 @@ const contracts = {
           + "github.event.sender.type == 'User' && "
           + 'contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association) && '
           + "(github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request)",
-        'runs-on': 'ubuntu-latest',
+        'runs-on': 'ubuntu-24.04',
         'timeout-minutes': 2,
         permissions: { 'pull-requests': 'read' },
         outputs: { eligible: '${{ steps.eligibility.outputs.eligible }}' },
