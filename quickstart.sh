@@ -610,12 +610,15 @@ install_command_line_tools() {
   [[ -n "$git_tool" ]] || fail 'Git is still unavailable. Finish Xcode Command Line Tools installation, then rerun Quickstart.'
 }
 
-# Resolve existing parents without executing startup code. NVM's writable tree
-# must remain user-owned and outside Cellar, including indirect parent aliases.
-validate_nvm_directory() {
-  local ancestor="$nvm_directory" physical suffix=''
+normalize_nvm_directory() {
   [[ "$nvm_directory" == /* && "$nvm_directory" != *:* && "$nvm_directory" != *$'\n'* && "$nvm_directory" != *$'\r'* ]] || fail 'NVM_DIR must be a safe absolute directory.'
-  normalize_absolute "$nvm_directory"; nvm_directory=$normalized; ancestor=$normalized
+  normalize_absolute "$nvm_directory"; nvm_directory=$normalized
+}
+# Resolve existing parents only before consented writes. Read-only discovery may
+# inspect a linked NVM tree while the user keeps their working Node installation.
+validate_nvm_directory() {
+  normalize_nvm_directory
+  local ancestor="$nvm_directory" physical suffix=''
   [[ ! -L "$nvm_directory" ]] || fail 'NVM_DIR is a directory symlink. Review it before configuring NVM.'
   while [[ ! -e "$ancestor" && ! -L "$ancestor" ]]; do
     suffix="/${ancestor##*/}$suffix"; ancestor=${ancestor%/*}; ancestor=${ancestor:-/}
@@ -644,7 +647,7 @@ discover_nvm() {
   nvm_source=''; nvm_method='official'; nvm_loadable=false; nvm_follows_lts=false
   nvm_directory=${NVM_DIR:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}}
   nvm_directory=${nvm_directory:-$HOME/.nvm}
-  validate_nvm_directory
+  normalize_nvm_directory
   for directory in "$nvm_directory" "$HOME/.nvm"; do
     source="$directory/nvm.sh"
     if [[ -f "$source" && -r "$source" ]]; then
@@ -672,7 +675,7 @@ discover_nvm() {
       fi
     fi
   fi
-  validate_nvm_directory
+  normalize_nvm_directory
   nvm_default_exists=false
   [[ ! -e "$nvm_directory/alias/default" && ! -L "$nvm_directory/alias/default" ]] || nvm_default_exists=true
   [[ -n "$nvm_source" ]] || return 0
@@ -727,7 +730,6 @@ plan_nvm() {
   use_nvm=false; nvm_profile_needed=false
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
-  validate_nvm_alias_targets
   printf '\nNVM can install and maintain latest LTS Node.\n'
   if [[ "$nvm_loadable" != true ]]; then
     if [[ -n "$brew_tool" ]]; then printf '$ brew install --formula nvm\n'
@@ -745,6 +747,8 @@ plan_nvm() {
     fi
     return
   fi
+  validate_nvm_directory
+  validate_nvm_alias_targets
   use_nvm=true; nvm_profile_needed=true
 }
 

@@ -19,8 +19,9 @@ that preference; it does not run an update.
 
 The NVM question appears when NVM can load and its default follows latest LTS,
 or when NVM updates are already enabled. A default pinned to one version or
-one named LTS line does not follow future LTS releases. New installations
-recommend Yes on the first eligible review, even if NVM becomes eligible later.
+one named LTS line does not follow future LTS releases. For an unset NVM
+preference, the first eligible review recommends Yes, even if NVM becomes
+eligible later.
 A confirmed No remains No on reruns. Existing saved values stay authoritative.
 
 The automatic-backup question appears when a valid backup is configured or the

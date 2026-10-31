@@ -421,8 +421,9 @@ post-destination save-failure handling.
 A replacement installation establishes its own automatic-backup choice during
 general setup.
 
-New local configurations also carry internal `_setup.unreviewedNvm` intent until
-an eligible NVM choice is confirmed. It is never exported. Confirmation, direct
+When configuration creation or migration supplies an absent NVM preference, it
+also saves internal `_setup.unreviewedNvm` intent until an eligible choice is
+confirmed. It is never exported. Confirmation, direct
 `config set update.nvm`, reset, or an admitted restored NVM choice supersedes it;
 ineligibility and cancellation preserve it. Existing explicit choices, including
 No, remain authoritative.

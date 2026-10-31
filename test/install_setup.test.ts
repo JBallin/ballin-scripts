@@ -137,6 +137,31 @@ describe('install setup', () => {
     assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
   });
 
+  for (const absent of ['nvm', 'update']) {
+    it(`preserves absent ${absent} intent through installer migration, delayed eligibility, and saved-No reruns`, () => {
+      installConfigSources(); fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
+      const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config/.defaultConfig.json'), 'utf8'));
+      if (absent === 'nvm') delete config.update.nvm; else delete config.update;
+      fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), JSON.stringify(config));
+      const run = (input: string) => spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'refresh'], {
+        input, encoding: 'utf8', env: childEnvironment({ BALLIN_BACKUP_CHOICE: 'no' }),
+      });
+      const skipped = run('n\n'); assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
+      assert.equal(readRepoConfig().update.nvm, 'false'); assert.isTrue(readRepoConfig()._setup.unreviewedNvm);
+      const ineligible = run('y\n' + '\n'.repeat(5)); assert.equal(ineligible.status, 0, ineligible.stderr);
+      assert.notInclude(ineligible.stdout, 'Keep NVM-managed Node'); assert.isTrue(readRepoConfig()._setup.unreviewedNvm);
+      const nvm = path.join(testDir, 'home/.nvm'); fs.mkdirSync(path.join(nvm, 'alias/lts'), { recursive: true });
+      fs.writeFileSync(path.join(nvm, 'alias/default'), 'lts/*'); fs.writeFileSync(path.join(nvm, 'alias/lts/*'), 'v26.13.0');
+      fs.writeFileSync(path.join(nvm, 'nvm.sh'), 'nvm() { [ "$1" = version ] && printf "v26.13.0\\n"; }\n');
+      const cancelled = run('y\n'); assert.equal(cancelled.status, 0, cancelled.stderr);
+      assert.isTrue(readRepoConfig()._setup.unreviewedNvm);
+      const reviewed = run('y\n' + '\n'.repeat(4) + 'n\nn\n'); assert.equal(reviewed.status, 0, reviewed.stderr);
+      assert.include(reviewed.stdout, 'latest LTS? [Y/n]'); assert.equal(readRepoConfig().update.nvm, 'false');
+      assert.notProperty(readRepoConfig(), '_setup');
+      const rerun = run('\n'.repeat(7)); assert.equal(rerun.status, 0, rerun.stderr);
+      assert.include(rerun.stdout, 'latest LTS? [y/N]'); assert.equal(readRepoConfig().update.nvm, 'false');
+    });
+  }
   it('creates the default config through setup code', () => {
     installConfigSources();
 

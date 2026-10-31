@@ -23,6 +23,13 @@ const formatUpdateValue = (value: ConfigValue): string => (
   isConfigObject(value) ? JSON.stringify(value) : `${value}`
 );
 
+// Preserve an absent NVM choice before supplying false. An explicit saved false
+// remains authoritative; this local intent survives until an eligible review.
+if (!('update' in userConfig) || (isConfigObject(userConfig.update) && !('nvm' in userConfig.update))) {
+  userConfig._setup = { ...(isConfigObject(userConfig._setup) ? userConfig._setup : {}), unreviewedNvm: true };
+  configChanged = true;
+}
+
 Object.keys(defaultConfig).forEach((key) => {
   const defaultVal = defaultConfig[key] as ConfigValue;
   if (!(key in userConfig)) {

@@ -400,6 +400,36 @@ esac
     assert.include(switched.stdout, 'Older Node installations and versions remain'); assert.include(readLog(), 'nvm:install:--lts');
     assert.isTrue(fs.existsSync(path.join(tools, 'node')));
   });
+  for (const linked of ['NVM directory', 'alias directory', 'default alias', 'hard-linked default alias']) {
+    it(`keeps compatible Node by default with a linked ${linked} without changing NVM`, () => {
+      const actual = path.join(root, 'existing-nvm'); fs.mkdirSync(path.join(actual, 'alias/lts'), { recursive: true });
+      const original = path.join(actual, 'alias/default'); fs.writeFileSync(original, 'lts/*');
+      fs.writeFileSync(path.join(actual, 'alias/lts/*'), 'v26.13.0');
+      fs.mkdirSync(path.join(actual, 'versions/node/v26.13.0/bin'), { recursive: true });
+      fs.copyFileSync(path.join(root, 'fake-tool'), path.join(actual, 'versions/node/v26.13.0/bin/node'));
+      const source = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8') + '\nprintf inspected > "$NVM_DIR/probe-write"\n';
+      fs.writeFileSync(path.join(actual, 'nvm.sh'), source);
+      const nvm = path.join(home, '.nvm');
+      if (linked === 'NVM directory') fs.symlinkSync(actual, nvm);
+      else {
+        fs.mkdirSync(nvm); fs.writeFileSync(path.join(nvm, 'nvm.sh'), source);
+        if (linked === 'alias directory') fs.symlinkSync(path.join(actual, 'alias'), path.join(nvm, 'alias'));
+        else {
+          fs.mkdirSync(path.join(nvm, 'alias'));
+          if (linked === 'default alias') fs.symlinkSync(original, path.join(nvm, 'alias/default'));
+          else fs.linkSync(original, path.join(nvm, 'alias/default'));
+        }
+      }
+      const before = fs.statSync(original);
+      const result = run('y\ny\n', { NVM_DIR: nvm, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: '\n' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Use NVM and latest LTS Node? [y/N]');
+      assert.equal(fs.readFileSync(original, 'utf8'), 'lts/*');
+      assert.equal(fs.statSync(original).ino, before.ino); assert.equal(fs.statSync(original).nlink, before.nlink);
+      assert.isFalse(fs.existsSync(path.join(nvm, 'probe-write'))); assert.isFalse(fs.existsSync(path.join(actual, 'probe-write')));
+      assert.notInclude(readLog(), 'nvm:install:'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
+    });
+  }
   for (const shell of ['bash', 'zsh']) {
     it(`changes an existing default only after consent and selects it from inherited older PATH in a new ${shell}`, () => {
       const nvm = path.join(home, '.nvm'); fs.mkdirSync(path.join(nvm, 'alias'), { recursive: true });

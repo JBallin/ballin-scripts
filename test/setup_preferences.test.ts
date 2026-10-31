@@ -103,6 +103,23 @@ describe('general preference review', () => {
     assert.notProperty(read(), '_setup'); assert.equal(read().update.nvm, 'false');
     assert.include(run('\n'.repeat(6)).stdout, 'latest LTS? [y/N]');
   });
+  for (const absent of ['nvm', 'update']) for (const delayed of [false, true]) {
+    it(`recommends the first absent ${absent} NVM choice and preserves confirmed No (delayed=${delayed})`, () => {
+      const config = read();
+      if (absent === 'nvm') delete config.update.nvm; else delete config.update;
+      write(config);
+      if (delayed) {
+        const ineligible = run('\n'.repeat(5)); assert.equal(ineligible.status, 0, ineligible.stderr);
+        assert.notInclude(ineligible.stdout, 'Keep NVM-managed Node'); assert.isUndefined(read().update?.nvm);
+      }
+      installNvm();
+      const cancelled = run(''); assert.equal(cancelled.status, 0, cancelled.stderr); assert.isUndefined(read().update?.nvm);
+      const reviewed = run('\n'.repeat(4) + 'n\nn\n'); assert.equal(reviewed.status, 0, reviewed.stderr);
+      assert.include(reviewed.stdout, 'latest LTS? [Y/n]'); assert.equal(read().update.nvm, 'false');
+      const rerun = run('\n'.repeat(6)); assert.equal(rerun.status, 0, rerun.stderr);
+      assert.include(rerun.stdout, 'latest LTS? [y/N]'); assert.equal(read().update.nvm, 'false');
+    });
+  }
   it('retires pending intent on direct set of false and explicit reset', () => {
     for (const action of ['set', 'reset']) {
       fs.rmSync(file); createDefaultConfig(path.resolve(__dirname, '..'), file);

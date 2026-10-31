@@ -71,7 +71,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
         continue;
       }
       if (key === 'backup' && configuredBackupDestination(current).kind !== 'repository' && !saved) continue;
-      const recommended = key === 'nvm' && current._setup?.unreviewedNvm === true ? true : saved;
+      const recommended = key === 'nvm' && (current.update?.nvm === undefined || current._setup?.unreviewedNvm === true) ? true : saved;
       const enabled = readYesNo(`${question} ${recommended ? '[Y/n]' : '[y/N]'} `, recommended);
       if (enabled === null) return cancel();
       save('update', key, enabled);
