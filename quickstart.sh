@@ -610,15 +610,19 @@ install_command_line_tools() {
 
 install_node() {
   phase 'Installing Node.js'
-  local package version minor expected status=0
-  download 'https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
-  package=$(awk '$2 ~ /^node-v24[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
-  [[ "$package" =~ ^node-v24\.[0-9]+\.[0-9]+\.pkg$ ]] || fail 'Unable to identify the official Node.js 24 macOS package.'
+  local package version major minor expected status=0
+  download 'https://nodejs.org/dist/latest-v26.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
+  package=$(awk '$2 ~ /^node-v26[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
+  [[ "$package" =~ ^node-v26\.[0-9]+\.[0-9]+\.pkg$ ]] || fail 'Unable to identify the official Node.js 26 macOS package.'
   version=${package#node-}
   version=${version%.pkg}
-  minor=${version#v24.}
+  major=${version#v}
+  major=${major%%.*}
+  minor=${version#v*.}
   minor=${minor%%.*}
-  (( 10#$minor >= ${required_node_version#*.} )) || fail "The official Node.js package is older than the required $required_node_version; it was not installed."
+  (( 10#$major > ${required_node_version%%.*} ||
+    (10#$major == ${required_node_version%%.*} && 10#$minor >= ${required_node_version#*.}) )) \
+    || fail "The official Node.js package is older than the required $required_node_version; it was not installed."
   printf 'Downloading Node.js %s...\n' "$version"
   download "https://nodejs.org/dist/$version/$package" "$scratch/$package" progress
   expected=$(checksum "$scratch/node-checksums.txt" "$package")
@@ -1036,7 +1040,7 @@ main() {
         printf '  - Install Xcode Command Line Tools\n'
       fi
       if "$need_node"; then
-        printf '  - Install Node.js 24 in %s\n' "$(display_path "$system_node_bin")"
+        printf '  - Install Node.js 26 in %s\n' "$(display_path "$system_node_bin")"
       fi
       if "$need_gh"; then
         printf '  - Install GitHub CLI in %s\n' "$(display_path "$local_bin")"

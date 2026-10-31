@@ -126,3 +126,19 @@ jobs:
           name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
           path: coverage/tmp/
           retention-days: 7
+
+  minimum-node:
+    name: Minimum Node.js runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up minimum Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24.12.0'
+
+      - name: Smoke test minimum runtime
+        run: node test/ci/minimum_node_smoke.ts
