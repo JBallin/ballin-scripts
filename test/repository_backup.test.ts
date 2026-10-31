@@ -2242,7 +2242,7 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
     assert.equal(config().update.backup, 'false');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup`');
-    assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups\n\n==> Backup preferences\n⚠️  Inventories and filtered preferences');
+    assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups\n\n==> Backup preferences\n⚠️ Inventories and filtered preferences');
     assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups\n');
     assert.include(result.stdout, '😎 Setup complete.\nRun `ballin setup` to review your other preferences.\n');
     assertSavedSensitiveChoice(result, 'false');
@@ -2591,7 +2591,7 @@ describe('repository backup lifecycle', function() {
       assert.isBelow(result.stdout.indexOf('Sensitive sources in backups:'), result.stdout.indexOf('Private backup reconnected:'));
       assert.include(result.stdout, 'Private backup reconnected: https://github.com/fixture-user/ballin-backups\n');
       assert.notInclude(result.stdout, 'Unrecognized backup entries:');
-      assert.include(result.stdout, '⚠️  Stop backups on other installations before backing up here.');
+      assert.include(result.stdout, '⚠️ Stop backups on other installations before backing up here.');
       assert.notInclude(result.stdout, 'Reconnect can recover supported preferences');
       assert.include(result.stdout, 'Setup complete.');
     });
@@ -2662,7 +2662,7 @@ describe('repository backup lifecycle', function() {
     unconfigured();
     const result = run(['setup'], '\nreconnect\nmissing-name\nballin-backups\nn\ny\nn\n');
     ok(result);
-    assert.include(result.stdout, '⚠️  The backup repository is missing or inaccessible.');
+    assert.include(result.stdout, '⚠️ The backup repository is missing or inaccessible.');
     assert.equal(result.stdout.split('Repository name').length - 1, 2);
     assert.deepEqual(config().backup.repository, fixtureDestination);
     assert.isBelow(result.stdout.indexOf('Sensitive sources in backups:'), result.stdout.indexOf('Private backup reconnected:'));
@@ -2705,7 +2705,7 @@ describe('repository backup lifecycle', function() {
       };`;
     const result = run(['setup'], '\nreconnect\nballin-backups\nballin-backups\nn\ny\nn\n', {}, preload);
     ok(result); assert.equal(result.stdout.split('Repository name').length - 1, 2);
-    assert.include(result.stdout, '⚠️  The backup repository is missing or inaccessible.');
+    assert.include(result.stdout, '⚠️ The backup repository is missing or inaccessible.');
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.isEmpty(publications());
   });
   it('does not reprompt for an explicit repository whose node is inaccessible', () => {
