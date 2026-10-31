@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
 
     steps:
@@ -32,7 +32,9 @@ jobs:
       - name: Install shell tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes shellcheck zsh jq coreutils
+          sudo apt-get install --yes shellcheck zsh jq gnu-coreutils
+          dpkg-query --show gnu-coreutils
+          /usr/bin/gnutimeout --version
 
       - name: Run ShellCheck
         run: |
@@ -49,6 +51,15 @@ jobs:
           check-latest: true
           cache: npm
 
+      - name: Report runner and tool versions
+        run: |
+          printf 'Runner image: %s (%s)\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+          cat /etc/os-release
+          for tool in bash jq /usr/bin/gnutimeout shellcheck zsh docker node npm; do
+            command -v "$tool"
+            "$tool" --version
+          done
+
       - name: Install dependencies
         run: npm ci
 
@@ -62,6 +73,8 @@ jobs:
         run: npm run typecheck:analytics-worker
 
       - name: Test Claude preflight with Bash and jq
+        env:
+          GNU_TIMEOUT: /usr/bin/gnutimeout
         run: npm run test:claude-preflight
 
       - name: Run unit tests with coverage
@@ -125,7 +138,7 @@ jobs:
 
   minimum-node:
     name: Minimum Node.js runtime
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Check out repository

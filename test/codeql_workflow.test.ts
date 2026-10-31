@@ -41,7 +41,7 @@ describe('CodeQL workflow', () => {
     const permissions = [...workflow.matchAll(/^\s+([a-z-]+): (read|write)\s*$/gmu)]
       .map((match) => `${match[1]}: ${match[2]}`);
     assert.deepEqual(permissions, ['contents: read', 'contents: read', 'security-events: write']);
-    assert.match(workflow, /^    runs-on: ubuntu-24\.04\s*$/mu);
+    assert.match(workflow, /^    runs-on: ubuntu-26\.04\s*$/mu);
     assert.match(workflow, /^          persist-credentials: false\s*$/mu);
   });
 });

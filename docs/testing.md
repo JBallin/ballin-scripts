@@ -62,12 +62,31 @@ may change without changing the parsed contract. Shared runtime behavior stays
 tested in the runtime repository.
 
 CI additionally runs `npm run test:claude-preflight` with Bash, `jq`, and GNU
-`timeout` declared as prerequisites. That bounded test executes the workflow's
-actual preflight script in a temporary directory with a stub `gh` and fixture
-responses, covering eligible/ineligible PRs, malformed data, wrong PR identity,
-and command failure. It makes no network or model calls. This separate CI test
-is excluded from portable `npm test`; invoking it directly requires those tools
-and fails if they are missing.
+`timeout` declared as prerequisites. CI and the manual eligibility job use
+`ubuntu-26.04`, install Ubuntu's `gnu-coreutils` package, and explicitly select
+`/usr/bin/gnutimeout`. Installing `coreutils` alone does not select GNU on Ubuntu
+26.04. The manual script verifies GNU identity before making its bounded request.
+Permanent diagnostics report the image identifier and version, OS release, and
+relevant tool paths and versions in CI and manual eligibility logs. The GNU
+package version is recorded too. These identify the actual environment behind
+the fixed OS label without dumping unrelated environment variables.
+
+That bounded test executes the workflow's actual preflight script in a temporary
+directory with a stub `gh` and fixture responses, covering eligible/ineligible
+PRs, malformed data, wrong PR identity,
+command failure, and timeout expiry without emitting eligibility. Short real-GNU
+probes check output and exit-status propagation and TERM/124 expiry. A fixture
+wrapper checks the production `30s` argument and shortens only the expiry case.
+It makes no network or model calls. This separate CI test is excluded from
+portable `npm test`; invoking it directly requires those tools and fails if they
+are missing. On macOS, an already installed GNU `gtimeout` can
+be used; selection checks GNU identity and skips other implementations. Set
+`GNU_TIMEOUT` to an explicit GNU executable to require that exact path.
+
+The pinned actionlint 1.7.12 predates the supported `ubuntu-26.04` runner label.
+The explicit label entry in `.github/actionlint.yaml` extends lint's inventory;
+it does not establish native runner compatibility. Hosted CI remains the
+compatibility check.
 
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.

@@ -168,6 +168,7 @@ const matchesDeployPaths = (files: string[], patterns: string[]): boolean => fil
 describe('analytics Worker deployment', () => {
   it('keeps automatic deploy triggers and setup scoped to deployment inputs', () => {
     const workflow = fs.readFileSync(deployWorkflowPath, 'utf8');
+    assert.match(workflow, /^    runs-on: ubuntu-26\.04\s*$/mu);
 
     assert.deepEqual(yamlListAfter(workflow, '    paths:', 6), [
       'analytics-worker/**',
