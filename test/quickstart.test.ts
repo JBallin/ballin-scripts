@@ -66,7 +66,15 @@ case "$1" in
       if [[ "$tool" == nvm ]]; then
         mkdir -p "$FAKE_NATIVE_PREFIX/opt/nvm/libexec" "$FAKE_NATIVE_PREFIX/opt/nvm/etc/bash_completion.d"
         cp "$FAKE_ROOT/nvm-source.sh" "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm.sh"
-        printf '. "%s/opt/nvm/libexec/nvm.sh" --no-use\\n' "$FAKE_NATIVE_PREFIX" > "$FAKE_NATIVE_PREFIX/opt/nvm/nvm.sh"
+        printf '#!/bin/bash\\n. "$NVM_DIR/nvm.sh" --no-use\\nexec "$@"\\n' > "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm-exec"
+        chmod +x "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm-exec"
+        cat > "$FAKE_NATIVE_PREFIX/opt/nvm/nvm.sh" <<'WRAPPER'
+printf 'homebrew-wrapper-loaded\\n' >> "$FAKE_COMMAND_LOG"
+. "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm.sh"
+[ -e "$NVM_DIR" ] || mkdir -p "$NVM_DIR"
+[ -e "$NVM_DIR/nvm.sh" ] || ln -s "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm.sh" "$NVM_DIR/nvm.sh"
+[ -e "$NVM_DIR/nvm-exec" ] || ln -s "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm-exec" "$NVM_DIR/nvm-exec"
+WRAPPER
         continue
       fi
       cp "$FAKE_ROOT/fake-tool" "$FAKE_NATIVE_PREFIX/bin/$tool"
@@ -388,8 +396,42 @@ esac
       assert.notInclude(profile, 'versions/node/'); assert.include(profile, 'nvm use --silent default');
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
-      if (prefix) { assert.include(profile, prefix + '/opt/nvm/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
+      if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
       else assert.include(readLog(), '/nvm-sh/nvm/v0.40.8/install.sh');
+    });
+  }
+  for (const shell of ['bash', 'zsh']) {
+    it(`initializes fresh Homebrew compatibility links once and loads libexec in a new ${shell}`, () => {
+      const prefix = nativeBrew(); const nvm = path.join(home, '.nvm');
+      const environment = { SHELL: '/bin/' + shell, PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix,
+        FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' };
+      const result = run('y\ny\ny\n', environment);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(readLog(), 'homebrew-wrapper-loaded');
+      for (const name of ['nvm.sh', 'nvm-exec']) {
+        assert.equal(fs.readlinkSync(path.join(nvm, name)), path.join(prefix, 'opt/nvm/libexec', name));
+      }
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      assert.include(fs.readFileSync(profile, 'utf8'), `${prefix}/opt/nvm/libexec/nvm.sh`);
+      assert.notInclude(fs.readFileSync(profile, 'utf8'), `${prefix}/opt/nvm/nvm.sh`);
+      // Missing compatibility links must not be recreated by ordinary startup.
+      fs.unlinkSync(path.join(nvm, 'nvm-exec'));
+      const fresh = spawnSync('/bin/' + shell, ['-c', '. "$1"; command -v node', 'fixture', profile], {
+        encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+      });
+      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+      assert.include(fresh.stdout, path.join(nvm, 'versions/node/v26.13.0/bin/node'));
+      assert.isFalse(fs.existsSync(path.join(nvm, 'nvm-exec')));
+      fs.symlinkSync(path.join(prefix, 'opt/nvm/libexec/nvm-exec'), path.join(nvm, 'nvm-exec'));
+      const execResult = spawnSync(path.join(nvm, 'nvm-exec'), ['/bin/echo', 'compatible'], {
+        encoding: 'utf8', env: testChildEnvironment({ HOME: home, NVM_DIR: nvm, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+      });
+      assert.equal(execResult.status, 0, execResult.stderr); assert.equal(execResult.stdout, 'compatible\n');
+      const rerun = run('y\ny\n', { ...environment, FAKE_MISSING_NODE: '0',
+        PATH: `${nvm}/versions/node/v26.13.0/bin:${environment.PATH}` });
+      assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
+      assert.notInclude(readLog(), 'homebrew-wrapper-loaded');
+      assert.equal(fs.readFileSync(profile, 'utf8').split('# NVM (Ballin Quickstart)').length - 1, 1);
     });
   }
   it('keeps compatible Node by default and switches only after explicit runtime consent', () => {
