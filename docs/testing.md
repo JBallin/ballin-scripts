@@ -5,6 +5,8 @@
 Run commands from the repository root. `npm test` runs comprehensive local Node
 checks: lint, both typechecks, and tests with coverage. For faster feedback, use
 the focused commands in [Test runtime and timeouts](#test-runtime-and-timeouts).
+Development and CI target the latest Node.js LTS major through tested PR upgrades,
+while Ballin's minimum supported runtime remains Node.js 24.12.
 CI runs the same Node scripts in separate steps and adds checks defined in the
 [CI workflow](../.github/workflows/ci.yml), including shell and workflow
 validation. Keep the shared Node script definitions aligned when changing them.
@@ -283,7 +285,7 @@ and checkout path prefixes. Reconcile the checkout commit and Git tree, test
 selection and passing/pending counts, runtime metadata (including UID), and
 lockfile dependencies before attributing a mismatch to Node. A PR merge checkout
 can have a different commit but identical tree. Use the same exact
-Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
+Node/V8 version: `.nvmrc` selects Node 26, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
 

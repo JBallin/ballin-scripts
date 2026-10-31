@@ -176,7 +176,7 @@ ${afterMain}
     fs.writeFileSync(path.join(root, 'node.pkg'), nodeBytes);
     fs.writeFileSync(path.join(root, 'gh.zip'), ghBytes);
     const hash = (text: string): string => crypto.createHash('sha256').update(text).digest('hex');
-    fs.writeFileSync(path.join(root, 'node-checksums.txt'), `${hash(nodeBytes)}  node-v24.21.0.pkg\n`);
+    fs.writeFileSync(path.join(root, 'node-checksums.txt'), `${hash(nodeBytes)}  node-v26.13.0.pkg\n`);
     fs.writeFileSync(path.join(root, 'gh-checksums.txt'), ['arm64', 'amd64'].map((arch) => (
       `${hash(ghBytes)}  gh_2.102.0_macOS_${arch}.zip\n`
     )).join(''));
@@ -296,8 +296,8 @@ case "$name" in
       esac
     done
     case "$url" in
-      https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt) cp "$FAKE_ROOT/node-checksums.txt" "$target" ;;
-      https://nodejs.org/dist/v24.21.0/node-v24.21.0.pkg)
+      https://nodejs.org/dist/latest-v26.x/SHASUMS256.txt) cp "$FAKE_ROOT/node-checksums.txt" "$target" ;;
+      https://nodejs.org/dist/v\${FAKE_NODE_PACKAGE_VERSION:-26.13.0}/node-v\${FAKE_NODE_PACKAGE_VERSION:-26.13.0}.pkg)
         cp "$FAKE_ROOT/node.pkg" "$target"; if [[ "\${FAKE_CORRUPT_NODE:-0}" == 1 ]]; then printf 'corruption' >> "$target"; fi ;;
       https://api.github.com/repos/cli/cli/releases/latest) cp "$FAKE_ROOT/gh-release.json" "$target" ;;
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_checksums.txt) cp "$FAKE_ROOT/gh-checksums.txt" "$target" ;;
@@ -318,7 +318,7 @@ case "$name" in
       *) exit 97 ;;
     esac ;;
   pkgutil)
-    [[ "$1" == --check-signature && "$2" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/node-v24.21.0.pkg && $# == 2 ]] || exit 97
+    [[ "$1" == --check-signature && "$2" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/node-v\${FAKE_NODE_PACKAGE_VERSION:-26.13.0}.pkg && $# == 2 ]] || exit 97
     [[ "\${FAKE_SIGNATURE_FAIL:-0}" != 1 ]] || exit 1
     if [[ "\${FAKE_BAD_PUBLISHER:-0}" == 1 ]]; then printf 'Unexpected publisher\\n'
     else printf 'Developer ID Installer: Node.js Foundation (HX7739G8FX)\\n'; fi ;;
@@ -1894,14 +1894,35 @@ system_sudo=fixture_sudo
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
   }
-  it('rejects an incompatible Node package version before requesting admin access', () => {
-    fs.writeFileSync(path.join(root, 'node-checksums.txt'), 'a'.repeat(64) + '  node-v24.11.0.pkg\n');
-    const result = run('y\n', { FAKE_MISSING_NODE: '1' });
-    assert.equal(result.status, 1);
-    assert.include(result.stderr, 'older than the required 24.12');
-    assert.notInclude(readLog(), 'sudo:');
-    assert.notInclude(readLog(), '/node-v24.11.0.pkg -o');
-  });
+  for (const minimum of ['24.12', '26.0']) {
+    it(`accepts a Node 26.0 package against the ${minimum} runtime minimum`, () => {
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'node.pkg'))).digest('hex');
+      fs.writeFileSync(path.join(root, 'node-checksums.txt'), `${digest}  node-v26.0.0.pkg\n`);
+      const result = run('y\n', { FAKE_MISSING_NODE: '1', FAKE_NODE_PACKAGE_VERSION: '26.0.0' }, home, `required_node_version='${minimum}'`);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(readLog(), 'https://nodejs.org/dist/v26.0.0/node-v26.0.0.pkg');
+      assert.equal(fs.readFileSync(path.join(root, 'installed.pkg'), 'utf8'), 'Synthetic official Node package\n');
+    });
+  }
+  for (const minimum of ['26.14', '27.0']) {
+    it(`rejects a Node package below the ${minimum} runtime minimum before requesting admin access`, () => {
+      const result = run('y\n', { FAKE_MISSING_NODE: '1' }, home, `required_node_version='${minimum}'`);
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, `older than the required ${minimum}`);
+      assert.notInclude(readLog(), 'sudo:');
+      assert.notInclude(readLog(), '/node-v26.13.0.pkg -o');
+    });
+  }
+  for (const packageName of ['node-v24.22.1.pkg', 'node-v27.0.0.pkg', 'node-v26.13.0-rc.1.pkg']) {
+    it(`rejects an unexpected Node package ${packageName} before requesting admin access`, () => {
+      fs.writeFileSync(path.join(root, 'node-checksums.txt'), 'a'.repeat(64) + `  ${packageName}\n`);
+      const result = run('y\n', { FAKE_MISSING_NODE: '1' });
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, 'Unable to identify the official Node.js 26 macOS package.');
+      assert.notInclude(readLog(), 'sudo:');
+      assert.notInclude(readLog(), `/${packageName} -o`);
+    });
+  }
   for (const pathComplete of [true, false]) {
     for (const answer of ['\n', 'y\n', 'Y\n']) {
       it(`captures and opens after first-backup acceptance ${JSON.stringify(answer)} with PATH complete ${pathComplete}`, () => {
@@ -2073,7 +2094,7 @@ main
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `Installation will:
   - Install Xcode Command Line Tools
-  - Install Node.js 24 in ${systemNode}
+  - Install Node.js 26 in ${systemNode}
   - Install GitHub CLI in ~/.local/bin
   - Create Ballin and its settings in ~/.ballin-scripts
   - Link the Ballin command in ~/.local/bin
@@ -2307,7 +2328,6 @@ Proceed with installation? [y/N] `);
     for (const script of [source, path.resolve(__dirname, '../install.sh')]) {
       assert.equal(fs.readFileSync(script, 'utf8').match(/required_node_version='([^']+)'/u)?.[1], minimum);
     }
-    assert.equal(minimum.split('.')[0], selectedMajor);
   });
   for (const shell of ['bash', 'zsh']) {
     for (const failure of ['empty', 'partial', 'complete-error', 'helper', 'eof', 'none']) {

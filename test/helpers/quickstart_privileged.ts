@@ -17,7 +17,7 @@ const swap = (): void => {
   fs.writeFileSync(source(), 'replaced package\n');
 };
 const replaceManifest = (): void => fs.writeFileSync(path.join(path.dirname(source()), 'node-checksums.txt'),
-  `${digest(Buffer.from('replaced package\n'))}  node-v24.21.0.pkg\n`);
+  `${digest(Buffer.from('replaced package\n'))}  ${path.basename(source())}\n`);
 const runCommand = (command: string, args: string[]): number => {
   log(`privileged-${command}:${args.join(' ')}`);
   if (command === 'mktemp') {
@@ -74,7 +74,7 @@ if (process.argv[2] === '--command') {
   assert.equal(args.length, 9);
   assert.deepEqual(args.slice(0, 5), ['/usr/bin/env', '-i', 'PATH=/usr/bin:/bin:/usr/sbin:/sbin', '/bin/bash', '-c']);
   assert.equal(args[6], 'ballin-node-install');
-  assert.match(args[7], new RegExp('^' + root.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&') + '/tmp/ballin-quickstart\\.[^/]+/node-v24[.][0-9]+[.][0-9]+[.]pkg$'));
+  assert.match(args[7], new RegExp('^' + root.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&') + '/tmp/ballin-quickstart\\.[^/]+/node-v26[.][0-9]+[.][0-9]+[.]pkg$'));
   assert.match(args[8], /^[0-9a-f]{64}$/u);
   fs.writeFileSync(path.join(root, 'package-source'), args[7]);
   fs.writeFileSync(path.join(root, 'captured-digest'), args[8]);
