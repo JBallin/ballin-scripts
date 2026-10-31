@@ -1,0 +1,5 @@
+# actionlint 1.7.12 predates the supported GitHub-hosted Ubuntu 26.04 label.
+# This extends lint's label inventory only; hosted CI verifies compatibility.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
