@@ -180,7 +180,7 @@ Node, installs nvm, or bootstraps Homebrew.
 For genuinely missing tools, a suitable native existing Homebrew installation
 is preferred for Git, Node and GitHub CLI. The Node route uses ordinary
 `brew install node`: Homebrew's **default formula**, which may move to a newer
-compatible major and is not pinned to Node 24 or LTS. Quickstart asks before
+compatible major and is not pinned to an LTS major. Quickstart asks before
 installing missing tools. If the existing Homebrew installation is unsuitable,
 it offers the direct routes. Once a consented Homebrew operation starts, failure
 stops setup for manual recovery rather than silently changing routes. Existing
@@ -202,7 +202,7 @@ silently starts a second installer. Interrupting the Terminal attempt stops setu
 Rerun Quickstart when you’re ready.
 
 Direct routes are Apple's Xcode Command Line Tools for Git, the latest official Node
-24 macOS package and GitHub CLI's architecture-specific archive. Node and GitHub
+26 macOS package and GitHub CLI's architecture-specific archive. Node and GitHub
 CLI downloads use published SHA-256 checksums. The Node package requires
 administrator access and installs commands under `/usr/local/bin`; actual
 Node/npm replacement risks name affected paths before consent. Its signature
