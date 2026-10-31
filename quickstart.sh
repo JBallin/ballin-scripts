@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+{ # Parse the complete body before starting installation.
 # Optional beginner bootstrap; install.sh remains the core Ballin installer.
 set -euo pipefail
 umask 077
@@ -1131,9 +1132,10 @@ main() {
   fi
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
   trap cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
   main
 fi
+}

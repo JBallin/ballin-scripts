@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+{ # Parse the complete body before starting installation.
 phase() {
   if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
     printf '\033[34m==>\033[1;39m %s\033[0m\n' "$1"
@@ -280,3 +281,4 @@ if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then
   command_reference 'ballin help'
   printf '.\n'
 fi
+}

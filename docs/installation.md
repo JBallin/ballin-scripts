@@ -301,8 +301,10 @@ tools, or change GitHub CLI authentication.
 
 ## Commands and services contacted
 
-The linked installation commands download scripts from GitHub. Quickstart's
-selected prerequisite routes may also contact Apple's Xcode Command Line Tools service,
+The linked installation commands download scripts from GitHub for interactive
+use.
+
+Quickstart’s selected prerequisite routes may also contact Apple's Xcode Command Line Tools service,
 Homebrew's formula/bottle services, Node.js releases, or GitHub CLI releases.
 The core installer then:
 

@@ -8,11 +8,19 @@ import type { Sandbox } from './helpers/onboarding.ts';
 describe('interactive setup with delayed terminal answers', function() {
   this.timeout(sandboxSuiteTimeout);
   let sandbox: Sandbox;
+  const publicCommand = (guide: string): string[] => {
+    const text = fs.readFileSync(path.resolve(__dirname, '..', guide), 'utf8');
+    const command = text.match(/```shell\n([\s\S]*?)\n```/)?.[1];
+    assert.isString(command);
+    // Direct installation expects its command directory on PATH before launch.
+    const prepare = guide === 'README.md' ? 'export PATH="$PATH:$HOME/.local/bin"; ' : '';
+    return ['/bin/bash', '-c', prepare + command];
+  };
   afterEach(() => { if (sandbox && fs.existsSync(sandbox.root)) cleanupSandbox(sandbox.root); });
 
   it('separates the direct installer cancellation outcome from its rerun guidance', () => {
-    sandbox = createSandbox();
-    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], [
+    sandbox = createSandbox({ quickstart: true });
+    const result = runInteractiveSetup(sandbox, publicCommand('README.md'), [
       { prompt: 'Proceed with installation? [y/N] ', answer: 'n' },
     ]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -22,6 +30,20 @@ describe('interactive setup with delayed terminal answers', function() {
     assert.isFalse(fs.existsSync(sandbox.repo));
     assert.notInclude(fs.readFileSync(sandbox.log, 'utf8'), 'git:clone');
   });
+
+  for (const route of ['direct', 'quickstart']) {
+    it(`preserves required-prompt EOF through the public ${route} command`, () => {
+      sandbox = createSandbox({ quickstart: true });
+      const result = runInteractiveSetup(sandbox,
+        publicCommand(route === 'direct' ? 'README.md' : 'docs/quickstart.md'), [
+          { prompt: route === 'direct' ? 'Proceed with installation? [y/N] ' : 'Set up backups to GitHub? [Y/n] ', answer: '\x04', raw: true },
+        ]);
+      assert.equal(result.status, route === 'direct' ? 1 : 0, result.stdout + result.stderr);
+      assert.isFalse(fs.existsSync(sandbox.repo));
+      assert.notInclude(fs.existsSync(sandbox.log) ? fs.readFileSync(sandbox.log, 'utf8') : '', 'git:clone');
+      assert.notInclude(result.stdout, 'Setup complete!');
+    });
+  }
 
   const backupAnswers = [
     { prompt: 'GitHub hostname [github.com]: ', answer: '' },
@@ -58,7 +80,7 @@ describe('interactive setup with delayed terminal answers', function() {
       const startup = shell === 'bash'
         ? { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' }
         : { prompt: `Zsh settings directory [Enter for home (~), an absolute directory, or skip]: `, answer: '' };
-      const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+      const result = runInteractiveSetup(sandbox, publicCommand('docs/quickstart.md'), [
         { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
         backupAnswers[0],
         startup,
@@ -206,8 +228,8 @@ describe('interactive setup with delayed terminal answers', function() {
   }
 
   it('keeps clone and onboarding spacing in a plain terminal', () => {
-    sandbox = createSandbox();
-    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], [
+    sandbox = createSandbox({ quickstart: true });
+    const result = runInteractiveSetup(sandbox, publicCommand('README.md'), [
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
       { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: 'login' },
