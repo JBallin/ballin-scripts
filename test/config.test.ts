@@ -565,8 +565,8 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
       const before = fetchConfigJSON();
       const writeMessage = 'Unable to save config. Check that the config file and its parent directory are writable.';
       const cases = [
-        { args: ['set', 'backup.repository', 'changed'], method: 'writeFileSync', code: 'EACCES', message: writeMessage },
-        { args: ['reset'], method: 'writeFileSync', code: 'EACCES', message: writeMessage },
+        { args: ['set', 'backup.repository', 'changed'], method: 'openSync', code: 'EACCES', message: writeMessage },
+        { args: ['reset'], method: 'openSync', code: 'EACCES', message: writeMessage },
         {
           args: ['get'], method: 'readFileSync', code: 'ERR_FS_FILE_TOO_LARGE',
           message: 'Unable to read config. Check that the config file is accessible and readable.',
@@ -577,9 +577,11 @@ printf 'called' > "$BALLIN_CONFIG_HELP_LOG"
         const script = `
           const fs = require('fs');
           const method = ${JSON.stringify(method)};
+          const resolvedPath = fs.realpathSync(process.env.BALLIN_TEST_CONFIG_PATH);
           const original = fs[method];
           fs[method] = (file, ...args) => {
-            if (file === process.env.BALLIN_TEST_CONFIG_PATH) {
+            if (file === process.env.BALLIN_TEST_CONFIG_PATH
+              || (method === 'openSync' && file.startsWith(resolvedPath + '.'))) {
               throw Object.assign(new Error('private path: ' + file), { code: ${JSON.stringify(code)} });
             }
             return original(file, ...args);

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { writeConfigFile } = require('./writeConfigFile.ts');
 
 type ConfigLeaf = string | number | boolean | null;
 type ConfigObject = { [key: string]: ConfigValue };
@@ -117,7 +118,7 @@ const createConfigStore = ({
 
   const writeConfig = (configJSON: string): void => {
     try {
-      fs.writeFileSync(configPath, configJSON, 'utf8');
+      writeConfigFile(configPath, configJSON);
     } catch (error) {
       if (!isFileSystemError(error)) throw error;
       throw new ConfigError('Unable to save config. Check that the config file and its parent directory are writable.');

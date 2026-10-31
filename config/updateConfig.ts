@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-const fs = require('fs');
+const { writeConfigFile } = require('./writeConfigFile.ts');
 const { configPath, fetchConfig, stringify } = require('./index.ts');
 const defaultConfig = require('./.defaultConfig.json');
 // Setup records destination and capture consent only in its confirmed transaction.
@@ -52,7 +52,7 @@ Object.keys(defaultConfig).forEach((key) => {
 });
 
 if (configChanged) {
-  fs.writeFileSync(configPath, stringify(userConfig), 'utf-8');
+  writeConfigFile(configPath, stringify(userConfig));
 }
 
 if (updates.length) {
