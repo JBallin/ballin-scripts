@@ -198,6 +198,28 @@ describe('general preference review', () => {
     fs.rmSync(file); const missing = path.join(root, 'missing'); fs.symlinkSync(missing, file);
     assert.equal(run().status, 1); assert.equal(fs.readlinkSync(file), missing); assert.isFalse(fs.existsSync(missing));
   });
+  it('creates a missing standalone config privately and retains unreviewed NVM intent', () => {
+    fs.rmSync(file);
+    const result = run('\n'.repeat(5)); assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assert.equal(read().update.nvm, 'false'); assert.isTrue(read()._setup.unreviewedNvm);
+    assert.include(result.stdout, 'Created config:'); assert.include(result.stdout, 'Setup complete.');
+  });
+  it('reports config creation failure without replacing missing parent directories', () => {
+    const missing = path.join(root, 'absent/config.json');
+    const result = run('', { BALLIN_TEST_CONFIG_PATH: missing });
+    assert.equal(result.status, 1); assert.include(result.stderr, 'Unable to create local config.');
+    assert.notInclude(result.stderr, 'config reset'); assert.isFalse(fs.existsSync(path.dirname(missing)));
+  });
+  it('keeps config access failures distinct from invalid-content recovery', () => {
+    const before = fs.readFileSync(file, 'utf8');
+    fs.appendFileSync(guard, `const stat = fs.lstatSync;
+      fs.lstatSync = (entry,...args) => { if(entry === process.env.BALLIN_TEST_CONFIG_PATH) throw Object.assign(Error('private details'),{code:'EACCES'});
+      return stat(entry,...args); };`);
+    const result = run(); assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Check local config access and structure.'); assert.notInclude(result.stderr, 'config reset');
+    assert.notInclude(result.stderr, 'private details'); assert.equal(fs.readFileSync(file, 'utf8'), before);
+  });
   it('keeps help offline and rejects extra setup arguments', () => {
     fs.writeFileSync(file, '{'); const help = run('', {}, ['setup', '--help']);
     assert.equal(help.status, 0); assert.include(help.stdout, 'update and analytics');

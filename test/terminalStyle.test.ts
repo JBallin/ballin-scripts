@@ -140,4 +140,10 @@ describe('setup presentation roles', () => {
     }
     assert.equal(terminalProse('\n'), '\n');
   });
+  it('counts combining marks, invisible controls, and wide scripts by their displayed columns', () => {
+    assert.equal(visibleWidth('e\u0301👩🏽‍💻汉字한글'), 11);
+    assert.equal(visibleWidth('\u200d\u0301'), 0);
+    assert.equal(visibleWidth('Ａ！𠀀'), 6);
+    assert.equal(terminalProse('汉字 한글 e\u0301', { columns: 5 }, {}), '汉字\n한글\ne\u0301');
+  });
 });

@@ -279,11 +279,11 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       return;
     case 'backup': {
       if (isCommandHelp(args)) {
-        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin backup setup', 'ballin help backup <subcommand>']));
         return;
       }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
-        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin backup setup', 'ballin help backup <subcommand>']));
         return;
       }
       const helpCommand = backupHelpCommand(args);

@@ -95,7 +95,10 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
         : 'Unable to save preferences; the pending choice is unchanged.'
       : /^(?:Invalid |Config is not valid JSON|Unable to (?:read config|create local config))/.test((error as Error).message)
         ? (error as Error).message : 'Check local config access and structure.';
-    writeStderrLine(terminalProse(`${message}\nCheck the config file and its directory, then run ${terminalCommand('ballin setup', process.stderr)} again.`, process.stderr));
+    const recovery = !reviewing && /^(?:Invalid |Config is not valid JSON)/u.test((error as Error).message)
+      ? `Repair the file, or run ${terminalCommand('ballin config reset', process.stderr)} to replace it with defaults, then run ${terminalCommand('ballin setup', process.stderr)} again.`
+      : `Check the config file and its directory, then run ${terminalCommand('ballin setup', process.stderr)} again.`;
+    writeStderrLine(terminalProse(`${message}\n${recovery}`, process.stderr));
     return 'failed';
   }
 };
