@@ -467,6 +467,40 @@ esac
       });
     }
   }
+  for (const route of ['Official', 'Homebrew', 'Homebrew without brew on PATH']) for (const shell of ['bash', 'zsh']) for (const outcome of ['declined', 'blocked']) {
+    it(`provides executable manual NVM activation for ${route} after startup is ${outcome} (${shell})`, () => {
+      const prefix = route.startsWith('Homebrew') ? nativeBrew() : '';
+      const noBrew = route.endsWith('without brew on PATH');
+      if (noBrew) {
+        fs.mkdirSync(path.join(prefix, 'opt/nvm/libexec'), { recursive: true });
+        fs.copyFileSync(path.join(root, 'nvm-source.sh'), path.join(prefix, 'opt/nvm/libexec/nvm.sh'));
+        fs.mkdirSync(path.join(home, '.nvm'));
+        fs.symlinkSync(path.join(prefix, 'opt/nvm/libexec/nvm.sh'), path.join(home, '.nvm/nvm.sh'));
+      }
+      const profile = path.join(home, shell === 'bash' ? '.bash_profile' : '.zshrc');
+      if (outcome === 'blocked') {
+        const target = path.join(root, 'preserved-profile'); fs.writeFileSync(target, '# preserved\n'); fs.symlinkSync(target, profile);
+      }
+      const result = run(outcome === 'declined' ? 'y\nn\ny\n' : 'y\ny\ny\n', {
+        SHELL: '/bin/' + shell, FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n',
+        ...(prefix ? { PATH: noBrew ? tools : `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix } : {}),
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, incompletePathGuidance);
+      assert.include(result.stdout, 'installation.md#manual-nvm-activation');
+      if (outcome === 'declined') assert.isFalse(fs.existsSync(profile));
+      else assert.equal(fs.readFileSync(profile, 'utf8'), '# preserved\n');
+      const guide = fs.readFileSync(path.join(__dirname, '../docs/installation.md'), 'utf8');
+      let block = guide.split(`#### ${prefix ? 'Homebrew' : 'Official'} NVM\n`)[1].match(/```sh\n([\s\S]*?)\n```/)![1];
+      if (noBrew) block = block.replace('$(brew --prefix)', prefix);
+      const fresh = spawnSync('/bin/' + shell, ['-c', block + '\ncommand -v node'], {
+        encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: prefix && !noBrew ? `${prefix}/bin:${tools}` : tools,
+          FAKE_NATIVE_PREFIX: prefix, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
+      });
+      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
+      assert.include(fresh.stdout, path.join(home, '.nvm/versions/node/v26.13.0/bin/node'));
+    });
+  }
   it('keeps compatible Node by default and switches only after explicit runtime consent', () => {
     const kept = run('y\ny\n', { FAKE_EARLY_ANSWER: 'n\n' }); assert.equal(kept.status, 0, kept.stderr);
     assert.notInclude(readLog(), 'nvm:install:');

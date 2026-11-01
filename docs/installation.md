@@ -253,14 +253,49 @@ otherwise `$HOME/.local/bin`. For example, without Homebrew:
 export PATH="$PATH:$HOME/.local/bin"
 ```
 
-If Node.js or Git was installed in a directory outside your PATH, also add its
-native bin directory, such as `/usr/local/bin` for the official Node installer.
+If Quickstart installed Node.js with NVM, follow
+[manual NVM activation](#manual-nvm-activation) before checking Ballin in a new
+Terminal. If Git was installed outside your PATH, also add its native bin directory.
 If GitHub CLI is installed at `~/.local/bin/gh`, also add `$HOME/.local/bin`,
 even when Homebrew supplies the Ballin command directory. Keep your existing
 Node version manager active. Open a new Terminal and check
 `command -v node git ballin` (and `gh` for backups), then `ballin help`.
 Inspect unexpected earlier commands rather than deleting them blindly. Remove
 only the Ballin PATH addition to undo it; prerequisites and other entries remain.
+
+### Manual NVM activation
+
+If you declined shell-startup changes or Quickstart could not safely update the
+file, setup's NVM activation does not carry over to new terminals. Add the appropriate block below
+to the Bash or Zsh startup file your Terminal reads. Use the NVM working directory
+selected during setup in place of `$HOME/.nvm` if you chose another location.
+Review existing NVM startup code first; update it rather than adding duplicate
+activation. Place default selection after any earlier Node version selection.
+
+#### Official NVM
+
+```sh
+export NVM_DIR="$HOME/.nvm"
+. "$NVM_DIR/nvm.sh" --no-use
+nvm use --silent default
+```
+
+#### Homebrew NVM
+
+Use Homebrew's stable source so startup survives formula upgrades. If `brew` is
+not on PATH in the new Terminal, replace `$(brew --prefix)` below with your
+Homebrew prefix: normally `/opt/homebrew` on Apple Silicon or `/usr/local` on
+Intel Macs. Use the actual prefix if Homebrew is installed elsewhere.
+
+```sh
+export NVM_DIR="$HOME/.nvm"
+. "$(brew --prefix)/opt/nvm/libexec/nvm.sh" --no-use
+nvm use --silent default
+```
+
+Open a new Terminal and check `node --version`, `command -v node`, and
+`ballin help`. If the source is missing or unreadable, repair the NVM installation
+before adding activation. Do not persist a version-specific Node bin directory.
 
 ### Answers, input ending and interruption
 

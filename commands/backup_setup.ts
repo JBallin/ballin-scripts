@@ -85,6 +85,13 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     if (configured.kind === 'invalid') {
       throw new PortableConfigError(`The backup destination configuration is invalid. Run ${terminalCommand('ballin backup disconnect')}, then ${terminalCommand('ballin backup setup')}.`);
     }
+    let selectedHost: string | undefined;
+    try { selectedHost = resolveBackupSetupHost(candidate, options.hostname); }
+    catch (error) {
+      writeStdoutLine();
+      writeStdoutLine(terminalError((error as Error).message));
+      return false;
+    }
     if (!options.configPrepared && !configure(repoDir, options.docsUrl ?? '', configPath, true)) {
       writeStdoutLine(`\n${terminalError('Unable to prepare local backup configuration.')}\nCheck the config file and its directory, then rerun ${terminalCommand('ballin backup setup')}.`);
       return false;
@@ -106,9 +113,6 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       }
     }
     if (!commandExists('gh')) throw new RepositoryLookupError('prerequisite');
-    let selectedHost: string | undefined;
-    try { selectedHost = resolveBackupSetupHost(candidate, options.hostname); }
-    catch (error) { throw new PortableConfigError((error as Error).message); }
     if (selectedHost === undefined) {
       const answer = readPromptLine('GitHub hostname [github.com]: ');
       if (answer.eof) return cancelled();

@@ -244,6 +244,16 @@ describe('repository backup lifecycle', function() {
       assert.equal(result.status, 1); assert.include(compact(result.stdout), 'Disconnect before choosing another host');
       assert.isEmpty(state().requests); assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     });
+    for (const missingGh of [false, true]) it(`rejects a host switch before migration (missing gh=${missingGh})`, () => {
+      const value = config(); delete value.update.nvm; saveConfig(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const preload = missingGh ? `require(${JSON.stringify(path.join(repoRoot, 'commands/commandHelpers.ts'))}).commandExists = () => false;` : '';
+      const result = run(['setup', '--hostname', host], '', {}, preload);
+      assert.equal(result.status, 1); assert.include(compact(result.stdout), 'Disconnect before choosing another host');
+      assert.notInclude(result.stdout, 'Repair the local configuration');
+      assert.notInclude(result.stdout, 'was not found on PATH');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before); assert.isEmpty(state().requests);
+    });
     for (const args of [['--hostname'], ['--hostname', '--help'], ['--hostname', 'https://git.example.com'],
       ['--hostname', host, '--hostname', 'github.com'], ['--hostname', host, 'a', 'b']]) {
       it(`rejects malformed host arguments without creating missing config: ${args.join(' ')}`, () => {

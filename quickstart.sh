@@ -1318,6 +1318,9 @@ main() {
     printf '.\n'
   else
     printf "\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
+    if [[ "${nvm_profile_needed:-false}" == true ]]; then
+      printf 'Activate NVM in your shell startup file before running Ballin in a new Terminal.\n🔗 NVM activation:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-nvm-activation\n'
+    fi
   fi
 }
 
