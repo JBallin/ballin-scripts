@@ -434,6 +434,39 @@ esac
       assert.equal(fs.readFileSync(profile, 'utf8').split('# NVM (Ballin Quickstart)').length - 1, 1);
     });
   }
+  for (const entry of ['missing', 'file', 'directory', 'symlink', 'dangling']) {
+    for (const consent of [false, true]) {
+      it(`initializes preinstalled Homebrew compatibility only after consent (${entry}, consent=${consent})`, () => {
+        const prefix = nativeBrew(); const libexec = path.join(prefix, 'opt/nvm/libexec');
+        fs.mkdirSync(libexec, { recursive: true });
+        fs.copyFileSync(path.join(root, 'nvm-source.sh'), path.join(libexec, 'nvm.sh'));
+        fs.writeFileSync(path.join(libexec, 'nvm-exec'), '#!/bin/bash\n. "$NVM_DIR/nvm.sh" --no-use\nexec "$@"\n', { mode: 0o700 });
+        const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+        const exec = path.join(nvm, 'nvm-exec'); const target = path.join(root, 'existing-exec');
+        if (entry === 'file') fs.writeFileSync(exec, 'preserve existing bytes');
+        if (entry === 'directory') fs.mkdirSync(exec);
+        if (entry === 'symlink') { fs.writeFileSync(target, 'preserve target bytes'); fs.symlinkSync(target, exec); }
+        if (entry === 'dangling') fs.symlinkSync(target, exec);
+        const result = run(consent ? 'y\ny\ny\n' : 'y\ny\n', { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix,
+          FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: consent ? 'y\n' : 'n\n' });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.notInclude(readLog(), 'native-brew:install');
+        const sourceLink = path.join(nvm, 'nvm.sh');
+        if (consent) assert.equal(fs.readlinkSync(sourceLink), path.join(libexec, 'nvm.sh'));
+        else assert.isFalse(fs.existsSync(sourceLink));
+        if (entry === 'missing') {
+          if (consent) {
+            assert.equal(fs.readlinkSync(exec), path.join(libexec, 'nvm-exec'));
+            const executed = spawnSync(exec, ['/bin/echo', 'compatible'], { encoding: 'utf8',
+              env: testChildEnvironment({ HOME: home, NVM_DIR: nvm, PATH: tools }) });
+            assert.equal(executed.status, 0, executed.stderr); assert.equal(executed.stdout, 'compatible\n');
+          } else assert.isFalse(fs.existsSync(exec));
+        } else if (entry === 'file') assert.equal(fs.readFileSync(exec, 'utf8'), 'preserve existing bytes');
+        else if (entry === 'directory') assert.isTrue(fs.lstatSync(exec).isDirectory());
+        else assert.equal(fs.readlinkSync(exec), target);
+      });
+    }
+  }
   it('keeps compatible Node by default and switches only after explicit runtime consent', () => {
     const kept = run('y\ny\n', { FAKE_EARLY_ANSWER: 'n\n' }); assert.equal(kept.status, 0, kept.stderr);
     assert.notInclude(readLog(), 'nvm:install:');

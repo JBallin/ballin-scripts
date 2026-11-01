@@ -774,11 +774,6 @@ install_nvm_lts() {
       HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew_checked install --formula nvm
       nvm_source="$brew_prefix/opt/nvm/libexec/nvm.sh"; nvm_method=homebrew
       [[ -r "$nvm_source" ]] || fail 'Homebrew NVM source was not installed at its stable prefix.'
-      # Preserve Homebrew's nvm exec/third-party compatibility initialization
-      # during consented installation, without loading its mutating wrapper.
-      mkdir -p "$nvm_directory"
-      ln -s "$nvm_source" "$nvm_directory/nvm.sh"
-      ln -s "$brew_prefix/opt/nvm/libexec/nvm-exec" "$nvm_directory/nvm-exec"
     else
       mkdir -p "$nvm_directory"
       download 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh' "$scratch/nvm-install.sh"
@@ -791,6 +786,17 @@ install_nvm_lts() {
       ( unset NVM_SOURCE NVM_INSTALL_VERSION NVM_INSTALL_GITHUB_REPO NODE_VERSION NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER NVM_METHOD NVM_ENV NVM_CD_FLAGS
         PROFILE=/dev/null NVM_DIR="$nvm_directory" METHOD=git BASH_ENV='' ENV='' /bin/bash "$scratch/nvm-install.sh" )
       nvm_source="$nvm_directory/nvm.sh"
+    fi
+  fi
+  if [[ "$nvm_method" == homebrew ]]; then
+    # Initialize fresh and discovered Homebrew installations only after consent.
+    # Preserve every existing entry, including dangling links and directories.
+    mkdir -p "$nvm_directory"
+    if [[ ! -e "$nvm_directory/nvm.sh" && ! -L "$nvm_directory/nvm.sh" ]]; then
+      ln -s "$nvm_source" "$nvm_directory/nvm.sh"
+    fi
+    if [[ ! -e "$nvm_directory/nvm-exec" && ! -L "$nvm_directory/nvm-exec" ]]; then
+      ln -s "${nvm_source%/nvm.sh}/nvm-exec" "$nvm_directory/nvm-exec"
     fi
   fi
   export NVM_DIR="$nvm_directory"
