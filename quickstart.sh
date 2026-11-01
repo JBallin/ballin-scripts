@@ -882,6 +882,14 @@ path_incomplete() {
   printf 'Review your shell startup and PATH setup, or rerun this quickstart to retry.\n' >&2
 }
 
+manual_nvm_guidance() {
+  if [[ "${nvm_profile_needed:-false}" == true && "${path_setup_complete:-false}" != true ]]; then
+    printf 'Activate NVM in your shell startup file before running Ballin in a new Terminal.\nUse this NVM working directory:\n'
+    printf 'export NVM_DIR=%q\n' "$nvm_directory"
+    printf '🔗 NVM activation:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-nvm-activation\n'
+  fi
+}
+
 profile_unchanged() {
   "$node_tool" -e '
     const fs = require("fs");
@@ -1282,6 +1290,7 @@ main() {
   fi
   if [[ "$nvm_profile_needed" == true ]] || ! original_path_sufficient; then
     configure_path
+    manual_nvm_guidance
   fi
   if "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
   if [[ "$backup_choice" == yes ]]; then
@@ -1318,9 +1327,6 @@ main() {
     printf '.\n'
   else
     printf "\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
-    if [[ "${nvm_profile_needed:-false}" == true ]]; then
-      printf 'Activate NVM in your shell startup file before running Ballin in a new Terminal.\n🔗 NVM activation:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-nvm-activation\n'
-    fi
   fi
 }
 

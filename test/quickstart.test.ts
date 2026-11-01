@@ -501,6 +501,28 @@ esac
       assert.include(fresh.stdout, path.join(home, '.nvm/versions/node/v26.13.0/bin/node'));
     });
   }
+  for (const location of ['inherited', 'xdg']) for (const outcome of ['declined', 'blocked']) {
+    it(`prints selected NVM recovery before a later failure (${location}, ${outcome})`, () => {
+      const prefix = nativeBrew();
+      const selected = path.join(home, location === 'xdg' ? 'custom config/nvm' : 'custom nvm');
+      const profile = path.join(home, '.zshrc');
+      if (outcome === 'blocked') {
+        const target = path.join(root, 'untouched-profile'); fs.writeFileSync(target, '# untouched\n'); fs.symlinkSync(target, profile);
+      }
+      const result = run(outcome === 'declined' ? 'y\nn\ny\n' : 'y\ny\ny\n', {
+        PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n', FAKE_INSTALL_FAIL: '1',
+        ...(location === 'xdg' ? { XDG_CONFIG_HOME: path.dirname(selected) } : { NVM_DIR: selected }),
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stdout, 'installation.md#manual-nvm-activation');
+      const command = result.stdout.match(/^export NVM_DIR=.+$/mu)![0];
+      const recovered = spawnSync('/bin/bash', ['-c', command + '; printf "%s" "$NVM_DIR"'], { encoding: 'utf8', env: testChildEnvironment({ HOME: home }) });
+      assert.equal(recovered.status, 0); assert.equal(recovered.stdout, selected);
+      assert.notInclude(result.stdout, 'Ballin is installed.');
+      if (outcome === 'blocked') assert.equal(fs.readFileSync(profile, 'utf8'), '# untouched\n');
+      else assert.isFalse(fs.existsSync(profile));
+    });
+  }
   it('keeps compatible Node by default and switches only after explicit runtime consent', () => {
     const kept = run('y\ny\n', { FAKE_EARLY_ANSWER: 'n\n' }); assert.equal(kept.status, 0, kept.stderr);
     assert.notInclude(readLog(), 'nvm:install:');

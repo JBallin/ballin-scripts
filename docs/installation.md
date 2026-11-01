@@ -268,7 +268,8 @@ only the Ballin PATH addition to undo it; prerequisites and other entries remain
 If you declined shell-startup changes or Quickstart could not safely update the
 file, setup's NVM activation does not carry over to new terminals. Add the appropriate block below
 to the Bash or Zsh startup file your Terminal reads. Use the NVM working directory
-selected during setup in place of `$HOME/.nvm` if you chose another location.
+reported by Quickstart in place of `$HOME/.nvm`. This may come from an inherited
+`NVM_DIR` or `$XDG_CONFIG_HOME/nvm`, even if you did not explicitly choose it.
 Review existing NVM startup code first; update it rather than adding duplicate
 activation. Place default selection after any earlier Node version selection.
 
