@@ -28,7 +28,7 @@ describe('ballin', () => {
     assert.include(result.stdout, 'Back up your dotfiles and update your macOS development environment.');
     assert.include(result.stdout, 'Usage:');
     assert.include(result.stdout, 'ballin <command> [options]');
-    const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\n')[0];
+    const commandSection = result.stdout.split('Commands:\n')[1].split('\n\n')[0];
     const commandLines = commandSection.split('\n').filter((line: string) => /^ {4}\S/u.test(line));
     assert.lengthOf(commandLines, topLevelCommandNames.length);
     const documentedCommands = commandLines.map((line: string) => {
@@ -39,7 +39,10 @@ describe('ballin', () => {
     assert.sameMembers(documentedCommands, [...topLevelCommandNames]);
     assert.include(result.stdout, 'back up Ballin-managed environment state');
     assert.include(result.stdout, 'view or change Ballin configuration');
-    assert.include(result.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
+    assert.include(result.stdout, 'update your development environment');
+    assert.include(result.stdout, 'check the Ballin-managed environment');
+    assert.include(result.stdout, 'review local Ballin preferences');
+    assert.include(result.stdout, 'ballin help [command...]');
     for (const detail of ['Examples:', '--verbose', 'backup.includeSensitive', 'configured backup',
       '[repository-name]', 'file name', '(ex:', 'local checkout', 'command shims']) {
       assert.notInclude(result.stdout, detail);
@@ -264,7 +267,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
     ['help', 'extra'], ['--help', 'extra'], ['help', 'backup', 'extra'],
     ['help', 'backup', 'read', 'extra'], ['help', 'backup', 'read', '--help'],
     ['help', 'backup', 'setup', 'repository'], ['help', 'backup', 'read', 'zshrc.sh'],
-    ['help', 'config', 'get'], ['help', 'doctor', '--help'],
+    ['help', 'config', 'missing'], ['help', 'doctor', '--help'],
   ]) {
     it(`preserves overview output and analytics eligibility for unsupported help route ${JSON.stringify(args)}`, () => {
       const expectedOutput = runBallin(['help']).stdout;
@@ -302,18 +305,16 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         assert.include(result.stdout, `ballin ${command}`);
         assert.notInclude(result.stdout, 'ballin config help');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
-        if (command === 'self-update') assert.include(result.stdout, 'local `ballin-scripts` checkout, command shims, and configuration');
+        if (command === 'self-update') assert.include(result.stdout, 'Update Ballin itself.');
         if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
         if (command === 'update') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get update` to inspect settings.');
         if (command === 'setup') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
         if (command === 'backup') {
-          assert.include(result.stdout.replace(/\s+/gu, ' '), '`setup` creates or reconnects to an optional backup; `open` opens it in a browser.');
-          assert.include(result.stdout.replace(/\s+/gu, ' '), '`list` finds saved snapshots; `read` prints one supported snapshot.');
-          assert.include(result.stdout.replace(/\s+/gu, ' '), 'Without a snapshot selector, `read` shows usage and lists saved options when readable.');
-          assert.include(result.stdout.replace(/\s+/gu, ' '), '`disconnect` stops local backups and clears comparison state.');
-          ['setup [repository-name]', 'open', 'list', 'read <snapshot>', 'read <snapshot> --list', 'read <snapshot> --file <path>', 'disconnect'].forEach((usage) => {
-            assert.include(result.stdout.replace(/\s+/gu, ' '), `ballin backup ${usage}`);
+          assert.include(result.stdout, 'ballin backup <command>');
+          ['setup', 'open', 'list', 'read', 'disconnect'].forEach((command) => {
+            assert.match(result.stdout, new RegExp(`^    ${command} {2,}`, 'mu'));
           });
+          assert.include(result.stdout.replace(/\s+/gu, ' '), 'disconnect this Mac and disable automatic backups');
           assert.include(result.stdout.replace(/\s+/gu, ' '), 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');
         }
         assert.deepEqual(commandLog(), []);
@@ -409,7 +410,7 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
 
   it('keeps top-level help aligned with the command catalog', () => {
     const result = runBallin(['--help']);
-    const commandSection = result.stdout.split('Commands:\n\n')[1].split('\n\n')[0];
+    const commandSection = result.stdout.split('Commands:\n')[1].split('\n\n')[0];
     const documentedCommands = [...commandSection.matchAll(/^ {4}([a-z][a-z-]*) {2,}/gmu)]
       .map((match) => match[1]);
 
@@ -452,10 +453,12 @@ exit 17
     assert.deepEqual(commandLog(), ['ballin-backup-called']);
   });
 
-  it('routes backup through the backup command implementation', () => {
+  it('routes backup help to the backup index', () => {
     const result = runBallin(['backup', 'help']);
 
-    assertHelpOutput(result);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, runBallin(['help', 'backup']).stdout);
+    assert.include(result.stdout, 'ballin backup <command>');
   });
 
   it('routes config through the existing config command implementation', () => {
@@ -643,7 +646,7 @@ require('https').request = () => {
       const ordinary = runBallin(args);
       const result = runBallin(args, interactiveEnv());
       assert.equal(result.status, ordinary.status);
-      assert.equal(result.stdout, ordinary.stdout);
+      assert.equal(result.stdout.replace(/\x1b\[[0-9;]*m/gu, ''), ordinary.stdout);
       assert.equal(result.stderr, ordinary.stderr);
     }
   });

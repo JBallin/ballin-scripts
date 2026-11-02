@@ -19,7 +19,7 @@ describe('beginner quickstart bootstrap', function() {
   const nodeInstallPrompt = 'Proceed with installation? [y/N]';
   const cltInstallQuestion = 'Proceed with installation?';
   const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
-  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
+  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
   printf 'brew-interruption:%s:%s\\n' "$stage" "$FAKE_BREW_INTERRUPTION" >> "$FAKE_COMMAND_LOG"
@@ -157,7 +157,7 @@ ${afterMain}
     log = path.join(root, 'commands.log');
     [home, tools, systemNode, path.join(root, 'tmp')].forEach((dir) => fs.mkdirSync(dir));
     fs.writeFileSync(log, '');
-    fs.writeFileSync(path.join(root, 'quickstart-entrypoint'), '#!/bin/bash\n'
+    fs.writeFileSync(path.join(root, 'quickstart-entrypoint'), '#!/bin/bash\n{\n'
       + 'set -euo pipefail\n'
       + 'printf "downloaded-quickstart:started\\n" >> "$FAKE_COMMAND_LOG"\n'
       + 'touch "$FAKE_ROOT/entrypoint-ran"\n'
@@ -165,8 +165,8 @@ ${afterMain}
       + 'IFS= read -r answer\n'
       + '[[ "$answer" == device-code ]] || exit 91\n'
       + 'printf "downloaded-quickstart:stdin-preserved\\n" >> "$FAKE_COMMAND_LOG"\n'
-      + 'exit "$FAKE_QUICKSTART_EXIT"\n');
-    for (const name of ['awk', 'bash', 'cat', 'chmod', 'cmp', 'cp', 'grep', 'ln', 'mkdir', 'mktemp', 'mv', 'readlink', 'rm', 'shasum', 'touch', 'zsh']) {
+      + 'exit "$FAKE_QUICKSTART_EXIT"\n}\n');
+    for (const name of ['awk', 'bash', 'cat', 'chmod', 'cmp', 'cp', 'grep', 'ln', 'mkdir', 'mktemp', 'mv', 'readlink', 'rm', 'shasum', 'sed', 'touch', 'zsh']) {
       const target = ['/bin', '/usr/bin'].map((dir) => path.join(dir, name)).find((file) => fs.existsSync(file));
       assert.exists(target, `Fixture requires ${name}`);
       fs.symlinkSync(target, path.join(tools, name));
@@ -176,7 +176,7 @@ ${afterMain}
     fs.writeFileSync(path.join(root, 'node.pkg'), nodeBytes);
     fs.writeFileSync(path.join(root, 'gh.zip'), ghBytes);
     const hash = (text: string): string => crypto.createHash('sha256').update(text).digest('hex');
-    fs.writeFileSync(path.join(root, 'node-checksums.txt'), `${hash(nodeBytes)}  node-v24.21.0.pkg\n`);
+    fs.writeFileSync(path.join(root, 'node-checksums.txt'), `${hash(nodeBytes)}  node-v26.13.0.pkg\n`);
     fs.writeFileSync(path.join(root, 'gh-checksums.txt'), ['arm64', 'amd64'].map((arch) => (
       `${hash(ghBytes)}  gh_2.102.0_macOS_${arch}.zip\n`
     )).join(''));
@@ -296,8 +296,8 @@ case "$name" in
       esac
     done
     case "$url" in
-      https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt) cp "$FAKE_ROOT/node-checksums.txt" "$target" ;;
-      https://nodejs.org/dist/v24.21.0/node-v24.21.0.pkg)
+      https://nodejs.org/dist/latest-v26.x/SHASUMS256.txt) cp "$FAKE_ROOT/node-checksums.txt" "$target" ;;
+      https://nodejs.org/dist/v\${FAKE_NODE_PACKAGE_VERSION:-26.13.0}/node-v\${FAKE_NODE_PACKAGE_VERSION:-26.13.0}.pkg)
         cp "$FAKE_ROOT/node.pkg" "$target"; if [[ "\${FAKE_CORRUPT_NODE:-0}" == 1 ]]; then printf 'corruption' >> "$target"; fi ;;
       https://api.github.com/repos/cli/cli/releases/latest) cp "$FAKE_ROOT/gh-release.json" "$target" ;;
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_checksums.txt) cp "$FAKE_ROOT/gh-checksums.txt" "$target" ;;
@@ -305,16 +305,20 @@ case "$name" in
         cp "$FAKE_ROOT/gh.zip" "$target"; if [[ "\${FAKE_CORRUPT_GH:-0}" == 1 ]]; then printf 'corruption' >> "$target"; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)
         if [[ "$FAKE_QUICK_DOWNLOAD" == empty ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi
-        if [[ -n "$target" && "$target" != - ]]; then cp "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}" "$target"
-        else cat "\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}"; fi
-        if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
+        payload="\${FAKE_QUICK_SOURCE:-$FAKE_ROOT/quickstart-entrypoint}"
+        if [[ "$FAKE_QUICK_DOWNLOAD" == partial ]]; then
+          sed '$d' "$payload"; printf 'Fixture curl failure\\n' >&2; exit 22
+        fi
+        if [[ -n "$target" && "$target" != - ]]; then cp "$payload" "$target"
+        else cat "$payload"; fi
+        if [[ "$FAKE_QUICK_DOWNLOAD" == complete-error ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
       https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
         cp "\${FAKE_CORE_INSTALL_SOURCE:-$FAKE_ROOT/fake-tool}" "$target" ;;
       *) exit 97 ;;
     esac ;;
   pkgutil)
-    [[ "$1" == --check-signature && "$2" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/node-v24.21.0.pkg && $# == 2 ]] || exit 97
+    [[ "$1" == --check-signature && "$2" == "$FAKE_ROOT"/tmp/ballin-quickstart.*/node-v\${FAKE_NODE_PACKAGE_VERSION:-26.13.0}.pkg && $# == 2 ]] || exit 97
     [[ "\${FAKE_SIGNATURE_FAIL:-0}" != 1 ]] || exit 1
     if [[ "\${FAKE_BAD_PUBLISHER:-0}" == 1 ]]; then printf 'Unexpected publisher\\n'
     else printf 'Developer ID Installer: Node.js Foundation (HX7739G8FX)\\n'; fi ;;
@@ -503,6 +507,9 @@ printf '0\\n'
       else if (state === 'unknown') {
         assert.include(result.stderr, 'could not be verified.');
         assert.notInclude(result.stderr, 'brew upgrade node');
+      }
+      if (!['130', '143'].includes(state)) {
+        assert.include(result.stderr, '\n🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
       }
       assert.equal(fs.readFileSync(installed, 'utf8'), contents);
       assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
@@ -1335,7 +1342,7 @@ system_sudo=fixture_sudo
       assert.notInclude(readLog(), 'core-startup-reloaded');
       assert.notInclude(result.stdout, 'Missing prerequisites:');
       assert.include(result.stdout, 'Proceed with installation? [y/N]');
-      assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
+      assert.include(result.stdout, '\n\nBallin installation cancelled.\nRerun the installer when you’re ready.\n');
       const childEnv = JSON.parse(fs.readFileSync(path.join(root, 'core-env.json'), 'utf8'));
       const parentEnv = JSON.parse(fs.readFileSync(path.join(root, 'parent-env.json'), 'utf8'));
       assert.equal(childEnv.BASH_ENV, '');
@@ -1369,7 +1376,7 @@ system_sudo=fixture_sudo
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'Missing prerequisites:');
       assert.include(result.stdout, 'Proceed with installation? [y/N]');
-      assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
+      assert.include(result.stdout, '\n\nBallin installation cancelled.\nRerun the installer when you’re ready.\n');
       assert.notInclude(readLog(), `exported-${name}:called`);
       assert.include(readLog(), 'parent-function-preserved');
       assert.include(readLog(), 'git:--version');
@@ -1887,14 +1894,35 @@ system_sudo=fixture_sudo
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
     });
   }
-  it('rejects an incompatible Node package version before requesting admin access', () => {
-    fs.writeFileSync(path.join(root, 'node-checksums.txt'), 'a'.repeat(64) + '  node-v24.11.0.pkg\n');
-    const result = run('y\n', { FAKE_MISSING_NODE: '1' });
-    assert.equal(result.status, 1);
-    assert.include(result.stderr, 'older than the required 24.12');
-    assert.notInclude(readLog(), 'sudo:');
-    assert.notInclude(readLog(), '/node-v24.11.0.pkg -o');
-  });
+  for (const minimum of ['24.12', '26.0']) {
+    it(`accepts a Node 26.0 package against the ${minimum} runtime minimum`, () => {
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'node.pkg'))).digest('hex');
+      fs.writeFileSync(path.join(root, 'node-checksums.txt'), `${digest}  node-v26.0.0.pkg\n`);
+      const result = run('y\n', { FAKE_MISSING_NODE: '1', FAKE_NODE_PACKAGE_VERSION: '26.0.0' }, home, `required_node_version='${minimum}'`);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(readLog(), 'https://nodejs.org/dist/v26.0.0/node-v26.0.0.pkg');
+      assert.equal(fs.readFileSync(path.join(root, 'installed.pkg'), 'utf8'), 'Synthetic official Node package\n');
+    });
+  }
+  for (const minimum of ['26.14', '27.0']) {
+    it(`rejects a Node package below the ${minimum} runtime minimum before requesting admin access`, () => {
+      const result = run('y\n', { FAKE_MISSING_NODE: '1' }, home, `required_node_version='${minimum}'`);
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, `older than the required ${minimum}`);
+      assert.notInclude(readLog(), 'sudo:');
+      assert.notInclude(readLog(), '/node-v26.13.0.pkg -o');
+    });
+  }
+  for (const packageName of ['node-v24.22.1.pkg', 'node-v27.0.0.pkg', 'node-v26.13.0-rc.1.pkg']) {
+    it(`rejects an unexpected Node package ${packageName} before requesting admin access`, () => {
+      fs.writeFileSync(path.join(root, 'node-checksums.txt'), 'a'.repeat(64) + `  ${packageName}\n`);
+      const result = run('y\n', { FAKE_MISSING_NODE: '1' });
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, 'Unable to identify the official Node.js 26 macOS package.');
+      assert.notInclude(readLog(), 'sudo:');
+      assert.notInclude(readLog(), `/${packageName} -o`);
+    });
+  }
   for (const pathComplete of [true, false]) {
     for (const answer of ['\n', 'y\n', 'Y\n']) {
       it(`captures and opens after first-backup acceptance ${JSON.stringify(answer)} with PATH complete ${pathComplete}`, () => {
@@ -2066,11 +2094,11 @@ main
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `Installation will:
   - Install Xcode Command Line Tools
-  - Install Node.js 24 in ${systemNode}
+  - Install Node.js 26 in ${systemNode}
   - Install GitHub CLI in ~/.local/bin
   - Create Ballin and its settings in ~/.ballin-scripts
   - Link the Ballin command in ~/.local/bin
-Installation details:
+🔗 Installation details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
 Proceed with installation? [y/N] `);
     assert.notInclude(result.stdout, 'graphical');
@@ -2300,24 +2328,23 @@ Proceed with installation? [y/N] `);
     for (const script of [source, path.resolve(__dirname, '../install.sh')]) {
       assert.equal(fs.readFileSync(script, 'utf8').match(/required_node_version='([^']+)'/u)?.[1], minimum);
     }
-    assert.equal(minimum.split('.')[0], selectedMajor);
   });
   for (const shell of ['bash', 'zsh']) {
-    for (const failure of ['empty', 'partial', 'helper', 'eof', 'none']) {
+    for (const failure of ['empty', 'partial', 'complete-error', 'helper', 'eof', 'none']) {
       it('preserves the copied command status, stdin and cleanup in ' + shell + ' after ' + failure, () => {
         const result = runCopiedCommand(shell, failure === 'eof' ? '' : 'device-code\n', {
-          FAKE_QUICK_DOWNLOAD: ['empty', 'partial'].includes(failure) ? failure : 'success',
+          FAKE_QUICK_DOWNLOAD: ['empty', 'partial', 'complete-error'].includes(failure) ? failure : 'success',
           FAKE_QUICKSTART_EXIT: failure === 'helper' ? '7' : '0',
         });
-        const expected = ['empty', 'partial'].includes(failure) ? 22 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
+        const expected = failure === 'empty' ? 0 : failure === 'partial' ? 2 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
         assert.equal(result.status, expected, result.stdout + result.stderr);
-        const executed = ['helper', 'eof', 'none'].includes(failure);
+        const executed = ['complete-error', 'helper', 'eof', 'none'].includes(failure);
         assert.equal(fs.existsSync(path.join(root, 'entrypoint-ran')), executed);
         if (executed) {
           assert.include(result.stdout, 'Native fixture prompt:');
           if (failure !== 'eof') assert.include(readLog(), 'downloaded-quickstart:stdin-preserved');
         } else assert.notInclude(readLog(), 'downloaded-quickstart:started');
-        if (['empty', 'partial'].includes(failure)) assert.include(result.stderr, 'Fixture curl failure');
+        if (['empty', 'partial', 'complete-error'].includes(failure)) assert.include(result.stderr, 'Fixture curl failure');
         assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
         assert.isEmpty(fs.readdirSync(home));
         for (const prohibited of ['auth status --active', 'install.sh:', 'ballin:']) assert.notInclude(readLog(), prohibited);
@@ -2336,15 +2363,16 @@ Proceed with installation? [y/N] `);
         FAKE_QUICK_DOWNLOAD: 'partial', s: 'inherited value',
         SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail',
       });
-      assert.equal(result.status, 22, result.stdout + result.stderr);
+      assert.equal(result.status, 2, result.stdout + result.stderr);
       assert.notInclude(readLog(), 'downloaded-quickstart:started');
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
       assert.isEmpty(fs.readdirSync(home));
     });
     for (const inherited of ['none', 'exported buffer', 'shell options']) {
-      it(`buffers a large copied-command download in ${shell} with ${inherited}`, () => {
+      it(`runs a current-script-sized copied command in ${shell} with ${inherited}`, () => {
         const payload = path.join(root, 'quickstart-entrypoint');
-        fs.appendFileSync(payload, '# Large valid script content.\n'.repeat(120000));
+        // The public command passes current script text as one argument, not arbitrary multi-megabyte payloads.
+        fs.appendFileSync(payload, '# Current script size.\n'.repeat(Math.ceil(fs.statSync(source).size / 23)));
         const overrides = inherited === 'exported buffer' ? { s: 'inherited value' }
           : inherited === 'shell options' ? { SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail' } : {};
         const result = runCopiedCommand(shell, 'device-code\n', overrides);
@@ -2485,7 +2513,7 @@ Proceed with installation? [y/N] `);
       const result = runPathSetup('home\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'already mentions a setup directory');
       assert.include(result.stderr, 'Review its PATH entries before changing PATH.');
-      assert.include(result.stderr, 'Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
+      assert.include(result.stderr, '\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
       assert.notInclude(result.stderr, 'command below');
       assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
       assert.notInclude(result.stderr, pathLine());
@@ -2660,6 +2688,7 @@ Proceed with installation? [y/N] `);
     // No startup selection is reached when prerequisite installation is declined.
     const declined = run('n\n', { FAKE_PROFILE_TARGET: 'n' });
     assert.equal(declined.status, 0, declined.stdout + declined.stderr);
+    assert.isTrue(declined.stdout.endsWith('Proceed with installation? [y/N] \n\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n'), declined.stdout);
     assert.isFalse(fs.existsSync(path.join(home, '.local')));
     linkFake('gh');
     const profile = path.join(home, '.zshrc');
@@ -2961,8 +2990,12 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         const maintenance = runSandbox(sandbox, ['quickstart'], 'no\nlogin\nyes\nyes\nno\nlogin\nno\n');
         assert.equal(maintenance.status, 0, maintenance.stdout + maintenance.stderr);
         const configPath = path.join(sandbox.repo, 'ballin.config.json');
-        const previousConfig = fs.readFileSync(configPath, 'utf8');
-        assert.isUndefined(JSON.parse(previousConfig).backup.repository);
+        const previousConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        assert.isUndefined(previousConfig.backup.repository);
+        const remotePath = path.join(sandbox.remote, 'repository.json');
+        const previousRemote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
+        const cachePath = path.join(sandbox.repo, '.backup-cache');
+        assert.isFalse(fs.existsSync(cachePath));
         const result = runSandbox(sandbox, ['quickstart'], `yes\n\ncreate\n\nno\n${configure ? 'yes\nno\nno\n' : 'no\n'}`);
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.include(result.stdout, '\n==> Updating Ballin\n');
@@ -2972,14 +3005,19 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
         assert.notInclude(result.stdout, 'Set up private backups to GitHub?');
         assert.include(result.stdout, 'Create this private GitHub backup without sensitive sources? [y/N]', result.stdout + result.stderr);
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        const remote = JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8'));
+        const remote = JSON.parse(fs.readFileSync(remotePath, 'utf8'));
         assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'open').length, 0);
         if (configure) {
           assert.isObject(config.backup.repository); assert.isTrue(remote.exists);
           assert.include(result.stdout, 'Run a backup now and open');
           assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 1);
         } else {
-          assert.equal(fs.readFileSync(configPath, 'utf8'), previousConfig);
+          assert.deepEqual(config, { ...previousConfig, backup: { ...previousConfig.backup, includeSensitive: 'false' } });
+          assert.isUndefined(config.backup.repository);
+          assert.equal(remote.head, previousRemote.head); assert.deepEqual(remote.commits, previousRemote.commits);
+          assert.deepEqual(remote.rulesets, previousRemote.rulesets); assert.isFalse(fs.existsSync(cachePath));
+          assert.isTrue(remote.requests.every((request: { method: string }) => request.method === 'GET'));
+          assert.notInclude(result.stdout, 'Sensitive sources in backups:');
           assert.isFalse(remote.exists);
           assert.notInclude(result.stdout, 'Run a backup now and open');
           assert.equal(remote.requests.filter((r: { endpoint: string }) => r.endpoint === 'user/repos').length, 0);

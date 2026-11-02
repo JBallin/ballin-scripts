@@ -39,7 +39,7 @@ Self-update reports changes to supported sources or collection scope, or says wh
 compare them. If sensitive sources are enabled, the notice reminds you that your
 opt-in persists across updates and covers future supported sources.
 
-Ballin previews logical paths and resolved targets for selected regular files,
+Ballin previews resolved paths for selected regular files,
 including symlinked dotfiles outside `HOME`. It identifies pipx separately as
 installation metadata whose URLs and arguments may contain credentials, without
 running its collector or presenting its executable as a raw configuration file.
@@ -48,10 +48,12 @@ select plugin packages. It checks selected file readability without reading
 their contents or creating backup snapshots. Codex and Claude Code directory
 discovery recursively inspects names and file types to identify
 nonempty sources. The preview lists detected sources; missing/unavailable
-sources are omitted. Access or resolution errors prevent confirmation. Closing input or declining final
-confirmation cancels without saving consent or changing destination, cache, or
-remote state. Excluded
-sensitive sources are not inspected just to verify them.
+sources are omitted. Access or resolution errors prevent inclusion; you can still
+choose to exclude the sources. Closing input leaves the pending choice unchanged.
+During creation or reconnect, an answered choice is saved immediately. Declining
+the separate destination confirmation changes no destination, cache, or remote state.
+Outside the explicit setup preview, excluded sensitive sources are not inspected
+just to verify them.
 
 Consent covers later captures as files, symlink targets, and installed-tool
 metadata change. It does not certify future contents or require repeated review

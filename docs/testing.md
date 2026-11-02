@@ -5,6 +5,8 @@
 Run commands from the repository root. `npm test` runs comprehensive local Node
 checks: lint, both typechecks, and tests with coverage. For faster feedback, use
 the focused commands in [Test runtime and timeouts](#test-runtime-and-timeouts).
+Development and CI target the latest Node.js LTS major through tested PR upgrades,
+while Ballin's minimum supported runtime remains Node.js 24.12.
 CI runs the same Node scripts in separate steps and adds checks defined in the
 [CI workflow](../.github/workflows/ci.yml), including shell and workflow
 validation. Keep the shared Node script definitions aligned when changing them.
@@ -14,6 +16,11 @@ four available CPUs and runs serially on smaller hosts.
 For the default full run with two workers, it queues the repository backup
 lifecycle file first to reduce the final-file tail. Explicit Mocha arguments
 and `MOCHA_OPTIONS` retain native selection and ordering; serial runs are unchanged.
+
+CI also runs a small, dependency-free smoke on exact Node.js 24.12.0 in parallel
+with the full Node 26 checks. It exercises CLI startup, direct TypeScript imports,
+and basic runtime paths in an isolated environment. Run it locally with
+`node test/ci/minimum_node_smoke.ts`; it reports the runtime actually used.
 
 The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;
@@ -55,12 +62,31 @@ may change without changing the parsed contract. Shared runtime behavior stays
 tested in the runtime repository.
 
 CI additionally runs `npm run test:claude-preflight` with Bash, `jq`, and GNU
-`timeout` declared as prerequisites. That bounded test executes the workflow's
-actual preflight script in a temporary directory with a stub `gh` and fixture
-responses, covering eligible/ineligible PRs, malformed data, wrong PR identity,
-and command failure. It makes no network or model calls. This separate CI test
-is excluded from portable `npm test`; invoking it directly requires those tools
-and fails if they are missing.
+`timeout` declared as prerequisites. CI and the manual eligibility job use
+`ubuntu-26.04`, install Ubuntu's `gnu-coreutils` package, and explicitly select
+`/usr/bin/gnutimeout`. Installing `coreutils` alone does not select GNU on Ubuntu
+26.04. The manual script verifies GNU identity before making its bounded request.
+Permanent diagnostics report the image identifier and version, OS release, and
+relevant tool paths and versions in CI and manual eligibility logs. The GNU
+package version is recorded too. These identify the actual environment behind
+the fixed OS label without dumping unrelated environment variables.
+
+That bounded test executes the workflow's actual preflight script in a temporary
+directory with a stub `gh` and fixture responses, covering eligible/ineligible
+PRs, malformed data, wrong PR identity,
+command failure, and timeout expiry without emitting eligibility. Short real-GNU
+probes check output and exit-status propagation and TERM/124 expiry. A fixture
+wrapper checks the production `30s` argument and shortens only the expiry case.
+It makes no network or model calls. This separate CI test is excluded from
+portable `npm test`; invoking it directly requires those tools and fails if they
+are missing. On macOS, an already installed GNU `gtimeout` can
+be used; selection checks GNU identity and skips other implementations. Set
+`GNU_TIMEOUT` to an explicit GNU executable to require that exact path.
+
+The pinned actionlint 1.7.12 predates the supported `ubuntu-26.04` runner label.
+The explicit label entry in `.github/actionlint.yaml` extends lint's inventory;
+it does not establish native runner compatibility. Hosted CI remains the
+compatibility check.
 
 Each accepted automatic or manual review can consume the existing Claude
 subscription and shares the captured checkout, PR metadata, and diff with Claude.
@@ -215,6 +241,16 @@ GitHub service. Quickstart's OS/tool-discovery stubs do not emulate macOS kernel
 or terminal behavior. A clean macOS VM retest is still needed for real
 prerequisites, authentication, shell activation, and the full published journey.
 
+The public install commands pass downloaded script text to `bash -c`, so they
+are intended for the current published scripts, within the host's argument-size
+limit. Copied-command fixtures cover current script sizes, inherited settings,
+prompt input, empty downloads, and incomplete bodies.
+
+Each script's outer brace group must parse before its executable contents run,
+so a syntactically incomplete body is refused. This does not verify integrity or
+require curl to succeed: an empty failed download can return 0, and a complete
+script can run even if curl reports a transfer error.
+
 ## Test environment and analytics safety
 
 Neither command needs an analytics opt-out or `CI=true` in your shell.
@@ -273,7 +309,7 @@ and checkout path prefixes. Reconcile the checkout commit and Git tree, test
 selection and passing/pending counts, runtime metadata (including UID), and
 lockfile dependencies before attributing a mismatch to Node. A PR merge checkout
 can have a different commit but identical tree. Use the same exact
-Node/V8 version: `.nvmrc` selects Node 24, whose patch version can change.
+Node/V8 version: `.nvmrc` selects Node 26, whose patch version can change.
 Investigate residual differences rather than relaxing coverage thresholds or
 excluding code.
 

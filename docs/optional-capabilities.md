@@ -7,7 +7,7 @@ keep updates predictable while letting you opt in to broader automation.
 
 ## Guided preference review
 
-Run `ballin setup` to review onboarding choices again without reinstalling:
+Run `ballin setup` to review local Ballin preferences without reinstalling:
 
 ```shell
 ballin setup
@@ -20,11 +20,12 @@ configured, use `ballin backup setup` first if you want backups.
 
 Review [what Ballin will back up](backup-sources.md#what-will-ballin-back-up)
 before changing the sensitive-source choice. Ballin previews local paths and
-readability. Final confirmation saves the choice for future backups.
+readability before asking whether to include the sources. Your answer saves the choice for future backups.
 
 Each confirmed choice is saved locally. Cancelling or closing input leaves the
 pending choice unchanged; earlier confirmed choices remain saved. Invalid
-configuration must be repaired before review. The command does not reinstall
+configuration must be repaired before review; a missing config is created with
+defaults. The command does not reinstall
 Ballin, change or validate remote destinations, or run backup/update operations.
 
 Use `ballin config get/set/reset` for direct configuration. Guided
@@ -47,55 +48,33 @@ an existing setting. Use `ballin help config` for usage, even if the config
 file is missing or unreadable.
 
 Use `ballin config reset` to recover a missing or malformed config file. This
-restores defaults and replaces saved settings. For read or save errors, check
-the config file's permissions and its parent directory before retrying.
+restores defaults and replaces saved settings. If the file is missing, reset
+creates one readable only by its owner. For read or save errors, check the config
+file's permissions and its parent directory before retrying.
+
+For custom config files, Ballin retains Unix permission bits and follows working
+symlinks. Custom ACLs and ownership metadata are not copied. Replace hard-linked
+configs with a regular file before saving. For a broken symlink, restore its target
+or replace the link with a regular file.
 
 ## Node.js
 
-Node.js 24.12 or newer is required by Ballin; install it using whichever method
-fits your environment. For development, we recommend [nvm](https://github.com/nvm-sh/nvm)
-with the latest Node.js long-term support (LTS) release. It supports switching
-versions, project-specific `.nvmrc` files, and a user-local installation.
+Ballin requires Node.js 24.12 or newer to run its TypeScript directly with
+[stable built-in type stripping](https://nodejs.org/api/typescript.html#type-stripping).
+We recommend the latest Node.js long-term support (LTS) release.
 
-Follow nvm's official
-[installation and shell setup instructions](https://github.com/nvm-sh/nvm#installing-and-updating),
-then install Node.js LTS:
-
-```shell
-nvm install --lts
-```
+Consider [nvm](https://github.com/nvm-sh/nvm) if you want Ballin to install newer
+LTS releases during `ballin update`. For installation choices, see
+[Node.js downloads](https://nodejs.org/en/download).
 
 Installed commands use the `node` found on your shell `PATH`, so make sure new
 terminal sessions use a supported Node.js version too.
 
-After installing Ballin, optionally let `ballin update` install newer
-LTS releases:
-
-```shell
-ballin config set update.nvm true
-```
-
-`update.nvm` runs `nvm install --lts`; it does not update nvm itself. It defaults to
-`false` because enabling it opts into newer LTS releases, and installing a new
-Node.js version does not migrate your globally installed npm packages
-automatically. If nvm cannot be loaded, `ballin update` reports the failure and
-continues with its remaining updates. A failure to capture nvm's updated
-environment is handled the same way; later stages use the previous environment.
-
-For a simpler setup, install Homebrew's current Node.js release instead:
-
-```shell
-brew install node
-```
-
-With this option, Homebrew manages Node.js updates along with your other formulae.
-The `update.nvm` setting does not apply.
-
-You can also use the macOS `.pkg` installer from the
-[official Node.js website](https://nodejs.org/en/download). It writes to
-`/usr/local` and may replace Node.js/npm already installed there. Install updates
-to this standalone installation yourself; `update.nvm` applies only to nvm-managed
-Node.js.
+Enable optional nvm updates with `ballin config set update.nvm true`.
+`update.nvm` defaults to `false` and applies only to an existing nvm installation.
+It runs `nvm install --lts`; it does not update nvm itself or migrate globally
+installed npm packages to the new Node.js version. Other Node installations
+remain managed by their existing installation method.
 
 ## Mac App Store apps
 

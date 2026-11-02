@@ -17,22 +17,37 @@ jobs:
       github.event.sender.type == 'User' &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
       (github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 2
     permissions:
       pull-requests: read
     outputs:
       eligible: ${{ steps.eligibility.outputs.eligible }}
     steps:
+      - name: Install GNU timeout
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gnu-coreutils
+          printf 'Runner image: %s (%s)\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+          cat /etc/os-release
+          dpkg-query --show gnu-coreutils
+          for tool in bash jq gh /usr/bin/gnutimeout; do
+            command -v "$tool"
+            "$tool" --version
+          done
+
       - name: Check PR eligibility
         id: eligibility
         env:
+          GNU_TIMEOUT: /usr/bin/gnutimeout
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           set -euo pipefail
-          pr=$(timeout 30s gh api "repos/$REPO/pulls/$PR_NUMBER")
+          timeout_version=$("$GNU_TIMEOUT" --version)
+          [[ "$timeout_version" == *'GNU coreutils'* ]] || exit 1
+          pr=$("$GNU_TIMEOUT" 30s gh api "repos/$REPO/pulls/$PR_NUMBER")
           eligible=$(printf '%s' "$pr" | jq -er --arg repo "$REPO" --argjson number "$PR_NUMBER" '
             if type != "object" then error("Invalid PR response")
             elif (.number | type) != "number" or .number != $number

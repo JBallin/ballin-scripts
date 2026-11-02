@@ -213,7 +213,7 @@ esac
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.isTrue(result.stdout.startsWith("==> Setting up Ballin\n"), result.stdout);
         const separator = scenario === 'initial configuration'
-          ? `\nInitial configuration\n${docsUrl}#what-will-installation-change\n`
+          ? `\nInitial configuration\n🔗 Installation details:\n${docsUrl}#what-will-installation-change\n`
           : existing ? '' : '\n';
         assert.include(result.stdout, `Git output fixture.\n${separator}Typed setup fixture.\n\n${terminalGuidance}\n`);
         assert.notInclude(result.stdout, '\n\n\n');
@@ -309,7 +309,7 @@ esac
     assert.equal(result.status, 0, result.stderr);
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.notInclude(result.stdout, 'Detected Node.js');
-    assert.include(result.stdout, 'Ballin installation cancelled. Rerun the installer when you’re ready.');
+    assert.isTrue(result.stdout.endsWith('Proceed with installation? [y/N] \n\nBallin installation cancelled.\nRerun the installer when you’re ready.\n'), result.stdout);
     assert.deepEqual(commandLog(), []);
     assert.isFalse(fs.existsSync(repoDir));
   });
@@ -443,7 +443,7 @@ esac
     assert.include(result.stdout, 'Node.js 24.12 or newer is required');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install supported Node.js');
-    assert.include(result.stdout, 'docs/optional-capabilities.md#nodejs');
+    assert.include(result.stdout, '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -549,7 +549,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     assert.include(result.stdout, 'Node.js 24.12 or newer is required');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'existing installation method');
-    assert.include(result.stdout, 'docs/optional-capabilities.md#nodejs');
+    assert.include(result.stdout, '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');

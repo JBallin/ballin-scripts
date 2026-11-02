@@ -1,9 +1,51 @@
 const { formatHelp } = require('../commands/help_format.ts');
 
 describe('help layout', () => {
-  it('wraps words and preserves paragraphs, lists, usage and examples', () => {
-    assert.equal(formatHelp('One two three four five.\n\n  ballin backup read <snapshot> --file <path>\n\n- one two three four', { columns: 14 }),
-      'One two three\nfour five.\n\n  ballin backup read <snapshot> --file <path>\n\n- one two\n  three four');
+  it('keeps compact usage inline and aligns alternative synopses', () => {
+    assert.equal(formatHelp('Usage: ballin config [get [key]]\n       ballin config reset\n\nRead local settings.\n', { columns: 80 }),
+      'Usage: ballin config [get [key]]\n       ballin config reset\n\nRead local settings.\n');
+    assert.equal(formatHelp('Usage: ballin backup setup [repository-name]\n       ballin backup setup\n', { columns: 40 }),
+      'Usage: ballin backup setup\n       [repository-name]\n       ballin backup setup\n');
+    assert.equal(formatHelp('Usage: ballin config [get [key]]', { columns: 20 }),
+      'Usage: ballin config\n       [get [key]]');
+    assert.equal(formatHelp('Usage: ballin setup', { columns: 12 }), 'Usage:\n    ballin\n    setup');
+  });
+
+  it('emphasizes help structure without styling descriptions or documentation labels', () => {
+    const text = 'Usage: ballin doctor [--verbose]\n\nCheck readiness.\n\nOptions:\n    --verbose  show full details\n\nExisting backup: Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n';
+    assert.equal(formatHelp(text, { columns: 80, isTTY: true }, { TERM: 'xterm' }),
+      '\x1b[1mUsage:\x1b[0m \x1b[1mballin doctor [--verbose]\x1b[0m\n\nCheck readiness.\n\n\x1b[1mOptions:\x1b[0m\n    \x1b[1m--verbose\x1b[0m  show full details\n\n\x1b[1mExisting backup:\x1b[0m Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n');
+    assert.equal(formatHelp('Usage: ballin setup', { columns: 12, isTTY: true }, { TERM: 'xterm' }),
+      '\x1b[1mUsage:\x1b[0m\n    \x1b[1mballin\x1b[0m\n    \x1b[1msetup\x1b[0m');
+    for (const mode of [
+      { isTTY: false, env: { TERM: 'xterm', FORCE_COLOR: '1' } },
+      { isTTY: true, env: { TERM: 'dumb', FORCE_COLOR: '1' } },
+      { isTTY: true, env: { TERM: 'xterm', NO_COLOR: '1', FORCE_COLOR: '1' } },
+    ]) assert.equal(formatHelp(text, { columns: 80, isTTY: mode.isTTY }, mode.env), text);
+  });
+
+  it('aligns bold table terms and keeps example command lines plain on supported terminals', () => {
+    assert.equal(formatHelp('    --file <path>  print original bytes\n', { columns: 30, isTTY: true }, { TERM: 'xterm' }),
+      '    \x1b[1m--file <path>\x1b[0m\n        print original bytes\n');
+    assert.equal(formatHelp('Examples:\n    ballin backup read zshrc.sh\n', { columns: 80, isTTY: true }, { TERM: 'xterm' }),
+      '\x1b[1mExamples:\x1b[0m\n    ballin backup read zshrc.sh\n');
+  });
+
+  it('wraps words and preserves paragraphs and lists', () => {
+    assert.equal(formatHelp('One two three four five.\n\n- one two three four', { columns: 14 }),
+      'One two three\nfour five.\n\n- one two\n  three four');
+  });
+
+  it('keeps optional syntax together and concrete wrapped examples copyable', () => {
+    assert.equal(formatHelp('Usage: ballin backup read <snapshot> [--list | --file <path>]', { columns: 40 }),
+      'Usage: ballin backup read <snapshot>\n       [--list | --file <path>]');
+    const example = '    ballin backup read codex_skills.bundle.json --file example/SKILL.md';
+    const wrapped = formatHelp(example, { columns: 40 });
+    assert.equal(wrapped, '    ballin backup read \\\n        codex_skills.bundle.json \\\n        --file example/SKILL.md');
+    assert.equal(wrapped.replace(/\\\n */gu, '').trim(), example.trim());
+    assert.equal(formatHelp(example, { columns: 40, isTTY: true }, { TERM: 'xterm' }), wrapped);
+    const quoted = formatHelp('    ballin backup read bundle --file "skill name/SKILL.md"', { columns: 40 });
+    assert.include(quoted, '"skill name/SKILL.md"');
   });
 
   it('retains numbered list indentation', () => {

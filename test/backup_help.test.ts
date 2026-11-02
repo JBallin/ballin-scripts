@@ -5,6 +5,7 @@ const { spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 const { topLevelCommandNames } = require('../commands/top_level_commands.ts');
 const { backupCommandNames } = require('../commands/backup_commands.ts');
+const { configOperationNames } = require('../config/commands.ts');
 
 const repoRoot = path.join(__dirname, '..');
 const forms: { args: string[]; canonical: string[]; usage: string }[] = [
@@ -16,7 +17,11 @@ const forms: { args: string[]; canonical: string[]; usage: string }[] = [
     { args: ['backup', command, '--help'], canonical: ['backup', command, '--help'], usage: `ballin backup ${command}` },
     { args: ['help', 'backup', command], canonical: ['backup', command, '--help'], usage: `ballin backup ${command}` },
   ]),
-  { args: ['backup', 'help'], canonical: ['--help'], usage: 'ballin <command> [options]' },
+  ...configOperationNames.flatMap((command: string) => [
+    { args: ['config', command, '--help'], canonical: ['config', '--help'], usage: 'ballin config' },
+    { args: ['help', 'config', command], canonical: ['config', '--help'], usage: 'ballin config' },
+  ]),
+  { args: ['backup', 'help'], canonical: ['backup', '--help'], usage: 'ballin backup <command>' },
   { args: ['config', 'help'], canonical: ['config', '--help'], usage: 'ballin config' },
 ];
 
@@ -123,11 +128,11 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
 
   it('shows operation-specific syntax and backup consequences', () => {
     for (const [command, details] of Object.entries({
-      setup: ['setup [repository-name]', 'confirmation', 'sensitive-source', '#optional-backup-setup-and-reconnect', 'docs/backup-sources.md'],
-      open: ['Open the configured backup in your browser', 'authentication for the selected GitHub host and remote access'],
+      setup: ['setup [repository-name]', 'confirm the destination', 'sensitive sources', 'Existing backup:', 'disconnect before choosing', '#optional-backup-setup-and-reconnect', 'docs/backup-sources.md'],
+      open: ['Open the configured backup and its saved history in your browser', 'authentication for the selected GitHub host and remote access'],
       list: ['List supported snapshots', 'remote read access', 'does not collect local backup sources'],
-      read: ['read <snapshot> --list', 'read <snapshot> --file <path>', 'original bytes', 'Without a snapshot selector', '#inspect-saved-backups'],
-      disconnect: ['disable automatic backup', 'Preserve remote history', 'sensitive-source preferences', 'no authentication or network access'],
+      read: ['read <snapshot> [--list | --file <path>]', 'Options for bundle snapshots:', 'original bytes', 'Without a snapshot selector', 'ballin backup list', 'Examples:', '#inspect-saved-backups'],
+      disconnect: ['disable automatic backups', 'Preserve remote history', 'sensitive-source preferences', 'no authentication or network access'],
     })) {
       const result = run(['backup', command, '--help']);
       assert.equal(result.status, 0, result.stderr);
@@ -141,8 +146,8 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
     const result = run(['help']);
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'ballin help [command...]');
-    assert.include(result.stdout, 'Run `ballin help <command...>` for command or subcommand help.');
-    assert.include(result.stdout, 'You can also append `--help` to a command.');
+    assert.notInclude(result.stdout, 'Run `ballin help');
+    assert.include(result.stdout, 'You can also append `--help` to any command.');
     assert.lengthOf([...result.stdout.matchAll(/--help/gu)], 1);
   });
 
@@ -166,10 +171,9 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
           assert.equal(result.stdout, equivalent.stdout);
           const plain = result.stdout.replace(/\x1b\[[0-9;]*m/gu, '');
           const baseline = run(['help', ...target]).stdout;
-          const content = (text: string) => text.replace(/`/gu, '').replace(/\s+/gu, ' ').trim();
+          const content = (text: string) => text.replace(/\\\n */gu, '').replace(/`/gu, '').replace(/\s+/gu, ' ').trim();
           assert.equal(content(plain), content(baseline));
-          assert.equal(result.stdout.includes('\x1b['), mode.name === 'styled TTY' && target.length === 0
-            || mode.name === 'styled TTY' && target.join(' ') === 'backup');
+          assert.equal(result.stdout.includes('\x1b['), mode.name === 'styled TTY');
           for (const line of plain.split('\n')) {
             // Usage is deliberately preformatted; indivisible URLs and syntax may overflow.
             if (line.trimStart().startsWith('ballin ') || line.length <= Math.min(columns, 80)) continue;
@@ -182,6 +186,28 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
       }
     }
   }
+
+  for (const args of [[], ['setup'], ['backup', 'setup'], ['backup', 'read'], ['config'], ['uninstall']]) {
+    it(`labels documentation links on a separate line for ${['help', ...args].join(' ')}`, () => {
+      const result = run(['help', ...args]);
+      assert.equal(result.status, 0, result.stderr);
+      const links = result.stdout.match(/🔗 [^\n]+:\nhttps:\/\/[^\n]+/gu) ?? [];
+      assert.lengthOf(links, args.join(' ') === 'backup setup' ? 2 : 1);
+    });
+  }
+
+  it('keeps configuration examples concrete and explains reset scope', () => {
+    const config = run(['config', '--help']).stdout.replace(/\s+/gu, ' ');
+    assert.include(config, 'Reset replaces all saved settings with defaults, including backup linkage; remote backups remain unchanged.');
+    assert.include(config, 'ballin config set update.backup false');
+  });
+
+  it('keeps overview headings compact', () => {
+    const overview = run(['help']).stdout;
+    assert.isFalse(overview.startsWith('\n'));
+    assert.notInclude(overview, 'Usage:\n\n');
+    assert.notInclude(overview, 'Commands:\n\n');
+  });
 
   for (const command of backupCommandNames) {
     it(`keeps ${command} help focused on operational syntax`, () => {

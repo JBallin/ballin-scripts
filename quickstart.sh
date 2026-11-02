@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+{ # Parse the complete body before starting installation.
 # Optional beginner bootstrap; install.sh remains the core Ballin installer.
 set -euo pipefail
 umask 077
@@ -395,9 +396,9 @@ existing_hidden_node() {
 manual_node_guidance() {
   local candidate=$1 state=${2:-incompatible} owner='its existing installation method' resolved=$1 target hops=0
   if [[ "$state" == compatible ]]; then
-    fail "Existing compatible Node.js at $(display_path "$candidate") is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+    fail "Existing compatible Node.js at $(display_path "$candidate") is not active on PATH. Activate it using its existing installation method or add its bin directory to PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
   elif [[ "$state" == unknown ]]; then
-    fail "Existing Node.js at $(display_path "$candidate") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+    fail "Existing Node.js at $(display_path "$candidate") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
   fi
   while [[ -L "$resolved" && $hops -lt 40 ]]; do
     target=$(readlink "$resolved") || break
@@ -423,7 +424,7 @@ manual_node_guidance() {
       fi
       ;;
   esac
-  fail "Existing Node.js at $(display_path "$candidate") needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart. https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fail "Existing Node.js at $(display_path "$candidate") needs manual attention. Ballin requires Node.js $required_node_version or newer. Update or select Node using $owner, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
 }
 
 brew_checked() {
@@ -609,15 +610,19 @@ install_command_line_tools() {
 
 install_node() {
   phase 'Installing Node.js'
-  local package version minor expected status=0
-  download 'https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
-  package=$(awk '$2 ~ /^node-v24[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
-  [[ "$package" =~ ^node-v24\.[0-9]+\.[0-9]+\.pkg$ ]] || fail 'Unable to identify the official Node.js 24 macOS package.'
+  local package version major minor expected status=0
+  download 'https://nodejs.org/dist/latest-v26.x/SHASUMS256.txt' "$scratch/node-checksums.txt"
+  package=$(awk '$2 ~ /^node-v26[.][0-9]+[.][0-9]+[.]pkg$/ { print $2 }' "$scratch/node-checksums.txt")
+  [[ "$package" =~ ^node-v26\.[0-9]+\.[0-9]+\.pkg$ ]] || fail 'Unable to identify the official Node.js 26 macOS package.'
   version=${package#node-}
   version=${version%.pkg}
-  minor=${version#v24.}
+  major=${version#v}
+  major=${major%%.*}
+  minor=${version#v*.}
   minor=${minor%%.*}
-  (( 10#$minor >= ${required_node_version#*.} )) || fail "The official Node.js package is older than the required $required_node_version; it was not installed."
+  (( 10#$major > ${required_node_version%%.*} ||
+    (10#$major == ${required_node_version%%.*} && 10#$minor >= ${required_node_version#*.}) )) \
+    || fail "The official Node.js package is older than the required $required_node_version; it was not installed."
   printf 'Downloading Node.js %s...\n' "$version"
   download "https://nodejs.org/dist/$version/$package" "$scratch/$package" progress
   expected=$(checksum "$scratch/node-checksums.txt" "$package")
@@ -778,7 +783,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=true
   else
-    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
+    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\n🔗 Manual setup:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
   fi
   return 0
 }
@@ -1035,7 +1040,7 @@ main() {
         printf '  - Install Xcode Command Line Tools\n'
       fi
       if "$need_node"; then
-        printf '  - Install Node.js 24 in %s\n' "$(display_path "$system_node_bin")"
+        printf '  - Install Node.js 26 in %s\n' "$(display_path "$system_node_bin")"
       fi
       if "$need_gh"; then
         printf '  - Install GitHub CLI in %s\n' "$(display_path "$local_bin")"
@@ -1054,10 +1059,10 @@ main() {
         printf '.\n'
       fi
     fi
-    printf 'Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
+    printf '🔗 Installation details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes\n'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
-      printf "Prerequisite installation skipped. Rerun Quickstart when you’re ready.\n"
+      printf "\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n"
       return 0
     fi
   fi
@@ -1127,13 +1132,14 @@ main() {
     command_reference 'ballin help'
     printf '.\n'
   else
-    printf "\nBallin is installed. PATH setup wasn’t verified. Manual setup: https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
+    printf "\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
   fi
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
   trap cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
   main
 fi
+}

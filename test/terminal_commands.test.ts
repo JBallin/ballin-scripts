@@ -40,13 +40,13 @@ describe('command references at prose output boundaries', () => {
     it(`preserves update help roles on ${mode.name}`, () => {
       const help = cli(['update', '--help']);
       assert.equal(help.status, 0, help.stderr);
-      assert.include(help.stdout, `Use ${command('ballin config get update')} to inspect settings.`);
-      assert.include(help.stdout, '    ballin update\n');
+      assert.include(help.stdout.replace(/\s+/gu, ' '), `Use ${command('ballin config get update')} to inspect settings.`);
+      assert.include(help.stdout, mode.styled ? '\x1b[1mUsage:\x1b[0m \x1b[1mballin update\x1b[0m\n' : 'Usage: ballin update\n');
     });
     it(`preserves backup help roles and alias output on ${mode.name}`, () => {
       const backup = cli(['backup', '--help']);
       assert.equal(backup.status, 0, backup.stderr);
-      assert.include(backup.stdout.replace(/\s+/gu, ' '), '`setup` creates or reconnects');
+      assert.include(backup.stdout.replace(/\x1b\[[0-9;]*m/gu, '').replace(/\s+/gu, ' '), 'setup create, reconnect to, or validate a backup');
       assert.include(backup.stdout.replace(/\s+/gu, ' '), `review them with ${command('ballin setup')}.`);
       assert.include(backup.stdout.replace(/\s+/gu, ' '), `Run ${command('ballin help backup <subcommand>')} for subcommand-specific help.`);
       const backupAlias = cli(['help', 'backup']);
@@ -56,12 +56,13 @@ describe('command references at prose output boundaries', () => {
     it(`preserves setup help notation on ${mode.name}`, () => {
       const shorthand = cli(['setup', '--help']);
       assert.equal(shorthand.status, 0, shorthand.stderr);
-      assert.include(shorthand.stdout, 'Use `ballin config get/set/reset` for direct configuration.');
+      assert.include(shorthand.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
     });
     it(`preserves config help notation on ${mode.name}`, () => {
       const configHelp = cli(['config', '--help']);
       assert.include(configHelp.stdout, '`update.cleanup`');
-      assert.notInclude(configHelp.stdout, '\x1b');
+      assert.equal(configHelp.stdout.includes('\x1b'), mode.styled);
+      assert.include(configHelp.stdout, mode.styled ? '\x1b[1mUsage:\x1b[0m \x1b[1mballin config [get [key]]\x1b[0m\n' : 'Usage: ballin config [get [key]]\n');
     });
     it(`preserves literal config bytes on ${mode.name}`, () => {
       const value = cli(['config', 'get', 'literal']);
@@ -81,7 +82,7 @@ describe('command references at prose output boundaries', () => {
       const recovery = cli(['setup']);
       assert.equal(recovery.status, 1);
       assert.equal(recovery.stdout, '');
-      assert.include(recovery.stderr, `Use ${command('ballin config get')} to inspect it or ${command('ballin config reset')} to restore defaults.`);
+      assert.equal(recovery.stderr, `ballin setup: Local config is invalid.\nRepair the file, or run ${command('ballin config reset')} to replace it with defaults.\n`);
       assert.equal(fs.readFileSync(config, 'utf8'), '{invalid');
     });
   }
@@ -91,8 +92,8 @@ describe('command references at prose output boundaries', () => {
       const help = run(['--help'], stdout, !stdout);
       assert.equal(help.status, 0, help.stderr);
       assert.include(help.stdout, stdout
-        ? 'Run \x1b[1mballin help <command...>\x1b[0m for command or subcommand help.'
-        : 'Run `ballin help <command...>` for command or subcommand help.');
+        ? '\x1b[1mballin help [command...]\x1b[0m'
+        : 'ballin help [command...]');
       const unknown = run(['unknown-command'], stdout, !stdout);
       assert.equal(unknown.status, 2);
       assert.equal(unknown.stderr, stdout

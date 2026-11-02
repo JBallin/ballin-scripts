@@ -1,4 +1,4 @@
-const { terminalCommand } = require('./terminalStyle.ts');
+const { terminalCommand, terminalPath } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { createConfigStore, stringify } = require('../config/store.ts');
@@ -34,10 +34,10 @@ const preferenceBoolean = (value: unknown, key: string): boolean => {
   if (value === false || value === 'false') return false;
   throw new Error(`Invalid \`${key}\`; expected true or false.`);
 };
-type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone' };
+type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone'; validateConfig?: (config: ReturnType<typeof readSetupConfigContext>) => boolean };
 const selectAutomaticUpdateBackup = (options: AutomaticBackupOptions = {}): boolean | null => {
   const defaultEnabled = options.defaultEnabled ?? false;
-  return readYesNo(`\n🔄 Automatically run ${terminalCommand('ballin backup')} as part of ${terminalCommand('ballin update')}? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
+  return readYesNo(`\nAutomatically run ${terminalCommand('ballin backup')} as part of ${terminalCommand('ballin update')}? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
 };
 const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
   const enabled = selectAutomaticUpdateBackup(options);
@@ -48,6 +48,7 @@ const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBacku
   if (createConfigStore({ configPath }).readLeafValue('update.backup') !== undefined) {
     try {
       const config = readSetupConfigContext(configPath);
+      if (options.validateConfig && !options.validateConfig(config)) return 'failed';
       previous = config.update.backup;
       config.update.backup = preference;
       saved = saveBackupConfig(configPath, config);
@@ -66,14 +67,22 @@ const offerAutomaticUpdateBackup = (configPath: string): boolean => (
   reviewAutomaticUpdateBackup(configPath) !== 'failed'
 );
 
-const displayPath = (value: string): string => JSON.stringify(value);
+// Quote unusual paths so control sequences cannot alter the terminal or impersonate another line.
+const displayPath = (value: string): string => {
+  const unsafe = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
+  if (!unsafe.test(value)) return value;
+  return JSON.stringify(value).replace(/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu, (character) => (
+    Array.from({ length: character.length }, (_, index) => `\\u${character.charCodeAt(index).toString(16).padStart(4, '0')}`).join('')
+  ));
+};
 const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolean => {
   const sensitiveDefinitions = (snapshotDefinitions as readonly SnapshotDefinition[])
     .filter((definition) => definition.inclusionGroup === 'sensitive')
     .sort((left, right) => left.name.localeCompare(right.name, 'en'));
   const available: string[] = [];
-  const absent: string[] = [];
-  const unavailable: string[] = [];
+  let pipxAvailable = false;
+  let actualHome = homeDir;
+  try { actualHome = fs.realpathSync(homeDir); } catch { /* Preserve normal source discovery errors. */ }
   for (const definition of sensitiveDefinitions) {
     const observation = definition.discover({ homeDir, env });
     if (observation.status === 'discovery-failed') {
@@ -81,11 +90,10 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
       return false;
     }
     if (observation.status !== 'available') {
-      (observation.status === 'absent' ? absent : unavailable).push(definition.name);
       continue;
     }
     if (definition.name === 'pipx') {
-      available.push('pipx: installation metadata');
+      pipxAvailable = true;
       continue;
     }
     try {
@@ -111,7 +119,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
         if (observation.source.kind === 'directory' ? !stat.isDirectory() : !stat.isFile()) throw new Error('Unsupported source type');
         fs.accessSync(resolved, fs.constants.R_OK);
       }
-      available.push(`${definition.name}: ${displayPath(logical)}${logical === resolved ? '' : ` -> ${displayPath(resolved)}`}`);
+      available.push(displayPath(terminalPath(resolved, actualHome)));
     } catch (error) {
       if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
       writeStdoutLine(`Unable to review ${definition.name}: resolution or read access failed.`);
@@ -119,31 +127,26 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     }
   }
   writeStdoutLine();
-  writeStdoutLine(available.length ? 'Sensitive sources available now:' : 'Sensitive sources available now: none.');
-  available.forEach((line) => writeStdoutLine(`  ${line}`));
+  writeStdoutLine(available.length ? 'Sensitive source paths available now:' : 'Sensitive source paths available now: none.');
+  [...new Set(available)].forEach((line) => writeStdoutLine(`  ${line}`));
+  if (pipxAvailable) writeStdoutLine('pipx installation metadata is also available.');
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('\nBackup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
-  const includeSensitive = readYesNo(`Review files that may contain credentials or private information for backup inclusion? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `, defaultIncluded);
-  if (includeSensitive === null) return null;
-  if (includeSensitive) {
-    if (!process.env.HOME) { writeStdoutLine('HOME is required to review sensitive sources.'); return undefined; }
-    if (!reviewSensitiveSources(process.env.HOME, process.env)) return undefined;
-  }
-  return includeSensitive;
-};
-
-const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null | undefined => {
-  writeStdoutLine('Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
-  const included = selectSensitiveSources(defaultIncluded);
-  if (included === null || included === undefined) return included;
-  const question = included ? 'Include sensitive sources in future backups?'
-    : 'Exclude sensitive sources from future backups?';
-  if (readYesNo(`${question} [y/N] `) !== true) return null;
+  writeStdoutLine('ℹ️  Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+  writeStdoutLine('🔗 Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
+  let reviewSucceeded = false;
+  if (!process.env.HOME) writeStdoutLine('HOME is required to review sensitive sources.');
+  else reviewSucceeded = reviewSensitiveSources(process.env.HOME, process.env);
+  const included = readYesNo(`Include sensitive sources in future backups? ${defaultIncluded ? '[Y/n]' : '[y/N]'} `, defaultIncluded);
+  if (included === true && !reviewSucceeded) return undefined;
   return included;
 };
+
+const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null | undefined => (
+  selectSensitiveSources(defaultIncluded)
+);
 
 module.exports = {
   saveBackupConfig, offerAutomaticUpdateBackup, reviewAutomaticUpdateBackup, selectSensitiveSources,
