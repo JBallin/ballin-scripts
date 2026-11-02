@@ -38,20 +38,23 @@ truth for Ballin's installed immutable [Claude Review Runtime](https://github.co
 revision. See the [runtime setup and review guide](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md)
 for shared setup, behavior, and review verification.
 
+Both review callers request Opus at Medium effort. Manual commands can override
+either setting; an omitted setting retains its caller default.
+
 Opened or newly ready same-repository PRs receive one automatic review; drafts,
 forks, and Dependabot-triggered runs are excluded. PR head pushes, base
 retargets, and pushes to target branches (including non-default branches)
 refresh existing presentation without running Claude. Branch deletions and tag
 pushes are excluded. For a fresh review of an open, non-draft, same-repository
 PR, a human owner, member, or collaborator with current write access can post
-one command on its own line, such as `/claude-review sonnet high`. Models are
+one command on its own line, such as `/claude-review opus high`. Models are
 `haiku`, `sonnet`, or `opus`; efforts are `low`, `medium`, `high`, `xhigh`, or
-`max`. Both choices are optional and use Runtime defaults when omitted; put the
-model first when using both. There is no literal `effort` keyword. Surrounding
-whitespace and prose on other lines are allowed. Quoted lines, inline-code
+`max`. Both choices are optional; put the model first when using both. There is
+no literal `effort` keyword. Surrounding whitespace and prose on other lines are allowed. Quoted lines, inline-code
 examples, and fenced code blocks are ignored; invalid arguments or multiple
-command lines produce usage feedback without starting a review. Runtime checks the requester's current write access before
-changing review state. See the Runtime guide for
+command lines produce usage feedback without starting a review. Runtime checks
+the requester's current write access before changing review state. See the
+Runtime guide for
 [model and effort defaults and selection](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#optional-model-and-effort-selection).
 
 Run `npm run test:unit -- test/claude_workflows.test.ts` for the portable offline

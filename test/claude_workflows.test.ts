@@ -12,6 +12,7 @@ const pin = '396f9f74195fe7df2b3081dca3d1550f2fb2e574';
 const reviewPermissions = {
   contents: 'read', 'pull-requests': 'write', checks: 'write', issues: 'write', 'id-token': 'write',
 };
+const reviewDefaults = { model: 'opus', effort: 'medium' };
 const reviewSecrets = { CLAUDE_CODE_OAUTH_TOKEN: '${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}' };
 
 // These are reviewed consumer contracts, not an Actions expression interpreter.
@@ -30,6 +31,7 @@ const contracts = {
           + 'github.event.pull_request.head.repo.full_name == github.repository',
         permissions: reviewPermissions,
         uses: `${runtime}claude-review.yml@${pin}`,
+        with: reviewDefaults,
         secrets: reviewSecrets,
       },
     },
@@ -98,6 +100,7 @@ const contracts = {
         if: "needs.eligibility.outputs.eligible == 'true'",
         permissions: reviewPermissions,
         uses: `${runtime}claude.yml@${pin}`,
+        with: reviewDefaults,
         secrets: reviewSecrets,
       },
     },
