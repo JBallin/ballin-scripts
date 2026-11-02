@@ -142,14 +142,9 @@ const analyticsPrompt = analyticsPromptFor();
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 const defaultRepoDir = path.join(__dirname, '..');
 
-const loadAppVersion = (appPackageJsonPath = packageJsonPath): string => {
-  try {
-    const packageJson = JSON.parse(fs.readFileSync(appPackageJsonPath, 'utf8')) as { version?: unknown };
-    return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-};
+const loadAppVersion = (appPackageJsonPath = packageJsonPath): string => (
+  require('./repo_update.ts').readIdentity(path.dirname(appPackageJsonPath)).version
+);
 
 const isAnalyticsConfig = (value: unknown): value is AnalyticsConfig => (
   typeof value === 'object' && value !== null && !Array.isArray(value)

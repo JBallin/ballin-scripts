@@ -15,11 +15,10 @@
 
 ## Development
 
-Start new work by updating the installed checkout before creating your feature
-branch. `ballin self-update` fetches `origin/main`, checks out `main`, and merges
-`origin/main`. Run it before creating or switching to your feature branch;
-otherwise it switches away from that branch and may stash changes during
-recovery. Commit or stash any existing work first.
+For development, use the [main-tracking environment default](docs/installation.md#selecting-a-revision).
+Self-update refuses unsafe local work and confirms track changes. Preserve work
+before updating, then create your feature branch. It never automatically stashes
+or merges changes. Use a separate worktree when working alongside an installation.
 
 ```shell
 $ cd ~/.ballin-scripts
@@ -45,3 +44,5 @@ For deeper user and maintainer documentation, see the
 ## Feedback and Discussions
 
 See [Support](SUPPORT.md) for questions, bug reports, and private security reporting.
+
+For release preparation and publication approval, see [Releasing Ballin](docs/releasing.md).

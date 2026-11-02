@@ -140,7 +140,7 @@ esac
     }
 
     return spawnSync('/bin/bash', ['-c', `
-source "$FAKE_SOURCE"
+source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }
 system_node_bin="$FAKE_SYSTEM_NODE"
 system_brew_arm="$FAKE_ROOT/native-brew-arm"
 system_brew_intel="$FAKE_ROOT/native-brew-intel"
@@ -323,7 +323,7 @@ case "$name" in
         if [[ -n "$target" && "$target" != - ]]; then cp "$payload" "$target"
         else cat "$payload"; fi
         if [[ "$FAKE_QUICK_DOWNLOAD" == complete-error ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
-      https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+      https://raw.githubusercontent.com/JBallin/ballin-scripts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
         cp "\${FAKE_CORE_INSTALL_SOURCE:-$FAKE_ROOT/fake-tool}" "$target" ;;
       *) exit 97 ;;
@@ -1462,7 +1462,7 @@ printf '0\\n'
       const result = spawnSync('/bin/bash', ['-c', [
         'brew() { printf "function-brew:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"; printf "%s\\n" "$FAKE_FUNCTION_BREW_PREFIX"; }',
         'export -f brew',
-        '/bin/bash -c \'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main\'',
+        '/bin/bash -c \'source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main\'',
       ].join('\n')], {
         encoding: 'utf8', input: 'y\nn\n\nhome\ny\ny\n\n', cwd: home, timeout: 12000,
         env: testChildEnvironment({
@@ -1580,7 +1580,7 @@ printf '0\\n'
   for (const name of ['git', 'node', 'gh']) {
     it(`ignores an exported ${name} function while selecting prerequisites for the actual core installer`, () => {
       linkFake('node', systemNode);
-      const inner = 'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main';
+      const inner = 'source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main';
       const result = spawnSync('/bin/bash', ['-c', [
         `${name}() { printf "exported-${name}:called\\n" >> "$FAKE_COMMAND_LOG"; return 73; }`,
         `export -f ${name}`,
@@ -2093,7 +2093,7 @@ printf '0\\n'
   }
   it('stops after SIGINT at the first-backup prompt without capture or open', async () => {
     const child = spawn('/bin/bash', ['-c', `
-source "$FAKE_SOURCE"
+source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }
 system_node_bin="$FAKE_SYSTEM_NODE"
 system_git="$FAKE_ROOT/tools/git"
 system_xcode_select="$FAKE_ROOT/tools/xcode-select"
@@ -2441,9 +2441,9 @@ Proceed with installation? [y/N] `);
           FAKE_QUICK_DOWNLOAD: ['empty', 'partial', 'complete-error'].includes(failure) ? failure : 'success',
           FAKE_QUICKSTART_EXIT: failure === 'helper' ? '7' : '0',
         });
-        const expected = failure === 'empty' ? 0 : failure === 'partial' ? 2 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
+        const expected = ['empty', 'partial', 'complete-error'].includes(failure) ? 22 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
         assert.equal(result.status, expected, result.stdout + result.stderr);
-        const executed = ['complete-error', 'helper', 'eof', 'none'].includes(failure);
+        const executed = ['helper', 'eof', 'none'].includes(failure);
         assert.equal(fs.existsSync(path.join(root, 'entrypoint-ran')), executed);
         if (executed) {
           assert.include(result.stdout, 'Native fixture prompt:');
@@ -2468,7 +2468,7 @@ Proceed with installation? [y/N] `);
         FAKE_QUICK_DOWNLOAD: 'partial', s: 'inherited value',
         SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail',
       });
-      assert.equal(result.status, 2, result.stdout + result.stderr);
+      assert.equal(result.status, 22, result.stdout + result.stderr);
       assert.notInclude(readLog(), 'downloaded-quickstart:started');
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
       assert.isEmpty(fs.readdirSync(home));
@@ -2556,7 +2556,7 @@ Proceed with installation? [y/N] `);
   }
   const pathLine = () => `export PATH=$PATH:'${path.join(home, '.local/bin')}'`;
   const runPathSetup = (input: string, overrides: NodeJS.ProcessEnv = {}) => spawnSync('/bin/bash', ['-c', `
-    source "$FAKE_SOURCE"
+    source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }
     node_tool="$TEST_NODE_RUNTIME"
     command_path="$HOME/.local/bin"
     git_tool="$HOME/selected/git"; gh_tool=''; npm_tool=''

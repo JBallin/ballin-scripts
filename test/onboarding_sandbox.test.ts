@@ -146,7 +146,7 @@ describe('onboarding sandbox', function() {
       selectScenario(sandbox, name);
       const failed = runSandbox(sandbox, [name === 'self-update' ? 'self-update' : 'update']);
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
-      assert.include(failed.stdout + failed.stderr, name === 'self-update' ? 'git fetch' : 'Simulated sandbox macOS update failure');
+      assert.include(failed.stdout + failed.stderr, name === 'self-update' ? 'Simulated sandbox fetch failure' : 'Simulated sandbox macOS update failure');
       if (name === 'update-failure') assert.include(failed.stdout, 'Updating Ballin');
       selectScenario(sandbox, 'none');
       assert.equal(runSandbox(sandbox, ['update']).status, 0);
@@ -245,7 +245,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('rejects extra PATH commands and unowned installed shims', () => {
-    const extra = path.join(sandbox.tools, 'curl');
+    const extra = path.join(sandbox.tools, 'wget');
     fs.writeFileSync(extra, 'uncontrolled');
     assert.throws(() => sandboxEnvironment(sandbox), /Unexpected sandbox command/u);
     fs.unlinkSync(extra);
@@ -325,7 +325,7 @@ describe('onboarding sandbox', function() {
     assert.equal(update.status, 0, update.stdout + update.stderr);
     assert.include(update.stdout, 'Checking Ballin readiness');
     assert.include(update.stdout, "You're ballin.");
-    assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'git:fetch --quiet origin +main:refs/remotes/origin/main');
+    assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'git:fetch --no-tags https://github.com/JBallin/ballin-scripts.git ' + 'a'.repeat(40));
     assert.include(fs.readFileSync(sandbox.log, 'utf8'), 'softwareupdate:-ia');
     assert.isEmpty(remote().requests);
   });
@@ -506,7 +506,7 @@ describe('interactive onboarding QA lifecycle', function() {
     assert.include(result.stdout, 'Unknown sandbox scenario');
     assert.include(result.stdout, 'Active scenario: self-update');
     assert.include(result.stdout, 'Command exited 1');
-    assert.include(result.stdout, 'Ballin updated.');
+    assert.include(result.stdout, 'Ballin is already up to date.');
     assert.include(result.stdout, 'Active scenario: none');
     assert.notInclude(result.stdout, '${activeScenario');
   });

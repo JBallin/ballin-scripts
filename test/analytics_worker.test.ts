@@ -620,6 +620,14 @@ describe('analytics Worker', () => {
     }
   });
 
+  for (const appVersion of ['development', 'unknown']) it(`accepts honest prelaunch identity ${appVersion}`, async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    const { env, runs } = makeEnv();
+    const response = await worker.fetch(eventRequest({ ...payloadForCommand('ballin update'), appVersion }), env);
+    assert.equal(response.status, 204);
+    assert.include(JSON.stringify(runs), appVersion);
+  });
+
   it('rejects high-cardinality version and runtime values', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const { env, runs } = makeEnv();
@@ -632,7 +640,7 @@ describe('analytics Worker', () => {
     const body = await response.json() as { error?: string };
 
     assert.equal(response.status, 400);
-    assert.equal(body.error, 'appVersion must be a released semantic version');
+    assert.equal(body.error, 'appVersion must be a released semantic version, development, or unknown');
     assert.deepEqual(runs, []);
   });
 

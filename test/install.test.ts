@@ -58,7 +58,7 @@ case "$1" in
     ;;
   clone)
     printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-    if [ "$2:$3" != "https://github.com/JBallin/ballin-scripts.git:$HOME/.ballin-scripts" ]; then
+    if [ "$2:$3:$4" != "--no-checkout:https://github.com/JBallin/ballin-scripts.git:$HOME/.ballin-scripts" ]; then
       exit 2
     fi
     mkdir -p "$HOME/.ballin-scripts/commands" "$HOME/.ballin-scripts/bin"
@@ -105,8 +105,8 @@ if [ "$1" = '-p' ]; then
 fi
 case "$1" in
   -e) exec "$TEST_NODE_RUNTIME" "$@" ;;
-  "$HOME/.ballin-scripts/commands/repo_update.ts")
-    printf 'node:repo_update %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
+  */ballin-checkout.*/repo_update.ts)
+    printf 'node:repo_update selected helper\\n' >> "$FAKE_COMMAND_LOG"
     if [ "$FAKE_REPO_UPDATE_STATUS" != 0 ]; then printf '%s\\n' "\${FAKE_REPO_UPDATE_ERROR:-}" >&2; fi
     exit "$FAKE_REPO_UPDATE_STATUS"
     ;;
@@ -135,7 +135,17 @@ esac
     installNodeStub();
   };
 
-  const runInstall = ({ env = {}, input = 'y\n' }: RunInstallOptions = {}) => spawnSync(installPath, [], {
+  const runInstall = ({ env = {}, input = 'y\n' }: RunInstallOptions = {}) => {
+    // Test inner setup independently of the candidate-entry resolver suite.
+    const fixture = path.join(homeDir, 'selected-install.sh');
+    const source = fs.readFileSync(installPath, 'utf8').replace('ballin_select "$@" || exit $?', `
+ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value
+ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install
+ballin_runtime() { return 0; }
+ballin_download() { : > "$2"; }
+`);
+    fs.writeFileSync(fixture, source, { mode: 0o700 });
+    return spawnSync(fixture, [], {
     encoding: 'utf8',
     input,
     env: {
@@ -156,6 +166,7 @@ esac
       ...env,
     },
   });
+  };
 
   const commandLog = () => (fs.existsSync(commandLogPath)
     ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter(Boolean)
@@ -238,9 +249,10 @@ esac
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
     assert.include(result.stdout, `Installation details:\n${docsUrl}#what-will-installation-change\nProceed with installation? [y/N] `);
-    assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 2);
+    assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 1);
     assert.deepEqual(commandLog(), [
-      `git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
+      `git:clone --no-checkout https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
+      'node:repo_update selected helper',
       setupCommand('fresh'),
     ]);
   });
@@ -338,7 +350,7 @@ esac
     assert.notInclude(result.stdout, 'Detected Node.js');
     assert.notInclude(result.stdout, 'Installation plan');
     assert.deepEqual(commandLog(), [
-      `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
+      'node:repo_update selected helper',
       setupCommand(),
     ]);
   });
@@ -347,14 +359,13 @@ esac
     for (const status of [130, 143]) {
       it(`preserves interrupted updater status ${status} through the ${typed ? 'typed' : 'legacy'} installer route`, () => {
         installBaseCommands(); writeCurrentCheckout({ repoUpdate: typed });
-        const result = runInstall({ env: typed
-          ? { FAKE_REPO_UPDATE_STATUS: String(status) } : { FAKE_GIT_FETCH_STATUS: String(status) } });
+        const result = runInstall({ env: { FAKE_REPO_UPDATE_STATUS: String(status) } });
         assert.equal(result.status, status, result.stdout + result.stderr);
         assert.notInclude(result.stdout + result.stderr, 'Update or delete');
         assert.notInclude(result.stdout, 'Setup complete');
         assert.notInclude(result.stdout, 'Unable to update');
         const log = fs.readFileSync(commandLogPath, 'utf8');
-        assert.include(log, typed ? 'node:repo_update' : 'git:fetch');
+        assert.include(log, 'node:repo_update');
         for (const later of ['node:install_setup', 'git:checkout', 'git:merge']) assert.notInclude(log, later);
         assert.equal(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'), '{}\n');
         assert.isFalse(fs.existsSync(path.join(homeDir, 'inspection-ran')));
@@ -369,7 +380,8 @@ esac
 
     assert.equal(first.status, 27);
     assert.deepEqual(commandLog(), [
-      `git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
+      `git:clone --no-checkout https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
+      'node:repo_update selected helper',
       setupCommand('fresh'),
     ]);
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -381,44 +393,15 @@ esac
     assert.notInclude(retry.stdout, 'Installation plan');
     assert.include(retry.stdout, `${docsUrl}#what-will-installation-change\n`);
     assert.deepEqual(commandLog(), [
-      `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
+      'node:repo_update selected helper',
       setupCommand('fresh'),
     ]);
   });
 
-  it('uses the minimal Bash update bridge for stale checkouts without typed repo update', () => {
-    installBaseCommands();
-    writeCurrentCheckout({ repoUpdate: false, installSetup: false });
-
-    const result = runInstall();
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, troubleshootingUrl);
-    assert.notInclude(result.stdout, 'Detected Node.js');
-    assert.deepEqual(commandLog(), [
-      'git:fetch origin +main:refs/remotes/origin/main',
-      'git:checkout main',
-      'git:merge origin/main',
-      setupCommand(),
-    ]);
-  });
-
-  it('fails clearly when the stale checkout bridge cannot update', () => {
-    installBaseCommands();
-    writeCurrentCheckout({ repoUpdate: false, installSetup: false });
-
-    const result = runInstall({ env: { FAKE_GIT_MERGE_STATUS: '24' } });
-
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, `Unable to update ~/.ballin-scripts before setup`);
-    assert.include(result.stdout, `Update or delete ~/.ballin-scripts`);
-    assert.equal(result.stdout.split(troubleshootingUrl).length - 1, 1);
-    assert.isBelow(result.stdout.indexOf('Unable to update'), result.stdout.indexOf(troubleshootingUrl));
-    assert.deepEqual(commandLog(), [
-      'git:fetch origin +main:refs/remotes/origin/main',
-      'git:checkout main',
-      'git:merge origin/main',
-    ]);
+  it('uses the selected helper even when the existing checkout lacks an updater', () => {
+    installBaseCommands(); writeCurrentCheckout({ repoUpdate: false });
+    const result = runInstall(); assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(commandLog(), ['node:repo_update selected helper', setupCommand()]);
   });
 
   for (const status of [130, 143]) {
@@ -442,7 +425,7 @@ esac
     const result = runInstall();
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Node.js 24.12 or newer is required');
+    assert.include(result.stdout, 'Node.js 24.12.0 or newer is required');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install supported Node.js');
     assert.include(result.stdout, '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
@@ -549,7 +532,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     const result = runInstall({ env: { FAKE_NODE_VERSION: '24.11.9' } });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Node.js 24.12 or newer is required');
+    assert.include(result.stdout, 'Node.js 24.12.0 or newer is required');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'existing installation method');
     assert.include(result.stdout, '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
@@ -575,7 +558,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       installBaseCommands();
       const result = runInstall({ env: { FAKE_NODE_VERSION: version } });
       assert.equal(result.status, 1);
-      assert.include(result.stdout, `Node.js 24.12 or newer is required. Detected Node.js ${version}.`);
+      assert.include(result.stdout, `Node.js 24.12.0 or newer is required. Detected Node.js ${version}.`);
       assert.include(result.stdout, 'existing installation method');
       assert.notInclude(result.stdout, 'nvm');
       assert.notInclude(result.stdout, troubleshootingUrl);
@@ -600,7 +583,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       installBaseCommands();
       const result = runInstall({ env });
       assert.equal(result.status, 1);
-      assert.include(result.stdout, 'Node.js 24.12 or newer is required.\n');
+      assert.include(result.stdout, 'Node.js 24.12.0 or newer is required.\n');
       assert.notInclude(result.stdout, 'Detected Node.js');
       assert.notInclude(result.stdout, troubleshootingUrl);
       assert.notInclude(result.stdout + result.stderr, 'DUMMY_PRIVATE_SECRET');
@@ -624,7 +607,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       assert.notInclude(result.stdout, 'Unable to prepare');
       assert.notInclude(result.stdout, troubleshootingUrl);
       assert.notInclude(result.stdout, 'Setup complete.');
-      assert.deepEqual(commandLog(), [`git:clone https://github.com/JBallin/ballin-scripts.git ${repoDir}`]);
+      assert.deepEqual(commandLog(), [`git:clone --no-checkout https://github.com/JBallin/ballin-scripts.git ${repoDir}`]);
       assert.isTrue(fs.existsSync(path.join(repoDir, 'commands', 'install_setup.ts')), 'partial checkout remains');
       assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
       assert.equal(fs.readFileSync(earlier, 'utf8'), 'keep this change\n');
@@ -661,9 +644,9 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
 
     assert.equal(result.status, 27);
     assert.notInclude(result.stdout, troubleshootingUrl);
-    assert.equal(result.stderr, '');
+    assert.include(result.stderr, 'setup refresh failed');
     assert.deepEqual(commandLog(), [
-      `node:repo_update ${repoDir}/commands/repo_update.ts ${repoDir}`,
+      'node:repo_update selected helper',
       setupCommand(),
     ]);
   });
@@ -680,7 +663,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       fs.unlinkSync(path.join(toolDir, 'uname'));
       writeExecutable('uname', '#!/bin/sh\nprintf Darwin\n');
       const script = path.join(homeDir, 'install-guard.sh');
-      fs.writeFileSync(script, fs.readFileSync(installPath, 'utf8').replace("system_git='/usr/bin/git'", `system_git='${apple}'`).replace("system_xcode_select='/usr/bin/xcode-select'", `system_xcode_select='${xcode}'`));
+      fs.writeFileSync(script, fs.readFileSync(installPath, 'utf8').replace('ballin_select \"$@\" || exit $?', 'ballin_minimum=24.12.0; ballin_mode=install').replace("system_git='/usr/bin/git'", `system_git='${apple}'`).replace("system_xcode_select='/usr/bin/xcode-select'", `system_xcode_select='${xcode}'`));
       // Refuse further installation so this case tests only the preclone guard.
       const result = spawnSync('/bin/bash', [script], { encoding: 'utf8', input: 'n\n', env: { HOME: homeDir, PATH: toolDir, FAKE_COMMAND_LOG: commandLogPath, TEST_NODE_RUNTIME: process.execPath, FAKE_NODE_VERSION: '24.12.0', FAKE_NODE_PROBE_STATUS: '0', FAKE_NODE_PROBE_LOG: path.join(homeDir, 'node-probes') } });
       assert.equal(result.status, toolsReady ? 0 : 1, result.stdout + result.stderr);

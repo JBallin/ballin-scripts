@@ -574,6 +574,7 @@ fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
     fs.writeFileSync(path.join(nvmBinDir, 'git'), `#!${process.execPath}
 process.exit(0);
 `, { mode: 0o755 });
+    fs.writeFileSync(path.join(installedCommandsDir, '..', 'install.sh'), '#!/bin/bash\nexec node commands/install_setup.ts\n');
     fs.writeFileSync(path.join(installedCommandsDir, 'install_setup.ts'), `const {
   ensureAnalyticsInstallId,
 } = require(${JSON.stringify(analyticsPath)});

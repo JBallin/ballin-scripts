@@ -57,7 +57,7 @@ const validateSandbox = (sandbox: Sandbox): void => {
     || fs.realpathSync(sandbox.repo) !== sandbox.repo)) throw new Error('Sandbox checkout was replaced');
   const state = path.join(sandbox.remote, 'repository.json');
   if (existsWithoutFollowingLinks(state) && fs.lstatSync(state).isSymbolicLink()) throw new Error('Sandbox remote state was replaced');
-  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, ...(sandbox.quickstart ? [...quickstartSystemTools, 'sw_vers', 'curl'] : []), 'node', 'git', 'gh', 'softwareupdate'].sort().join(',')
+  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, ...(sandbox.quickstart ? [...quickstartSystemTools, 'sw_vers'] : []), 'curl', 'node', 'git', 'gh', 'softwareupdate'].sort().join(',')
     || fs.readdirSync(sandbox.bin).some((name: string) => name !== 'ballin')) throw new Error('Unexpected sandbox command');
   for (const [file, contents] of sandbox.expected) {
     if (fs.readFileSync(file, 'utf8') !== contents || fs.lstatSync(file).isSymbolicLink()) {
@@ -149,7 +149,7 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
     sandbox.links.set(path.join(sandbox.tools, 'node'), process.execPath);
     fs.copyFileSync(path.join(__dirname, 'onboarding_guard.ts'), sandbox.guard);
     const git = path.join(sandbox.tools, 'git');
-    fs.writeFileSync(git, `#!/usr/bin/env node\nconst fs = require('fs');\nconst path = require('path');\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(sandbox.log)}, 'git:' + args.join(' ') + '\\n');\nconst exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);\nif (exact(['--version'])) process.stdout.write('git version onboarding fixture\\n');\nelse if (exact(['clone', 'https://github.com/JBallin/ballin-scripts.git', ${JSON.stringify(sandbox.repo)}]) && process.cwd() === ${JSON.stringify(sandbox.home)}) {\n  fs.mkdirSync(${JSON.stringify(sandbox.repo)}, { recursive: true });\n  for (const name of ['commands', 'config', 'bin', 'completions', 'package.json']) fs.cpSync(path.join(${JSON.stringify(source)}, name), path.join(${JSON.stringify(sandbox.repo)}, name), { recursive: true });\n} else if (exact(['show', 'HEAD:commands/backup_scope.json']) && process.cwd() === ${JSON.stringify(sandbox.repo)}) {\n  const catalog = path.join(${JSON.stringify(sandbox.repo)}, 'commands/backup_scope.json');\n  if (fs.realpathSync(${JSON.stringify(sandbox.repo)}) !== ${JSON.stringify(sandbox.repo)}\n    || fs.realpathSync(catalog) !== catalog || !fs.lstatSync(catalog).isFile()) {\n    process.stderr.write('Sandbox backup scope catalog was replaced\\n'); process.exitCode = 2;\n  } else process.stdout.write(fs.readFileSync(catalog, 'utf8'));\n} else if (exact(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])) process.exitCode = 1;\nelse if (process.cwd() === ${JSON.stringify(sandbox.repo)} && [\n  ['fetch', 'origin', '+main:refs/remotes/origin/main'], ['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'], ['checkout', 'main'], ['merge', 'origin/main'], ['stash', 'push', '--include-untracked']\n].some(exact)) {\n  if (args[0] === 'fetch' && JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name === 'self-update') { process.stderr.write('Simulated sandbox fetch failure\\n'); process.exitCode = 1; }\n}\nelse { process.stderr.write('Unsupported sandbox Git operation\\n'); process.exitCode = 2; }\n`, { mode: 0o755 });
+    fs.writeFileSync(git, `#!/usr/bin/env node\nconst fs = require('fs');\nconst path = require('path');\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(sandbox.log)}, 'git:' + args.join(' ') + '\\n');\nconst exact = (expected) => JSON.stringify(args) === JSON.stringify(expected);\nif (exact(['--version'])) process.stdout.write('git version onboarding fixture\\n');\nelse if (exact(['clone', '--no-checkout', 'https://github.com/JBallin/ballin-scripts.git', ${JSON.stringify(sandbox.repo)}])) {\n  fs.mkdirSync(${JSON.stringify(sandbox.repo)}, { recursive: true });\n  for (const name of ['commands', 'config', 'bin', 'completions', 'package.json', 'install.sh', 'installer-contract.json']) fs.cpSync(path.join(${JSON.stringify(source)}, name), path.join(${JSON.stringify(sandbox.repo)}, name), { recursive: true });\n} else if (exact(['show', 'HEAD:commands/backup_scope.json']) && process.cwd() === ${JSON.stringify(sandbox.repo)}) {\n  const catalog = path.join(${JSON.stringify(sandbox.repo)}, 'commands/backup_scope.json');\n  if (fs.realpathSync(${JSON.stringify(sandbox.repo)}) !== ${JSON.stringify(sandbox.repo)}\n    || fs.realpathSync(catalog) !== catalog || !fs.lstatSync(catalog).isFile()) {\n    process.stderr.write('Sandbox backup scope catalog was replaced\\n'); process.exitCode = 2;\n  } else process.stdout.write(fs.readFileSync(catalog, 'utf8'));\n} else if (exact(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])) process.exitCode = 1;\nelse if (process.cwd() === ${JSON.stringify(sandbox.repo)} && [\n  ['fetch', 'origin', '+main:refs/remotes/origin/main'], ['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'], ['checkout', 'main'], ['merge', 'origin/main'], ['stash', 'push', '--include-untracked']\n].some(exact)) {\n  if (args[0] === 'fetch' && JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name === 'self-update') { process.stderr.write('Simulated sandbox fetch failure\\n'); process.exitCode = 1; }\n}\nelse { process.stderr.write('Unsupported sandbox Git operation\\n'); process.exitCode = 2; }\n`, { mode: 0o755 });
     installRepositoryFixture(sandbox.tools, path.join(sandbox.remote, 'repository.json'), true);
     const softwareUpdate = path.join(sandbox.tools, 'softwareupdate');
     fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); const scenario = JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name;\n  if (scenario === 'update-failure') { process.stderr.write('Simulated sandbox macOS update failure\\n'); process.exitCode = 1; }\n  else if (scenario === 'update-interrupt') { fs.writeFileSync(${JSON.stringify(path.join(sandbox.root, 'update-stage.ready'))}, 'ready'); process.stdout.write('Sandbox update stage ready for interruption\\n'); setInterval(() => {}, 1000); }\n  else process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
@@ -185,6 +185,47 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
         sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
       }
     }
+    // Canonical revision fixture: every accepted download is mapped to local data.
+    const curl = path.join(sandbox.tools, 'curl');
+    fs.writeFileSync(curl, `#!/usr/bin/env node
+const fs=require('fs'),path=require('path');const args=process.argv.slice(2),sha='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const url=args.find(v=>v.startsWith('https://'));const output=args.includes('-o')?args[args.indexOf('-o')+1]:null;
+const publicBase='https://raw.githubusercontent.com/JBallin/ballin-scripts/';
+let data;
+if(url==='https://api.github.com/repos/JBallin/ballin-scripts/git/ref/heads/main')data=JSON.stringify({object:{sha,type:'commit'}});
+else if(url==='https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh')data=fs.readFileSync(${JSON.stringify(sandbox.root)}+'/nvm-install.sh');
+else {
+ const allowed=['install.sh','quickstart.sh','installer-contract.json','commands/repo_update.ts'];
+ const file=allowed.find(f=>url===publicBase+sha+'/'+f || (['install.sh','quickstart.sh'].includes(f)&&url===publicBase+'main/'+f));
+ if(!file)process.exit(97); data=fs.readFileSync(path.join(${JSON.stringify(source)},file));
+}
+if(output){if(!path.resolve(output).startsWith(${JSON.stringify(sandbox.scratch + '/')}))process.exit(97);fs.writeFileSync(output,data);if(args.includes('-w'))process.stdout.write('200');}
+else if(args.length===3&&args[0]==='-q'&&args[1]==='-fsSL')process.stdout.write(data);else process.exit(97);
+`, { mode: 0o755 });
+    sandbox.expected.set(curl, fs.readFileSync(curl, 'utf8'));
+    const legacyGit = fs.readFileSync(git, 'utf8');
+    const revisionGit = `
+const revisionArgs=process.argv.slice(2),revisionRoot=${JSON.stringify(sandbox.repo)},revisionSha='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const same=a=>JSON.stringify(a)===JSON.stringify(revisionArgs);
+let handled=true,answer='';
+if(revisionArgs[0]!=='-C'&&process.cwd()!==revisionRoot)handled=false;
+else if(same(['-C',revisionRoot,'rev-parse','--show-toplevel'])||same(['rev-parse','--show-toplevel']))answer=revisionRoot;
+else if(same(['-C',revisionRoot,'remote','get-url','origin'])||same(['remote','get-url','origin']))answer='https://github.com/JBallin/ballin-scripts.git';
+else if(same(['-C',revisionRoot,'for-each-ref','--format=%(refname)','refs/replace/'])||same(['for-each-ref','--format=%(refname)','refs/replace/']))answer='';
+else if(same(['-C',revisionRoot,'ls-files','-v'])||same(['ls-files','-v']))answer='H package.json';
+else if(same(['-C',revisionRoot,'config','--get','core.sparseCheckout'])||same(['config','--get','core.sparseCheckout']))process.exit(1);
+else if(revisionArgs.includes('--git-path')) {const name=revisionArgs.at(-1);if(!/^[a-zA-Z0-9_.-]+$/.test(name))process.exit(97);fs.mkdirSync(path.join(revisionRoot,'.git'),{recursive:true});answer=path.join(revisionRoot,'.git',name);}
+else if(revisionArgs.includes('status')&&revisionArgs.includes('--porcelain'))answer='';
+else if(revisionArgs[0]==='rev-parse'&&['HEAD','FETCH_HEAD^{commit}'].includes(revisionArgs.at(-1)))answer=revisionSha;
+else if(same(['symbolic-ref','-q','HEAD']))answer='refs/heads/main';
+else if(revisionArgs[0]==='ls-tree'&&revisionArgs[1]===revisionSha&&revisionArgs[2]==='--'&&['install.sh','quickstart.sh','commands/repo_update.ts','commands/install_setup.ts','bin/ballin','package.json'].includes(revisionArgs[3]))answer='100644 blob '+revisionSha+'\\t'+revisionArgs[3];
+else if(same(['show',revisionSha+':installer-contract.json']))answer=fs.readFileSync(path.join(${JSON.stringify(source)},'installer-contract.json'),'utf8');
+else if(same(['fetch','--no-tags','https://github.com/JBallin/ballin-scripts.git',revisionSha])) {if(JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))},'utf8')).name==='self-update'){process.stderr.write('Simulated sandbox fetch failure\\n');process.exit(1);}}
+else if(same(['checkout','--detach','--no-overwrite-ignore',revisionSha])||same(['merge','--ff-only','--no-overwrite-ignore',revisionSha])||same(['merge-base','--is-ancestor',revisionSha,revisionSha]))answer='';
+else handled=false;
+if(handled){fs.appendFileSync(${JSON.stringify(sandbox.log)},'git:'+revisionArgs.join(' ')+'\\n');process.stdout.write(answer);process.exit(0);}
+`;
+    fs.writeFileSync(git, legacyGit.replace("const args = process.argv.slice(2);", revisionGit + "\nconst args = process.argv.slice(2);"));
     for (const file of [git, path.join(sandbox.tools, 'gh'), softwareUpdate, sandbox.guard]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
     fs.writeFileSync(path.join(sandbox.home, '.zshrc'), '# Harmless onboarding QA fixture\nexport BALLIN_QA_EXAMPLE=1\n');
     resetRemote(sandbox);
