@@ -1,729 +1,228 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn, spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const { createAnalyticsCapture } = require('./helpers/analytics.ts');
+const { createDefaultConfig } = require('../config/setup.ts');
+const { createConfigStore } = require('../config/store.ts');
+const { restorePortablePreferences, projectPortablePreferences } = require('../config/portable.ts');
+const ballin = path.resolve(__dirname, '../bin/ballin');
+const defaults = require('../config/.defaultConfig.json');
 
-const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
-const preferencesPath = path.join(__dirname, '..', 'commands', 'backup_preferences.ts');
-
-describe('guided preference setup', () => {
+describe('general preference review', () => {
   let root: string;
-  let configPath: string;
-  let guardPath: string;
-  let callsPath: string;
-  let capture: ReturnType<typeof createAnalyticsCapture>;
-
-  const readConfig = () => JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  const writeConfig = (config: unknown) => fs.writeFileSync(configPath, JSON.stringify(config));
-  const configFor = (kind = 'repository', enabled = false) => ({
-    backup: {
-      repository: kind === 'repository' ? { id: '1', ownerId: '2', name: 'fixture-backup', branch: 'main' } : null,
-      includeSensitive: String(enabled),
-      custom: { retained: true },
-    },
-    update: { backup: String(enabled), npm: 'false', custom: 'retained' },
-    analytics: { enabled: String(enabled), custom: 'retained' },
-    custom: { retained: true },
+  let file: string;
+  let guard: string;
+  let nvm: string;
+  const read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+  const write = (value: unknown) => fs.writeFileSync(file, JSON.stringify(value));
+  const run = (input = '', env: NodeJS.ProcessEnv = {}, args = ['setup']) => spawnSync(process.execPath, [ballin, ...args], {
+    input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: '/usr/bin:/bin',
+      BALLIN_TEST_CONFIG_PATH: file, NODE_OPTIONS: `--require ${JSON.stringify(guard)}`, ...env }),
   });
-  const run = (input = '', args = ['setup'], env: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath, [ballinPath, ...args], {
-    input,
-    encoding: 'utf8',
-    env: testChildEnvironment({
-      HOME: root,
-      PATH: root,
-      BALLIN_TEST_CONFIG_PATH: configPath,
-      NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}`,
-      ...env,
-    }),
-  });
-  const assertNoCalls = () => assert.isFalse(fs.existsSync(callsPath), 'no child workflows or raw source reads');
-
-  beforeEach(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-preferences-')));
-    configPath = path.join(root, 'ballin.config.json');
-    callsPath = path.join(root, 'calls');
-    guardPath = path.join(root, 'guard.cjs');
-    capture = createAnalyticsCapture(root);
-    fs.writeFileSync(guardPath, `
-const fs = require('fs');
-const cp = require('child_process');
-cp.spawnSync = (...args) => { fs.appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(args) + '\\n'); throw new Error('No child workflows allowed'); };
-const path = require('path');
-const sourceFds = new Set();
-const sourcePath = (file) => typeof file === 'string' && (path.resolve(file) === ${JSON.stringify(path.join(root, '.zshrc'))} || [${JSON.stringify(path.join(root, '.codex') + path.sep)}, ${JSON.stringify(path.join(root, '.agents', 'skills') + path.sep)}].some((prefix) => path.resolve(file).startsWith(prefix)));
-const open = fs.openSync;
-fs.openSync = (file, flags, ...args) => {
-  const source = sourcePath(file);
-  if (source && flags !== (fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK)) {
-    fs.appendFileSync(${JSON.stringify(callsPath)}, 'unexpected source open\\n'); throw new Error('Only metadata source opens allowed');
-  }
-  const fd = open(file, flags, ...args);
-  if (source) sourceFds.add(fd);
-  return fd;
-};
-const close = fs.closeSync;
-fs.closeSync = (fd) => { const result = close(fd); sourceFds.delete(fd); return result; };
-const descriptorRead = fs.readSync;
-fs.readSync = (fd, ...args) => {
-  if (sourceFds.has(fd)) {
-    fs.appendFileSync(${JSON.stringify(callsPath)}, 'source descriptor read\\n'); throw new Error('No source descriptor reads allowed');
-  }
-  return descriptorRead(fd, ...args);
-};
-const read = fs.readFileSync;
-fs.readFileSync = (file, ...args) => {
-  if (sourceFds.has(file) || sourcePath(file)) {
-    fs.appendFileSync(${JSON.stringify(callsPath)}, 'raw source read\\n'); throw new Error('No source content reads allowed');
-  }
-  return read(file, ...args);
-};
-`);
-    // Availability inspection is permitted; running pipx to collect metadata is forbidden.
-    fs.writeFileSync(path.join(root, 'pipx'), '#!/bin/sh\nexit 91\n', { mode: 0o755 });
-    writeConfig(configFor());
-  });
-  afterEach(() => {
-    assertNoCalls();
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-
-  it('groups available sensitive sources above absent and unavailable sources without redundant paths', () => {
-    fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
-    const result = run('y\ny\nn\nn\n');
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Sensitive source paths available now:\n  ~/.zshrc\npipx installation metadata is also available.\n');
-    assert.notInclude(result.stdout, ' -> ');
-    assert.notInclude(result.stdout, 'Sources not found now:');
-    assert.notInclude(result.stdout, 'Unavailable now:');
-    assert.notInclude(result.stdout, 'Claude');
-    assert.include(result.stdout, 'Backup source details:');
-    assert.notInclude(result.stdout, 'fixture private content');
-  });
-
-  [false, true].forEach((included) => {
-    it(`reviews the override instruction source before the inclusion question: ${included}`, () => {
-      const codex = path.join(root, '.codex'); fs.mkdirSync(codex);
-      const override = path.join(codex, 'AGENTS.override.md');
-      fs.writeFileSync(override, 'SYNTHETIC_OVERRIDE_CONTENT');
-      const probes = path.join(root, 'override-probes');
-      fs.appendFileSync(guardPath, `const definitions = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'backup_snapshots.ts'))}).snapshotDefinitions;
-        const overrideDefinition = definitions.find((definition) => definition.name === 'codex_AGENTS.override.md');
-        if (!overrideDefinition) throw new Error('Missing override source definition');
-        const discoverOverride = overrideDefinition.discover;
-        overrideDefinition.discover = (context) => {
-          fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
-          return discoverOverride(context);
-        };\n`);
-      const result = run(`${included ? 'y' : 'n'}\nn\nn\n`);
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.isTrue(fs.existsSync(probes));
-      assert.equal(readConfig().backup.includeSensitive, String(included));
-      assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
-      assert.include(result.stdout, '~/.codex/AGENTS.override.md\n');
-      assert.include(result.stdout, 'docs/backup-sources.md#what-will-ballin-back-up');
-      assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
-    });
-  });
-
-  [false, true].forEach((included) => {
-    it(`reviews fixed HOME user skills independently of CODEX_HOME before the inclusion question: ${included}`, () => {
-      const skills = path.join(root, '.agents', 'skills');
-      fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
-      fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_USER_SKILL_CONTENT');
-      const active = path.join(root, '.codex', 'active'); fs.mkdirSync(active, { recursive: true });
-      const probes = path.join(root, 'user-skills-probes');
-      fs.appendFileSync(guardPath, `const userSkillsDefinitions = require(${JSON.stringify(path.join(__dirname, '..', 'commands', 'backup_snapshots.ts'))}).snapshotDefinitions;
-        const userSkillsDefinition = userSkillsDefinitions.find((definition) => definition.name === 'codex_user_skills.bundle.json');
-        if (!userSkillsDefinition) throw new Error('Missing user skills source definition');
-        const discoverUserSkills = userSkillsDefinition.discover;
-        userSkillsDefinition.discover = (context) => {
-          fs.appendFileSync(${JSON.stringify(probes)}, 'probe\\n');
-          return discoverUserSkills(context);
-        };\n`);
-      const result = run(`${included ? 'y' : 'n'}\nn\nn\n`, ['setup'], { CODEX_HOME: active });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.isTrue(fs.existsSync(probes));
-      assert.equal(readConfig().backup.includeSensitive, String(included));
-      assert.notInclude(result.stdout, 'SYNTHETIC_USER_SKILL_CONTENT');
-      {
-        assert.include(result.stdout, '~/.agents/skills\n');
-        assert.notInclude(result.stdout, 'Sources not found now:');
-        assert.notInclude(result.stdout, 'codex_skills.bundle.json');
-      }
-    });
-  });
-
-  [false, true].forEach((enabled) => {
-    it(`accepts current ${enabled} defaults and preserves custom settings`, () => {
-      const initial = configFor('repository', enabled);
-      writeConfig(initial);
-      fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
-      const result = run('\n\n\n');
-      assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, `Include sensitive sources in future backups? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `\`ballin update\`? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.notInclude(result.stdout, 'Usage analytics are currently');
-      assert.include(result.stdout, `Share usage analytics to help improve Ballin? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      assert.include(result.stdout, `Usage analytics: ${enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` unchanged at \`${enabled}\`).`);
-      assert.include(result.stdout, `Automatic backup during updates: ${enabled ? 'enabled' : 'disabled'} (\`update.backup\` unchanged at \`${enabled}\`).`);
-      assert.include(result.stdout, `Sensitive sources in backups: ${enabled ? 'included' : 'excluded'} (\`backup.includeSensitive\` unchanged at \`${enabled}\`).`);
-      for (const key of ['backup.includeSensitive', 'update.backup', 'analytics.enabled']) assert.lengthOf(result.stdout.split('`' + key + '` unchanged at'), 2);
-      assert.deepEqual(readConfig(), initial);
-      assert.include(result.stdout, '\n\n😎 Ballin preference review complete.\n');
-      if (enabled) {
-        assert.include(result.stdout, 'pipx installation metadata is also available.');
-        assert.include(result.stdout, '~/.zshrc');
-      } else assert.include(result.stdout, 'pipx installation metadata is also available.');
-    });
-    it(`changes all ${enabled} choices through the existing owners`, () => {
-      writeConfig(configFor('repository', enabled));
-      const answer = enabled ? 'n' : 'y';
-      const result = run(`${answer}\n${answer}\n${answer}\n`);
-      assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, enabled ? 'Include sensitive sources in future backups? [Y/n]' : 'Include sensitive sources in future backups? [y/N]');
-      const config = readConfig();
-      assert.equal(config.backup.includeSensitive, String(!enabled));
-      assert.equal(config.update.backup, String(!enabled));
-      assert.equal(config.analytics.enabled, String(!enabled));
-      assert.include(result.stdout, `Automatic backup during updates: ${!enabled ? 'enabled' : 'disabled'} (\`update.backup\` set to \`${!enabled}\`).`);
-      assert.include(result.stdout, `Usage analytics: ${!enabled ? 'enabled' : 'disabled'} (\`analytics.enabled\` set to \`${!enabled}\`).`);
-      for (const key of ['backup.includeSensitive', 'update.backup', 'analytics.enabled']) assert.lengthOf(result.stdout.split('`' + key + '` set to'), 2);
-      assert.include(result.stdout, `Sensitive sources in backups: ${!enabled ? 'included' : 'excluded'} (\`backup.includeSensitive\` set to \`${!enabled}\`).`);
-    });
-  });
-
-  it('renders the single sensitive question and saves No before the next question', () => {
-    writeConfig(configFor('repository', true));
-    const result = run('n\n\n\n'); assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /^==> Backup preferences\nℹ️  Inventories/u);
-    assert.include(result.stdout, '🔗 Backup source details:\nhttps://');
-    assert.equal(result.stdout.split('Include sensitive sources in future backups?').length - 1, 1);
-    assert.notInclude(result.stdout, 'Review files that may contain');
-    assert.include(result.stdout, '+ Sensitive sources in backups: excluded');
-    assert.isBelow(result.stdout.indexOf('+ Sensitive sources in backups: excluded'), result.stdout.indexOf('Automatically run'));
-    assert.include(result.stdout, '==> Analytics\nℹ️  Optional analytics report command');
-    assert.include(result.stdout, '✓ Automatic backup during updates: enabled');
-    assert.notInclude(result.stdout, '🔄 Automatically'); assert.notInclude(result.stdout, 'Ctrl-C to cancel');
-    assert.equal(readConfig().backup.includeSensitive, 'false'); assert.equal(readConfig().update.backup, 'true');
-  });
-  it('omits the cancellation hint in interactive preference review', () => {
-    fs.appendFileSync(guardPath, "require('tty').isatty = (fd) => fd === 0;\n");
-    const result = run('n\nn\nn\n'); assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Ctrl-C to cancel');
-  });
-  it('reviews only analytics when unconfigured', () => {
-    const initial = configFor('unconfigured');
-    writeConfig(initial);
-    const result = run('y\n');
-    assert.equal(result.status, 0, result.stderr);
-    assert.notInclude(result.stdout, 'Include sensitive sources in future backups?');
-    assert.notInclude(result.stdout, 'Automatically run');
-    assert.include(result.stdout, 'Run `ballin backup setup`');
-    assert.include(result.stdout, 'ℹ️  Optional analytics report command results, not backup contents.\n🔗 Analytics details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share\n');
-    assert.equal(readConfig().backup.includeSensitive, initial.backup.includeSensitive);
-    assert.equal(readConfig().update.backup, 'false');
-    assert.equal(readConfig().analytics.enabled, 'true');
-  });
-
-  ['', 'y'].forEach((input) => {
-    it(`leaves unconfirmed sensitive choice unchanged on ${JSON.stringify(input)}`, () => {
-      const before = fs.readFileSync(configPath, 'utf8');
-      const result = run(input);
-      assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, '\nReview cancelled. Earlier confirmed choices remain saved.\nRun `ballin setup`');
-      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
-      assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
-      assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup|analytics.enabled)` (?:set to|unchanged at)/u);
-      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
-      assert.notInclude(result.stdout, 'Automatically run');
-      assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
-    });
-  });
-
-  ['n\n', 'n\nn', 'n\nn\n', 'n\nn\nn'].forEach((input) => {
-    it(`stops at EOF and retains only confirmed choices: ${JSON.stringify(input)}`, () => {
-      writeConfig(configFor('repository', true));
-      const result = run(input);
-      assert.equal(result.status, 0, result.stderr);
-      const config = readConfig();
-      assert.equal(config.backup.includeSensitive, 'false');
-      assert.equal(config.update.backup, input.startsWith('n\nn\n') ? 'false' : 'true');
-      assert.equal(config.analytics.enabled, 'true');
-      assert.include(result.stdout, 'Earlier confirmed choices remain saved');
-      assert.include(result.stdout, 'Earlier confirmed choices remain saved.\nRun `ballin setup` to review your preferences again.');
-      assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
-      if (!input.startsWith('n\nn\n')) assert.notInclude(result.stdout, 'Share usage analytics to help improve Ballin?');
-    });
-  });
-
-  ['\n', 'n\n', 'y\n', 'Y\n', '', 'y'].forEach((input) => {
-    it(`uses the fresh automatic-backup default without running a backup: ${JSON.stringify(input)}`, () => {
-      writeConfig(configFor('repository', true));
-      const result = spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH) ? 0 : 1`], {
-        input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}` }),
-      });
-      assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`? [y/N]');
-      assert.equal(readConfig().update.backup, ['y\n', 'Y\n', '', 'y'].includes(input) ? 'true' : 'false');
-    });
-  });
-
-  it('preserves the pending automatic choice on EOF in review and onboarding', () => {
-    writeConfig(configFor('repository', true));
-    assert.equal(run().status, 0);
-    assert.equal(readConfig().update.backup, 'true');
-    const result = spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH) ? 0 : 1`], {
-      input: '', encoding: 'utf8', env: testChildEnvironment({ HOME: root, BALLIN_TEST_CONFIG_PATH: configPath }),
-    });
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(readConfig().update.backup, 'true');
-  });
-
-  ['sensitive', 'automatic'].forEach((choice) => {
-    it(`preserves the pending ${choice} choice on SIGINT`, async () => {
-      writeConfig(configFor('repository', true));
-      const child = spawn(process.execPath, [ballinPath, 'setup'], {
-        env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}` }),
-      });
-      let output = '';
-      let signalled = false;
-      child.stdout.on('data', (chunk: Buffer) => {
-        output += chunk.toString();
-        const prompt = choice === 'sensitive' ? 'Include sensitive sources in future backups?' : 'Automatically run';
-        if (!signalled && output.includes(prompt)) { signalled = true; child.kill('SIGINT'); }
-      });
-      if (choice === 'automatic') child.stdin.write('n\n');
-      const result = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
-        const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('fixture prompt timeout')); }, 3000);
-        child.once('error', (error: Error) => { clearTimeout(timer); reject(error); });
-        child.once('exit', (code: number | null, signal: string | null) => { clearTimeout(timer); resolve({ code, signal }); });
-      });
-      assert.equal(result.signal, 'SIGINT');
-      assert.equal(readConfig().backup.includeSensitive, choice === 'sensitive' ? 'true' : 'false');
-      assert.equal(readConfig().update.backup, 'true');
-      assert.equal(readConfig().analytics.enabled, 'true');
-    });
-  });
-
-  for (const defaultValue of [false, true]) {
-    for (const input of ['', 'y', 'no']) {
-      it(`does not write the automatic preference on partial/empty EOF: ${defaultValue}/${JSON.stringify(input)}`, () => {
-        writeConfig(configFor('repository', defaultValue));
-        const before = fs.readFileSync(configPath);
-        const result = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(preferencesPath)}).offerAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH)`], {
-          input, encoding: 'utf8', env: testChildEnvironment({ HOME: root, BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_NO_ANALYTICS: '1' }),
-        });
-        assert.equal(result.status, 0, result.stderr);
-        assert.isTrue(fs.readFileSync(configPath).equals(before));
-        assert.notInclude(result.stdout, 'set to');
-      });
-    }
-  }
-  it('accepts full words, mixed case and whitespace while reprompting invalid complete answers', () => {
-    writeConfig(configFor('repository', true));
-    const result = run('private invalid answer\n  nO \n\tno\t\n YeS \n');
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'Please enter yes or no.');
-    assert.notInclude(result.stdout, 'private invalid answer');
-    assert.equal(readConfig().backup.includeSensitive, 'false');
-    assert.equal(readConfig().update.backup, 'false');
-    assert.equal(readConfig().analytics.enabled, 'true');
-  });
-
-  it('accepts native boolean choices', () => {
-    const config = configFor('repository');
-    writeConfig({ ...config, backup: { ...config.backup, includeSensitive: true }, update: { backup: false }, analytics: { enabled: true } });
-    const result = run('\n\n\n');
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(readConfig().backup.includeSensitive, 'true');
-    assert.equal(readConfig().update.backup, 'false');
-    assert.equal(readConfig().analytics.enabled, 'true');
-  });
-
-  it('discloses current and future sensitive sources before acceptance without adding consent state', () => {
-    const initial = configFor('repository', false);
-    writeConfig(initial);
-    const result = run('n\nn\nn\n');
-    assert.equal(result.status, 0, result.stderr);
-    const disclosure = 'Backup source details:';
-    assert.isAtLeast(result.stdout.indexOf(disclosure), 0);
-    assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Include sensitive sources in future backups?'));
-    assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Include sensitive sources in future backups?'));
-    const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Include sensitive sources in future backups?'));
-    assert.include(result.stdout, 'Inventories and filtered preferences can contain private information or secrets even without sensitive sources.\n🔗 Backup source details:\n');
-    assert.include(consent, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\n');
-    assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
-    assert.notInclude(result.stdout, 'Excluding sources does not remove');
-    assert.deepEqual(Object.keys(readConfig().backup).sort(), Object.keys(initial.backup).sort());
-    assert.equal(readConfig().backup.includeSensitive, 'false');
-  });
-
-  it('stops on sensitive inspection failure without saving', () => {
-    fs.writeFileSync(path.join(root, '.zshrc'), 'fixture content');
-    fs.appendFileSync(guardPath, `const realpath = fs.realpathSync; fs.realpathSync = (file, ...args) => {
-      if (file === ${JSON.stringify(path.join(root, '.zshrc'))}) throw new Error('fixture resolution failure');
-      return realpath(file, ...args);
-    };\n`);
-    const before = fs.readFileSync(configPath, 'utf8');
-    const result = run('y\ny\ny\ny\n');
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Unable to review');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
-    assert.notInclude(result.stdout, 'Automatically run');
-  });
-
-  it('allows exclusion after source review fails without saving inclusion', () => {
-    fs.writeFileSync(path.join(root, '.zshrc'), 'fixture content');
-    fs.appendFileSync(guardPath, `const realpath = fs.realpathSync; fs.realpathSync = (file, ...args) => {
-      if (file === ${JSON.stringify(path.join(root, '.zshrc'))}) throw new Error('fixture resolution failure');
-      return realpath(file, ...args);
-    };\n`);
-    writeConfig(configFor('repository', true));
-    const result = run('n\n\n\n');
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, 'Unable to review'); assert.include(result.stdout, '+ Sensitive sources in backups: excluded');
-    assert.equal(readConfig().backup.includeSensitive, 'false');
-    assert.include(result.stdout, '😎 Ballin preference review complete.');
-  });
-
-  const denyReadAccess = (file: string): string => {
-    const attempts = path.join(root, 'access-attempts');
-    fs.appendFileSync(guardPath, `const metadataOpen = fs.openSync; fs.openSync = (entry, ...args) => {
-      if (typeof entry === 'string' && path.resolve(entry) === ${JSON.stringify(file)}) {
-        fs.appendFileSync(${JSON.stringify(attempts)}, 'denied\\n');
-        const error = new Error('synthetic unreadable leaf'); error.code = 'EACCES'; throw error;
-      }
-      return metadataOpen(entry, ...args);
-    };\n`);
-    return attempts;
+  const installNvm = (alias = 'lts/*') => {
+    nvm = path.join(root, '.nvm');
+    fs.mkdirSync(path.join(nvm, 'alias/lts'), { recursive: true });
+    fs.writeFileSync(path.join(nvm, 'alias/default'), alias);
+    fs.writeFileSync(path.join(nvm, 'alias/lts/*'), 'v26.13.0');
+    fs.mkdirSync(path.join(nvm, 'versions/node/v26.13.0/bin'), { recursive: true });
+    fs.writeFileSync(path.join(nvm, 'versions/node/v26.13.0/bin/node'), 'not executed');
+    fs.writeFileSync(path.join(nvm, 'nvm.sh'), `nvm() { [ "$1" = version ] && printf 'v26.13.0\\n'; }\n`);
   };
-
-  ['skills', 'rules', 'agents'].forEach((tree) => {
-    it(`refuses opt-in when a selected recursive ${tree} leaf is unreadable`, () => {
-      const leaf = path.join(root, '.codex', tree, 'synthetic', 'instructions.md');
-      fs.mkdirSync(path.dirname(leaf), { recursive: true });
-      fs.writeFileSync(leaf, 'SYNTHETIC_PRIVATE_CONTENT');
-      const attempts = denyReadAccess(leaf);
-      const before = fs.readFileSync(configPath, 'utf8');
-      const result = run('y\ny\ny\ny\n');
-      assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stdout, `Unable to review codex_${tree}.bundle.json`);
-      assert.isTrue(fs.existsSync(attempts), 'selected leaf must receive a metadata access check');
-      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
-      assert.notInclude(result.stdout, 'Automatically run');
-      assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
-    });
-  });
-
-  [false, true].forEach((selected) => {
-    it(`checks read access only for selected named TOML profiles: selected ${selected}`, () => {
-      const codex = path.join(root, '.codex'); fs.mkdirSync(codex);
-      fs.writeFileSync(path.join(codex, 'synthetic.config.toml'), 'synthetic profile');
-      const denied = path.join(codex, selected ? 'synthetic.config.toml' : 'history.jsonl');
-      if (!selected) fs.writeFileSync(denied, 'synthetic runtime');
-      const attempts = denyReadAccess(denied);
-      const before = fs.readFileSync(configPath, 'utf8');
-      const result = run('y\ny\nn\nn\n');
-      assert.equal(result.status, selected ? 1 : 0, result.stdout + result.stderr);
-      assert.equal(fs.existsSync(attempts), selected);
-      if (selected) {
-        assert.include(result.stdout, 'Unable to review codex_profiles.bundle.json');
-        assert.equal(fs.readFileSync(configPath, 'utf8'), before);
-      } else assert.equal(readConfig().backup.includeSensitive, 'true');
-    });
-  });
-
-  it('aborts opt-in after fatal snapshot working-directory restoration without later discovery', () => {
-    const codex = path.join(root, '.codex');
-    fs.mkdirSync(path.join(codex, 'agents'), { recursive: true });
-    fs.writeFileSync(path.join(codex, 'agents', 'synthetic.md'), 'synthetic agent');
-    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic later source');
-    const restored = path.join(root, 'restore-attempt');
-    const later = path.join(root, 'later-discovery');
-    fs.appendFileSync(guardPath, `const originalCwd = process.cwd(); const chdir = process.chdir;
-      process.chdir = (directory) => {
-        if (directory === originalCwd) {
-          fs.writeFileSync(${JSON.stringify(restored)}, 'failed'); throw new Error('synthetic restore failure');
-        }
-        return chdir(directory);
-      };
-      const lstat = fs.lstatSync;
-      fs.lstatSync = (entry, ...args) => {
-        if (typeof entry === 'string' && path.resolve(entry) === ${JSON.stringify(path.join(codex, 'config.toml'))}) fs.writeFileSync(${JSON.stringify(later)}, 'continued');
-        return lstat(entry, ...args);
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-general-'));
+    file = path.join(root, 'ballin.config.json'); guard = path.join(root, 'guard.cjs');
+    fs.writeFileSync(guard, `const fs = require('fs');
+      const read = fs.readFileSync;
+      fs.readFileSync = (file,...args) => {
+        if (typeof file === 'string' && /\\.(?:zshrc|bashrc)$/.test(file)) throw Error('General setup must not collect sources');
+        return read(file,...args);
       };\n`);
-    const before = fs.readFileSync(configPath, 'utf8');
-    const result = run('y\ny\ny\ny\n');
-    assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.isTrue(fs.existsSync(restored));
-    assert.isFalse(fs.existsSync(later), 'fatal restoration must stop later source discovery');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
-    assert.notInclude(result.stdout, 'Automatically run');
+    write(structuredClone(defaults));
   });
-
-  it('displays configured Codex aliases and canonical paths for raw and recursive sources', () => {
-    const codex = path.join(root, '.codex');
-    fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
-    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic config');
-    fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill');
-    const alias = path.join(root, 'codex-alias'); fs.symlinkSync(codex, alias);
-    const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '~/.codex/config.toml');
-    assert.include(result.stdout, '~/.codex/skills');
-    assert.equal(readConfig().backup.includeSensitive, 'true');
-  });
-
-  it('reviews Codex source metadata without following absolute descendant paths', () => {
-    const codex = path.join(root, '.codex');
-    fs.mkdirSync(path.join(codex, 'skills', 'synthetic'), { recursive: true });
-    fs.writeFileSync(path.join(codex, 'config.toml'), 'synthetic config');
-    fs.writeFileSync(path.join(codex, 'skills', 'synthetic', 'SKILL.md'), 'synthetic skill');
-    const alias = path.join(root, 'metadata-alias'); fs.symlinkSync(codex, alias);
-    fs.appendFileSync(guardPath, `const selectedDescendant = (entry) => typeof entry === 'string' && path.isAbsolute(entry)
-      && [${JSON.stringify(codex + path.sep)}, ${JSON.stringify(alias + path.sep)}].some((prefix) => entry.startsWith(prefix));
-      for (const method of ['realpathSync', 'statSync', 'accessSync']) {
-        const original = fs[method];
-        fs[method] = (entry, ...args) => {
-          if (selectedDescendant(entry)) {
-            fs.appendFileSync(${JSON.stringify(callsPath)}, method + ' followed absolute source\\n');
-            throw new Error('Synthetic forbidden absolute source lookup');
-          }
-          return original(entry, ...args);
-        };
-      }\n`);
-    const result = run('y\ny\nn\nn\n', ['setup'], { CODEX_HOME: alias });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '~/.codex/config.toml');
-    assert.include(result.stdout, '~/.codex/skills');
-    assert.equal(readConfig().backup.includeSensitive, 'true');
-  });
-
-  it('shows distinct resolved files and directories outside HOME without shortening their prefix', () => {
-    const outside = fs.mkdtempSync(`${root}-outside-`);
-    try {
-      const actual = fs.realpathSync(outside);
-      fs.mkdirSync(path.join(outside, 'skills', 'one'), { recursive: true });
-      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
-      fs.writeFileSync(path.join(outside, 'AGENTS.md'), 'fixture');
-      fs.writeFileSync(path.join(outside, 'skills', 'one', 'SKILL.md'), 'fixture');
-      fs.writeFileSync(path.join(root, '.zshrc'), 'fixture');
-      const result = run('y\nn\nn\n', ['setup'], { CODEX_HOME: outside });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+  for (const native of [false, true]) for (const enabled of [false, true]) {
+    it(`uses saved ${native ? 'native' : 'string'} ${enabled} choices without changing backup ownership`, () => {
+      const config = structuredClone(defaults);
+      for (const key of Object.keys(config.update)) config.update[key] = native ? enabled : String(enabled);
+      config.analytics.enabled = native ? enabled : String(enabled);
+      config.backup.includeSensitive = 'true'; config.custom = { retained: true };
+      write(config);
+      const result = run('\n'.repeat(enabled ? 7 : 5));
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      for (const suffix of ['config.toml', 'AGENTS.md', 'skills']) {
-        assert.include(result.stdout, `  ${path.join(actual, suffix)}\n`);
+      assert.notInclude(result.stdout, 'Include sensitive'); assert.notInclude(result.stdout, 'GitHub hostname');
+      assert.notInclude(result.stdout, 'Create a new backup');
+      for (const key of ['npm', 'selfUpdate', 'cleanup', 'softwareupdate']) assert.equal(read().update[key], String(enabled));
+      assert.equal(read().analytics.enabled, String(enabled));
+      assert.equal(read().backup.includeSensitive, 'true'); assert.deepEqual(read().custom, { retained: true });
+      assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
+      assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
+      assert.include(result.stdout, '==> Update preferences'); assert.include(result.stdout, '==> Analytics');
+    });
+  }
+  it('falls back only for absent preferences and retains bundled macOS default Yes', () => {
+    write({ custom: true }); const result = run('\n'.repeat(5));
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'Install available macOS updates? [Y/n]');
+    assert.equal(read().update.softwareupdate, 'true');
+  });
+  for (const key of ['npm', 'selfUpdate', 'cleanup', 'softwareupdate', 'nvm', 'backup', 'analytics']) {
+    for (const value of [null, 'invalid', 1]) it(`rejects invalid ${key}=${value} before prompts`, () => {
+      const config = structuredClone(defaults);
+      if (key === 'analytics') config.analytics.enabled = value; else config.update[key] = value;
+      write(config); const before = fs.readFileSync(file, 'utf8');
+      const result = run('y\n'.repeat(9)); assert.equal(result.status, 1);
+      assert.include(result.stderr, 'expected true or false'); assert.notInclude(result.stdout, 'Update preferences');
+      assert.equal(fs.readFileSync(file, 'utf8'), before);
+    });
+  }
+  for (const enabled of [false, true]) for (const configured of [false, true]) {
+    it(`offers automatic backup for configured=${configured}, enabled=${enabled}`, () => {
+      const config = structuredClone(defaults); config.update.backup = String(enabled);
+      if (configured) config.backup.repository = require('./helpers/repository.ts').fixtureDestination;
+      write(config); const result = run('\n'.repeat(6)); assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout.includes('Back up to GitHub during updates?'), configured || enabled);
+    });
+  }
+  for (const eligible of [false, true]) for (const enabled of [false, true]) {
+    it(`offers NVM for eligible=${eligible}, enabled=${enabled}`, () => {
+      if (eligible) installNvm();
+      const config = structuredClone(defaults); config.update.nvm = String(enabled); write(config);
+      const result = run('\n'.repeat(6)); assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout.includes('Keep NVM-managed Node on latest LTS?'), eligible || enabled);
+      if (eligible || enabled) assert.include(result.stdout, `latest LTS? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      else assert.include(result.stdout, 'NVM can maintain latest LTS Node');
+    });
+  }
+  it('retains first eligible recommendation across ineligibility and cancelled reviews, then preserves No', () => {
+    fs.rmSync(file); assert.isTrue(createDefaultConfig(path.resolve(__dirname, '..'), file));
+    run('\n'.repeat(5)); assert.isTrue(read()._setup.unreviewedNvm);
+    installNvm(); run('n\n'); assert.isTrue(read()._setup.unreviewedNvm);
+    const result = run('\n\n\n\nn\nn\n');
+    assert.equal(result.status, 0, result.stderr); assert.include(result.stdout, 'latest LTS? [Y/n]');
+    assert.notProperty(read(), '_setup'); assert.equal(read().update.nvm, 'false');
+    assert.include(run('\n'.repeat(6)).stdout, 'latest LTS? [y/N]');
+  });
+  for (const absent of ['nvm', 'update']) for (const delayed of [false, true]) {
+    it(`recommends the first absent ${absent} NVM choice and preserves confirmed No (delayed=${delayed})`, () => {
+      const config = read();
+      if (absent === 'nvm') delete config.update.nvm; else delete config.update;
+      write(config);
+      if (delayed) {
+        const ineligible = run('\n'.repeat(5)); assert.equal(ineligible.status, 0, ineligible.stderr);
+        assert.notInclude(ineligible.stdout, 'Keep NVM-managed Node'); assert.isUndefined(read().update?.nvm);
       }
-      assert.include(result.stdout, '  ~/.zshrc\n');
-      assert.notInclude(result.stdout, 'codex_config.toml:');
-      assert.notInclude(result.stdout, `~${actual.slice(root.length)}`);
-    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
-  });
-  it('shows printable paths with spaces, quotes, and backslashes without added delimiters', () => {
-    const outside = fs.mkdtempSync(`${root}-space \"quote\" \\slash-`);
-    try {
-      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
-      const result = run('n\nn\nn\n', ['setup'], { CODEX_HOME: outside });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, `  ${path.join(fs.realpathSync(outside), 'config.toml')}\n`);
-    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
-  });
-  it('escapes terminal controls and line separators in resolved paths', () => {
-    const outside = fs.mkdtempSync(`${root}-line\nreturn\r${String.fromCharCode(27)}[31m\u0085\u202e\u2028-`);
-    try {
-      fs.writeFileSync(path.join(outside, 'config.toml'), 'fixture');
-      const result = run('n\nn\nn\n', ['setup'], { CODEX_HOME: outside });
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      const actual = path.join(fs.realpathSync(outside), 'config.toml');
-      const expected = JSON.stringify(actual).replace(/\u0085/gu, '\\u0085').replace(/\u202e/gu, '\\u202e').replace(/\u2028/gu, '\\u2028');
-      assert.include(result.stdout, `  ${expected}\n`);
-      for (const unsafe of ['\r', String.fromCharCode(27), '\u0085', '\u202e', '\u2028']) assert.notInclude(result.stdout, unsafe);
-      assert.notInclude(result.stdout, actual);
-    } finally { fs.rmSync(outside, { recursive: true, force: true }); }
-  });
-  it('reviews recursive Codex directories with metadata without collecting their contents', () => {
-    const skills = path.join(root, '.codex', 'skills');
-    fs.mkdirSync(path.join(skills, 'synthetic'), { recursive: true });
-    fs.writeFileSync(path.join(skills, 'synthetic', 'SKILL.md'), 'SYNTHETIC_PRIVATE_CONTENT');
-    const result = run('y\ny\nn\nn\n');
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, '~/.codex/skills');
-    assert.notInclude(result.stdout, 'codex_skills.bundle.json:');
-    assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
-  });
-
-  it('retains the confirmed sensitive choice when the next prompt ends', () => {
-    const initial = configFor('repository', true);
-    writeConfig(initial);
-    const before = fs.readFileSync(configPath, 'utf8');
-    const result = run('y\nn\n');
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(readConfig().backup.includeSensitive, 'true');
-    assert.equal(readConfig().update.backup, 'false');
-    assert.notEqual(fs.readFileSync(configPath, 'utf8'), before);
-  });
-
-  it('reports prompt input failure without changing pending choices', () => {
-    fs.appendFileSync(guardPath, `const readSync = fs.readSync; fs.readSync = (fd, ...args) => {
-      if (fd === 0) throw new Error('fixture input failure');
-      return readSync(fd, ...args);
-    };\n`);
-    const before = fs.readFileSync(configPath, 'utf8');
-    const result = run();
-    assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Unable to complete preference review');
-    assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
-  });
-
-  it('requires HOME only for opted-in sensitive review', () => {
-    const result = run('y\n', ['setup'], { HOME: undefined });
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'HOME is required');
-  });
-
-  ['sensitive', 'automatic'].forEach((choice) => {
-    it(`stops on ${choice} preference persistence failure`, () => {
-      const result = choice === 'automatic'
-        ? spawnSync(process.execPath, ['-e', `process.exitCode = require(${JSON.stringify(preferencesPath)}).reviewAutomaticUpdateBackup(process.env.BALLIN_TEST_CONFIG_PATH, { defaultEnabled: false, cancelOnEof: true }) === 'failed' ? 1 : 0`], {
-          input: 'y\n', encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath, NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}`, BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' }),
-        })
-        : run('y\ny\n', ['setup'], { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
-      assert.equal(result.status, 1);
-      assert.notMatch(result.stdout, /`(?:backup.includeSensitive|update.backup)` (?:set to|unchanged at)/u);
-      if (choice === 'automatic') assert.include(result.stdout, 'Unable to save the automatic-backup preference');
-      assert.equal(readConfig().backup.includeSensitive, 'false');
-      assert.equal(readConfig().update.backup, 'false');
+      installNvm();
+      const cancelled = run(''); assert.equal(cancelled.status, 0, cancelled.stderr); assert.isUndefined(read().update?.nvm);
+      const reviewed = run('\n'.repeat(4) + 'n\nn\n'); assert.equal(reviewed.status, 0, reviewed.stderr);
+      assert.include(reviewed.stdout, 'latest LTS? [Y/n]'); assert.equal(read().update.nvm, 'false');
+      const rerun = run('\n'.repeat(6)); assert.equal(rerun.status, 0, rerun.stderr);
+      assert.include(rerun.stdout, 'latest LTS? [y/N]'); assert.equal(read().update.nvm, 'false');
     });
+  }
+  it('retires pending intent on direct set of false and explicit reset', () => {
+    for (const action of ['set', 'reset']) {
+      fs.rmSync(file); createDefaultConfig(path.resolve(__dirname, '..'), file);
+      const store = createConfigStore({ configPath: file });
+      if (action === 'set') store.setConfig('update.nvm', 'false'); else store.resetConfig();
+      assert.notProperty(read(), '_setup');
+    }
   });
-
-  it('reports analytics persistence failure and preserves its choice', () => {
-    writeConfig(configFor('unconfigured'));
-    fs.appendFileSync(guardPath, `fs.renameSync = () => { throw new Error('fixture write failure'); };\n`);
-    const result = run('y\n');
-    assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Unable to save the analytics preference');
-    assert.notInclude(result.stdout, '😎 Ballin preference review complete.');
-    assert.notInclude(result.stdout, 'Usage analytics:');
-    assert.equal(readConfig().analytics.enabled, 'false');
+  it('keeps internal intent read-only through the config command', () => {
+    const config = read(); config._setup = { unreviewedNvm: true }; write(config);
+    const result = run('', {}, ['config', 'set', '_setup.unreviewedNvm', 'false']);
+    assert.equal(result.status, 1); assert.isTrue(read()._setup.unreviewedNvm);
   });
-
-  const invalids: [string, (config: ReturnType<typeof configFor>) => unknown][] = [
-    ['JSON', () => '{'],
-    ['root', () => []],
-    ['section', (config) => ({ ...config, update: [] })],
-    ['destination', (config) => ({ ...config, backup: { repository: { id: '1' } } })],
-    ['sensitive', (config) => ({ ...config, backup: { ...config.backup, includeSensitive: 'invalid' } })],
-    ['automatic', (config) => ({ ...config, update: { backup: 'invalid' } })],
-    ['analytics', (config) => ({ ...config, analytics: { enabled: 'invalid' } })],
-    ['missing analytics', (config) => ({ ...config, analytics: {} })],
-  ];
-  invalids.forEach(([name, invalid]) => {
-    it(`rejects invalid ${name} before any prompt or repair`, () => {
-      const value = invalid(configFor());
-      if (name === 'JSON') fs.writeFileSync(configPath, value); else writeConfig(value);
-      const before = fs.readFileSync(configPath, 'utf8');
-      const result = run('y\ny\ny\ny\n');
-      assert.equal(result.status, 1);
-      const key = ({ sensitive: 'backup.includeSensitive', automatic: 'update.backup', analytics: 'analytics.enabled', 'missing analytics': 'analytics.enabled' } as Record<string, string>)[name];
-      if (key) assert.equal(result.stderr, `ballin setup: Invalid \`${key}\`; expected true or false.\nRepair the file, or run \`ballin config reset\` to replace it with defaults.\n`);
-      if (name === 'JSON' || name === 'root') assert.equal(result.stderr, 'ballin setup: Local config is invalid.\nRepair the file, or run `ballin config reset` to replace it with defaults.\n');
-      assert.include(result.stderr, 'Repair the file');
-      assert.notInclude(result.stdout, 'Review your Ballin');
-      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+  it('uses a direct No confirmed during review as the later NVM default', () => {
+    installNvm(); const config = read(); config._setup = { unreviewedNvm: true }; write(config);
+    fs.appendFileSync(guard, `const readSync = fs.readSync; let changed = false;
+      fs.readSync = (fd,...args) => { if(fd===0 && !changed) { changed=true;
+      require(${JSON.stringify(path.resolve(__dirname, '../config/store.ts'))}).createConfigStore({ configPath: process.env.BALLIN_TEST_CONFIG_PATH }).setConfig('update.nvm','false');
+      } return readSync(fd,...args); };`);
+    const result = run('\n'.repeat(6)); assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, 'latest LTS? [y/N]'); assert.equal(read().update.nvm, 'false');
+    assert.notProperty(read(), '_setup');
+  });
+  it('does not recreate config removed while a choice is pending', () => {
+    fs.appendFileSync(guard, `const readSync = fs.readSync; let changed = false;
+      fs.readSync = (fd,...args) => { if(fd===0 && !changed) { changed=true; fs.unlinkSync(process.env.BALLIN_TEST_CONFIG_PATH); }
+      return readSync(fd,...args); };`);
+    const result = run('y\n'); assert.equal(result.status, 1);
+    assert.isFalse(fs.existsSync(file)); assert.notInclude(result.stdout, 'Keep Ballin');
+  });
+  it('restores explicit remote NVM choices over pending defaults without exporting intent', () => {
+    const local = { ...structuredClone(defaults), _setup: { unreviewedNvm: true } };
+    const restored = restorePortablePreferences(local, local, { update: { nvm: false } });
+    assert.notProperty(restored, '_setup'); assert.equal(restored.update.nvm, 'false');
+    assert.notProperty(projectPortablePreferences(local), '_setup');
+    const explicit = { ...local }; delete explicit._setup;
+    assert.equal(restorePortablePreferences(explicit, explicit, { update: { nvm: true } }).update.nvm, 'false');
+  });
+  for (const input of ['', 'y', 'n\n', 'n\ny']) {
+    it(`preserves pending and earlier confirmed choices on EOF ${JSON.stringify(input)}`, () => {
+      const result = run(input); assert.equal(result.status, 0, result.stderr);
+      assert.equal(read().update.npm, 'false'); assert.equal(read().update.selfUpdate, 'true');
+      assert.include(result.stdout, 'Review cancelled'); assert.notInclude(result.stdout, 'Setup complete.');
+      assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
     });
+  }
+  it('reprompts invalid answers and saves only complete decisions', () => {
+    const result = run('private invalid answer\n YeS \nno\n\n\n\n');
+    assert.equal(result.status, 0, result.stderr); assert.include(result.stdout, 'Please enter yes or no.');
+    assert.notInclude(result.stdout, 'private invalid answer'); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'false');
   });
-  it('creates missing config and continues preference review', () => {
-    fs.rmSync(configPath);
-    const result = run('n\n');
-    assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, '⚙️  Created config: ~/ballin.config.json\n');
-    assert.include(result.stdout, 'No backup is configured.');
-    assert.include(result.stdout, '😎 Ballin preference review complete.');
-    assert.equal(readConfig().analytics.enabled, 'false');
-    assert.isNull(readConfig().backup.repository);
+  it('rereads config before every save so concurrent unrelated edits survive', () => {
+    fs.appendFileSync(guard, `const readSync = fs.readSync; let changed = false;
+      fs.readSync = (fd,...args) => { if(fd===0 && !changed) { changed=true; const f=process.env.BALLIN_TEST_CONFIG_PATH;
+      const c=JSON.parse(read(f,'utf8')); c.concurrent='retained'; fs.writeFileSync(f,JSON.stringify(c)); } return readSync(fd,...args); };`);
+    assert.equal(run('\n'.repeat(5)).status, 0); assert.equal(read().concurrent, 'retained');
   });
-  it('preserves an unreadable config and reports access guidance', () => {
-    const before = fs.readFileSync(configPath, 'utf8');
-    fs.appendFileSync(guardPath, `const guardedRead = fs.readFileSync; fs.readFileSync = (file, ...args) => {
-      if (file === ${JSON.stringify(configPath)}) { const error = new Error('fixture access denied'); error.code = 'EACCES'; throw error; }
-      return guardedRead(file, ...args);
-    };\n`);
-    const result = run('n\n');
-    assert.equal(result.status, 1);
-    assert.equal(result.stderr, 'ballin setup: Unable to read local config.\nCheck that the config file and its parent directory are accessible and readable.\n');
-    assert.equal(result.stdout, '');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+  it('stops on save failure before later prompts, with recovery last and no backup-specific error', () => {
+    fs.appendFileSync(guard, "fs.renameSync = () => { throw Error('Synthetic save failure'); };\n");
+    const before = fs.readFileSync(file, 'utf8'); const result = run('y\n'.repeat(6));
+    assert.equal(result.status, 1); assert.notInclude(result.stdout, 'Keep Ballin');
+    assert.notInclude(result.stderr, 'save backup configuration'); assert.include(result.stderr, 'run `ballin setup` again.');
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
   });
-  it('preserves a dangling config symlink and reports access guidance', () => {
-    fs.rmSync(configPath);
-    const target = path.join(root, 'missing-target');
-    fs.symlinkSync(target, configPath);
-    const result = run('n\n');
-    assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Unable to read local config.');
-    assert.equal(result.stdout, '');
-    assert.equal(fs.readlinkSync(configPath), target);
-    assert.isFalse(fs.existsSync(target));
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) it(`preserves current choice on ${signal}`, async () => {
+    const child = spawn(process.execPath, [ballin, 'setup'], { env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: file }) });
+    let text = ''; child.stdout.on('data', (chunk: Buffer) => { text += chunk; if (text.includes('Keep Ballin')) child.kill(signal); });
+    child.stdin.write('y\n');
+    const ended = await new Promise<string | null>((resolve, reject) => { child.once('error', reject); child.once('exit', (_code: number, end: string | null) => resolve(end)); });
+    assert.equal(ended, signal); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'true');
   });
-  it('does not overwrite a config created concurrently', () => {
-    fs.rmSync(configPath);
-    fs.appendFileSync(guardPath, `const copy = fs.copyFileSync; fs.copyFileSync = (source, target, flags) => {
-      if (target === ${JSON.stringify(configPath)}) fs.writeFileSync(target, 'concurrent config');
-      return copy(source, target, flags);
-    };\n`);
-    const result = run('n\n');
-    assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Unable to create local config');
-    assert.equal(result.stdout, '');
-    assert.equal(fs.readFileSync(configPath, 'utf8'), 'concurrent config');
+  for (const contents of ['{', '[]', '{"update":[]}']) it(`preserves malformed config ${contents}`, () => {
+    fs.writeFileSync(file, contents); assert.equal(run().status, 1); assert.equal(fs.readFileSync(file, 'utf8'), contents);
   });
-
-  ['missing', 'malformed', 'enabled'].forEach((state) => {
-    it(`provides offline setup help with ${state} config`, () => {
-      if (state === 'missing') fs.rmSync(configPath);
-      else if (state === 'malformed') fs.writeFileSync(configPath, '{');
-      else writeConfig(configFor('repository', true));
-      fs.appendFileSync(guardPath, `const originalRead = fs.readFileSync; fs.readFileSync = (file, ...args) => {
-        if (file === ${JSON.stringify(configPath)}) throw new Error('Help must not read config');
-        return originalRead(file, ...args);
-      };\n`);
-      const result = run('', ['setup', '--help'], {
-        ...capture.env,
-        NODE_OPTIONS: `${capture.env.NODE_OPTIONS} --require ${JSON.stringify(guardPath)}`,
-      });
-      assert.equal(result.status, 0, result.stderr);
-      assert.include(result.stdout, 'ballin setup');
-      assert.notInclude(result.stdout, 'Review your Ballin');
-      assert.deepEqual(capture.readEvents(), []);
-    });
+  it('does not replace a dangling config link', () => {
+    fs.rmSync(file); const missing = path.join(root, 'missing'); fs.symlinkSync(missing, file);
+    assert.equal(run().status, 1); assert.equal(fs.readlinkSync(file), missing); assert.isFalse(fs.existsSync(missing));
   });
-  it('rejects unsupported setup arguments without running preference prompts', () => {
-    const result = run('y\n', ['setup', 'extra']);
-    assert.equal(result.status, 2);
-    assert.include(result.stderr, 'Usage: ballin setup');
-    assert.notInclude(result.stdout, 'Review your Ballin');
+  it('creates a missing standalone config privately and retains unreviewed NVM intent', () => {
+    fs.rmSync(file);
+    const result = run('\n'.repeat(5)); assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assert.equal(read().update.nvm, 'false'); assert.isTrue(read()._setup.unreviewedNvm);
+    assert.include(result.stdout, 'Created config:'); assert.include(result.stdout, 'Setup complete.');
   });
-  it('uses the existing identity owner when guided review enables analytics', () => {
-    writeConfig(configFor('unconfigured'));
-    fs.rmSync(capture.installIdPath);
-    const result = run('y\n', ['setup'], {
-      ...capture.env,
-      NODE_OPTIONS: `${capture.env.NODE_OPTIONS} --require ${JSON.stringify(guardPath)}`,
-    });
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(fs.readFileSync(capture.installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
-    assert.deepEqual(capture.readEvents().map((event: { command: string }) => event.command), ['ballin setup']);
+  it('reports config creation failure without replacing missing parent directories', () => {
+    const missing = path.join(root, 'absent/config.json');
+    const result = run('', { BALLIN_TEST_CONFIG_PATH: missing });
+    assert.equal(result.status, 1); assert.include(result.stderr, 'Unable to create local config.');
+    assert.notInclude(result.stderr, 'config reset'); assert.isFalse(fs.existsSync(path.dirname(missing)));
   });
-
-  it('uses only the existing top-level analytics event', () => {
-    writeConfig(configFor('unconfigured', true));
-    const result = run('\n', ['setup'], {
-      ...capture.env,
-      NODE_OPTIONS: `${capture.env.NODE_OPTIONS} --require ${JSON.stringify(guardPath)}`,
-    });
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(capture.readEvents().map((event: { command: string; schemaVersion: number }) => [event.command, event.schemaVersion]), [['ballin setup', 1]]);
+  it('keeps config access failures distinct from invalid-content recovery', () => {
+    const before = fs.readFileSync(file, 'utf8');
+    fs.appendFileSync(guard, `const stat = fs.lstatSync;
+      fs.lstatSync = (entry,...args) => { if(entry === process.env.BALLIN_TEST_CONFIG_PATH) throw Object.assign(Error('private details'),{code:'EACCES'});
+      return stat(entry,...args); };`);
+    const result = run(); assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Check local config access and structure.'); assert.notInclude(result.stderr, 'config reset');
+    assert.notInclude(result.stderr, 'private details'); assert.equal(fs.readFileSync(file, 'utf8'), before);
+  });
+  it('keeps help offline and rejects extra setup arguments', () => {
+    fs.writeFileSync(file, '{'); const help = run('', {}, ['setup', '--help']);
+    assert.equal(help.status, 0); assert.include(help.stdout, 'update and analytics');
+    assert.equal(run('', {}, ['setup', 'extra']).status, 2);
   });
 });

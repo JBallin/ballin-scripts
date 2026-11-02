@@ -25,14 +25,14 @@ describe('onboarding sandbox', function() {
 
   const { scenarios, activeScenario, selectScenario, scenarioPath } = require('./helpers/sandbox_scenarios.ts');
   const installBackup = () => {
-    const result = runSandbox(sandbox, ['install'], 'y\nn\ny\n\ncreate\n\ny\ny\ny\n');
+    const result = runSandbox(sandbox, ['install'], 'y\ny\n\ncreate\n\ny\ny\ny\n\n\n\n\ny\nn\n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
   it('runs custom-host creation and backup through the guarded installer and installed CLI', () => {
     const remoteFile = path.join(sandbox.remote, 'repository.json');
     const remote = JSON.parse(fs.readFileSync(remoteFile, 'utf8')); remote.host = 'git.example.com';
     fs.writeFileSync(remoteFile, JSON.stringify(remote));
-    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\ngit.example.com\ncreate\n\ny\ny\nn\n');
+    const install = runSandbox(sandbox, ['install'], 'y\ny\ngit.example.com\ncreate\n\ny\ny\nn\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     assert.include(install.stdout, 'GitHub hostname [github.com]: ');
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
@@ -47,7 +47,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('limits the backup scope read to the sandbox catalog and exact Git operation', () => {
-    const install = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
+    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     const read = (args = ['show', 'HEAD:commands/backup_scope.json'], cwd = sandbox.repo) => (
       spawnSync(path.join(sandbox.tools, 'git'), args, {
@@ -95,7 +95,7 @@ describe('onboarding sandbox', function() {
   for (const name of ['auth', 'connection', 'timeout']) {
     it(`recovers installer backup setup after ${name} without reinstalling`, () => {
       selectScenario(sandbox, name);
-      const failed = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n');
+      const failed = runSandbox(sandbox, ['install'], 'y\ny\n\n');
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
       assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'ballin.config.json')));
       selectScenario(sandbox, 'none');
@@ -142,7 +142,7 @@ describe('onboarding sandbox', function() {
   });
   for (const name of ['self-update', 'update-failure']) {
     it(`recovers ${name} while continuing later update stages`, () => {
-      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
       selectScenario(sandbox, name);
       const failed = runSandbox(sandbox, [name === 'self-update' ? 'self-update' : 'update']);
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
@@ -153,7 +153,7 @@ describe('onboarding sandbox', function() {
     });
   }
   it('announces update-stage readiness before process-group interruption and retry', async () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     selectScenario(sandbox, 'update-interrupt');
     const child = spawn(path.join(sandbox.bin, 'ballin'), ['update'], { cwd: sandbox.home, env: sandboxEnvironment(sandbox), detached: true, stdio: 'ignore' });
     const group = child.pid as number;
@@ -185,7 +185,7 @@ describe('onboarding sandbox', function() {
     assert.equal(runSandbox(sandbox, ['update']).status, 0);
   });
   it('saves only temporary analytics consent with mocked command and behavioral delivery', () => {
-    const installed = runSandbox(sandbox, ['install'], 'y\ny\nn\n');
+    const installed = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\ny\n');
     assert.equal(installed.status, 0, installed.stdout + installed.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.analytics.enabled, 'true');
@@ -222,7 +222,7 @@ describe('onboarding sandbox', function() {
       const env = JSON.parse(result.stdout);
       assert.equal(env.HOME, sandbox.home);
       for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_HOST', 'BASH_ENV', 'ENV', 'BALLIN_TEST_CONFIG_PATH', 'BALLIN_BACKUP_HOST']) assert.notProperty(env, key);
-      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     });
     assert.isFalse(fs.existsSync(trap));
   });
@@ -318,7 +318,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('runs maintenance with fresh installation defaults and the guarded installed self-update path', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.update.selfUpdate, 'true');
     const update = runSandbox(sandbox, ['update']);
@@ -331,7 +331,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('runs self-update and automatic backup through the real guarded installed CLI', () => {
-    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\n\ncreate\n\ny\ny\ny\n');
+    const install = runSandbox(sandbox, ['install'], 'y\ny\n\ncreate\n\ny\ny\ny\n\n\n\n\ny\nn\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.update.selfUpdate, 'true');
@@ -347,7 +347,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('refuses sibling executables and redirected targets beside the exact installed CLI', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     const executable = path.join(sandbox.repo, 'bin/ballin');
     const sibling = path.join(sandbox.repo, 'bin/other');
     fs.symlinkSync(executable, sibling);
@@ -364,12 +364,13 @@ describe('onboarding sandbox', function() {
   });
 
   it('reuses an install for later opt-in and clean create/reconnect walkthrough resets', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'completions/_ballin')));
     const setup = runSandbox(sandbox, ['backup', 'setup'], '\ncreate\n\ny\ny\n\n');
     assert.equal(setup.status, 0, setup.stdout + setup.stderr);
     assert.include(setup.stdout, 'sensitive sources');
-    assert.include(setup.stdout, 'Automatically');
+    assert.notInclude(setup.stdout, 'Automatically');
+    assert.include(setup.stdout, 'Run `ballin setup`');
     assert.isTrue(remote().exists);
     resetSandbox(sandbox, 'reconnect');
     const config = () => JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
@@ -435,7 +436,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('stops the entire synchronous command group before timeout teardown', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     const childPid = path.join(sandbox.scratch, 'timeout-child.pid');
     fs.writeFileSync(path.join(sandbox.repo, 'bin/ballin'), `#!/usr/bin/env node\nconst {spawn}=require('child_process'); const fs=require('fs'); const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}); fs.writeFileSync(${JSON.stringify(childPid)},String(child.pid)); setInterval(()=>{},1000);`, { mode: 0o755 });
     assert.throws(() => runSandbox(sandbox, ['update'], undefined, 2000), /exceeded the 2000ms test timeout/u);
@@ -714,7 +715,7 @@ describe('interactive onboarding QA lifecycle', function() {
       assert.equal(actualPath.stdout.trim(), interpreter);
       const result = spawnSync(interpreter, [cli, '--keep'], {
         env, encoding: 'utf8', timeout: 240000,
-        input: 'y\nn\nn\nballin backup setup\n\ncreate\n\nn\ny\ny\nballin update\nexit\n',
+        input: 'y\nn\nn\nballin backup setup\n\ncreate\n\nn\ny\nballin setup\n\n\n\n\ny\nn\nballin update\nexit\n',
       });
       root = findRoot(result.stdout);
       assert.equal(result.status, 0, result.stdout + result.stderr);

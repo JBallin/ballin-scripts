@@ -413,12 +413,20 @@ An absent snapshot preserves local settings and defaults. Diagnostics do not
 print rejected values or arbitrary remote content.
 
 `update.backup` remains local-only, including when reading older snapshots.
-Its maintenance-only default is `"false"`. New linkage prompts for the choice;
-configured-destination revalidation preserves it. See
+Its maintenance-only default is `"false"`. General setup offers the choice when
+a destination is configured or automatic backup is already enabled; destination
+setup and revalidation preserve it. See
 [Installation](installation.md#optional-backup-setup-and-reconnect) for setup and
 post-destination save-failure handling.
 A replacement installation establishes its own automatic-backup choice during
-setup.
+general setup.
+
+When configuration creation or migration supplies an absent NVM preference, it
+also saves internal `_setup.unreviewedNvm` intent until an eligible choice is
+confirmed. It is never exported. Confirmation, direct
+`config set update.nvm`, reset, or an admitted restored NVM choice supersedes it;
+ineligibility and cancellation preserve it. Existing explicit choices, including
+No, remain authoritative.
 
 ## Shared inclusion policy
 

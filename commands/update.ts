@@ -146,16 +146,18 @@ const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
   }
 };
 
-const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
+const runNvmInstall = (env: NodeJS.ProcessEnv, source?: string): NvmInstallResult => {
   const envPath = makeTempFile('ballin-update-env-');
   try {
     const result = runCommand('bash', [
       '-c',
-      '. "$NVM_DIR/nvm.sh"; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UPDATE_ENV_PATH"; exit "$nvm_status"',
+      'unset -f nvm; . "$BALLIN_NVM_SOURCE" --no-use && declare -F nvm >/dev/null || exit 1; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UPDATE_ENV_PATH"; exit "$nvm_status"',
     ], {
       env: {
         ...env,
         BALLIN_UPDATE_ENV_PATH: envPath,
+        BALLIN_NVM_SOURCE: source ?? path.join(env.NVM_DIR ?? '', 'nvm.sh'),
+        BASH_ENV: '', ENV: '',
       },
       stdio: 'inherit',
     });
@@ -186,6 +188,9 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
     }
 
     delete nextEnv.BALLIN_UPDATE_ENV_PATH;
+    delete nextEnv.BALLIN_NVM_SOURCE;
+    if (env.BASH_ENV === undefined) delete nextEnv.BASH_ENV; else nextEnv.BASH_ENV = env.BASH_ENV;
+    if (env.ENV === undefined) delete nextEnv.ENV; else nextEnv.ENV = env.ENV;
     return {
       captureFailed: false,
       env: nextEnv,
@@ -308,10 +313,10 @@ function runUpdateCommand(): void {
 
   if (settings.nvm) {
     progress('Updating Node.js LTS');
-    const nvmDir = process.env.NVM_DIR ?? '';
-    const nvmScript = path.join(nvmDir, 'nvm.sh');
-    if (nvmDir && fs.existsSync(nvmScript) && fs.statSync(nvmScript).size > 0) {
-      const result = runNvmInstall(childEnv);
+    const { discoverNvm } = require('./nvm.ts');
+    const installation = discoverNvm(childEnv);
+    if (installation) {
+      const result = runNvmInstall({ ...childEnv, NVM_DIR: installation.directory }, installation.source);
       recordFailure(result.status);
       if (result.captureFailed) {
         reportDiagnostic('Unable to capture the updated Node.js environment after running nvm.');

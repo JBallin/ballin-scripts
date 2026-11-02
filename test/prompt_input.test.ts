@@ -83,7 +83,7 @@ describe('plain prompt input contracts', function() {
       const result = runInteractiveSetup(sandbox, command, answers, undefined, { columns: mode === 'narrow' ? 10 : 120, echo: mode !== 'no-echo' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'KEEP THIS ROW'); assert.include(result.stdout, 'DONE');
-      assert.notInclude(result.stdout, '\x1b'); assert.notMatch(result.stdout, /^(?:Yes|No)\.?$/mu);
+      assert.notMatch(result.stdout, /\x1b\[[0-9;]*[A-HJKSTf]/u); assert.notMatch(result.stdout, /^(?:Yes|No)\.?$/mu);
     });
   }
   it('keeps redirected input and arbitrary private answers out of output', () => {
@@ -112,7 +112,7 @@ describe('plain prompt input contracts', function() {
           { prompt: 'Run a backup now and open its GitHub destination? [Y/n] ', answer: 'N' }]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'KEEP THIS ROW'); assert.include(result.stdout, 'DONE');
-      assert.notInclude(result.stdout, '\x1b'); assert.notMatch(result.stdout, /(?:Selected|First backup): (?:Yes|No)/u);
+      assert.notMatch(result.stdout, /\x1b\[[0-9;]*[A-HJKSTf]/u); assert.notMatch(result.stdout, /(?:Selected|First backup): (?:Yes|No)/u);
     });
   }
 });

@@ -20,13 +20,10 @@ const {
   isConfigObject,
   sensitiveSourceConsent,
   parseBackupSetupArgs,
-  resolveBackupSetupHost,
 } = require('./backup_config.ts');
 const {
-  configure,
   configureBackup,
   disconnectBackup,
-  readOriginalSetupConfig,
 } = require('./install_setup.ts');
 const {
   makeTempFile,
@@ -690,35 +687,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
 
-    const originalConfig = readOriginalSetupConfig(configPath);
-    if (!originalConfig) {
-      writeStderrLine('ballin backup setup: unable to inspect config');
-      process.exitCode = 1;
-      return;
-    }
-    try { resolveBackupSetupHost(originalConfig, setup.hostname); } catch (error) {
-      writeStderrLine(`ballin backup setup: ${(error as Error).message}`);
-      process.exitCode = 1;
-      return;
-    }
-    if (!configure(repoDir, backupSetupDocsUrl, configPath, true)) {
-      writeStderrLine('ballin backup setup: unable to create or update config');
-      process.exitCode = 1;
-      return;
-    }
-    let cancelled = false;
     const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
       configPath,
-      originalConfig,
       repositoryName: setup.repositoryName,
       hostname: setup.hostname,
       reviewExistingSettings: true,
-      onCancelled: () => { cancelled = true; },
     });
-    if (!configured && !cancelled) {
-      writeStderrLine(`ballin backup setup: setup incomplete; follow the recovery guidance above before running ${terminalCommand('ballin backup setup', process.stderr)} again.`);
-    }
     process.exitCode = configured ? 0 : 1;
     return;
   }

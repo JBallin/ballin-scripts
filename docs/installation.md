@@ -36,9 +36,12 @@ Choose a route:
 Both guides provide the command to paste into Terminal. Zsh and Bash are supported.
 
 A fresh install checks Git and Node.js, previews installation details, and asks for `[y/N]`
-before making installation changes. It then offers
-[usage analytics](analytics.md#what-will-analytics-share), disabled by default.
-Refreshes preserve existing choices without repeating onboarding.
+before making installation changes. After installing the command and offering
+shell completion, it offers backup setup, then general preferences including
+[analytics](analytics.md#what-will-analytics-share), disabled by default.
+Declining backup still reaches the preference offer. Explicit installer reruns
+reoffer unconfigured backup setup and general review using saved preferences;
+configured backups retain their verification and summary.
 
 Successful setup ends with a reminder to open a new Terminal and run `ballin help`.
 If Quickstart cannot verify PATH setup for finding `ballin` in a new Terminal,
@@ -162,37 +165,35 @@ or Bash. Homebrew is optional.
 Quickstart first asks whether to set up backups. If selected, it asks for a
 hostname (default `github.com`) before sign-in and installing Ballin, then reuses it
 without another host prompt. An existing destination keeps its configured host.
-Choosing “No” still installs Ballin for maintenance; it omits backup-only GitHub
-CLI discovery/installation, sign-in, destination setup and run-now. Existing tools, accounts and backups remain.
+Choosing “No” still installs Ballin for maintenance; for an unconfigured
+installation it omits backup-only GitHub CLI discovery/installation, sign-in,
+destination setup and run-now. An existing configured backup retains installer
+verification. Existing tools, accounts and backups remain.
 Later `ballin backup setup` checks current prerequisites and GitHub access.
 
-Compatible existing Git, Node.js and (when selected) GitHub CLI are reused.
-Node must meet the [package requirement](../package.json), currently >=24.12;
-a newer compatible major is accepted. An incompatible or unverifiable existing
-Node requires manual attention. Quickstart can add the normal Node installer
-directory to PATH. If Node is installed through a version manager, activate it
-before rerunning Quickstart. Follow the reported guidance and your existing
-installation method, or the
-[Node guidance](optional-capabilities.md#nodejs), then rerun Quickstart.
-Quickstart never automatically upgrades or switches an existing incompatible
-Node, installs nvm, or bootstraps Homebrew.
+Quickstart accepts Node.js 24.12 or newer. When Node is missing or incompatible,
+it offers NVM and latest compatible LTS Node. With compatible Node, switching is
+optional and defaults to keeping the current setup. Before consent it explains
+activation, the future default, retained installations and the need to reinstall
+any global npm packages you still use. An existing loadable NVM is reused.
+A fresh installation uses `nvm install --lts` to activate LTS and create a
+following-LTS default; changing an existing default requires switch consent.
 
-For genuinely missing tools, a suitable native existing Homebrew installation
-is preferred for Git, Node and GitHub CLI. The Node route uses ordinary
-`brew install node`: Homebrew's **default formula**, which may move to a newer
-compatible major and is not pinned to an LTS major. Quickstart asks before
-installing missing tools. If the existing Homebrew installation is unsuitable,
-it offers the direct routes. Once a consented Homebrew operation starts, failure
-stops setup for manual recovery rather than silently changing routes. Existing
-formulae or link conflicts may need manual attention. Homebrew can install
-dependencies; automatic updates and cleanup are suppressed.
+For missing NVM, Quickstart uses suitable existing Homebrew, otherwise the
+versioned official NVM installer. It does not install Homebrew for this purpose.
+The NVM working directory stays outside Homebrew Cellar. Direct installation and
+`ballin setup` never install NVM or change its default. Broken or unverifiable
+Node/NVM commands need repair before proceeding.
+
+Suitable existing Homebrew is also preferred for missing Git and GitHub CLI.
+Homebrew can install dependencies; automatic updates, upgrades of already
+installed formulae, and cleanup are suppressed. Once a consented Homebrew
+operation starts, a failure stops setup for recovery without switching routes.
 
 When missing tools and a fresh Ballin installation are both needed, Quickstart
-previews the selected tools, installation routes, checkout and command paths,
-and asks one combined `[y/N]` question. Reruns with an existing checkout ask only
-about missing tools. Backup selection stays first; PATH, completion, analytics
-and backup destination permissions remain separate. Existing Node.js is never
-upgraded automatically during setup.
+previews the tools, routes, checkout and command paths before combined installation
+consent. Backup selection stays first. Runtime selection, shell startup changes,
+completion, backup destination and preference review retain separate choices.
 
 Quickstart can install missing Xcode Command Line Tools with administrator access.
 If the Terminal route is unavailable or finishes without usable tools, it asks
@@ -201,14 +202,11 @@ to Terminal so Quickstart can recheck the tools before continuing. It never
 silently starts a second installer. Interrupting the Terminal attempt stops setup.
 Rerun Quickstart when you’re ready.
 
-Direct routes are Apple's Xcode Command Line Tools for Git, the latest official Node
-26 macOS package and GitHub CLI's architecture-specific archive. Node and GitHub
-CLI downloads use published SHA-256 checksums. The Node package requires
-administrator access and installs commands under `/usr/local/bin`; actual
-Node/npm replacement risks name affected paths before consent. Its signature
-and publisher are checked before administrator access and again before installation.
-A failed operation can leave completed prerequisite work: inspect its output
-before retrying.
+The direct Git route uses Apple's Command Line Tools. NVM comes from its
+versioned official installer over HTTPS, with its own profile edits disabled;
+Quickstart separately asks before adding shell initialization. The GitHub CLI
+archive uses a published SHA-256 checksum and is checked for the native
+architecture. Completed prerequisite work remains after a later failure.
 
 The direct GitHub CLI route installs the executable at `~/.local/bin/gh`. Quickstart reuses compatible tools, including an active Node
 version manager, and leaves their updates and removal to their existing owners.
@@ -216,12 +214,21 @@ If an earlier command is broken or unsupported, repair it or your PATH before
 retrying. Quickstart does not replace an occupied GitHub CLI destination.
 
 If the original PATH supplies the selected tools and command directory,
-Quickstart skips PATH setup. Otherwise it asks before adding the needed native
+Quickstart skips PATH setup unless consented NVM activation still needs startup
+configuration. Otherwise it asks before adding the needed native
 directories. An existing exact line completes PATH configuration without a
 duplicate edit. Quickstart never executes startup files or verifies that a new
 shell reads the line.
 Unsafe or ambiguous files and write failures retain specific recovery guidance.
 Declines leave files unchanged; the current run can still use its adjusted PATH.
+
+NVM and Ballin have separate recognizable startup sections. The NVM section
+loads the correct official or Homebrew source without automatic selection, then
+selects the saved default, including when the terminal inherits an older NVM
+PATH. It never stores one version's bin directory. Existing personal NVM code
+requires manual review rather than a conflicting second initialization. Later
+startup code can still override the selection. Open a new terminal and check
+`node --version` and `nvm version default` after setup.
 
 When backups are selected, Quickstart reuses active GitHub CLI authentication or
 starts gh's native browser sign-in. “Authenticate Git” controls Git credentials;
@@ -246,14 +253,50 @@ otherwise `$HOME/.local/bin`. For example, without Homebrew:
 export PATH="$PATH:$HOME/.local/bin"
 ```
 
-If Node.js or Git was installed in a directory outside your PATH, also add its
-native bin directory, such as `/usr/local/bin` for the official Node installer.
+If Quickstart installed Node.js with NVM, follow
+[manual NVM activation](#manual-nvm-activation) before checking Ballin in a new
+Terminal. If Git was installed outside your PATH, also add its native bin directory.
 If GitHub CLI is installed at `~/.local/bin/gh`, also add `$HOME/.local/bin`,
 even when Homebrew supplies the Ballin command directory. Keep your existing
 Node version manager active. Open a new Terminal and check
 `command -v node git ballin` (and `gh` for backups), then `ballin help`.
 Inspect unexpected earlier commands rather than deleting them blindly. Remove
 only the Ballin PATH addition to undo it; prerequisites and other entries remain.
+
+### Manual NVM activation
+
+If you declined shell-startup changes or Quickstart could not safely update the
+file, setup's NVM activation does not carry over to new terminals. Add the appropriate block below
+to the Bash or Zsh startup file your Terminal reads. Use the NVM working directory
+reported by Quickstart in place of `$HOME/.nvm`. This may come from an inherited
+`NVM_DIR` or `$XDG_CONFIG_HOME/nvm`, even if you did not explicitly choose it.
+Review existing NVM startup code first; update it rather than adding duplicate
+activation. Place default selection after any earlier Node version selection.
+
+#### Official NVM
+
+```sh
+export NVM_DIR="$HOME/.nvm"
+. "$NVM_DIR/nvm.sh" --no-use
+nvm use --silent default
+```
+
+#### Homebrew NVM
+
+Use Homebrew's stable source so startup survives formula upgrades. If `brew` is
+not on PATH in the new Terminal, replace `$(brew --prefix)` below with your
+Homebrew prefix: normally `/opt/homebrew` on Apple Silicon or `/usr/local` on
+Intel Macs. Use the actual prefix if Homebrew is installed elsewhere.
+
+```sh
+export NVM_DIR="$HOME/.nvm"
+. "$(brew --prefix)/opt/nvm/libexec/nvm.sh" --no-use
+nvm use --silent default
+```
+
+Open a new Terminal and check `node --version`, `command -v node`, and
+`ballin help`. If the source is missing or unreadable, repair the NVM installation
+before adding activation. Do not persist a version-specific Node bin directory.
 
 ### Answers, input ending and interruption
 
@@ -326,12 +369,12 @@ that pass the conflict checks. See [Backup sources and sensitivity](backup-sourc
 
 ## Revisiting onboarding choices
 
-After installation, run `ballin setup` to review your local sensitive-source,
-automatic-backup, and analytics choices using their current values as defaults.
+After installation, run `ballin setup` to review update and analytics preferences
+using saved values as defaults.
 It does not reinstall Ballin, change backup destinations, or run backup/update.
 See [guided preference review](optional-capabilities.md#guided-preference-review)
 for applicable choices and cancellation behavior. Use `ballin backup setup`
-when you need to create or reconnect a destination.
+to create, reconnect, validate a destination, or review sensitive-source inclusion.
 
 ## Optional backup setup and reconnect
 
@@ -392,11 +435,10 @@ Reconnect restores only
 existing local choices take precedence. It does not restore saved dotfiles or
 reinstall saved packages.
 
-After creating or reconnecting a backup, Ballin asks whether `ballin update`
-should run backups automatically (default: “No”). The choice is stored in
-`update.backup`; change it later with `ballin config set update.backup true` or
-`false`. If Ballin cannot save the choice, the backup destination remains
-configured, and Ballin reports the partial result.
+After creating or reconnecting a backup, standalone setup points to `ballin setup`
+for automatic-backup and other general preferences. Installation offers that
+review next. `update.backup` defaults to No and remains independent of the
+sensitive-source choice.
 
 ### GitHub account and host support
 
@@ -477,13 +519,13 @@ For an already-configured backup, `ballin backup setup` shows the validated
 destination, whether sensitive sources are included, and whether automatic
 backup during update is enabled, plus the
 [local last-success record](backup-sources.md#last-successful-backup). It then
-offers to review sensitive-source inclusion and automatic backup using your
-current settings as defaults. Each answered choice is saved before the next question; cancelling
+offers to review sensitive-source inclusion using your current setting as the
+default. Each answered choice is saved before the next question; cancelling
 later leaves earlier confirmed choices saved. This review keeps the destination
 and does not run a backup.
 
-To change sensitive-source inclusion or automatic backup during update while
-keeping your destination, run `ballin setup` for
+To review automatic backup during update while keeping your destination, run
+`ballin setup` for
 [guided preference review](optional-capabilities.md#guided-preference-review)
 or use the
 [backup settings commands](optional-capabilities.md#private-repository-backups).
@@ -500,7 +542,7 @@ ballin backup setup new-repository-name
 Disconnect clears local backup linkage and `.backup-cache`, and disables
 automatic backup during updates. Remote history and shared `gh` authentication
 remain unchanged. Setup offers create or reconnect and asks for sensitive-source
-and automatic-backup choices again. See [Disconnect](#disconnect) for preserved
+inclusion again. Review automatic backup with `ballin setup`. See [Disconnect](#disconnect) for preserved
 preferences and failure handling.
 
 Ballin backup repositories must be private, belong to the individual GitHub

@@ -1,7 +1,6 @@
 // Help-only layout: do not apply to prompts, diagnostics, config or snapshot bytes.
 // Syntax in backticks and URLs stays copyable, even when wider than the terminal.
-const { terminalEmphasis } = require('./terminalStyle.ts');
-const visibleWidth = (text: string): number => text.replace(/\x1b\[[0-9;]*m/gu, '').length;
+const { terminalEmphasis, terminalUrls, visibleWidth } = require('./terminalStyle.ts');
 
 const wrapHelpWords = (words: string[], width: number, prefix = '', continuation = prefix, suffix = ''): string => {
   const lines: string[] = [];
@@ -42,7 +41,7 @@ const formatHelp = (
   )).join('\n');
   let inUsage = false;
   let usageIndent = '       ';
-  return text.split('\n').map((line) => {
+  return terminalUrls(text.split('\n').map((line) => {
     const usage = /^Usage: (.+)$/u.exec(line);
     if (usage) {
       inUsage = true;
@@ -81,7 +80,7 @@ const formatHelp = (
     if (bullet) return wrapHelpLine(bullet[2], width, bullet[1], ' '.repeat(bullet[1].length));
     if (/^\s/u.test(line) || !line) return line;
     return wrapHelpLine(line, width);
-  }).join('\n');
+  }).join('\n'), stream, env);
 };
 
 module.exports = { formatHelp };

@@ -747,7 +747,7 @@ process.stdout.write = ((chunk, encoding, callback) => {
       });
 
       assert.equal(result.status, 0);
-      assert.deepEqual(fetchConfig().configObj, defaultConfig);
+      assert.deepEqual(fetchConfig().configObj, { ...defaultConfig, _setup: { unreviewedNvm: true } });
     });
 
     it('updates the isolated fixture when invoked through updateConfig.ts', () => {
@@ -756,7 +756,7 @@ process.stdout.write = ((chunk, encoding, callback) => {
       const result = runUpdateConfig();
 
       assert.equal(result.status, 0);
-      assert.deepEqual(fetchConfig().configObj, defaultConfig);
+      assert.deepEqual(fetchConfig().configObj, { ...defaultConfig, _setup: { unreviewedNvm: true } });
     });
 
     ['true', 'false'].forEach((enabled) => {

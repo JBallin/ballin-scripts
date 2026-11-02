@@ -103,8 +103,12 @@ npm run sandbox
 
 To exercise startup-file selection, use `npm run sandbox -- --shell zsh` or
 `--shell bash`. This sets only the supported shell in the isolated child
-environment; it does not load your shell settings. The menu runs the direct
-installer, not Quickstart's prerequisite or PATH setup.
+environment; it does not load your shell settings. Add `--quickstart` to start
+with the real Quickstart instead of the direct installer. This route can exercise
+consented NVM activation, shell-file selection, and the integrated setup sequence
+with controlled tools. It uses a prepared Node executable and a fake NVM source;
+it does not verify upstream downloads or actual tool installation. The menu's
+`install` command continues to run the direct installer.
 
 The tool prints its temporary sandbox paths and starts the real installer. Answer
 the normal prompts, then use the sandbox menu to run installed commands:

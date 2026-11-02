@@ -381,8 +381,9 @@ require(${JSON.stringify(ballinPath)});
       const result = runBackup({ args });
 
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stdout + result.stderr, 'ballin backup disconnect');
-      assert.include(result.stdout + result.stderr, 'ballin backup setup');
+      const diagnostic = (result.stdout + result.stderr).replace(/\s+/gu, ' ');
+      assert.include(diagnostic, 'ballin backup disconnect');
+      assert.include(diagnostic, 'ballin backup setup');
       assert.deepEqual(state().requests, []);
       assert.deepEqual(readLogLines(path.join(testHomeDir, 'collector.log')), []);
       assert.deepEqual(fs.readdirSync(scratchDir), []);

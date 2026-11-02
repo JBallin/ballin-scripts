@@ -1,109 +1,106 @@
-const { terminalCommand, terminalHeading } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
+const { terminalCommand, terminalHeading, terminalComplete, terminalProse, terminalError } = require('./terminalStyle.ts');
 const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
-const { PortableConfigError, readSetupConfigContext } = require('../config/portable.ts');
-const { createDefaultConfig } = require('./install_setup.ts');
-const { configuredBackupDestination, sensitiveSourceConsent } = require('./backup_config.ts');
-const { configureAnalyticsPreference } = require('./analytics.ts');
-const { saveBackupConfig, reviewAutomaticUpdateBackup, confirmSensitiveSourceChoice, preferenceBoolean } = require('./backup_preferences.ts');
-const { rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
+const { readSetupConfigContext } = require('../config/portable.ts');
+const { createDefaultConfig, saveSetupPreference, preferenceBoolean } = require('../config/setup.ts');
+const { configuredBackupDestination } = require('./backup_config.ts');
+const { inspectNvm } = require('./nvm.ts');
+const { readYesNo, promptInputState, rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
 const setupHelp = `Usage: ballin setup
 
-Review local Ballin preferences.
+Review update and analytics preferences, using saved choices as defaults.
+NVM updates are offered when NVM follows latest LTS or updates are already enabled. Automatic backup is offered when configured or already enabled.
 
-Backup choices cover sensitive-source inclusion and automatic backups, and appear when a backup is configured. Sensitive-source review applies to repository backups.
+Use \`ballin backup setup\` for backup destinations and sensitive sources. Use \`ballin config get/set/reset\` for direct configuration.
 
-Use \`ballin backup setup\` to create, reconnect to, or validate a backup destination. Use \`ballin config get/set/reset\` for direct configuration.
+This review does not run updates, backups, or runtime installation.
 
-This review does not reinstall Ballin, change backup destinations, or run backup/update.
-
-🔗 Preference review:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#guided-preference-review
+🔗 Preferences:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md
 `;
 
-const cancelSetup = (): void => {
-  writeStdoutLine(`\nReview cancelled. Earlier confirmed choices remain saved.\nRun ${terminalCommand('ballin setup')} to review your preferences again.`);
-  process.exitCode = 0;
-};
+type SetupOutcome = 'completed' | 'cancelled' | 'failed';
+const backupHint = (): void => writeStdoutLine(terminalProse(`Run ${terminalCommand('ballin backup setup')} to configure or review your GitHub backup.`));
+const questions = [
+  ['npm', 'Update global npm packages?'],
+  ['selfUpdate', 'Keep Ballin up to date?'],
+  ['cleanup', 'Clean up outdated Homebrew packages?'],
+  ['softwareupdate', 'Install available macOS updates?'],
+  ['nvm', 'Keep NVM-managed Node on latest LTS?'],
+  ['backup', 'Back up to GitHub during updates?'],
+] as const;
 
-const runSetupCommand = (): void => {
+const reviewGeneralPreferences = (file: string, options: { installation?: boolean } = {}): SetupOutcome => {
   let reviewing = false;
-  let validating = false;
   try {
-    try {
-      const entry = fs.lstatSync(configPath);
-      // A dangling link is an existing, unreadable entry, not a missing config.
-      if (entry.isSymbolicLink()) {
-        try { fs.statSync(configPath); } catch {
-          throw new Error('Unable to read config.');
-        }
-      }
-    } catch (error) {
+    try { fs.lstatSync(file); } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
-      if (!createDefaultConfig(repoDir, configPath)) {
-        writeStderrLine('ballin setup: Unable to create local config. Check the installation and config directory, then retry.');
-        process.exitCode = 1;
-        return;
-      }
+      if (!createDefaultConfig(repoDir, file)) throw new Error('Unable to create local config.');
     }
-    const config = readSetupConfigContext(configPath);
-    validating = true;
+    const config = readSetupConfigContext(file);
+    // lstat distinguishes a missing file from an unreadable dangling link.
+    if (fs.lstatSync(file).isSymbolicLink()) fs.statSync(file);
+    const defaults = require('../config/.defaultConfig.json');
+    questions.forEach(([key]) => preferenceBoolean(config.update?.[key] === undefined ? defaults.update[key] : config.update[key], `update.${key}`));
+    preferenceBoolean(config.analytics?.enabled === undefined ? defaults.analytics.enabled : config.analytics.enabled, 'analytics.enabled');
     const destination = configuredBackupDestination(config);
     if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
-    const sensitive = destination.kind === 'repository' ? sensitiveSourceConsent(config) : false;
-    if (sensitive === null) throw new Error('Invalid `backup.includeSensitive`; expected true or false.');
-    const automatic = destination.kind !== 'unconfigured'
-      ? preferenceBoolean(config.update?.backup, 'update.backup') : false;
-    const analytics = preferenceBoolean(config.analytics?.enabled, 'analytics.enabled');
-
+    const nvm = inspectNvm();
     reviewing = true;
-    writeStdoutLine(terminalHeading('Backup preferences'));
-    if (destination.kind === 'repository') {
-      const included = confirmSensitiveSourceChoice(sensitive);
-      if (included === null) { cancelSetup(); return; }
-      if (included === undefined) { process.exitCode = 1; return; }
-      const current = readSetupConfigContext(configPath);
-      const previous = current.backup.includeSensitive;
-      current.backup.includeSensitive = String(included);
-      if (!saveBackupConfig(configPath, current)) { process.exitCode = 1; return; }
-      writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previous));
-    } else {
-      writeStdoutLine(`No backup is configured.\nRun ${terminalCommand('ballin backup setup')} to choose a destination.`);
+    writeStdoutLine(terminalProse('Review your update and analytics preferences. Confirmed choices are saved; this does not run updates.'));
+    writeStdoutLine(terminalProse('🔗 Optional capabilities:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'));
+    writeStdoutLine(`\n${terminalHeading('Update preferences')}`);
+    const cancel = (): SetupOutcome => {
+      writeStdoutLine('\nReview cancelled. Earlier confirmed choices remain saved.');
+      backupHint();
+      return 'cancelled';
+    };
+    const save = (section: 'update' | 'analytics', key: string, enabled: boolean): void => {
+      const previous = saveSetupPreference(file, section, key, enabled);
+      writeStdoutLine(terminalProse(savedPreferenceLine(`${section}.${key}`, enabled, previous)));
+    };
+    for (const [key, question] of questions) {
+      const current = readSetupConfigContext(file, false);
+      const saved = preferenceBoolean(current.update?.[key] === undefined ? defaults.update[key] : current.update[key], `update.${key}`);
+      if (key === 'nvm' && !saved && !(nvm.loadable && nvm.followsLts)) {
+        writeStdoutLine(terminalProse('ℹ️  NVM can maintain latest LTS Node when its default follows latest LTS.'));
+        continue;
+      }
+      if (key === 'backup' && configuredBackupDestination(current).kind !== 'repository' && !saved) continue;
+      const recommended = key === 'nvm' && (current.update?.nvm === undefined || current._setup?.unreviewedNvm === true) ? true : saved;
+      const enabled = readYesNo(`${question} ${recommended ? '[Y/n]' : '[y/N]'} `, recommended);
+      if (enabled === null) return cancel();
+      save('update', key, enabled);
     }
-
-    if (destination.kind !== 'unconfigured') {
-      const outcome = reviewAutomaticUpdateBackup(configPath, { defaultEnabled: automatic, cancelOnEof: true });
-      if (outcome === 'cancelled') { cancelSetup(); return; }
-      if (outcome === 'failed') { process.exitCode = 1; return; }
-    }
+    const current = readSetupConfigContext(file, false);
+    const analytics = preferenceBoolean(current.analytics?.enabled === undefined ? defaults.analytics.enabled : current.analytics.enabled, 'analytics.enabled');
     let cancelled = false;
-    if (!configureAnalyticsPreference({ configPath, defaultEnabled: analytics, onCancelled: () => { cancelled = true; } })) {
-      process.exitCode = 1;
-      return;
-    }
-    if (cancelled) { cancelSetup(); return; }
-    writeStdoutLine('\n😎 Ballin preference review complete.');
-    process.exitCode = 0;
+    const { configureAnalyticsPreference } = require('./analytics.ts');
+    if (!configureAnalyticsPreference({ configPath: file, defaultEnabled: analytics, detailsLink: false, reportFailure: false,
+      onCancelled: () => { cancelled = true; } })) throw new Error('Unable to save the analytics preference; the existing local setting is unchanged.');
+    if (cancelled) return cancel();
+    if (!options.installation) writeStdoutLine(`\n${terminalComplete('😎 Setup complete.')}`);
+    backupHint();
+    return 'completed';
   } catch (error) {
     rethrowInterruption(error);
-    const message = (error as Error).message;
-    if (reviewing) {
-      writeStderrLine(`ballin setup: ${message}`);
-      writeStderrLine('Unable to complete preference review; unconfirmed choices are unchanged.');
-    } else if (validating || (error instanceof PortableConfigError && message !== 'Unable to read config.')) {
-      const detail = message === 'Config is not valid JSON.' || message === 'Invalid config; expected a JSON object.' ? 'Local config is invalid.' : message;
-      writeStderrLine(`ballin setup: ${detail}`);
-      writeStderrLine(`Repair the file, or run ${terminalCommand('ballin config reset', process.stderr)} to replace it with defaults.`);
-    } else {
-      writeStderrLine('ballin setup: Unable to read local config.');
-      writeStderrLine('Check that the config file and its parent directory are accessible and readable.');
-    }
-    process.exitCode = 1;
+    writeStderrLine();
+    writeStderrLine(terminalError(reviewing ? 'Unable to complete preference review; unconfirmed choices are unchanged.' : 'Unable to read or validate local preferences.', process.stderr));
+    const message = reviewing
+      ? promptInputState() === 'failed' ? 'Prompt input could not be read.'
+        : 'Unable to save preferences; the pending choice is unchanged.'
+      : /^(?:Invalid |Config is not valid JSON|Unable to (?:read config|create local config))/.test((error as Error).message)
+        ? (error as Error).message : 'Check local config access and structure.';
+    const recovery = !reviewing && /^(?:Invalid |Config is not valid JSON)/u.test((error as Error).message)
+      ? `Repair the file, or run ${terminalCommand('ballin config reset', process.stderr)} to replace it with defaults, then run ${terminalCommand('ballin setup', process.stderr)} again.`
+      : `Check the config file and its directory, then run ${terminalCommand('ballin setup', process.stderr)} again.`;
+    writeStderrLine(terminalProse(`${message}\n${recovery}`, process.stderr));
+    return 'failed';
   }
 };
-
-module.exports = { runSetupCommand, setupHelp };
+const runSetupCommand = (): void => { process.exitCode = reviewGeneralPreferences(configPath) === 'failed' ? 1 : 0; };
+module.exports = { runSetupCommand, reviewGeneralPreferences, setupHelp };

@@ -11,6 +11,7 @@ type PromptAnswer = { prompt: string; answer: string; raw?: boolean };
 // Answer only after each real terminal prompt is visible. A short delay leaves
 // fd 0 empty long enough to expose a synchronous read accidentally made nonblocking.
 const driver = [
+  'setopt extendedglob',
   'zmodload zsh/zpty || exit 70',
   'zmodload zsh/zselect || exit 70',
   'zmodload zsh/datetime || exit 70',
@@ -32,7 +33,7 @@ const driver = [
   'read_available() {',
   '  local chunk="" read_status',
   '  zpty -r -t setup chunk; read_status=$?',
-  '  transcript+="$chunk"; pending+="$chunk"',
+  '  transcript+="$chunk"; chunk="${chunk//$\'\\e\'\\[[0-9;]##m/}"; pending+="$chunk"',
   '  (( read_status <= 2 )) || return 71',
   '  return "$read_status"',
   '}',
@@ -93,7 +94,7 @@ const runInteractiveSetup = (sandbox: Sandbox, command: string[], answers: Promp
   recordSession(sandbox, [], true);
   const result = spawnSync(shell, [
     '-d', '-f', '-c', driver, 'interactive-setup-test', shell, marker,
-    String(command.length), ...command, ...answers.flatMap(({ prompt, answer, raw }) => [prompt, answer, raw ? '1' : '0']),
+    String(command.length), ...command, ...answers.flatMap(({ prompt, answer, raw }) => [prompt.replace(/\x1b\[[0-9;]*m/gu, ''), answer, raw ? '1' : '0']),
   ], { cwd: options.cwd ?? sandbox.home, env, encoding: 'utf8', timeout: 90000, killSignal: 'SIGTERM', detached: true });
   const childPid = Number(result.stdout?.match(/^CHILD_PID:(\d+)$/mu)?.[1]);
   const groups = [result.pid, childPid].filter((pid) => Number.isInteger(pid) && pid > 1);
