@@ -44,7 +44,8 @@ const checkRuntime = (minimum: string, actual = process.versions.node): void => 
     throw new Error(`Selected revision requires Node.js ${minimum} or newer; active Node.js is ${actual}. Upgrade or activate Node, then retry. The checkout has not changed.`);
   }
 };
-const receiptPath = (root: string): string => git(root, ['rev-parse', '--path-format=absolute', '--git-path', 'ballin-install.json']);
+// Resolve the worktree's metadata directory through Git, without resolving the receipt leaf symlink.
+const receiptPath = (root: string): string => path.join(git(root, ['rev-parse', '--absolute-git-dir']), 'ballin-install.json');
 const readIdentity = (root: string): Identity => {
   try {
     const sha = git(root, ['rev-parse', '--verify', 'HEAD']);

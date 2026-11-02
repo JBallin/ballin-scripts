@@ -27,13 +27,36 @@ describe('selected checkout integration', () => {
     fs.writeFileSync(preload, `const cp=require('child_process'),original=cp.spawnSync;cp.spawnSync=function(command,args,options){if(command==='git'&&args[0]==='fetch'){require('fs').appendFileSync(${JSON.stringify(path.join(root, 'fetches'))},args.join(' ')+'\\n');if(process.env.FIXTURE_FETCH_STATUS)return {status:Number(process.env.FIXTURE_FETCH_STATUS),stderr:'fixture failure'};args=args.map(a=>a==='https://github.com/JBallin/ballin-scripts.git'?${JSON.stringify(upstream)}:a);}return original(command,args,options);};require('tty').isatty=()=>process.env.FIXTURE_TTY==='1';`);
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
-  const run = (options: { sha?: string; kind?: string; value?: string; minimum?: string; mode?: string; input?: string; env?: NodeJS.ProcessEnv } = {}) => spawnSync(process.execPath, [helper, 'apply', installed, options.kind || 'sha', options.value || options.sha || target, options.sha || target, options.minimum || '24.12.0', options.kind === 'release' ? '123' : '-', options.mode || 'install', 'false'], {
+  const run = (options: { sha?: string; kind?: string; value?: string; minimum?: string; mode?: string; input?: string; env?: NodeJS.ProcessEnv; fresh?: boolean } = {}) => spawnSync(process.execPath, [helper, 'apply', installed, options.kind || 'sha', options.value || options.sha || target, options.sha || target, options.minimum || '24.12.0', options.kind === 'release' ? '123' : '-', options.mode || 'install', String(options.fresh ?? false)], {
     encoding: 'utf8', input: options.input ?? 'yes\n', env: testChildEnvironment({ HOME: root, PATH: process.env.PATH, NODE_OPTIONS: `--require=${preload}`, FIXTURE_TTY: '1', ...options.env }), timeout: 10000,
   });
   it('checks out exactly the selected SHA and preserves local data', () => {
     const r = run(); assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
     assert.equal(fs.readFileSync(path.join(installed, 'ballin.config.json'), 'utf8'), '{"preserve":true}'); assert.equal(fs.readFileSync(path.join(installed, '.analytics/install-id'), 'utf8'), 'preserved');
     const receipt = JSON.parse(fs.readFileSync(path.join(installed, '.git/ballin-install.json'), 'utf8')); assert.equal(receipt.kind, 'sha'); assert.equal(receipt.sha, target);
+  });
+  it('installs into a fresh clone without checking out its default branch first', () => {
+    installed = path.join(root, 'fresh'); git(root, ['clone', '-q', '--no-checkout', upstream, installed]);
+    git(installed, ['remote', 'set-url', 'origin', 'https://github.com/JBallin/ballin-scripts.git']);
+    assert.isFalse(fs.existsSync(path.join(installed, 'content')));
+    const r = run({ fresh: true, input: '' }); assert.equal(r.status, 0, r.stderr);
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), target); assert.equal(fs.readFileSync(path.join(installed, 'content'), 'utf8'), 'after');
+    assert.notInclude(r.stdout, 'Change the installed revision');
+  });
+  it('refuses a fetched incompatible contract before changing HEAD', () => {
+    fs.writeFileSync(path.join(upstream, 'installer-contract.json'), JSON.stringify({ protocol: '1', minimumNode: '24.12.0' }));
+    git(upstream, ['commit', '-qam', 'incompatible contract']);
+    const r = run({ sha: git(upstream, ['rev-parse', 'HEAD']) }); assert.equal(r.status, 1); assert.include(r.stderr, 'contract changed or is unsupported');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('exposes read-only inspection and rejects unknown CLI actions', () => {
+    const env = testChildEnvironment({ HOME: root, PATH: process.env.PATH, NODE_OPTIONS: `--require=${preload}` });
+    for (const action of ['inspect', 'unknown']) {
+      const r = spawnSync(process.execPath, [helper, action, installed], { encoding: 'utf8', env });
+      assert.equal(r.status, action === 'inspect' ? 0 : 1, r.stderr);
+      if (action === 'unknown') assert.include(r.stderr, 'Usage:');
+    }
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.isFalse(fs.existsSync(path.join(root, 'fetches')));
   });
   for (const input of ['no\n', '', 'y', 'yes' + ' '.repeat(40) + 'no\n']) it(`refuses an unconfirmed transition (${JSON.stringify(input)})`, () => {
     const r = run({ input }); assert.equal(r.status, 1); assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.include(r.stderr, 'cancelled');

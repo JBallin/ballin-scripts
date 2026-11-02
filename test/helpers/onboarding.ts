@@ -214,6 +214,7 @@ else if(same(['-C',revisionRoot,'remote','get-url','origin'])||same(['remote','g
 else if(same(['-C',revisionRoot,'for-each-ref','--format=%(refname)','refs/replace/'])||same(['for-each-ref','--format=%(refname)','refs/replace/']))answer='';
 else if(same(['-C',revisionRoot,'ls-files','-v'])||same(['ls-files','-v']))answer='H package.json';
 else if(same(['-C',revisionRoot,'config','--get','core.sparseCheckout'])||same(['config','--get','core.sparseCheckout']))process.exit(1);
+else if(same(['rev-parse','--absolute-git-dir'])) {fs.mkdirSync(path.join(revisionRoot,'.git'),{recursive:true});answer=path.join(revisionRoot,'.git');}
 else if(revisionArgs.includes('--git-path')) {const name=revisionArgs.at(-1);if(!/^[a-zA-Z0-9_.-]+$/.test(name))process.exit(97);fs.mkdirSync(path.join(revisionRoot,'.git'),{recursive:true});answer=path.join(revisionRoot,'.git',name);}
 else if(revisionArgs.includes('status')&&revisionArgs.includes('--porcelain'))answer='';
 else if(revisionArgs[0]==='rev-parse'&&['HEAD','FETCH_HEAD^{commit}'].includes(revisionArgs.at(-1)))answer=revisionSha;

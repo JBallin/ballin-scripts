@@ -66,7 +66,32 @@ describe('revision selection and checkout safety', () => {
   });
   it('uses per-worktree Git metadata rather than assuming .git is a directory', () => {
     const linked = path.join(root, 'linked'); git('worktree', 'add', '--detach', linked, 'HEAD');
-    assert.equal(readIdentity(linked).sha, git('rev-parse', 'HEAD'));
+    const head = git('rev-parse', 'HEAD'); git('tag', 'v1.0.0');
+    const metadata = git('-C', linked, 'rev-parse', '--absolute-git-dir');
+    fs.writeFileSync(path.join(metadata, 'ballin-install.json'), JSON.stringify({ ...selection, sha: head }));
+    assert.equal(readIdentity(linked).sha, head); assert.equal(readIdentity(linked).version, '1.0.0');
+    assert.isFalse(fs.existsSync(path.join(root, '.git/ballin-install.json')));
+  });
+  it('uses the selected published tag rather than a higher tag at the same commit', () => {
+    const head = git('rev-parse', 'HEAD'); git('tag', 'v1.0.0'); git('tag', 'v2.0.0');
+    fs.writeFileSync(path.join(root, '.git/ballin-install.json'), JSON.stringify({ ...selection, sha: head }));
+    assert.equal(readIdentity(root).version, '1.0.0');
+    git('tag', '-d', 'v1.0.0'); assert.equal(readIdentity(root).version, 'development');
+  });
+  it('invalidates release identity for tracked and hidden-index modifications', () => {
+    const head = git('rev-parse', 'HEAD'); git('tag', 'v1.0.0');
+    fs.writeFileSync(path.join(root, '.git/ballin-install.json'), JSON.stringify({ ...selection, sha: head }));
+    fs.writeFileSync(path.join(root, 'tracked'), 'local work\n'); assert.equal(readIdentity(root).version, 'development');
+    git('update-index', '--assume-unchanged', 'tracked'); assert.equal(readIdentity(root).version, 'development');
+    assert.equal(fs.readFileSync(path.join(root, 'tracked'), 'utf8'), 'local work\n');
+  });
+  for (const kind of ['oversized', 'linked']) it(`does not trust ${kind} receipt metadata`, () => {
+    const file = path.join(root, '.git/ballin-install.json');
+    const head = git('rev-parse', 'HEAD'); git('tag', 'v1.0.0');
+    const validReceipt = JSON.stringify({ ...selection, sha: head });
+    if (kind === 'oversized') fs.writeFileSync(file, validReceipt + ' '.repeat(4097));
+    else { const target = path.join(root, '.git/other-receipt'); fs.writeFileSync(target, validReceipt); fs.symlinkSync(target, file); }
+    assert.equal(readIdentity(root).version, 'development');
   });
   it('refuses an unprotected detached commit until the user gives it a branch', () => {
     git('checkout', '--detach'); fs.writeFileSync(path.join(root, 'tracked'), 'local commit\n'); git('commit', '-am', 'local work');
