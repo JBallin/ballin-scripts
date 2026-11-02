@@ -47,15 +47,18 @@ retargets, and pushes to target branches (including non-default branches)
 refresh existing presentation without running Claude. Branch deletions and tag
 pushes are excluded. For a fresh review of an open, non-draft, same-repository
 PR, a human owner, member, or collaborator with current write access can post
-one command on its own line, such as `/claude-review opus high`. Models are
-`haiku`, `sonnet`, or `opus`; efforts are `low`, `medium`, `high`, `xhigh`, or
-`max`. Both choices are optional; put the model first when using both. There is
-no literal `effort` keyword. Surrounding whitespace and prose on other lines are allowed. Quoted lines, inline-code
-examples, and fenced code blocks are ignored; invalid arguments or multiple
-command lines produce usage feedback without starting a review. Runtime checks
-the requester's current write access before changing review state. See the
-Runtime guide for
-[model and effort defaults and selection](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#optional-model-and-effort-selection).
+`/claude-review` on its own line. Runtime owns the
+[command grammar and per-request overrides](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#optional-model-and-effort-selection).
+It validates the original comment author's current write access before changing
+review state.
+
+The caller forwards matching command mentions to eligibility checks and Runtime's
+queued classification. Matching prose, quoted or fenced examples, and invalid
+commands can consume Actions runner time and GitHub API requests even when no
+model runs, and can wait behind an active review. Invalid eligible requests may
+post one guarded usage response; ignored and invalid requests do not start a
+model or change review Checks, status, or reactions. See the
+[canonical caller setup](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#manual-review).
 
 Run `npm run test:unit -- test/claude_workflows.test.ts` for the portable offline
 caller contracts, also included in `npm test`. They parse YAML and compare the
