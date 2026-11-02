@@ -8,16 +8,7 @@ const readWorkflow = (name: string): unknown => yaml.load(
   fs.readFileSync(path.join(workflowDirectory, name), 'utf8'),
 );
 const runtime = 'JBallin/claude-review-runtime/.github/workflows/';
-const pin = 'b9a56eae9db8d11b67f5b6c5682c349146124711';
-// Exact full-comment forms accepted by the selected Runtime. Actions contains()
-// compares strings case-insensitively; no trimming or token splitting is added.
-const manualCommands = ['/claude-review', '/claude-review opus'];
-for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
-  manualCommands.push(`/claude-review effort ${effort}`);
-}
-for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
-  manualCommands.push(`/claude-review opus effort ${effort}`);
-}
+const pin = '396f9f74195fe7df2b3081dca3d1550f2fb2e574';
 const reviewPermissions = {
   contents: 'read', 'pull-requests': 'write', checks: 'write', issues: 'write', 'id-token': 'write',
 };
@@ -52,7 +43,7 @@ const contracts = {
     permissions: {},
     jobs: {
       eligibility: {
-        if: `contains(fromJSON('${JSON.stringify(manualCommands)}'), github.event.comment.body) && `
+        if: "contains(github.event.comment.body, '/claude-review') && "
           + "github.event.comment.user.type == 'User' && "
           + "github.event.sender.type == 'User' && "
           + 'contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association) && '
@@ -149,6 +140,76 @@ describe('offline Claude caller contracts', () => {
       assert.deepEqual(readWorkflow(name), expected);
     });
   }
+});
+
+describe('manual Claude request forwarding', () => {
+  const manual = readWorkflow('claude.yml') as typeof contracts['claude.yml'];
+  const admits = (body: string, options: {
+    eventName?: string; userType?: string; senderType?: string;
+    association?: string; isPullRequest?: boolean;
+  } = {}): boolean => Boolean(runInNewContext(manual.jobs.eligibility.if, {
+    github: {
+      event_name: options.eventName ?? 'issue_comment',
+      event: {
+        comment: {
+          body, user: { type: options.userType ?? 'User' },
+          author_association: options.association ?? 'OWNER',
+        },
+        sender: { type: options.senderType ?? 'User' },
+        issue: { pull_request: options.isPullRequest === false ? undefined : {} },
+      },
+    },
+    fromJSON: JSON.parse,
+    contains: (value: string | string[], needle: string) => typeof value === 'string'
+      ? value.toLowerCase().includes(needle.toLowerCase())
+      : value.some((item) => item.toLowerCase() === needle.toLowerCase()),
+  }));
+
+  const models = ['haiku', 'sonnet', 'opus'];
+  const efforts = ['low', 'medium', 'high', 'xhigh', 'max'];
+  const commands = [
+    '/claude-review',
+    ...models.map((model) => `/claude-review ${model}`),
+    ...efforts.map((effort) => `/claude-review ${effort}`),
+    ...models.flatMap((model) => efforts.map((effort) => `/claude-review ${model} ${effort}`)),
+  ];
+  for (const command of commands) {
+    it(`forwards the supported command to Runtime: ${command}`, () => {
+      assert.isTrue(admits(command));
+    });
+  }
+
+  for (const body of [
+    '  /CLAUDE-REVIEW\tSONNET\tHIGH  ',
+    'Please review this change.\n/claude-review sonnet high\nThanks.',
+    '/claude-review effort high',
+    '/claude-review high opus',
+    '/claude-review\n/claude-review opus',
+    'Example: `/claude-review opus high`',
+  ]) {
+    it(`leaves command parsing, invalid usage and ignored examples to Runtime: ${JSON.stringify(body)}`, () => {
+      assert.isTrue(admits(body));
+    });
+  }
+
+  it('retains top-level and inline PR requests from trusted human associations', () => {
+    for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
+      assert.isTrue(admits('/claude-review', { association }));
+      assert.isTrue(admits('/claude-review', {
+        association, eventName: 'pull_request_review_comment', isPullRequest: false,
+      }));
+    }
+  });
+
+  it('rejects bot identities, untrusted associations, non-PR issues and unrelated comments', () => {
+    assert.isFalse(admits('/claude-review', { userType: 'Bot' }));
+    assert.isFalse(admits('/claude-review', { senderType: 'Bot' }));
+    for (const association of ['NONE', 'CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR']) {
+      assert.isFalse(admits('/claude-review', { association }));
+    }
+    assert.isFalse(admits('/claude-review', { isPullRequest: false }));
+    assert.isFalse(admits('Please review this change.'));
+  });
 });
 
 describe('Claude status event routes', () => {

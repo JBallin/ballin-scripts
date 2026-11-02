@@ -43,10 +43,16 @@ forks, and Dependabot-triggered runs are excluded. PR head pushes, base
 retargets, and pushes to target branches (including non-default branches)
 refresh existing presentation without running Claude. Branch deletions and tag
 pushes are excluded. For a fresh review of an open, non-draft, same-repository
-PR, a human owner, member, or collaborator can post `/claude-review` as the
-entire top-level or inline PR
-comment. See the Runtime guide for
-[model and effort options](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#optional-model-and-effort-selection).
+PR, a human owner, member, or collaborator with current write access can post
+one command on its own line, such as `/claude-review sonnet high`. Models are
+`haiku`, `sonnet`, or `opus`; efforts are `low`, `medium`, `high`, `xhigh`, or
+`max`. Both choices are optional and use Runtime defaults when omitted; put the
+model first when using both. There is no literal `effort` keyword. Surrounding
+whitespace and prose on other lines are allowed. Quoted lines, inline-code
+examples, and fenced code blocks are ignored; invalid arguments or multiple
+command lines produce usage feedback without starting a review. Runtime checks the requester's current write access before
+changing review state. See the Runtime guide for
+[model and effort defaults and selection](https://github.com/JBallin/claude-review-runtime/blob/main/docs/consumer-workflows.md#optional-model-and-effort-selection).
 
 Run `npm run test:unit -- test/claude_workflows.test.ts` for the portable offline
 caller contracts, also included in `npm test`. They parse YAML and compare the
