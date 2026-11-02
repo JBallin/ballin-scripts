@@ -9,7 +9,7 @@ import type { FixtureState } from './repository.ts';
 
 type Sandbox = {
   quickstart: boolean; root: string; home: string; tools: string; bin: string; repo: string; remote: string;
-  log: string; scratch: string; source: string; guard: string; expected: Map<string, string>; links: Map<string, string>;
+  log: string; scratch: string; source: string; quickstartEntry: string; guard: string; expected: Map<string, string>; links: Map<string, string>;
 };
 const markerName = '.ballin-onboarding-sandbox.json';
 const source = path.resolve(__dirname, '../..');
@@ -129,7 +129,7 @@ const cleanupSandbox = (root: string): void => {
 const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-onboarding-')));
   const sandbox: Sandbox = {
-    quickstart: options.quickstart ?? false, root, source, home: path.join(root, 'home'), tools: path.join(root, 'tools'),
+    quickstart: options.quickstart ?? false, root, source, quickstartEntry: path.join(root, 'quickstart.sh'), home: path.join(root, 'home'), tools: path.join(root, 'tools'),
     bin: path.join(root, 'home/.local/bin'), repo: path.join(root, 'home/.ballin-scripts'),
     remote: path.join(root, 'remote'), log: path.join(root, 'commands.log'), scratch: path.join(root, 'tmp'),
     guard: path.join(root, 'guard.ts'), expected: new Map(), links: new Map(),
@@ -154,6 +154,15 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
     const softwareUpdate = path.join(sandbox.tools, 'softwareupdate');
     fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); const scenario = JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name;\n  if (scenario === 'update-failure') { process.stderr.write('Simulated sandbox macOS update failure\\n'); process.exitCode = 1; }\n  else if (scenario === 'update-interrupt') { fs.writeFileSync(${JSON.stringify(path.join(sandbox.root, 'update-stage.ready'))}, 'ready'); process.stdout.write('Sandbox update stage ready for interruption\\n'); setInterval(() => {}, 1000); }\n  else process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
     if (sandbox.quickstart) {
+      // The journey sandbox simulates macOS on Linux too. Substitute only the
+      // platform JSON tool in a guarded copy; real macOS parser tests use the
+      // untouched entrypoint in revision_bootstrap.test.ts.
+      const parser = path.join(sandbox.root, 'plutil');
+      fs.writeFileSync(parser, `#!${process.execPath}\n` + fs.readFileSync(path.join(__dirname, 'onboarding_plutil.ts'), 'utf8'), { mode: 0o700 });
+      const entry = fs.readFileSync(path.join(source, 'quickstart.sh'), 'utf8');
+      if (entry.split('/usr/bin/plutil').length !== 3) throw new Error('Quickstart JSON parser contract changed');
+      fs.writeFileSync(sandbox.quickstartEntry, entry.replaceAll('/usr/bin/plutil', "'" + parser.replaceAll("'", "'\\''") + "'"), { mode: 0o700 });
+      for (const file of [parser, sandbox.quickstartEntry]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
       const nvmFixture = path.join(sandbox.root, 'nvm-fixture.sh');
       fs.copyFileSync(path.join(__dirname, 'onboarding_nvm.sh'), nvmFixture);
       fs.chmodSync(nvmFixture, 0o700);
@@ -197,7 +206,7 @@ else if(url==='https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh')
 else {
  const allowed=['install.sh','quickstart.sh','installer-contract.json','commands/repo_update.ts'];
  const file=allowed.find(f=>url===publicBase+sha+'/'+f || (['install.sh','quickstart.sh'].includes(f)&&url===publicBase+'main/'+f));
- if(!file)process.exit(97); data=fs.readFileSync(path.join(${JSON.stringify(source)},file));
+ if(!file)process.exit(97); data=fs.readFileSync(file==='quickstart.sh'?${JSON.stringify(sandbox.quickstartEntry)}:path.join(${JSON.stringify(source)},file));
 }
 if(output){if(!path.resolve(output).startsWith(${JSON.stringify(sandbox.scratch + '/')}))process.exit(97);fs.writeFileSync(output,data);if(args.includes('-w'))process.stdout.write('200');}
 else if(args.length===3&&args[0]==='-q'&&args[1]==='-fsSL')process.stdout.write(data);else process.exit(97);
@@ -244,7 +253,7 @@ const runSandbox = (sandbox: Sandbox, args: string[], input?: string, timeout = 
   }
   recordSession(sandbox, [], true);
   const result = spawnSync(
-    args[0] === 'quickstart' ? path.join(source, 'quickstart.sh') : args[0] === 'install' ? path.join(source, 'install.sh') : path.join(sandbox.bin, 'ballin'),
+    args[0] === 'quickstart' ? sandbox.quickstartEntry : args[0] === 'install' ? path.join(source, 'install.sh') : path.join(sandbox.bin, 'ballin'),
     ['install', 'quickstart'].includes(args[0]) ? [] : args,
     { cwd: sandbox.home, env, input, encoding: 'utf8', timeout, detached: true },
   );

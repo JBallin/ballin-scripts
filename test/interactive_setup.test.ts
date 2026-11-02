@@ -88,7 +88,7 @@ describe('integrated setup with delayed terminal answers', function() {
 
   it('switches to controlled NVM/LTS, persists No, and keeps backup decline independent of general review', () => {
     sandbox = createSandbox({ quickstart: true });
-    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+    const result = runInteractiveSetup(sandbox, [sandbox.quickstartEntry], [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
       { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'y' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
@@ -161,7 +161,7 @@ describe('integrated setup with delayed terminal answers', function() {
 
   it('keeps the PATH-unverified ending after shell activation is declined', () => {
     sandbox = createSandbox({ quickstart: true });
-    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+    const result = runInteractiveSetup(sandbox, [sandbox.quickstartEntry], [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
       { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'n' }, startup('bash'),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
