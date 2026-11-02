@@ -64,6 +64,21 @@ describe('selected checkout integration', () => {
   it('refuses automatic track changes even with a terminal', () => {
     const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: '1' }, mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires confirmation'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });
+  it('refuses noninteractive revision changes even with affirmative input', () => {
+    const r = run({ env: { FIXTURE_TTY: '0' }, input: 'yes\n' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires confirmation');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('rejects inconsistent selected runtime metadata before changing checkout', () => {
+    const r = run({ minimum: '24.12.1' }); assert.equal(r.status, 1); assert.include(r.stderr, 'contract changed or is unsupported');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('reports an unavailable updater launcher without changing checkout', () => {
+    const r = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(helper)}).updateInstalledRepo(process.argv[1])`, installed], {
+      encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: '', NODE_OPTIONS: `--require=${preload}` }),
+    });
+    assert.equal(r.status, 1); assert.include(r.stderr, 'Unable to start the installed updater');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.isFalse(fs.existsSync(path.join(root, 'fetches')));
+  });
   it('checks minimum runtime before fetching or changing HEAD', () => {
     const r = run({ minimum: '999.0.0' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires Node.js'); assert.isFalse(fs.existsSync(path.join(root, 'fetches'))); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });
