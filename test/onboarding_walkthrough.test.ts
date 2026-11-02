@@ -72,12 +72,13 @@ describe('first-run onboarding walkthroughs', function() {
     const backupResult = runInstalled(['backup']);
     assert.equal(updateResult.status, 0, updateResult.stderr);
     assert.equal(selfUpdateResult.status, 0, selfUpdateResult.stderr);
-    assert.equal(selfUpdateResult.stdout, 'Ballin updated.\n');
+    assert.include(selfUpdateResult.stdout, 'Selected branch main (aaaaaaaaaaaa)');
+    assert.include(selfUpdateResult.stdout, 'Ballin is already up to date.');
     assert.lengthOf(commandLog().match(/^git:show HEAD:commands\/backup_scope\.json$/gmu) ?? [], 2);
     assert.equal(backupResult.status, 1);
     assert.include(backupResult.stderr, "run `ballin backup setup` to enable it");
     assert.notInclude(commandLog(), 'gh:');
-    assert.include(commandLog(), 'git:fetch --quiet origin +main:refs/remotes/origin/main');
+    assert.include(commandLog(), 'git:fetch --no-tags https://github.com/JBallin/ballin-scripts.git ' + 'a'.repeat(40));
   });
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {

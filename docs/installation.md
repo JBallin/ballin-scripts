@@ -73,6 +73,48 @@ for full validation and the settings summary. During `ballin update`, a full
 readiness check follows self-update and reports snapshot-read failures. Fresh
 installs show one completion message after setup.
 
+## Selecting a revision
+
+Installation currently follows `main` while release delivery is prepared. Both
+entrypoints accept one optional selector after the script's argument-zero name:
+
+```shell
+ballin_script=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh) && /bin/bash -c "$ballin_script" ballin-install --sha FULL_COMMIT_SHA
+```
+
+Use `--version v1.0.0` for a published stable release, `--sha` for a full commit
+SHA, or `--branch NAME` for a branch. Branches are resolved once; setup and the
+installed checkout use that exact commit. Only revisions with the supported
+installer contract can be selected. An absent release, unsupported revision, or
+network error stops installation; none causes a fallback to main.
+
+A versioned release entrypoint defaults to its embedded version after stable
+activation. The normal command will then be updated with each release. Release
+notes live in [GitHub Releases](https://github.com/JBallin/ballin-scripts/releases).
+
+For developer main tracking, set `export BALLIN_UPDATE_TRACK=main` in your shell.
+It affects default installation and self-update selection only. An explicit
+installer selector takes precedence. Unset it to restore the normal default;
+there is no customer configuration setting or setup question for this choice.
+
+Reinstalling the same revision preserves existing settings and reoffers the
+usual setup review. Changing a clean installation's revision or track requires
+confirmation. Dirty or conflicting checkouts stop; Ballin does not stash,
+reset, merge, or repair local work. Preserve local work before retrying.
+Release/SHA installs use detached HEAD; create a branch before making commits.
+
+Self-update checks the target's Node requirement before changing the checkout.
+Activate a compatible Node runtime and retry when instructed. Automatic
+maintenance refuses changes requiring consent, including major upgrades,
+downgrades, and track switches; run `ballin self-update` interactively instead.
+A failure after checkout reports the installed revision and incomplete setup.
+
+A release label means publication was verified during installation/update and
+still matches the local commit and tag. Ordinary commands do not contact GitHub
+to recheck publication. Explicit SHA/branch installs display development
+identity even at a tagged commit. Local modifications invalidate clean release
+identity. Configuration and backup/cache contents are preserved across updates.
+
 ## Shell completion
 
 Ballin includes command completion for zsh and Bash. A fresh interactive

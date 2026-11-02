@@ -2082,6 +2082,8 @@ describe('repository backup lifecycle', function() {
         else if (exact(['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'])) process.stderr.write(${JSON.stringify(diagnostic)});
         else if (!exact(['checkout', 'main']) && !exact(['merge', 'origin/main'])) process.exitCode = 2;
       `, { mode: 0o755 });
+      fs.writeFileSync(path.join(checkout, 'install.sh'), '#!/bin/bash\ngit fetch --quiet origin +main:refs/remotes/origin/main || exit $?\nexec node commands/install_setup.ts setup "$PWD" https://example.test/docs "" self-update\n');
+      fs.symlinkSync('/bin/bash', path.join(bin, 'bash'));
       const preload = path.join(root, 'successful-fetch-preload.cjs');
       fs.writeFileSync(preload, progressPreload(nonTTY));
       const result = spawnSync(process.execPath, [path.join(repoRoot, 'bin', 'ballin'), 'self-update'], {

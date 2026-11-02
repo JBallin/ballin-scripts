@@ -1,6 +1,5 @@
 {
   "name": "ballin-scripts",
-  "version": "2.0.0",
   "private": true,
   "license": "MIT",
   "scripts": {
@@ -12,8 +11,10 @@
     "test:unit": "mocha --parallel",
     "test:claude-preflight": "mocha test/ci/claude_preflight.test.ts",
     "sandbox": "node test/qa_sandbox.ts",
-    "test:coverage": "node --max-old-space-size=6144 test/coverage.ts npm run test:unit",
-    "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage"
+    "test:coverage": "npm run check:release && node --max-old-space-size=6144 test/coverage.ts npm run test:unit",
+    "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage",
+    "prepare-release": "node scripts/prepare-release.cjs",
+    "check:release": "node scripts/prepare-release.cjs --check"
   },
   "engines": {
     "node": ">=24.12"

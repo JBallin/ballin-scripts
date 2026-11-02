@@ -177,6 +177,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       HOME: homeDir,
       PATH: toolDir,
       BALLIN_NO_ANALYTICS: '1',
+      TEST_NODE_RUNTIME: process.execPath,
       BALLIN_UPDATE_TEST_LOG: commandLogPath,
       BALLIN_UPDATE_TEST_LOCAL_GIT_LOG: path.join(testDir, 'local-git.log'),
       FAKE_GIT_MERGE_COUNT_PATH: mergeCountPath,
@@ -223,6 +224,21 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
     installGitStub();
     installSetupStub();
+    // Isolate self-update reporting/scope/analytics from the selected installer.
+    // Real checkout safety and resolution are exercised by revision_* suites.
+    const selectedInstaller = path.join(testDir, 'selected-installer.cjs');
+    fs.writeFileSync(selectedInstaller, `
+const cp=require('child_process');
+for(const args of [['fetch','--quiet','origin','+main:refs/remotes/origin/main'],['checkout','main'],['merge','origin/main']]) {
+ const r=cp.spawnSync('git',args,{stdio:args[0]==='fetch'?['inherit','ignore','inherit']:'ignore'});
+ if(r.signal==='SIGINT'||r.status===130)process.exit(130);
+ if(r.signal==='SIGTERM'||r.status===143)process.exit(143);
+ if(r.status!==0){process.stdout.write('git '+args[0]+(args[0]==='fetch'?' origin main':'')+' failed\\n');process.exit(1);}
+}
+const r=cp.spawnSync(process.execPath,['commands/install_setup.ts','setup',process.env.PWD,${JSON.stringify(docsUrl)},${JSON.stringify(analyticsDocsUrl)},'self-update'],{stdio:'inherit'});
+if(r.signal==='SIGINT')process.exit(130);if(r.signal==='SIGTERM')process.exit(143);process.exit(r.status===null?1:r.status);
+`);
+    fs.writeFileSync(path.join(repoDir, 'install.sh'), `#!/bin/bash\nexec "$TEST_NODE_RUNTIME" "${selectedInstaller}"\n`);
     const scope = fs.readFileSync(path.join(__dirname, '../commands/backup_scope.json'), 'utf8');
     fs.writeFileSync(path.join(testDir, 'before-scope.json'), scope);
     fs.writeFileSync(path.join(testDir, 'after-scope.json'), scope);
@@ -312,6 +328,13 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({ ...revisions, FAKE_HEAD_AFTER: revisions.FAKE_HEAD_BEFORE });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, 'Ballin is already up to date.\n');
+    assert.include(commandLog(), setupLog());
+  });
+  it('reports a release identity transition even when the commit stays the same', () => {
+    const preload = path.join(testDir, 'identity-transition.cjs');
+    fs.writeFileSync(preload, `const fs=require('fs');require(${JSON.stringify(path.resolve(__dirname, '../commands/repo_update.ts'))}).readIdentity=()=>fs.existsSync(${JSON.stringify(mergeCountPath)})?{kind:'release',value:'v1.0.0',version:'1.0.0',dirty:false}:{kind:'sha',value:'a'.repeat(40),version:'development',dirty:false};`);
+    const result = runSelfUpdate({ ...revisions, FAKE_HEAD_AFTER: revisions.FAKE_HEAD_BEFORE, NODE_OPTIONS: `--require=${preload}` });
+    assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'Ballin revision identity updated.\n');
     assert.include(commandLog(), setupLog());
   });
   it('passes the guide that owns both setup recovery anchors', () => {
@@ -836,204 +859,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.deepEqual(commandLog(), []);
   });
 
-  it('stashes, retries checkout main, merges, and runs setup when initial checkout is blocked', () => {
-    const result = runSelfUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '27' });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(
-      result.stdout,
-      'git checkout main failed. stashing changes and trying again...\nBallin updated.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      setupLog(),
-    ]);
-  });
-
-  it('stops before merge and setup when checkout recovery cannot stash changes', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
-      FAKE_GIT_STASH_STATUS: '28',
-    });
-
+  it('does not attempt recovery after the selected installer refuses a transition', () => {
+    const result = runSelfUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '1' });
     assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git checkout main failed. stashing changes and trying again...\n'
-        + 'git stash failed during checkout recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-    ]);
-  });
-
-  it('stops before merge and setup when checkout still fails after stashing', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
-      FAKE_GIT_RETRY_CHECKOUT_STATUS: '28',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git checkout main failed. stashing changes and trying again...\n'
-        + 'git checkout failed during checkout recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-    ]);
-  });
-
-  it('stashes, checks out main, retries merge, and runs setup after an initial merge failure', () => {
-    const result = runSelfUpdate({ FAKE_GIT_FIRST_MERGE_STATUS: '24' });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\nBallin updated.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      setupLog(),
-    ]);
-  });
-
-  it('aborts an in-progress failed merge before stashing changes during recovery', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_MERGE_IN_PROGRESS: '1',
-    });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\nBallin updated.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:merge --abort`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      setupLog(),
-    ]);
-  });
-
-  it('stops before stashing when aborting an in-progress failed merge fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_MERGE_IN_PROGRESS: '1',
-      FAKE_GIT_MERGE_ABORT_STATUS: '29',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git merge abort failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:merge --abort`,
-    ]);
-  });
-
-  it('stops before setup when the retry merge fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_RETRY_MERGE_STATUS: '25',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git merge failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-    ]);
-  });
-
-  it('stops before retry merge and setup when the fallback stash path fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_STASH_STATUS: '26',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git stash failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-    ]);
-  });
-
-  it('stops before retry merge and setup when the fallback checkout fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_RETRY_CHECKOUT_STATUS: '27',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git checkout failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-    ]);
+    assert.notInclude(commandLog().join('\n'), 'git:stash');
+    assert.notInclude(commandLog().join('\n'), 'git:merge');
+    assert.notInclude(commandLog().join('\n'), 'install_setup:');
   });
 });
