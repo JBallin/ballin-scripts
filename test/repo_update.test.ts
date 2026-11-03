@@ -106,6 +106,26 @@ describe('selected checkout integration', () => {
     const r = run({ kind: 'branch', value: 'main', mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, `Checkout is now ${target}`); assert.include(r.stderr, 'setup is incomplete'); assert.include(r.stderr, 'run `ballin self-update`'); assert.notInclude(r.stderr, 'rerun the installer');
     assert.equal(git(installed, ['rev-parse', 'HEAD']), target); assert.equal(require('../commands/repo_update.ts').readIdentity(installed).version, 'development');
   });
+  it('reports fresh-install recovery when provenance fails without touching an existing installation', () => {
+    const existing = installed;
+    installed = path.join(root, 'fresh-provenance-failure');
+    git(root, ['clone', '-q', '--no-checkout', upstream, installed]);
+    fs.mkdirSync(path.join(installed, '.git/ballin-install.json'));
+    const result = run({ fresh: true, input: '' });
+
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, `Checkout is now ${target}`);
+    assert.include(result.stderr, 'installation provenance could not be saved and setup is incomplete');
+    assert.include(result.stderr, 'Inspect the Git metadata and rerun the installer.');
+    assert.notInclude(result.stderr, 'ballin self-update');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+    assert.equal(fs.readFileSync(path.join(installed, 'content'), 'utf8'), 'after');
+    assert.isTrue(fs.statSync(path.join(installed, '.git/ballin-install.json')).isDirectory());
+    assert.isEmpty(fs.readdirSync(path.join(installed, '.git')).filter((name: string) => /^ballin-install\.json\..*\.tmp$/u.test(name)));
+    assert.equal(git(existing, ['rev-parse', 'HEAD']), before);
+    assert.equal(fs.readFileSync(path.join(existing, 'ballin.config.json'), 'utf8'), '{"preserve":true}');
+    assert.equal(fs.readFileSync(path.join(existing, '.analytics/install-id'), 'utf8'), 'preserved');
+  });
   it('does not redirect failed explicit-selection provenance to a different revision', () => {
     fs.mkdirSync(path.join(installed, '.git/ballin-install.json'));
     const r = run(); assert.equal(r.status, 1);

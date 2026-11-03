@@ -607,18 +607,26 @@ kill -${signal} $$
     assert.isTrue(fs.statSync(path.join(binDir, 'ballin')).isDirectory());
   });
 
-  it('stops before setup work when the command directory is missing from PATH', () => {
-    installConfigSources();
+  for (const mode of ['fresh', 'refresh', 'self-update'] as const) {
+    it(`stops before ${mode} setup work and gives contextual recovery when PATH is missing`, () => {
+      installConfigSources();
+      const result = withEnvironment({
+        HOME: path.join(testDir, 'home'),
+        PATH: path.join(testDir, 'other-bin'),
+      }, () => captureStdout(() => setup(repoDir, docsUrl, undefined, mode)));
 
-    const result = withEnvironment({
-      HOME: path.join(testDir, 'home'),
-      PATH: path.join(testDir, 'other-bin'),
-    }, () => captureStdout(() => setup(repoDir, docsUrl)));
-
-    assert.isFalse(result.result);
-    assert.include(result.output, "~/.local/bin doesn't seem to be in your path.");
-    assert.include(result.output, `Add \`export PATH="${binDir}:$PATH"\` to your shell profile.\n`);
-  });
+      assert.isFalse(result.result);
+      assert.include(result.output, "~/.local/bin doesn't seem to be in your path.");
+      assert.include(result.output, `Add \`export PATH="${binDir}:$PATH"\` to your shell profile.\n`);
+      assert.include(result.output, mode === 'fresh' ? 'run the installer again.'
+        : mode === 'self-update' ? 'run `ballin self-update` again.'
+          : 'use `ballin self-update` for the default selection.');
+      if (mode !== 'fresh') assert.notInclude(result.output, 'installer again');
+      assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
+      assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
+      assert.equal(commandLog(), '');
+    });
+  }
 
   it('stops safely when neither Homebrew nor HOME can provide a command directory', () => {
     installConfigSources();
