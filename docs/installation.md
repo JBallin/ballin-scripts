@@ -104,6 +104,11 @@ successfully. Dirty or conflicting checkouts stop; Ballin does not stash,
 reset, merge, or repair local work. Preserve local work before retrying.
 Release/SHA installs use detached HEAD; create a branch before making commits.
 
+Fresh installs prepare the selected checkout in a private temporary directory
+under your home directory, then move the completed checkout into
+`~/.ballin-scripts`. A failure before that move can be retried without repairing
+a partial installation. A destination created in the meantime is preserved.
+
 Self-update checks the target's Node requirement before changing the checkout.
 Activate a compatible Node runtime and retry when instructed. Automatic
 maintenance refuses changes requiring consent, including major upgrades,

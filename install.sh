@@ -416,11 +416,19 @@ if [[ "$ballin_mode" != self-update ]]; then
   if [[ "$repo_existed" == true ]]; then phase 'Updating Ballin'; else phase 'Installing Ballin'; fi
 fi
 revision_scratch=$(mktemp -d "${TMPDIR:-/tmp}/ballin-checkout.XXXXXX") || exit 1
-trap '[ -z "$prompt_error" ] || rm -f -- "$prompt_error"; rm -rf -- "$revision_scratch"' EXIT
+fresh_staging=''
+apply_repo_dir="$repo_dir"
+trap '[ -z "$prompt_error" ] || rm -f -- "$prompt_error"; rm -rf -- "$revision_scratch"; [[ -z "$fresh_staging" ]] || rm -rf -- "$fresh_staging"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$ballin_sha/commands/repo_update.ts" "$revision_scratch/repo_update.ts" || exit $?
 if [[ "$repo_existed" == false ]]; then
   [[ "$ballin_mode" != self-update ]] || { ballin_error 'Self-update requires an existing installation.'; exit 1; }
-  if git clone --no-checkout https://github.com/JBallin/ballin-scripts.git "$repo_dir"; then :
+  # Keep partial clones out of the installation path. Stage on the same filesystem
+  # so a completed checkout can be published with a single rename.
+  fresh_staging=$(mktemp -d "$HOME/.ballin-install.XXXXXX") || exit 1
+  apply_repo_dir="$fresh_staging/.ballin-scripts"
+  if git clone --no-checkout https://github.com/JBallin/ballin-scripts.git "$apply_repo_dir"; then :
   else
     status=$?
     [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
@@ -429,7 +437,7 @@ if [[ "$repo_existed" == false ]]; then
     exit 1
   fi
 fi
-if node "$revision_scratch/repo_update.ts" apply "$repo_dir" "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" "$ballin_mode" "$([[ "$repo_existed" == false ]] && printf true || printf false)"; then :
+if node "$revision_scratch/repo_update.ts" apply "$apply_repo_dir" "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" "$ballin_mode" "$([[ "$repo_existed" == false ]] && printf true || printf false)"; then :
 else
   status=$?
   [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
@@ -439,8 +447,31 @@ else
     [[ "$ballin_mode" != self-update ]] || exit 20
     exit 0
   fi
-  print_stale_checkout_guidance
+  if [[ "$repo_existed" == false ]]; then
+    printf '\nBallin installation did not finish. Rerun the installer to try again.\n' >&2
+  else
+    print_stale_checkout_guidance
+  fi
   exit 1
+fi
+if [[ "$repo_existed" == false ]]; then
+  if [[ -e "$repo_dir" || -L "$repo_dir" ]]; then
+    ballin_error 'The installation destination changed. Inspect it, then rerun the installer.'
+    exit 1
+  fi
+  # Target HOME rather than repo_dir: -n must skip an existing installation,
+  # never nest the staged checkout inside a concurrently created directory.
+  if mv -n "$apply_repo_dir" "$HOME/"; then
+    if [[ -e "$apply_repo_dir" || -L "$apply_repo_dir" ]]; then
+      ballin_error 'The installation destination changed. Inspect it, then rerun the installer.'
+      exit 1
+    fi
+  else
+    status=$?
+    [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
+    ballin_error 'Unable to publish the prepared installation. Check the home directory and rerun the installer.'
+    exit 1
+  fi
 fi
 [[ "$ballin_mode" != self-update ]] || setup_mode=self-update
 

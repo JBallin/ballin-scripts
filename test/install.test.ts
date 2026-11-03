@@ -58,12 +58,11 @@ case "$1" in
     ;;
   clone)
     printf 'git:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"
-    if [ "$2:$3:$4" != "--no-checkout:https://github.com/JBallin/ballin-scripts.git:$HOME/.ballin-scripts" ]; then
-      exit 2
-    fi
-    mkdir -p "$HOME/.ballin-scripts/commands" "$HOME/.ballin-scripts/bin"
-    : > "$HOME/.ballin-scripts/commands/repo_update.ts"
-    : > "$HOME/.ballin-scripts/commands/install_setup.ts"
+    if [ "$2:$3" != "--no-checkout:https://github.com/JBallin/ballin-scripts.git" ]; then exit 2; fi
+    case "$4" in "$HOME"/.ballin-install.*/.ballin-scripts) ;; *) exit 2 ;; esac
+    mkdir -p "$4/commands" "$4/bin"
+    : > "$4/commands/repo_update.ts"
+    : > "$4/commands/install_setup.ts"
     if [ "$FAKE_GIT_CLONE_STATUS" != 0 ]; then printf '%s\\n' "\${FAKE_GIT_ERROR:-}" >&2; fi
     if [ -n "\${FAKE_GIT_CLONE_SIGNAL:-}" ]; then kill -"$FAKE_GIT_CLONE_SIGNAL" "$$"; fi
     exit "$FAKE_GIT_CLONE_STATUS"
@@ -131,6 +130,7 @@ esac
     linkCommand('mkdir');
     linkCommand('mktemp');
     linkCommand('rm');
+    linkCommand('mv');
     installGitStub();
     installNodeStub();
   };
@@ -169,7 +169,7 @@ ballin_download() { : > "$2"; }
   };
 
   const commandLog = () => (fs.existsSync(commandLogPath)
-    ? fs.readFileSync(commandLogPath, 'utf8').trim().split('\n').filter(Boolean)
+    ? fs.readFileSync(commandLogPath, 'utf8').replace(/\.ballin-install\.[^/\n]+\/\.ballin-scripts/gu, '.ballin-scripts').trim().split('\n').filter(Boolean)
     : []);
 
   const setupCommand = (mode = 'refresh') => `node:install_setup ${repoDir}/commands/install_setup.ts setup ${repoDir} ${docsUrl} ${analyticsDocsUrl} ${mode}`;
@@ -620,7 +620,8 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       assert.notInclude(result.stdout, troubleshootingUrl);
       assert.notInclude(result.stdout, 'Setup complete.');
       assert.deepEqual(commandLog(), [`git:clone --no-checkout https://github.com/JBallin/ballin-scripts.git ${repoDir}`]);
-      assert.isTrue(fs.existsSync(path.join(repoDir, 'commands', 'install_setup.ts')), 'partial checkout remains');
+      assert.isFalse(fs.existsSync(repoDir), 'partial checkout is not published');
+      assert.isEmpty(fs.readdirSync(homeDir).filter((name: string) => name.startsWith('.ballin-install.')));
       assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
       assert.equal(fs.readFileSync(earlier, 'utf8'), 'keep this change\n');
     });
