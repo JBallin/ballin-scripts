@@ -69,9 +69,9 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   const checkSetup = <T>(action: () => T): T => (options.reviewExistingSettings || options.presentation === 'installation')
     ? withTemporaryStatus('Checking backup setup…', action) : action();
   const cancelled = (): boolean => {
-    writeStdoutLine(`\nBackup setup cancelled.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
+    writeStdoutLine(`\nBackup setup cancelled. The backup destination is unchanged.\nConfirmed local preferences remain saved.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
     options.onCancelled?.();
-    return promptInputState() === 'ended' ? true : false;
+    return true;
   };
   let recoveryUrl: string | undefined;
   let configuredRecoveryUrl: string | undefined;
@@ -183,10 +183,14 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       return maintain();
     }
     const account = readRepositoryAccount(host);
-    const choice = readPromptLine('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
-    if (choice.eof) return cancelled();
-    const mode = choice.text || 'create';
-    if (!['create', 'reconnect'].includes(mode)) return cancelled();
+    let mode: 'create' | 'reconnect';
+    while (true) {
+      const choice = readPromptLine('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+      if (choice.eof) return cancelled();
+      const answer = choice.text.trim().toLowerCase() || 'create';
+      if (answer === 'create' || answer === 'reconnect') { mode = answer; break; }
+      writeStdoutLine('Enter Create or Reconnect, or press Ctrl-D to cancel.');
+    }
     let suggested: string | undefined = 'ballin-backups';
     let found: (RepositoryRead['destination'] & { redirected?: true }) | null = null;
     if (mode === 'create' && repositoryName === undefined) {

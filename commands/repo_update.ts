@@ -96,6 +96,8 @@ const needsConsent = (before: Identity, s: Selection, mode: string): boolean => 
   if (before.kind !== 'release' || s.kind !== 'release') return true;
   return compareVersions(s.value.slice(1), before.version) < 0 || s.value.split('.')[0] !== before.value?.split('.')[0];
 };
+const revisionCancelledStatus = 20;
+class RevisionChangeCancelled extends Error {}
 const confirmTransition = (before: Identity, selection: Selection, mode: string): void => {
   process.stdout.write(`Ballin: ${before.label} → ${selectionLabel(selection)}\n`);
   if (selection.kind === 'release') process.stdout.write(`Release notes: https://github.com/JBallin/ballin-scripts/releases/tag/${selection.value}\n`);
@@ -104,7 +106,7 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
   process.stdout.write('Change the installed revision/track? [y/N] ');
   const byte = Buffer.alloc(1); let answer = ''; let complete = false; let overflow = false;
   while (fs.readSync(0, byte, 0, 1, null)) { if (byte[0] === 10) { complete = true; break; } if (answer.length < 32) answer += byte.toString(); else overflow = true; }
-  if (!complete || overflow || !/^y(es)?$/iu.test(answer.trim())) throw new Error('Revision change cancelled. The checkout has not changed.');
+  if (!complete || overflow || !/^y(es)?$/iu.test(answer.trim())) throw new RevisionChangeCancelled('Revision change cancelled. The installed checkout is unchanged.');
 };
 const applySelection = (root: string, selection: Selection, mode: string, fresh = false): void => {
   validateSelection(selection); checkRuntime(selection.minimumNode);
@@ -149,11 +151,12 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
   finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
   process.stdout.write(`Selected ${selectionLabel(selection)}\n`);
 };
-const updateInstalledRepo = (root: string): boolean => {
+const updateInstalledRepo = (root: string): boolean | 'cancelled' => {
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) { process.stdout.write(`install directory not found: ${root}\n`); return false; }
   const result = cp.spawnSync('bash', [path.join(root, 'install.sh'), '--self-update'], { cwd: root, env: commandEnv(root), stdio: 'inherit' });
   if (result.signal || result.status === 130 || result.status === 143) throw Object.assign(new Error('Update interrupted.'), { status: result.signal === 'SIGTERM' || result.status === 143 ? 143 : 130 });
   if (result.error) throw new Error(`Unable to start the installed updater: ${result.error.message}`);
+  if (result.status === revisionCancelledStatus) return 'cancelled';
   if (result.status !== 0) process.exitCode = result.status || 1;
   return result.status === 0;
 };
@@ -163,7 +166,15 @@ const runRepoUpdateCli = (): void => {
     if (action === 'inspect') { assertSafeCheckout(root); return; }
     if (action !== 'apply') throw new Error('Usage: repo_update.ts inspect <root> | apply <root> <kind> <value> <sha> <minimum-node> <release-id> <mode> <fresh>');
     applySelection(root, { kind: kind as Selection['kind'], value, sha, minimumNode, releaseId }, mode, fresh === 'true');
-  } catch (error) { process.stderr.write(`${(error as Error).message}\n`); process.exitCode = (error as { status?: number }).status || 1; }
+  } catch (error) {
+    if (error instanceof RevisionChangeCancelled) {
+      process.stdout.write(`${error.message}\n`);
+      process.exitCode = revisionCancelledStatus;
+    } else {
+      process.stderr.write(`${(error as Error).message}\n`);
+      process.exitCode = (error as { status?: number }).status || 1;
+    }
+  }
 };
 if (require.main === module) runRepoUpdateCli();
 module.exports = { commandEnv, readIdentity, validateSelection, compareVersions, checkRuntime, assertSafeCheckout, needsConsent, applySelection, updateInstalledRepo, runRepoUpdateCli };

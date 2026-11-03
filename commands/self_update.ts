@@ -152,7 +152,9 @@ const refreshInstalledBallin = (): void => {
   const previousIdentity = identityFingerprint(repoDir);
 
   try {
-    if (!updateInstalledRepo(repoDir)) {
+    const outcome = updateInstalledRepo(repoDir);
+    if (outcome === 'cancelled') { process.exitCode = 0; return; }
+    if (!outcome) {
       if (!process.exitCode) process.exitCode = 1;
       return;
     }

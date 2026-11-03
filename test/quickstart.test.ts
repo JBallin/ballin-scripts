@@ -665,6 +665,23 @@ esac
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.equal(fs.readFileSync(active, 'utf8'), old);
     assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:');
   });
+  for (const installerStatus of [0, 37]) {
+    it(`summarizes successful upstream NVM output and preserves installer failure diagnostics (${installerStatus})`, () => {
+      fs.appendFileSync(path.join(root, 'nvm-install.sh'), `printf 'upstream reload instructions\\n'\nprintf 'upstream diagnostics\\n' >&2\nexit ${installerStatus}\n`);
+      const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' });
+      assert.equal(result.status, installerStatus, result.stdout + result.stderr);
+      if (installerStatus === 0) {
+        assert.notInclude(result.stdout + result.stderr, 'upstream reload instructions');
+        assert.notInclude(result.stdout + result.stderr, 'upstream diagnostics');
+        assert.include(result.stdout, 'NVM is ready in ~/.nvm; Node v26.13.0 is active for this setup.');
+      } else {
+        assert.include(result.stderr, 'upstream reload instructions'); assert.include(result.stderr, 'upstream diagnostics');
+        assert.include(result.stderr, 'NVM installation did not finish.');
+        assert.notInclude(result.stdout, 'Setup complete.'); assert.notInclude(readLog(), '/main/install.sh');
+      }
+    });
+  }
+
   it('retains native NVM failure status and ends with recovery before installing Ballin', () => {
     const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_NVM_FAIL: 'install', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(result.status, 42, result.stdout + result.stderr);

@@ -14,10 +14,30 @@ describe('revision confirmation in a real terminal', function() {
       const r = runInteractiveSetup(sandbox, [process.execPath, path.resolve(__dirname, '../commands/repo_update.ts'), 'apply', sandbox.repo, 'sha', sha, sha, '24.12.0', '-', 'install', 'false'], [
         { prompt: 'Change the installed revision/track? [y/N]', answer },
       ]);
-      assert.equal(r.status, answer === 'yes' ? 0 : 1, r.stdout + r.stderr);
+      assert.equal(r.status, answer === 'yes' ? 0 : 20, r.stdout + r.stderr);
       assert.notInclude(r.stdout + r.stderr, 'EAGAIN');
       const receipt = JSON.parse(fs.readFileSync(path.join(sandbox.repo, '.git/ballin-install.json'), 'utf8'));
       assert.equal(receipt.kind, answer === 'yes' ? 'sha' : 'branch');
     } finally { cleanupSandbox(sandbox.root); }
   });
+  it('returns cleanly from a cancelled installer track change without setup or false success', () => {
+    const sandbox = createSandbox({ quickstart: true });
+    try {
+      const installed = runSandbox(sandbox, ['quickstart'], 'no\nno\nlogin\nyes\nyes\nno\nno\n');
+      assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+      const file = path.join(sandbox.repo, '.git/ballin-install.json');
+      const receipt = JSON.parse(fs.readFileSync(file, 'utf8'));
+      receipt.kind = 'sha'; receipt.value = receipt.sha;
+      fs.writeFileSync(file, JSON.stringify(receipt));
+      const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'install.sh')], [
+        { prompt: 'Change the installed revision/track? [y/N]', answer: 'no' },
+      ]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Revision change cancelled. The installed checkout is unchanged.');
+      assert.notInclude(result.stdout, 'ERROR:'); assert.notInclude(result.stdout, 'Setup complete.');
+      assert.notInclude(result.stdout, 'Review your update and analytics');
+      assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), receipt);
+    } finally { cleanupSandbox(sandbox.root); }
+  });
+
 });

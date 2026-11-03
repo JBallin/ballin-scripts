@@ -59,7 +59,7 @@ describe('selected checkout integration', () => {
     assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.isFalse(fs.existsSync(path.join(root, 'fetches')));
   });
   for (const input of ['no\n', '', 'y', 'yes' + ' '.repeat(40) + 'no\n']) it(`refuses an unconfirmed transition (${JSON.stringify(input)})`, () => {
-    const r = run({ input }); assert.equal(r.status, 1); assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.include(r.stderr, 'cancelled');
+    const r = run({ input }); assert.equal(r.status, 20); assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.include(r.stdout, 'cancelled'); assert.notInclude(r.stderr, 'cancelled');
   });
   it('refuses automatic track changes even with a terminal', () => {
     const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: '1' }, mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires confirmation'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);

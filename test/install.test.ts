@@ -187,6 +187,17 @@ ballin_download() { : > "$2"; }
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
+  it('ends a cancelled revision change without setup, failure guidance, or success output', () => {
+    installBaseCommands(); writeCurrentCheckout();
+    const resultFile = path.join(homeDir, 'result');
+    fs.writeFileSync(resultFile, 'pending\n', { mode: 0o600 });
+    const result = runInstall({ env: { FAKE_REPO_UPDATE_STATUS: '20', BALLIN_SETUP_RESULT_FILE: resultFile } });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notInclude(result.stdout, 'ERROR:'); assert.notInclude(result.stdout, 'Setup complete.');
+    assert.notInclude(commandLog().join('\n'), 'node:install_setup');
+    assert.equal(fs.readFileSync(resultFile, 'utf8'), 'cancelled\n');
+  });
+
   for (const scenario of ['standalone', 'embedded', 'failure', 'declined', 'eof']) {
     it(`ends installer output with terminal guidance only on standalone success: ${scenario}`, () => {
       installBaseCommands();
@@ -223,7 +234,8 @@ ballin_download() { : > "$2"; }
         fs.writeFileSync(node, fs.readFileSync(node, 'utf8').replace('    exit "$FAKE_SETUP_STATUS"', '    printf \'Typed setup fixture.\\n\'\n    exit "$FAKE_SETUP_STATUS"'));
         const result = runInstall({ env: noColor ? { NO_COLOR: '1' } : {} });
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.isTrue(result.stdout.startsWith("==> Setting up Ballin\n"), result.stdout);
+        assert.isTrue(result.stdout.startsWith(existing ? '==> Updating Ballin\n' : '==> Setting up Ballin\n'), result.stdout);
+        if (existing) assert.notInclude(result.stdout, '==> Setting up Ballin');
         const separator = scenario === 'initial configuration'
           ? `\nInitial configuration\n🔗 Installation details:\n${docsUrl}#what-will-installation-change\n`
           : existing ? '' : '\n';

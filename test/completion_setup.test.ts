@@ -57,7 +57,9 @@ describe('optional completion setup', () => {
             return { text: answers[index], eof: index === eofAt };
           },
         });
-        assert.equal(events[0].startsWith('write:'), presentation === 'installation');
+        const introduction = events.findIndex(event => event.includes('Optional tab completion'));
+        assert.isAtLeast(introduction, 0);
+        assert.isBelow(introduction, events.findIndex(event => event.startsWith('prompt:')));
         if (presentation === 'installation') assert.equal(events[0], 'write:');
         assert.equal(events.filter(event => event === 'write:').length, (presentation === 'installation' ? 1 : 0) + (eofAt === 0 ? 1 : 0));
         assert.equal(question, eofAt === 0 ? 1 : 2);
@@ -77,7 +79,7 @@ describe('optional completion setup', () => {
       assert.equal(result.status, 0, result.stderr);
       if (alreadyEnabled) assert.equal(result.stdout, '');
       else {
-        assert.isTrue(result.stdout.startsWith(`\nQUESTION:Enable tab completion in ~/.zshrc?`));
+        assert.isTrue(result.stdout.startsWith(`\nOptional tab completion suggests Ballin commands as you type.\nQUESTION:Enable tab completion in ~/.zshrc?`));
         assert.equal(result.stdout.split('QUESTION:').length - 1, 1);
       }
     });
@@ -215,6 +217,7 @@ describe('optional completion setup', () => {
     const output: string[] = [];
     offerCompletionSetup('guide', { env, interactive: true, write: (text: string) => output.push(text), prompt: () => { throw new Error('input failed'); } });
     assert.deepEqual(output, [
+      'Optional tab completion suggests Ballin commands as you type.',
       'Tab completion setup could not finish. Ballin remains installed.',
       '🔗 Manual setup:\nguide#startup-files-and-manual-activation',
     ]);

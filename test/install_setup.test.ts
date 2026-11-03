@@ -1140,7 +1140,7 @@ require('https').request = () => {
       encoding: 'utf8', input: 'y\n\ncreate\n\nn\nn\nn\n', env: childEnvironment(),
     });
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Backup setup cancelled.\nRun `ballin backup setup` when you’re ready.');
+    assert.include(result.stdout, 'Backup setup cancelled. The backup destination is unchanged.\nConfirmed local preferences remain saved.\nRun `ballin backup setup` when you’re ready.');
     assert.notInclude(result.stdout + result.stderr, 'ERROR:');
     assert.notInclude(result.stdout, 'Backup setup complete.');
     assert.isNull(readRepoConfig().backup.repository ?? null);

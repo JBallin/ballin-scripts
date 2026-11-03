@@ -267,6 +267,15 @@ if(r.signal==='SIGINT')process.exit(130);if(r.signal==='SIGTERM')process.exit(14
     return { NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '1' };
   };
 
+  it('does not report success or failure after a cancelled selected update', () => {
+    fs.writeFileSync(path.join(repoDir, 'install.sh'), '#!/bin/bash\nprintf "Revision change cancelled. The installed checkout is unchanged.\\n"\nexit 20\n');
+    const result = runSelfUpdate();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Revision change cancelled.');
+    assert.notInclude(result.stdout, 'already up to date'); assert.notInclude(result.stdout, 'Ballin updated');
+    assert.equal(result.stderr, '');
+  });
+
   it('reports a missing installed repository without child work', () => {
     const env = interactiveEnv();
     fs.rmSync(repoDir, { recursive: true, force: true });

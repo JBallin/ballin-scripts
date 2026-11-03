@@ -1255,7 +1255,7 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(path.join(claude, 'skills', 'demo', 'SKILL.md'), 'DUMMY_SKILL_SECRET');
     fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SUPPORT_SECRET');
     const result = run(['setup'], '\nreconnect\n\ny\nn\n');
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 0);
     assert.include(result.stdout, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
     assert.include(result.stdout, '~/.claude/agents');
     assert.include(result.stdout, '~/.claude/skills');
@@ -2185,7 +2185,7 @@ describe('repository backup lifecycle', function() {
     it(`shows status only after finding a reconnect candidate with ${delay}ms fixture delay`, () => {
       unconfigured();
       const result = run(['setup'], '\nreconnect\n\nn\nn\n', ttyEnv, progressPreload(undefined, 80, delay));
-      assert.equal(result.status, 1); assert.include(result.stdout, 'Backup setup cancelled.');
+      assert.equal(result.status, 0); assert.include(result.stdout, 'Backup setup cancelled.');
       const requests = progressRequests().filter((request) => request.args[0] === 'api');
       assert.equal(requests[0]?.status, ''); assert.isTrue(requests[0]?.args.includes('user'));
       assert.equal(requests[1]?.status, ''); assert.isTrue(requests[1]?.args.includes('repos/fixture-user/ballin-backups'));
@@ -2216,7 +2216,7 @@ describe('repository backup lifecycle', function() {
     assert.isTrue(progressRequests().some((r) => r.status === 'Checking existing private backup...'));
     unconfigured();
     const cancelled = run(['setup'], '\nreconnect\n\nn\nn\n', ttyEnv, progressPreload());
-    assert.equal(cancelled.status, 1); assert.equal(cancelled.stderr.includes('Checking existing'), false);
+    assert.equal(cancelled.status, 0); assert.equal(cancelled.stderr.includes('Checking existing'), false);
     assert.include(cancelled.stdout, 'Backup setup cancelled.');
   });
   it('shows backup status before quiet work and removes it on success and failure', () => {
@@ -2336,7 +2336,7 @@ describe('repository backup lifecycle', function() {
               return write.call(this, text, ...args);
             };`;
           const result = run(['setup'], `\n${mode}\n\n${included ? 'y' : 'n'}\n${finalAnswer}`, {}, preload);
-          assert.equal(result.status, finalAnswer ? 1 : 0, result.stdout + result.stderr);
+          assert.equal(result.status, 0, result.stdout + result.stderr);
           assert.equal(config().backup.includeSensitive, String(included)); assert.isNull(config().backup.repository);
           assert.equal(cached(), 'untouched\n'); assert.isEmpty(mutations());
           assert.isBelow(result.stdout.indexOf('Sensitive sources in backups:'), result.stdout.indexOf('this private GitHub backup'));
@@ -2469,7 +2469,7 @@ describe('repository backup lifecycle', function() {
       snapshots.snapshotDefinitions.find((definition) => definition.name === 'zshrc.sh').discover = () => ({ status: 'discovery-failed' });`;
     const before = config();
     const declined = run(['setup'], '\ncreate\n\nn\nn\n', {}, preload);
-    assert.equal(declined.status, 1);
+    assert.equal(declined.status, 0);
     assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'false' } }); assert.isEmpty(mutations());
     const accepted = run(['setup'], '\ncreate\n\nn\ny\nn\n', {}, preload);
     ok(accepted); assert.equal(config().backup.includeSensitive, 'false');
@@ -2486,7 +2486,7 @@ describe('repository backup lifecycle', function() {
       unconfigured(); const value = state(); value.exists = false; saveState(value); seedCache('zshrc.sh', 'untrusted\n');
       const before = config(); const result = run(['setup'], input);
       const answered = input.startsWith('\ncreate\n\nn\n');
-      assert.equal(result.status, input === '\ncreate\n\nn\nn\n' ? 1 : 0);
+      assert.equal(result.status, 0);
       assert.deepEqual(config(), answered ? { ...before, backup: { ...before.backup, includeSensitive: 'false' } } : before);
       assert.include(result.stdout, 'Backup setup cancelled.');
       assert.notInclude(result.stdout, '😎 Backup setup complete.');
@@ -2510,7 +2510,7 @@ describe('repository backup lifecycle', function() {
         if(String(file).endsWith('.zshrc') || String(file).endsWith('external-config'))
           throw new Error('Raw contents must not be read during review');
         return original.call(this,file,...args); }; }`;
-    const result = run(['setup'], '\nreconnect\n\ny\nn\n', {}, preload); assert.equal(result.status, 1);
+    const result = run(['setup'], '\nreconnect\n\ny\nn\n', {}, preload); assert.equal(result.status, 0);
     assert.include(result.stdout, `  ${fs.realpathSync(external)}\n`);
     assert.notInclude(result.stdout, 'zshrc.sh:');
     assert.notInclude(result.stdout, 'Unavailable now:');
@@ -2587,7 +2587,7 @@ describe('repository backup lifecycle', function() {
   it('reports retained unrecognized entries during reconnect without changing them', () => {
     unconfigured(); saveState(fixtureState({ 'unrecognized-file': 'saved data\n' }));
     const result = run(['setup'], '\nreconnect\n\nn\nn\n');
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 0);
     assert.include(result.stdout, 'Unrecognized backup entries: 1. Ballin will leave them unchanged.');
     assert.equal(remote('unrecognized-file'), 'saved data\n');
     assert.equal(mutations().length, 0);
@@ -2765,7 +2765,7 @@ describe('repository backup lifecycle', function() {
     unconfigured(); const value = state(); value.exists = false; value.faults.candidate = 'redirect'; saveState(value);
     seedCache('zshrc.sh', 'unchanged\n'); const before = config();
     const result = run(['setup', 'ballin-backups'], `\ncreate\nn\n${answer}`);
-    assert.equal(result.status, answer === '' ? 0 : 1); assert.include(compact(result.stdout), 'Creating a backup here ends that redirect');
+    assert.equal(result.status, 0); assert.include(compact(result.stdout), 'Creating a backup here ends that redirect');
     assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'false' } }); assert.equal(cached(), 'unchanged\n'); assert.lengthOf(mutations(), 0);
   }));
   it('revalidates a configured backup through its old name using stable identity', () => {
@@ -2801,7 +2801,7 @@ describe('repository backup lifecycle', function() {
       value.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } }; saveState(value);
       seedCache('zshrc.sh', 'unchanged\n'); const before = config();
       const result = run(['setup'], `\ncreate\nfresh-name\nn\n${consent}`);
-      assert.equal(result.status, consent === '' ? 0 : 1, result.stdout + result.stderr);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Enter a repository name to check.');
       assert.include(result.stdout, 'Repository name: ');
       assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/fresh-name');
@@ -2836,7 +2836,7 @@ describe('repository backup lifecycle', function() {
     value.faults.candidateMetadata = { owner: { node_id: 'U_transferred', type: 'User' } }; saveState(value);
     const before = config();
     const result = run(['setup', 'fresh-name'], '\ncreate\nn\nn\n');
-    assert.equal(result.status, 1); assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/fresh-name');
+    assert.equal(result.status, 0); assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/fresh-name');
     assert.include(result.stdout, 'this private GitHub backup '); assert.notInclude(result.stdout, 'Enter a repository name to check.');
     assert.notInclude(result.stdout, 'Repository name'); assert.isEmpty(mutations());
     assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'false' } });
@@ -2850,7 +2850,7 @@ describe('repository backup lifecycle', function() {
         response: { status: 1, signal: null, stdout: '{"status":"503"}', stderr: 'dummy-private-provider-error' } }; saveState(value);
       const before = config();
       const result = run(['setup'], '\ncreate\nfresh-name\nn\nn\n');
-      assert.equal(result.status, 1); assert.include(result.stdout, 'Unable to suggest an available name.');
+      assert.equal(result.status, 0); assert.include(result.stdout, 'Unable to suggest an available name.');
       assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/fresh-name');
       assert.include(result.stdout, 'this private GitHub backup '); assert.notInclude(result.stdout, 'Available suggestion:');
       assert.notInclude(result.stdout + result.stderr, 'dummy-private-provider-error');
@@ -2895,7 +2895,7 @@ describe('repository backup lifecycle', function() {
     value.faults.occupiedNames = Array.from({ length: 100 }, (_, index) => index ? `ballin-backups-${index + 1}` : 'ballin-backups'); saveState(value);
     const before = config();
     const result = run(['setup'], '\ncreate\nfresh-name\nn\nn\n');
-    assert.equal(result.status, 1); assert.include(result.stdout, 'Repository name: ');
+    assert.equal(result.status, 0); assert.include(result.stdout, 'Repository name: ');
     assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/fresh-name');
     assert.include(result.stdout, 'this private GitHub backup '); assert.notInclude(result.stdout, 'Available suggestion:');
     assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'false' } }); assert.isEmpty(mutations());
@@ -2920,7 +2920,7 @@ describe('repository backup lifecycle', function() {
       unconfigured(); const value = state(); value.exists = false; saveState(value);
       const before = config();
       const result = run(['setup'], '\n\n\nn\n' + (confirmation === 'eof' ? '' : `${confirmation}\nn\n`));
-      assert.equal(result.status, confirmation === 'no' ? 1 : 0, result.stdout + result.stderr);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.isTrue(result.stdout.startsWith('==> Setting up GitHub backup\nGitHub hostname [github.com]: '));
       assert.equal(result.stdout.split('==> Setting up GitHub backup').length - 1, 1);
       assert.include(result.stdout, 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
@@ -2939,15 +2939,35 @@ describe('repository backup lifecycle', function() {
     });
   }
   for (const input of ['', 'invalid\n']) {
-    it(`cancels EOF or invalid mode without defaulting to creation: ${JSON.stringify(input)}`, () => {
+    it(`reprompts invalid mode and cancels EOF without defaulting to creation: ${JSON.stringify(input)}`, () => {
       unconfigured(); const before = fs.readFileSync(configPath, 'utf8');
       const result = run(['setup'], '\n' + input);
-      assert.equal(result.status, input ? 1 : 0, result.stdout + result.stderr);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      if (input) assert.include(result.stdout, 'Enter Create or Reconnect');
       assert.include(result.stdout, 'Backup setup cancelled.');
       assert.notInclude(result.stdout, 'Repository name'); assert.isEmpty(mutations());
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
     });
   }
+  for (const mode of [' CREATE ', ' ReConNect ']) {
+    it(`accepts a normalized setup mode ${JSON.stringify(mode)} without skipping final consent`, () => {
+      unconfigured(); const value = state(); value.exists = mode.trim().toLowerCase() === 'reconnect'; saveState(value);
+      const result = run(['setup'], '\n' + mode + '\n\nn\nn\n');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Repository name'); assert.include(result.stdout, 'this private GitHub backup');
+      assert.include(result.stdout, 'Backup setup cancelled.'); assert.isEmpty(mutations());
+      assert.isNull(config().backup.repository);
+    });
+  }
+  it('recovers from an invalid setup mode before a valid Create choice', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const result = run(['setup'], '\ninvalid\ncreate\n\nn\nn\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter Create or Reconnect');
+    assert.equal(result.stdout.split('[CREATE/reconnect]').length - 1, 2);
+    assert.include(result.stdout, 'Repository name'); assert.isEmpty(mutations()); assert.isFalse(state().exists);
+  });
+
   it('lets an interactive create retry a typed collision without reconnecting', () => {
     unconfigured(); const value = state(); value.exists = false;
     value.faults.occupiedNames = ['taken']; saveState(value);

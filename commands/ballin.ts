@@ -162,6 +162,13 @@ Options:
 const selfUpdateHelp = `Usage: ballin self-update
 
 Update Ballin itself.
+
+Use the installer's default selection. Ballin asks before revision or track changes that require consent.
+
+To select a specific release, SHA, or branch, rerun the installer with a revision selector. Local settings are preserved; conflicting local changes stop the update.
+
+🔗 Revision selection:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#selecting-a-revision
 `;
 
 const uninstallHelp = `Usage: ballin uninstall

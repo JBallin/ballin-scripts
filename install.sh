@@ -217,7 +217,7 @@ command_entry_snapshot() {
 }
 
 ballin_select "$@" || exit $?
-if [[ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 && "$ballin_mode" != self-update ]]; then phase 'Setting up Ballin'; fi
+if [[ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 && "$ballin_mode" != self-update && ! -d "$HOME/.ballin-scripts" ]]; then phase 'Setting up Ballin'; fi
 
 repo_dir="$HOME/.ballin-scripts"
 docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
@@ -433,6 +433,12 @@ if node "$revision_scratch/repo_update.ts" apply "$repo_dir" "$ballin_kind" "$ba
 else
   status=$?
   [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
+  # The selected helper reserves 20 for a declined revision change.
+  if [[ "$status" == 20 ]]; then
+    write_install_cancelled || exit 1
+    [[ "$ballin_mode" != self-update ]] || exit 20
+    exit 0
+  fi
   print_stale_checkout_guidance
   exit 1
 fi

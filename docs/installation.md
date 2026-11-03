@@ -99,7 +99,8 @@ there is no customer configuration setting or setup question for this choice.
 
 Reinstalling the same revision preserves existing settings and reoffers the
 usual setup review. Changing a clean installation's revision or track requires
-confirmation. Dirty or conflicting checkouts stop; Ballin does not stash,
+confirmation. Declining a revision or track change leaves the checkout unchanged and exits
+successfully. Dirty or conflicting checkouts stop; Ballin does not stash,
 reset, merge, or repair local work. Preserve local work before retrying.
 Release/SHA installs use detached HEAD; create a branch before making commits.
 

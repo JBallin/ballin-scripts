@@ -136,7 +136,10 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     const env = options.env ?? process.env;
     let firstQuestion = true;
     const completionPrompt: typeof prompt = (question: string) => {
-      if (firstQuestion && options.presentation === 'installation') write('');
+      if (firstQuestion) {
+        if (options.presentation === 'installation') write('');
+        write('Optional tab completion suggests Ballin commands as you type.');
+      }
       firstQuestion = false;
       return prompt(question);
     };

@@ -901,7 +901,8 @@ plan_nvm() {
   fi
   printf '$ nvm install --lts\n'
   if "$nvm_default_exists"; then printf 'The existing NVM default will be changed to follow latest LTS.\n'; printf "$ nvm alias default 'lts/*'\n"; fi
-  printf 'This activates LTS here and makes it the default for future terminals.\n'
+  printf 'This activates LTS for this setup and selects NVM’s default.\n'
+  printf 'Future terminals need the shell startup setup offered next.\n'
   printf 'Older Node installations and versions remain installed. Global npm packages\nmay need to be reinstalled for the selected Node version.\n'
   printf 'Shell startup changes require separate permission.\n'
   if ! confirm 'Use NVM and latest LTS Node?'; then
@@ -936,11 +937,18 @@ install_nvm_lts() {
       if [[ ! -s "$scratch/nvm-install.sh" ]] || ! /bin/bash -n "$scratch/nvm-install.sh"; then
         fail 'The official NVM installer is empty or incomplete.'
       fi
-      printf '$ PROFILE=/dev/null NVM_DIR=%q bash %q\n' "$nvm_directory" "$scratch/nvm-install.sh"
+      printf 'Installing NVM v0.40.8 in %s...\n' "$(display_path "$nvm_directory")"
+      local installer_status=0
       # NVM installer overrides must not redirect the promised source or install
       # an inherited NODE_VERSION. Keep unrelated caller/auth environment intact.
       ( unset NVM_SOURCE NVM_INSTALL_VERSION NVM_INSTALL_GITHUB_REPO NODE_VERSION NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER NVM_METHOD NVM_ENV NVM_CD_FLAGS
-        PROFILE=/dev/null NVM_DIR="$nvm_directory" METHOD=git BASH_ENV='' ENV='' /bin/bash "$scratch/nvm-install.sh" )
+        PROFILE=/dev/null NVM_DIR="$nvm_directory" METHOD=git BASH_ENV='' ENV='' /bin/bash "$scratch/nvm-install.sh" ) >"$scratch/nvm-install.log" 2>&1 || installer_status=$?
+      stop_if_interrupted "$installer_status"
+      if [[ "$installer_status" != 0 ]]; then
+        cat "$scratch/nvm-install.log" >&2
+        printf '\nQuickstart: NVM installation did not finish. Inspect its output, then rerun Quickstart.\n' >&2
+        return "$installer_status"
+      fi
       nvm_source="$nvm_directory/nvm.sh"
     fi
   fi
@@ -985,6 +993,7 @@ install_nvm_lts() {
   resolved_default=$(nvm version default)
   current=$(node --version)
   [[ "$resolved_default" == "$current" ]] || fail 'NVM default and active Node differ. Inspect them before retrying.'
+  printf 'NVM is ready in %s; Node %s is active for this setup.\n' "$(display_path "$nvm_directory")" "$current"
   # Do not add this version-specific bin directory to persistent command_path.
 }
 
