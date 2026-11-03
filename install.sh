@@ -243,10 +243,10 @@ fi
 retry_guidance='run this installer again'
 retry_prerequisites='rerun this installer'
 if [[ "$ballin_mode" == self-update ]]; then
-  retry_guidance='run `ballin self-update` again'
+  retry_guidance="run \`ballin self-update\` again"
   retry_prerequisites=$retry_guidance
 elif [[ "$setup_mode" != fresh ]]; then
-  retry_guidance='use `ballin self-update` for the default selection'
+  retry_guidance="use \`ballin self-update\` for the default selection"
   retry_prerequisites=$retry_guidance
 fi
 
@@ -505,11 +505,11 @@ fi
 setup_status=$?
 if [ "$setup_status" -ne 0 ]; then
   if [[ "$ballin_mode" == self-update ]]; then
-    printf 'Ballin checkout is now %s, but setup refresh failed. Fix the reported error, then run `ballin self-update` to finish.\n' "$ballin_sha" >&2
+    printf "Ballin checkout is now %s, but setup refresh failed. Fix the reported error, then run \`ballin self-update\` to finish.\n" "$ballin_sha" >&2
   elif [[ "$setup_mode" == fresh ]]; then
     printf "Ballin checkout is now %s, but initial setup failed. Fix the reported error, then rerun installation to finish.\n" "$ballin_sha" >&2
   else
-    printf 'Ballin checkout is now %s, but setup refresh failed. Fix the reported error. `ballin self-update` uses the default selection; it cannot resume an explicit revision selection.\n' "$ballin_sha" >&2
+    printf "Ballin checkout is now %s, but setup refresh failed. Fix the reported error. \`ballin self-update\` uses the default selection; it cannot resume an explicit revision selection.\n" "$ballin_sha" >&2
   fi
   exit "$setup_status"
 fi
