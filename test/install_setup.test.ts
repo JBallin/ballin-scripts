@@ -690,10 +690,20 @@ exit 2
       const result = withEnvironment({ HOME: path.join(testDir, 'home'), PATH: binDir }, () => captureStdout(() => setup(repoDir, docsUrl)));
       assert.isFalse(result.result);
       assert.include(result.output, 'invalid installation prefix');
+      assert.include(result.output, 'ballin self-update');
+      assert.notInclude(result.output, 'installer again');
       assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
       assert.isFalse(fs.existsSync(path.join(binDir, 'ballin')));
     });
   }
+
+  it('retains initial-install recovery for a fresh setup prerequisite failure', () => {
+    installConfigSources(); writeExecutable('brew', '#!/bin/sh\nprintf relative\n');
+    const result = withEnvironment({ HOME: path.join(testDir, 'home'), PATH: binDir }, () => captureStdout(() => setup(repoDir, docsUrl, undefined, 'fresh')));
+    assert.isFalse(result.result);
+    assert.include(result.output, 'run the installer again');
+    assert.notInclude(result.output, 'ballin self-update');
+  });
 
   it('preserves a command target replaced after setup inspection', () => {
     installConfigSources();

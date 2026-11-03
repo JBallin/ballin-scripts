@@ -62,10 +62,13 @@ describe('selected checkout integration', () => {
     const r = run({ input }); assert.equal(r.status, 20); assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.include(r.stdout, 'cancelled'); assert.notInclude(r.stderr, 'cancelled');
   });
   it('refuses automatic track changes even with a terminal', () => {
-    const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: '1' }, mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires confirmation'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+    const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: '1' }, mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, 'This revision/track change requires confirmation. Run `ballin self-update` interactively.'); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });
   it('refuses noninteractive revision changes even with affirmative input', () => {
     const r = run({ env: { FIXTURE_TTY: '0' }, input: 'yes\n' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires confirmation');
+    assert.include(r.stderr, 'The requested revision was not applied.');
+    assert.include(r.stderr, 'cannot select an explicit revision');
+    assert.notInclude(r.stderr, 'Run `ballin self-update` interactively');
     assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });
   it('rejects inconsistent selected runtime metadata before changing checkout', () => {
@@ -100,8 +103,15 @@ describe('selected checkout integration', () => {
   });
   it('reports actual checkout and incomplete setup when receipt storage fails', () => {
     fs.mkdirSync(path.join(installed, '.git/ballin-install.json'));
-    const r = run(); assert.equal(r.status, 1); assert.include(r.stderr, `Checkout is now ${target}`); assert.include(r.stderr, 'setup is incomplete');
+    const r = run({ kind: 'branch', value: 'main', mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, `Checkout is now ${target}`); assert.include(r.stderr, 'setup is incomplete'); assert.include(r.stderr, 'run `ballin self-update`'); assert.notInclude(r.stderr, 'rerun the installer');
     assert.equal(git(installed, ['rev-parse', 'HEAD']), target); assert.equal(require('../commands/repo_update.ts').readIdentity(installed).version, 'development');
+  });
+  it('does not redirect failed explicit-selection provenance to a different revision', () => {
+    fs.mkdirSync(path.join(installed, '.git/ballin-install.json'));
+    const r = run(); assert.equal(r.status, 1);
+    assert.include(r.stderr, 'follows the default selection; it cannot restore an explicit selection');
+    assert.notInclude(r.stderr, 'rerun the installer');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
   });
   it('verifies the selected tag and records release provenance', () => {
     const r = run({ kind: 'release', value: 'v1.0.0' }); assert.equal(r.status, 0, r.stderr); assert.equal(git(installed, ['rev-parse', 'v1.0.0^{commit}']), target);
@@ -125,7 +135,7 @@ describe('selected checkout integration', () => {
   it('refuses automatic main rewind and divergence without changing local work', () => {
     assert.equal(run({ kind: 'branch', value: 'main' }).status, 0);
     let r = run({ kind: 'branch', value: 'main', sha: before, mode: 'self-update' });
-    assert.equal(r.status, 1); assert.include(r.stderr, 'moved backward'); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+    assert.equal(r.status, 1); assert.include(r.stderr, 'moved backward'); assert.include(r.stderr, 'retrying `ballin self-update`'); assert.notInclude(r.stderr, 'installer'); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
     git(upstream, ['checkout', '-q', '--detach', before]); fs.writeFileSync(path.join(upstream, 'content'), 'different'); git(upstream, ['commit', '-qam', 'divergent']);
     const divergent = git(upstream, ['rev-parse', 'HEAD']);
     r = run({ kind: 'branch', value: 'main', sha: divergent, mode: 'self-update' });

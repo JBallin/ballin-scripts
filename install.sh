@@ -240,6 +240,15 @@ fi
 if [ ! -f "$repo_dir/ballin.config.json" ]; then
   setup_mode='fresh'
 fi
+retry_guidance='run this installer again'
+retry_prerequisites='rerun this installer'
+if [[ "$ballin_mode" == self-update ]]; then
+  retry_guidance='run `ballin self-update` again'
+  retry_prerequisites=$retry_guidance
+elif [[ "$setup_mode" != fresh ]]; then
+  retry_guidance='use `ballin self-update` for the default selection'
+  retry_prerequisites=$retry_guidance
+fi
 
 if [[ -n "${BALLIN_APPROVED_INSTALL_ROOT:-}" && ( "$BALLIN_APPROVED_INSTALL_ROOT" != "$repo_dir" || "$repo_existed" == true ) ]]; then
   printf 'The checkout changed after approval. Inspect it, then rerun Quickstart.\n' >&2
@@ -251,7 +260,7 @@ system_xcode_select='/usr/bin/xcode-select'
 git_tool=$(type -P git) || git_tool=''
 if [[ -z "$git_tool" ]]; then
   printf '\n'; error_icon; printf ' Git is required before install can continue.\n'
-  printf 'Install Git, then run this installer again.\n'
+  printf 'Install Git, then %s.\n' "$retry_guidance"
   exit 1
 fi
 prerequisite_status=0
@@ -260,7 +269,7 @@ if [[ "$(uname -s)" == Darwin && "$git_tool" -ef "$system_git" ]]; then
   [[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
   if [[ "$prerequisite_status" != 0 ]]; then
     printf '\n'; error_icon; printf " Xcode Command Line Tools are required to use Apple’s Git.\n"
-    printf 'Run '; command_reference 'xcode-select --install'; printf ', finish installation, then rerun this installer.\n'
+    printf 'Run '; command_reference 'xcode-select --install'; printf ', finish installation, then %s.\n' "$retry_prerequisites"
     exit 1
   fi
 fi
@@ -269,13 +278,13 @@ git_diagnostics=$("$git_tool" --version 2>&1) || prerequisite_status=$?
 if [[ "$prerequisite_status" != 0 ]]; then
   [[ -z "$git_diagnostics" ]] || printf '%s\n' "$git_diagnostics"
   printf '\n'; error_icon; printf ' Git was found but could not run.\n'
-  printf 'Make sure '; command_reference 'git --version'; printf ' works, then rerun this installer.\n'
+  printf 'Make sure '; command_reference 'git --version'; printf ' works, then %s.\n' "$retry_prerequisites"
   exit 1
 fi
 
 if [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
-  printf "\nInstall supported Node.js, then run this installer again.\n"
+  printf '\nInstall supported Node.js, then %s.\n' "$retry_guidance"
   documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
   exit 1
 else
@@ -294,7 +303,7 @@ else
       printf ' Detected Node.js %s.' "$node_check"
     fi
     printf '\n'
-    printf "\nUpdate or activate Node.js using your existing installation method, then run this installer again.\n"
+    printf '\nUpdate or activate Node.js using your existing installation method, then %s.\n' "$retry_guidance"
     documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
     exit 1
   fi
@@ -358,7 +367,7 @@ if command_preflight=$(node -e '
   if (brew.signal === "SIGTERM" || brew.status === 143) process.exit(143);
   if (brew.status === 0) {
     const prefix = brew.stdout.trimEnd();
-    if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) { console.error("Homebrew returned an invalid installation prefix. Inspect " + process.argv[2] + ", then rerun installation."); process.exit(1); }
+    if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) { console.error("Homebrew returned an invalid installation prefix. Inspect " + process.argv[2] + ", then " + process.argv[3] + "."); process.exit(1); }
     directory = path.join(prefix, "bin");
   }
   const displayPath = value => value === process.env.HOME ? "~" : value.startsWith(process.env.HOME + "/") ? "~" + value.slice(process.env.HOME.length) : value;
@@ -376,7 +385,7 @@ if command_preflight=$(node -e '
     if (error.code !== "ENOENT") { console.error(error.message); process.exit(1); }
   }
   process.stdout.write(JSON.stringify({directory, target, snapshot}));
-' "$repo_dir" "$(command_reference 'brew --prefix' 2)"); then :
+' "$repo_dir" "$(command_reference 'brew --prefix' 2)" "$retry_guidance"); then :
 else
   exit $?
 fi
@@ -495,7 +504,13 @@ fi
 )
 setup_status=$?
 if [ "$setup_status" -ne 0 ]; then
-  printf "Ballin checkout is now %s, but setup refresh failed. Rerun installation to finish.\n" "$ballin_sha" >&2
+  if [[ "$ballin_mode" == self-update ]]; then
+    printf 'Ballin checkout is now %s, but setup refresh failed. Fix the reported error, then run `ballin self-update` to finish.\n' "$ballin_sha" >&2
+  elif [[ "$setup_mode" == fresh ]]; then
+    printf "Ballin checkout is now %s, but initial setup failed. Fix the reported error, then rerun installation to finish.\n" "$ballin_sha" >&2
+  else
+    printf 'Ballin checkout is now %s, but setup refresh failed. Fix the reported error. `ballin self-update` uses the default selection; it cannot resume an explicit revision selection.\n' "$ballin_sha" >&2
+  fi
   exit "$setup_status"
 fi
 

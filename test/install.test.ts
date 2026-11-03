@@ -140,7 +140,7 @@ esac
     const fixture = path.join(homeDir, 'selected-install.sh');
     const source = fs.readFileSync(installPath, 'utf8').replace('ballin_select "$@" || exit $?', `
 ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value
-ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install
+ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=${env.FAKE_INSTALL_MODE || 'install'}
 ballin_runtime() { return 0; }
 ballin_download() { : > "$2"; }
 `);
@@ -649,6 +649,27 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     });
   }
 
+  for (const mode of ['fresh', 'self-update']) it(`gives the appropriate recovery after ${mode} setup fails`, () => {
+    installBaseCommands();
+    if (mode === 'self-update') writeCurrentCheckout();
+    const result = runInstall({ env: { FAKE_SETUP_STATUS: '27', FAKE_INSTALL_MODE: mode === 'self-update' ? mode : 'install' } });
+    assert.equal(result.status, 27, result.stdout + result.stderr);
+    if (mode === 'fresh') {
+      assert.include(result.stderr, 'initial setup failed');
+      assert.include(result.stderr, 'rerun installation to finish');
+    } else {
+      assert.include(result.stderr, 'run `ballin self-update` to finish');
+      assert.notInclude(result.stderr, 'rerun installation');
+    }
+  });
+  it('directs existing users back to self-update after a runtime prerequisite failure', () => {
+    installBaseCommands(); writeCurrentCheckout();
+    const result = runInstall({ env: { FAKE_NODE_VERSION: '22.14.0', FAKE_INSTALL_MODE: 'self-update' } });
+    assert.equal(result.status, 1);
+    assert.include(result.stdout, 'run `ballin self-update` again');
+    assert.notInclude(result.stdout, 'run this installer again');
+  });
+
   it('returns the typed setup status when setup fails', () => {
     installBaseCommands();
     writeCurrentCheckout();
@@ -658,6 +679,8 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     assert.equal(result.status, 27);
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stderr, 'setup refresh failed');
+    assert.include(result.stderr, 'cannot resume an explicit revision selection.');
+    assert.notInclude(result.stderr, 'Rerun installation');
     assert.deepEqual(commandLog(), [
       'node:repo_update selected helper',
       setupCommand(),

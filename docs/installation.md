@@ -75,7 +75,12 @@ installs show one completion message after setup.
 
 ## Selecting a revision
 
-Installation currently follows `main` while release delivery is prepared. Both
+For an existing installation, use `ballin self-update` for maintenance. It follows
+the default selection; the installed command does not currently accept release,
+SHA or branch selectors. The selectors below belong to initial installation and
+isolated candidate testing.
+
+Initial installation currently follows `main` while release delivery is prepared. Both
 entrypoints accept one optional selector after the script's argument-zero name:
 
 ```shell
@@ -653,7 +658,7 @@ help, see [Support](../SUPPORT.md). Review output before sharing it and remove
 credentials or sensitive backup contents.
 
 If `ballin self-update` fails during setup, the checkout may already be updated;
-address the reported setup error before retrying.
+address the reported setup error, then run `ballin self-update` again.
 
 For other self-update failures, follow the reported error and recovery guidance
 before retrying.

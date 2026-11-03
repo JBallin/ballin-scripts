@@ -102,7 +102,9 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
   process.stdout.write(`Ballin: ${before.label} → ${selectionLabel(selection)}\n`);
   if (selection.kind === 'release') process.stdout.write(`Release notes: https://github.com/JBallin/ballin-scripts/releases/tag/${selection.value}\n`);
   if (!needsConsent(before, selection, mode)) return;
-  if (process.env.BALLIN_AUTOMATIC_UPDATE === '1' || !require('node:tty').isatty(0)) throw new Error('This revision/track change requires confirmation. Run the installer or ballin self-update interactively.');
+  if (process.env.BALLIN_AUTOMATIC_UPDATE === '1' || !require('node:tty').isatty(0)) throw new Error(mode === 'self-update'
+    ? 'This revision/track change requires confirmation. Run `ballin self-update` interactively.'
+    : 'This revision/track change requires confirmation. The requested revision was not applied. `ballin self-update` follows the default selection; it cannot select an explicit revision.');
   process.stdout.write('Change the installed revision/track? [y/N] ');
   const byte = Buffer.alloc(1); let answer = ''; let complete = false; let overflow = false;
   while (fs.readSync(0, byte, 0, 1, null)) { if (byte[0] === 10) { complete = true; break; } if (answer.length < 32) answer += byte.toString(); else overflow = true; }
@@ -125,7 +127,7 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
   if (!fresh) {
     const before = readIdentity(root);
     if (mode === 'self-update' && before.kind === 'branch' && before.value === 'main' && selection.kind === 'branch' && selection.value === 'main') {
-      if (!isAncestor(root, head!, selection.sha)) throw new Error('Main has diverged or moved backward. Inspect the checkout and select the revision explicitly with the installer.');
+      if (!isAncestor(root, head!, selection.sha)) throw new Error('Main has diverged or moved backward. Preserve local work and inspect the checkout before retrying `ballin self-update`.');
     }
     confirmTransition(before, selection, mode);
   }
@@ -147,7 +149,12 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
   if (git(root, ['rev-parse', 'HEAD']) !== selection.sha) throw new Error('Installed revision verification failed.');
   const file = receiptPath(root), temporary = `${file}.${process.pid}.tmp`;
   try { fs.writeFileSync(temporary, JSON.stringify(selection) + '\n', { flag: 'wx', mode: 0o600 }); fs.renameSync(temporary, file); }
-  catch (error) { throw new Error(`Checkout is now ${selection.sha}, but installation provenance could not be saved and setup is incomplete. Inspect the Git metadata and rerun the installer: ${(error as Error).message}`); }
+  catch (error) {
+    const recovery = fresh ? 'Inspect the Git metadata and rerun the installer.'
+      : mode === 'self-update' ? 'Inspect the Git metadata and run `ballin self-update` again.'
+        : 'Inspect the Git metadata before continuing. `ballin self-update` follows the default selection; it cannot restore an explicit selection.';
+    throw new Error(`Checkout is now ${selection.sha}, but installation provenance could not be saved and setup is incomplete. ${recovery} ${(error as Error).message}`);
+  }
   finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
   process.stdout.write(`Selected ${selectionLabel(selection)}\n`);
 };

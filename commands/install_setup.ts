@@ -117,7 +117,7 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
       const targetPath = path.join(binDir, binName);
       const current = commandTargetSnapshot(targetPath);
       if (preflight && (preflight.target !== targetPath || preflight.snapshot !== current)) {
-        writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying installation.`);
+        writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying.`);
         return false;
       }
       fs.rmSync(targetPath, { force: true });
@@ -131,7 +131,10 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
   return true;
 };
 
-const resolveBinDir = (): string | null => {
+const setupRetry = (mode: SetupMode): string => mode === 'fresh' ? 'run the installer again'
+  : mode === 'self-update' ? `run ${terminalCommand('ballin self-update')} again`
+    : `use ${terminalCommand('ballin self-update')} for the default selection`;
+const resolveBinDir = (mode: SetupMode): string | null => {
   if (commandExists('brew')) {
     const result = runCommand('brew', ['--prefix']);
     requireUninterrupted(result);
@@ -139,7 +142,7 @@ const resolveBinDir = (): string | null => {
     if (brewPrefix !== null) {
       const prefix = brewPrefix.trimEnd();
       if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) {
-        writeStdoutLine(`Homebrew returned an invalid installation prefix. Inspect ${terminalCommand('brew --prefix')}, then rerun installation.`);
+        writeStdoutLine(`Homebrew returned an invalid installation prefix. Inspect ${terminalCommand('brew --prefix')}, then ${setupRetry(mode)}.`);
         return null;
       }
       return path.join(prefix, 'bin');
@@ -150,7 +153,7 @@ const resolveBinDir = (): string | null => {
   return homeDir ? path.join(homeDir, '.local', 'bin') : null;
 };
 
-const validateBinDirInPath = (binDir: string): boolean => {
+const validateBinDirInPath = (binDir: string, mode: SetupMode): boolean => {
   const envPath = process.env.PATH ?? '';
   if (envPath.split(path.delimiter).includes(binDir)) {
     return true;
@@ -158,7 +161,7 @@ const validateBinDirInPath = (binDir: string): boolean => {
 
   writeStdoutLine(`\n⚠️  ERROR: ${terminalPath(binDir)} doesn't seem to be in your path.`);
   writeStdoutLine(`Add ${terminalCommand(`export PATH="${binDir}:$PATH"`)} to your shell profile.`);
-  writeStdoutLine('Then open a new terminal window and run the installer again.');
+  writeStdoutLine(`Then open a new terminal window and ${setupRetry(mode)}.`);
   return false;
 };
 
@@ -183,8 +186,8 @@ const setup = (
       return false;
     }
   }
-  const binDir = resolveBinDir();
-  if (!binDir || !validateBinDirInPath(binDir)) {
+  const binDir = resolveBinDir(mode);
+  if (!binDir || !validateBinDirInPath(binDir, mode)) {
     return false;
   }
   let preflight: CommandPreflight;
@@ -196,7 +199,7 @@ const setup = (
     if (preflight.directory !== binDir || preflight.target !== target || typeof preflight.snapshot !== 'string'
       || preflight.snapshot !== commandTargetSnapshot(target)) throw new Error('Command target changed');
   } catch {
-    writeStdoutLine('Unable to verify the reviewed command target. Inspect it before retrying installation.');
+    writeStdoutLine('Unable to verify the reviewed command target. Inspect it before retrying.');
     return false;
   }
 

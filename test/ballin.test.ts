@@ -305,7 +305,11 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         assert.include(result.stdout, `ballin ${command}`);
         assert.notInclude(result.stdout, 'ballin config help');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
-        if (command === 'self-update') assert.include(result.stdout, 'Update Ballin itself.');
+        if (command === 'self-update') {
+          assert.include(result.stdout, 'Update Ballin itself.');
+          assert.notInclude(result.stdout, 'installer');
+          assert.include(result.stdout, '#health-and-recovery');
+        }
         if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
         if (command === 'update') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get update` to inspect settings.');
         if (command === 'setup') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
