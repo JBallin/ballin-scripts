@@ -901,7 +901,7 @@ plan_nvm() {
   fi
   printf '$ nvm install --lts\n'
   if "$nvm_default_exists"; then printf 'The existing NVM default will be changed to follow latest LTS.\n'; printf "$ nvm alias default 'lts/*'\n"; fi
-  printf 'This activates LTS for this setup and selects NVM’s default.\n'
+  printf 'This activates LTS for this setup and selects the NVM default.\n'
   printf 'Future terminals need the shell startup setup offered next.\n'
   printf 'Older Node installations and versions remain installed. Global npm packages\nmay need to be reinstalled for the selected Node version.\n'
   printf 'Shell startup changes require separate permission.\n'
