@@ -198,6 +198,18 @@ ballin_download() { : > "$2"; }
     assert.equal(fs.readFileSync(resultFile, 'utf8'), 'cancelled\n');
   });
 
+  it('reports confirmation-only self-update refusal without checkout-repair guidance', () => {
+    installBaseCommands(); writeCurrentCheckout();
+    const guidance = 'Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.';
+    const result = runInstall({ env: { FAKE_INSTALL_MODE: 'self-update', FAKE_REPO_UPDATE_STATUS: '21', FAKE_REPO_UPDATE_ERROR: guidance } });
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, guidance + '\n');
+    assert.notInclude(result.stdout, 'Unable to update');
+    assert.notInclude(result.stdout, 'preserve local work');
+    assert.notInclude(result.stdout, 'Setup complete');
+    assert.deepEqual(commandLog(), ['node:repo_update selected helper']);
+  });
+
   for (const scenario of ['standalone', 'embedded', 'failure', 'declined', 'eof']) {
     it(`ends installer output with terminal guidance only on standalone success: ${scenario}`, () => {
       installBaseCommands();

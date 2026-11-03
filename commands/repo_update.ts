@@ -98,13 +98,15 @@ const needsConsent = (before: Identity, s: Selection, mode: string): boolean => 
 };
 const revisionCancelledStatus = 20;
 class RevisionChangeCancelled extends Error {}
+class RevisionChangeRequiresConfirmation extends Error { status = 21; }
 const confirmTransition = (before: Identity, selection: Selection, mode: string): void => {
   process.stdout.write(`Ballin: ${before.label} → ${selectionLabel(selection)}\n`);
   if (selection.kind === 'release') process.stdout.write(`Release notes: https://github.com/JBallin/ballin-scripts/releases/tag/${selection.value}\n`);
   if (!needsConsent(before, selection, mode)) return;
-  if (process.env.BALLIN_AUTOMATIC_UPDATE === '1' || !require('node:tty').isatty(0)) throw new Error(mode === 'self-update'
-    ? 'This revision/track change requires confirmation. Run `ballin self-update` interactively.'
-    : 'This revision/track change requires confirmation. The requested revision was not applied. `ballin self-update` follows the default selection; it cannot select an explicit revision.');
+  if (process.env.BALLIN_AUTOMATIC_UPDATE === '1' || !require('node:tty').isatty(0)) {
+    if (mode === 'self-update') throw new RevisionChangeRequiresConfirmation('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.');
+    throw new Error('This revision/track change requires confirmation. The requested revision was not applied. `ballin self-update` follows the default selection; it cannot select an explicit revision.');
+  }
   process.stdout.write('Change the installed revision/track? [y/N] ');
   const byte = Buffer.alloc(1); let answer = ''; let complete = false; let overflow = false;
   while (fs.readSync(0, byte, 0, 1, null)) { if (byte[0] === 10) { complete = true; break; } if (answer.length < 32) answer += byte.toString(); else overflow = true; }

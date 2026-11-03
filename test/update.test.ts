@@ -905,6 +905,26 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     assert.deepEqual(commandLog(), ['mas|,|upgrade']);
   });
 
+  it('keeps confirmation-only self-update noninteractive and continues configured backup', () => {
+    const guidance = 'Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.';
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$UPDATE_TEST_LOG"
+if [[ "$1" == self-update ]]; then
+  printf 'automatic:%s\\n' "$BALLIN_AUTOMATIC_UPDATE" >> "$UPDATE_TEST_LOG"
+  printf '%s\\n' '${guidance}' >&2
+  exit 1
+fi
+exit 0
+`);
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true' });
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, guidance);
+    assert.notInclude(result.stdout + result.stderr, 'preserve local work');
+    assert.notInclude(result.stdout, 'Checking Ballin readiness');
+    assert.notInclude(result.stdout, 'Change the installed revision');
+    assert.deepEqual(commandLog(), ['self-update', 'automatic:1', 'backup']);
+  });
+
   it('checks Ballin readiness after a successful ballin update', () => {
     installCommandStub('ballin', { output: 'updated ballin-scripts' });
     installHealthyReadinessCommands();

@@ -61,8 +61,8 @@ describe('selected checkout integration', () => {
   for (const input of ['no\n', '', 'y', 'yes' + ' '.repeat(40) + 'no\n']) it(`refuses an unconfirmed transition (${JSON.stringify(input)})`, () => {
     const r = run({ input }); assert.equal(r.status, 20); assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.include(r.stdout, 'cancelled'); assert.notInclude(r.stderr, 'cancelled');
   });
-  it('refuses automatic track changes even with a terminal', () => {
-    const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: '1' }, mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, 'This revision/track change requires confirmation. Run `ballin self-update` interactively.'); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  for (const [automatic, tty] of [['1', '0'], ['1', '1'], ['0', '0']]) it(`refuses track changes requiring consent without checkout changes (automatic ${automatic}, TTY ${tty})`, () => {
+    const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: automatic, FIXTURE_TTY: tty }, mode: 'self-update' }); assert.equal(r.status, 21); assert.isTrue(r.stderr.endsWith('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.\n')); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });
   it('refuses noninteractive revision changes even with affirmative input', () => {
     const r = run({ env: { FIXTURE_TTY: '0' }, input: 'yes\n' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires confirmation');

@@ -456,6 +456,8 @@ else
     [[ "$ballin_mode" != self-update ]] || exit 20
     exit 0
   fi
+  # Status 21 means self-update needs consent, not checkout repair.
+  [[ "$status" != 21 ]] || exit 1
   if [[ "$repo_existed" == false ]]; then
     printf '\nBallin installation did not finish. Rerun the installer to try again.\n' >&2
   else
