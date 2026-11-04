@@ -5,7 +5,7 @@ const { runInteractiveSetup } = require('./helpers/interactive_setup.ts');
 
 describe('revision confirmation in a real terminal', function() {
   this.timeout(sandboxSuiteTimeout);
-  for (const answer of ['yes', 'no']) it(`waits for delayed ${answer} without making stdin nonblocking`, () => {
+  for (const answer of ['yes', 'no', '']) it(`waits for delayed ${JSON.stringify(answer)} without making stdin nonblocking`, () => {
     const sandbox = createSandbox({ quickstart: true });
     try {
       const install = runSandbox(sandbox, ['quickstart'], 'no\nno\nlogin\nyes\nyes\nno\nno\n');

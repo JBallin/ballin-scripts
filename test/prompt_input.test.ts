@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { createSandbox, cleanupSandbox, sandboxSuiteTimeout } = require('./helpers/onboarding.ts');
+const { createSandbox, cleanupSandbox, runSandbox, sandboxSuiteTimeout } = require('./helpers/onboarding.ts');
 const { runInteractiveSetup } = require('./helpers/interactive_setup.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 import type { Sandbox } from './helpers/onboarding.ts';
@@ -150,20 +150,50 @@ describe('plain prompt input contracts', function() {
     assert.include(result.stdout, 'DONE:true');
     assert.notInclude(result.stdout + result.stderr, 'EAGAIN');
   });
-  for (const file of ['install.sh', 'quickstart.sh']) it(`accepts Bash Y with one Enter in ${file}`, () => {
+  for (const defaultValue of [true, false]) it(`confirms empty Enter as the TypeScript default ${defaultValue ? 'Yes' : 'No'}`, () => {
     sandbox = createSandbox();
-    const source = fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8');
-    const helpers = ['status_marker', 'choice_word', 'fixed_prompt_layout', 'render_fixed_prompt', 'confirm_fixed_choice', 'prompt_choices', 'read_prompt_answer', 'confirm'].map((name) => {
-      const helper = source.match(new RegExp('^' + name + '\\(\\) \\{\\n[\\s\\S]*?^\\}', 'mu'))?.[0];
-      assert.isString(helper); return helper;
-    }).join('\n');
-    const script = `${helpers}\nprompt_error=''; input_ended=false; printf 'KEEP\\n'; if confirm 'Proceed?'; then printf 'DONE:true\\n'; else printf 'DONE:false\\n'; fi`;
-    const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', script], [
-      { prompt: 'Proceed? [y/N] ', answer: 'Y' },
+    const choices = defaultValue ? '[Y/n]' : '[y/N]', label = defaultValue ? 'Yes' : 'No';
+    const result = runInteractiveSetup(sandbox, [process.execPath, '-e',
+      `const h=require(process.argv[1]); console.log('KEEP'); console.log('DONE:'+h.readYesNo('Proceed? ${choices} ',${defaultValue}));`,
+      path.resolve(__dirname, '../commands/commandHelpers.ts')], [{ prompt: 'Proceed? ' + choices + ' ', answer: '' }]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, '\x1b[36m' + label + '\x1b[0m');
+    assert.include(promptScreen(result.stdout, 120), 'KEEP\n? Proceed? ' + choices + ' ' + label + '\nDONE:' + defaultValue);
+  });
+  for (const file of ['install.sh', 'quickstart.sh']) for (const [input, defaultValue, label] of [['Y', 'n', 'Yes'], ['', 'n', 'No'], ['', 'y', 'Yes']]) {
+    it(`accepts ${JSON.stringify(input)} with one Enter in ${file} with default ${defaultValue}`, () => {
+      sandbox = createSandbox();
+      const source = fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8');
+      const helpers = ['status_marker', 'choice_word', 'fixed_prompt_layout', 'render_fixed_prompt', 'confirm_fixed_choice', 'prompt_choices', 'read_prompt_answer', 'confirm'].map((name) => {
+        const helper = source.match(new RegExp('^' + name + '\\(\\) \\{\\n[\\s\\S]*?^\\}', 'mu'))?.[0];
+        assert.isString(helper); return helper;
+      }).join('\n');
+      const script = `${helpers}\nprompt_error=''; input_ended=false; printf 'KEEP\\n'; if confirm 'Proceed?' ${defaultValue}; then printf 'DONE:true\\n'; else printf 'DONE:false\\n'; fi`;
+      const choices = defaultValue === 'y' ? '[Y/n]' : '[y/N]';
+      const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', script], [
+        { prompt: 'Proceed? ' + choices + ' ', answer: input },
+      ]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, '\x1b[36m' + label + '\x1b[0m');
+      assert.include(promptScreen(result.stdout, 120), 'KEEP\n? Proceed? ' + choices + ' ' + label + '\nDONE:' + String(label === 'Yes'));
+    });
+  }
+  it('confirms empty Enter as Create in the actual backup setup flow without creating a destination', () => {
+    sandbox = createSandbox({ quickstart: true });
+    const installed = runSandbox(sandbox, ['quickstart'], 'no\nno\nlogin\nyes\nyes\nno\nno\n');
+    assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+    const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
+      { prompt: 'GitHub hostname [github.com]: ', answer: '' },
+      { prompt: '[CREATE/reconnect] ', answer: '' },
+      { prompt: 'Repository name [ballin-backups]: ', answer: '' },
+      { prompt: 'Include sensitive sources in future backups? [y/N] ', answer: '' },
+      { prompt: 'Create this private GitHub backup without sensitive sources? [y/N] ', answer: '' },
     ]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '\x1b[36mYes\x1b[0m');
-    assert.include(result.stdout, 'DONE:true');
+    assert.include(result.stdout, '\x1b[36mCreate\x1b[0m');
+    assert.include(promptScreen(result.stdout, 120), '[CREATE/reconnect] Create');
+    assert.include(result.stdout, 'Backup setup cancelled.');
+    assert.isFalse(JSON.parse(fs.readFileSync(path.join(sandbox.remote, 'repository.json'), 'utf8')).exists);
   });
   for (const input of ['', 'yes', 'NO']) {
     it(`discards redirected partial EOF ${JSON.stringify(input)} without selecting the default`, () => {
