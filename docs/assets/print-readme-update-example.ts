@@ -1,4 +1,5 @@
-const { terminalHeading } = require('../../commands/terminalStyle.ts') as {
+const { terminalEmphasis, terminalHeading } = require('../../commands/terminalStyle.ts') as {
+  terminalEmphasis: (text: string, kind: 'bold', stream: { isTTY?: boolean }, env: NodeJS.ProcessEnv) => string;
   terminalHeading: (text: string, stream: { isTTY?: boolean }, env: NodeJS.ProcessEnv) => string;
 };
 
@@ -35,6 +36,8 @@ const example = [
 
 const output = example.map((line) => line.startsWith('==> ')
   ? terminalHeading(line.slice(4), { isTTY: true }, { TERM: 'xterm-256color' })
-  : line);
+  : line === '✎ zshrc'
+    ? terminalEmphasis(line, 'bold', { isTTY: true }, { TERM: 'xterm-256color' })
+    : line);
 
 process.stdout.write(`\x1b[1m$ ballin update\x1b[0m\n${output.join('\n')}\n`);
