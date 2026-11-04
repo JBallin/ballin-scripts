@@ -1,6 +1,7 @@
 # README example image
 
-Regenerate the `ballin update` image from the repository root on macOS with:
+Regenerate the `ballin update` image from the repository root. This requires
+macOS and a Swift toolchain that provides AppKit.
 
 ```sh
 node docs/assets/print-readme-update-example.ts | swift -module-cache-path /private/tmp/ballin-update-example-swift-cache docs/assets/render-readme-update-example.swift
