@@ -26,8 +26,11 @@ The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;
 unexecuted included files still count as uncovered. Use the same wrapper when
 reporting saved profiles, and review the compatibility correction when updating c8.
-Coverage reporting runs with a 6 GiB JavaScript heap limit to merge the full suite's
-profiles. This process-local Node flag does not change test subprocess heap limits.
+The wrapper reads raw profiles one at a time before filtering, then keeps c8's
+standard single merge and branch accounting. Reporting retains its existing
+6 GiB JavaScript heap limit; this process-local flag does not change test
+subprocess heap limits. All-file accounting and coverage thresholds are unchanged.
+CI reports runner memory and the configured reporter heap alongside tool versions.
 
 ## Pull request review
 

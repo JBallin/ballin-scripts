@@ -55,6 +55,7 @@ jobs:
         run: |
           printf 'Runner image: %s (%s)\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
           cat /etc/os-release
+          node --max-old-space-size=6144 -e 'const os = require("node:os"), v8 = require("node:v8"); const mib = value => Math.round(value / 2 ** 20); console.log(JSON.stringify({memoryMiB: {total: mib(os.totalmem()), free: mib(os.freemem()), constrained: mib(process.constrainedMemory()), available: mib(process.availableMemory()), reporterHeapLimit: mib(v8.getHeapStatistics().heap_size_limit)}}));'
           for tool in bash jq /usr/bin/gnutimeout shellcheck zsh docker node npm; do
             command -v "$tool"
             "$tool" --version

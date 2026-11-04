@@ -60,6 +60,9 @@ cp.spawnSync=function(command,args,options){
   if(mode==='poll-signal'||(mode==='post-poll-term'&&polls>1))return {status:null,signal:'SIGTERM'};
   if(mode==='poll-int-status')return {status:130,signal:null};
  }
+ // This suite's Git executable is a Node mock with no included product code.
+ // Avoid hundreds of irrelevant profiles; retain coverage on the actual readers.
+ if(command==='git')options={...options,env:{...(options?.env??process.env),NODE_V8_COVERAGE:''}};
  return originalSpawn.call(this,command,args,options);
 };
 `;

@@ -30,7 +30,7 @@ const vanilla = require.resolve('c8/bin/c8.js');
 
 function report(cell: Cell, corrected: boolean, options: {
   mergeAsync?: boolean; unexecutedFile?: boolean; uncalledFunction?: boolean;
-  mixedPaths?: boolean; checkCoverageFalse?: boolean;
+  mixedPaths?: boolean; splitProfiles?: boolean; normalizationOnly?: boolean; checkCoverageFalse?: boolean;
 } = {}) {
   const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-c8-')));
   try {
@@ -58,7 +58,8 @@ function report(cell: Cell, corrected: boolean, options: {
     const raw = path.join(temp, 'raw');
     const output = path.join(temp, 'report');
     fs.mkdirSync(raw);
-    fs.writeFileSync(path.join(raw, 'coverage-1-1-0.json'), JSON.stringify({ result: scripts }));
+    if (options.splitProfiles) scripts.forEach((script, index) => fs.writeFileSync(path.join(raw, `coverage-${index + 1}-1-0.json`), JSON.stringify({ result: [script] })));
+    else fs.writeFileSync(path.join(raw, 'coverage-1-1-0.json'), JSON.stringify({ result: scripts }));
     const unexecuted = path.join(temp, `unexecuted.${extension}`);
     if (options.unexecutedFile) fs.writeFileSync(unexecuted, bytes);
     const config = path.join(temp, 'c8.json');
@@ -72,7 +73,16 @@ function report(cell: Cell, corrected: boolean, options: {
     }));
     const args = [...(corrected ? ['--max-old-space-size=6144'] : []), corrected ? wrapper : vanilla, 'report', '--config', config,
       '--temp-directory', raw, '--reports-dir', output];
-    if (options.mergeAsync) args.push('--merge-async');
+    if (options.normalizationOnly) {
+      // Baseline: the pre-existing index correction with c8's original array loader.
+      const preload = path.join(temp, 'normalization-only.js');
+      fs.writeFileSync(preload, `const p=Object.getPrototypeOf(require(${JSON.stringify(require.resolve('c8/lib/report.js'))})({}));
+        const original=p._normalizeProcessCov;
+        p._normalizeProcessCov=function(coverage,index){const result=original.call(this,coverage,index);
+          for(const script of result.result)if(require('node:path').isAbsolute(script.url))index.add(script.url);return result;};`);
+      args.unshift('--require', preload);
+    }
+    if (options.mergeAsync !== undefined) args.push('--merge-async=' + options.mergeAsync);
     if (options.checkCoverageFalse) args.push('--check-coverage=false');
     const result = spawnSync(process.execPath, args, {
       cwd: temp, encoding: 'utf8', timeout: 8000,
@@ -121,6 +131,20 @@ describe('c8 absolute-path compatibility', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.summary.functions.pct, 100);
     assert.notExists(result.unexecuted);
+  });
+
+  for (const options of [
+    { mixedPaths: true, splitProfiles: true },
+    { mixedPaths: true, splitProfiles: true, unexecutedFile: true },
+    { splitProfiles: true, uncalledFunction: true },
+  ]) it(`keeps streamed loading and the standard strict gate identical: ${JSON.stringify(options)}`, () => {
+    const synchronous = report(cells[0], false, { ...options, normalizationOnly: true });
+    const incremental = report(cells[0], true, options);
+    assert.equal(incremental.status, synchronous.status);
+    assert.deepEqual(incremental.summary, synchronous.summary);
+    assert.deepEqual(incremental.subject, synchronous.subject);
+    assert.deepEqual(incremental.files, synchronous.files);
+    assert.deepEqual(incremental.unexecuted?.f, synchronous.unexecuted?.f);
   });
 
   it('merges mixed absolute paths and file URLs without adding an empty report', () => {
