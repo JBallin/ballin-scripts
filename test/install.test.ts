@@ -461,7 +461,8 @@ ballin_download() { : > "$2"; }
     const result = runInstall();
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Node.js 24.12.0 or newer is required');
+    assert.include(result.stdout, '\n✗ Node.js 24.12.0 or newer is required');
+    assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install supported Node.js');
     assert.include(result.stdout, 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
@@ -568,7 +569,8 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     const result = runInstall({ env: { FAKE_NODE_VERSION: '24.11.9' } });
 
     assert.equal(result.status, 1);
-    assert.include(result.stdout, 'Node.js 24.12.0 or newer is required');
+    assert.include(result.stdout, '\n✗ Node.js 24.12.0 or newer is required');
+    assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'existing installation method');
     assert.include(result.stdout, 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
@@ -666,6 +668,8 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       const result = runInstall({ env });
       assert.equal(result.status, 1);
       assert.include(result.stdout, message);
+      assert.notInclude(result.stdout, 'ERROR:');
+      if (current) assert.include(result.stdout, '\n✗ Unable to update');
       assert.equal(result.stdout.split(troubleshootingUrl).length - 1, 1);
       assert.isBelow(result.stdout.indexOf(message), result.stdout.indexOf(troubleshootingUrl));
       assert.equal(result.stderr, env.FAKE_GIT_ERROR ? `${env.FAKE_GIT_ERROR}\n` : env.FAKE_REPO_UPDATE_ERROR ? `${env.FAKE_REPO_UPDATE_ERROR}\n` : '');

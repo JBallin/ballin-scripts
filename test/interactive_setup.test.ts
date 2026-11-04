@@ -56,7 +56,7 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true });
     const result = runInteractiveSetup(sandbox, publicCommand('docs/quickstart.md'), [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
-      { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'no' },
+      { prompt: 'Proceed? [y/N] ', answer: 'no' },
       { prompt: 'GitHub hostname [github.com]: ', answer: '' },
       startup(shell),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
@@ -90,7 +90,7 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true });
     const result = runInteractiveSetup(sandbox, [sandbox.quickstartEntry], [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
-      { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'y' },
+      { prompt: 'Proceed? [y/N] ', answer: 'y' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       startup('bash'),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
@@ -163,7 +163,7 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true });
     const result = runInteractiveSetup(sandbox, [sandbox.quickstartEntry], [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
-      { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'n' }, startup('bash'),
+      { prompt: 'Proceed? [y/N] ', answer: 'n' }, startup('bash'),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       { prompt: 'Enable tab completion in ', answer: 'n' },

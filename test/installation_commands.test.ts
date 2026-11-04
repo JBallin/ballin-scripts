@@ -64,7 +64,8 @@ exit ${status}
           assert.equal(result.status, 2, result.stderr);
           assert.equal(result.stdout, '');
           assert.include(result.stderr, 'Fixture curl failure');
-          assert.include(result.stderr, 'syntax error');
+          // Bash reports unmatched quotes as unexpected EOF on some platforms.
+          assert.match(result.stderr, /syntax error|unexpected EOF/u);
         });
       }
       it(`refuses a malformed ${script} body before executing in ${shell}`, () => {

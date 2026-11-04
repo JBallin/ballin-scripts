@@ -289,7 +289,7 @@ repo_existed=true
 setup_mode='refresh'
 
 print_stale_checkout_guidance() {
-  printf '\n'; error_icon; printf ' ERROR: Unable to update %s before setup.\n' "$(display_path "$repo_dir")"
+  printf '\n'; error_icon; printf ' Unable to update %s before setup.\n' "$(display_path "$repo_dir")"
   printf 'Inspect %s and preserve local work before retrying. Ballin will not stash or reset it.\n' "$(display_path "$repo_dir")"
   documentation_pointer 'Troubleshooting' "$docs_url#health-and-recovery"
 }
@@ -345,7 +345,7 @@ if [[ "$prerequisite_status" != 0 ]]; then
 fi
 
 if [ ! -x "$(command -v node)" ]; then
-  printf '\n'; error_icon; printf ' ERROR: Node.js %s or newer is required.\n' "$required_node_version"
+  printf '\n'; error_icon; printf ' Node.js %s or newer is required.\n' "$required_node_version"
   printf '\nInstall supported Node.js, then %s.\n' "$retry_guidance"
   documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
   exit 1
@@ -360,7 +360,7 @@ else
   " 2>/dev/null) || { prerequisite_status=$?; node_check=''; }
   [[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
   if [ "$node_check" != 'true' ]; then
-    printf '\n'; error_icon; printf ' ERROR: Node.js %s or newer is required.' "$required_node_version"
+    printf '\n'; error_icon; printf ' Node.js %s or newer is required.' "$required_node_version"
     if [[ "$node_check" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
       printf ' Detected Node.js %s.' "$node_check"
     fi

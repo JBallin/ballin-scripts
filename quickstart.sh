@@ -995,18 +995,14 @@ plan_nvm() {
   use_nvm=false; nvm_profile_needed=false
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
-  printf 'NVM can install and maintain latest LTS Node.\n'
   if [[ "$nvm_loadable" != true ]]; then
-    if [[ -n "$brew_tool" ]]; then printf 'Install NVM using Homebrew.\n'
-    else printf 'Install NVM v0.40.8 using its official installer.\n'; fi
+    if [[ -n "$brew_tool" ]]; then printf '  - Install NVM using Homebrew.\n'
+    else printf '  - Install NVM v0.40.8 using its official installer.\n'; fi
   fi
-  printf 'Install latest LTS Node.\n'
-  if "$nvm_default_exists"; then printf 'The existing NVM default will be changed to follow latest LTS.\n'; fi
-  printf 'This activates LTS for this setup and selects the NVM default.\n'
-  printf 'Future terminals need the shell startup setup offered next.\n'
-  printf 'Existing Node installations are preserved. Global npm packages may need\nreinstalling for the selected version.\n'
-  printf "NVM's installer won't change your shell startup files. Ballin will ask\nseparately before making those changes.\n"
-  if ! confirm 'Use NVM and latest LTS Node?'; then
+  printf '  - Install latest LTS Node.js.\n'
+  printf "Latest LTS will be active for this setup and become NVM's default.\n"
+  printf 'Existing Node installations are preserved; global npm packages may need\nreinstalling. Future terminals need shell setup; startup files change only\nwith your separate permission.\n'
+  if ! confirm 'Proceed?'; then
     if [[ "$compatible" != true ]]; then
       "$input_ended" && fail 'No answer received. Node.js setup stopped.'
       fail 'A compatible Node.js is required. Activate or install one, then rerun Quickstart.'$'\ni Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
@@ -1246,7 +1242,7 @@ check_existing_path() {
 }
 
 configure_path() {
-  phase 'Setting up shell startup'
+  phase 'Setting up Ballin in your shell'
   local command_escaped line choice candidate original default_directory login_profile
   command_escaped=${command_path//\'/\'\\\'\'}
   line="export PATH=\$PATH:'$command_escaped'"
