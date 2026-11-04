@@ -47,6 +47,43 @@ example shows a fully configured run.
 
 ![Terminal output from `ballin update`, with blue arrows and bold headings.](docs/assets/readme-update-example.png)
 
+<details>
+<summary>Text version</summary>
+
+```text
+$ ballin update
+==> Updating Homebrew...
+...
+==> Updating Homebrew packages
+...
+==> Cleaning up Homebrew packages
+...
+==> Checking Homebrew installation
+...
+==> Updating Node.js LTS
+...
+==> Updating global npm packages
+...
+==> Updating App Store apps
+...
+==> Installing macOS updates
+...
+==> Updating Ballin
+...
+==> Checking Ballin readiness
+...
+==> Backing up development environment
+Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
+✔ ballin_config
+✔ bash_completions
+✔ Brewfile
+...
+✎ zshrc
+View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
+```
+
+</details>
+
 ## Using saved state on another Mac
 
 Saved snapshots of your tools and configuration give you a reference when
