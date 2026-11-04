@@ -43,12 +43,12 @@ exit ${status}
           return result;
         } finally { fs.rmSync(root, { recursive: true, force: true }); }
       };
-      it(`preserves curl failure before executing the downloaded command for ${script} in ${shell}`, () => {
-        assert.equal(command(guide), `ballin_script=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/${script}) && /bin/bash -c "$ballin_script"`);
+      it(`uses the familiar short command with explicit pre-release main selection for ${script} in ${shell}`, () => {
+        assert.equal(command(guide), `BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/${script})"`);
       });
-      it(`propagates curl's empty download error for ${script} in ${shell}`, () => {
+      it(`accepts the short command's zero exit for an empty failed download for ${script} in ${shell}`, () => {
         const result = runDownloaded('', 22);
-        assert.equal(result.status, 22, result.stderr);
+        assert.equal(result.status, 0, result.stderr);
         assert.equal(result.stdout, '');
         assert.include(result.stderr, 'Fixture curl failure');
       });
@@ -61,9 +61,10 @@ exit ${status}
               : cut === 'quoted value' ? body.indexOf("required_node_version='") + "required_node_version='".length + 1
                 : body.lastIndexOf('}');
           const result = runDownloaded(body.slice(0, end), 22);
-          assert.equal(result.status, 22, result.stderr);
+          assert.equal(result.status, 2, result.stderr);
           assert.equal(result.stdout, '');
           assert.include(result.stderr, 'Fixture curl failure');
+          assert.include(result.stderr, 'syntax error');
         });
       }
       it(`refuses a malformed ${script} body before executing in ${shell}`, () => {
@@ -74,10 +75,10 @@ exit ${status}
         assert.equal(result.stdout, '');
         assert.include(result.stderr, 'syntax error');
       });
-      it(`does not execute a complete ${script} body after curl failure in ${shell}`, () => {
-        const result = runDownloaded('{ printf "complete-body-ran\\n"; }\n', 22);
-        assert.equal(result.status, 22, result.stderr);
-        assert.equal(result.stdout, '');
+      it(`can execute a complete ${script} body despite curl failure in ${shell}`, () => {
+        const result = runDownloaded('{ printf "complete-body-ran:%s\\n" "$BALLIN_UPDATE_TRACK"; }\n', 22);
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout, 'complete-body-ran:main\n');
         assert.include(result.stderr, 'Fixture curl failure');
       });
       it(`retains the script's failure status for ${script} in ${shell}`, () => {

@@ -2536,7 +2536,10 @@ describe('repository backup lifecycle', function() {
   });
   it('rejects invalid names, wrong owners, and invalid recovered preference snapshots before confirmation', () => {
     unconfigured(); assert.equal(run(['setup', 'owner/repo']).status, 1); assert.equal(state().requests.length, 0);
-    assert.equal(run(['setup'], '\nreconnect\nwrong/name\n').status, 1);
+    const invalidName = run(['setup'], '\nreconnect\nwrong/name\n');
+    assert.equal(invalidName.status, 0);
+    assert.include(invalidName.stdout, 'Enter a repository name using letters, digits, dots, hyphens, or underscores.');
+    assert.include(invalidName.stdout, 'Backup setup cancelled.');
     const value = state(); value.faults.user = { type: 'Organization' }; saveState(value);
     assert.equal(run(['setup'], '\nreconnect\n\n').status, 1);
     for (const content of ['invalid JSON', '[]']) {
@@ -2966,6 +2969,26 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, 'Enter Create or Reconnect');
     assert.equal(result.stdout.split('[CREATE/reconnect]').length - 1, 2);
     assert.include(result.stdout, 'Repository name'); assert.isEmpty(mutations()); assert.isFalse(state().exists);
+  });
+
+  it('reprompts invalid interactive host and repository names before confirmation', () => {
+    unconfigured(); const value = state(); value.exists = false; saveState(value);
+    const before = config();
+    const result = run(['setup'], 'bad/host\ngithub.com\ncreate\nwrong/name\nmy-backup\nn\nn\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter a GitHub hostname only');
+    assert.include(result.stdout, 'Enter a repository name using letters, digits, dots, hyphens, or underscores.');
+    assert.equal(result.stdout.split('GitHub hostname [github.com]:').length - 1, 2);
+    assert.equal(result.stdout.split('Repository name').length - 1, 2);
+    assert.include(compact(result.stdout), 'Backup setup cancelled. Destination unchanged; confirmed local preferences remain saved.');
+    assert.include(result.stdout, '\n\nBackup setup cancelled.');
+    const outcome = result.stdout.split('Backup setup cancelled.')[1].split('\nRun ')[0];
+    assert.notInclude(outcome, '\n\n');
+    assert.equal(outcome.replaceAll('\n', ' '), ' Destination unchanged; confirmed local preferences remain saved.');
+    assert.include(result.stdout, '\nRun `ballin backup setup` when you’re ready.\n');
+    assert.notInclude(result.stdout, 'Ctrl-D');
+    assert.deepEqual(config().backup.repository, before.backup.repository);
+    assert.isEmpty(mutations());
   });
 
   it('lets an interactive create retry a typed collision without reconnecting', () => {

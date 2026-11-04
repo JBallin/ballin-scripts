@@ -1,20 +1,21 @@
 {
   "name": "ballin-scripts",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "scripts": {
     "lint": "eslint .",
-    "generate:completions": "node -e \"require('./commands/completions.ts').writeCompletionAssets('completions')\"",
-    "analytics:report": "node analytics-worker/report.ts",
     "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "typecheck:analytics-worker": "node node_modules/@typescript/native/bin/tsc --noEmit --strict --target ES2023 --module ESNext --lib ES2023,WebWorker --ignoreConfig analytics-worker/src/index.ts",
+    "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run release:check && npm run test:coverage",
     "test:unit": "mocha --parallel",
+    "test:coverage": "node --max-old-space-size=6144 test/coverage.ts npm run test:unit",
     "test:claude-preflight": "mocha test/ci/claude_preflight.test.ts",
     "sandbox": "node test/qa_sandbox.ts",
-    "test:coverage": "npm run check:release && node --max-old-space-size=6144 test/coverage.ts npm run test:unit",
-    "test": "npm run lint && npm run typecheck && npm run typecheck:analytics-worker && npm run test:coverage",
-    "prepare-release": "node scripts/prepare-release.cjs",
-    "check:release": "node scripts/prepare-release.cjs --check"
+    "generate:completions": "node -e \"require('./commands/completions.ts').writeCompletionAssets('completions')\"",
+    "analytics:report": "node analytics-worker/report.ts",
+    "release:prepare": "node scripts/prepare-release.cjs",
+    "release:check": "node scripts/prepare-release.cjs --check"
   },
   "engines": {
     "node": ">=24.12"
@@ -71,5 +72,8 @@
   "overrides": {
     "diff": "^8.0.3",
     "serialize-javascript": "^7.0.5"
+  },
+  "ballin": {
+    "installerProtocol": 1
   }
 }

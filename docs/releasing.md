@@ -3,25 +3,29 @@
 *Maintainer guide to preparing and approving a release.*
 
 GitHub tags and published GitHub Releases identify releases and their notes.
-The private npm package has no release version. `release.json` records preparation
-intent; it is not proof that a checkout is a published release.
+The private package's `package.json.version` is the canonical release version;
+`package.json.ballin.installerProtocol` records bootstrap compatibility. Neither
+field proves that a checkout is a published release. Release identity still
+requires the verified published GitHub Release and its exact tag and commit.
 
 ## Prepare
 
-Run `npm run prepare-release -- 1.0.0 stable` for the intended version and policy.
-The command updates shared metadata, the data-only installer contract, embedded
-bootstrap blocks in both entrypoints, and known install URLs in README,
-Quickstart, and installation guidance. It produces an ordinary Git diff and
-never creates tags, publishes, merges, or deploys. Run `npm run check:release`
-and review the complete diff and all documented installation commands. The
-minimum Node version derives from `package.json` engines. Bootstrap protocol 1
-supports only revisions carrying its contract; older revisions are unsupported.
+Run `npm run release:prepare -- 1.0.0` for the intended version. The command updates
+package and lockfile metadata, embedded bootstrap blocks in both entrypoints,
+and known install URLs in README, Quickstart, and installation guidance. It
+produces an ordinary Git diff and never creates tags, publishes, merges, or
+deploys. Run `npm run release:check` and review the complete diff and all documented
+installation commands. The minimum Node version derives only from `package.json`
+engines. Bootstrap protocol 1 supports only revisions carrying compatible package
+metadata; older revisions are unsupported.
 
-The version-support implementation retains `main` as its deliberate temporary
-default. Stable activation is a separate reviewed change. Before the first tag
-exists, a versioned raw URL fails in curl before any script runs. Running scripts
-also refuse missing/unpublished releases before setup mutations. Neither case
-falls back to main.
+Stable is the permanent installer default. Before the first release, the public
+commands temporarily use the main script URL and explicitly set
+`BALLIN_UPDATE_TRACK=main` for Bash. Development installations must opt into main;
+there is no stable-to-main fallback. Version-only release preparation replaces
+those temporary commands with the intended versioned URL and removes the main
+override. That URL is not usable until the approved release is published. Running
+scripts refuse missing or unpublished releases before setup mutations.
 
 Submit the preparation diff through a separately authorized PR and normal review.
 After merging, validate the exact merged SHA, including disposable macOS VM
@@ -34,7 +38,7 @@ The matching client and Worker accept numeric release versions, `development`,
 and `unknown` in the existing text field. No data reset or D1 migration is needed.
 Relevant changes merged to main trigger the existing production Worker deployment
 workflow. Account for that deployment when approving a merge; verify the matching
-Worker before normal delivery of the client, especially while main is the default.
+Worker before normal delivery of the client, including while development installs explicitly track main.
 A code review or release-preparation command does not itself authorize deployment.
 
 ## Approve and publish

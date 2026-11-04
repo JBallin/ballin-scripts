@@ -85,13 +85,14 @@ describe('plain prompt input contracts', function() {
     assert.include(screen, 'KEEP? Proceed? [y/N] YesDONE');
     assert.notInclude(screen, '[y/N] YYes');
   });
-  for (const [input, label] of [['login', 'Login'], ['bashrc', 'Bashrc'], ['', 'Skip'], ['LOGIN', undefined], [' login ', undefined], ['none', undefined]]) {
+  for (const [input, label] of [['login', 'login'], ['bashrc', 'bashrc'], ['', 'Skip'], ['LOGIN', undefined], [' login ', undefined], ['none', undefined]]) {
     it(`preserves Bash startup selection semantics for ${JSON.stringify(input)}`, () => {
       sandbox = createSandbox();
       const result = runInteractiveSetup(sandbox, [process.execPath, '-e',
         `const h=require(process.argv[1]); const c=require(process.argv[2]); const target=c.completionTarget({HOME:process.env.HOME,SHELL:'/bin/bash'},h.readPromptLine); console.log('TARGET:'+Boolean(target));`,
         path.resolve(__dirname, '../commands/commandHelpers.ts'), path.resolve(__dirname, '../commands/completion_setup.ts')],
-      [{ prompt: '[login/bashrc; Enter to skip] ', answer: input }]);
+      [{ prompt: '[login/bashrc; Enter to skip] ', answer: input },
+        ...(!label ? [{ prompt: 'Enter login or bashrc.', answer: '\x04', raw: true }] : [])]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'TARGET:' + String(input === 'login' || input === 'bashrc'));
       if (label) assert.include(result.stdout, '\x1b[36m' + label + '\x1b[0m');

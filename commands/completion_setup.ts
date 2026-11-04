@@ -32,6 +32,7 @@ const inspectProfile = (profile: string): void => {
 const completionTarget = (
   env: NodeJS.ProcessEnv,
   prompt: (text: string, choiceLabel?: (text: string) => string | undefined) => { text: string; eof: boolean },
+  write: (text: string) => void = (text) => writeStdoutLine(terminalProse(text)),
 ): CompletionTarget | null => {
   const home = env.HOME;
   if (!home || !path.isAbsolute(home) || !env.SHELL || !path.isAbsolute(env.SHELL)) return null;
@@ -48,26 +49,38 @@ const completionTarget = (
   } else if (shell === 'zsh') {
     const suggested = env.ZDOTDIR && path.isAbsolute(env.ZDOTDIR) && !/[\r\n\0]/u.test(env.ZDOTDIR) ? env.ZDOTDIR : home;
     const defaultLabel = suggested === home ? 'home (~), an absolute directory' : `${terminalPath(suggested, home)}, another absolute directory`;
-    const choice = prompt(`Zsh settings directory [Enter for ${defaultLabel}, or skip]: `);
-    if (choice.eof || choice.text === 'skip') return null;
-    const directory = choice.text === '' ? suggested : choice.text === 'home' ? home : choice.text;
-    if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) return null;
-    profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
+    while (true) {
+      const choice = prompt(`Zsh settings directory [Enter for ${defaultLabel}, or skip]: `);
+      if (choice.eof || choice.text === 'skip') return null;
+      const directory = choice.text === '' ? suggested : choice.text === 'home' ? home : choice.text;
+      if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) {
+        write('Enter an absolute directory.');
+        continue;
+      }
+      profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
+      break;
+    }
   } else if (shell === 'bash') {
-    const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', (text) => text === 'login' ? 'Login' : text === 'bashrc' ? 'Bashrc' : text === '' ? 'Skip' : undefined);
-    if (choice.eof) return null;
-    if (choice.text === 'bashrc') profile = path.join(home, '.bashrc');
-    else if (choice.text === 'login') {
-      // Bash reads only the first existing login startup file.
-      const existing = ['.bash_profile', '.bash_login', '.profile'].find((name) => {
-        try { fs.lstatSync(path.join(home, name)); return true; } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          return false;
-        }
-      });
-      if (existing === '.profile') return null;
-      profile = path.join(home, existing ?? '.bash_profile');
-    } else return null;
+    while (true) {
+      const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', (text) => text === 'login' ? 'login' : text === 'bashrc' ? 'bashrc' : text === '' ? 'Skip' : undefined);
+      if (choice.eof || choice.text === '') return null;
+      if (choice.text === 'bashrc') profile = path.join(home, '.bashrc');
+      else if (choice.text === 'login') {
+        // Bash reads only the first existing login startup file.
+        const existing = ['.bash_profile', '.bash_login', '.profile'].find((name) => {
+          try { fs.lstatSync(path.join(home, name)); return true; } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            return false;
+          }
+        });
+        if (existing === '.profile') return null;
+        profile = path.join(home, existing ?? '.bash_profile');
+      } else {
+        write('Enter login or bashrc.');
+        continue;
+      }
+      break;
+    }
   } else return null;
   inspectProfile(profile);
   return { shell, profile, line: activationLine(shell) };
@@ -143,7 +156,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       firstQuestion = false;
       return prompt(question, choiceLabel);
     };
-    const target = completionTarget(env, completionPrompt);
+    const target = completionTarget(env, completionPrompt, write);
     if (!target) { fallback(true); return; }
     // Inspect only the selected file; a conventional location is not activation proof.
     try {

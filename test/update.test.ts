@@ -1416,7 +1416,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Updating Node.js LTS');
-    assert.include(result.stderr, 'unable to load nvm');
+    assert.include(result.stderr, '✗ Unable to update Node.js LTS: unable to load nvm.');
     assert.include(result.stderr, 'Set `NVM_DIR` to your nvm installation or disable this update with: `ballin config set update.nvm false`');
     assert.include(result.stderr, 'ballin config set update.nvm false');
     assert.isFalse(fs.existsSync(logPath));
@@ -1472,7 +1472,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stderr,
-      'Warning: using bundled defaults for missing settings: update.cleanup, update.nvm, update.npm, update.softwareupdate, update.selfUpdate, update.backup.\n',
+      '! Using bundled defaults for missing settings: update.cleanup, update.nvm,\nupdate.npm, update.softwareupdate, update.selfUpdate, update.backup.\n',
     );
     assert.deepEqual(commandLog(), [
       'softwareupdate|,|-ia',
@@ -1498,7 +1498,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 0);
     assert.equal(
       result.stderr,
-      'Warning: using bundled defaults for missing settings: update.backup.\n',
+      '! Using bundled defaults for missing settings: update.backup.\n',
     );
     assert.deepEqual(commandLog(), []);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
@@ -1519,7 +1519,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     const result = spawnUpdate();
 
     assert.equal(result.status, 127);
-    assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
+    assert.include(result.stderr, 'Using bundled defaults for missing settings: update.selfUpdate.');
     assert.include(result.stderr, 'ballin: command not found');
     assert.equal(result.stdout, '\n==> Updating Ballin\n');
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
@@ -1541,7 +1541,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     const result = spawnUpdate();
 
     assert.equal(result.status, 23);
-    assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
+    assert.include(result.stderr, 'Using bundled defaults for missing settings: update.selfUpdate.');
     assert.deepEqual(commandLog(), ['ballin|,|self-update']);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
   });
@@ -1570,6 +1570,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 
       assert.equal(result.status, 1);
       assert.include(result.stderr, diagnostic);
+      assert.equal(result.stderr.split('✗').length - 1, 1);
       if (name !== 'nvm') {
         assert.equal(result.stdout, '\n==> Backing up development environment\n');
       }
@@ -1604,12 +1605,12 @@ exit 17
     writeConfig([]);
     const arrayResult = spawnUpdate();
     assert.equal(arrayResult.status, 1);
-    assert.include(arrayResult.stderr, 'Ballin config must contain a JSON object.');
+    assert.include(arrayResult.stderr.replace(/\s+/gu, ' '), '✗ Unable to resolve update configuration: Ballin config must contain a JSON object.');
 
     writeConfig({ update: null });
     const updateResult = spawnUpdate();
     assert.equal(updateResult.status, 1);
-    assert.include(updateResult.stderr, 'Ballin config update section must contain a JSON object.');
+    assert.include(updateResult.stderr.replace(/\s+/gu, ' '), '✗ Unable to resolve update configuration: Ballin config update section must contain a JSON object.');
     assert.deepEqual(commandLog(), []);
   });
 
@@ -1648,7 +1649,7 @@ exit 17
     const result = spawnUpdate();
 
     assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Ballin config update.cleanup must be true or false.');
+    assert.include(result.stderr.replace(/\s+/gu, ' '), '✗ Unable to resolve update configuration: Ballin config update.cleanup must be true or false.');
     assert.deepEqual(commandLog(), []);
   });
 

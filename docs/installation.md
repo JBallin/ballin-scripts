@@ -80,11 +80,12 @@ the default selection; the installed command does not currently accept release,
 SHA or branch selectors. The selectors below belong to initial installation and
 isolated candidate testing.
 
-Initial installation currently follows `main` while release delivery is prepared. Both
-entrypoints accept one optional selector after the script's argument-zero name:
+Stable is the installer default. While the first release is being prepared,
+the public commands explicitly select `main` with `BALLIN_UPDATE_TRACK=main`.
+Both entrypoints accept one optional selector after the script's argument-zero name:
 
 ```shell
-ballin_script=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh) && /bin/bash -c "$ballin_script" ballin-install --sha FULL_COMMIT_SHA
+BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)" ballin-install --sha FULL_COMMIT_SHA
 ```
 
 Use `--version v1.0.0` for a published stable release, `--sha` for a full commit
@@ -93,8 +94,9 @@ installed checkout use that exact commit. Only revisions with the supported
 installer contract can be selected. An absent release, unsupported revision, or
 network error stops installation; none causes a fallback to main.
 
-A versioned release entrypoint defaults to its embedded version after stable
-activation. The normal command will then be updated with each release. Release
+A versioned release entrypoint defaults to its embedded version. Release
+preparation removes the temporary main override and updates the public command
+for the intended release; publication is separately approved. Release
 notes live in [GitHub Releases](https://github.com/JBallin/ballin-scripts/releases).
 
 For developer main tracking, set `export BALLIN_UPDATE_TRACK=main` in your shell.

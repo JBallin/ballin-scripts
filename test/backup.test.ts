@@ -1519,6 +1519,7 @@ printf '%*s\\n' 1048577 '' >&2
         const result = observedRun(prepare());
         assert.isAbove(result.status ?? 0, 0, result.stdout + result.stderr);
         assert.include(result.stderr.toLowerCase(), message.toLowerCase());
+        if (name === 'missing HOME') assert.include(result.stderr, '✗ ballin backup: HOME is not set;');
         assertOutcome('failure', 'failure', name === 'authentication' ? 'authentication'
           : ['reconciliation', 'publication'].includes(name) ? 'reconciliation'
             : ['missing destination configuration', 'missing HOME'].includes(name) ? 'local_state' : 'unknown');

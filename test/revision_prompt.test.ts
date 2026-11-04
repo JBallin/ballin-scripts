@@ -22,6 +22,23 @@ describe('revision confirmation in a real terminal', function() {
       assert.equal(receipt.kind, answer === 'yes' ? 'sha' : 'branch');
     } finally { cleanupSandbox(sandbox.root); }
   });
+  it('reprompts a completed invalid answer and accepts one subsequent Enter in a real terminal', () => {
+    const sandbox = createSandbox({ quickstart: true });
+    try {
+      const installed = runSandbox(sandbox, ['quickstart'], 'no\nno\nlogin\nyes\nyes\nno\nno\n');
+      assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+      const sha = 'a'.repeat(40);
+      const result = runInteractiveSetup(sandbox, [process.execPath, path.resolve(__dirname, '../commands/repo_update.ts'), 'apply', sandbox.repo, 'sha', sha, sha, '24.12.0', '-', 'install', 'false'], [
+        { prompt: 'Change the installed revision/track? [y/N]', answer: 'maybe' },
+        { prompt: 'Please enter yes or no.', answer: 'Y' },
+      ]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Please enter yes or no.');
+      assert.include(result.stdout, '\x1b[36mYes\x1b[0m');
+      assert.notInclude(result.stdout, '\x1b[36mmaybe');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(sandbox.repo, '.git/ballin-install.json'), 'utf8')).kind, 'sha');
+    } finally { cleanupSandbox(sandbox.root); }
+  });
   for (const mode of ['dumb', 'NO_COLOR']) it(`keeps standalone helper consent plain for ${mode}`, () => {
     const sandbox = createSandbox({ quickstart: true });
     try {

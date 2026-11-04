@@ -142,21 +142,26 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
   const rendered = styled
     ? '\x1b[0;32m?\x1b[0m Change the installed revision/track? [y/\x1b[1mN\x1b[0m] '
     : plainPrompt;
-  const layout = selectionPromptLayout();
-  process.stdout.write(rendered);
-  const byte = Buffer.alloc(1); let answer = ''; let complete = false; let overflow = false;
-  while (fs.readSync(0, byte, 0, 1, null)) { if (byte[0] === 10) { complete = true; break; } if (answer.length < 32) answer += byte.toString(); else overflow = true; }
-  if (layout?.echo === false) process.stdout.write('\n');
-  const normalized = answer.trim().toLowerCase();
-  const label = /^(?:y|yes)$/u.test(normalized) ? 'Yes' : /^(?:n|no)?$/u.test(normalized) ? 'No' : undefined;
-  if (complete && !overflow && label && layout && /^[\x20-\x7e]*$/u.test(answer)) {
-    const current = selectionPromptLayout();
-    const rows = Math.max(1, Math.ceil((plainPrompt.length + (layout.echo ? answer.length : 0)) / layout.columns));
-    if (current && current.rows === layout.rows && current.columns === layout.columns && current.echo === layout.echo && rows < layout.rows) {
-      process.stdout.write(`\x1b[${rows}A\r\x1b[J${rendered}\x1b[36m${label}\x1b[0m\n`);
+  while (true) {
+    const layout = selectionPromptLayout();
+    process.stdout.write(rendered);
+    const byte = Buffer.alloc(1); let answer = ''; let complete = false; let overflow = false;
+    while (fs.readSync(0, byte, 0, 1, null)) { if (byte[0] === 10) { complete = true; break; } if (answer.length < 32) answer += byte.toString(); else overflow = true; }
+    if (layout?.echo === false) process.stdout.write('\n');
+    const normalized = answer.trim().toLowerCase();
+    const label = /^(?:y|yes)$/u.test(normalized) ? 'Yes' : /^(?:n|no)?$/u.test(normalized) ? 'No' : undefined;
+    if (complete && !overflow && label && layout && /^[\x20-\x7e]*$/u.test(answer)) {
+      const current = selectionPromptLayout();
+      const rows = Math.max(1, Math.ceil((plainPrompt.length + (layout.echo ? answer.length : 0)) / layout.columns));
+      if (current && current.rows === layout.rows && current.columns === layout.columns && current.echo === layout.echo && rows < layout.rows) {
+        process.stdout.write(`\x1b[${rows}A\r\x1b[J${rendered}\x1b[36m${label}\x1b[0m\n`);
+      }
     }
+    if (!complete) throw new RevisionChangeCancelled('Revision change cancelled. The installed checkout is unchanged.');
+    if (overflow || !label) { process.stdout.write('Please enter yes or no.\n'); continue; }
+    if (label === 'No') throw new RevisionChangeCancelled('Revision change cancelled. The installed checkout is unchanged.');
+    return;
   }
-  if (!complete || overflow || !/^y(es)?$/iu.test(answer.trim())) throw new RevisionChangeCancelled('Revision change cancelled. The installed checkout is unchanged.');
 };
 const applySelection = (root: string, selection: Selection, mode: string, fresh = false): void => {
   validateSelection(selection); checkRuntime(selection.minimumNode);
@@ -165,9 +170,11 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
   // Fetch the immutable object, never a moving branch or a force-updated tag.
   git(root, ['fetch', '--no-tags', repository, selection.sha]);
   if (git(root, ['rev-parse', '--verify', 'FETCH_HEAD^{commit}']) !== selection.sha) throw new Error('Fetched revision does not match selection.');
-  const contract = JSON.parse(git(root, ['show', `${selection.sha}:installer-contract.json`]));
-  if (contract.protocol !== 1 || contract.minimumNode !== selection.minimumNode) throw new Error('Selected installer contract changed or is unsupported.');
-  checkRuntime(contract.minimumNode);
+  const contract = JSON.parse(git(root, ['show', `${selection.sha}:package.json`]));
+  const engine = typeof contract.engines?.node === 'string' ? /^>=(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})(?:\.(0|[1-9]\d{0,2}))?$/u.exec(contract.engines.node) : null;
+  const minimumNode = engine ? `${engine[1]}.${engine[2]}.${engine[3] ?? '0'}` : undefined;
+  if (contract.ballin?.installerProtocol !== 1 || minimumNode !== selection.minimumNode) throw new Error('Selected installer contract changed or is unsupported.');
+  checkRuntime(minimumNode);
   for (const entry of ['install.sh', 'quickstart.sh', 'commands/repo_update.ts', 'commands/install_setup.ts', 'bin/ballin', 'package.json']) {
     const treeEntry = git(root, ['ls-tree', selection.sha, '--', entry]);
     if (!/^(100644|100755) blob [a-f0-9]{40}\t/u.test(treeEntry)) throw new Error(`Selected revision lacks a supported installer file: ${entry}. The checkout has not changed.`);

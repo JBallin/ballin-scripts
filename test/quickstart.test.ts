@@ -404,6 +404,11 @@ esac
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
       assert.equal(result.stdout.includes('Homebrew shows manual setup instructions above.'), route === 'homebrew');
+      assert.include(result.stdout, '==> Checking required tools\nNVM can install and maintain latest LTS Node.');
+      assert.include(result.stdout, route === 'homebrew' ? 'Install NVM using Homebrew.' : 'Install NVM v0.40.8 using its official installer.');
+      assert.include(result.stdout, "NVM's installer won't change your shell startup files. Ballin will ask\nseparately before making those changes.");
+      assert.notInclude(result.stdout, '$ nvm install --lts\n$ nvm');
+      assert.equal((result.stdout.match(route === 'homebrew' ? /^\$ brew install --formula nvm$/gmu : /^\$ PROFILE=\/dev\/null NVM_DIR=/gmu) ?? []).length, 1);
       if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
       else assert.include(readLog(), '/nvm-sh/nvm/v0.40.8/install.sh');
     });
@@ -571,7 +576,7 @@ esac
     assert.notInclude(readLog(), 'nvm:install:');
     const switched = run('y\ny\ny\n', { FAKE_NVM_ANSWER: 'y\n', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(switched.status, 0, switched.stdout + switched.stderr);
-    assert.include(switched.stdout, 'Older Node installations and versions remain'); assert.include(readLog(), 'nvm:install:--lts');
+    assert.include(switched.stdout, 'Existing Node installations are preserved.'); assert.include(readLog(), 'nvm:install:--lts');
     assert.isTrue(fs.existsSync(path.join(tools, 'node')));
   });
   for (const linked of ['NVM directory', 'alias directory', 'default alias', 'hard-linked default alias']) {
@@ -1116,7 +1121,8 @@ printf '0\\n'
         fs.writeFileSync(executable, `#!/bin/bash\n${tool === 'gh-help' ? 'if [[ "$*" == --version ]]; then exit 0; fi\n' : ''}kill -${signal} $$\n`, { mode: 0o755 });
         const result = run('yes\nyes\n');
         assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
-        assert.notInclude(result.stdout, 'Install ');
+        assert.notInclude(result.stdout, 'Proceed with installation?');
+        assert.notInclude(result.stdout, '==> Setting up NVM and LTS Node');
         assert.notInclude(result.stderr, 'needs manual attention');
         assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
         for (const forbidden of ['auth status --active', 'auth login', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
@@ -1675,7 +1681,7 @@ printf '0\\n'
         `declare -F ${name} >/dev/null && printf 'parent-function-preserved\\n' >> "$FAKE_COMMAND_LOG"`,
         'exit "$status"',
       ].join('\n')], {
-        encoding: 'utf8', input: 'y\n\nhome\ny\nn\n', cwd: home, timeout: 12000,
+        encoding: 'utf8', input: 'y\n\n\nhome\ny\nn\n', cwd: home, timeout: 12000,
         env: testChildEnvironment({ HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
           FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source, FAKE_SYSTEM_NODE: systemNode,
           TEST_NODE_RUNTIME: process.execPath, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') }),
@@ -2219,7 +2225,7 @@ main
     });
     child.stderr.on('data', (data: Buffer) => { output += data.toString(); });
     const timeout = setTimeout(() => child.kill('SIGKILL'), 8000);
-    child.stdin.write('y\n\nhome\ny\ny\n');
+    child.stdin.write('y\n\n\nhome\ny\ny\n');
     try {
       const status = await new Promise((resolve, reject) => {
         child.once('error', reject);
@@ -2527,9 +2533,9 @@ https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-in
           FAKE_QUICK_DOWNLOAD: ['empty', 'partial', 'complete-error'].includes(failure) ? failure : 'success',
           FAKE_QUICKSTART_EXIT: failure === 'helper' ? '7' : '0',
         });
-        const expected = ['empty', 'partial', 'complete-error'].includes(failure) ? 22 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
+        const expected = failure === 'partial' ? 2 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
         assert.equal(result.status, expected, result.stdout + result.stderr);
-        const executed = ['helper', 'eof', 'none'].includes(failure);
+        const executed = ['complete-error', 'helper', 'eof', 'none'].includes(failure);
         assert.equal(fs.existsSync(path.join(root, 'entrypoint-ran')), executed);
         if (executed) {
           assert.include(result.stdout, 'Native fixture prompt:');
@@ -2554,7 +2560,7 @@ https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-in
         FAKE_QUICK_DOWNLOAD: 'partial', s: 'inherited value',
         SHELLOPTS: 'allexport:errexit:noclobber:nounset:pipefail',
       });
-      assert.equal(result.status, 22, result.stdout + result.stderr);
+      assert.equal(result.status, 2, result.stdout + result.stderr);
       assert.notInclude(readLog(), 'downloaded-quickstart:started');
       assert.isEmpty(fs.readdirSync(path.join(root, 'tmp')));
       assert.isEmpty(fs.readdirSync(home));
@@ -2670,13 +2676,27 @@ https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-in
       assert.isFalse(fs.existsSync(path.join(root, 'startup-ran')));
     });
   }
-  it('retains the manual warning for an invalid Bash startup selection', () => {
+  it('retries an invalid Bash startup selection before accepting login', () => {
+    const result = runPathSetup('other\nlogin\ny\n', { SHELL: '/bin/bash' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter login or bashrc.');
+    assert.equal((result.stdout.match(/Which Bash startup file/gu) ?? []).length, 2);
+    assert.include(readProfile(path.join(home, '.bash_profile')), pathLine());
+    assert.equal(result.stderr, '');
+  });
+  it('retries an invalid Zsh directory before accepting home', () => {
+    const result = runPathSetup('relative\nhome\ny\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter an absolute directory, home, or skip.');
+    assert.equal((result.stdout.match(/Zsh settings directory/gu) ?? []).length, 2);
+    assert.include(readProfile(path.join(home, '.zshrc')), pathLine());
+    assert.equal(result.stderr, '');
+  });
+  it('preserves startup files when EOF follows an invalid Bash choice', () => {
     const result = runPathSetup('other\n', { SHELL: '/bin/bash' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stderr, 'No Bash startup file selected.');
-    assert.include(result.stderr, 'The startup file was left unchanged.');
-    assert.include(result.stderr, 'Review your shell startup and PATH setup');
-    assert.notInclude(result.stdout, 'PATH setup skipped.');
+    assert.include(result.stdout, 'Enter login or bashrc.');
+    assert.include(result.stdout, 'PATH setup skipped.');
     for (const profile of ['.bash_profile', '.bashrc']) assert.isFalse(fs.existsSync(path.join(home, profile)));
   });
   for (const initial of ['', '# Existing settings\n', '# No final newline']) {
@@ -2944,7 +2964,9 @@ https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-in
     for (const value of ['~', '~/outside-home-zsh']) {
       const rejected = runPathSetup(value + '\n');
       assert.equal(rejected.status, 0, rejected.stderr);
-      assert.include(rejected.stderr, 'No absolute zsh startup directory selected.');
+      assert.include(rejected.stdout, 'Enter an absolute directory, home, or skip.');
+      assert.include(rejected.stdout, 'PATH setup skipped.');
+      assert.equal(rejected.stderr, '');
       assert.notInclude(rejected.stdout, 'Add Ballin setup');
     }
     assert.isFalse(fs.existsSync(path.join(directory, '.zshrc')));
@@ -3099,10 +3121,20 @@ confirm() {
       assert.isBelow(readLog().indexOf('gh:auth status --active'), readLog().indexOf('install.sh:'));
     });
   }
+  it('retries an invalid Quickstart hostname before authenticating only the accepted host', () => {
+    const result = run('y\ny\n', { FAKE_HOST_ANSWER: 'bad_host\ngit.example.com' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter a GitHub hostname only, such as github.com or git.example.com.');
+    assert.lengthOf(result.stdout.match(/GitHub hostname \[github.com\]:/gu) ?? [], 2);
+    assert.notInclude(readLog(), '--hostname bad_host');
+    assert.include(readLog(), 'gh:auth status --active --hostname git.example.com');
+    assert.include(readLog(), 'installer-host:git.example.com');
+  });
   for (const hostname of ['https://git.example.com', 'git.example.com:443', 'bad_host', 'K.example.com']) {
-    it(`refuses invalid Quickstart hostname ${hostname} before authentication`, () => {
-      const result = run('y\ny\n', { FAKE_HOST_ANSWER: hostname });
-      assert.equal(result.status, 1);
+    it(`retries invalid Quickstart hostname ${hostname} before authentication`, () => {
+      const result = run('', { FAKE_HOST_ANSWER: hostname }, home, '', '');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Enter a GitHub hostname only, such as github.com or git.example.com.');
       assert.notInclude(readLog(), 'gh:auth status --active');
       assert.notInclude(readLog(), 'install.sh:');
     });

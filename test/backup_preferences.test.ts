@@ -93,6 +93,38 @@ fs.readFileSync = (file, ...args) => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  for (const mode of ['tty', 'redirected', 'NO_COLOR', 'dumb']) {
+    it(`owns one separated primary save error and adjacent recovery for ${mode}`, () => {
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = spawnSync(process.execPath, ['-e', `
+        Object.defineProperty(process.stdout, 'isTTY', { value: process.env.PRESENTATION_MODE !== 'redirected' });
+        const { saveBackupConfig } = require(${JSON.stringify(preferencesPath)});
+        console.log('BEFORE');
+        console.log('RETURN:' + saveBackupConfig(process.env.BALLIN_TEST_CONFIG_PATH, {changed:true}));
+      `], { encoding: 'utf8', env: testChildEnvironment({
+        HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: configPath,
+        NODE_OPTIONS: `--require ${JSON.stringify(guardPath)}`,
+        BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1', PRESENTATION_MODE: mode,
+        TERM: mode === 'dumb' ? 'dumb' : 'xterm-256color',
+        ...(mode === 'NO_COLOR' ? { NO_COLOR: '1' } : {}),
+      }) });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr, '');
+      const plain = result.stdout.replace(/\x1b\[[0-9;]*m/gu, '');
+      assert.isTrue(plain.startsWith('BEFORE\n\n✗ Unable to save backup configuration;'));
+      assert.equal(plain.split('✗').length - 1, 1);
+      const block = plain.slice('BEFORE\n\n'.length, plain.indexOf('RETURN:false'));
+      assert.notInclude(block, '\n\n');
+      const lines = block.trimEnd().split('\n');
+      assert.match(lines.at(-1)!, /^Check the config file and its directory, then rerun /u);
+      assert.include(lines.at(-1)!, 'ballin backup setup');
+      if (mode === 'tty') assert.include(result.stdout, '\x1b[0;31m✗\x1b[0m');
+      else assert.notInclude(result.stdout, '\x1b');
+      assert.equal(fs.readFileSync(configPath, 'utf8'), before);
+      assert.isEmpty(fs.readdirSync(root).filter((name: string) => name.endsWith('.backup.tmp')));
+    });
+  }
+
   it('groups available sensitive sources above absent and unavailable sources without redundant paths', () => {
     fs.writeFileSync(path.join(root, '.zshrc'), 'fixture private content');
     const result = run('y\ny\nn\nn\n');

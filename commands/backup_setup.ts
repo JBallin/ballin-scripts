@@ -69,7 +69,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   const checkSetup = <T>(action: () => T): T => (options.reviewExistingSettings || options.presentation === 'installation')
     ? withTemporaryStatus('Checking backup setup…', action) : action();
   const cancelled = (): boolean => {
-    writeStdoutLine(`\nBackup setup cancelled. The backup destination is unchanged.\nConfirmed local preferences remain saved.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
+    writeStdoutLine(`\nBackup setup cancelled. Destination unchanged; confirmed local preferences remain saved.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
     options.onCancelled?.();
     return true;
   };
@@ -114,14 +114,17 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     if (!commandExists('gh')) throw new RepositoryLookupError('prerequisite');
     if (selectedHost === undefined) {
-      const answer = readPromptLine('GitHub hostname [github.com]: ');
-      if (answer.eof) return cancelled();
-      const normalized = normalizeBackupHost(answer.text || 'github.com');
-      if (!normalized) {
-        writeStdoutLine('Enter a GitHub hostname only, such as github.com or git.example.com.');
-        return false;
+      while (true) {
+        const answer = readPromptLine('GitHub hostname [github.com]: ');
+        if (answer.eof) return cancelled();
+        const normalized = normalizeBackupHost(answer.text || 'github.com');
+        if (!normalized) {
+          writeStdoutLine('Enter a GitHub hostname only, such as github.com or git.example.com.');
+          continue;
+        }
+        host = normalized;
+        break;
       }
-      host = normalized;
     } else host = selectedHost;
     if (configured.kind === 'repository') {
       const maintain = (): boolean => {
@@ -192,7 +195,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       if (choice.eof) return cancelled();
       const answer = choice.text.trim().toLowerCase() || 'create';
       if (answer === 'create' || answer === 'reconnect') { mode = answer; break; }
-      writeStdoutLine('Enter Create or Reconnect, or press Ctrl-D to cancel.');
+      writeStdoutLine('Enter Create or Reconnect.');
     }
     let suggested: string | undefined = 'ballin-backups';
     let found: (RepositoryRead['destination'] & { redirected?: true }) | null = null;
@@ -225,7 +228,11 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         ? readPromptLine(suggested === undefined ? 'Repository name: ' : `Repository name [${suggested}]: `) : { text: repositoryName, eof: false };
       if (nameLine.eof) return cancelled();
       name = nameLine.text || suggested || '';
-      if (!validRepositoryName(name)) { writeStdoutLine('Invalid repository name.'); return false; }
+      if (!validRepositoryName(name)) {
+        writeStdoutLine('Enter a repository name using letters, digits, dots, hyphens, or underscores.');
+        if (repositoryName !== undefined) return false;
+        continue;
+      }
       found = candidateRepository(name, account);
       if (mode === 'reconnect' && found && !found.redirected) {
         const selected = found;

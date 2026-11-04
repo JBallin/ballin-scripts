@@ -375,7 +375,9 @@ Warnings include sensitive-data exposure and stopping backups on another
 installation. A failure needs a specific next action. Documentation pointers use
 a neutral label and put the blue URL on the next line. Final completion uses a
 green `✓` followed by neutral text. Ordinary progress stays plain and quiet;
-do not add a status marker solely to fill the palette. Avoid emoji decorations.
+do not add a status marker solely to fill the palette. Avoid decorative emoji
+in CLI output. Use functional text symbols for status and convey personality
+through wording.
 Markers and wording must remain meaningful without color.
 
 Interactive prompts start with a green `?` and neutral question text. Available
@@ -386,7 +388,9 @@ Do not change the case of literal hostnames or paths.
 Typed input stays neutral while editing. After Enter accepts a fixed choice,
 replace the entered answer in place on the same prompt line with its cyan
 canonical label: `y`/`Y` becomes `Yes`, `n`/`N` becomes `No`, and `reconnect`
-becomes `Reconnect`. Accept a completed answer once; never require a second
+becomes `Reconnect`. Technical choice tokens such as `login` and `bashrc`
+keep their lowercase option spelling. Accept a completed answer once; never
+require a second
 Enter to confirm this presentation. Invalid or incomplete input, EOF and
 interruption must not appear confirmed. Free text and paths stay exactly as
 entered. Redraw only an owned prompt region when the terminal supports it; never

@@ -697,7 +697,7 @@ exit 2
       writeExecutable('brew', `#!/bin/sh\nprintf '%s\\n' '${prefix}'\n`);
       const result = withEnvironment({ HOME: path.join(testDir, 'home'), PATH: binDir }, () => captureStdout(() => setup(repoDir, docsUrl)));
       assert.isFalse(result.result);
-      assert.include(result.output, 'invalid installation prefix');
+      assert.include(result.output, '✗ Homebrew returned an invalid installation prefix.\nInspect');
       assert.include(result.output, 'ballin self-update');
       assert.notInclude(result.output, 'installer again');
       assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
@@ -740,7 +740,7 @@ exit 2
       BALLIN_COMMAND_PREFLIGHT_JSON: JSON.stringify({ directory: binDir, target: command, snapshot: 'null' }),
     }, () => captureStdout(() => setup(repoDir, docsUrl)));
     assert.isFalse(result.result);
-    assert.include(result.output, 'Unable to verify the reviewed command target');
+    assert.include(result.output, '✗ Unable to verify the reviewed command target.\nInspect it before retrying.');
     assert.equal(fs.readFileSync(command, 'utf8'), 'preserve\n');
     assert.isFalse(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
@@ -1158,7 +1158,7 @@ require('https').request = () => {
       encoding: 'utf8', input: 'y\n\ncreate\n\nn\nn\nn\n', env: childEnvironment(),
     });
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Backup setup cancelled. The backup destination is unchanged.\nConfirmed local preferences remain saved.\nRun `ballin backup setup` when you’re ready.');
+    assert.include(result.stdout.replace(/\s+/gu, ' '), 'Backup setup cancelled. Destination unchanged; confirmed local preferences remain saved. Run `ballin backup setup` when you’re ready.');
     assert.notInclude(result.stdout + result.stderr, 'ERROR:');
     assert.notInclude(result.stdout, 'Backup setup complete.');
     assert.isNull(readRepoConfig().backup.repository ?? null);

@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Embedded in both public entrypoints by prepare-release. No setup mutations here.
-: "${ballin_entry:?Generated entrypoint name is required}" "${ballin_embedded_version:?Generated version is required}" "${ballin_default_track:?Generated default is required}"
-ballin_error() { printf 'Ballin: %s\n' "$*" >&2; return 1; }
+: "${ballin_entry:?Generated entrypoint name is required}" "${ballin_embedded_version:?Generated version is required}"
+ballin_error() {
+  if [[ -t 2 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[0;31m✗\033[0m Ballin: %s\n' "$*" >&2
+  else printf '✗ Ballin: %s\n' "$*" >&2; fi
+  return 1
+}
 ballin_download() {
   local status code
   code=$(curl -q -sS -L --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 15 --max-time 60 -w '%{http_code}' "$1" -o "$2") || {
@@ -78,7 +83,7 @@ ballin_select() {
     [[ "$ballin_entry" == quickstart.sh ]] || ballin_runtime || return $?
     return 0
   fi
-  local selector='' value='' scratch status api='https://api.github.com/repos/JBallin/ballin-scripts' object_type tag published requested draft prerelease protocol depth=0
+  local selector='' value='' scratch status api='https://api.github.com/repos/JBallin/ballin-scripts' object_type tag published requested draft prerelease protocol engine_requirement engine_pattern depth=0
   if [[ "${1:-}" == --self-update && "$ballin_entry" == install.sh ]]; then ballin_mode=self-update; shift; fi
   if [[ $# != 0 ]]; then
     [[ $# == 2 ]] || { ballin_error 'Use one of --version vX.Y.Z, --sha FULL_SHA, or --branch NAME.'; return 1; }
@@ -87,7 +92,7 @@ ballin_select() {
   fi
   if [[ -z "$selector" ]]; then
     case "${BALLIN_UPDATE_TRACK:-}" in ''|main) ;; *) ballin_error 'BALLIN_UPDATE_TRACK supports only main; unset it for the default.'; return 1 ;; esac
-    if [[ "${BALLIN_UPDATE_TRACK:-$ballin_default_track}" == main ]]; then selector=--branch; value=main
+    if [[ "${BALLIN_UPDATE_TRACK:-}" == main ]]; then selector=--branch; value=main
     else selector=--version; value="v$ballin_embedded_version"; [[ "$ballin_mode" != self-update ]] || value=latest; fi
   fi
   case "$selector" in
@@ -137,11 +142,13 @@ ballin_select() {
     else resolved_sha=$value; fi
     [[ "$resolved_sha" =~ ^[a-f0-9]{40}$ ]] || { ballin_error 'GitHub returned an invalid commit.'; exit 1; }
     resolved_value=$value
-    ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/installer-contract.json" "$scratch/contract.json" || exit $?
-    protocol=$(ballin_json "$scratch/contract.json" protocol number) || exit $?
+    ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/package.json" "$scratch/package.json" || exit $?
+    protocol=$(ballin_json "$scratch/package.json" ballin.installerProtocol number) || exit $?
     [[ "$protocol" == 1 ]] || { ballin_error 'Selected revision has an unsupported installer contract.'; exit 1; }
-    resolved_minimum=$(ballin_json "$scratch/contract.json" minimumNode) || exit $?
-    [[ "$resolved_minimum" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]] || { ballin_error 'Selected installer contract has an invalid Node requirement.'; exit 1; }
+    engine_requirement=$(ballin_json "$scratch/package.json" engines.node) || exit $?
+    engine_pattern='^>=(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2}))?$'
+    [[ "$engine_requirement" =~ $engine_pattern ]] || { ballin_error 'Selected installer contract has an invalid Node requirement.'; exit 1; }
+    resolved_minimum="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[4]:-0}"
     ballin_preflight || exit $?
     [[ "$ballin_entry" == quickstart.sh ]] || ballin_runtime "$resolved_minimum" || exit $?
     ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/$ballin_entry" "$scratch/$ballin_entry" || exit $?

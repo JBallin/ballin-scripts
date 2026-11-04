@@ -1,4 +1,4 @@
-const { terminalCommand } = require('./terminalStyle.ts');
+const { terminalCommand, terminalError, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -129,7 +129,7 @@ const resolveUpdateSettings = (
   });
 
   if (defaultedKeys.length > 0) {
-    reportWarning(`Warning: using bundled defaults for missing settings: ${defaultedKeys.join(', ')}.`);
+    reportWarning(terminalProse(`! Using bundled defaults for missing settings: ${defaultedKeys.join(', ')}.`, process.stderr));
   }
   return settings;
 };
@@ -258,7 +258,7 @@ function runUpdateCommand(): void {
     settings = resolveUpdateSettings(undefined, undefined, reportDiagnostic);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown configuration error.';
-    reportDiagnostic(`Unable to resolve update configuration: ${message}`);
+    reportDiagnostic(terminalError(`Unable to resolve update configuration: ${message}`, process.stderr));
     process.exitCode = 1;
     return;
   }
@@ -319,12 +319,12 @@ function runUpdateCommand(): void {
       const result = runNvmInstall({ ...childEnv, NVM_DIR: installation.directory }, installation.source);
       recordFailure(result.status);
       if (result.captureFailed) {
-        reportDiagnostic('Unable to capture the updated Node.js environment after running nvm.');
+        reportDiagnostic(terminalError('Unable to capture the updated Node.js environment after running nvm.', process.stderr));
       }
       childEnv = result.env ?? childEnv;
     } else {
       reportDiagnostic();
-      reportDiagnostic('Unable to update Node.js LTS: unable to load nvm.');
+      reportDiagnostic(terminalError('Unable to update Node.js LTS: unable to load nvm.', process.stderr));
       reportDiagnostic(`Set \`NVM_DIR\` to your nvm installation or disable this update with: ${terminalCommand('ballin config set update.nvm false', process.stderr)}`);
       recordFailure(1);
     }
@@ -335,7 +335,7 @@ function runUpdateCommand(): void {
       progress('Updating global npm packages');
       runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
     } else {
-      reportDiagnostic('Unable to update global npm packages: npm is not available on PATH.');
+      reportDiagnostic(terminalError('Unable to update global npm packages: npm is not available on PATH.', process.stderr));
       recordFailure(1);
     }
   }
@@ -350,7 +350,7 @@ function runUpdateCommand(): void {
       progress('Installing macOS updates');
       runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
     } else {
-      reportDiagnostic('Unable to install macOS updates: softwareupdate is not available on PATH.');
+      reportDiagnostic(terminalError('Unable to install macOS updates: softwareupdate is not available on PATH.', process.stderr));
       recordFailure(1);
     }
   }

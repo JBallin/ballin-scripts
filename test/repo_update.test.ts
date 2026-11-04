@@ -15,10 +15,10 @@ describe('selected checkout integration', () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-checkout-test-')); upstream = path.join(root, 'source'); installed = path.join(root, 'installed'); fs.mkdirSync(upstream);
     git(upstream, ['init', '-q', '-b', 'main']);
     fs.writeFileSync(path.join(upstream, '.gitignore'), 'ballin.config.json\n.backup-cache\n.analytics\n');
-    fs.writeFileSync(path.join(upstream, 'installer-contract.json'), JSON.stringify({ protocol: 1, minimumNode: '24.12.0' }));
-    for (const entry of ['install.sh', 'quickstart.sh', 'commands/repo_update.ts', 'commands/install_setup.ts', 'bin/ballin', 'package.json']) {
+    for (const entry of ['install.sh', 'quickstart.sh', 'commands/repo_update.ts', 'commands/install_setup.ts', 'bin/ballin']) {
       const file = path.join(upstream, entry); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'fixture\n');
     }
+    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 1 }, engines: { node: '>=24.12' } }));
     fs.writeFileSync(path.join(upstream, 'content'), 'before'); git(upstream, ['add', '.']); git(upstream, ['commit', '-qm', 'before']); before = git(upstream, ['rev-parse', 'HEAD']);
     git(root, ['clone', '-q', upstream, installed]); git(installed, ['remote', 'set-url', 'origin', 'https://github.com/JBallin/ballin-scripts.git']);
     fs.writeFileSync(path.join(upstream, 'content'), 'after'); git(upstream, ['commit', '-qam', 'after']); target = git(upstream, ['rev-parse', 'HEAD']); git(upstream, ['tag', 'v1.0.0']);
@@ -44,7 +44,7 @@ describe('selected checkout integration', () => {
     assert.notInclude(r.stdout, 'Change the installed revision');
   });
   it('refuses a fetched incompatible contract before changing HEAD', () => {
-    fs.writeFileSync(path.join(upstream, 'installer-contract.json'), JSON.stringify({ protocol: '1', minimumNode: '24.12.0' }));
+    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: '1' }, engines: { node: '>=24.12' } }));
     git(upstream, ['commit', '-qam', 'incompatible contract']);
     const r = run({ sha: git(upstream, ['rev-parse', 'HEAD']) }); assert.equal(r.status, 1); assert.include(r.stderr, 'contract changed or is unsupported');
     assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
@@ -61,6 +61,16 @@ describe('selected checkout integration', () => {
   for (const input of ['no\n', '', 'y', 'yes' + ' '.repeat(40) + 'no\n']) it(`refuses an unconfirmed transition (${JSON.stringify(input)})`, () => {
     const r = run({ input }); assert.equal(r.status, 20); assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.include(r.stdout, 'cancelled'); assert.notInclude(r.stderr, 'cancelled');
   });
+  for (const input of ['maybe\nyes\n', 'yes' + ' '.repeat(40) + 'no\nyes\n']) {
+    it(`reprompts a completed invalid revision answer before a confirmed transition (${JSON.stringify(input)})`, () => {
+      const r = run({ input });
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.include(r.stdout, 'Please enter yes or no.');
+      assert.equal(r.stdout.split('Change the installed revision/track?').length - 1, 2);
+      assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+      assert.notInclude(r.stdout, 'cancelled');
+    });
+  }
   for (const [automatic, tty] of [['1', '0'], ['1', '1'], ['0', '0']]) it(`refuses track changes requiring consent without checkout changes (automatic ${automatic}, TTY ${tty})`, () => {
     const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: automatic, FIXTURE_TTY: tty }, mode: 'self-update' }); assert.equal(r.status, 21); assert.isTrue(r.stderr.endsWith('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.\n')); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });

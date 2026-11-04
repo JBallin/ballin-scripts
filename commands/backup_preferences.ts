@@ -1,4 +1,4 @@
-const { terminalPath, terminalProse, terminalCommand } = require('./terminalStyle.ts');
+const { terminalPath, terminalProse, terminalCommand, terminalError } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { stringify } = require('../config/store.ts');
@@ -18,7 +18,7 @@ const saveBackupConfig = (configPath: string, config: Record<string, unknown>): 
     fs.renameSync(temporary, configPath);
     return true;
   } catch {
-    writeStdoutLine('Unable to save backup configuration; the previous destination and local choices remain authoritative.');
+    writeStdoutLine(`\n${terminalError('Unable to save backup configuration; the previous destination and local choices remain authoritative.')}`);
     writeStdoutLine(`Check the config file and its directory, then rerun ${terminalCommand('ballin backup setup')}.`);
     return false;
   } finally {

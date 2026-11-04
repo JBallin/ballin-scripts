@@ -3,7 +3,7 @@ import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
-const { terminalCommand, terminalEmphasis, terminalMarkers } = require('./terminalStyle.ts');
+const { terminalCommand, terminalEmphasis, terminalMarkers, terminalError } = require('./terminalStyle.ts');
 const { compareBackupFileNames } = require('./backup_file_names.ts');
 const fs = require('fs');
 const tty = require('tty');
@@ -627,13 +627,13 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
 
   if (!homeDir) {
     observeBackupFailure(evidence, 'local_state');
-    writeStderrLine('ballin backup: HOME is not set; unable to collect backup sources safely');
+    writeStderrLine(terminalError('ballin backup: HOME is not set; unable to collect backup sources safely', process.stderr));
     return 1;
   }
 
   if (config.includeSensitive === null) {
     observeBackupFailure(evidence, 'local_state');
-    writeStderrLine('ballin backup: invalid `backup.includeSensitive`; expected true or false');
+    writeStderrLine(terminalError('ballin backup: invalid `backup.includeSensitive`; expected true or false', process.stderr));
     return 1;
   }
   if (!secureExistingBackupCache(backupCacheDir)) { observeBackupFailure(evidence, 'local_state'); return 1; }

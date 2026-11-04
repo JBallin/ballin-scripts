@@ -45,7 +45,7 @@ describe('fresh installer checkout publication', function() {
       const file = path.join(upstream, entry); fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, entry === 'commands/install_setup.ts' ? "process.stdout.write('fixture setup\\n');\n" : entry === 'package.json' ? '{}\n' : 'fixture\n');
     }
-    fs.writeFileSync(path.join(upstream, 'installer-contract.json'), JSON.stringify({ protocol: 1, minimumNode: '24.12.0' }));
+    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 1 }, engines: { node: '>=24.12' } }));
     git(['add', '.']); git(['commit', '-qm', 'fixture']); selected = git(['rev-parse', 'HEAD']);
     writeTool('git', `
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
@@ -96,7 +96,7 @@ ballin_download() { cp "$FIXTURE_HELPER" "$2"; }
       else if (failure === 'clone') options.FIXTURE_CLONE_STATUS = '17';
       else if (failure.startsWith('clone-')) options.FIXTURE_CLONE_SIGNAL = failure.slice(6);
       else {
-        fs.writeFileSync(path.join(upstream, 'installer-contract.json'), JSON.stringify({ protocol: 2, minimumNode: '24.12.0' }));
+        fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 2 }, engines: { node: '>=24.12' } }));
         git(['commit', '-qam', 'unsupported fixture']); options.FIXTURE_SELECTED_SHA = git(['rev-parse', 'HEAD']);
       }
       const failed = run(options);

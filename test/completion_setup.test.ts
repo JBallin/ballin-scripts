@@ -104,7 +104,10 @@ describe('optional completion setup', () => {
     assert.strictEqual(selected.profile, path.join(env.ZDOTDIR, '.zshrc'));
     assert.deepEqual(questions, [`Zsh settings directory [Enter for ~/zsh, another absolute directory, or skip]: `]);
     env.ZDOTDIR = 'relative';
-    assert.isNull(target());
+    const invalidAnswers = ['relative'];
+    const guidance: string[] = [];
+    assert.isNull(completionTarget(env, () => { const text = invalidAnswers.shift(); return { text: text ?? '', eof: text === undefined }; }, (text: string) => guidance.push(text)));
+    assert.deepEqual(guidance, ['Enter an absolute directory.']);
     env.ZDOTDIR = path.join(home, 'missing');
     assert.include(offer(['y']), 'could not finish');
     assert.isFalse(fs.existsSync(env.ZDOTDIR));
@@ -290,14 +293,33 @@ describe('optional completion setup', () => {
     }
   });
 
+  for (const shell of ['bash', 'zsh']) {
+    it(`reprompts an invalid ${shell} target before accepting a valid choice without changing it`, () => {
+      env.SHELL = '/bin/' + shell;
+      const answers = ['not-a-selection', shell === 'bash' ? 'bashrc' : home];
+      const messages: string[] = [], labels: (string | undefined)[] = [];
+      const selected = completionTarget(env, (_question: string, canonical?: (text: string) => string | undefined) => {
+        const text = answers.shift(); labels.push(canonical?.(text ?? ''));
+        return { text: text ?? '', eof: text === undefined };
+      }, (text: string) => messages.push(text));
+      assert.equal(selected.profile, path.join(home, shell === 'bash' ? '.bashrc' : '.zshrc'));
+      assert.deepEqual(messages, [shell === 'bash' ? 'Enter login or bashrc.' : 'Enter an absolute directory.']);
+      assert.equal(labels[0], undefined);
+      assert.equal(labels[1], shell === 'bash' ? 'bashrc' : undefined);
+      assert.isEmpty(fs.readdirSync(home));
+    });
+  }
   it('offers conventional Zsh settings without sourcing .zshenv and accepts custom selection', () => {
     const directory = path.join(home, 'custom-zsh');
     fs.mkdirSync(directory);
     fs.writeFileSync(path.join(home, '.zshenv'), `ZDOTDIR=${directory}\nprintf touched > "${home}/startup-ran"\n`);
     assert.equal(completionTarget(env, response('')).profile, path.join(home, '.zshrc'));
     assert.isNull(completionTarget(env, response('skip')));
-    assert.isNull(completionTarget(env, response('~')));
-    assert.isNull(completionTarget(env, response('~/custom-zsh')));
+    for (const invalid of ['~', '~/custom-zsh']) {
+      const answers = [invalid]; const messages: string[] = [];
+      assert.isNull(completionTarget(env, () => { const text = answers.shift(); return { text: text ?? '', eof: text === undefined }; }, (text: string) => messages.push(text)));
+      assert.deepEqual(messages, ['Enter an absolute directory.']);
+    }
     assert.isNull(completionTarget(env, () => ({ text: 'home', eof: true })));
     assert.strictEqual(completionTarget(env, response(directory)).profile, path.join(directory, '.zshrc'));
     const script = 'require("tty").isatty = (fd) => fd === 0; require(process.argv[1]).offerCompletionSetup("guide");';

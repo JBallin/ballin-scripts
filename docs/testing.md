@@ -253,10 +253,12 @@ are intended for the current published scripts, within the host's argument-size
 limit. Copied-command fixtures cover current script sizes, inherited settings,
 prompt input, empty downloads, and incomplete bodies.
 
-The public commands preserve curl's nonzero exit status and do not execute output
-from a failed transfer. A downloaded script's outer brace group must parse before
-its body runs, so a syntactically incomplete body is refused. These checks do not
-verify integrity or establish that a successful download is nonempty.
+The familiar public commands pass curl output directly to Bash. An empty failed
+download can therefore produce a successful Bash exit, and a complete body can
+execute even when curl reports a transfer failure. A downloaded script's outer
+brace group must parse before its body runs, so a syntactically incomplete body
+is refused. Fixtures record this accepted command-simplicity tradeoff; they do
+not verify integrity or establish that a successful download is nonempty.
 
 ## Test environment and analytics safety
 

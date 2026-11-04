@@ -142,7 +142,8 @@ const resolveBinDir = (mode: SetupMode): string | null => {
     if (brewPrefix !== null) {
       const prefix = brewPrefix.trimEnd();
       if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) {
-        writeStdoutLine(`Homebrew returned an invalid installation prefix. Inspect ${terminalCommand('brew --prefix')}, then ${setupRetry(mode)}.`);
+        writeStdoutLine(terminalError('Homebrew returned an invalid installation prefix.'));
+        writeStdoutLine(`Inspect ${terminalCommand('brew --prefix')}, then ${setupRetry(mode)}.`);
         return null;
       }
       return path.join(prefix, 'bin');
@@ -182,7 +183,7 @@ const setup = (
       if (destination.kind === 'invalid') throw new Error('Invalid backup destination; disconnect before choosing another host.');
       hostname = resolveBackupSetupHost(originalConfig, process.env.BALLIN_BACKUP_HOSTNAME);
     } catch (error) {
-      writeStdoutLine((error as Error).message);
+      writeStdoutLine(terminalError((error as Error).message));
       return false;
     }
   }
@@ -199,7 +200,8 @@ const setup = (
     if (preflight.directory !== binDir || preflight.target !== target || typeof preflight.snapshot !== 'string'
       || preflight.snapshot !== commandTargetSnapshot(target)) throw new Error('Command target changed');
   } catch {
-    writeStdoutLine('Unable to verify the reviewed command target. Inspect it before retrying.');
+    writeStdoutLine(terminalError('Unable to verify the reviewed command target.'));
+    writeStdoutLine('Inspect it before retrying.');
     return false;
   }
 

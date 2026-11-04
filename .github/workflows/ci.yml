@@ -78,6 +78,9 @@ jobs:
           GNU_TIMEOUT: /usr/bin/gnutimeout
         run: npm run test:claude-preflight
 
+      - name: Check release consistency
+        run: npm run release:check
+
       - name: Run unit tests with coverage
         id: coverage
         run: npm run test:coverage

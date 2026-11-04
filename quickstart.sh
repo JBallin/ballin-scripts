@@ -3,10 +3,14 @@
 # BEGIN RELEASE BOOTSTRAP
 ballin_entry='quickstart.sh'
 ballin_embedded_version='1.0.0'
-ballin_default_track='main'
 # Embedded in both public entrypoints by prepare-release. No setup mutations here.
-: "${ballin_entry:?Generated entrypoint name is required}" "${ballin_embedded_version:?Generated version is required}" "${ballin_default_track:?Generated default is required}"
-ballin_error() { printf 'Ballin: %s\n' "$*" >&2; return 1; }
+: "${ballin_entry:?Generated entrypoint name is required}" "${ballin_embedded_version:?Generated version is required}"
+ballin_error() {
+  if [[ -t 2 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[0;31m✗\033[0m Ballin: %s\n' "$*" >&2
+  else printf '✗ Ballin: %s\n' "$*" >&2; fi
+  return 1
+}
 ballin_download() {
   local status code
   code=$(curl -q -sS -L --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 15 --max-time 60 -w '%{http_code}' "$1" -o "$2") || {
@@ -83,7 +87,7 @@ ballin_select() {
     [[ "$ballin_entry" == quickstart.sh ]] || ballin_runtime || return $?
     return 0
   fi
-  local selector='' value='' scratch status api='https://api.github.com/repos/JBallin/ballin-scripts' object_type tag published requested draft prerelease protocol depth=0
+  local selector='' value='' scratch status api='https://api.github.com/repos/JBallin/ballin-scripts' object_type tag published requested draft prerelease protocol engine_requirement engine_pattern depth=0
   if [[ "${1:-}" == --self-update && "$ballin_entry" == install.sh ]]; then ballin_mode=self-update; shift; fi
   if [[ $# != 0 ]]; then
     [[ $# == 2 ]] || { ballin_error 'Use one of --version vX.Y.Z, --sha FULL_SHA, or --branch NAME.'; return 1; }
@@ -92,7 +96,7 @@ ballin_select() {
   fi
   if [[ -z "$selector" ]]; then
     case "${BALLIN_UPDATE_TRACK:-}" in ''|main) ;; *) ballin_error 'BALLIN_UPDATE_TRACK supports only main; unset it for the default.'; return 1 ;; esac
-    if [[ "${BALLIN_UPDATE_TRACK:-$ballin_default_track}" == main ]]; then selector=--branch; value=main
+    if [[ "${BALLIN_UPDATE_TRACK:-}" == main ]]; then selector=--branch; value=main
     else selector=--version; value="v$ballin_embedded_version"; [[ "$ballin_mode" != self-update ]] || value=latest; fi
   fi
   case "$selector" in
@@ -142,11 +146,13 @@ ballin_select() {
     else resolved_sha=$value; fi
     [[ "$resolved_sha" =~ ^[a-f0-9]{40}$ ]] || { ballin_error 'GitHub returned an invalid commit.'; exit 1; }
     resolved_value=$value
-    ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/installer-contract.json" "$scratch/contract.json" || exit $?
-    protocol=$(ballin_json "$scratch/contract.json" protocol number) || exit $?
+    ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/package.json" "$scratch/package.json" || exit $?
+    protocol=$(ballin_json "$scratch/package.json" ballin.installerProtocol number) || exit $?
     [[ "$protocol" == 1 ]] || { ballin_error 'Selected revision has an unsupported installer contract.'; exit 1; }
-    resolved_minimum=$(ballin_json "$scratch/contract.json" minimumNode) || exit $?
-    [[ "$resolved_minimum" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]] || { ballin_error 'Selected installer contract has an invalid Node requirement.'; exit 1; }
+    engine_requirement=$(ballin_json "$scratch/package.json" engines.node) || exit $?
+    engine_pattern='^>=(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2}))?$'
+    [[ "$engine_requirement" =~ $engine_pattern ]] || { ballin_error 'Selected installer contract has an invalid Node requirement.'; exit 1; }
+    resolved_minimum="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[4]:-0}"
     ballin_preflight || exit $?
     [[ "$ballin_entry" == quickstart.sh ]] || ballin_runtime "$resolved_minimum" || exit $?
     ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/$ballin_entry" "$scratch/$ballin_entry" || exit $?
@@ -314,17 +320,23 @@ system_xcode_select='/usr/bin/xcode-select'
 system_sudo='/usr/bin/sudo'
 system_sysctl='/usr/sbin/sysctl'
 system_file='/usr/bin/file'
-# Mirrored bootstrap requirement; tests keep this aligned with package.json.
-required_node_version='24.12'
+# Populated from the selected revision's package.json before tool checks.
+required_node_version=''
 scratch=''
 profile_temp=''
 gh_temp=''
 original_path=${PATH-}
 original_pwd=$PWD
 
-fail() {
-  printf '\nQuickstart: ' >&2
+failure_message() {
+  printf '\n' >&2
+  status_marker failure 2 >&2
+  printf ' Quickstart: ' >&2
   presentation_text "$1" 2 >&2
+}
+
+fail() {
+  failure_message "$1"
   exit 1
 }
 
@@ -423,7 +435,8 @@ backup_setup_host() {
         if (!configured) throw Error();
       }
       const selected = proposed === undefined ? configured : host(proposed);
-      if (proposed !== undefined && (!selected || (configured && configured !== selected))) throw Error();
+      if (proposed !== undefined && !selected) process.exit(2);
+      if (proposed !== undefined && configured && configured !== selected) throw Error();
       process.stdout.write(selected ?? "");
     } catch {
       process.stderr.write("Quickstart: Invalid backup hostname or destination. Check configuration; disconnect before choosing another host.\n");
@@ -982,17 +995,17 @@ plan_nvm() {
   use_nvm=false; nvm_profile_needed=false
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
-  printf '\nNVM can install and maintain latest LTS Node.\n'
+  printf 'NVM can install and maintain latest LTS Node.\n'
   if [[ "$nvm_loadable" != true ]]; then
-    if [[ -n "$brew_tool" ]]; then printf '$ brew install --formula nvm\n'
-    else printf '$ PROFILE=/dev/null bash <downloaded official NVM v0.40.8 installer>\n'; fi
+    if [[ -n "$brew_tool" ]]; then printf 'Install NVM using Homebrew.\n'
+    else printf 'Install NVM v0.40.8 using its official installer.\n'; fi
   fi
-  printf '$ nvm install --lts\n'
-  if "$nvm_default_exists"; then printf 'The existing NVM default will be changed to follow latest LTS.\n'; printf "$ nvm alias default 'lts/*'\n"; fi
+  printf 'Install latest LTS Node.\n'
+  if "$nvm_default_exists"; then printf 'The existing NVM default will be changed to follow latest LTS.\n'; fi
   printf 'This activates LTS for this setup and selects the NVM default.\n'
   printf 'Future terminals need the shell startup setup offered next.\n'
-  printf 'Older Node installations and versions remain installed. Global npm packages\nmay need to be reinstalled for the selected Node version.\n'
-  printf 'Shell startup changes require separate permission.\n'
+  printf 'Existing Node installations are preserved. Global npm packages may need\nreinstalling for the selected version.\n'
+  printf "NVM's installer won't change your shell startup files. Ballin will ask\nseparately before making those changes.\n"
   if ! confirm 'Use NVM and latest LTS Node?'; then
     if [[ "$compatible" != true ]]; then
       "$input_ended" && fail 'No answer received. Node.js setup stopped.'
@@ -1029,6 +1042,7 @@ install_nvm_lts() {
       fi
       printf 'Installing NVM v0.40.8 in %s...\n' "$(display_path "$nvm_directory")"
       local installer_status=0
+      printf "$ PROFILE=/dev/null NVM_DIR=%q METHOD=git BASH_ENV='' ENV='' /bin/bash %q\n" "$nvm_directory" "$scratch/nvm-install.sh"
       # NVM installer overrides must not redirect the promised source or install
       # an inherited NODE_VERSION. Keep unrelated caller/auth environment intact.
       ( unset NVM_SOURCE NVM_INSTALL_VERSION NVM_INSTALL_GITHUB_REPO NODE_VERSION NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER NVM_METHOD NVM_ENV NVM_CD_FLAGS
@@ -1036,7 +1050,7 @@ install_nvm_lts() {
       stop_if_interrupted "$installer_status"
       if [[ "$installer_status" != 0 ]]; then
         cat "$scratch/nvm-install.log" >&2
-        printf '\nQuickstart: NVM installation did not finish. Inspect its output, then rerun Quickstart.\n' >&2
+        failure_message 'NVM installation did not finish. Inspect its output, then rerun Quickstart.'
         return "$installer_status"
       fi
       nvm_source="$nvm_directory/nvm.sh"
@@ -1068,7 +1082,7 @@ install_nvm_lts() {
   nvm install --lts || nvm_status=$?
   stop_if_interrupted "$nvm_status"
   if [[ "$nvm_status" != 0 ]]; then
-    printf '\nQuickstart: NVM LTS installation did not finish. Inspect its output, then rerun Quickstart.\n' >&2
+    failure_message 'NVM LTS installation did not finish. Inspect its output, then rerun Quickstart.'
     return "$nvm_status"
   fi
   if "$nvm_default_exists"; then
@@ -1077,7 +1091,7 @@ install_nvm_lts() {
     nvm alias default 'lts/*' || nvm_status=$?
     stop_if_interrupted "$nvm_status"
     if [[ "$nvm_status" != 0 ]]; then
-      printf '\nQuickstart: NVM default selection did not finish. Inspect its output, then rerun Quickstart.\n' >&2
+      failure_message 'NVM default selection did not finish. Inspect its output, then rerun Quickstart.'
       return "$nvm_status"
     fi
   fi
@@ -1089,7 +1103,7 @@ install_nvm_lts() {
   resolved_default=$(nvm version default) || nvm_status=$?
   stop_if_interrupted "$nvm_status"
   if [[ "$nvm_status" != 0 ]]; then
-    printf '\nQuickstart: Unable to resolve the NVM default. Inspect its output, then rerun Quickstart.\n' >&2
+    failure_message 'Unable to resolve the NVM default. Inspect its output, then rerun Quickstart.'
     return "$nvm_status"
   fi
   current=$(node --version)
@@ -1265,17 +1279,20 @@ configure_path() {
       if [[ "${ZDOTDIR:-}" == /* && "$ZDOTDIR" != *$'\n'* && "$ZDOTDIR" != *$'\r'* ]]; then
         default_directory="$ZDOTDIR"
       fi
-      if [[ "$default_directory" == "$HOME" ]]; then
-        status_marker prompt; printf ' Zsh settings directory '; prompt_options 'Enter for home (~), an absolute directory, or skip'; printf ': '
-      else
-        status_marker prompt; printf ' Zsh settings directory '; prompt_options "Enter for $(display_path "$default_directory"), another absolute directory, or skip"; printf ': '
-      fi
-      if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
-      choice=$prompt_answer
-      [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }
-      [[ -n "$choice" ]] || choice="$default_directory"
-      [[ "$choice" != home ]] || choice="$HOME"
-      if [[ "$choice" != /* || "$choice" == *$'\n'* || "$choice" == *$'\r'* ]]; then path_incomplete 'No absolute zsh startup directory selected.'; return; fi
+      while :; do
+        if [[ "$default_directory" == "$HOME" ]]; then
+          status_marker prompt; printf ' Zsh settings directory '; prompt_options 'Enter for home (~), an absolute directory, or skip'; printf ': '
+        else
+          status_marker prompt; printf ' Zsh settings directory '; prompt_options "Enter for $(display_path "$default_directory"), another absolute directory, or skip"; printf ': '
+        fi
+        if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
+        choice=$prompt_answer
+        [[ "$choice" != skip ]] || { path_setup_complete=false; printf 'PATH setup skipped.\n'; return; }
+        [[ -n "$choice" ]] || choice="$default_directory"
+        [[ "$choice" != home ]] || choice="$HOME"
+        if [[ "$choice" == /* && "$choice" != *$'\n'* && "$choice" != *$'\r'* ]]; then break; fi
+        printf 'Enter an absolute directory, home, or skip.\n'
+      done
       profile="${choice%/}/.zshrc"
       ;;
     bash)
@@ -1288,21 +1305,23 @@ configure_path() {
       profile="$HOME/.bashrc"
       if [[ "${nvm_profile_needed:-false}" != true ]] && check_existing_path; then return; fi
       profile="$login_profile"
-      prompt_kind=startup; prompt_question='Which Bash startup file does your terminal read?'
-      prompt_options_text='[login/bashrc; Enter to skip]'; prompt_plain="? $prompt_question $prompt_options_text "
-      fixed_prompt_layout; render_fixed_prompt
-      local choice_complete=true
-      read_prompt_answer || { prompt_answer=''; choice_complete=false; }
-      if [[ "$prompt_redraw" == true && "$prompt_echo" == false ]]; then printf '\n'; fi
-      choice=$prompt_answer
-      case "$choice" in
-        bashrc) confirm_fixed_choice Bashrc; profile="$HOME/.bashrc" ;;
-        login) confirm_fixed_choice Login ;; # First existing login file selected above.
-        '')
-          [[ "$choice_complete" != true ]] || confirm_fixed_choice Skip
-          path_setup_complete=false; printf 'PATH setup skipped.\n'; return ;;
-        *) path_incomplete 'No Bash startup file selected.'; return ;;
-      esac
+      while :; do
+        prompt_kind=startup; prompt_question='Which Bash startup file does your terminal read?'
+        prompt_options_text='[login/bashrc; Enter to skip]'; prompt_plain="? $prompt_question $prompt_options_text "
+        fixed_prompt_layout; render_fixed_prompt
+        local choice_complete=true
+        read_prompt_answer || { prompt_answer=''; choice_complete=false; }
+        if [[ "$prompt_redraw" == true && "$prompt_echo" == false ]]; then printf '\n'; fi
+        choice=$prompt_answer
+        case "$choice" in
+          bashrc) confirm_fixed_choice bashrc; profile="$HOME/.bashrc"; break ;;
+          login) confirm_fixed_choice login; break ;; # First existing login file selected above.
+          '')
+            [[ "$choice_complete" != true ]] || confirm_fixed_choice Skip
+            path_setup_complete=false; printf 'PATH setup skipped.\n'; return ;;
+          *) printf 'Enter login or bashrc.\n' ;;
+        esac
+      done
       ;;
     *) path_incomplete 'Automatic PATH setup supports Bash and zsh. Configure the equivalent PATH for your shell, or retry in Bash/zsh.'; return ;;
   esac
@@ -1561,9 +1580,15 @@ main() {
   if [[ "$backup_choice" == yes ]]; then
     backup_hostname=$(backup_setup_host) || return $?
     if [[ -z "$backup_hostname" ]]; then
-      status_marker prompt; printf ' GitHub hostname '; prompt_options 'github.com'; printf ': '
-      if ! read_prompt_answer; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
-      backup_hostname=$(backup_setup_host "${prompt_answer:-github.com}") || return $?
+      while :; do
+        status_marker prompt; printf ' GitHub hostname '; prompt_options 'github.com'; printf ': '
+        if ! read_prompt_answer; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
+        local host_status=0
+        backup_hostname=$(backup_setup_host "${prompt_answer:-github.com}") || host_status=$?
+        if [[ "$host_status" == 0 ]]; then break; fi
+        [[ "$host_status" == 2 ]] || return "$host_status"
+        printf 'Enter a GitHub hostname only, such as github.com or git.example.com.\n'
+      done
     fi
   fi
   if [[ "$nvm_profile_needed" == true ]] || ! original_path_sufficient; then

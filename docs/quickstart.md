@@ -5,7 +5,7 @@ You’ll need a [GitHub account](https://github.com/signup) only if you choose t
 Open Terminal and paste:
 
 ```shell
-ballin_script=$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh) && /bin/bash -c "$ballin_script"
+BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)"
 ```
 
 Quickstart offers NVM and latest LTS Node when needed. If your existing Node
