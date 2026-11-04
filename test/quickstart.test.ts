@@ -64,6 +64,11 @@ case "$1" in
     for tool in "$@"; do
       [[ "$tool" == nvm || "$tool" == gh || "$tool" == git ]] || exit 96
       if [[ "$tool" == nvm ]]; then
+        if [[ "\${FAKE_NVM_CAVEATS:-0}" == 1 ]]; then
+          printf 'upstream manual NVM profile instructions\\n'
+          printf 'upstream NVM diagnostic\\n' >&2
+        fi
+        [[ "\${FAKE_NVM_BREW_STATUS:-0}" == 0 ]] || exit "$FAKE_NVM_BREW_STATUS"
         mkdir -p "$FAKE_NATIVE_PREFIX/opt/nvm/libexec" "$FAKE_NATIVE_PREFIX/opt/nvm/etc/bash_completion.d"
         cp "$FAKE_ROOT/nvm-source.sh" "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm.sh"
         printf '#!/bin/bash\\n. "$NVM_DIR/nvm.sh" --no-use\\nexec "$@"\\n' > "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm-exec"
@@ -398,10 +403,45 @@ esac
       assert.notInclude(profile, 'versions/node/'); assert.include(profile, 'nvm use --silent default');
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
+      assert.equal(result.stdout.includes('Homebrew shows manual setup instructions above.'), route === 'homebrew');
       if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
       else assert.include(readLog(), '/nvm-sh/nvm/v0.40.8/install.sh');
     });
   }
+  for (const status of [0, 42, 130, 143]) {
+    it(`clarifies successful new Homebrew NVM setup without hiding caveats or changing status ${status}`, () => {
+      const prefix = nativeBrew();
+      const result = run('y\ny\ny\n', {
+        PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
+        FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n',
+        FAKE_NVM_BREW_STATUS: String(status), FAKE_NVM_CAVEATS: '1',
+      });
+      assert.equal(result.status, status, result.stdout + result.stderr);
+      assert.include(result.stdout, 'upstream manual NVM profile instructions');
+      assert.include(result.stderr, 'upstream NVM diagnostic');
+      const clarification = 'Homebrew shows manual setup instructions above. Ballin can configure your shell next, with your permission.';
+      if (status === 0) {
+        assert.equal(result.stdout.split(clarification).length - 1, 1);
+        assert.isAbove(result.stdout.indexOf(clarification), result.stdout.indexOf('NVM is ready in'));
+        assert.isBelow(result.stdout.indexOf(clarification), result.stdout.indexOf('Add Ballin setup to'));
+      } else {
+        assert.notInclude(result.stdout, clarification);
+        assert.notInclude(result.stdout, 'Setup complete.');
+        assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+      }
+    });
+  }
+  it('does not offer shell clarification when Node setup fails after new Homebrew NVM installation', () => {
+    const prefix = nativeBrew();
+    const result = run('y\ny\ny\n', {
+      PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
+      FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_FAIL: 'install', FAKE_NVM_CAVEATS: '1',
+    });
+    assert.equal(result.status, 42, result.stdout + result.stderr);
+    assert.include(result.stdout, 'upstream manual NVM profile instructions');
+    assert.notInclude(result.stdout, 'Homebrew shows manual setup instructions above.');
+    assert.notInclude(result.stdout, 'Setup complete.');
+  });
   for (const shell of ['bash', 'zsh']) {
     it(`initializes fresh Homebrew compatibility links once and loads libexec in a new ${shell}`, () => {
       const prefix = nativeBrew(); const nvm = path.join(home, '.nvm');
@@ -453,6 +493,7 @@ esac
           FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: consent ? 'y\n' : 'n\n' });
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.notInclude(readLog(), 'native-brew:install');
+        assert.notInclude(result.stdout, 'Homebrew shows manual setup instructions above.');
         const sourceLink = path.join(nvm, 'nvm.sh');
         if (consent) assert.equal(fs.readlinkSync(sourceLink), path.join(libexec, 'nvm.sh'));
         else assert.isFalse(fs.existsSync(sourceLink));

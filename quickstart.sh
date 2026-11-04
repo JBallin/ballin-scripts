@@ -1006,6 +1006,7 @@ plan_nvm() {
 }
 
 install_nvm_lts() {
+  local installed_with_brew=false
   phase 'Setting up NVM and LTS Node'
   validate_nvm_directory
   validate_nvm_alias_targets
@@ -1017,6 +1018,7 @@ install_nvm_lts() {
     if [[ -n "$brew_tool" ]]; then
       printf '$ brew install --formula nvm\n'
       HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew_checked install --formula nvm
+      installed_with_brew=true
       nvm_source="$brew_prefix/opt/nvm/libexec/nvm.sh"; nvm_method=homebrew
       [[ -r "$nvm_source" ]] || fail 'Homebrew NVM source was not installed at its stable prefix.'
     else
@@ -1093,6 +1095,9 @@ install_nvm_lts() {
   current=$(node --version)
   [[ "$resolved_default" == "$current" ]] || fail 'NVM default and active Node differ. Inspect them before retrying.'
   printf 'NVM is ready in %s; Node %s is active for this setup.\n' "$(display_path "$nvm_directory")" "$current"
+  if "$installed_with_brew"; then
+    printf '\nHomebrew shows manual setup instructions above. Ballin can configure your shell next, with your permission.\n'
+  fi
   # Do not add this version-specific bin directory to persistent command_path.
 }
 

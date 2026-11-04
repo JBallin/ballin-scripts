@@ -371,9 +371,9 @@ for how confirmed choices are saved when revisiting settings.
 
 The installer can create or change:
 
-- `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Rerunning the
-  installer updates this checkout; if local changes block checkout or merge,
-  Ballin may move tracked and untracked changes to a Git stash during recovery.
+- `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Installation
+  stops if the checkout is dirty or has conflicting local files. Preserve local
+  work before retrying; Ballin does not stash or reset it.
 - `~/.ballin-scripts/ballin.config.json`, which stores local Ballin settings.
   Reconnecting to a backup can recover supported portable preferences while
   preserving existing local choices.
