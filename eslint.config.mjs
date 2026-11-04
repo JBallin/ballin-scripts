@@ -18,6 +18,7 @@ const tsFiles = [
   'analytics-worker/wrangler.ts',
   'commands/**/*.ts',
   'config/**/*.ts',
+  'docs/assets/**/*.ts',
   'test/**/*.ts',
 ];
 

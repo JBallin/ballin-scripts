@@ -1,9 +1,18 @@
 import AppKit
+import Darwin
 import Foundation
 
 let inputData = FileHandle.standardInput.readDataToEndOfFile()
 guard let input = String(data: inputData, encoding: .utf8) else {
     fatalError("Expected UTF-8 terminal output on stdin")
+}
+guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    fputs("No terminal output received on stdin\n", stderr)
+    exit(EXIT_FAILURE)
+}
+guard CommandLine.arguments.count == 2 else {
+    fputs("Pass a temporary PNG output path\n", stderr)
+    exit(EXIT_FAILURE)
 }
 
 var lines = input.components(separatedBy: "\n")
@@ -83,5 +92,5 @@ for (row, line) in lines.enumerated() {
 
 NSGraphicsContext.restoreGraphicsState()
 let png = image.representation(using: .png, properties: [:])!
-let outputPath = CommandLine.arguments.dropFirst().first ?? "docs/assets/readme-update-example.png"
+let outputPath = CommandLine.arguments[1]
 try png.write(to: URL(fileURLWithPath: outputPath))
