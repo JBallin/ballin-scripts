@@ -18,7 +18,7 @@
 For development, use the [main-tracking environment default](docs/installation.md#selecting-a-revision).
 Self-update refuses unsafe local work and confirms track changes. Preserve work
 before updating, then create your feature branch. It never automatically stashes
-or merges changes. Use a separate worktree when working alongside an installation.
+or merges local work. Use a separate worktree when working alongside an installation.
 
 ```shell
 $ cd ~/.ballin-scripts

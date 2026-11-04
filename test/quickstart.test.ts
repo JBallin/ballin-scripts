@@ -391,8 +391,10 @@ esac
         ...(prefix ? { PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix } : {}) });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const profile = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-      assert.include(profile, '# NVM (Ballin Quickstart)'); assert.include(profile, '# Ballin');
-      assert.equal(profile.split('https://github.com/JBallin/ballin-scripts').length - 1, 1);
+      assert.include(profile, '# NVM (Ballin Quickstart)');
+      if (prefix) assert.notInclude(profile, '# Ballin');
+      else assert.include(profile, '# Ballin');
+      assert.equal(profile.split('https://github.com/JBallin/ballin-scripts').length - 1, prefix ? 0 : 1);
       assert.notInclude(profile, 'versions/node/'); assert.include(profile, 'nvm use --silent default');
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
@@ -679,6 +681,32 @@ esac
         assert.include(result.stderr, 'NVM installation did not finish.');
         assert.notInclude(result.stdout, 'Setup complete.'); assert.notInclude(readLog(), '/main/install.sh');
       }
+    });
+  }
+
+  for (const action of ['alias', 'version']) {
+    it(`reports NVM ${action} failure explicitly before installing Ballin`, () => {
+      const nvm = path.join(home, '.nvm');
+      fs.mkdirSync(path.join(nvm, 'alias'), { recursive: true });
+      fs.writeFileSync(path.join(nvm, 'alias/default'), 'v22.0.0\n');
+      const source = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8').replace(
+        '  local action=$1; shift\n',
+        '  local action=$1; shift\n'
+          + '  if [[ "$action" == "${FAKE_NVM_FAIL:-}" && "$NVM_DIR" == "$HOME/.nvm" ]]; then\n'
+          + '    false # Model a tolerated nonzero internal NVM operation.\n'
+          + '    printf "fixture NVM diagnostic\\n" >&2; return 42\n'
+          + '  fi\n');
+      fs.writeFileSync(path.join(nvm, 'nvm.sh'), source);
+      const result = run('y\ny\ny\n', {
+        FAKE_MISSING_NODE: '1', FAKE_NVM_FAIL: action, FAKE_EARLY_ANSWER: 'n\n',
+      });
+      assert.equal(result.status, 42, result.stdout + result.stderr);
+      assert.include(result.stderr, 'fixture NVM diagnostic');
+      assert.include(result.stderr, action === 'alias'
+        ? 'NVM default selection did not finish.' : 'Unable to resolve the NVM default.');
+      assert.notInclude(readLog(), '/main/install.sh');
+      assert.notInclude(result.stdout, 'Setup complete.');
+      assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
     });
   }
 
@@ -3061,8 +3089,16 @@ confirm() {
     assert.notInclude(readLog(), 'install.sh:');
   });
   it('rejects unsupported platforms before changing home files', () => {
-    for (const env of [{ FAKE_OS: 'Linux' }, { FAKE_MACOS: '13.4' }, { FAKE_ARCH: 'i386' }]) {
-      assert.equal(run('', env).status, 1);
+    for (const [env, message] of [
+      [{ FAKE_OS: 'Linux' }, 'This quickstart is for macOS.'],
+      [{ FAKE_MACOS: '13.4' }, 'This quickstart requires macOS 13.5 or newer.'],
+      [{ FAKE_ARCH: 'i386' }, 'Unsupported Mac architecture: i386.'],
+    ] as const) {
+      const result = run('', env, home,
+        'ballin_select() { printf "revision-resolution\\n" >> "$FAKE_COMMAND_LOG"; return 1; }');
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, message);
+      assert.notInclude(readLog(), 'revision-resolution');
       assert.isFalse(fs.existsSync(path.join(home, '.local')));
     }
   });
@@ -3103,7 +3139,11 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           if (choice !== 'analytics-eof') assert.isEmpty(publishes);
           assert.notInclude(result.stdout, 'Run a backup now and open');
           if (choice.startsWith('final-')) assert.include(result.stdout, 'Backup setup cancelled.');
-          if (choice === 'analytics-eof') assert.notInclude(result.stdout.slice(result.stdout.indexOf('Analytics details:')), 'Which Bash startup file');
+          if (choice === 'analytics-eof') {
+            const analyticsPrompt = result.stdout.indexOf('Share usage analytics to help improve Ballin?');
+            assert.isAtLeast(analyticsPrompt, 0, result.stdout);
+            assert.notInclude(result.stdout.slice(analyticsPrompt), 'Which Bash startup file');
+          }
         }
       } finally { cleanupSandbox(sandbox.root); }
     });

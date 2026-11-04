@@ -65,7 +65,7 @@ describe('selected checkout integration', () => {
     const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: automatic, FIXTURE_TTY: tty }, mode: 'self-update' }); assert.equal(r.status, 21); assert.isTrue(r.stderr.endsWith('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.\n')); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });
   it('refuses noninteractive revision changes even with affirmative input', () => {
-    const r = run({ env: { FIXTURE_TTY: '0' }, input: 'yes\n' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires confirmation');
+    const r = run({ env: { FIXTURE_TTY: '0' }, input: 'yes\n' }); assert.equal(r.status, 21); assert.include(r.stderr, 'requires confirmation');
     assert.include(r.stderr, 'The requested revision was not applied.');
     assert.include(r.stderr, 'cannot select an explicit revision');
     assert.notInclude(r.stderr, 'Run `ballin self-update` interactively');

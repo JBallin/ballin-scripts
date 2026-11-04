@@ -1071,14 +1071,25 @@ install_nvm_lts() {
   fi
   if "$nvm_default_exists"; then
     printf "$ nvm alias default 'lts/*'\n"
-    nvm alias default 'lts/*'
+    # Check the whole NVM call: its internals are not safe under errexit.
+    nvm alias default 'lts/*' || nvm_status=$?
+    stop_if_interrupted "$nvm_status"
+    if [[ "$nvm_status" != 0 ]]; then
+      printf '\nQuickstart: NVM default selection did not finish. Inspect its output, then rerun Quickstart.\n' >&2
+      return "$nvm_status"
+    fi
   fi
   node_tool=$(type -P node) || fail 'NVM did not activate Node.'
   node_compatible "$node_tool" || fail "Latest NVM LTS does not satisfy Ballin's Node.js requirement."
   npm_tool=$(type -P npm) || fail 'NVM did not provide npm.'
   npm_compatible "$npm_tool" || fail 'NVM npm could not run.'
   local resolved_default current
-  resolved_default=$(nvm version default)
+  resolved_default=$(nvm version default) || nvm_status=$?
+  stop_if_interrupted "$nvm_status"
+  if [[ "$nvm_status" != 0 ]]; then
+    printf '\nQuickstart: Unable to resolve the NVM default. Inspect its output, then rerun Quickstart.\n' >&2
+    return "$nvm_status"
+  fi
   current=$(node --version)
   [[ "$resolved_default" == "$current" ]] || fail 'NVM default and active Node differ. Inspect them before retrying.'
   printf 'NVM is ready in %s; Node %s is active for this setup.\n' "$(display_path "$nvm_directory")" "$current"
@@ -1380,7 +1391,7 @@ configure_path() {
     path_incomplete 'The proposed append could not be written.'; return
   fi
   if [[ -n "$nvm_block" ]]; then printf '%s\n\n' "$nvm_block" >> "$profile_temp"; fi
-  if ! grep -Fxq '# https://github.com/JBallin/ballin-scripts' "$original"; then
+  if "$append_path" && ! grep -Fxq '# https://github.com/JBallin/ballin-scripts' "$original"; then
     printf '# Ballin\n# https://github.com/JBallin/ballin-scripts\n' >> "$profile_temp"
   fi
   if "$append_path"; then printf '%s\n' "$line" >> "$profile_temp"; fi
@@ -1394,10 +1405,7 @@ configure_path() {
 
 main() {
   [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
-  ballin_select "$@" || return $?
-  required_node_version=$ballin_minimum
   local approved_root='' approved_command='' approved_snapshot='' exposed_npm os_version major minor machine git_tool need_git need_node need_gh repo path_node local_bin command_path='' destination npm_tool='' path_setup_complete=true selected_profile='' backup_hostname=''
-  [[ "$(uname -s)" == Darwin ]] || fail 'This quickstart is for macOS.'
   [[ "${HOME:-}" == /* && "$HOME" != *:* && "$HOME" != *$'\n'* ]] || fail 'HOME must be an absolute path without colons or newlines.'
   os_version=$(sw_vers -productVersion)
   IFS=. read -r major minor _ <<< "$os_version"
@@ -1409,6 +1417,8 @@ main() {
     x86_64) gh_arch='amd64' ;;
     *) fail "Unsupported Mac architecture: $machine." ;;
   esac
+  ballin_select "$@" || return $?
+  required_node_version=$ballin_minimum
   normalize_process_path
   # Select executable tools and keep child installers from importing overrides.
   unset -f git node npm gh nvm

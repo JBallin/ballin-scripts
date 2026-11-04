@@ -135,7 +135,7 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
   if (!needsConsent(before, selection, mode)) return;
   if (process.env.BALLIN_AUTOMATIC_UPDATE === '1' || !require('node:tty').isatty(0)) {
     if (mode === 'self-update') throw new RevisionChangeRequiresConfirmation('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.');
-    throw new Error('This revision/track change requires confirmation. The requested revision was not applied. `ballin self-update` follows the default selection; it cannot select an explicit revision.');
+    throw new RevisionChangeRequiresConfirmation('This revision/track change requires confirmation. The requested revision was not applied. `ballin self-update` follows the default selection; it cannot select an explicit revision.');
   }
   const styled = process.stdout.isTTY && process.env.TERM !== 'dumb' && !process.env.NO_COLOR;
   const plainPrompt = '? Change the installed revision/track? [y/N] ';

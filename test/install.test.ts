@@ -210,6 +210,18 @@ ballin_download() { : > "$2"; }
     assert.deepEqual(commandLog(), ['node:repo_update selected helper']);
   });
 
+  it('reports confirmation-only explicit-install refusal without checkout-repair guidance', () => {
+    installBaseCommands(); writeCurrentCheckout();
+    const guidance = 'This revision/track change requires confirmation. The requested revision was not applied.';
+    const result = runInstall({ env: { FAKE_REPO_UPDATE_STATUS: '21', FAKE_REPO_UPDATE_ERROR: guidance } });
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, guidance + '\n');
+    assert.notInclude(result.stdout, 'Unable to update');
+    assert.notInclude(result.stdout, 'preserve local work');
+    assert.notInclude(result.stdout, 'Setup complete');
+    assert.notInclude(commandLog().join('\n'), 'node:install_setup');
+  });
+
   for (const scenario of ['standalone', 'embedded', 'failure', 'declined', 'eof']) {
     it(`ends installer output with terminal guidance only on standalone success: ${scenario}`, () => {
       installBaseCommands();

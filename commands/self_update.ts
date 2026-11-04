@@ -164,18 +164,16 @@ const refreshInstalledBallin = (): void => {
   }
 
   process.exitCode = 0;
-  {
-    writeStdoutLine(updateResult(repoDir, previousRevision, previousIdentity));
-    const currentSources = installedScope(repoDir);
-    if (!previousSources || !currentSources || previousSources !== currentSources) {
-      writeStdoutLine(previousSources && currentSources
-        ? 'Supported backup sources or collection scope changed.'
-        : 'Unable to compare backup sources and collection scope across this update.');
-      if (sensitiveSourcesEnabled(repoDir)) {
-        writeStdoutLine('Your sensitive-source opt-in remains enabled across updates and covers current and future supported sources.');
-      }
-      writeStdoutLine(`Review: ${sourcesUrl}`);
+  writeStdoutLine(updateResult(repoDir, previousRevision, previousIdentity));
+  const currentSources = installedScope(repoDir);
+  if (!previousSources || !currentSources || previousSources !== currentSources) {
+    writeStdoutLine(previousSources && currentSources
+      ? 'Supported backup sources or collection scope changed.'
+      : 'Unable to compare backup sources and collection scope across this update.');
+    if (sensitiveSourcesEnabled(repoDir)) {
+      writeStdoutLine('Your sensitive-source opt-in remains enabled across updates and covers current and future supported sources.');
     }
+    writeStdoutLine(`Review: ${sourcesUrl}`);
   }
 };
 
