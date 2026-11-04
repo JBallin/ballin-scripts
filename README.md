@@ -74,11 +74,11 @@ $ ballin update
 ...
 ==> Backing up development environment
 Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
-✔ ballin_config
-✔ bash_completions
-✔ Brewfile
+✓ ballin_config
+✓ bash_completions
+✓ Brewfile
 ...
-✎ zshrc
+~ zshrc
 View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```
 

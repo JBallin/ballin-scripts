@@ -55,9 +55,9 @@ describe('README update example image generation', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, '\x1b[1m$ ballin update\x1b[0m\n');
     assert.include(result.stdout, '\x1b[34m==>\x1b[1;39m Updating Homebrew...\x1b[0m');
-    assert.include(result.stdout, '\x1b[1m✎ zshrc\x1b[0m');
-    assert.include(result.stdout, '✔ ballin_config\n✔ bash_completions\n✔ Brewfile\n...\n');
-    assert.notInclude(result.stdout, '\x1b[1m✔');
+    assert.include(result.stdout, '\x1b[0;32m✓\x1b[0m ballin_config\n\x1b[0;32m✓\x1b[0m bash_completions\n\x1b[0;32m✓\x1b[0m Brewfile\n...\n');
+    assert.include(result.stdout, '~ \x1b[1mzshrc\x1b[0m');
+    assert.notInclude(result.stdout, '\x1b[1m~');
     assert.equal((result.stdout.match(/\x1b\[34m==>/g) ?? []).length, 11);
   });
 

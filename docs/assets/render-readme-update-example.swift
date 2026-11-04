@@ -44,6 +44,7 @@ let regularFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
 let boldFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .bold)
 let normalColor = NSColor(calibratedRed: 0.93, green: 0.94, blue: 0.96, alpha: 1)
 let blueColor = NSColor(calibratedRed: 0.36, green: 0.64, blue: 1, alpha: 1)
+let greenColor = NSColor(calibratedRed: 0.30, green: 0.82, blue: 0.47, alpha: 1)
 
 for (row, line) in lines.enumerated() {
     let source = line as NSString
@@ -52,24 +53,26 @@ for (row, line) in lines.enumerated() {
     var cursor = 0
     var bold = false
     var blue = false
+    var green = false
 
     for match in matches {
         if match.range.location > cursor {
             let text = source.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
             rendered.append(NSAttributedString(string: text, attributes: [
                 .font: bold ? boldFont : regularFont,
-                .foregroundColor: blue ? blueColor : normalColor,
+                .foregroundColor: blue ? blueColor : green ? greenColor : normalColor,
             ]))
         }
 
         let codes = source.substring(with: match.range(at: 1)).split(separator: ";").compactMap { Int($0) }
         for code in codes {
             switch code {
-            case 0: bold = false; blue = false
+            case 0: bold = false; blue = false; green = false
             case 1: bold = true
             case 22: bold = false
-            case 34: blue = true
-            case 39: blue = false
+            case 32: blue = false; green = true
+            case 34: blue = true; green = false
+            case 39: blue = false; green = false
             default: break
             }
         }
@@ -80,7 +83,7 @@ for (row, line) in lines.enumerated() {
         let text = source.substring(from: cursor)
         rendered.append(NSAttributedString(string: text, attributes: [
             .font: bold ? boldFont : regularFont,
-            .foregroundColor: blue ? blueColor : normalColor,
+            .foregroundColor: blue ? blueColor : green ? greenColor : normalColor,
         ]))
     }
 

@@ -26,18 +26,20 @@ const example = [
   '...',
   '==> Backing up development environment',
   'Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00',
-  '✔ ballin_config',
-  '✔ bash_completions',
-  '✔ Brewfile',
+  '✓ ballin_config',
+  '✓ bash_completions',
+  '✓ Brewfile',
   '...',
-  '✎ zshrc',
+  '~ zshrc',
   'View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567',
 ];
 
-const output = example.map((line) => line.startsWith('==> ')
-  ? terminalHeading(line.slice(4), { isTTY: true }, { TERM: 'xterm-256color' })
-  : line === '✎ zshrc'
-    ? terminalEmphasis(line, 'bold', { isTTY: true }, { TERM: 'xterm-256color' })
-    : line);
+const output = example.map((line) => {
+  if (line.startsWith('==> ')) return terminalHeading(line.slice(4), { isTTY: true }, { TERM: 'xterm-256color' });
+  if (line.startsWith('✓ ')) return `\x1b[0;32m✓\x1b[0m ${line.slice(2)}`;
+  const changed = line.match(/^([+~-]) (.+)$/u);
+  if (changed) return `${changed[1]} ${terminalEmphasis(changed[2], 'bold', { isTTY: true }, { TERM: 'xterm-256color' })}`;
+  return line;
+});
 
 process.stdout.write(`\x1b[1m$ ballin update\x1b[0m\n${output.join('\n')}\n`);
