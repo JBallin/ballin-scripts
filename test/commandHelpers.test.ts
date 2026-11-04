@@ -46,7 +46,7 @@ describe('command helpers', () => {
         process.stdout.write = stdoutWrite;
         process.stderr.write = stderrWrite;
       }
-      assert.equal(stdout, 'Answer: ');
+      assert.equal(stdout, '? Answer: ');
       assert.equal(stderr, `Unable to read prompt input (stdin read: ${['EAGAIN', 'EBADF'].includes(String(code)) ? code : 'unknown'}).\n`);
       assert.notInclude(stdout + stderr, 'credential content');
       assert.notInclude(stdout + stderr, 'secret-token');

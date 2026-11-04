@@ -288,7 +288,7 @@ describe('repository backup lifecycle', function() {
       assert.equal(result.status, 1, result.stdout + result.stderr);
       const reference = (command: string) => styled ? `\x1b[1m${command}\x1b[0m` : `\`${command}\``;
       const login = reference(`gh auth login --hostname ${host}`); const setup = reference('ballin backup setup');
-      const icon = styled ? '\x1b[31m✗\x1b[0m' : '✗';
+      const icon = styled ? '\x1b[0;31m✗\x1b[0m' : '✗';
       const recovery = result.stdout.slice(result.stdout.indexOf(icon));
       assert.equal(compact(recovery), `${icon} GitHub CLI authentication is required. Run ${login}, then run ${setup}.`);
       assert.include(recovery, login + ','); assert.include(recovery, setup + '.');
@@ -2921,7 +2921,7 @@ describe('repository backup lifecycle', function() {
       const before = config();
       const result = run(['setup'], '\n\n\nn\n' + (confirmation === 'eof' ? '' : `${confirmation}\nn\n`));
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.isTrue(result.stdout.startsWith('==> Setting up GitHub backup\nGitHub hostname [github.com]: '));
+      assert.isTrue(result.stdout.startsWith('==> Setting up GitHub backup\n? GitHub hostname [github.com]: '));
       assert.equal(result.stdout.split('==> Setting up GitHub backup').length - 1, 1);
       assert.include(result.stdout, 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
       assert.include(result.stdout, 'Repository name [ballin-backups]: ');
