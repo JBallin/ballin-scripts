@@ -176,33 +176,114 @@ url_reference() {
     printf '\033[34m%s\033[0m' "$1"
   else printf '%s' "$1"; fi
 }
+status_marker() {
+  local symbol color
+  case "$1" in
+    prompt) symbol='?'; color=32 ;;
+    warning) symbol='!'; color=33 ;;
+    info) symbol='i'; color=34 ;;
+    success) symbol='✓'; color=32 ;;
+    failure) symbol='✗'; color=31 ;;
+  esac
+  if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[0;%sm%s\033[0m' "$color" "$symbol"
+  else printf '%s' "$symbol"; fi
+}
+choice_word() {
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" && "${2:-}" == default ]]; then
+    printf '\033[1m%s\033[0m' "$1"
+  else printf '%s' "$1"; fi
+}
+presentation_text() {
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      'i '*) status_marker info "${2:-1}"; printf ' %s\n' "${line#i }" ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done <<< "$1"
+}
+fixed_prompt_layout() {
+  prompt_redraw=false
+  [[ -t 0 && -t 1 && /dev/fd/0 -ef /dev/fd/1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]] || return 0
+  local flags status=0
+  flags=$(/bin/stty -a 2>/dev/null) || status=$?
+  case "$status" in 130|143) exit "$status" ;; 0) ;; *) return 0 ;; esac
+  flags=${flags//$'\n'/ }; flags=${flags//;/ }; flags=" $flags "
+  [[ "$flags" == *' icanon '* && "$flags" == *' onlcr '* ]] || return 0
+  if [[ "$flags" == *' -echo '* ]]; then prompt_echo=false
+  elif [[ "$flags" == *' echo '* ]]; then prompt_echo=true
+  else return 0; fi
+  read -r prompt_rows prompt_columns < <(/bin/stty size 2>/dev/null) || return 0
+  [[ "$prompt_rows" =~ ^[0-9]+$ && "$prompt_columns" =~ ^[0-9]+$ ]] || return 0
+  (( prompt_rows > 1 && prompt_columns > 0 )) || return 0
+  # Poll without reading bytes. Bash 3's read -t 0 cannot reliably detect
+  # queued input on macOS. Missing/unsupported polling keeps the plain echo.
+  local readiness=0
+  /bin/zsh -d -f -c 'zmodload zsh/zselect || exit 2; zselect -r 0 -t 0' >/dev/null 2>&1 || readiness=$?
+  case "$readiness" in 130|143) exit "$readiness" ;; 1) ;; *) return 0 ;; esac
+  prompt_redraw=true
+}
+render_fixed_prompt() {
+  status_marker prompt; printf ' %s ' "$prompt_question"
+  if [[ "$prompt_kind" == yesno ]]; then
+    if [[ "$prompt_default" == y ]]; then prompt_choices '[Y/n]' y; else prompt_choices '[y/N]' n; fi
+  else printf '%s ' "$prompt_options_text"; fi
+}
+confirm_fixed_choice() {
+  [[ "${prompt_redraw:-false}" == true ]] || return 0
+  local columns=$prompt_columns rows=$prompt_rows echo=$prompt_echo lines width LC_ALL=C
+  fixed_prompt_layout
+  [[ "$prompt_redraw" == true && "$prompt_columns" == "$columns" && "$prompt_rows" == "$rows" && "$prompt_echo" == "$echo" ]] || return 0
+  # Bootstrap prompts cannot rely on Node. Avoid guessing the display width of
+  # non-ASCII/control input or repainting beyond the visible owned region.
+  [[ "$prompt_plain$prompt_answer" =~ ^[[:print:]]*$ ]] || return 0
+  width=${#prompt_plain}; [[ "$echo" == false ]] || width=$((width + ${#prompt_answer}))
+  lines=$(((width + columns - 1) / columns)); (( lines > 0 )) || lines=1
+  (( lines < rows )) || return 0
+  printf '\033[%sA\r\033[J' "$lines"
+  render_fixed_prompt
+  printf '\033[36m%s\033[0m\n' "$1"
+}
 documentation_pointer() {
-  printf '🔗 %s:\n' "$1"
+  status_marker info
+  printf ' %s:\n' "$1"
   url_reference "$2"
   printf '\n'
 }
 error_icon() {
-  if [[ -t "${1:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    printf '\033[31m❌\033[0m'
-  else printf '❌'; fi
+  status_marker failure "${1:-1}"
 }
 setup_complete() {
-  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    printf '\033[32m😎 Setup complete.\033[0m'
-  else printf '😎 Setup complete.'; fi
+  status_marker success; printf ' Setup complete.'
 }
 prompt_options() {
-  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    printf '\033[34m[%s]\033[0m' "$1"
-  else printf '[%s]' "$1"; fi
+  local text=$1 options suffix selected word rest
+  printf '['
+  case "$text" in
+    'Enter for '*)
+      selected=${text#Enter for }; word=${selected%%,*}; rest=${selected#*,}
+      printf 'Enter for '; choice_word "$word"
+      printf ',%s' "${rest%skip}"; choice_word skip
+      ;;
+    *)
+      options=${text%%;*}; suffix=${text#"$options"}
+      if [[ "$options" == */* ]]; then
+        choice_word "${options%%/*}"; printf '/'; choice_word "${options#*/}"
+      else choice_word "$options"; fi
+      printf '%s' "$suffix"
+      ;;
+  esac
+  printf ']'
 }
 prompt_choices() {
-  local choices=$1 default=$2
-  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    if [[ "$default" == y ]]; then printf '\033[34m[\033[1mY\033[22m/n]\033[0m '
-    else printf '\033[34m[y/\033[1mN\033[22m]\033[0m '; fi
-  else printf '%s ' "$choices"; fi
+  local default=$2
+  printf '['
+  if [[ "$default" == y ]]; then choice_word Y default; printf '/'; choice_word n
+  else choice_word y; printf '/'; choice_word N default; fi
+  printf '] '
 }
+
 
 # Abbreviate only paths inside HOME for display; filesystem operations stay absolute.
 display_path() {
@@ -242,7 +323,8 @@ original_path=${PATH-}
 original_pwd=$PWD
 
 fail() {
-  printf '\nQuickstart: %s\n' "$1" >&2
+  printf '\nQuickstart: ' >&2
+  presentation_text "$1" 2 >&2
   exit 1
 }
 
@@ -276,17 +358,23 @@ read_prompt_answer() {
 }
 confirm() {
   local default=${2:-n} normalized
+  prompt_kind=yesno; prompt_default=$default; prompt_question=$1
+  prompt_plain="? $1 $([[ "$default" == y ]] && printf '[Y/n]' || printf '[y/N]') "
   while :; do
-    printf '%s ' "$1"
-    if [[ "$default" == y ]]; then prompt_choices '[Y/n]' y; else prompt_choices '[y/N]' n; fi
+    fixed_prompt_layout
+    render_fixed_prompt
     read_prompt_answer || return 1
+    if [[ "$prompt_redraw" == true && "$prompt_echo" == false ]]; then printf '\n'; fi
     normalized=$prompt_answer
     normalized="${normalized#"${normalized%%[![:space:]]*}"}"
     normalized="${normalized%"${normalized##*[![:space:]]}"}"
     case "$normalized" in
-      y|Y|[yY][eE][sS]) return 0 ;;
-      n|N|[nN][oO]) return 1 ;;
-      '') [[ "$default" == y ]]; return ;;
+      y|Y|[yY][eE][sS]) confirm_fixed_choice Yes; return 0 ;;
+      n|N|[nN][oO]) confirm_fixed_choice No; return 1 ;;
+      '')
+        if [[ "$default" == y ]]; then confirm_fixed_choice Yes; return 0
+        else confirm_fixed_choice No; return 1; fi
+        ;;
       *) printf 'Please enter yes or no.\n' ;;
     esac
   done
@@ -583,7 +671,7 @@ existing_hidden_node() {
 }
 
 manual_node_guidance() {
-  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\n🔗 Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\ni Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
 }
 
 brew_checked() {
@@ -759,7 +847,7 @@ install_command_line_tools() {
     fi
     printf '$ xcode-select --install\n'
     probe_tool "$system_xcode_select" --install || fail 'Apple could not start Xcode Command Line Tools installation. Finish any pending installation, then rerun Quickstart.'
-    printf 'Finish installing Xcode Command Line Tools, then press Return here: '
+    status_marker prompt; printf ' Finish installing Xcode Command Line Tools, then press Return here: '
     read_prompt_answer || fail 'Git setup did not complete.'
   fi
   git_tool=$(find_git)
@@ -908,7 +996,7 @@ plan_nvm() {
   if ! confirm 'Use NVM and latest LTS Node?'; then
     if [[ "$compatible" != true ]]; then
       "$input_ended" && fail 'No answer received. Node.js setup stopped.'
-      fail 'A compatible Node.js is required. Activate or install one, then rerun Quickstart.'$'\n🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+      fail 'A compatible Node.js is required. Activate or install one, then rerun Quickstart.'$'\ni Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
     fi
     return
   fi
@@ -1042,7 +1130,8 @@ install_gh() {
 
 path_incomplete() {
   path_setup_complete=false
-  printf '\nPersistent PATH setup incomplete: %s\n' "$1" >&2
+  printf '\nPersistent PATH setup incomplete: ' >&2
+  presentation_text "$1" 2 >&2
   printf 'The startup file was left unchanged. Setup can continue with the current process PATH.\n' >&2
   printf 'Review your shell startup and PATH setup, or rerun this quickstart to retry.\n' >&2
 }
@@ -1051,7 +1140,7 @@ manual_nvm_guidance() {
   if [[ "${nvm_profile_needed:-false}" == true && "${path_setup_complete:-false}" != true ]]; then
     printf 'Activate NVM in your shell startup file before running Ballin in a new Terminal.\nUse this NVM working directory:\n'
     printf 'export NVM_DIR=%q\n' "$nvm_directory"
-    printf '🔗 NVM activation:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-nvm-activation\n'
+    documentation_pointer 'NVM activation' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-nvm-activation'
   fi
 }
 
@@ -1121,7 +1210,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=true
   else
-    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\n🔗 Manual setup:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
+    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\ni Manual setup:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
   fi
   return 0
 }
@@ -1161,9 +1250,9 @@ configure_path() {
         default_directory="$ZDOTDIR"
       fi
       if [[ "$default_directory" == "$HOME" ]]; then
-        printf 'Zsh settings directory '; prompt_options 'Enter for home (~), an absolute directory, or skip'; printf ': '
+        status_marker prompt; printf ' Zsh settings directory '; prompt_options 'Enter for home (~), an absolute directory, or skip'; printf ': '
       else
-        printf 'Zsh settings directory '; prompt_options "Enter for $(display_path "$default_directory"), another absolute directory, or skip"; printf ': '
+        status_marker prompt; printf ' Zsh settings directory '; prompt_options "Enter for $(display_path "$default_directory"), another absolute directory, or skip"; printf ': '
       fi
       if ! read_prompt_answer; then path_setup_complete=false; printf 'PATH setup skipped.\n'; return; fi
       choice=$prompt_answer
@@ -1183,13 +1272,19 @@ configure_path() {
       profile="$HOME/.bashrc"
       if [[ "${nvm_profile_needed:-false}" != true ]] && check_existing_path; then return; fi
       profile="$login_profile"
-      printf 'Which Bash startup file does your terminal read? '; prompt_options 'login/bashrc; Enter to skip'; printf ' '
-      read_prompt_answer || prompt_answer=''
+      prompt_kind=startup; prompt_question='Which Bash startup file does your terminal read?'
+      prompt_options_text='[login/bashrc; Enter to skip]'; prompt_plain="? $prompt_question $prompt_options_text "
+      fixed_prompt_layout; render_fixed_prompt
+      local choice_complete=true
+      read_prompt_answer || { prompt_answer=''; choice_complete=false; }
+      if [[ "$prompt_redraw" == true && "$prompt_echo" == false ]]; then printf '\n'; fi
       choice=$prompt_answer
       case "$choice" in
-        bashrc) profile="$HOME/.bashrc" ;;
-        login) ;; # First existing login file selected above.
-        '') path_setup_complete=false; printf 'PATH setup skipped.\n'; return ;;
+        bashrc) confirm_fixed_choice Bashrc; profile="$HOME/.bashrc" ;;
+        login) confirm_fixed_choice Login ;; # First existing login file selected above.
+        '')
+          [[ "$choice_complete" != true ]] || confirm_fixed_choice Skip
+          path_setup_complete=false; printf 'PATH setup skipped.\n'; return ;;
         *) path_incomplete 'No Bash startup file selected.'; return ;;
       esac
       ;;
@@ -1451,7 +1546,7 @@ main() {
   if [[ "$backup_choice" == yes ]]; then
     backup_hostname=$(backup_setup_host) || return $?
     if [[ -z "$backup_hostname" ]]; then
-      printf 'GitHub hostname '; prompt_options 'github.com'; printf ': '
+      status_marker prompt; printf ' GitHub hostname '; prompt_options 'github.com'; printf ': '
       if ! read_prompt_answer; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0; fi
       backup_hostname=$(backup_setup_host "${prompt_answer:-github.com}") || return $?
     fi
@@ -1494,7 +1589,8 @@ main() {
     command_reference 'ballin help'
     printf '.\n'
   else
-    printf "\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n"
+    printf "\nBallin is installed. PATH setup wasn’t verified.\n"
+    documentation_pointer 'Manual setup' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup'
   fi
 }
 

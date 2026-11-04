@@ -32,14 +32,14 @@ const reportManagedBranchProtection = (outcome: ManagedBranchRulesetOutcome, ins
     return;
   }
   if (outcome.status === 'permission-denied') {
-    writeStdoutLine(`ℹ️  Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun ${terminalCommand('ballin backup setup')} after updating GitHub access.`);
+    writeStdoutLine(`i Optional GitHub branch protection was not enabled with the current permissions; backup setup can continue normally. Rerun ${terminalCommand('ballin backup setup')} after updating GitHub access.`);
     return;
   }
   if (outcome.status === 'unexpected') {
-    writeStdoutLine('ℹ️  Backup setup can continue normally, but optional GitHub branch protection could not be confirmed.');
+    writeStdoutLine('i Backup setup can continue normally, but optional GitHub branch protection could not be confirmed.');
     return;
   }
-  writeStdoutLine('ℹ️  Backup setup can continue normally, but optional GitHub branch protection is unconfirmed. Inspect the Ballin-named repository ruleset before retrying setup.');
+  writeStdoutLine('i Backup setup can continue normally, but optional GitHub branch protection is unconfirmed. Inspect the Ballin-named repository ruleset before retrying setup.');
 };
 type RepositorySetupOptions = {
   configPath: string; backupCacheDir: string; originalConfig?: Record<string, unknown>; repositoryName?: string;
@@ -61,7 +61,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   const repoDir = options.repoDir ?? require('path').join(__dirname, '..');
   const complete = (): boolean => {
     if (options.presentation !== 'installation' && !options.maintenanceOnly) {
-      writeStdoutLine(`\n${terminalComplete('😎 Setup complete.')}`);
+      writeStdoutLine(`\n${terminalComplete('Setup complete.')}`);
       writeStdoutLine(terminalProse(`Run ${terminalCommand('ballin setup')} to review your other preferences.`));
     }
     return true;
@@ -105,7 +105,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     if (configured.kind === 'unconfigured') {
       if (!options.initialConsent && !options.reviewExistingSettings) {
-        writeStdoutLine('🔗 Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
+        writeStdoutLine('i Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
         if (readYesNo('Set up private backups to GitHub? [y/N] ') !== true) {
           writeStdoutLine(`\nBackup setup skipped.\nRun ${terminalCommand('ballin backup setup')} when you’re ready.`);
           return true;
@@ -185,7 +185,10 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     const account = readRepositoryAccount(host);
     let mode: 'create' | 'reconnect';
     while (true) {
-      const choice = readPromptLine('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ');
+      const choice = readPromptLine('Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', (text: string) => {
+        const answer = text.trim().toLowerCase() || 'create';
+        return answer === 'create' ? 'Create' : answer === 'reconnect' ? 'Reconnect' : undefined;
+      });
       if (choice.eof) return cancelled();
       const answer = choice.text.trim().toLowerCase() || 'create';
       if (answer === 'create' || answer === 'reconnect') { mode = answer; break; }
@@ -229,13 +232,13 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         const inspection = checkSetup(() => inspectRepository(selected));
         if (inspection.status === 'incomplete' && inspection.missingRepositoryNode
           && !inspection.cleanupFailed && repositoryName === undefined) {
-          writeStdoutLine(`⚠️  ${formatRepositoryMessage('unavailable')}`);
+          writeStdoutLine(`! ${formatRepositoryMessage('unavailable')}`);
           continue;
         }
         previous = requireRepositoryRead(inspection);
       }
       if (mode === 'reconnect' && (!found || found.redirected)) {
-        writeStdoutLine(`⚠️  ${formatRepositoryMessage('unavailable')}`);
+        writeStdoutLine(`! ${formatRepositoryMessage('unavailable')}`);
         if (repositoryName !== undefined) return false;
         continue;
       }
@@ -248,7 +251,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     if (mode === 'reconnect' && previous) {
       const existing = previous;
       const unexpected = unexpectedRepositoryEntries(existing);
-      if (unexpected) writeStdoutLine(`ℹ️  Unrecognized backup entries: ${unexpected}. Ballin will leave them unchanged.`);
+      if (unexpected) writeStdoutLine(`i Unrecognized backup entries: ${unexpected}. Ballin will leave them unchanged.`);
       previous = existing;
       const bytes = existing.snapshots.get(configSnapshotFileName);
       if (bytes !== undefined) {
@@ -259,14 +262,14 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         remotePreferences = remote;
         restorePortablePreferences(candidate, originalConfig, remote);
       }
-      writeStdoutLine('⚠️  Stop backups on other installations before backing up here.');
-      writeStdoutLine('🔗 Reconnect details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
+      writeStdoutLine('! Stop backups on other installations before backing up here.');
+      writeStdoutLine('i Reconnect details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     } else if (found && !found.redirected) {
       writeStdoutLine('That repository name is already in use. Reconnect to a valid backup, or explicitly choose another name.');
       return false;
     }
     if (found?.redirected) {
-      writeStdoutLine('ℹ️  This name redirects to a renamed repository. Creating a backup here ends that redirect; links and clones using the old URL will no longer reach the renamed repository.');
+      writeStdoutLine('i This name redirects to a renamed repository. Creating a backup here ends that redirect; links and clones using the old URL will no longer reach the renamed repository.');
     }
     writeStdoutLine(`\n${terminalHeading('Backup preferences')}`);
     const includeSensitive = selectSensitiveSources();

@@ -30,7 +30,7 @@ describe('optional completion setup', () => {
     assert.include(output, '~/.zshrc');
     assert.notInclude(output, activationLine('zsh'));
     assert.isFalse(fs.existsSync(profile));
-    assert.include(offer([], false), 'Tab completion skipped.\n🔗 Enable it later:\nhttps://example.test/install#startup-files-and-manual-activation');
+    assert.include(offer([], false), 'Tab completion skipped.\ni Enable it later:\nhttps://example.test/install#startup-files-and-manual-activation');
     offer([]);
     assert.isFalse(fs.existsSync(profile));
   });
@@ -219,7 +219,7 @@ describe('optional completion setup', () => {
     assert.deepEqual(output, [
       'Optional tab completion suggests Ballin commands as you type.',
       'Tab completion setup could not finish. Ballin remains installed.',
-      '🔗 Manual setup:\nguide#startup-files-and-manual-activation',
+      'i Manual setup:\nguide#startup-files-and-manual-activation',
     ]);
   });
   it('refuses a hardlink added between inspection and opening the startup file', () => {

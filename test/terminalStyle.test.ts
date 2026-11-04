@@ -112,29 +112,45 @@ describe('setup presentation roles', () => {
     assert.equal(styled, '🔗 Details:\nVisit \x1b[34mhttps://example.com/guide\x1b[0m, then \x1b[34mhttps://example.com/next\x1b[0m.');
     assert.equal(terminalUrls(styled, tty, {}), styled);
   });
-  it('keeps questions neutral and bolds the uppercase default inside blue brackets', () => {
-    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), 'Continue? \x1b[34m[y/\x1b[1mN\x1b[22m]\x1b[0m ');
-    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), 'Mode? \x1b[34m[\x1b[1mCREATE\x1b[22m/reconnect]\x1b[0m ');
-    assert.equal(terminalPrompt('Host [github.com]: ', tty, {}), 'Host \x1b[34m[github.com]\x1b[0m: ');
+  it('keeps choices neutral and bolds uppercase defaults', () => {
+    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), '\x1b[0;32m?\x1b[0m Continue? [y/\x1b[1mN\x1b[0m] ');
+    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), '\x1b[0;32m?\x1b[0m Mode? [\x1b[1mCREATE\x1b[0m/reconnect] ');
+    assert.equal(terminalPrompt('Host [github.com]: ', tty, {}), '\x1b[0;32m?\x1b[0m Host [github.com]: ');
+  });
+  it('preserves Enter-to-skip instructions and styles a declared NONE default', () => {
+    assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', tty, {}),
+      '\x1b[0;32m?\x1b[0m Startup [login/bashrc; Enter to skip] ');
+    assert.equal(terminalPrompt('Choice [yes/no/NONE] ', tty, {}),
+      '\x1b[0;32m?\x1b[0m Choice [yes/no/\x1b[1mNONE\x1b[0m] ');
+    assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', {}, {}), '? Startup [login/bashrc; Enter to skip] ');
+    assert.equal(terminalPrompt('Directory [Enter for home (~), an absolute directory, or skip]: ', tty, {}),
+      '\x1b[0;32m?\x1b[0m Directory [Enter for home (~), an absolute directory, or skip]: ');
+  });
+  it('provides regular-weight markers without changing prose or adding messages', () => {
+    for (const [marker, color] of [['?', 32], ['!', 33], ['i', 34], ['✓', 32], ['✗', 31]]) {
+      assert.equal(terminalProse(`${marker} Message.`, tty, {}), `\x1b[0;${color}m${marker}\x1b[0m Message.`);
+      assert.equal(terminalProse(`${marker} Message.`, tty, { NO_COLOR: '1' }), `${marker} Message.`);
+    }
+    assert.equal(terminalProse('Ordinary progress.', tty, {}), 'Ordinary progress.');
   });
   for (const env of [{ TERM: 'dumb' }, { NO_COLOR: '0', FORCE_COLOR: '1' }, { NO_COLOR: 'yes' }]) {
     it(`respects all emphasis guards: ${JSON.stringify(env)}`, () => {
-      assert.equal(terminalPrompt('Continue? [Y/n]', tty, env), 'Continue? [Y/n]');
+      assert.equal(terminalPrompt('Continue? [Y/n]', tty, env), '? Continue? [Y/n]');
       assert.equal(terminalUrls('https://example.com', tty, env), 'https://example.com');
-      assert.equal(terminalError('Failed.', tty, env), '❌ Failed.');
-      assert.equal(terminalComplete('Setup complete.', tty, env), 'Setup complete.');
+      assert.equal(terminalError('Failed.', tty, env), '✗ Failed.');
+      assert.equal(terminalComplete('Setup complete.', tty, env), '✓ Setup complete.');
     });
   }
   it('uses the receiving stream, red error icons, and green final completion', () => {
-    assert.equal(terminalError('Failed.', tty, {}), '\x1b[31m❌\x1b[0m Failed.');
-    assert.equal(terminalError('Failed.', {}, { FORCE_COLOR: '1' }), '❌ Failed.');
-    assert.equal(terminalComplete('Setup complete.', tty, {}), '\x1b[32mSetup complete.\x1b[0m');
+    assert.equal(terminalError('Failed.', tty, {}), '\x1b[0;31m✗\x1b[0m Failed.');
+    assert.equal(terminalError('Failed.', {}, { FORCE_COLOR: '1' }), '✗ Failed.');
+    assert.equal(terminalComplete('Setup complete.', tty, {}), '\x1b[0;32m✓\x1b[0m Setup complete.');
   });
   it('wraps host-specific recovery commands using visible Unicode/ANSI columns', () => {
     assert.equal(visibleWidth('A😎⚠️中e\u0301'), 8);
     const command = terminalCommand('gh auth login --hostname ' + 'enterprise.'.repeat(3) + 'example.com', tty, {});
     for (const columns of [80, 47]) {
-      const text = terminalProse(`❌ GitHub CLI authentication is required.\nRun ${command}, then run ${terminalCommand('ballin backup setup', tty, {})}.`, { ...tty, columns }, {});
+      const text = terminalProse(`✗ GitHub CLI authentication is required.\nRun ${command}, then run ${terminalCommand('ballin backup setup', tty, {})}.`, { ...tty, columns }, {});
       assert.include(text, command + ',');
       for (const line of text.split('\n')) {
         if (visibleWidth(line) > columns) assert.equal(line, command + ',');

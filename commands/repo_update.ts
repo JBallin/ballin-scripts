@@ -97,6 +97,36 @@ const needsConsent = (before: Identity, s: Selection, mode: string): boolean => 
   return compareVersions(s.value.slice(1), before.version) < 0 || s.value.split('.')[0] !== before.value?.split('.')[0];
 };
 const revisionCancelledStatus = 20;
+// This downloaded helper remains standalone; mirror the shared prompt's
+// read-only layout checks without depending on the installed checkout's code.
+type SelectionPromptLayout = { rows: number; columns: number; echo: boolean };
+const selectionPromptLayout = (): SelectionPromptLayout | undefined => {
+  if (!process.stdout.isTTY || process.env.TERM === 'dumb' || process.env.NO_COLOR || !require('node:tty').isatty(0)) return;
+  try {
+    const input = fs.fstatSync(0), output = fs.fstatSync(1);
+    if (!input.isCharacterDevice() || !output.isCharacterDevice() || input.rdev !== output.rdev) return;
+    const result = cp.spawnSync('/bin/stty', ['-a'], { stdio: [0, 'pipe', 'ignore'], encoding: 'utf8', timeout: 1000 });
+    if (result.error) return;
+    if (result.signal || result.status === 130 || result.status === 143) throw Object.assign(new Error('Revision confirmation interrupted.'), { status: result.signal === 'SIGTERM' || result.status === 143 ? 143 : 130 });
+    if (result.status !== 0) return;
+    const flags = result.stdout;
+    const row = /\brows\s*=?\s*(\d+)|(\d+)\s+rows\b/u.exec(flags);
+    const column = /\bcolumns\s*=?\s*(\d+)|(\d+)\s+columns\b/u.exec(flags);
+    const echo = /(?:^|[\s;])(-?echo)(?=[\s;]|$)/u.exec(flags);
+    if (!row || !column || !echo || !/(?:^|[\s;])icanon(?=[\s;]|$)/u.test(flags)
+      || !/(?:^|[\s;])onlcr(?=[\s;]|$)/u.test(flags)) return;
+    const rows = Number(row[1] || row[2]), columns = Number(column[1] || column[2]);
+    if (rows > 1 && columns > 0) {
+      const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('BASH_FUNC_')));
+      const readiness = cp.spawnSync('/bin/zsh', ['-d', '-f', '-c', 'zmodload zsh/zselect || exit 2; zselect -r 0 -t 0'], {
+        env: { ...env, BASH_ENV: '', ENV: '', ZDOTDIR: '' }, stdio: [0, 'ignore', 'ignore'], timeout: 1000,
+      });
+      if (readiness.error) return;
+      if (readiness.signal || readiness.status === 130 || readiness.status === 143) throw Object.assign(new Error('Revision confirmation interrupted.'), { status: readiness.signal === 'SIGTERM' || readiness.status === 143 ? 143 : 130 });
+      if (readiness.status === 1) return { rows, columns, echo: echo[1] === 'echo' };
+    }
+  } catch (error) { if ((error as { status?: number }).status) throw error; }
+};
 class RevisionChangeCancelled extends Error {}
 class RevisionChangeRequiresConfirmation extends Error { status = 21; }
 const confirmTransition = (before: Identity, selection: Selection, mode: string): void => {
@@ -107,9 +137,25 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
     if (mode === 'self-update') throw new RevisionChangeRequiresConfirmation('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.');
     throw new Error('This revision/track change requires confirmation. The requested revision was not applied. `ballin self-update` follows the default selection; it cannot select an explicit revision.');
   }
-  process.stdout.write('Change the installed revision/track? [y/N] ');
+  const styled = process.stdout.isTTY && process.env.TERM !== 'dumb' && !process.env.NO_COLOR;
+  const plainPrompt = '? Change the installed revision/track? [y/N] ';
+  const rendered = styled
+    ? '\x1b[0;32m?\x1b[0m Change the installed revision/track? [y/\x1b[1mN\x1b[0m] '
+    : plainPrompt;
+  const layout = selectionPromptLayout();
+  process.stdout.write(rendered);
   const byte = Buffer.alloc(1); let answer = ''; let complete = false; let overflow = false;
   while (fs.readSync(0, byte, 0, 1, null)) { if (byte[0] === 10) { complete = true; break; } if (answer.length < 32) answer += byte.toString(); else overflow = true; }
+  if (layout?.echo === false) process.stdout.write('\n');
+  const normalized = answer.trim().toLowerCase();
+  const label = /^(?:y|yes)$/u.test(normalized) ? 'Yes' : /^(?:n|no)?$/u.test(normalized) ? 'No' : undefined;
+  if (complete && !overflow && label && layout && /^[\x20-\x7e]*$/u.test(answer)) {
+    const current = selectionPromptLayout();
+    const rows = Math.max(1, Math.ceil((plainPrompt.length + (layout.echo ? answer.length : 0)) / layout.columns));
+    if (current && current.rows === layout.rows && current.columns === layout.columns && current.echo === layout.echo && rows < layout.rows) {
+      process.stdout.write(`\x1b[${rows}A\r\x1b[J${rendered}\x1b[36m${label}\x1b[0m\n`);
+    }
+  }
   if (!complete || overflow || !/^y(es)?$/iu.test(answer.trim())) throw new RevisionChangeCancelled('Revision change cancelled. The installed checkout is unchanged.');
 };
 const applySelection = (root: string, selection: Selection, mode: string, fresh = false): void => {

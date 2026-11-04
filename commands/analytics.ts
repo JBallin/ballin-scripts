@@ -131,8 +131,8 @@ const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
-  'ℹ️  Optional analytics report command results, not backup contents.\n'
-  + '🔗 Analytics details:\n' + docsUrl
+  'i Optional analytics report command results, not backup contents.\n'
+  + 'i Analytics details:\n' + docsUrl
 );
 const analyticsPromptFor = (defaultEnabled = false): string => (
   `Share usage analytics to help improve Ballin? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `
@@ -281,11 +281,11 @@ const writeAnalyticsPreference = (configPath: string, enabled: boolean): { previ
 };
 
 const configureAnalyticsPreference = (options: AnalyticsPreferenceOptions): boolean => {
-  writeStdoutLine(options.detailsLink === false
-    ? `\n${terminalHeading('Analytics')}\n${terminalProse('ℹ️  Optional analytics report command results, not backup contents.')}`
+  writeStdoutLine(terminalProse(options.detailsLink === false
+    ? `\n${terminalHeading('Analytics')}\ni Optional analytics report command results, not backup contents.`
     : options.presentation === 'installation'
-    ? `\n${terminalHeading('Analytics')}\n🔗 Analytics details:\n${options.docsUrl || defaultAnalyticsDocsUrl}`
-    : `\n${terminalHeading('Analytics')}\n${analyticsDisclosureFor(options.docsUrl)}`);
+    ? `\n${terminalHeading('Analytics')}\ni Analytics details:\n${options.docsUrl || defaultAnalyticsDocsUrl}`
+    : `\n${terminalHeading('Analytics')}\n${analyticsDisclosureFor(options.docsUrl)}`));
   const defaultEnabled = options.defaultEnabled ?? false;
   let enabled: boolean | null;
   try {

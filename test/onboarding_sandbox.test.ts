@@ -340,7 +340,7 @@ describe('onboarding sandbox', function() {
     assert.equal(update.status, 0, update.stdout + update.stderr);
     assert.include(update.stdout, 'Checking Ballin readiness');
     assert.include(update.stdout, 'Backing up development environment');
-    assert.include(update.stdout, '✚ zshrc');
+    assert.include(update.stdout, '+ zshrc');
     const state = remote();
     assert.equal(Buffer.from(state.commits[state.head].files['zshrc.sh'], 'base64').toString(), fs.readFileSync(path.join(sandbox.home, '.zshrc'), 'utf8'));
     assert.lengthOf(state.requests.filter((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish')), 2);

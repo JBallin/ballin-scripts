@@ -63,13 +63,27 @@ const terminalUrls = (text: string, stream: { isTTY?: boolean } = process.stdout
     return terminalColor(url, 34, stream, env) + token.slice(url.length);
   })
 );
-const terminalPrompt = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
-  text.replace(/\[([^\[\]]+)\]/gu, (_match, choices: string) => {
-    if (!supportsEmphasis(stream, env)) return `[${choices}]`;
-    const parts = choices.split('/').map((choice) => /[A-Z]/u.test(choice) && choice === choice.toUpperCase()
-      ? `\x1b[1m${choice}\x1b[22m` : choice);
-    return `\x1b[34m[${parts.join('/')}]\x1b[0m`;
-  })
+// Ballin-owned prose only; never pass config values, snapshots or child output.
+const terminalMarkers = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
+  const colors: Record<string, number> = { '?': 32, '!': 33, i: 34, '✓': 32, '✗': 31 };
+  return text.replace(/(^|\n)([?!i✓✗])(?= )/gu, (_match, start: string, marker: string) => (
+    start + (supportsEmphasis(stream, env) ? `\x1b[0;${colors[marker]}m${marker}\x1b[0m` : marker)
+  ));
+};
+const terminalPrompt = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
+  const choices = text.replace(/\[([^\[\]]+)\]/gu, (_match, content: string) => {
+    if (!supportsEmphasis(stream, env) || content.startsWith('Enter for ')) return `[${content}]`;
+    const separator = content.indexOf(';');
+    const options = separator < 0 ? content : content.slice(0, separator);
+    const instruction = separator < 0 ? '' : content.slice(separator);
+    return '[' + options.split('/').map((word) => /^[A-Z][A-Z0-9_-]*$/u.test(word)
+      ? terminalEmphasis(word, 'bold', stream, env) : word).join('/') + instruction + ']';
+  });
+  const leading = choices.match(/^\n*/u)![0];
+  return leading + terminalMarkers('? ', stream, env) + choices.slice(leading.length);
+};
+const terminalChoice = (label: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
+  terminalColor(label, 36, stream, env)
 );
 const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/gu, '');
 const visibleWidth = (text: string): number => {
@@ -87,7 +101,7 @@ const visibleWidth = (text: string): number => {
 };
 const terminalProse = (text: string, stream: { isTTY?: boolean; columns?: number } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
   const width = Math.min(80, Math.max(1, stream.columns || 80));
-  return terminalUrls(text, stream, env).split('\n').map((paragraph) => {
+  return terminalMarkers(terminalUrls(text, stream, env), stream, env).split('\n').map((paragraph) => {
     const lines: string[] = [];
     let line = '';
     // Explicit references and adjacent punctuation stay copyable, even when one
@@ -102,11 +116,11 @@ const terminalProse = (text: string, stream: { isTTY?: boolean; columns?: number
   }).join('\n');
 };
 const terminalError = (text: string, stream: { isTTY?: boolean; columns?: number } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
-  terminalProse(`${terminalColor('❌', 31, stream, env)} ${text}`, stream, env)
+  terminalProse(`✗ ${text}`, stream, env)
 );
-const terminalComplete = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => terminalColor(text, 32, stream, env);
+const terminalComplete = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => terminalMarkers(`✓ ${text}`, stream, env);
 
 module.exports = {
   terminalPath, terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences,
-  terminalUrls, terminalPrompt, stripAnsi, visibleWidth, terminalProse, terminalError, terminalComplete,
+  terminalUrls, terminalMarkers, terminalPrompt, terminalChoice, supportsEmphasis, stripAnsi, visibleWidth, terminalProse, terminalError, terminalComplete,
 };

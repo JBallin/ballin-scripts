@@ -261,7 +261,7 @@ describe('install setup', () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, `⚙️  Created config: ${path.join(fs.realpathSync(repoDir), 'ballin.config.json')}\n`);
+    assert.equal(result.stdout, `✓ Created config: ${path.join(fs.realpathSync(repoDir), 'ballin.config.json')}\n`);
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));
   });
 
@@ -825,8 +825,8 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'ℹ️  Optional analytics report command results, not backup contents.\n'
-      + '🔗 Analytics details:\nhttps://example.test/analytics',
+      'i Optional analytics report command results, not backup contents.\n'
+      + 'i Analytics details:\nhttps://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
     assert.equal(analyticsPromptFor(true), 'Share usage analytics to help improve Ballin? [Y/n] ');
@@ -1036,7 +1036,7 @@ require('https').request = () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout.split("\n"), `⚙️  Created config: ${path.join(repoDir, 'ballin.config.json')}`);
+    assert.include(result.stdout.split("\n"), `✓ Created config: ${path.join(repoDir, 'ballin.config.json')}`);
     assert.isBelow(result.stdout.indexOf('Ballin installed successfully.'), result.stdout.indexOf('Set up private backups'));
     assert.include(result.stdout, 'Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBallin installed successfully.`);

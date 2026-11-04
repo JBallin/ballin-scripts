@@ -466,7 +466,7 @@ exit 0
     assert.include(result.stdout, 'simulated cleanup failure');
     assert.include(result.stdout, 'Checking Homebrew installation');
     assert.include(result.stdout, 'Updating Ballin');
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'brew|1,1|update',
       'brew|1,1|upgrade',
@@ -941,7 +941,7 @@ exit 0
     const readinessState = JSON.parse(fs.readFileSync(path.join(tempDir, 'readiness-repository.json'), 'utf8'));
     assert.isAbove(readinessState.requests.length, 0);
     assert.isFalse(readinessState.requests.some((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish')));
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
     ]);
@@ -988,7 +988,7 @@ exit 0
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'updated maintenance-only Ballin');
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), ['ballin|,|self-update']);
   });
 
@@ -1070,7 +1070,7 @@ exit 2
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Checking Ballin readiness');
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog().slice(1), [
       'node|,|-e process.stdout.write(JSON.stringify(process.env))',
       'ballin|,|self-update',
@@ -1094,7 +1094,7 @@ exit 2
       assert.include(result.stdout, 'Checking Ballin readiness');
       assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.');
       assert.notInclude(result.stdout, 'Backing up development environment');
-      assert.notInclude(result.stdout, "😎 You're ballin.");
+      assert.notInclude(result.stdout, "✓ You're ballin.");
       assert.deepEqual(commandLog(), ['ballin|,|self-update', 'interrupted readiness']);
       assert.equal(result.stderr, '');
     });
@@ -1120,7 +1120,7 @@ exit 0
     assert.include(result.stdout, 'Checking Ballin readiness');
     assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: `ballin`.');
     assert.include(result.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
-    assert.notInclude(result.stdout, '😎 You\'re ballin.');
+    assert.notInclude(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
       'ballin|,|backup',
@@ -1139,7 +1139,7 @@ exit 0
     assert.equal(result.status, 23);
     assert.include(result.stdout, 'simulated update failure');
     assert.notInclude(result.stdout, 'Checking Ballin readiness');
-    assert.notInclude(result.stdout, '😎 You\'re ballin.');
+    assert.notInclude(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
     ]);
@@ -1200,7 +1200,7 @@ exit 0
     });
 
     assert.equal(result.status, 17);
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
@@ -1285,7 +1285,7 @@ exit 2
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "😎 You're ballin.");
+    assert.include(result.stdout, "✓ You're ballin.");
     assert.include(commandLog(), 'node|,|-p process.versions.node');
   });
 

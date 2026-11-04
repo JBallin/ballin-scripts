@@ -15,9 +15,26 @@ describe('revision confirmation in a real terminal', function() {
         { prompt: 'Change the installed revision/track? [y/N]', answer },
       ]);
       assert.equal(r.status, answer === 'yes' ? 0 : 20, r.stdout + r.stderr);
+      assert.include(r.stdout, '\x1b[0;32m?\x1b[0m Change the installed revision/track? [y/\x1b[1mN\x1b[0m] ');
+      assert.include(r.stdout, '\x1b[36m' + (answer === 'yes' ? 'Yes' : 'No') + '\x1b[0m');
       assert.notInclude(r.stdout + r.stderr, 'EAGAIN');
       const receipt = JSON.parse(fs.readFileSync(path.join(sandbox.repo, '.git/ballin-install.json'), 'utf8'));
       assert.equal(receipt.kind, answer === 'yes' ? 'sha' : 'branch');
+    } finally { cleanupSandbox(sandbox.root); }
+  });
+  for (const mode of ['dumb', 'NO_COLOR']) it(`keeps standalone helper consent plain for ${mode}`, () => {
+    const sandbox = createSandbox({ quickstart: true });
+    try {
+      const installed = runSandbox(sandbox, ['quickstart'], 'no\nno\nlogin\nyes\nyes\nno\nno\n');
+      assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+      const sha = 'a'.repeat(40);
+      const command = [process.execPath, path.resolve(__dirname, '../commands/repo_update.ts'), 'apply', sandbox.repo, 'sha', sha, sha, '24.12.0', '-', 'install', 'false'];
+      const result = runInteractiveSetup(sandbox, mode === 'NO_COLOR' ? ['/usr/bin/env', 'NO_COLOR=0', ...command] : command, [
+        { prompt: 'Change the installed revision/track? [y/N]', answer: 'no' },
+      ], undefined, { term: mode === 'dumb' ? 'dumb' : 'xterm' });
+      assert.equal(result.status, 20, result.stdout + result.stderr);
+      assert.include(result.stdout, '? Change the installed revision/track? [y/N] ');
+      assert.notMatch(result.stdout, /\x1b\[[0-9;]*m/u);
     } finally { cleanupSandbox(sandbox.root); }
   });
   it('returns cleanly from a cancelled installer track change without setup or false success', () => {

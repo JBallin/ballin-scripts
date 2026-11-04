@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
-const terminalGuidanceMessage = '😎 Setup complete. Open a new Terminal and run `ballin help`.';
+const terminalGuidanceMessage = '✓ Setup complete. Open a new Terminal and run `ballin help`.';
 const terminalGuidance = `\n${terminalGuidanceMessage}\n`;
 
 describe('beginner quickstart bootstrap', function() {
@@ -19,8 +19,8 @@ describe('beginner quickstart bootstrap', function() {
   const source = path.resolve(__dirname, '../quickstart.sh');
   const nodeInstallPrompt = 'Proceed with installation? [y/N]';
   const cltInstallQuestion = 'Proceed with installation?';
-  const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
-  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
+  const firstBackupPrompt = '\n? Run a backup now and open its GitHub destination? [Y/n] ';
+  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\ni Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
   printf 'brew-interruption:%s:%s\\n' "$stage" "$FAKE_BREW_INTERRUPTION" >> "$FAKE_COMMAND_LOG"
@@ -818,7 +818,7 @@ printf '0\\n'
         assert.notInclude(result.stderr, 'brew upgrade node');
       }
       if (!['130', '143'].includes(state)) {
-        assert.include(result.stderr, '\n🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+        assert.include(result.stderr, '\ni Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
       }
       assert.equal(fs.readFileSync(installed, 'utf8'), contents);
       assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
@@ -2230,9 +2230,9 @@ main
   - Install GitHub CLI in ~/.local/bin
   - Create Ballin and its settings in ~/.ballin-scripts
   - Link the Ballin command in ~/.local/bin
-🔗 Installation details:
+i Installation details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
-Proceed with installation? [y/N] `);
+? Proceed with installation? [y/N] `);
     assert.notInclude(result.stdout, 'graphical');
     assert.notInclude(result.stdout, 'verified official');
     assert.notInclude(result.stdout, 'Administrator access is required.');
@@ -2635,7 +2635,7 @@ Proceed with installation? [y/N] `);
       const result = runPathSetup('home\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'already mentions a setup directory');
       assert.include(result.stderr, 'Review its PATH entries before changing PATH.');
-      assert.include(result.stderr, '\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
+      assert.include(result.stderr, '\ni Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
       assert.notInclude(result.stderr, 'command below');
       assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
       assert.notInclude(result.stderr, pathLine());

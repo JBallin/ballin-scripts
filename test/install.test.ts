@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
-const terminalGuidance = '😎 Setup complete. Open a new Terminal and run `ballin help`.';
+const terminalGuidance = '✓ Setup complete. Open a new Terminal and run `ballin help`.';
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
@@ -249,7 +249,7 @@ ballin_download() { : > "$2"; }
         assert.isTrue(result.stdout.startsWith(existing ? '==> Updating Ballin\n' : '==> Setting up Ballin\n'), result.stdout);
         if (existing) assert.notInclude(result.stdout, '==> Setting up Ballin');
         const separator = scenario === 'initial configuration'
-          ? `\nInitial configuration\n🔗 Installation details:\n${docsUrl}#what-will-installation-change\n`
+          ? `\nInitial configuration\ni Installation details:\n${docsUrl}#what-will-installation-change\n`
           : existing ? '' : '\n';
         assert.include(result.stdout, `Git output fixture.\n${separator}Typed setup fixture.\n\n${terminalGuidance}\n`);
         assert.notInclude(result.stdout, '\n\n\n');
@@ -272,7 +272,7 @@ ballin_download() { : > "$2"; }
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
-    assert.include(result.stdout, `Installation details:\n${docsUrl}#what-will-installation-change\nProceed with installation? [y/N] `);
+    assert.include(result.stdout, `Installation details:\n${docsUrl}#what-will-installation-change\n? Proceed with installation? [y/N] `);
     assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 1);
     assert.deepEqual(commandLog(), [
       `git:clone --no-checkout https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
@@ -452,7 +452,7 @@ ballin_download() { : > "$2"; }
     assert.include(result.stdout, 'Node.js 24.12.0 or newer is required');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install supported Node.js');
-    assert.include(result.stdout, '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -559,7 +559,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     assert.include(result.stdout, 'Node.js 24.12.0 or newer is required');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'existing installation method');
-    assert.include(result.stdout, '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -718,7 +718,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       const log = fs.readFileSync(calls, 'utf8'); assert.isTrue(log.startsWith('tools:-p\n'));
       assert.equal(log.includes('git:--version'), toolsReady);
       if (!toolsReady) {
-        assert.include(result.stdout, '\n❌ Xcode Command Line Tools are required to use Apple’s Git.\nRun `xcode-select --install`, finish installation, then rerun this installer.\n');
+        assert.include(result.stdout, '\n✗ Xcode Command Line Tools are required to use Apple’s Git.\nRun `xcode-select --install`, finish installation, then rerun this installer.\n');
         assert.isFalse(fs.existsSync(repoDir));
       }
     });
@@ -726,7 +726,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
   it('prints actual Git failure diagnostics before the final recovery block', () => {
     installBaseCommands(); writeExecutable('git', '#!/bin/sh\nprintf "Actual fixture Git diagnostic\\n" >&2\nexit 69\n');
     const result = runInstall(); assert.equal(result.status, 1);
-    assert.isTrue(result.stdout.endsWith('Actual fixture Git diagnostic\n\n❌ Git was found but could not run.\nMake sure `git --version` works, then rerun this installer.\n'));
+    assert.isTrue(result.stdout.endsWith('Actual fixture Git diagnostic\n\n✗ Git was found but could not run.\nMake sure `git --version` works, then rerun this installer.\n'));
     assert.notInclude(result.stdout, 'xcode-select --install'); assert.isFalse(fs.existsSync(repoDir));
   });
 

@@ -53,7 +53,7 @@ describe('first-run onboarding walkthroughs', function() {
     const doctorResult = runInstalled(['doctor']);
     const verboseDoctorResult = runInstalled(['doctor', '--verbose']);
     assert.equal(doctorResult.status, 0, doctorResult.stderr);
-    assert.equal(doctorResult.stdout, '😎 You\'re ballin.\n');
+    assert.equal(doctorResult.stdout, '✓ You\'re ballin.\n');
     assert.equal(verboseDoctorResult.status, 0, verboseDoctorResult.stderr);
     assert.include(verboseDoctorResult.stdout, 'INFO  Optional backup');
     assert.include(verboseDoctorResult.stdout, 'ballin backup setup');
@@ -96,7 +96,7 @@ describe('first-run onboarding walkthroughs', function() {
     fs.writeFileSync(path.join(homeDir, '.zshrc'), zshrc);
     const backupResult = runInstalled(['backup']);
     assert.equal(backupResult.status, 0, backupResult.stderr);
-    assert.include(backupResult.stdout, '✚ zshrc');
+    assert.include(backupResult.stdout, '+ zshrc');
     assert.equal(remoteFile('zshrc.sh'), zshrc);
     assert.equal(
       fs.readFileSync(path.join(repositoryCacheDirectory(path.join(installedRepoDir, '.backup-cache'), fixtureDestination), 'zshrc.sh'), 'utf8'),

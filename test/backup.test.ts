@@ -452,12 +452,12 @@ printf '%s\\n' 'publisher.insiders-extension'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ vs_extensions',
-      '✚ vs_keybindings',
-      '✚ vs_settings',
-      '✚ vsI_extensions',
-      '✚ vsI_keybindings',
-      '✚ vsI_settings',
+      '+ vs_extensions',
+      '+ vs_keybindings',
+      '+ vs_settings',
+      '+ vsI_extensions',
+      '+ vsI_keybindings',
+      '+ vsI_settings',
       commitLink(),
     ]);
     assert.equal(fs.readFileSync(path.join(backupCacheDir, 'vs_settings'), 'utf8'), '{"fontSize":14}\n');
@@ -502,8 +502,8 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ mas',
-      '✚ npm_global',
+      '+ mas',
+      '+ npm_global',
       commitLink(),
     ]);
     assert.equal(
@@ -532,9 +532,9 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ pipx',
-      '✚ pyenv_versions',
-      '✚ uv_tools',
+      '+ pipx',
+      '+ pyenv_versions',
+      '+ uv_tools',
       commitLink(),
     ]);
     assert.deepEqual(pythonToolCalls(), [
@@ -564,7 +564,7 @@ printf '%s\\n' '123456 Example App'
       const result = runBackup({ brewPrefix });
 
       assertBackupSucceeded(result);
-      assert.include(result.stdout, '✚ bash_completions\n');
+      assert.include(result.stdout, '+ bash_completions\n');
       assert.equal(
         fs.readFileSync(path.join(backupCacheDir, 'bash_completions'), 'utf8'),
         'git\nnpm\n',
@@ -609,7 +609,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup({ completionDir });
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✚ bash_completions\n'));
+    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('+ bash_completions\n'));
     assert.equal(
       fs.readFileSync(path.join(backupCacheDir, 'bash_completions'), 'utf8'),
       'apple-silicon-tool\n',
@@ -662,11 +662,11 @@ printf '%s\\n' '123456 Example App'
 
     assertBackupSucceeded(result);
     assert.deepEqual(result.stdout.trim().split('\n'), [
-      '✚ Brewfile',
-      '✚ brew_cask',
-      '✚ brew_leaves',
-      '✚ brew_list',
-      '✚ brew_services',
+      '+ Brewfile',
+      '+ brew_cask',
+      '+ brew_leaves',
+      '+ brew_list',
+      '+ brew_services',
       commitLink(),
     ]);
     assert.deepEqual(brewCalls(), [
@@ -710,7 +710,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✚ zshrc\n'));
+    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('+ zshrc\n'));
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'alias hello="world"\n');
     assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'alias hello="world"\n');
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
@@ -844,7 +844,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup({ umask: '000' });
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+    assert.equal(result.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
     assertOwnerOnlyCache();
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'shared snapshot\n');
     assert.equal(fs.readFileSync(cachedFilePath('inactive-snapshot'), 'utf8'), 'old inactive snapshot\n');
@@ -918,8 +918,8 @@ printf '%s\\n' '123456 Example App'
       assert.equal(
         result.stdout,
         previousSuccessOutputLine() + publishedOutput(mode === 'tty'
-          ? '\x1b[1m✖︎ gitconfig\x1b[0m\n\x1b[1m✎ vimrc\x1b[0m\n\x1b[1m✚ zprofile\x1b[0m\n✔ zshrc\n'
-          : '✖︎ gitconfig\n✎ vimrc\n✚ zprofile\n✔ zshrc\n'),
+          ? '- \x1b[1mgitconfig\x1b[0m\n~ \x1b[1mvimrc\x1b[0m\n+ \x1b[1mzprofile\x1b[0m\n\x1b[0;32m✓\x1b[0m zshrc\n'
+          : '- gitconfig\n~ vimrc\n+ zprofile\n✓ zshrc\n'),
       );
       assert.deepEqual(uploadedFiles(), ['zprofile.sh', 'gitconfig', 'vimrc']);
     });
@@ -931,7 +931,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✚ zshrc\n'));
+    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('+ zshrc\n'));
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'empty\n');
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
@@ -944,7 +944,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup({ umask: '000' });
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+    assert.equal(result.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export EDITOR=vim\n');
     assertOwnerOnlyCache();
     assert.deepEqual(uploadedFiles(), []);
@@ -979,7 +979,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+    assert.equal(result.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
     assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
     assert.deepEqual(uploadedFiles(), []);
   });
@@ -991,7 +991,7 @@ printf '%s\\n' '123456 Example App'
       remote: null,
       local: 'local value\n',
       expectedStatus: 0,
-      expectedOutput: '✚ zshrc\n',
+      expectedOutput: '+ zshrc\n',
       uploads: [snapshotFileName],
     },
     {
@@ -1000,7 +1000,7 @@ printf '%s\\n' '123456 Example App'
       remote: 'shared value\n',
       local: 'shared value\n',
       expectedStatus: 0,
-      expectedOutput: '✔ zshrc\n',
+      expectedOutput: '✓ zshrc\n',
       uploads: [],
     },
     {
@@ -1018,7 +1018,7 @@ printf '%s\\n' '123456 Example App'
       remote: 'shared value\n',
       local: 'shared value\n',
       expectedStatus: 0,
-      expectedOutput: '✔ zshrc\n',
+      expectedOutput: '✓ zshrc\n',
       uploads: [],
     },
     {
@@ -1027,7 +1027,7 @@ printf '%s\\n' '123456 Example App'
       remote: 'base value\n',
       local: 'local value\n',
       expectedStatus: 0,
-      expectedOutput: '✎ zshrc\n',
+      expectedOutput: '~ zshrc\n',
       uploads: [snapshotFileName],
     },
     {
@@ -1036,7 +1036,7 @@ printf '%s\\n' '123456 Example App'
       remote: 'remote value\n',
       local: 'remote value\n',
       expectedStatus: 0,
-      expectedOutput: '✔ zshrc\n',
+      expectedOutput: '✓ zshrc\n',
       uploads: [],
     },
     {
@@ -1135,7 +1135,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+    assert.equal(result.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
     assert.deepEqual(uploadedFiles(), []);
   });
 
@@ -1146,7 +1146,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✎ zshrc\n'));
+    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('~ zshrc\n'));
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'export COLOR=blue\n');
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
   });
@@ -1173,7 +1173,7 @@ printf '%s\\n' '123456 Example App'
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✚ zshrc\n'));
+    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('+ zshrc\n'));
     assert.equal(fs.statSync(cachedSnapshotPath()).size, largeSnapshot.length);
     assert.equal(fs.statSync(remoteSnapshotPath()).size, largeSnapshot.length);
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
@@ -1189,7 +1189,7 @@ printf '%*s\\n' 1048577 '' >&2
     const result = runBackup();
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '✚ vs_extensions\n');
+    assert.include(result.stdout, '+ vs_extensions\n');
     assert.equal(result.stderr.length, 1024 * 1024 + 2);
     assert.equal(result.stderr.slice(0, 1), ' ');
     assert.equal(result.stderr.slice(-1), '\n');
@@ -1208,7 +1208,7 @@ printf '%*s\\n' 1048577 '' >&2
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✖︎ zshrc\n'));
+    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('- zshrc\n'));
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
   });
@@ -1220,7 +1220,7 @@ printf '%*s\\n' 1048577 '' >&2
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+    assert.equal(result.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'empty\n');
     assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'empty\n');
     assert.deepEqual(uploadedFiles(), []);
@@ -1233,7 +1233,7 @@ printf '%*s\\n' 1048577 '' >&2
     const result = runBackup();
 
     assertBackupSucceeded(result);
-    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✚ zshrc\n'));
+    assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('+ zshrc\n'));
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
   });
 
@@ -1265,7 +1265,7 @@ printf '%*s\\n' 1048577 '' >&2
 
     assertBackupSucceeded(firstResult);
     assertBackupSucceeded(secondResult);
-    assert.equal(secondResult.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+    assert.equal(secondResult.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
   });
 
@@ -1323,7 +1323,7 @@ printf '%*s\\n' 1048577 '' >&2
 
     assert.equal(failedResult.status, 1);
     assertBackupSucceeded(recoveredResult);
-    assert.equal(recoveredResult.stdout, previousSuccessOutputLine() + publishedOutput('✎ zshrc\n'));
+    assert.equal(recoveredResult.stdout, previousSuccessOutputLine() + publishedOutput('~ zshrc\n'));
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'recovered\n');
     assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'recovered\n');
     assert.deepEqual(uploadedFiles(), [snapshotFileName]);
@@ -1372,7 +1372,7 @@ printf '%*s\\n' 1048577 '' >&2
     const recoveredResult = runBackup({ umask: '000' });
 
     assertBackupSucceeded(recoveredResult);
-    assert.equal(recoveredResult.stdout, previousSuccessOutputLine() + '✔ gitconfig\n✔ zshrc\n');
+    assert.equal(recoveredResult.stdout, previousSuccessOutputLine() + '✓ gitconfig\n✓ zshrc\n');
     assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new zsh value\n');
     assert.equal(fs.readFileSync(cachedFilePath('gitconfig'), 'utf8'), 'new git value\n');
     assertOwnerOnlyCache();
@@ -1399,7 +1399,7 @@ printf '%*s\\n' 1048577 '' >&2
       assert.deepEqual(fs.readdirSync(scratchDir).sort(), attempts.map((entry: string) => path.basename(entry)).sort());
       const next = runBackup();
       assert.equal(next.status, 0, next.stderr);
-      assert.equal(next.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+      assert.equal(next.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
       assert.lengthOf(publicationCalls(), 1);
     });
   }
@@ -1484,7 +1484,7 @@ printf '%*s\\n' 1048577 '' >&2
 
       const result = observedRun();
       assertBackupSucceeded(result);
-      assert.equal(result.stdout, previousSuccessOutputLine() + '✔ zshrc\n');
+      assert.equal(result.stdout, previousSuccessOutputLine() + '✓ zshrc\n');
       assert.lengthOf(publicationCalls(), 1);
       assertOutcome('success');
     });
@@ -1610,7 +1610,7 @@ require(${JSON.stringify(path.join(repoRoot, 'commands', 'analytics.ts'))}).runW
         writeSnapshot('sender-independent\n');
         const result = observedRun({ env: { BALLIN_TEST_ANALYTICS_MODE: mode } });
         assertBackupSucceeded(result);
-        assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('✚ zshrc\n'));
+        assert.equal(result.stdout, previousSuccessOutputLine() + publishedOutput('+ zshrc\n'));
         assert.equal(fs.readFileSync(remoteSnapshotPath(), 'utf8'), 'sender-independent\n');
         assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'sender-independent\n');
         if (mode !== 'throw') assertOutcome('success');

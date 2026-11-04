@@ -3,7 +3,7 @@ import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
-const { terminalCommand, terminalEmphasis } = require('./terminalStyle.ts');
+const { terminalCommand, terminalEmphasis, terminalMarkers } = require('./terminalStyle.ts');
 const { compareBackupFileNames } = require('./backup_file_names.ts');
 const fs = require('fs');
 const tty = require('tty');
@@ -243,13 +243,13 @@ const writeSnapshotStatus = (
 ): void => {
   const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '').replace(/\.bundle$/, '');
   if (resultState === 'unchanged') {
-    writeStdoutLine(`✔ ${fileWithoutExtension}`);
+    writeStdoutLine(terminalMarkers(`✓ ${fileWithoutExtension}`));
   } else if (resultState === 'created') {
-    writeStdoutLine(terminalEmphasis(`✚ ${fileWithoutExtension}`, 'bold'));
+    writeStdoutLine(`+ ${terminalEmphasis(fileWithoutExtension, 'bold')}`);
   } else if (resultState === 'removed') {
-    writeStdoutLine(terminalEmphasis(`✖︎ ${fileWithoutExtension}`, 'bold'));
+    writeStdoutLine(`- ${terminalEmphasis(fileWithoutExtension, 'bold')}`);
   } else {
-    writeStdoutLine(terminalEmphasis(`✎ ${fileWithoutExtension}`, 'bold'));
+    writeStdoutLine(`~ ${terminalEmphasis(fileWithoutExtension, 'bold')}`);
   }
 };
 

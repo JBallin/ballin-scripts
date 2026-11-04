@@ -31,7 +31,7 @@ const inspectProfile = (profile: string): void => {
 
 const completionTarget = (
   env: NodeJS.ProcessEnv,
-  prompt: (text: string) => { text: string; eof: boolean },
+  prompt: (text: string, choiceLabel?: (text: string) => string | undefined) => { text: string; eof: boolean },
 ): CompletionTarget | null => {
   const home = env.HOME;
   if (!home || !path.isAbsolute(home) || !env.SHELL || !path.isAbsolute(env.SHELL)) return null;
@@ -54,7 +54,7 @@ const completionTarget = (
     if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) return null;
     profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
   } else if (shell === 'bash') {
-    const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ');
+    const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', (text) => text === 'login' ? 'Login' : text === 'bashrc' ? 'Bashrc' : text === '' ? 'Skip' : undefined);
     if (choice.eof) return null;
     if (choice.text === 'bashrc') profile = path.join(home, '.bashrc');
     else if (choice.text === 'login') {
@@ -128,20 +128,20 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
   const write = options.write ?? ((text = '') => writeStdoutLine(terminalProse(text)));
   const fallback = (needsContext = false): void => {
     if (needsContext) write('');
-    write(`Tab completion skipped.\n🔗 Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
+    write(`Tab completion skipped.\ni Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
   };
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
-  const prompt = options.prompt ?? readPromptLine;
+  const prompt: typeof readPromptLine = options.prompt ?? readPromptLine;
   try {
     const env = options.env ?? process.env;
     let firstQuestion = true;
-    const completionPrompt: typeof prompt = (question: string) => {
+    const completionPrompt: typeof prompt = (question: string, choiceLabel?: (text: string) => string | undefined) => {
       if (firstQuestion) {
         if (options.presentation === 'installation') write('');
         write('Optional tab completion suggests Ballin commands as you type.');
       }
       firstQuestion = false;
-      return prompt(question);
+      return prompt(question, choiceLabel);
     };
     const target = completionTarget(env, completionPrompt);
     if (!target) { fallback(true); return; }
@@ -161,7 +161,10 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     while (true) {
-      const answer = completionPrompt(`Enable tab completion in ${terminalPath(target.profile, env.HOME)}? [y/N] `);
+      const answer = completionPrompt(`Enable tab completion in ${terminalPath(target.profile, env.HOME)}? [y/N] `, (text: string) => {
+        const enabled = parseYesNo(text, false);
+        return enabled === undefined ? undefined : enabled ? 'Yes' : 'No';
+      });
       if (answer.eof) { fallback(); return; }
       const enabled = parseYesNo(answer.text, false);
       if (enabled === false) { fallback(); return; }
@@ -174,7 +177,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     rethrowInterruption(error);
     if (error instanceof CompletionProfileError) write(error.message);
     write('Tab completion setup could not finish. Ballin remains installed.');
-    write(`🔗 Manual setup:\n${docsUrl}#startup-files-and-manual-activation`);
+    write(`i Manual setup:\n${docsUrl}#startup-files-and-manual-activation`);
   }
 };
 

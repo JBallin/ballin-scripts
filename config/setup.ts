@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { stringify } = require('./store.ts');
 const { PortableConfigError, readSetupConfigContext } = require('./portable.ts');
-const { terminalPath, terminalError, terminalUrls } = require('../commands/terminalStyle.ts');
+const { terminalPath, terminalError, terminalUrls, terminalMarkers } = require('../commands/terminalStyle.ts');
 const { writeStdoutLine, runNodeScript, requireUninterrupted } = require('../commands/commandHelpers.ts');
 type ConfigLeaf = string | number | boolean | null;
 type ConfigObject = { [key: string]: ConfigValue };
@@ -55,7 +55,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
 
   const updateOutput = updateResult.stdout.trimEnd();
   if (updateOutput) {
-    writeStdoutLine(`\n🙌 ${updateOutput}`);
+    writeStdoutLine(`\n${updateOutput}`);
     writeStdoutLine(`\n${terminalUrls(`${docsUrl}#what-installation-changes`)}`);
   }
 
@@ -75,7 +75,7 @@ const createDefaultConfig = (repoDir: string, configPath: string, deferBackupSel
   } catch {
     return false;
   }
-  writeStdoutLine(`⚙️  Created config: ${terminalPath(configPath)}`);
+  writeStdoutLine(terminalMarkers(`✓ Created config: ${terminalPath(configPath)}`));
   return true;
 };
 

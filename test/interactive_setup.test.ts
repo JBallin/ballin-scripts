@@ -81,9 +81,9 @@ describe('integrated setup with delayed terminal answers', function() {
     assert.notInclude(output, '\n\n\n');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'true'); assert.equal(config().analytics.enabled, 'false');
     assert.deepEqual(Object.keys(remote().commits[remote().head].files).sort(), ['.ballin-backup.json', 'README.md']);
-    assert.notInclude(result.stdout, '\x1b[34m[y/N]'); // Default is bold inside the blue bracket span.
-    assert.include(result.stdout, '\x1b[34m[y/\x1b[1mN\x1b[22m]\x1b[0m');
-    assert.include(result.stdout, '\x1b[32m😎 Setup complete.\x1b[0m');
+    assert.notInclude(result.stdout, '\x1b[34m[y/N]'); // Brackets stay neutral; only the default carries bold emphasis.
+    assert.include(result.stdout, '[y/\x1b[1mN\x1b[0m]');
+    assert.include(result.stdout, '\x1b[0;32m✓\x1b[0m Setup complete.');
   });
 
   it('switches to controlled NVM/LTS, persists No, and keeps backup decline independent of general review', () => {
@@ -133,10 +133,10 @@ describe('integrated setup with delayed terminal answers', function() {
     ], 'bash');
     assert.equal(failed.status, 1, failed.stdout + failed.stderr);
     const output = plain(failed.stdout);
-    assert.include(output, '\n\n❌ GitHub CLI authentication is required.\nRun gh auth login --hostname github.com, then run ballin backup setup.\n');
+    assert.include(output, '\n\n✗ GitHub CLI authentication is required.\nRun gh auth login --hostname github.com, then run ballin backup setup.\n');
     assert.equal(output.split('authentication is required.').length - 1, 1);
     assert.notInclude(output, 'Review your update'); assert.notInclude(output, 'Setup complete.'); assert.notInclude(output, 'setup incomplete');
-    assert.include(failed.stdout, '\x1b[31m❌\x1b[0m GitHub CLI');
+    assert.include(failed.stdout, '\x1b[0;31m✗\x1b[0m GitHub CLI');
     selectScenario(sandbox, 'none');
     const recovered = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
       { prompt: 'GitHub hostname [github.com]: ', answer: '' }, ...backup,

@@ -83,7 +83,7 @@ describe('command references at prose output boundaries', () => {
       const recovery = cli(['setup']);
       assert.equal(recovery.status, 1);
       assert.equal(recovery.stdout, '');
-      const icon = mode.styled ? '\x1b[31m❌\x1b[0m' : '❌';
+      const icon = mode.styled ? '\x1b[0;31m✗\x1b[0m' : '✗';
       assert.isTrue(recovery.stderr.startsWith(`\n${icon} Unable to read or validate local preferences.\nConfig is not valid JSON.\n`));
       assert.include(recovery.stderr.replace(/\s+/gu, ' '), `Repair the file, or run ${command('ballin config reset')} to replace it with defaults, then run ${command('ballin setup')} again.`);
       assert.notInclude(recovery.stderr, '\n\n', 'the final error and recovery stay consecutive');
@@ -148,14 +148,15 @@ describe('bootstrap command references on a real PTY without running an installe
       sandbox = createSandbox();
       const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
       const helper = source.match(/^command_reference\(\) \{\n[\s\S]*?^\}/mu)?.[0];
+      const marker = source.match(/^status_marker\(\) \{\n[\s\S]*?^\}/mu)?.[0];
       const complete = source.match(/^setup_complete\(\) \{\n[\s\S]*?^\}/mu)?.[0];
       const completion = source.match(/^[ \t]*printf '\\n'; setup_complete; printf ' Open a new Terminal and run '\n[ \t]*command_reference 'ballin help'\n[ \t]*printf '\.\\n'/mu)?.[0];
-      assert.isString(helper); assert.isString(complete); assert.isString(completion);
+      assert.isString(helper); assert.isString(marker); assert.isString(complete); assert.isString(completion);
       // Execute only the extracted pure formatter and print statements. No source,
       // eval of the bootstrap, installer entry, platform discovery or setup runs.
       const plain = '`ballin help`';
       const bold = '\x1b[1mballin help\x1b[0m';
-      const program = `${helper}\n${complete}\nexport TERM=xterm NO_COLOR=''\n${completion}
+      const program = `${helper}\n${marker}\n${complete}\nexport TERM=xterm NO_COLOR=''\n${completion}
         printf '\\nPIPE:'; command_reference 'ballin help' > '${sandbox.scratch}/reference'; /bin/cat '${sandbox.scratch}/reference'
         printf '\\nSTDERR:'; { command_reference 'ballin help' 2 >&2; } > '${sandbox.scratch}/other'
         export TERM=dumb FORCE_COLOR=1; printf '\\nDUMB:'; command_reference 'ballin help'
@@ -166,10 +167,44 @@ describe('bootstrap command references on a real PTY without running an installe
       const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', program], []);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, `\x1b[32m😎 Setup complete.\x1b[0m Open a new Terminal and run ${bold}.\n`);
+      assert.include(output, `\x1b[0;32m✓\x1b[0m Setup complete. Open a new Terminal and run ${bold}.\n`);
       for (const label of ['PIPE', 'DUMB', 'ZERO', 'NO_COLOR']) assert.include(output, `${label}:${plain}`);
       for (const label of ['STDERR', 'EMPTY']) assert.include(output, `${label}:${bold}`);
       assert.notInclude(output, '`\x1b[1m');
     });
   }
+});
+
+describe('bootstrap marker and choice palette on a real PTY', function() {
+  this.timeout(30000);
+  for (const file of ['install.sh', 'quickstart.sh']) it(`preserves neutral separators and declared defaults in ${file}`, () => {
+    const sandbox = createSandbox();
+    try {
+      const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+      const names = ['status_marker', 'choice_word', 'prompt_choices', ...(file === 'quickstart.sh' ? ['prompt_options'] : [])];
+      const helpers = names.map((name) => {
+        const helper = source.match(new RegExp('^' + name + '\\(\\) \\{\\n[\\s\\S]*?^\\}', 'mu'))?.[0];
+        assert.isString(helper); return helper;
+      }).join('\n');
+      const program = `${helpers}
+        export TERM=xterm NO_COLOR=''
+        for role in prompt warning info success failure; do status_marker "$role"; printf ' Message.\\n'; done
+        printf 'CHOICES:'; prompt_choices '[y/N]' n
+        printf '\\nDEFAULT:['; choice_word NONE default; printf ']\\n'
+        ${file === 'quickstart.sh' ? "printf 'STARTUP:'; prompt_options 'login/bashrc; Enter to skip'; printf '\\n'" : ''}
+        export NO_COLOR=0 FORCE_COLOR=1
+        printf 'PLAIN:'; prompt_choices '[y/N]' n; status_marker success; printf ' Done.\\n'
+      `;
+      const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', program], []);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const output = result.stdout.replace(/\r\n/gu, '\n');
+      for (const [marker, color] of [['?', 32], ['!', 33], ['i', 34], ['✓', 32], ['✗', 31]]) {
+        assert.include(output, `\x1b[0;${color}m${marker}\x1b[0m Message.\n`);
+      }
+      assert.include(output, 'CHOICES:[y/\x1b[1mN\x1b[0m] ');
+      assert.include(output, 'DEFAULT:[\x1b[1mNONE\x1b[0m]\n');
+      if (file === 'quickstart.sh') assert.include(output, 'STARTUP:[login/bashrc; Enter to skip]\n');
+      assert.include(output, 'PLAIN:[y/N] ✓ Done.\n');
+    } finally { cleanupSandbox(sandbox.root); }
+  });
 });

@@ -172,28 +172,84 @@ url_reference() {
     printf '\033[34m%s\033[0m' "$1"
   else printf '%s' "$1"; fi
 }
+status_marker() {
+  local symbol color
+  case "$1" in
+    prompt) symbol='?'; color=32 ;;
+    warning) symbol='!'; color=33 ;;
+    info) symbol='i'; color=34 ;;
+    success) symbol='✓'; color=32 ;;
+    failure) symbol='✗'; color=31 ;;
+  esac
+  if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[0;%sm%s\033[0m' "$color" "$symbol"
+  else printf '%s' "$symbol"; fi
+}
+choice_word() {
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" && "${2:-}" == default ]]; then
+    printf '\033[1m%s\033[0m' "$1"
+  else printf '%s' "$1"; fi
+}
+fixed_prompt_layout() {
+  prompt_redraw=false
+  [[ -t 0 && -t 1 && /dev/fd/0 -ef /dev/fd/1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]] || return 0
+  local flags status=0
+  flags=$(/bin/stty -a 2>/dev/null) || status=$?
+  case "$status" in 130|143) exit "$status" ;; 0) ;; *) return 0 ;; esac
+  flags=${flags//$'\n'/ }; flags=${flags//;/ }; flags=" $flags "
+  [[ "$flags" == *' icanon '* && "$flags" == *' onlcr '* ]] || return 0
+  if [[ "$flags" == *' -echo '* ]]; then prompt_echo=false
+  elif [[ "$flags" == *' echo '* ]]; then prompt_echo=true
+  else return 0; fi
+  read -r prompt_rows prompt_columns < <(/bin/stty size 2>/dev/null) || return 0
+  [[ "$prompt_rows" =~ ^[0-9]+$ && "$prompt_columns" =~ ^[0-9]+$ ]] || return 0
+  (( prompt_rows > 1 && prompt_columns > 0 )) || return 0
+  # Poll without reading bytes. Bash 3's read -t 0 cannot reliably detect
+  # queued input on macOS. Missing/unsupported polling keeps the plain echo.
+  local readiness=0
+  /bin/zsh -d -f -c 'zmodload zsh/zselect || exit 2; zselect -r 0 -t 0' >/dev/null 2>&1 || readiness=$?
+  case "$readiness" in 130|143) exit "$readiness" ;; 1) ;; *) return 0 ;; esac
+  prompt_redraw=true
+}
+render_fixed_prompt() {
+  status_marker prompt; printf ' %s ' "$prompt_question"
+  if [[ "$prompt_default" == y ]]; then prompt_choices '[Y/n]' y; else prompt_choices '[y/N]' n; fi
+}
+confirm_fixed_choice() {
+  [[ "${prompt_redraw:-false}" == true ]] || return 0
+  local columns=$prompt_columns rows=$prompt_rows echo=$prompt_echo lines width LC_ALL=C
+  fixed_prompt_layout
+  [[ "$prompt_redraw" == true && "$prompt_columns" == "$columns" && "$prompt_rows" == "$rows" && "$prompt_echo" == "$echo" ]] || return 0
+  # Bootstrap prompts cannot rely on Node. Avoid guessing the display width of
+  # non-ASCII/control input or repainting beyond the visible owned region.
+  [[ "$prompt_plain$prompt_answer" =~ ^[[:print:]]*$ ]] || return 0
+  width=${#prompt_plain}; [[ "$echo" == false ]] || width=$((width + ${#prompt_answer}))
+  lines=$(((width + columns - 1) / columns)); (( lines > 0 )) || lines=1
+  (( lines < rows )) || return 0
+  printf '\033[%sA\r\033[J' "$lines"
+  render_fixed_prompt
+  printf '\033[36m%s\033[0m\n' "$1"
+}
 documentation_pointer() {
-  printf '🔗 %s:\n' "$1"
+  status_marker info
+  printf ' %s:\n' "$1"
   url_reference "$2"
   printf '\n'
 }
 error_icon() {
-  if [[ -t "${1:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    printf '\033[31m❌\033[0m'
-  else printf '❌'; fi
+  status_marker failure "${1:-1}"
 }
 setup_complete() {
-  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    printf '\033[32m😎 Setup complete.\033[0m'
-  else printf '😎 Setup complete.'; fi
+  status_marker success; printf ' Setup complete.'
 }
 prompt_choices() {
-  local choices=$1 default=$2
-  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    if [[ "$default" == y ]]; then printf '\033[34m[\033[1mY\033[22m/n]\033[0m '
-    else printf '\033[34m[y/\033[1mN\033[22m]\033[0m '; fi
-  else printf '%s ' "$choices"; fi
+  local default=$2
+  printf '['
+  if [[ "$default" == y ]]; then choice_word Y default; printf '/'; choice_word n
+  else choice_word y; printf '/'; choice_word N default; fi
+  printf '] '
 }
+
 
 # Abbreviate only paths inside HOME for display; filesystem operations stay absolute.
 display_path() {
@@ -227,7 +283,7 @@ repo_existed=true
 setup_mode='refresh'
 
 print_stale_checkout_guidance() {
-  printf '\n⚠️  ERROR: Unable to update %s before setup.\n' "$(display_path "$repo_dir")"
+  printf '\n'; error_icon; printf ' ERROR: Unable to update %s before setup.\n' "$(display_path "$repo_dir")"
   printf 'Inspect %s and preserve local work before retrying. Ballin will not stash or reset it.\n' "$(display_path "$repo_dir")"
   documentation_pointer 'Troubleshooting' "$docs_url#health-and-recovery"
 }
@@ -283,7 +339,7 @@ if [[ "$prerequisite_status" != 0 ]]; then
 fi
 
 if [ ! -x "$(command -v node)" ]; then
-  printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
+  printf '\n'; error_icon; printf ' ERROR: Node.js %s or newer is required.\n' "$required_node_version"
   printf '\nInstall supported Node.js, then %s.\n' "$retry_guidance"
   documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
   exit 1
@@ -298,7 +354,7 @@ else
   " 2>/dev/null) || { prerequisite_status=$?; node_check=''; }
   [[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
   if [ "$node_check" != 'true' ]; then
-    printf '\n⚠️  ERROR: Node.js %s or newer is required.' "$required_node_version"
+    printf '\n'; error_icon; printf ' ERROR: Node.js %s or newer is required.' "$required_node_version"
     if [[ "$node_check" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
       printf ' Detected Node.js %s.' "$node_check"
     fi
@@ -333,17 +389,23 @@ read_prompt_answer() {
 }
 confirm() {
   local default=${2:-n} normalized
+  prompt_default=$default; prompt_question=$1
+  prompt_plain="? $1 $([[ "$default" == y ]] && printf '[Y/n]' || printf '[y/N]') "
   while :; do
-    printf '%s ' "$1"
-    if [[ "$default" == y ]]; then prompt_choices '[Y/n]' y; else prompt_choices '[y/N]' n; fi
+    fixed_prompt_layout
+    render_fixed_prompt
     read_prompt_answer || return 1
+    if [[ "$prompt_redraw" == true && "$prompt_echo" == false ]]; then printf '\n'; fi
     normalized=$prompt_answer
     normalized="${normalized#"${normalized%%[![:space:]]*}"}"
     normalized="${normalized%"${normalized##*[![:space:]]}"}"
     case "$normalized" in
-      y|Y|[yY][eE][sS]) return 0 ;;
-      n|N|[nN][oO]) return 1 ;;
-      '') [[ "$default" == y ]]; return ;;
+      y|Y|[yY][eE][sS]) confirm_fixed_choice Yes; return 0 ;;
+      n|N|[nN][oO]) confirm_fixed_choice No; return 1 ;;
+      '')
+        if [[ "$default" == y ]]; then confirm_fixed_choice Yes; return 0
+        else confirm_fixed_choice No; return 1; fi
+        ;;
       *) printf 'Please enter yes or no.\n' ;;
     esac
   done
@@ -497,7 +559,7 @@ if [ "$repo_existed" = false ]; then
 fi
 
 if [ "$repo_existed" = true ] && [ "$setup_mode" = fresh ]; then
-  printf '\nInitial configuration\n🔗 Installation details:\n%s#what-will-installation-change\n' "$docs_url"
+  printf '\nInitial configuration\n'; documentation_pointer 'Installation details' "$docs_url#what-will-installation-change"
 fi
 
 (

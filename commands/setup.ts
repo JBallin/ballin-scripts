@@ -18,7 +18,7 @@ Use \`ballin backup setup\` for backup destinations and sensitive sources. Use \
 
 This review does not run updates, backups, or runtime installation.
 
-🔗 Preferences:
+i Preferences:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md
 `;
 
@@ -52,7 +52,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     const nvm = inspectNvm();
     reviewing = true;
     writeStdoutLine(terminalProse('Review your update and analytics preferences. Confirmed choices are saved; this does not run updates.'));
-    writeStdoutLine(terminalProse('🔗 Optional capabilities:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'));
+    writeStdoutLine(terminalProse('i Optional capabilities:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'));
     writeStdoutLine(`\n${terminalHeading('Update preferences')}`);
     const cancel = (): SetupOutcome => {
       writeStdoutLine('\nReview cancelled. Earlier confirmed choices remain saved.');
@@ -67,7 +67,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
       const current = readSetupConfigContext(file, false);
       const saved = preferenceBoolean(current.update?.[key] === undefined ? defaults.update[key] : current.update[key], `update.${key}`);
       if (key === 'nvm' && !saved && !(nvm.loadable && nvm.followsLts)) {
-        writeStdoutLine(terminalProse('ℹ️  NVM can maintain latest LTS Node when its default follows latest LTS.'));
+        writeStdoutLine(terminalProse('i NVM can maintain latest LTS Node when its default follows latest LTS.'));
         continue;
       }
       if (key === 'backup' && configuredBackupDestination(current).kind !== 'repository' && !saved) continue;
@@ -83,7 +83,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     if (!configureAnalyticsPreference({ configPath: file, defaultEnabled: analytics, detailsLink: false, reportFailure: false,
       onCancelled: () => { cancelled = true; } })) throw new Error('Unable to save the analytics preference; the existing local setting is unchanged.');
     if (cancelled) return cancel();
-    if (!options.installation) writeStdoutLine(`\n${terminalComplete('😎 Setup complete.')}`);
+    if (!options.installation) writeStdoutLine(`\n${terminalComplete('Setup complete.')}`);
     backupHint();
     return 'completed';
   } catch (error) {

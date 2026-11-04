@@ -53,7 +53,10 @@ for (const name of ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork']) {
       && fs.readFileSync(probeArgs[5], 'utf8') === fs.readFileSync(path.join(root, 'nvm-fixture.sh'), 'utf8')
       && probeEnv?.HOME?.startsWith(path.join(root, 'tmp/ballin-nvm-probe-')) && probeEnv.NVM_DIR === path.join(probeEnv.HOME, 'nvm')
       && probeEnv.PATH === process.env.PATH && probeEnv.BASH_ENV === '' && probeEnv.ENV === '') return original(command, ...args);
-    if (candidate !== process.execPath && !candidate.startsWith(path.join(root, 'tools') + path.sep)
+    const terminalMetadata = name === 'spawnSync' && command === '/bin/stty' && probeArgs?.length === 1 && probeArgs[0] === '-a';
+    const inputReadiness = name === 'spawnSync' && command === '/bin/zsh' && JSON.stringify(probeArgs) === JSON.stringify(['-d', '-f', '-c', 'zmodload zsh/zselect || exit 2; zselect -r 0 -t 0'])
+      && probeEnv?.BASH_ENV === '' && probeEnv.ENV === '' && probeEnv.ZDOTDIR === '' && !Object.keys(probeEnv).some(key => key.startsWith('BASH_FUNC_'));
+    if (!terminalMetadata && !inputReadiness && candidate !== process.execPath && !candidate.startsWith(path.join(root, 'tools') + path.sep)
       && candidate !== path.join(root, 'home/.local/bin/ballin') && candidate !== installedBallin) fail();
     if (candidate === installedBallin) {
       if (fs.realpathSync(candidate) !== installedBallin || !fs.lstatSync(candidate).isFile()) fail();

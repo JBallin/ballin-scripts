@@ -159,7 +159,7 @@ const validateBinDirInPath = (binDir: string, mode: SetupMode): boolean => {
     return true;
   }
 
-  writeStdoutLine(`\n⚠️  ERROR: ${terminalPath(binDir)} doesn't seem to be in your path.`);
+  writeStdoutLine(`\n${terminalError(`${terminalPath(binDir)} doesn't seem to be in your path.`)}`);
   writeStdoutLine(`Add ${terminalCommand(`export PATH="${binDir}:$PATH"`)} to your shell profile.`);
   writeStdoutLine(`Then open a new terminal window and ${setupRetry(mode)}.`);
   return false;
