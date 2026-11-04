@@ -30,4 +30,5 @@ For the project overview, see the [main README](../README.md).
 | [Coverage boundaries](coverage-boundaries.md) | Reviewed production gaps and their test, ignore, or measured dispositions. |
 | [Backup design](backup-design.md) | Backup safety model and GitHub constraints. |
 | [Design system](design-system.md) | Ballin identity, product messaging, visual guidance, and brand asset conventions. |
+| [README example image](assets/README.md) | Regenerate the styled `ballin update` image shown in the main README. |
 | [Analytics backend](analytics-backend.md) | Backend deployment and data-policy notes for usage analytics. |
