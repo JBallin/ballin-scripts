@@ -2,6 +2,7 @@
 """Build a local review gallery; never execute product/install commands."""
 import argparse
 import hashlib
+import html
 import json
 from pathlib import Path
 import re
@@ -29,19 +30,58 @@ STAGED_TOPICS = [
 ]
 
 
+def markdown_text(value):
+    text = html.escape(str(value)).replace('\n', ' ')
+    return re.sub(r'([\\`*_[\]])', r'\\\1', text)
+
+
+def edit_disclosure(entry):
+    edits = entry.get('edits', 'No edit declaration supplied.')
+    if not isinstance(edits, dict):
+        return str(edits)
+    summary = str(edits.get('method', 'See provenance for edit details.'))
+    counts = edits.get('counts')
+    omitted = edits.get('omitted') or (counts.get('omitted') if isinstance(counts, dict) else None)
+    if omitted:
+        summary += ' Omitted: ' + ('; '.join(omitted) if isinstance(omitted, list) else str(omitted))
+    return summary
+
+
+def staged_case_ranges(text):
+    """Keep current staged case notes and outcomes together, including blanks."""
+    lines = text.split('\n')
+    if lines[-1] == '':
+        lines.pop()
+    if not lines:
+        return []
+    starts = [0] + [index for index, line in enumerate(lines) if index and line.startswith('[STAGED ')
+                    and not line.startswith(('[STAGED omission', '[STAGED omitted'))]
+    ranges = []
+    for start, end in zip(starts, starts[1:] + [len(lines)]):
+        if ranges and all(not line.strip() or line.startswith('[STAGED ') for line in lines[ranges[-1][0]:start]):
+            ranges[-1][1] = end
+        else:
+            ranges.append([start, end])
+    return ranges
+
+
 def write_index(work, entries, source):
     lines = ['# Local output gallery', '', 'Source: `' + source + '`', '',
              'Each entry links the same content as Terminal ANSI, accessible text and rendered PNGs.',
-             'Actual recordings and staged examples remain labeled separately.', '']
+             'Actual recordings and staged examples remain labeled separately.',
+             'Each entry links its provenance. Staged excerpts retain inline omission notes; actual recordings disclose normalization/omissions below.', '']
     for category in CATEGORIES:
         lines += ['## ' + category, '']
         for entry in entries:
             if entry['category'] != category:
                 continue
             folder = work / entry['id']
-            links = [f'[ANSI]({entry["id"]}/preview.ansi)', f'[text]({entry["id"]}/text.txt)']
+            links = [f'[ANSI]({entry["id"]}/preview.ansi)', f'[text]({entry["id"]}/text.txt)',
+                     f'[provenance]({entry["id"]}/provenance.json)']
             links += [f'[PNG {index}]({entry["id"]}/{png.name})' for index, png in enumerate(sorted(folder.glob('output-*.png')), 1)]
-            lines += [f'- {entry["title"]} ({entry["kind"]}): ' + ' · '.join(links)]
+            lines += [f'- {markdown_text(entry["title"])} ({entry["kind"]}): ' + ' · '.join(links)]
+            if entry['kind'] == 'actual-vm':
+                lines += ['  Normalization/omissions: ' + markdown_text(edit_disclosure(entry))]
         if not any(entry['category'] == category for entry in entries):
             lines += ['No entries recorded yet.']
         lines += ['']
@@ -122,6 +162,9 @@ def main():
                 parser.error('Review capture for sensitive data before importing')
             if capture.get('category', 'Diagnostics') not in CATEGORIES:
                 parser.error('Unknown capture category; see README')
+            title = capture.get('title', capture['id'])
+            if not isinstance(title, str) or not 0 < len(title) <= 160 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in title):
+                parser.error('Capture title must be short single-line text')
             source = (args.captures.resolve().parent / capture['raw']).resolve()
             if digest(source) != capture['rawSha256']:
                 parser.error('Raw capture hash mismatch')
@@ -145,7 +188,10 @@ def main():
         (folder / 'raw.ansi').write_bytes(original.encode('utf-8'))
         (folder / 'preview.ansi').write_text(header + canonical)
         (folder / 'text.txt').write_text(header + text)
-        run([str(renderer), str(folder / 'output')], input=(header + canonical).encode())
+        presentation = {'label': label, 'source': args.source, 'scenario': entry['title'] + ' (' + entry['id'] + ')',
+                        'keepTogether': staged_case_ranges(text) if entry['id'] == 'staged-09' else []}
+        (folder / 'presentation.json').write_text(json.dumps(presentation, indent=2) + '\n')
+        run([str(renderer), str(folder / 'output'), str(folder / 'presentation.json')], input=(header + canonical).encode())
         render_report = json.loads((folder / 'output.json').read_text())
         if render_report['text'] != header + text:
             raise ValueError('Renderer/text fidelity mismatch: ' + entry['id'])

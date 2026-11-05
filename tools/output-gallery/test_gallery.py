@@ -28,10 +28,41 @@ class GalleryTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
-    def render(self, text, name):
+    def render(self, text, name, presentation=None):
         prefix = self.root / name
-        result = subprocess.run([str(self.renderer), str(prefix)], input=text.encode(), capture_output=True, timeout=30)
+        command = [str(self.renderer), str(prefix)]
+        if presentation is not None:
+            metadata = self.root / (name + '-presentation.json')
+            metadata.write_text(json.dumps(presentation))
+            command.append(str(metadata))
+        result = subprocess.run(command, input=text.encode(), capture_output=True, timeout=30)
         return result, prefix
+
+    def test_repeated_captions_and_small_case_pagination_preserve_transcript(self):
+        label, source = 'STAGED — no live execution.', 'a' * 40
+        lines = ['prefill ' + str(i) for i in range(44)] + [
+            '[STAGED major release change]', 'Ballin: v1 → v2', 'Release notes: example',
+            '? Change revision? Yes', 'Ballin updated: v1 to v2', '']
+        header = label + '\nSource: ' + source + '\n\n'
+        text = header + '\n'.join(lines)
+        context = {'label': label, 'source': source, 'scenario': 'Update (staged-update)', 'keepTogether': [[44, 49]]}
+        result, prefix = self.render(text, 'captions', context)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(prefix.with_suffix('.json').read_text())
+        self.assertEqual(report['text'], text)
+        self.assertEqual(len(report['pages']), 2)
+        for index, caption in enumerate(report['pageCaptions'], 1):
+            for value in [label, source, context['scenario'], f'Page {index} of 2']:
+                self.assertIn(value, caption)
+        self.assertTrue(any(set(range(44, 49)).issubset(page) for page in report['pageLineIndexes']))
+        result, prefix = self.render(header + 'large case\n' * 100, 'large-case', {**context, 'keepTogether': [[0, 100]]})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(prefix.with_suffix('.json').read_text())['text'], header + 'large case\n' * 100)
+
+    def test_staged_notes_and_transition_cases_form_complete_blocks(self):
+        text = '[STAGED alternative — NVM failed]\n\n[STAGED omission: upstream output]\n\nFailure\n\n' \
+            '[STAGED alternative — transition scope]\n\n[STAGED major release]\nProposal\nConsent\nResult\n'
+        self.assertEqual(gallery.staged_case_ranges(text), [[0, 6], [6, 12]])
 
     def test_styled_text_unicode_tabs_long_lines_and_pagination(self):
         text = '\x1b[1;36mAccepted: Yes\x1b[0m\n\x1b[31mFailure\ncontinued\x1b[0m\nUnicode: café ✓ end\n' + ('long ' * 80 + '\n') * 65
@@ -75,15 +106,17 @@ class GalleryTests(unittest.TestCase):
                 folder = root / identifier
                 folder.mkdir()
                 (folder / 'output-001.png').touch()
-                entries.append({'id': identifier, 'kind': kind, 'category': 'Update', 'title': identifier})
+                entries.append({'id': identifier, 'kind': kind, 'category': 'Update', 'title': identifier,
+                                'edits': {'method': 'Redraw normalization.', 'omitted': ['Guard status', 'Inspector boilerplate']}})
             gallery.write_index(root, entries, 'a' * 40)
             text = (root / 'index.md').read_text()
             headings = [line for line in text.splitlines() if line.startswith('## ')]
             self.assertEqual(headings, ['## ' + category for category in gallery.CATEGORIES])
             for entry in entries:
                 self.assertIn(entry['id'] + ' (' + entry['kind'] + ')', text)
-                for name in ['preview.ansi', 'text.txt', 'output-001.png']:
+                for name in ['preview.ansi', 'text.txt', 'output-001.png', 'provenance.json']:
                     self.assertIn('(' + entry['id'] + '/' + name + ')', text)
+            self.assertIn('Normalization/omissions: Redraw normalization. Omitted: Guard status; Inspector boilerplate', text)
 
 
 class GallerySecurityTests(unittest.TestCase):

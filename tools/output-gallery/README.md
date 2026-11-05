@@ -39,6 +39,10 @@ Each entry contains labeled ANSI preview, matching `text.txt`, paginated PNGs an
 provenance. Start with the generated `index.md`, grouped into Install & Quickstart,
 Setup & Backup, Update, and Diagnostics. Compare these together for wording, flow,
 color, spacing and wrapping.
+Every PNG repeats its classification, source, scenario and page identity as a
+presentation caption, separate from the logical transcript. Small staged Update
+cases stay together when they fit a page. The index links each entry's provenance
+and exposes normalization/omission declarations alongside its preview links.
 The renderer preserves supported ANSI styling; its logical text must match the
 text file exactly. Images are rendered output, not native Terminal screenshots.
 **Staged** entries contain source-informed synthetic prompts/answers/outcomes;
