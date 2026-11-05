@@ -173,6 +173,54 @@ describe('bootstrap command references on a real PTY without running an installe
       assert.notInclude(output, '`\x1b[1m');
     });
   }
+  it('styles actual installer retry output for its receiving stream', () => {
+    sandbox = createSandbox();
+    const source = fs.readFileSync(path.join(__dirname, '../install.sh'), 'utf8');
+    const command = source.match(/^command_reference\(\) \{\n[\s\S]*?^\}/mu)?.[0];
+    const retry = source.match(/^print_retry_guidance\(\) \{\n[\s\S]*?^\}/mu)?.[0];
+    const prerequisite = source.match(/^    printf '\\nUpdate or activate Node\.js[^\n]+$/mu)?.[0];
+    const refresh = source.match(/^    \{\n      printf 'Ballin checkout[^\n]+\n      command_reference 'ballin self-update' 2\n      printf ' to finish\.\\n'\n    \} >&2/mu)?.[0];
+    const preflight = source.match(/"\$\(print_retry_guidance 2\)"/u)?.[0];
+    for (const fragment of [command, retry, prerequisite, refresh, preflight]) assert.isString(fragment);
+    // Execute the actual output fragments only, never the installer or tools.
+    const render = `${prerequisite}\n${refresh}\nprintf 'ARG:%s\\n' ${preflight} >&2`;
+    const program = `${command}\n${retry}
+      export TERM=xterm NO_COLOR=''
+      ballin_sha=fixture; ballin_mode=self-update; setup_mode=self-update
+      { ${render}; } > '${sandbox.scratch}/out'
+      printf 'OUT-PIPE:'; /bin/cat '${sandbox.scratch}/out'
+      { ${render}; } 2> '${sandbox.scratch}/err'
+      printf 'ERR-PIPE:'; /bin/cat '${sandbox.scratch}/err'
+      ballin_mode=install; setup_mode=refresh
+      printf 'EXISTING:'; print_retry_guidance; printf '\\n'
+      setup_mode=fresh
+      printf 'FRESH:'; print_retry_guidance; printf '\\n'
+      printf 'FRESH-PREREQUISITE:'; print_retry_guidance 1 'rerun this installer'; printf '\\n'
+      ballin_mode=self-update
+      export NO_COLOR=0
+      printf 'NO-COLOR:'; print_retry_guidance; printf '\\n'
+      export NO_COLOR='' TERM=dumb FORCE_COLOR=1
+      printf 'DUMB:'; print_retry_guidance; printf '\\n'
+    `;
+    const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', program], []);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const output = result.stdout.replace(/\r\n/gu, '\n');
+    const plain = '`ballin self-update`';
+    const bold = '\x1b[1mballin self-update\x1b[0m';
+    const prefix = 'Update or activate Node.js using your existing installation method, then run ';
+    const failure = 'Ballin checkout is now fixture, but setup refresh failed. Fix the reported error, then run ';
+    assert.include(output, `${prefix}${plain} again.\n`);
+    assert.include(output, `${prefix}${bold} again.\n`);
+    assert.include(output, `${failure}${bold} to finish.\n`);
+    assert.include(output, `${failure}${plain} to finish.\n`);
+    assert.include(output, `ARG:run ${bold} again\n`);
+    assert.include(output, `ARG:run ${plain} again\n`);
+    assert.include(output, `EXISTING:use ${bold} for the default selection\n`);
+    assert.include(output, 'FRESH:run this installer again\n');
+    assert.include(output, 'FRESH-PREREQUISITE:rerun this installer\n');
+    for (const gate of ['NO-COLOR', 'DUMB']) assert.include(output, `${gate}:run ${plain} again\n`);
+    assert.notInclude(output, '`\x1b[1m');
+  });
 });
 
 describe('bootstrap marker and choice palette on a real PTY', function() {

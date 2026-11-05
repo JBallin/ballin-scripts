@@ -300,15 +300,16 @@ fi
 if [ ! -f "$repo_dir/ballin.config.json" ]; then
   setup_mode='fresh'
 fi
-retry_guidance='run this installer again'
-retry_prerequisites='rerun this installer'
-if [[ "$ballin_mode" == self-update ]]; then
-  retry_guidance="run \`ballin self-update\` again"
-  retry_prerequisites=$retry_guidance
-elif [[ "$setup_mode" != fresh ]]; then
-  retry_guidance="use \`ballin self-update\` for the default selection"
-  retry_prerequisites=$retry_guidance
-fi
+print_retry_guidance() {
+  local stream=${1:-1} fresh_guidance=${2:-'run this installer again'}
+  if [[ "$ballin_mode" == self-update ]]; then
+    printf 'run '; command_reference 'ballin self-update' "$stream"; printf ' again'
+  elif [[ "$setup_mode" != fresh ]]; then
+    printf 'use '; command_reference 'ballin self-update' "$stream"; printf ' for the default selection'
+  else
+    printf '%s' "$fresh_guidance"
+  fi
+}
 
 if [[ -n "${BALLIN_APPROVED_INSTALL_ROOT:-}" && ( "$BALLIN_APPROVED_INSTALL_ROOT" != "$repo_dir" || "$repo_existed" == true ) ]]; then
   printf 'The checkout changed after approval. Inspect it, then rerun Quickstart.\n' >&2
@@ -320,7 +321,7 @@ system_xcode_select='/usr/bin/xcode-select'
 git_tool=$(type -P git) || git_tool=''
 if [[ -z "$git_tool" ]]; then
   printf '\n'; error_icon; printf ' Git is required before install can continue.\n'
-  printf 'Install Git, then %s.\n' "$retry_guidance"
+  printf 'Install Git, then '; print_retry_guidance; printf '.\n'
   exit 1
 fi
 prerequisite_status=0
@@ -329,7 +330,7 @@ if [[ "$(uname -s)" == Darwin && "$git_tool" -ef "$system_git" ]]; then
   [[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
   if [[ "$prerequisite_status" != 0 ]]; then
     printf '\n'; error_icon; printf " Xcode Command Line Tools are required to use Apple’s Git.\n"
-    printf 'Run '; command_reference 'xcode-select --install'; printf ', finish installation, then %s.\n' "$retry_prerequisites"
+    printf 'Run '; command_reference 'xcode-select --install'; printf ', finish installation, then '; print_retry_guidance 1 'rerun this installer'; printf '.\n'
     exit 1
   fi
 fi
@@ -338,13 +339,13 @@ git_diagnostics=$("$git_tool" --version 2>&1) || prerequisite_status=$?
 if [[ "$prerequisite_status" != 0 ]]; then
   [[ -z "$git_diagnostics" ]] || printf '%s\n' "$git_diagnostics"
   printf '\n'; error_icon; printf ' Git was found but could not run.\n'
-  printf 'Make sure '; command_reference 'git --version'; printf ' works, then %s.\n' "$retry_prerequisites"
+  printf 'Make sure '; command_reference 'git --version'; printf ' works, then '; print_retry_guidance 1 'rerun this installer'; printf '.\n'
   exit 1
 fi
 
 if [ ! -x "$(command -v node)" ]; then
   printf '\n'; error_icon; printf ' Node.js %s or newer is required.\n' "$required_node_version"
-  printf '\nInstall supported Node.js, then %s.\n' "$retry_guidance"
+  printf '\nInstall supported Node.js, then '; print_retry_guidance; printf '.\n'
   documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
   exit 1
 else
@@ -363,7 +364,7 @@ else
       printf ' Detected Node.js %s.' "$node_check"
     fi
     printf '\n'
-    printf '\nUpdate or activate Node.js using your existing installation method, then %s.\n' "$retry_guidance"
+    printf '\nUpdate or activate Node.js using your existing installation method, then '; print_retry_guidance; printf '.\n'
     documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
     exit 1
   fi
@@ -451,7 +452,7 @@ if command_preflight=$(node -e '
     if (error.code !== "ENOENT") { console.error(error.message); process.exit(1); }
   }
   process.stdout.write(JSON.stringify({directory, target, snapshot}));
-' "$repo_dir" "$(command_reference 'brew --prefix' 2)" "$retry_guidance"); then :
+' "$repo_dir" "$(command_reference 'brew --prefix' 2)" "$(print_retry_guidance 2)"); then :
 else
   exit $?
 fi
@@ -573,7 +574,11 @@ fi
 setup_status=$?
 if [ "$setup_status" -ne 0 ]; then
   if [[ "$ballin_mode" == self-update ]]; then
-    printf "Ballin checkout is now %s, but setup refresh failed. Fix the reported error, then run \`ballin self-update\` to finish.\n" "$ballin_sha" >&2
+    {
+      printf 'Ballin checkout is now %s, but setup refresh failed. Fix the reported error, then run ' "$ballin_sha"
+      command_reference 'ballin self-update' 2
+      printf ' to finish.\n'
+    } >&2
   elif [[ "$setup_mode" == fresh ]]; then
     printf "Ballin checkout is now %s, but initial setup failed. Fix the reported error, then rerun installation to finish.\n" "$ballin_sha" >&2
   else
