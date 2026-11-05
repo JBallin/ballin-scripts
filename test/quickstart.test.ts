@@ -899,7 +899,11 @@ printf '0\\n'
         assert.notInclude(result.stderr, 'brew upgrade node');
       }
       if (!['130', '143'].includes(state)) {
-        assert.include(result.stderr, '\ni Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+        const url = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs';
+        const details = `i Node.js details:\n${url}\n`;
+        assert.include(state === 'unknown' ? result.stderr : result.stdout, details);
+        assert.equal((result.stdout + result.stderr).split(url).length - 1, 1);
+        if (state !== 'unknown') assert.isBelow(result.stdout.indexOf(details), result.stdout.indexOf('Ballin requires Node.js. Install it using NVM?'));
       }
       assert.equal(fs.readFileSync(installed, 'utf8'), contents);
       assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
