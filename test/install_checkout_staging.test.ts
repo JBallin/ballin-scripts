@@ -75,7 +75,10 @@ const target=path.join(process.env.HOME,'.ballin-scripts'),race=process.env.FIXT
 if(race==='directory'||race==='empty') {fs.mkdirSync(target);if(race==='directory')fs.writeFileSync(path.join(target,'user-data'),'preserve');}
 if(race==='file') fs.writeFileSync(target,'preserve');
 if(race==='symlink') {const other=path.join(process.env.HOME,'other');fs.mkdirSync(other);fs.writeFileSync(path.join(other,'user-data'),'preserve');fs.symlinkSync(other,target);}
-const result=cp.spawnSync(process.env.FIXTURE_REAL_MV,process.argv.slice(2),{stdio:'inherit',env:process.env});process.exit(result.status||0);
+const result=cp.spawnSync(process.env.FIXTURE_REAL_MV,process.argv.slice(2),{stdio:'inherit',env:process.env});
+// Retain the real no-clobber operation while covering both portable refusal statuses.
+const refusal=process.env.FIXTURE_MV_REFUSAL_STATUS;
+process.exit(race&&refusal!==undefined?Number(refusal):result.status||0);
 `);
     installer = path.join(root, 'install.sh');
     const source = fs.readFileSync(path.resolve(__dirname, '../install.sh'), 'utf8').replace('ballin_select "$@" || exit $?', `
@@ -113,9 +116,11 @@ ballin_download() { cp "$FIXTURE_HELPER" "$2"; }
       assert.isEmpty(fs.readdirSync(home).filter((name: string) => name.startsWith('.ballin-install.')));
     });
   }
-  for (const race of ['directory', 'empty', 'file', 'symlink']) it(`preserves a concurrently created ${race} at publication`, () => {
-    const result = run({ FIXTURE_MV_RACE: race }); assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.notInclude(result.stdout, 'fixture setup'); assert.include(result.stderr, 'installation destination changed');
+  for (const race of ['directory', 'empty', 'file', 'symlink']) for (const refusal of ['native', '0', '1']) it(`preserves a concurrently created ${race} at publication (mv status ${refusal})`, () => {
+    const result = run({ FIXTURE_MV_RACE: race, ...(refusal === 'native' ? {} : { FIXTURE_MV_REFUSAL_STATUS: refusal }) });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.notInclude(result.stdout, 'fixture setup');
+    assert.match(result.stderr, /(?:The installation destination changed\.|Unable to publish the prepared installation\.)/u);
     const target = path.join(home, '.ballin-scripts');
     if (race === 'empty') assert.isEmpty(fs.readdirSync(target));
     else if (race === 'file') assert.equal(fs.readFileSync(target, 'utf8'), 'preserve');
