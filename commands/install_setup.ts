@@ -230,9 +230,10 @@ const setup = (
   let backupSetupCancelled = false;
   let generalReview = false;
   const interactive = mode !== 'self-update' && promptInputState() === 'open';
+  const backupSetupAllowed = mode === 'self-update' || process.env.BALLIN_BACKUP_CHOICE !== 'no';
   if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine(`\n${terminalComplete('Ballin installed successfully.')}`);
-  if (backupConfigured || backupInvalid || (interactive && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1'
-    && process.env.BALLIN_BACKUP_CHOICE !== 'no')) {
+  if (backupSetupAllowed && (backupConfigured || backupInvalid
+    || (interactive && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1'))) {
     backupFlow = true;
     if (mode !== 'self-update') writeStdoutLine();
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {

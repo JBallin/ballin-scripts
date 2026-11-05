@@ -581,6 +581,60 @@ kill -${signal} $$
     }
   }
 
+  for (const mode of ['fresh', 'refresh', 'self-update']) {
+    for (const ghAvailable of [false, true]) {
+      it(`honors the Quickstart backup opt-out without discarding saved settings in ${mode} mode (gh: ${ghAvailable})`, () => {
+        installConfigSources();
+        const configPath = path.join(repoDir, 'ballin.config.json');
+        const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8'));
+        config.backup.repository = require('./helpers/repository.ts').fixtureDestination;
+        config.update.backup = 'true';
+        fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
+        const previousConfig = fs.readFileSync(configPath);
+        const cachePath = path.join(repoDir, '.backup-cache', 'prior-comparison');
+        fs.mkdirSync(path.dirname(cachePath));
+        fs.writeFileSync(cachePath, 'earlier cache\n');
+        if (ghAvailable) writeExecutable('gh', `#!/bin/sh
+printf '%s\\n' "$*" >> '${commandLogPath}'
+exit 1
+`);
+        const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
+          encoding: 'utf8', input: 'n\n', env: childEnvironment({ BALLIN_BACKUP_CHOICE: 'no' }),
+        });
+        // A Quickstart choice affects installation/refresh, not self-update maintenance.
+        assert.equal(result.status, mode === 'self-update' ? 1 : 0, result.stdout + result.stderr);
+        if (mode === 'self-update' && ghAvailable) assert.match(commandLog(), /^api /u);
+        else assert.equal(commandLog(), '');
+        if (mode !== 'self-update') {
+          assert.notInclude(result.stdout, 'GitHub CLI');
+          assert.notInclude(result.stdout, 'Checking backup setup');
+          assert.notInclude(result.stdout, 'Validated private backup');
+        }
+        assert.deepEqual(fs.readFileSync(configPath), previousConfig);
+        assert.equal(fs.readFileSync(cachePath, 'utf8'), 'earlier cache\n');
+        assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+      });
+    }
+  }
+
+  for (const mode of ['fresh', 'refresh']) {
+    it(`defers an invalid saved backup destination when Quickstart declines backup in ${mode} mode`, () => {
+      installConfigSources();
+      const configPath = path.join(repoDir, 'ballin.config.json');
+      const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8'));
+      config.backup.repository = {};
+      fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
+      const previousConfig = fs.readFileSync(configPath);
+      const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
+        encoding: 'utf8', input: 'n\n', env: childEnvironment({ BALLIN_BACKUP_CHOICE: 'no' }),
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'backup destination configuration is invalid');
+      assert.deepEqual(fs.readFileSync(configPath), previousConfig);
+      assert.equal(commandLog(), '');
+    });
+  }
+
   it('replaces existing command symlinks', () => {
     fs.mkdirSync(binDir, { recursive: true });
     fs.symlinkSync(path.join(testDir, 'old-ballin'), path.join(binDir, 'ballin'));

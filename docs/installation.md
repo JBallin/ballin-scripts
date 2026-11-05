@@ -45,7 +45,8 @@ shell completion, it offers backup setup, then general preferences including
 [analytics](analytics.md#what-will-analytics-share), disabled by default.
 Declining backup still reaches the preference offer. Explicit installer reruns
 reoffer unconfigured backup setup and general review using saved preferences;
-configured backups retain their verification and summary.
+configured backups retain their verification and summary unless backup setup is
+declined in Quickstart.
 
 Successful setup ends with a reminder to open a new Terminal and run `ballin help`.
 If Quickstart cannot verify PATH setup for finding `ballin` in a new Terminal,
@@ -224,10 +225,9 @@ or Bash. Homebrew is optional.
 Quickstart first asks whether to set up backups. If selected, it asks for a
 hostname (default `github.com`) before sign-in and installing Ballin, then reuses it
 without another host prompt. An existing destination keeps its configured host.
-Choosing “No” still installs Ballin for maintenance; for an unconfigured
-installation it omits backup-only GitHub CLI discovery/installation, sign-in,
-destination setup and run-now. An existing configured backup retains installer
-verification. Existing tools, accounts and backups remain.
+Choosing “No” still installs Ballin for maintenance and omits backup-only GitHub
+CLI discovery/installation, sign-in, destination setup, verification and run-now.
+Existing tools, accounts, saved backup settings and backups remain.
 Later `ballin backup setup` checks current prerequisites and GitHub access.
 
 Quickstart accepts Node.js 24.12 or newer. When Node.js is missing or
