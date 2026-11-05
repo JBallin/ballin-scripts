@@ -325,7 +325,7 @@ excluding code.
 When the coverage step fails after producing raw V8 coverage, CI attempts to
 retain exact reports and runtime, commit, tree, and lockfile metadata in a compact
 artifact for seven days. Failures before coverage starts skip these diagnostics. A
-separate failure-only artifact retains the complete raw V8 directory as
+separate artifact retains the complete raw V8 directory as
 `coverage-raw.tar.gz`, even if compact report generation fails. A single archive
 avoids per-file upload overhead; fast gzip packaging and uncompressed artifact
 upload avoid compressing it twice. To inspect downloaded raw evidence, extract
@@ -337,9 +337,12 @@ tar -xzf /path/to/download/coverage-raw.tar.gz -C "$BALLIN_RAW_COVERAGE_DIR"
 node --max-old-space-size=6144 test/coverage.ts report --check-coverage=false --temp-directory="$BALLIN_RAW_COVERAGE_DIR/tmp" --reporter=json --reporter=json-summary --reports-dir=coverage/ci
 ```
 
-The archive includes auxiliary and nested files needed to interpret the profiles. An intentional successful
-`workflow_dispatch` run retains only the compact evidence. Ordinary successful
-pull request and push runs skip diagnostic report generation and artifact
+The archive includes auxiliary and nested files needed to interpret the profiles.
+An intentional `workflow_dispatch` run also retains raw evidence after successful
+coverage, downloads the uploaded archive, and verifies the extracted directory
+against the original byte for byte. Packaging, extraction and comparison timings
+are logged; upload and download durations are available in the job steps.
+Ordinary successful pull request and push runs skip diagnostic report generation and artifact
 uploads. Compare retained evidence with the corresponding local run before
 attributing a difference to the OS or runtime. Platform-dependent execution can
 also change V8's range boundaries, so one newly uncovered branch may change
@@ -440,7 +443,7 @@ smoke check. Node supplies the CPU estimate through `os.availableParallelism()`.
 Benchmark reductions describe command wall time and exclude runner queue, setup
 and evidence capture. Machine load, platform, runtime and source changes can alter
 timing and coverage geometry. Use focused selection for feedback, retain the
-single complete final gate, and verify that the full CI job fits its 25-minute
+single complete final gate, and verify that the full CI job fits its 35-minute
 budget.
 
 ## Runtime and platform limits

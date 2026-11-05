@@ -15,7 +15,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-26.04
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
       - name: Check out repository
@@ -133,16 +133,22 @@ jobs:
         id: raw_coverage_archive
         if: >-
           ${{ !cancelled() &&
-            steps.coverage.outcome == 'failure' &&
+            (steps.coverage.outcome == 'failure' ||
+              (github.event_name == 'workflow_dispatch' &&
+                steps.coverage.outcome == 'success')) &&
             hashFiles('coverage/tmp/coverage-*.json') != '' }}
         run: |
           set -o pipefail
-          tar -cf - -C coverage tmp | gzip -1 > coverage/coverage-raw.tar.gz
+          TIMEFORMAT='Archive packaging: %3R seconds'
+          time { tar -cf - -C coverage tmp | gzip -1 > coverage/coverage-raw.tar.gz; }
 
       - name: Upload raw V8 coverage evidence
+        id: raw_coverage_upload
         if: >-
           ${{ !cancelled() &&
-            steps.coverage.outcome == 'failure' &&
+            (steps.coverage.outcome == 'failure' ||
+              (github.event_name == 'workflow_dispatch' &&
+                steps.coverage.outcome == 'success')) &&
             steps.raw_coverage_archive.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -151,6 +157,35 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
+
+      - name: Download raw V8 coverage evidence
+        id: raw_coverage_download
+        if: >-
+          ${{ !cancelled() && github.event_name == 'workflow_dispatch' &&
+            steps.raw_coverage_upload.outcome == 'success' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/raw-coverage-roundtrip/download
+
+      - name: Verify raw V8 coverage artifact round trip
+        if: >-
+          ${{ !cancelled() && github.event_name == 'workflow_dispatch' &&
+            steps.raw_coverage_download.outcome == 'success' }}
+        env:
+          ROUNDTRIP_ROOT: ${{ runner.temp }}/raw-coverage-roundtrip
+        run: |
+          set -euo pipefail
+          cmp coverage/coverage-raw.tar.gz "$ROUNDTRIP_ROOT/download/coverage-raw.tar.gz"
+          mkdir "$ROUNDTRIP_ROOT/extracted"
+          TIMEFORMAT='Archive extraction: %3R seconds'
+          time tar -xzf "$ROUNDTRIP_ROOT/download/coverage-raw.tar.gz" -C "$ROUNDTRIP_ROOT/extracted"
+          TIMEFORMAT='Content comparison: %3R seconds'
+          time diff -r coverage/tmp "$ROUNDTRIP_ROOT/extracted/tmp"
+          printf 'Raw coverage files: '
+          find coverage/tmp -type f -print | wc -l
+          du -sk coverage/tmp
+          wc -c coverage/coverage-raw.tar.gz
 
   minimum-node:
     name: Minimum Node.js runtime
