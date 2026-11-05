@@ -1,0 +1,35 @@
+{
+  "candidate": "5fe81405e0a729eb4af361509015fe932ddc3c75",
+  "exit_codes": {
+    "plain": 0,
+    "normal_pty": 0,
+    "NO_COLOR_pty": 0,
+    "dumb_pty": 0
+  },
+  "checks": [
+    "10 labeled selected sections",
+    "PTY/plain words agree allowing command backticks and normal wrapping; paragraph counts agree",
+    "NO_COLOR/dumb output has no ANSI",
+    "plain proposed Create; blue successful Create and existing Reconnect",
+    "neutral uppercase defaults; cyan canonical labels including Skip",
+    "current retry/cancellation/privacy copy",
+    "raw quoted synthetic configuration paths; whitelisted filesystem causes",
+    "literal missing keys remain backticked in every mode",
+    "source-derived selection labels and staged proposal/summary identities",
+    "current Node.js preference/help and component-specific failures",
+    "all 13 applicable main-flow fixed-choice prompts present in source order; excerpts identify omissions",
+    "pure formatter/runtime import review; no child/network/input/mutating calls in renderer"
+  ],
+  "limits": [
+    "Selected staged excerpts, not a live transcript",
+    "No product/VM actions",
+    "No verification of interactive redraw by this static renderer; separate native PTY test evidence exists",
+    "Immutable candidate recorded in provenance.json"
+  ],
+  "captures": {
+    "plain.txt": "040d3d9a1a2712226f11a50a30081d2e72588c8001420e47ca19b8814fa13027",
+    "terminal-preview.ansi": "26edd541e9f450af71628e4ebee4dd62ed2ca6d1a6dc5ad3fbbf7154bb4a9621",
+    "no-color-pty.txt": "b4501f8a70ac76ab631e77a0fa9d3098c68899a98fcf70e1954de81b2e361d90",
+    "dumb-pty.txt": "b4501f8a70ac76ab631e77a0fa9d3098c68899a98fcf70e1954de81b2e361d90"
+  }
+}

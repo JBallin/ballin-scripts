@@ -1,0 +1,17 @@
+{
+  "update": {
+    "cleanup": "true",
+    "selfUpdate": "true",
+    "backup": "false",
+    "softwareupdate": "true",
+    "npm": "false",
+    "nvm": "false"
+  },
+  "backup": {
+    "repository": null,
+    "includeSensitive": "false"
+  },
+  "analytics": {
+    "enabled": "false"
+  }
+}
