@@ -50,6 +50,27 @@ need their separate authorization and disposable data. Retain meaningful prompts
 answers, results and original output; exclude credentials, device codes, private
 backup names and personal data before saving evidence.
 
+For a clean Quickstart capture, start without Homebrew or Ballin; for direct
+installation, prepare its prerequisites first. Record the disposable clone name,
+its template/source VM, initial prerequisites and exact reviewed source SHA in the
+capture provenance. Preserve the original VM and its existing data/authentication.
+Use a working guest console or SSH; host-side controls must target only the clone.
+
+Record real output with an output-only recorder such as `script -q -t 0`, retaining
+the raw ANSI, exact command, prompts/answers, process exit status and downloaded
+script checksum. Do not enable key logging. If using Tart folder shares, expose
+only dedicated capture inputs (read-only) and generated output, never host HOME or
+credentials; clipboard sharing is unnecessary.
+
+Keep private authentication outside recording: complete the initial installation
+without backup setup, stop the recorder, and let the maintainer log into GitHub
+privately. Do not inspect or capture authentication screens, credentials, tokens or
+device codes. Resume only after confirmation, within the approved setup/read or
+synthetic-backup scope. Record disposable test repository names/URLs and intended
+mutations; login alone grants no new mutation authority. Preserve the guest and
+captures at handoff, and document cleanup. Delete test repositories only with the
+required specific approval; do not remove existing guest data or repositories.
+
 Pass `--captures /path/to/manifest.json` to import reviewed recordings. No manifest
 command is executed. The manifest format is:
 
