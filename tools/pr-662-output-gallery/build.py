@@ -318,7 +318,7 @@ line('Revision change cancelled. The installed checkout is unchanged.');
 
 alternative('security repair: outcome-only excerpts, prior preflight/consent/checkout stages omitted; no live transition executed');
 line('Checkout changed after confirmation. Retry after inspecting it.');
-prose(t.terminalError('Installed updater uses an unsupported contract. See https://github.com/JBallin/ballin-scripts/blob/main/docs/installation-testing.md#prelaunch-entrypoint-recovery.'));
+line(t.terminalMarkers('✗ Ballin: Installed updater uses an unsupported contract. See https://github.com/JBallin/ballin-scripts/blob/main/docs/installation-testing.md#prelaunch-entrypoint-recovery.'));
 line('Ballin checkout is now '+manifest.candidateHead+', but setup refresh failed. Fix the reported error, then run '+command('ballin self-update')+' to finish.');
 
 section(10,'Doctor and help','actual pure current formatters with synthetic doctor data and extracted setup help');
