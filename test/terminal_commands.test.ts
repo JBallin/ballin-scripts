@@ -273,18 +273,24 @@ describe('bootstrap marker and choice palette on a real PTY', function() {
         printf 'CHOICES:'; prompt_choices '[y/N]' n
         printf '\\nDEFAULT:['; choice_word NONE default; printf ']\\n'
         ${file === 'quickstart.sh' ? "printf 'STARTUP:'; prompt_options 'login/bashrc; Enter to skip'; printf '\\n'" : ''}
-        export NO_COLOR=0 FORCE_COLOR=1
+        { for role in prompt warning info success failure; do status_marker "$role"; printf ' Message.\\n'; done; } > '${sandbox.scratch}/palette'
+        printf 'PIPE:'; /bin/cat '${sandbox.scratch}/palette'
+        export TERM=dumb
+        printf 'DUMB:'; for role in prompt warning info success failure; do status_marker "$role"; printf ' Message.\\n'; done
+        export TERM=xterm NO_COLOR=0 FORCE_COLOR=1
+        printf 'NO-COLOR:'; for role in prompt warning info success failure; do status_marker "$role"; printf ' Message.\\n'; done
         printf 'PLAIN:'; prompt_choices '[y/N]' n; status_marker success; printf ' Done.\\n'
       `;
       const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', program], []);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      for (const [marker, color] of [['?', 32], ['!', 33], ['i', 34], ['✓', 32], ['✗', 31]]) {
-        assert.include(output, `\x1b[0;${color}m${marker}\x1b[0m Message.\n`);
+      for (const [marker, sgr] of [['?', '1;32'], ['!', '0;33'], ['i', '0;34'], ['✓', '0;32'], ['✗', '0;31']]) {
+        assert.include(output, `\x1b[${sgr}m${marker}\x1b[0m Message.\n`);
       }
       assert.include(output, 'CHOICES:[y/N] ');
       assert.include(output, 'DEFAULT:[NONE]\n');
       if (file === 'quickstart.sh') assert.include(output, 'STARTUP:[login/bashrc; Enter to skip]\n');
+      for (const label of ['PIPE', 'DUMB', 'NO-COLOR']) assert.include(output, `${label}:? Message.\n! Message.\ni Message.\n✓ Message.\n✗ Message.\n`);
       assert.include(output, 'PLAIN:[y/N] ✓ Done.\n');
     } finally { cleanupSandbox(sandbox.root); }
   });

@@ -216,16 +216,16 @@ url_reference() {
   else printf '%s' "$1"; fi
 }
 status_marker() {
-  local symbol color
+  local symbol color weight=0
   case "$1" in
-    prompt) symbol='?'; color=32 ;;
+    prompt) symbol='?'; color=32; weight=1 ;;
     warning) symbol='!'; color=33 ;;
     info) symbol='i'; color=34 ;;
     success) symbol='✓'; color=32 ;;
     failure) symbol='✗'; color=31 ;;
   esac
   if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
-    printf '\033[0;%sm%s\033[0m' "$color" "$symbol"
+    printf '\033[%s;%sm%s\033[0m' "$weight" "$color" "$symbol"
   else printf '%s' "$symbol"; fi
 }
 choice_word() {

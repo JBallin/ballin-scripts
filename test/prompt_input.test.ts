@@ -118,7 +118,7 @@ describe('plain prompt input contracts', function() {
         path.resolve(__dirname, '../commands/commandHelpers.ts')], [{ prompt: 'Choice [CREATE/reconnect] ', answer: input }]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'RAW:' + input);
-      assert.include(result.stdout, '\x1b[0;32m?\x1b[0m Choice [CREATE/reconnect] ');
+      assert.include(result.stdout, '\x1b[1;32m?\x1b[0m Choice [CREATE/reconnect] ');
       assert.notInclude(result.stdout, '\x1b[1mCREATE\x1b[0m');
       if (expected) assert.include(result.stdout, '\x1b[36m' + expected + '\x1b[0m');
       else assert.notInclude(result.stdout, '\x1b[36m', JSON.stringify(result.stdout));
@@ -161,7 +161,7 @@ describe('plain prompt input contracts', function() {
       path.resolve(__dirname, '../commands/commandHelpers.ts')], [{ prompt: 'Proceed? ' + choices + ' ', answer: '' }]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, '\x1b[36m' + label + '\x1b[0m');
-    assert.include(result.stdout, '\x1b[0;32m?\x1b[0m Proceed? ' + choices + ' ');
+    assert.include(result.stdout, '\x1b[1;32m?\x1b[0m Proceed? ' + choices + ' ');
     assert.include(promptScreen(result.stdout, 120), 'KEEP\n? Proceed? ' + choices + ' ' + label + '\nDONE:' + defaultValue);
   });
   for (const file of ['install.sh', 'quickstart.sh']) for (const [input, defaultValue, label] of [['Y', 'n', 'Yes'], ['', 'n', 'No'], ['', 'y', 'Yes']]) {
@@ -179,6 +179,7 @@ describe('plain prompt input contracts', function() {
       ]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, '\x1b[36m' + label + '\x1b[0m');
+      assert.include(result.stdout, '\x1b[1;32m?\x1b[0m Proceed? ' + choices + ' ');
       assert.include(promptScreen(result.stdout, 120), 'KEEP\n? Proceed? ' + choices + ' ' + label + '\nDONE:' + String(label === 'Yes'));
     });
   }
@@ -213,7 +214,7 @@ describe('plain prompt input contracts', function() {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
       assert.include(output, 'Startup file: ~/.bashrc\n');
-      assert.include(output, '\x1b[0;32m?\x1b[0m Enable Ballin tab completion? [y/N] ');
+      assert.include(output, '\x1b[1;32m?\x1b[0m Enable Ballin tab completion? [y/N] ');
       assert.notInclude(output, 'Optional tab completion');
       assert.notInclude(output, '\x1b[1mN\x1b[0m');
       if (label) assert.include(output, '\x1b[36m' + label + '\x1b[0m');

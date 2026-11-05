@@ -15,7 +15,7 @@ describe('revision confirmation in a real terminal', function() {
         { prompt: 'Change the installed revision/track? [y/N]', answer },
       ]);
       assert.equal(r.status, answer === 'yes' ? 0 : 20, r.stdout + r.stderr);
-      assert.include(r.stdout, '\x1b[0;32m?\x1b[0m Change the installed revision/track? [y/N] ');
+      assert.include(r.stdout, '\x1b[1;32m?\x1b[0m Change the installed revision/track? [y/N] ');
       assert.include(r.stdout, '\x1b[36m' + (answer === 'yes' ? 'Yes' : 'No') + '\x1b[0m');
       assert.notInclude(r.stdout + r.stderr, 'EAGAIN');
       const receipt = JSON.parse(fs.readFileSync(path.join(sandbox.repo, '.git/ballin-install.json'), 'utf8'));
@@ -42,6 +42,7 @@ describe('revision confirmation in a real terminal', function() {
         assert.equal(result.status, status, result.stdout + result.stderr);
         assert.equal(fs.existsSync(marker), answer === 'Y');
         assert.equal(result.stdout.split('Change the installed revision/track?').length - 1, label ? 2 : 1);
+        assert.equal(result.stdout.split('\x1b[1;32m?\x1b[0m Change the installed revision/track? [y/N] ').length - 1, label ? 2 : 1);
         if (label) assert.include(result.stdout, '\x1b[36m' + label + '\x1b[0m');
         if (answer === 'Y') assert.equal(fs.readFileSync(marker, 'utf8'), 'handoff\n');
         else assert.deepEqual(JSON.parse(fs.readFileSync(receiptFile, 'utf8')), receipt);
