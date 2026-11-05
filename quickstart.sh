@@ -819,14 +819,25 @@ install_nvm_lts() {
   fi
   if "$nvm_default_exists"; then
     printf "$ nvm alias default 'lts/*'\n"
-    nvm alias default 'lts/*'
+    # Check the whole NVM call: its internals are not safe under errexit.
+    nvm alias default 'lts/*' || nvm_status=$?
+    stop_if_interrupted "$nvm_status"
+    if [[ "$nvm_status" != 0 ]]; then
+      printf '\nQuickstart: NVM default selection did not finish. Inspect its output, then rerun Quickstart.\n' >&2
+      return "$nvm_status"
+    fi
   fi
   node_tool=$(type -P node) || fail 'NVM did not activate Node.'
   node_compatible "$node_tool" || fail "Latest NVM LTS does not satisfy Ballin's Node.js requirement."
   npm_tool=$(type -P npm) || fail 'NVM did not provide npm.'
   npm_compatible "$npm_tool" || fail 'NVM npm could not run.'
   local resolved_default current
-  resolved_default=$(nvm version default)
+  resolved_default=$(nvm version default) || nvm_status=$?
+  stop_if_interrupted "$nvm_status"
+  if [[ "$nvm_status" != 0 ]]; then
+    printf '\nQuickstart: Unable to resolve the NVM default. Inspect its output, then rerun Quickstart.\n' >&2
+    return "$nvm_status"
+  fi
   current=$(node --version)
   [[ "$resolved_default" == "$current" ]] || fail 'NVM default and active Node differ. Inspect them before retrying.'
   # Do not add this version-specific bin directory to persistent command_path.

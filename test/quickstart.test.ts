@@ -665,6 +665,32 @@ esac
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.equal(fs.readFileSync(active, 'utf8'), old);
     assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:');
   });
+  for (const action of ['alias', 'version']) {
+    it(`reports NVM ${action} failure explicitly before installing Ballin`, () => {
+      const nvm = path.join(home, '.nvm');
+      fs.mkdirSync(path.join(nvm, 'alias'), { recursive: true });
+      fs.writeFileSync(path.join(nvm, 'alias/default'), 'v22.0.0\n');
+      const source = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8').replace(
+        '  local action=$1; shift\n',
+        '  local action=$1; shift\n'
+          + '  if [[ "$action" == "${FAKE_NVM_FAIL:-}" && "$NVM_DIR" == "$HOME/.nvm" ]]; then\n'
+          + '    false # Model a tolerated nonzero internal NVM operation.\n'
+          + '    printf "fixture NVM diagnostic\\n" >&2; return 42\n'
+          + '  fi\n');
+      fs.writeFileSync(path.join(nvm, 'nvm.sh'), source);
+      const result = run('y\ny\ny\n', {
+        FAKE_MISSING_NODE: '1', FAKE_NVM_FAIL: action, FAKE_EARLY_ANSWER: 'n\n',
+      });
+      assert.equal(result.status, 42, result.stdout + result.stderr);
+      assert.include(result.stderr, 'fixture NVM diagnostic');
+      assert.include(result.stderr, action === 'alias'
+        ? 'NVM default selection did not finish.' : 'Unable to resolve the NVM default.');
+      assert.notInclude(readLog(), '/main/install.sh');
+      assert.notInclude(result.stdout, 'Setup complete.');
+      assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+    });
+  }
+
   it('retains native NVM failure status and ends with recovery before installing Ballin', () => {
     const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_NVM_FAIL: 'install', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(result.status, 42, result.stdout + result.stderr);
