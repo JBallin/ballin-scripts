@@ -22,6 +22,33 @@ describe('revision confirmation in a real terminal', function() {
       assert.equal(receipt.kind, answer === 'yes' ? 'sha' : 'branch');
     } finally { cleanupSandbox(sandbox.root); }
   });
+  for (const [answer, label, status] of [['Y', 'Yes', 0], ['N', 'No', 0], ['', 'No', 0], ['\x04', '', 0], ['\x03', '', 130]] as [string, string, number][]) {
+    it(`guards the complete installed self-update journey for terminal input ${JSON.stringify(answer)}`, () => {
+      const sandbox = createSandbox({ quickstart: true });
+      try {
+        const installed = runSandbox(sandbox, ['quickstart'], 'no\nno\nlogin\nyes\nyes\nno\nno\n');
+        assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+        const receiptFile = path.join(sandbox.repo, '.git/ballin-install.json');
+        const receipt = JSON.parse(fs.readFileSync(receiptFile, 'utf8'));
+        receipt.kind = 'sha'; receipt.value = receipt.sha;
+        fs.writeFileSync(receiptFile, JSON.stringify(receipt));
+        const marker = path.join(sandbox.home, 'applied-handoff');
+        const script = path.join(sandbox.repo, 'install.sh');
+        fs.writeFileSync(script, fs.readFileSync(script, 'utf8').replace('{ # Parse the complete body before starting installation.\n',
+          '{ # Parse the complete body before starting installation.\n[[ "${1:-}" != --ballin-applied-v2 ]] || printf "handoff\\n" >> "$HOME/applied-handoff"\n'));
+        const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'self-update'], [
+          { prompt: 'Change the installed revision/track? [y/N]', answer, raw: !label },
+        ]);
+        assert.equal(result.status, status, result.stdout + result.stderr);
+        assert.equal(fs.existsSync(marker), answer === 'Y');
+        assert.equal(result.stdout.split('Change the installed revision/track?').length - 1, label ? 2 : 1);
+        if (label) assert.include(result.stdout, '\x1b[36m' + label + '\x1b[0m');
+        if (answer === 'Y') assert.equal(fs.readFileSync(marker, 'utf8'), 'handoff\n');
+        else assert.deepEqual(JSON.parse(fs.readFileSync(receiptFile, 'utf8')), receipt);
+        assert.notInclude(result.stdout + result.stderr, 'EAGAIN');
+      } finally { cleanupSandbox(sandbox.root); }
+    });
+  }
   it('reprompts a completed invalid answer and accepts one subsequent Enter in a real terminal', () => {
     const sandbox = createSandbox({ quickstart: true });
     try {

@@ -13,7 +13,7 @@ describe('candidate revision bootstrap', () => {
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-bootstrap-test-'));
     write('entry.sh', candidate); write('selected.sh', candidate);
-    write('contract.json', { ballin: { installerProtocol: 1 }, engines: { node: '>=24.12' } });
+    write('contract.json', { ballin: { installerProtocol: 2 }, engines: { node: '>=24.12' } });
     write('ref.json', { object: { sha, type: 'commit' } });
     write('release.json', { tag_name: 'v1.0.0', draft: false, prerelease: false, id: 123, published_at: '2026-01-01T00:00:00Z' });
     fs.writeFileSync(path.join(root, 'curl'), `#!${process.execPath}\nconst fs=require('fs'),p=require('path');const a=process.argv.slice(2),u=a.find(v=>v.startsWith('https://')),out=a[a.indexOf('-o')+1];fs.appendFileSync(p.join(process.env.HOME,'requests'),u+'\\n');let f;if(u.includes('/releases/'))f='release.json';else if(u.includes('/git/ref/'))f='ref.json';else if(u.endsWith('/package.json'))f='contract.json';else if(u.endsWith('/install.sh'))f='selected.sh';else process.exit(97);if(process.env.FIXTURE_HTTP){process.stdout.write(process.env.FIXTURE_HTTP);process.exit(0);}fs.copyFileSync(p.join(process.env.HOME,f),out);process.stdout.write('200');\n`, { mode: 0o700 });
@@ -39,13 +39,18 @@ describe('candidate revision bootstrap', () => {
     assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), '/heads/main');
     assert.include(r.stderr, code === '404' ? 'No published release' : code === '500' ? 'request failed' : 'authentication or rate limit');
   });
+  it('refuses self-update without an installation before resolving or offering installation', () => {
+    const result = run(['--self-update']);
+    assert.equal(result.status, 1); assert.include(result.stderr, 'Self-update requires an existing installation.');
+    assert.isFalse(fs.existsSync(path.join(root, 'requests'))); assert.notInclude(result.stdout, 'answer:');
+  });
   it('refuses an unsupported contract before downloading selected executable code', () => {
-    write('contract.json', { ballin: { installerProtocol: 2 }, engines: { node: '>=24.12' } });
+    write('contract.json', { ballin: { installerProtocol: 3 }, engines: { node: '>=24.12' } });
     const r = run(['--sha', sha]); assert.notEqual(r.status, 0); assert.include(r.stderr, 'unsupported installer contract');
     assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), '/install.sh');
   });
   it('refuses incompatible Node before selected executable code', () => {
-    write('contract.json', { ballin: { installerProtocol: 1 }, engines: { node: '>=999.0.0' } });
+    write('contract.json', { ballin: { installerProtocol: 2 }, engines: { node: '>=999.0.0' } });
     const r = run(['--sha', sha]); assert.notEqual(r.status, 0); assert.include(r.stderr, 'requires Node.js 999.0.0'); assert.include(r.stderr, 'Upgrade or activate Node.js and retry.');
     assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), '/install.sh');
   });
@@ -88,22 +93,22 @@ describe('candidate revision bootstrap', () => {
     const r = run(['--sha', sha]); assert.equal(r.status, 23); assert.include(r.stdout, 'answer:kept stdin');
   });
   for (const entry of process.platform === 'darwin' ? ['install.sh', 'quickstart.sh'] : ['install.sh']) {
-    for (const protocol of [1, '1', true, null]) it(`validates contract JSON type through ${entry}: ${JSON.stringify(protocol)}`, () => {
+    for (const protocol of [2, 1, '2', true, null]) it(`validates contract JSON type through ${entry}: ${JSON.stringify(protocol)}`, () => {
       const source = candidate.replaceAll('ballin_entry=install.sh', `ballin_entry=${entry}`);
       write('entry.sh', source); write('selected.sh', source);
       write('curl', fs.readFileSync(path.join(root, 'curl'), 'utf8').replace("u.endsWith('/install.sh')", "(u.endsWith('/install.sh')||u.endsWith('/quickstart.sh'))"));
       write('contract.json', { ballin: { installerProtocol: protocol }, engines: { node: '>=24.12' } });
-      const r = run(['--sha', sha]); assert.equal(r.status, protocol === 1 ? 0 : 1, r.stderr);
-      if (protocol !== 1) { assert.notInclude(r.stdout, 'answer:'); assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), `/${entry}`); }
+      const r = run(['--sha', sha]); assert.equal(r.status, protocol === 2 ? 0 : 1, r.stderr);
+      if (protocol !== 2) { assert.notInclude(r.stdout, 'answer:'); assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), `/${entry}`); }
     });
   }
   for (const engine of ['>=24', '^24.12', '>=024.12', '>=24.12.0 <30', null, 24]) it(`rejects unsupported Node engine ${JSON.stringify(engine)} before selected code`, () => {
-    write('contract.json', { ballin: { installerProtocol: 1 }, engines: { node: engine } });
+    write('contract.json', { ballin: { installerProtocol: 2 }, engines: { node: engine } });
     const r = run(['--sha', sha]); assert.equal(r.status, 1); assert.notInclude(r.stdout, 'answer:');
     assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), '/install.sh');
   });
   it('normalizes an explicit patch minimum without changing it', () => {
-    write('contract.json', { ballin: { installerProtocol: 1 }, engines: { node: '>=24.12.1' } });
+    write('contract.json', { ballin: { installerProtocol: 2 }, engines: { node: '>=24.12.1' } });
     const r = run(['--sha', sha]); assert.equal(r.status, 0, r.stderr); assert.include(r.stdout, ':24.12.1');
   });
   it('marks a primary bootstrap error once without ANSI in plain output', () => {

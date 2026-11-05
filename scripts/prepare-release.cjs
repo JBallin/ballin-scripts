@@ -9,7 +9,7 @@ if (!check && (args.length > 1 || args[0]?.startsWith('-'))) throw Error('Usage:
 const metadata = JSON.parse(read('package.json'));
 const version = !check && args.length ? args[0] : metadata.version;
 if (!/^(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})$/.test(version)) throw Error('Invalid release version');
-if (metadata.ballin?.installerProtocol !== 1) throw Error('Unsupported installer protocol');
+if (metadata.ballin?.installerProtocol !== 2) throw Error('Unsupported installer protocol');
 const match = /^>=(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})(?:\.(0|[1-9]\d{0,2}))?$/.exec(metadata.engines?.node);
 if (!match) throw Error('Unsupported minimum Node engine');
 const minimumNode = `${match[1]}.${match[2]}.${match[3] || '0'}`;

@@ -46,6 +46,21 @@ const checkRuntime = (minimum: string, actual = process.versions.node): void => 
 };
 // Resolve the worktree's metadata directory through Git, without resolving the receipt leaf symlink.
 const receiptPath = (root: string): string => path.join(git(root, ['rev-parse', '--absolute-git-dir']), 'ballin-install.json');
+const receiptSnapshot = (root: string): string => {
+  try {
+    const file = receiptPath(root), stat = fs.lstatSync(file);
+    return JSON.stringify([stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs,
+      stat.isSymbolicLink() ? fs.readlinkSync(file) : stat.isFile() && stat.size <= 4096 ? fs.readFileSync(file, 'utf8') : null]);
+  } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing'; throw error; }
+};
+const readReceipt = (root: string): Selection => {
+  const file = receiptPath(root);
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4096) throw new Error('Invalid installation receipt.');
+  const receipt = JSON.parse(fs.readFileSync(file, 'utf8')) as Selection;
+  validateSelection(receipt);
+  return receipt;
+};
 const selectionLabel = (s: Selection): string => s.kind === 'release' ? s.value : s.kind === 'sha' ? `commit ${s.sha.slice(0, 12)}` : `branch ${s.value} (${s.sha.slice(0, 12)})`;
 const readIdentity = (root: string): Identity => {
   try {
@@ -57,11 +72,7 @@ const readIdentity = (root: string): Identity => {
       || git(root, ['ls-files', '-v']).split('\n').some((line: string) => /^[a-zS]/u.test(line));
     const development: Identity = { sha, label: `development ${sha.slice(0, 12)}${dirty ? ' (dirty)' : ''}`, version: 'development', dirty };
     try {
-      const file = receiptPath(root);
-      const stat = fs.lstatSync(file);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4096) return development;
-      const receipt = JSON.parse(fs.readFileSync(file, 'utf8')) as Selection;
-      validateSelection(receipt);
+      const receipt = readReceipt(root);
       if (receipt.sha !== sha) return development;
       if (receipt.kind !== 'release') return { ...development, label: `${selectionLabel(receipt)}${dirty ? ' (dirty)' : ''}`, kind: receipt.kind, value: receipt.value };
       if (dirty || git(root, ['rev-parse', '--verify', `refs/tags/${receipt.value}^{commit}`], true) !== sha) return development;
@@ -166,6 +177,13 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
     return;
   }
 };
+const verifySelectedContract = (root: string, selection: Selection): void => {
+  const contract = JSON.parse(git(root, ['show', `${selection.sha}:package.json`]));
+  const engine = typeof contract.engines?.node === 'string' ? /^>=(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})(?:\.(0|[1-9]\d{0,2}))?$/u.exec(contract.engines.node) : null;
+  const minimumNode = engine ? `${engine[1]}.${engine[2]}.${engine[3] ?? '0'}` : undefined;
+  if (contract.ballin?.installerProtocol !== 2 || minimumNode !== selection.minimumNode) throw new Error('Selected installer contract changed or is unsupported.');
+  checkRuntime(minimumNode);
+};
 const applySelection = (root: string, selection: Selection, mode: string, fresh = false): void => {
   validateSelection(selection); checkRuntime(selection.minimumNode);
   let head: string | undefined;
@@ -173,15 +191,12 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
   // Fetch the immutable object, never a moving branch or a force-updated tag.
   git(root, ['fetch', '--no-tags', repository, selection.sha]);
   if (git(root, ['rev-parse', '--verify', 'FETCH_HEAD^{commit}']) !== selection.sha) throw new Error('Fetched revision does not match selection.');
-  const contract = JSON.parse(git(root, ['show', `${selection.sha}:package.json`]));
-  const engine = typeof contract.engines?.node === 'string' ? /^>=(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})(?:\.(0|[1-9]\d{0,2}))?$/u.exec(contract.engines.node) : null;
-  const minimumNode = engine ? `${engine[1]}.${engine[2]}.${engine[3] ?? '0'}` : undefined;
-  if (contract.ballin?.installerProtocol !== 1 || minimumNode !== selection.minimumNode) throw new Error('Selected installer contract changed or is unsupported.');
-  checkRuntime(minimumNode);
+  verifySelectedContract(root, selection);
   for (const entry of ['install.sh', 'quickstart.sh', 'commands/repo_update.ts', 'commands/install_setup.ts', 'bin/ballin', 'package.json']) {
     const treeEntry = git(root, ['ls-tree', selection.sha, '--', entry]);
     if (!/^(100644|100755) blob [a-f0-9]{40}\t/u.test(treeEntry)) throw new Error(`Selected revision lacks a supported installer file: ${entry}. The checkout has not changed.`);
   }
+  const beforeReceipt = fresh ? undefined : receiptSnapshot(root);
   if (!fresh) {
     const before = readIdentity(root);
     if (mode === 'self-update' && before.kind === 'branch' && before.value === 'main' && selection.kind === 'branch' && selection.value === 'main') {
@@ -189,7 +204,7 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
     }
     confirmTransition(before, selection, mode);
   }
-  if (!fresh && assertSafeCheckout(root) !== head) throw new Error('Checkout changed after confirmation. Retry after inspecting it.');
+  if (!fresh && (assertSafeCheckout(root) !== head || receiptSnapshot(root) !== beforeReceipt)) throw new Error('Checkout changed after confirmation. Retry after inspecting it.');
   if (selection.kind === 'release') {
     const tag = git(root, ['rev-parse', '--verify', `refs/tags/${selection.value}^{commit}`], true);
     if (tag && tag !== selection.sha) throw new Error('Existing release tag conflicts with the selected release.');
@@ -199,7 +214,7 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
     }
   }
   checkRuntime(selection.minimumNode);
-  if (!fresh && assertSafeCheckout(root) !== head) throw new Error('Checkout changed before transition.');
+  if (!fresh && (assertSafeCheckout(root) !== head || receiptSnapshot(root) !== beforeReceipt)) throw new Error('Checkout changed before transition.');
   if (!fresh && selection.kind === 'branch' && selection.value === 'main' && git(root, ['symbolic-ref', '-q', 'HEAD'], true) === 'refs/heads/main'
     && isAncestor(root, head!, selection.sha)) {
     git(root, ['merge', '--ff-only', '--no-overwrite-ignore', selection.sha]);
@@ -216,6 +231,49 @@ const applySelection = (root: string, selection: Selection, mode: string, fresh 
   finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
   process.stdout.write(`Selected ${selectionLabel(selection)}\n`);
 };
+const canonicalInstallationRoot = (root: string): string => {
+  assertSafeCheckout(root);
+  const canonical = fs.realpathSync(root);
+  if (canonical !== fs.realpathSync(path.join(process.env.HOME ?? '', '.ballin-scripts'))) throw new Error('Self-update installation root does not match HOME.');
+  return canonical;
+};
+const assertAppliedSelection = (root: string, selection: Selection): void => {
+  validateSelection(selection); checkRuntime(selection.minimumNode);
+  if (root !== canonicalInstallationRoot(root) || git(root, ['rev-parse', '--verify', 'HEAD']) !== selection.sha) throw new Error('Applied-update checkout does not match the selected revision.');
+  const receipt = readReceipt(root);
+  if (Object.keys(selection).some(key => receipt[key as keyof Selection] !== selection[key as keyof Selection])) throw new Error('Applied-update receipt does not match the selected revision.');
+  verifySelectedContract(root, selection);
+  if (selection.kind === 'release' && git(root, ['rev-parse', '--verify', `refs/tags/${selection.value}^{commit}`]) !== selection.sha) throw new Error('Applied-update release tag does not match.');
+};
+const applyAndRefresh = (root: string, selection: Selection, commandPreflight: string): void => {
+  const canonical = canonicalInstallationRoot(root);
+  try {
+    const preflight = JSON.parse(commandPreflight), snapshot = JSON.parse(preflight.snapshot);
+    if (typeof preflight.directory !== 'string' || !path.isAbsolute(preflight.directory)
+      || preflight.target !== path.join(preflight.directory, 'ballin')
+      || (snapshot !== null && (!['dev', 'ino', 'mode', 'nlink', 'size', 'mtimeMs', 'ctimeMs'].every(key => Number.isFinite(snapshot[key]))
+        || (snapshot.link !== null && typeof snapshot.link !== 'string')))) throw new Error();
+  } catch { throw new Error('Invalid command preflight for self-update. The checkout has not changed.'); }
+  applySelection(canonical, selection, 'self-update');
+  const incomplete = (status: number): void => {
+    process.stderr.write(`Ballin checkout is now ${selection.sha}, but setup refresh failed. Fix the reported error, then run ${stderrCommand('ballin self-update')} to finish.\n`);
+    process.exitCode = status;
+  };
+  try {
+    assertAppliedSelection(canonical, selection);
+    const result = cp.spawnSync('/bin/bash', [path.join(canonical, 'install.sh'), '--ballin-applied-v2', canonical,
+      selection.kind, selection.value, selection.sha, selection.minimumNode, selection.releaseId, commandPreflight], {
+      cwd: canonical, env: { ...commandEnv(canonical), BASH_ENV: '', ENV: '' }, stdio: 'inherit',
+    });
+    if (result.signal || result.status === 130 || result.status === 143) throw Object.assign(new Error('Update interrupted.'), { status: result.signal === 'SIGTERM' || result.status === 143 ? 143 : 130 });
+    if (result.error) process.stderr.write(`${result.error.message}\n`);
+    if (result.error || result.status !== 0) incomplete(result.status || 1);
+  } catch (error) {
+    if ([130, 143].includes((error as { status?: number }).status ?? 0)) throw error;
+    process.stderr.write(`${(error as Error).message}\n`);
+    incomplete(1);
+  }
+};
 const updateInstalledRepo = (root: string): boolean | 'cancelled' => {
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) { process.stdout.write(`install directory not found: ${root}\n`); return false; }
   const result = cp.spawnSync('bash', [path.join(root, 'install.sh'), '--self-update'], { cwd: root, env: commandEnv(root), stdio: 'inherit' });
@@ -229,8 +287,11 @@ const runRepoUpdateCli = (): void => {
   const [, , action, root, kind, value, sha, minimumNode, releaseId, mode, fresh] = process.argv;
   try {
     if (action === 'inspect') { assertSafeCheckout(root); return; }
+    const selection = { kind: kind as Selection['kind'], value, sha, minimumNode, releaseId };
+    if (action === 'verify-applied') { assertAppliedSelection(root, selection); return; }
+    if (action === 'self-update') { applyAndRefresh(root, selection, mode); return; }
     if (action !== 'apply') throw new Error('Usage: repo_update.ts inspect <root> | apply <root> <kind> <value> <sha> <minimum-node> <release-id> <mode> <fresh>');
-    applySelection(root, { kind: kind as Selection['kind'], value, sha, minimumNode, releaseId }, mode, fresh === 'true');
+    applySelection(root, selection, mode, fresh === 'true');
   } catch (error) {
     if (error instanceof RevisionChangeCancelled) {
       process.stdout.write(`${error.message}\n`);
@@ -242,6 +303,6 @@ const runRepoUpdateCli = (): void => {
   }
 };
 if (require.main === module) runRepoUpdateCli();
-module.exports = { commandEnv, readIdentity, validateSelection, compareVersions, checkRuntime, assertSafeCheckout, needsConsent, applySelection, updateInstalledRepo, runRepoUpdateCli };
+module.exports = { commandEnv, readIdentity, validateSelection, compareVersions, checkRuntime, assertSafeCheckout, needsConsent, applySelection, assertAppliedSelection, updateInstalledRepo, runRepoUpdateCli };
 
 export type { Identity };

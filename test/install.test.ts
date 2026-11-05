@@ -40,6 +40,7 @@ describe('install', () => {
     fs.mkdirSync(path.join(repoDir, 'commands'), { recursive: true });
     fs.mkdirSync(path.join(repoDir, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), '{}\n');
+    fs.writeFileSync(path.join(repoDir, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 2 } }));
     fs.mkdirSync(path.join(repoDir, 'test'), { recursive: true });
     fs.writeFileSync(path.join(repoDir, 'test', 'inspect.ts'), `require('fs').writeFileSync(${JSON.stringify(path.join(homeDir, 'inspection-ran'))}, 'ran');`);
     if (repoUpdate) {
@@ -109,6 +110,16 @@ case "$1" in
     if [ "$FAKE_REPO_UPDATE_STATUS" != 0 ]; then printf '%s\\n' "\${FAKE_REPO_UPDATE_ERROR:-}" >&2; fi
     exit "$FAKE_REPO_UPDATE_STATUS"
     ;;
+  "$HOME/.ballin-scripts/commands/repo_update.ts")
+    printf 'node:repo_update selected helper\\n' >> "$FAKE_COMMAND_LOG"
+    if [ "$FAKE_REPO_UPDATE_STATUS" != 0 ]; then printf '%s\\n' "\${FAKE_REPO_UPDATE_ERROR:-}" >&2; exit "$FAKE_REPO_UPDATE_STATUS"; fi
+    FAKE_APPLIED=true FAKE_PREFLIGHT="$9" /bin/bash "$HOME/selected-install.sh"
+    setup_result=$?
+    if [ "$setup_result" != 0 ] && [ "$setup_result" != 130 ] && [ "$setup_result" != 143 ]; then
+      printf 'Ballin checkout is now aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, but setup refresh failed. Fix the reported error, then run \`ballin self-update\` to finish.\\n' >&2
+    fi
+    exit "$setup_result"
+    ;;
   "$HOME/.ballin-scripts/commands/install_setup.ts")
     printf 'node:install_setup %s\\n' "$*" >> "$FAKE_COMMAND_LOG"
     exit "$FAKE_SETUP_STATUS"
@@ -141,6 +152,7 @@ esac
     const source = fs.readFileSync(installPath, 'utf8').replace('ballin_select "$@" || exit $?', `
 ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value
 ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=${env.FAKE_INSTALL_MODE || 'install'}
+ballin_applied=\${FAKE_APPLIED:-false}; ballin_command_preflight=\${FAKE_PREFLIGHT:-}
 ballin_runtime() { return 0; }
 ballin_download() { : > "$2"; }
 `);

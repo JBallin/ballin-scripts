@@ -5,6 +5,7 @@ ballin_entry='quickstart.sh'
 ballin_embedded_version='1.0.0'
 # Embedded in both public entrypoints by prepare-release. No setup mutations here.
 : "${ballin_entry:?Generated entrypoint name is required}" "${ballin_embedded_version:?Generated version is required}"
+ballin_applied=false
 ballin_error() {
   if [[ -t 2 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
     printf '\033[0;31m✗\033[0m Ballin: %s\n' "$*" >&2
@@ -72,7 +73,25 @@ ballin_preflight() {
 ballin_select() {
   [[ "${BALLIN_BOOTSTRAP_HOPS:-0}" =~ ^[0-3]$ ]] || { ballin_error 'Installation handoff limit exceeded. The selected entrypoint is incompatible.'; return 1; }
   ballin_mode=install
-  if [[ "${1:-}" == --ballin-resolved-v1 ]]; then
+  ballin_applied=false
+  if [[ "${1:-}" == --ballin-applied-v2 ]]; then
+    [[ "$ballin_entry" == install.sh && $# == 8 ]] || { ballin_error 'Invalid applied-update continuation.'; return 1; }
+    local applied_root=$2 expected_root
+    ballin_kind=$3 ballin_value=$4 ballin_sha=$5 ballin_minimum=$6 ballin_release_id=$7
+    ballin_mode=self-update
+    ballin_preflight || return $?
+    expected_root=$(cd "$HOME/.ballin-scripts" && pwd -P) || return $?
+    [[ "$applied_root" == "$expected_root" ]] || { ballin_error 'Applied-update installation root does not match.'; return 1; }
+    node "$expected_root/commands/repo_update.ts" verify-applied "$expected_root" "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" || return $?
+    ballin_runtime || return $?
+    # Shared continuation outputs are consumed by install.sh.
+    # shellcheck disable=SC2034
+    ballin_command_preflight=$8
+    # shellcheck disable=SC2034
+    ballin_applied=true
+    return 0
+  fi
+  if [[ "${1:-}" == --ballin-resolved-v2 ]]; then
     [[ $# == 7 ]] || { ballin_error 'Invalid installation continuation.'; return 1; }
     ballin_kind=$2 ballin_value=$3 ballin_sha=$4 ballin_minimum=$5 ballin_release_id=$6 ballin_mode=$7
     [[ "$ballin_sha" =~ ^[a-f0-9]{40}$ && "$ballin_minimum" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
@@ -82,13 +101,16 @@ ballin_select() {
       branch) [[ -n "$ballin_value" && "$ballin_value" != -* && "$ballin_value" != *[[:space:]]* && "$ballin_release_id" == - ]] || return 1 ;;
       *) return 1 ;;
     esac
-    [[ "$ballin_mode" == install || "$ballin_mode" == self-update ]] || return 1
+    [[ "$ballin_mode" == install ]] || return 1
     ballin_preflight || return $?
     [[ "$ballin_entry" == quickstart.sh ]] || ballin_runtime || return $?
     return 0
   fi
   local selector='' value='' scratch status api='https://api.github.com/repos/JBallin/ballin-scripts' object_type tag published requested draft prerelease protocol engine_requirement engine_pattern depth=0
-  if [[ "${1:-}" == --self-update && "$ballin_entry" == install.sh ]]; then ballin_mode=self-update; shift; fi
+  if [[ "${1:-}" == --self-update && "$ballin_entry" == install.sh ]]; then
+    [[ -e "$HOME/.ballin-scripts" || -L "$HOME/.ballin-scripts" ]] || { ballin_error 'Self-update requires an existing installation.'; return 1; }
+    ballin_mode=self-update; shift
+  fi
   if [[ $# != 0 ]]; then
     [[ $# == 2 ]] || { ballin_error 'Use one of --version vX.Y.Z, --sha FULL_SHA, or --branch NAME.'; return 1; }
     selector=$1 value=$2
@@ -106,8 +128,8 @@ ballin_select() {
     *) ballin_error "Unknown selector: $selector"; return 1 ;;
   esac
   scratch=$(mktemp -d "${TMPDIR:-/tmp}/ballin-revision.XXXXXX") || return $?
-  (
-    # Only the selected child continues setup; these are not returned to the caller.
+  ballin_resolve_selection() (
+    # Self-update returns data to the installed installer; other routes hand off.
     local resolved_release_id resolved_sha resolved_value resolved_minimum
     trap 'rm -rf -- "$scratch"' EXIT
     trap 'exit 130' INT
@@ -148,17 +170,28 @@ ballin_select() {
     resolved_value=$value
     ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/package.json" "$scratch/package.json" || exit $?
     protocol=$(ballin_json "$scratch/package.json" ballin.installerProtocol number) || exit $?
-    [[ "$protocol" == 1 ]] || { ballin_error 'Selected revision has an unsupported installer contract.'; exit 1; }
+    [[ "$protocol" == 2 ]] || { ballin_error 'Selected revision has an unsupported installer contract.'; exit 1; }
     engine_requirement=$(ballin_json "$scratch/package.json" engines.node) || exit $?
     engine_pattern='^>=(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2}))?$'
     [[ "$engine_requirement" =~ $engine_pattern ]] || { ballin_error 'Selected installer contract has an invalid Node requirement.'; exit 1; }
     resolved_minimum="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[4]:-0}"
     ballin_preflight || exit $?
     [[ "$ballin_entry" == quickstart.sh ]] || ballin_runtime "$resolved_minimum" || exit $?
+    if [[ "$ballin_mode" == self-update ]]; then
+      printf '%s\t%s\t%s\t%s\t%s\n' "$ballin_kind" "$resolved_value" "$resolved_sha" "$resolved_minimum" "$resolved_release_id"
+      exit 0
+    fi
     ballin_download "https://raw.githubusercontent.com/JBallin/ballin-scripts/$resolved_sha/$ballin_entry" "$scratch/$ballin_entry" || exit $?
     /bin/bash -n "$scratch/$ballin_entry" || exit $?
-    BALLIN_BOOTSTRAP_HOPS=$((${BALLIN_BOOTSTRAP_HOPS:-0} + 1)) BASH_ENV='' /bin/bash "$scratch/$ballin_entry" --ballin-resolved-v1 "$ballin_kind" "$resolved_value" "$resolved_sha" "$resolved_minimum" "$resolved_release_id" "$ballin_mode"
-  ); status=$?
+    BALLIN_BOOTSTRAP_HOPS=$((${BALLIN_BOOTSTRAP_HOPS:-0} + 1)) BASH_ENV='' /bin/bash "$scratch/$ballin_entry" --ballin-resolved-v2 "$ballin_kind" "$resolved_value" "$resolved_sha" "$resolved_minimum" "$resolved_release_id" "$ballin_mode"
+  )
+  if [[ "$ballin_mode" == self-update ]]; then
+    local resolved
+    resolved=$(ballin_resolve_selection) || return $?
+    IFS=$'\t' read -r ballin_kind ballin_value ballin_sha ballin_minimum ballin_release_id <<< "$resolved"
+    return 0
+  fi
+  ballin_resolve_selection; status=$?
   exit "$status"
 }
 # END RELEASE BOOTSTRAP
@@ -1599,7 +1632,7 @@ main() {
   # Keep startup hooks from replacing the tools qualified above.
   result_file="$scratch/installation-result"
   printf 'pending\n' > "$result_file"
-  BALLIN_APPROVED_INSTALL_ROOT="$approved_root" BALLIN_APPROVED_INSTALL_COMMAND="$approved_command" BALLIN_APPROVED_INSTALL_SNAPSHOT="$approved_snapshot" BALLIN_SETUP_PROFILE="$selected_profile" BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_BACKUP_HOSTNAME="$backup_hostname" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh" --ballin-resolved-v1 "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" install
+  BALLIN_APPROVED_INSTALL_ROOT="$approved_root" BALLIN_APPROVED_INSTALL_COMMAND="$approved_command" BALLIN_APPROVED_INSTALL_SNAPSHOT="$approved_snapshot" BALLIN_SETUP_PROFILE="$selected_profile" BALLIN_DEFER_TERMINAL_GUIDANCE=1 BALLIN_BACKUP_CHOICE="$backup_choice" BALLIN_BACKUP_HOSTNAME="$backup_hostname" BALLIN_SETUP_RESULT_FILE="$result_file" BASH_ENV='' bash "$scratch/install.sh" --ballin-resolved-v2 "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" install
   result=$(cat "$result_file")
   [[ "$result" != cancelled ]] || return 0
   case "$result" in 'complete configured open'|'complete configured ended'|'complete configured failed'|'complete skipped open'|'complete skipped ended'|'complete skipped failed') ;; *) fail 'Installation outcome could not be verified. Review the installation before retrying.' ;; esac

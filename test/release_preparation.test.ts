@@ -53,7 +53,7 @@ describe('release preparation', () => {
     const file = path.join(root, 'package.json'); const data = packageData(); data.engines.node = '>=26.2.1'; fs.writeFileSync(file, JSON.stringify(data));
     assert.notEqual(run('--check').status, 0); const updated = run(); assert.equal(updated.status, 0, updated.stderr);
     assert.include(updated.stdout, 'Node >=26.2.1'); assert.equal(run('--check').status, 0);
-    assert.deepEqual(packageData().ballin, { installerProtocol: 1 });
+    assert.deepEqual(packageData().ballin, { installerProtocol: 2 });
   });
   it('detects root and package lock version drift', () => {
     assert.equal(run().status, 0);
@@ -63,7 +63,7 @@ describe('release preparation', () => {
     lock.version = packageData().version; lock.packages[''].version = '3.0.0'; fs.writeFileSync(file, JSON.stringify(lock));
     assert.notEqual(run('--check').status, 0);
   });
-  for (const invalid of ['1', 2, null]) it(`refuses invalid installer protocol ${JSON.stringify(invalid)}`, () => {
+  for (const invalid of ['2', 1, null]) it(`refuses invalid installer protocol ${JSON.stringify(invalid)}`, () => {
     const file = path.join(root, 'package.json'), data = packageData(); data.ballin.installerProtocol = invalid; fs.writeFileSync(file, JSON.stringify(data));
     const before = fs.readFileSync(file, 'utf8'); assert.notEqual(run('1.2.3').status, 0); assert.equal(fs.readFileSync(file, 'utf8'), before);
   });

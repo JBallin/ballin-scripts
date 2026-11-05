@@ -96,8 +96,8 @@ BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercon
 Use `--version v1.0.0` for a published stable release, `--sha` for a full commit
 SHA, or `--branch NAME` for a branch. Branches are resolved once; setup and the
 installed checkout use that exact commit. Only revisions with the supported
-installer contract can be selected. An absent release, unsupported revision, or
-network error stops installation; none causes a fallback to main.
+installer contract (protocol 2) can be selected. An absent release, unsupported
+revision, or network error stops installation; none causes a fallback to main.
 
 A versioned release entrypoint defaults to its embedded version. Release
 preparation removes the temporary main override and updates the public command

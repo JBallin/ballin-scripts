@@ -13,8 +13,8 @@ type Sandbox = {
 };
 const markerName = '.ballin-onboarding-sandbox.json';
 const source = path.resolve(__dirname, '../..');
-const systemTools = ['uname', 'bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'mv', 'rm', 'tail'];
-const quickstartSystemTools = ['awk', 'chmod', 'grep', 'ln', 'readlink', 'shasum'];
+const systemTools = ['uname', 'bash', 'cat', 'cmp', 'cp', 'grep', 'ls', 'mkdir', 'mktemp', 'mv', 'rm', 'tail'];
+const quickstartSystemTools = ['awk', 'chmod', 'ln', 'readlink', 'shasum'];
 const sandboxCommandTimeout = 120000;
 const sandboxSuiteTimeout = 300000;
 const existsWithoutFollowingLinks = (file: string): boolean => {

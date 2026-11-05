@@ -18,7 +18,7 @@ describe('selected checkout integration', () => {
     for (const entry of ['install.sh', 'quickstart.sh', 'commands/repo_update.ts', 'commands/install_setup.ts', 'bin/ballin']) {
       const file = path.join(upstream, entry); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'fixture\n');
     }
-    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 1 }, engines: { node: '>=24.12' } }));
+    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 2 }, engines: { node: '>=24.12' } }));
     fs.writeFileSync(path.join(upstream, 'content'), 'before'); git(upstream, ['add', '.']); git(upstream, ['commit', '-qm', 'before']); before = git(upstream, ['rev-parse', 'HEAD']);
     git(root, ['clone', '-q', upstream, installed]); git(installed, ['remote', 'set-url', 'origin', 'https://github.com/JBallin/ballin-scripts.git']);
     fs.writeFileSync(path.join(upstream, 'content'), 'after'); git(upstream, ['commit', '-qam', 'after']); target = git(upstream, ['rev-parse', 'HEAD']); git(upstream, ['tag', 'v1.0.0']);
@@ -79,7 +79,7 @@ describe('selected checkout integration', () => {
     assert.notInclude(r.stdout, 'Change the installed revision');
   });
   it('refuses a fetched incompatible contract before changing HEAD', () => {
-    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: '1' }, engines: { node: '>=24.12' } }));
+    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: '2' }, engines: { node: '>=24.12' } }));
     git(upstream, ['commit', '-qam', 'incompatible contract']);
     const r = run({ sha: git(upstream, ['rev-parse', 'HEAD']) }); assert.equal(r.status, 1); assert.include(r.stderr, 'contract changed or is unsupported');
     assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
