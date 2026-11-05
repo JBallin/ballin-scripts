@@ -64,6 +64,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate documentation site and bundle contracts offline
+        run: |
+          npm ci --prefix site --ignore-scripts
+          python3 tools/site/test_site.py
+
       - name: Lint
         run: npm run lint
 

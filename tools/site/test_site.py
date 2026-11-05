@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""Offline site/bundle contracts. Fixtures contain no actual capture data."""
+import contextlib
+import copy
+import io
+import json
+from pathlib import Path
+import stat
+import struct
+import subprocess
+import tempfile
+import unittest
+import zipfile
+import zlib
+
+import importlib.util
+
+# Avoid Python's standard-library site module name.
+spec = importlib.util.spec_from_file_location('ballin_site', Path(__file__).with_name('site.py'))
+site = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(site)
+
+
+def png():
+    def chunk(name, data):
+        return struct.pack('>I', len(data)) + name + data + struct.pack('>I', zlib.crc32(name + data))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(b'\0\x20\x30\x40')) + chunk(b'IEND', b''))
+
+
+def fixture():
+    text = 'STAGED — synthetic test fixture; no live execution.\n$ ballin update\n<untrusted & text>\n'.encode()
+    entry = {'id': 'update', 'title': 'Synthetic update fixture', 'category': 'Update', 'kind': 'staged',
+             'sourceRevision': 'a' * 40, 'edits': 'Synthetic fixture only.', 'text': 'gallery/update/text.txt',
+             'images': ['gallery/update/output-001.png'], 'readmeUpdate': True}
+    files = {entry['text']: text, entry['images'][0]: png()}
+    manifest = {'schema': 1, 'entries': [entry], 'files': {name: {'size': len(data), 'sha256': site.digest(data)} for name, data in files.items()}}
+    return manifest, files
+
+
+def archive(manifest, files, extras=()):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as output:
+        output.writestr('manifest.json', site.json_bytes(manifest))
+        for name, data in list(files.items()) + list(extras):
+            output.writestr(name, data)
+    return buffer.getvalue()
+
+
+def pin_for(data):
+    return {'mode': 'release', 'release': {'id': 11, 'tag': 'v1.0.0', 'commit': 'a' * 40},
+            'asset': {'id': 22, 'name': 'ballin-gallery-v1.0.0.zip', 'size': len(data), 'sha256': site.digest(data)}}
+
+
+class BundleTests(unittest.TestCase):
+    def setUp(self):
+        self.manifest, self.files = fixture()
+        self.data = archive(self.manifest, self.files)
+        self.pin = pin_for(self.data)
+
+    def test_roundtrip(self):
+        self.assertEqual(site.read_bundle(self.data, site.digest(self.data)), (self.manifest, self.files))
+
+    def test_bundle_and_file_hashes_fail_closed(self):
+        with self.assertRaisesRegex(ValueError, 'SHA-256'):
+            site.read_bundle(self.data, 'f' * 64)
+        self.files['gallery/update/text.txt'] += b'altered'
+        with self.assertRaisesRegex(ValueError, 'integrity'):
+            site.read_bundle(archive(self.manifest, self.files))
+
+    def test_private_or_surprising_files_are_refused(self):
+        for name in ['raw.ansi', 'capture-input.json', 'gallery/update/environment.json', 'tools/render.swift']:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                site.read_bundle(archive(self.manifest, self.files, [(name, b'PRIVATE SENTINEL')]))
+
+    def test_unsafe_paths(self):
+        for name in ['../escape', '/escape', 'gallery/../escape', 'gallery//text.txt', 'gallery\\escape', 'C:/escape', './manifest.json']:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                site.read_bundle(archive(self.manifest, self.files, [(name, b'x')]))
+
+    def test_symlinks_devices_directories_and_duplicates(self):
+        for mode in [stat.S_IFLNK, stat.S_IFCHR, stat.S_IFDIR]:
+            info = zipfile.ZipInfo('gallery/extra')
+            info.external_attr = (mode | 0o644) << 16
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, 'regular files'):
+                site.read_bundle(archive(self.manifest, self.files, [(info, b'target')]))
+        with self.assertWarns(UserWarning):
+            data = archive(self.manifest, self.files, [('manifest.json', b'{}')])
+        with self.assertRaisesRegex(ValueError, 'Duplicate'):
+            site.read_bundle(data)
+
+    def test_expansion_limits(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as output:
+            output.writestr('manifest.json', b'x' * 1024 * 1024)
+        with self.assertRaisesRegex(ValueError, 'compression ratio'):
+            site.read_bundle(buffer.getvalue())
+        with self.assertRaisesRegex(ValueError, 'compressed size'):
+            site.read_bundle(b'x' * (site.MAX_ZIP + 1))
+
+    def test_manifest_is_an_exact_public_schema(self):
+        for value in ['capturesManifest', 'environment', 'command', 'answers', 'raw']:
+            manifest = copy.deepcopy(self.manifest)
+            manifest['entries'][0][value] = 'PRIVATE SENTINEL'
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'schema fields'):
+                site.read_bundle(archive(manifest, self.files))
+        with self.assertRaisesRegex(ValueError, 'Duplicate JSON'):
+            site.load_json('{"schema":1,"schema":1}')
+
+    def test_missing_images_and_bad_labels(self):
+        for field, value in [('kind', 'live'), ('sourceRevision', 'main'), ('readmeUpdate', 1), ('category', 'Unknown'), ('images', [])]:
+            manifest = copy.deepcopy(self.manifest)
+            manifest['entries'][0][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                site.read_bundle(archive(manifest, self.files))
+
+    def test_invalid_png_or_terminal_controls(self):
+        for name, data in [('gallery/update/output-001.png', b'not a PNG'), ('gallery/update/text.txt', b'\x1b[31mANSI')]:
+            files = dict(self.files, **{name: data})
+            manifest = copy.deepcopy(self.manifest)
+            manifest['files'][name] = {'size': len(data), 'sha256': site.digest(data)}
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                site.read_bundle(archive(manifest, files))
+
+    def test_png_requires_valid_complete_bounded_image_stream(self):
+        image = png()
+        for data in [image[:33], image[:-12], image + b'extra', image[:-15] + b'bad' + image[-12:]]:
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                site.validate_png(data)
+        # Header dimensions alone cannot permit an expanded image-data bomb.
+        def chunk(name, data):
+            return struct.pack('>I', len(data)) + name + data + struct.pack('>I', zlib.crc32(name + data))
+        bad = image[:33] + chunk(b'IDAT', zlib.compress(b'x' * 1000000)) + image[-12:]
+        with self.assertRaisesRegex(ValueError, 'size/stream'):
+            site.validate_png(bad)
+
+    def test_png_capture_metadata_removed_without_changing_pixels(self):
+        metadata = b'PRIVATE SENTINEL'
+        chunk = struct.pack('>I', len(metadata)) + b'eXIf' + metadata + struct.pack('>I', zlib.crc32(b'eXIf' + metadata))
+        original = png()
+        image = original[:33] + chunk + original[33:]
+        self.assertEqual(site.public_png(image), original)
+        with self.assertRaisesRegex(ValueError, 'Unexpected PNG'):
+            site.validate_png(image)
+
+    def test_nul_archive_filename_is_rejected_before_python_normalization(self):
+        # ZIP supports arbitrary bytes; mutate both local and central names to
+        # reproduce Python's NUL-truncating ZipInfo normalization.
+        name = b'gallery/update/output-001.png'
+        files = dict(self.files)
+        files['gallery/update/output-001.pngX'] = files.pop('gallery/update/output-001.png')
+        data = archive(self.manifest, files)
+        data = data.replace(name + b'X', name + b'\0')
+        with self.assertRaisesRegex(ValueError, 'Ambiguous archive filename'):
+            site.read_bundle(data)
+
+    def test_readme_image_title_cannot_inject_markdown(self):
+        self.manifest['entries'][0]['title'] = 'Update ](https://example.invalid) ![injected " <tag>'
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / 'title.zip'
+            bundle.write_bytes(archive(self.manifest, self.files))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                site.readme_example(bundle, 'https://jballin.github.io/ballin-scripts')
+            self.assertIn('<img src="https://jballin.github.io/ballin-scripts/gallery/update/output-001.png" alt="Update ]', out.getvalue())
+            self.assertIn('&quot; &lt;tag&gt;', out.getvalue())
+
+    def mock_api(self, mutation=None, annotated=False):
+        release = {'id': 11, 'tag_name': 'v1.0.0', 'draft': False, 'prerelease': False, 'published_at': '2026-11-05', 'assets': [{'id': 22}]}
+        asset = {**self.pin['asset'], 'state': 'uploaded', 'digest': 'sha256:' + site.digest(self.data)}
+        tag = {'object': {'type': 'tag' if annotated else 'commit', 'sha': 'b' * 40 if annotated else 'a' * 40}}
+        responses = {'/releases/11': release, '/releases/assets/22': asset, '/git/ref/tags/v1.0.0': tag,
+                     '/git/tags/' + 'b' * 40: {'object': {'type': 'commit', 'sha': 'a' * 40}}}
+        if mutation:
+            mutation(responses)
+        calls = []
+
+        def request(path, binary=False):
+            calls.append((path, binary))
+            return self.data if binary else responses[path]
+        return request, calls
+
+    def test_exact_release_retrieval_including_annotated_tags(self):
+        for annotated in [False, True]:
+            request, calls = self.mock_api(annotated=annotated)
+            self.assertEqual(site.retrieve(self.pin, request), self.data)
+            self.assertEqual(calls[-1], ('/releases/assets/22', True))
+            self.assertFalse(any('latest' in path for path, _ in calls))
+
+    def test_release_or_asset_substitution_refused_before_download(self):
+        mutations = [
+            lambda r: r['/releases/11'].update(id=12),
+            lambda r: r['/releases/11'].update(tag_name='v1.0.1'),
+            lambda r: r['/releases/11'].update(draft=True),
+            lambda r: r['/releases/11'].update(prerelease=True),
+            lambda r: r['/releases/11'].update(assets=[]),
+            lambda r: r['/git/ref/tags/v1.0.0']['object'].update(sha='c' * 40),
+            lambda r: r['/releases/assets/22'].update(id=23),
+            lambda r: r['/releases/assets/22'].update(name='changed.zip'),
+            lambda r: r['/releases/assets/22'].update(size=1),
+            lambda r: r['/releases/assets/22'].update(digest='sha256:' + 'f' * 64),
+        ]
+        for mutation in mutations:
+            request, calls = self.mock_api(mutation)
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                site.retrieve(self.pin, request)
+            self.assertFalse(any(binary for _, binary in calls))
+
+    def test_credentials_not_forwarded_on_storage_redirect(self):
+        import urllib.request
+        request = urllib.request.Request(site.API + '/releases/assets/22', headers={'Authorization': 'Bearer TEST SENTINEL'})
+        redirected = site.SafeRedirect().redirect_request(request, None, 302, 'Found', {}, 'https://release-assets.githubusercontent.com/file')
+        self.assertIsNone(redirected.get_header('Authorization'))
+        with self.assertRaises(ValueError):
+            site.SafeRedirect().redirect_request(request, None, 302, 'Found', {}, 'https://example.com/file')
+
+    def test_pin_requires_explicit_mode_and_identity(self):
+        for pin in [{}, {'mode': 'auto'}, {'mode': 'bootstrap'}, {**self.pin, 'asset': {**self.pin['asset'], 'id': True}}]:
+            with self.subTest(pin=pin), self.assertRaises(ValueError):
+                site.validate_pin(pin)
+
+    def test_readme_uses_canonical_text_and_optional_same_images(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'bundle.zip'
+            path.write_bytes(self.data)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                site.readme_example(path, 'https://jballin.github.io/ballin-scripts')
+            value = out.getvalue()
+            self.assertIn('gallery/update/output-001.png', value)
+            self.assertIn('&lt;untrusted &amp; text&gt;', value)
+            self.assertEqual(value.count('<details>'), 2)
+            self.assertNotIn('<details open', value)
+
+    def test_pack_is_minimal_deterministic_and_refuses_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gallery = root / 'input'
+            folder = gallery / 'staged-09'
+            folder.mkdir(parents=True)
+            text = self.files['gallery/update/text.txt']
+            report = site.json_bytes({'text': text.decode(), 'private': 'PRIVATE SENTINEL'})
+            for name, data in [('text.txt', text), ('output-001.png', png()), ('output.json', report), ('raw.ansi', b'PRIVATE SENTINEL')]:
+                (folder / name).write_bytes(data)
+            scenario = {**self.manifest['entries'][0], 'id': 'staged-09', 'environment': 'PRIVATE SENTINEL',
+                        'files': {p.name: site.digest(p.read_bytes()) for p in folder.iterdir()}}
+            (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario], 'capturesManifest': 'PRIVATE SENTINEL'}))
+            selected = {'schema': 1, 'entries': [{'scenario': 'staged-09', 'id': 'update', 'title': 'Synthetic update fixture', 'edits': 'Synthetic fixture only.', 'approvedForPublication': True, 'readmeUpdate': True}]}
+            selection = root / 'selection.json'
+            selection.write_bytes(site.json_bytes(selected))
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.pack(gallery, selection, root / 'one.zip')
+                site.pack(gallery, selection, root / 'two.zip')
+            self.assertEqual((root / 'one.zip').read_bytes(), (root / 'two.zip').read_bytes())
+            manifest, files = site.read_bundle((root / 'one.zip').read_bytes())
+            self.assertEqual(set(files), set(self.files))
+            self.assertNotIn('PRIVATE SENTINEL', json.dumps(manifest) + repr(files))
+            with self.assertRaisesRegex(ValueError, 'Output exists'):
+                site.pack(gallery, selection, root / 'one.zip')
+            selected['entries'][0]['approvedForPublication'] = False
+            selection.write_bytes(site.json_bytes(selected))
+            with self.assertRaisesRegex(ValueError, 'approval'):
+                site.pack(gallery, selection, root / 'refused.zip')
+            selected['entries'][0]['approvedForPublication'] = True
+            selection.write_bytes(site.json_bytes(selected))
+            (folder / 'text.txt').write_text('altered')
+            with self.assertRaisesRegex(ValueError, 'disagree'):
+                site.pack(gallery, selection, root / 'mismatch.zip')
+
+
+class BuildTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.folder = Path(cls.temp.name)
+        cls.manifest, cls.files = fixture()
+        cls.data = archive(cls.manifest, cls.files)
+        cls.bundle = cls.folder / 'bundle.zip'
+        cls.bundle.write_bytes(cls.data)
+        cls.pin = cls.folder / 'pin.json'
+        cls.pin.write_bytes(site.json_bytes(pin_for(cls.data)))
+        cls.bootstrap_pin = cls.folder / 'bootstrap.json'
+        cls.bootstrap_pin.write_bytes(site.json_bytes({'mode': 'bootstrap', 'reason': 'Synthetic fixture.'}))
+        cls.output = cls.folder / 'complete'
+        with contextlib.redirect_stdout(io.StringIO()):
+            site.build(cls.output, cls.pin, '/ballin-scripts', cls.bundle)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def test_complete_site_contains_docs_and_same_bundle_bytes(self):
+        self.assertTrue((self.output / 'docs/installation.html').is_file())
+        self.assertTrue((self.output / 'sitemap.xml').is_file())
+        for name, data in self.files.items():
+            self.assertEqual((self.output / name).read_bytes(), data)
+        source = (self.output / 'index.html').read_text()
+        self.assertIn('/ballin-scripts/docs/quickstart.html', source)
+        self.assertIn('/ballin-scripts/gallery.html', source)
+        self.assertIn('github.com/JBallin/ballin-scripts/blob/', source)
+        site.verify_site(self.output, '/ballin-scripts')
+
+    def test_accessible_nested_details_and_escaped_text(self):
+        value = (self.output / 'gallery.html').read_text()
+        self.assertEqual(value.count('<details>'), 2)
+        self.assertNotIn('<details open', value)
+        self.assertIn('<summary>Text version</summary>', value)
+        self.assertIn('&lt;untrusted &amp; text&gt;', value)
+        for anchor in ['install-quickstart', 'setup-backup', 'update', 'diagnostics']:
+            self.assertIn('id="' + anchor + '"', value)
+
+    def test_explicit_bootstrap_has_no_gallery_links(self):
+        output = self.folder / 'bootstrap'
+        with contextlib.redirect_stdout(io.StringIO()):
+            site.build(output, self.bootstrap_pin, '/ballin-scripts')
+        self.assertFalse((output / 'gallery.html').exists())
+        self.assertNotIn('href="/ballin-scripts/gallery.html"', (output / 'index.html').read_text())
+        with self.assertRaisesRegex(ValueError, 'Bootstrap'):
+            site.build(self.folder / 'invalid-bootstrap', self.bootstrap_pin, '', self.bundle)
+
+    def test_canonical_markdown_nested_details_tables_links_and_github_fragments(self):
+        text = '# Fixture\n\n> [!TIP]\n> A useful tip.\n\n## Repeated `heading`\n\n## Repeated `heading`\n\n[Source](commands/update.ts)\n\n<details>\n<summary>Example installation</summary>\n\n![Fixture](docs/assets/brand/readme-hero.png)\n\n<details>\n<summary>Text version</summary>\n\n```text\n$ ballin update\n```\n\n</details>\n\n</details>\n\n| Command | Purpose |\n| --- | --- |\n| update | maintenance |\n'
+        text = text.replace('A useful tip.', 'A useful [Quickstart](docs/quickstart.md) tip.')
+        payload = {'pages': [{'path': 'README.md', 'text': text}, {'path': 'docs/quickstart.md', 'text': '# Quickstart'}], 'base': '/ballin-scripts', 'sourceBase': 'https://github.com/' + site.REPO + '/blob/' + 'a' * 40}
+        pages = json.loads(subprocess.check_output(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload)))
+        rendered = pages[0]['content']
+        self.assertEqual(rendered.count('<details>'), 2)
+        self.assertNotIn('<details open', rendered)
+        self.assertIn('<pre><code class="language-text">$ ballin update', rendered)
+        self.assertIn('<table>', rendered)
+        self.assertIn('id="repeated-heading-1"', rendered)
+        self.assertIn('/ballin-scripts/docs/assets/brand/readme-hero.png', rendered)
+        self.assertIn('/blob/' + 'a' * 40 + '/commands/update.ts', rendered)
+        self.assertNotIn('[!TIP]', rendered)
+        self.assertIn('href="/ballin-scripts/docs/quickstart.html"', rendered)
+
+    def test_invalid_pin_or_bundle_cannot_replace_good_snapshot(self):
+        before = (self.output / 'index.html').read_bytes()
+        with self.assertRaisesRegex(ValueError, 'Output exists'):
+            site.build(self.output, self.pin, '/ballin-scripts', self.bundle)
+        bad = self.folder / 'missing.zip'
+        with self.assertRaises(ValueError):
+            site.build(self.folder / 'bad-pin', self.pin, '/ballin-scripts', bad)
+        self.assertEqual(before, (self.output / 'index.html').read_bytes())
+        self.assertFalse((self.folder / 'bad-pin').exists())
+
+    def test_verify_rejects_broken_fragments_and_base_paths(self):
+        for value in ['<a href="/docs/installation.html">bad base</a>', '<a href="#missing">bad fragment</a>', '<img src="missing.png" alt="Fixture">']:
+            with tempfile.TemporaryDirectory() as folder:
+                output = Path(folder)
+                (output / 'index.html').write_text(value)
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    site.verify_site(output, '/ballin-scripts')
+
+    def test_workflow_scope_permissions_and_freshness(self):
+        code = "const fs=require('node:fs'),yaml=require('js-yaml');process.stdout.write(JSON.stringify(yaml.load(fs.readFileSync('.github/workflows/pages.yml','utf8'))));"
+        workflow = json.loads(subprocess.check_output(['node', '-e', code], cwd=site.ROOT))
+        self.assertEqual(set(workflow['on']), {'push', 'workflow_dispatch'})
+        self.assertEqual(workflow['on']['push']['branches'], ['main'])
+        paths = set(workflow['on']['push']['paths'])
+        expected = {'README.md', 'CONTRIBUTING.md', 'SUPPORT.md', 'SECURITY.md', 'LICENSE.md', 'docs/**', 'site/**', 'tools/site/**', '.nvmrc', '.github/workflows/pages.yml'}
+        self.assertEqual(paths, expected)
+        self.assertEqual(workflow['permissions'], {'contents': 'read'})
+        self.assertFalse(workflow['concurrency']['cancel-in-progress'])
+        build, deploy = workflow['jobs']['build'], workflow['jobs']['deploy']
+        self.assertIn("github.ref == 'refs/heads/main'", build['if'])
+        self.assertNotIn('permissions', build)
+        self.assertEqual(deploy['permissions'], {'contents': 'read', 'pages': 'write', 'id-token': 'write'})
+        self.assertEqual(deploy['needs'], 'build')
+        self.assertEqual(build['steps'][0]['with']['ref'], 'main')
+        freshness = next(step['run'] for step in deploy['steps'] if step.get('name') == 'Refuse a superseded snapshot')
+        self.assertIn('git diff --exit-code', freshness)
+        self.assertIn('docs site tools/site .nvmrc .github/workflows/pages.yml', freshness)
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

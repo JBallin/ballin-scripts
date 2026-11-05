@@ -94,3 +94,21 @@
   `docs/design-system.md` according to the surface's job and audience. Use Ballin
   for product prose, `ballin` for the executable and command examples, and
   `ballin-scripts` for repository, package, checkout, or path precision.
+
+## Documentation site and gallery
+
+- Keep website prose canonical in README/docs; see [site maintenance](docs/website.md).
+  After root `npm ci`, run `npm ci --prefix site --ignore-scripts` and
+  `python3 tools/site/test_site.py` for site tooling/template/workflow changes.
+  Include a local complete-site build
+  and inspect changed navigation, project base paths, fragments and nested details.
+- For affected output flows, useful review evidence is a labeled PNG plus its
+  matching actual text and exact source revision from the local output-gallery
+  tooling. Do not require captures for unrelated changes or regenerate on docs
+  commits. Staged examples do not establish real installation/backup success.
+- Generated evidence stays ignored and local. Public bundles require explicit
+  selection and publication approval for the actual files; never copy a gallery
+  directory or its private manifests/raw captures into the site. Preserve fail-closed
+  pins and the complete current-docs/approved-assets snapshot contract.
+- Public links wait for verified destinations. Site changes do not authorize
+  release publication, capture uploads, Pages settings changes or deployment.

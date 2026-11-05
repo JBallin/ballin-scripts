@@ -1,0 +1,494 @@
+#!/usr/bin/env python3
+"""Build complete documentation snapshots and curate public gallery bundles."""
+import argparse
+import hashlib
+import html
+from html.parser import HTMLParser
+import io
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import stat
+import struct
+import subprocess
+import tempfile
+import urllib.parse
+import urllib.request
+import zipfile
+import zlib
+
+ROOT = Path(__file__).resolve().parents[2]
+REPO = 'JBallin/ballin-scripts'
+API = 'https://api.github.com/repos/' + REPO
+CATEGORIES = ('Install & Quickstart', 'Setup & Backup', 'Update', 'Diagnostics')
+MAX_FILE = 16 * 1024 * 1024
+MAX_TOTAL = 128 * 1024 * 1024
+MAX_ZIP = 40 * 1024 * 1024
+SHA = re.compile(r'[0-9a-f]{64}')
+REV = re.compile(r'[0-9a-f]{40}')
+SLUG = re.compile(r'[a-z0-9][a-z0-9-]{0,63}')
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def json_bytes(value):
+    return (json.dumps(value, indent=2, ensure_ascii=False) + '\n').encode()
+
+
+def load_json(data):
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            require(key not in result, 'Duplicate JSON key: ' + key)
+            result[key] = value
+        return result
+    return json.loads(data, object_pairs_hook=pairs)
+
+
+def keys(value, names):
+    require(isinstance(value, dict) and set(value) == set(names.split()), 'Unexpected or missing schema fields')
+
+
+def string(value, limit=1000):
+    require(isinstance(value, str) and 0 < len(value) <= limit, 'Invalid display string')
+    require(not any(ord(c) < 32 and c != '\n' for c in value), 'Control characters in display text')
+    return value
+
+
+def valid_path(value):
+    require(isinstance(value, str) and re.fullmatch(r'[a-z0-9/-]+(?:\.[a-z0-9]+)?', value), 'Unexpected archive path')
+    require(not value.startswith('/') and all(p not in ('', '.', '..') for p in value.split('/')), 'Unsafe archive path')
+    return value
+
+
+def validate_png(data):
+    require(data.startswith(b'\x89PNG\r\n\x1a\n'), 'Invalid PNG signature')
+    offset, chunks, compressed = 8, [], bytearray()
+    width = height = depth = color = 0
+    while offset < len(data):
+        require(offset + 12 <= len(data), 'Truncated PNG chunk')
+        length = struct.unpack('>I', data[offset:offset + 4])[0]
+        kind = data[offset + 4:offset + 8]
+        end = offset + length + 12
+        require(end <= len(data), 'Truncated PNG payload')
+        body = data[offset + 8:end - 4]
+        require(zlib.crc32(kind + body) == struct.unpack('>I', data[end - 4:end])[0], 'PNG checksum mismatch')
+        # AppKit's ordinary image/profile chunks are supported. Text and arbitrary
+        # ancillary payloads are deliberately outside the publication allowlist.
+        require(kind in (b'IHDR', b'PLTE', b'IDAT', b'IEND', b'sRGB', b'gAMA', b'cHRM', b'pHYs', b'iCCP', b'tRNS', b'sBIT'), 'Unexpected PNG chunk')
+        if not chunks:
+            require(kind == b'IHDR' and length == 13, 'Invalid PNG header')
+            width, height, depth, color, compression, filtering, interlace = struct.unpack('>IIBBBBB', body)
+            allowed = {0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8), 4: (8, 16), 6: (8, 16)}
+            require(color in allowed and depth in allowed[color] and compression == filtering == interlace == 0, 'Unsupported PNG encoding')
+            require(0 < width <= 10000 and 0 < height <= 20000, 'Oversize PNG dimensions')
+        else:
+            require(kind != b'IHDR', 'Duplicate PNG header')
+        if kind == b'IDAT':
+            require(b'IEND' not in chunks and (b'IDAT' not in chunks or chunks[-1] == b'IDAT'), 'Nonconsecutive PNG image chunks')
+            compressed.extend(body)
+        if kind == b'IEND':
+            require(length == 0 and end == len(data), 'Invalid PNG ending')
+        chunks.append(kind)
+        offset = end
+    require(chunks and chunks[-1] == b'IEND' and compressed, 'Incomplete PNG')
+    if color == 3:
+        require(b'PLTE' in chunks and chunks.index(b'PLTE') < chunks.index(b'IDAT'), 'Missing PNG palette')
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color]
+    stride = (width * depth * channels + 7) // 8 + 1
+    expanded = stride * height
+    require(expanded <= 64 * 1024 * 1024, 'Oversize decoded PNG')
+    decoder = zlib.decompressobj()
+    try:
+        pixels = decoder.decompress(compressed, expanded + 1)
+    except zlib.error as error:
+        raise ValueError('Invalid PNG image stream') from error
+    require(len(pixels) == expanded and decoder.eof and not decoder.unused_data and not decoder.unconsumed_tail, 'PNG image size/stream mismatch')
+    require(all(pixels[row * stride] <= 4 for row in range(height)), 'Invalid PNG row filter')
+
+
+def public_png(data):
+    """Remove capture metadata without changing encoded pixels or color chunks."""
+    require(data.startswith(b'\x89PNG\r\n\x1a\n'), 'Invalid PNG signature')
+    output, offset = bytearray(data[:8]), 8
+    while offset < len(data):
+        require(offset + 12 <= len(data), 'Truncated PNG chunk')
+        length = struct.unpack('>I', data[offset:offset + 4])[0]
+        end = offset + length + 12
+        require(end <= len(data), 'Truncated PNG payload')
+        kind, body = data[offset + 4:offset + 8], data[offset + 8:end - 4]
+        require(zlib.crc32(kind + body) == struct.unpack('>I', data[end - 4:end])[0], 'PNG checksum mismatch')
+        if kind not in (b'eXIf', b'tEXt', b'zTXt', b'iTXt', b'tIME'):
+            output.extend(data[offset:end])
+        offset = end
+    result = bytes(output)
+    validate_png(result)
+    return result
+
+
+def validate_manifest(manifest, files):
+    keys(manifest, 'schema entries files')
+    require(manifest['schema'] == 1, 'Unsupported bundle schema')
+    require(isinstance(manifest['entries'], list) and 0 < len(manifest['entries']) <= 64, 'Invalid entries')
+    require(isinstance(manifest['files'], dict) and set(manifest['files']) == set(files), 'Unexpected or missing files')
+    expected = set()
+    ids = set()
+    updates = 0
+    for entry in manifest['entries']:
+        keys(entry, 'id title category kind sourceRevision edits text images readmeUpdate')
+        require(isinstance(entry['id'], str) and SLUG.fullmatch(entry['id']) and entry['id'] not in ids, 'Invalid or duplicate entry ID')
+        ids.add(entry['id'])
+        string(entry['title'], 160)
+        string(entry['edits'], 2000)
+        require(entry['category'] in CATEGORIES and entry['kind'] in ('staged', 'actual-vm'), 'Invalid gallery classification')
+        require(isinstance(entry['sourceRevision'], str) and REV.fullmatch(entry['sourceRevision']), 'Invalid source revision')
+        require(type(entry['readmeUpdate']) is bool, 'Invalid README designation')
+        updates += entry['readmeUpdate']
+        if entry['readmeUpdate']:
+            require(entry['category'] == 'Update', 'README example must belong to Update')
+        prefix = 'gallery/' + entry['id'] + '/'
+        require(entry['text'] == prefix + 'text.txt', 'Unexpected text path')
+        require(isinstance(entry['images'], list) and 0 < len(entry['images']) <= 32, 'Invalid image list')
+        require(entry['images'] == [prefix + f'output-{i:03}.png' for i in range(1, len(entry['images']) + 1)], 'Unexpected image paths')
+        expected.update([entry['text']] + entry['images'])
+    require(updates <= 1 and expected == set(files), 'Unexpected publication files or repeated Update example')
+    require(sum(len(data) for data in files.values()) <= MAX_TOTAL, 'Bundle exceeds size limit')
+    for name, data in files.items():
+        valid_path(name)
+        require(0 < len(data) <= MAX_FILE, 'Invalid file size')
+        record = manifest['files'][name]
+        keys(record, 'sha256 size')
+        require(record['sha256'] == digest(data) and type(record['size']) is int and record['size'] == len(data), 'File integrity mismatch: ' + name)
+        if name.endswith('.png'):
+            validate_png(data)
+        else:
+            string(data.decode('utf-8'), MAX_FILE)
+
+
+def read_bundle(data, expected_sha=None):
+    require(0 < len(data) <= MAX_ZIP, 'Archive exceeds compressed size limit')
+    if expected_sha is not None:
+        require(digest(data) == expected_sha, 'Bundle SHA-256 mismatch')
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        infos = archive.infolist()
+        require(0 < len(infos) <= 512 and len({i.filename for i in infos}) == len(infos), 'Duplicate or excessive archive entries')
+        require(sum(i.file_size for i in infos) <= MAX_TOTAL + 1024 * 1024, 'Archive expansion limit exceeded')
+        for info in infos:
+            require(info.orig_filename == info.filename, 'Ambiguous archive filename')
+            valid_path(info.filename)
+            mode = info.external_attr >> 16
+            require(stat.S_IFMT(mode) in (0, stat.S_IFREG) and not info.is_dir(), 'Only regular files are allowed')
+            require(not info.flag_bits & 1 and info.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED), 'Unsupported ZIP encoding')
+            require(info.file_size <= MAX_FILE and info.file_size <= max(1, info.compress_size) * 200, 'Oversize or suspicious compression ratio')
+        require('manifest.json' in archive.namelist(), 'Missing public manifest')
+        require(archive.getinfo('manifest.json').file_size <= 1024 * 1024, 'Oversize manifest')
+        manifest = load_json(archive.read('manifest.json'))
+        # Validate paths and member bounds before reading; never extract ZIP paths.
+        files = {i.filename: archive.read(i) for i in infos if i.filename != 'manifest.json'}
+    validate_manifest(manifest, files)
+    return manifest, files
+
+
+def read_regular(path, limit=MAX_FILE):
+    require(not path.is_symlink() and path.is_file() and path.stat().st_size <= limit, 'Expected bounded regular input: ' + str(path))
+    return path.read_bytes()
+
+
+def new_output(path):
+    require(not path.exists() and not path.is_symlink(), 'Output exists; choose a new path to preserve prior evidence')
+    if path.resolve().is_relative_to(ROOT):
+        ignored = subprocess.run(['git', 'check-ignore', '--no-index', '-q', str(path / 'probe')], cwd=ROOT)
+        require(ignored.returncode == 0, 'Generated output inside checkout must be Git-ignored')
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def pack(gallery, selection_path, output):
+    selection = load_json(read_regular(selection_path, 1024 * 1024))
+    keys(selection, 'schema entries')
+    require(selection['schema'] == 1 and isinstance(selection['entries'], list), 'Invalid publication selection')
+    generation = load_json(read_regular(gallery / 'manifest.json', 4 * 1024 * 1024))
+    generated = {entry['id']: entry for entry in generation['scenarios']}
+    entries, files = [], {}
+    for selected in selection['entries']:
+        keys(selected, 'scenario id title edits approvedForPublication readmeUpdate')
+        require(selected['approvedForPublication'] is True, 'Explicit file publication approval is required')
+        require(isinstance(selected['scenario'], str) and SLUG.fullmatch(selected['scenario']), 'Invalid scenario')
+        require(isinstance(selected['id'], str) and SLUG.fullmatch(selected['id']), 'Invalid public ID')
+        require(selected['scenario'] in generated, 'Unknown scenario')
+        scenario = generated[selected['scenario']]
+        folder = gallery / selected['scenario']
+        require(not folder.is_symlink(), 'Symlink scenario directory')
+        entry = {key: scenario[key] for key in ('category', 'kind', 'sourceRevision')}
+        entry.update({key: selected[key] for key in ('id', 'title', 'edits', 'readmeUpdate')})
+        prefix = 'gallery/' + selected['id'] + '/'
+        entry['text'] = prefix + 'text.txt'
+        report = load_json(read_regular(folder / 'output.json', MAX_FILE))
+        text = read_regular(folder / 'text.txt')
+        require(report['text'] == text.decode('utf-8'), 'Renderer and accessible text disagree')
+        images = sorted(name for name in scenario['files'] if re.fullmatch(r'output-[0-9]{3}\.png', name))
+        entry['images'] = [prefix + name for name in images]
+        for name in ['text.txt', 'output.json'] + images:
+            data = read_regular(folder / name)
+            require(digest(data) == scenario['files'][name], 'Generation hash mismatch: ' + name)
+            if name != 'output.json':
+                files[prefix + name] = public_png(data) if name.endswith('.png') else data
+        entries.append(entry)
+    manifest = {'schema': 1, 'entries': entries, 'files': {name: {'sha256': digest(data), 'size': len(data)} for name, data in files.items()}}
+    validate_manifest(manifest, files)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, data in [('manifest.json', json_bytes(manifest))] + sorted(files.items()):
+            info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (stat.S_IFREG | 0o644) << 16
+            archive.writestr(info, data)
+    data = buffer.getvalue()
+    read_bundle(data)
+    new_output(output)
+    with output.open('xb') as handle:
+        handle.write(data)
+    print(json.dumps({'bundle': str(output), 'size': len(data), 'sha256': digest(data), 'entries': len(entries)}))
+
+
+class SafeRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        parsed = urllib.parse.urlsplit(newurl)
+        require(parsed.scheme == 'https' and parsed.hostname in ('api.github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'), 'Unexpected asset redirect')
+        redirected = super().redirect_request(request, fp, code, message, headers, newurl)
+        redirected.remove_header('Authorization')
+        return redirected
+
+
+def github(endpoint, binary=False):
+    headers = {'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'ballin-site-build'}
+    token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    request = urllib.request.Request(API + endpoint, headers=headers)
+    with urllib.request.build_opener(SafeRedirect()).open(request, timeout=30) as response:
+        data = response.read((MAX_ZIP if binary else 4 * 1024 * 1024) + 1)
+    require(len(data) <= (MAX_ZIP if binary else 4 * 1024 * 1024), 'GitHub response exceeds limit')
+    return data if binary else load_json(data)
+
+
+def validate_pin(pin):
+    require(isinstance(pin, dict) and pin.get('mode') in ('bootstrap', 'release'), 'Explicit bundle mode is required')
+    if pin['mode'] == 'bootstrap':
+        keys(pin, 'mode reason')
+        string(pin['reason'])
+        return
+    keys(pin, 'mode release asset')
+    keys(pin['release'], 'id tag commit')
+    keys(pin['asset'], 'id name size sha256')
+    release, asset = pin['release'], pin['asset']
+    require(type(release['id']) is int and release['id'] > 0 and type(asset['id']) is int and asset['id'] > 0, 'Invalid immutable identity')
+    require(isinstance(release['tag'], str) and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', release['tag']), 'Expected stable product tag')
+    require(isinstance(release['commit'], str) and REV.fullmatch(release['commit']), 'Invalid product commit')
+    require(isinstance(asset['name'], str) and re.fullmatch(r'ballin-gallery-[a-z0-9.-]+\.zip', asset['name']), 'Unexpected asset name')
+    require(type(asset['size']) is int and 0 < asset['size'] <= MAX_ZIP and isinstance(asset['sha256'], str) and SHA.fullmatch(asset['sha256']), 'Invalid asset integrity pin')
+
+
+def retrieve(pin, request=github):
+    validate_pin(pin)
+    require(pin['mode'] == 'release', 'No release bundle in bootstrap mode')
+    release, asset = pin['release'], pin['asset']
+    metadata = request('/releases/' + str(release['id']))
+    require(metadata['id'] == release['id'] and metadata['tag_name'] == release['tag'] and metadata['draft'] is False and metadata['prerelease'] is False and metadata.get('published_at'), 'Pinned stable release identity changed')
+    ref = request('/git/ref/tags/' + release['tag'])['object']
+    for _ in range(5):
+        if ref['type'] == 'commit':
+            break
+        require(ref['type'] == 'tag' and REV.fullmatch(ref['sha']), 'Unexpected tag object')
+        ref = request('/git/tags/' + ref['sha'])['object']
+    require(ref['type'] == 'commit' and ref['sha'] == release['commit'], 'Version tag no longer matches pinned commit')
+    actual = request('/releases/assets/' + str(asset['id']))
+    require(any(item['id'] == asset['id'] for item in metadata['assets']), 'Asset is not attached to pinned product release')
+    require(actual['id'] == asset['id'] and actual['name'] == asset['name'] and actual['size'] == asset['size'] and actual['state'] == 'uploaded', 'Pinned asset metadata changed')
+    if actual.get('digest'):
+        require(actual['digest'] == 'sha256:' + asset['sha256'], 'GitHub asset digest mismatch')
+    data = request('/releases/assets/' + str(asset['id']), binary=True)
+    require(len(data) == asset['size'], 'Asset length mismatch')
+    read_bundle(data, asset['sha256'])
+    return data
+
+
+def gallery_html(manifest, files, base):
+    lines = ['<h1 id="gallery">Output gallery</h1>', '<p>Rendered output and matching text. Actual VM recordings and staged demonstrations are labeled separately. Presentation examples do not establish end-to-end correctness.</p>', '<nav aria-label="Gallery sections">']
+    for category in CATEGORIES:
+        slug = category.lower().replace(' & ', '-').replace(' ', '-')
+        lines.append(f'<a href="#{slug}">{html.escape(category)}</a> ')
+    lines.append('</nav>')
+    for category in CATEGORIES:
+        slug = category.lower().replace(' & ', '-').replace(' ', '-')
+        lines.append(f'<h2 id="{slug}">{html.escape(category)}</h2>')
+        entries = [entry for entry in manifest['entries'] if entry['category'] == category]
+        if not entries:
+            lines.append('<p>No approved examples in this section yet.</p>')
+        for entry in entries:
+            label = 'Actual VM capture · rendered recorded output' if entry['kind'] == 'actual-vm' else 'Staged · source-informed synthetic output'
+            lines.append(f'<article class="gallery-entry" id="entry-{entry["id"]}"><h3>{html.escape(entry["title"])}</h3><p>{label}; not a native Terminal screenshot.</p>')
+            revision = entry['sourceRevision']
+            lines.append(f'<p class="provenance">Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>{html.escape(entry["edits"])}</p>')
+            lines.append('<details><summary>Example output</summary>')
+            for index, image in enumerate(entry['images'], 1):
+                lines.append(f'<figure><a href="{base}/{image}"><img loading="lazy" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, rendered page {index}. Matching text follows."></a><figcaption>Page {index} of {len(entry["images"])}</figcaption></figure>')
+            text = html.escape(files[entry['text']].decode('utf-8'))
+            lines.append(f'<details><summary>Text version</summary><pre><code>{text}</code></pre><a href="{base}/{entry["text"]}">Download text</a></details></details></article>')
+    return '\n'.join(lines)
+
+
+class Links(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.ids, self.links = set(), []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if 'id' in attrs:
+            require(attrs['id'] not in self.ids, 'Duplicate HTML anchor: ' + attrs['id'])
+            self.ids.add(attrs['id'])
+        for key in ('href', 'src'):
+            if key in attrs:
+                self.links.append(attrs[key])
+        if tag == 'img':
+            require(bool(attrs.get('alt')), 'Image missing alt text')
+
+
+def verify_site(output, base):
+    parsed = {}
+    for file in output.rglob('*.html'):
+        parser = Links()
+        parser.feed(file.read_text())
+        parsed[file.relative_to(output).as_posix()] = parser
+    for name, parser in parsed.items():
+        for link in parser.links:
+            url = urllib.parse.urlsplit(link)
+            if url.scheme or url.netloc:
+                continue
+            path = urllib.parse.unquote(url.path)
+            if path.startswith('/'):
+                require(path.startswith(base + '/'), 'Link lost project base path: ' + link)
+                path = path[len(base) + 1:]
+            else:
+                path = str(PurePosixPath(name).parent / path) if path else name
+            target = output / path
+            require(target.resolve().is_relative_to(output.resolve()) and target.is_file(), 'Broken local link from ' + name + ': ' + link)
+            if url.fragment:
+                require(path in parsed and urllib.parse.unquote(url.fragment) in parsed[path].ids, 'Broken local anchor from ' + name + ': ' + link)
+
+
+def build(output, pin_path, base, local_bundle=None, origin='https://jballin.github.io'):
+    require(base == '' or re.fullmatch(r'/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*', base), 'Invalid site base path')
+    require(re.fullmatch(r'https://[a-zA-Z0-9.-]+', origin), 'Invalid canonical origin')
+    pin = load_json(read_regular(pin_path, 1024 * 1024))
+    validate_pin(pin)
+    manifest, files = None, {}
+    if pin['mode'] == 'release':
+        data = read_regular(local_bundle, MAX_ZIP) if local_bundle else retrieve(pin)
+        require(len(data) == pin['asset']['size'], 'Local bundle size does not match pin')
+        manifest, files = read_bundle(data, pin['asset']['sha256'])
+    else:
+        require(local_bundle is None, 'Bootstrap cannot silently accept an unpinned bundle')
+    new_output(output)
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT).strip())
+    tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
+    candidates = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=ROOT).decode().split('\0')
+    sources = sorted(p for p in candidates if p in ('README.md', 'CONTRIBUTING.md', 'SUPPORT.md', 'SECURITY.md', 'LICENSE.md') or re.fullmatch(r'docs/[^/]+\.md', p))
+    source_base = f'https://github.com/{REPO}/blob/{revision}'
+    payload = {'pages': [{'path': p, 'text': (ROOT / p).read_text()} for p in sources], 'base': base, 'sourceBase': source_base}
+    pages = json.loads(subprocess.check_output(['node', str(ROOT / 'tools/site/markdown.cjs')], input=json_bytes(payload), cwd=ROOT))
+    template = (ROOT / 'site/page.html').read_text()
+    if manifest:
+        pages.append({'path': 'gallery.html', 'title': 'Output gallery', 'source': 'tools/output-gallery/README.md', 'content': gallery_html(manifest, files, base)})
+    work = Path(tempfile.mkdtemp(prefix='.site-build-', dir=output.parent))
+    try:
+        for page in pages:
+            values = {'title': html.escape(page['title']), 'canonical': origin + base + '/' + page['path'], 'base': base,
+                      'galleryNav': f'<a href="{base}/gallery.html">Gallery</a>' if manifest else '',
+                      'content': page['content'], 'source': source_base + '/' + page['source']}
+            rendered = re.sub(r'\{\{(\w+)\}\}', lambda m: values[m[1]], template)
+            target = work / page['path']
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(rendered)
+        shutil.copyfile(ROOT / 'site/style.css', work / 'style.css')
+        for path in tracked:
+            if path.startswith('docs/assets/') and Path(path).suffix in ('.png', '.svg'):
+                target = work / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(read_regular(ROOT / path))
+        for path, data in files.items():
+            target = work / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        if manifest:
+            (work / 'gallery/manifest.json').write_bytes(json_bytes(manifest))
+        (work / '.nojekyll').write_text('')
+        (work / 'build.json').write_bytes(json_bytes({'sourceRevision': revision, 'sourceWorktreeDirty': dirty, 'bundle': pin}))
+        urls = ''.join('<url><loc>' + html.escape(origin + base + '/' + p['path']) + '</loc></url>' for p in pages)
+        (work / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + urls + '</urlset>')
+        (work / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: ' + origin + base + '/sitemap.xml\n')
+        verify_site(work, base)
+        work.rename(output)
+    except Exception:
+        print('Incomplete build retained for diagnosis: ' + str(work))
+        raise
+    print('Complete site: ' + str(output))
+
+
+def readme_example(bundle, image_base=None):
+    manifest, files = read_bundle(read_regular(bundle, MAX_ZIP))
+    entries = [e for e in manifest['entries'] if e['readmeUpdate']]
+    require(len(entries) == 1, 'Designate exactly one canonical README Update entry')
+    entry = entries[0]
+    images = ''
+    if image_base:
+        require(re.fullmatch(r'https://[a-zA-Z0-9.-]+(?:/[a-zA-Z0-9_-]+)*', image_base), 'Invalid image base')
+        images = '\n'.join(f'<img src="{image_base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}">' for index, image in enumerate(entry['images'], 1)) + '\n\n'
+    # HTML escaping prevents recorded text from closing the details or code block.
+    print('<details>\n<summary>Example output</summary>\n\n' + html.escape(entry['kind']) + ' · Source: `' + entry['sourceRevision'] + '`\n\n' + html.escape(entry['edits']) + '\n\n' + images + '<details>\n<summary>Text version</summary>\n\n<pre><code>' + html.escape(files[entry['text']].decode()) + '</code></pre>\n\n</details>\n</details>')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='command', required=True)
+    package = commands.add_parser('pack', help='Create a minimal ZIP from explicitly approved scenario files')
+    package.add_argument('--gallery', type=Path, required=True)
+    package.add_argument('--selection', type=Path, required=True)
+    package.add_argument('--output', type=Path, required=True)
+    inspect = commands.add_parser('inspect', help='Validate and print only public bundle metadata')
+    inspect.add_argument('bundle', type=Path)
+    compile_site = commands.add_parser('build')
+    compile_site.add_argument('--output', type=Path, default=ROOT / '.site-output/site')
+    compile_site.add_argument('--pin', type=Path, default=ROOT / 'site/bundle.json')
+    compile_site.add_argument('--base', default='/ballin-scripts')
+    compile_site.add_argument('--bundle', type=Path, help='Offline bundle; still checked against the release pin')
+    example = commands.add_parser('readme-example', help='Print matching expandable Update text; never edit README')
+    example.add_argument('bundle', type=Path)
+    example.add_argument('--image-base', help='Include canonical images only after verifying the public base URL')
+    args = parser.parse_args()
+    try:
+        if args.command == 'pack':
+            pack(args.gallery, args.selection, args.output)
+        elif args.command == 'inspect':
+            manifest, _ = read_bundle(read_regular(args.bundle, MAX_ZIP))
+            print(json.dumps(manifest, indent=2))
+        elif args.command == 'readme-example':
+            readme_example(args.bundle, args.image_base)
+        else:
+            build(args.output, args.pin, args.base, args.bundle)
+    except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as error:
+        parser.exit(1, 'Site operation failed: ' + str(error) + '\n')
+
+
+if __name__ == '__main__':
+    main()
