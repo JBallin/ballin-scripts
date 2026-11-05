@@ -46,8 +46,15 @@ describe('candidate revision bootstrap', () => {
   });
   it('refuses incompatible Node before selected executable code', () => {
     write('contract.json', { ballin: { installerProtocol: 1 }, engines: { node: '>=999.0.0' } });
-    const r = run(['--sha', sha]); assert.notEqual(r.status, 0); assert.include(r.stderr, 'requires Node.js 999.0.0');
+    const r = run(['--sha', sha]); assert.notEqual(r.status, 0); assert.include(r.stderr, 'requires Node.js 999.0.0'); assert.include(r.stderr, 'Upgrade or activate Node.js and retry.');
     assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), '/install.sh');
+  });
+  it('names Node.js consistently when direct metadata parsing has no runtime', () => {
+    const script=`ballin_entry=install.sh; ballin_embedded_version=1.0.0;\n${shared}\nballin_json ignored.json value`;
+    const result=spawnSync('/bin/bash',['-c',script],{encoding:'utf8',env:testChildEnvironment({HOME:root,PATH:path.join(root,'no-tools'),TERM:'dumb'})});
+    assert.equal(result.status,1);
+    assert.equal(result.stderr,'✗ Ballin: Node.js is required for the direct installer. Install supported Node.js or use Quickstart.\n');
+    assert.equal(result.stdout,''); assert.isFalse(fs.existsSync(path.join(root,'requests')));
   });
   it('uses embedded release after activation, not latest release or main', () => {
     const r = run([]); assert.equal(r.status, 0, r.stderr); assert.include(r.stdout, 'release:v1.0.0:');

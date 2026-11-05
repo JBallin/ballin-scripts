@@ -16,7 +16,7 @@ describe('revision selection and checkout safety', () => {
   });
   it('refuses insufficient and prerelease Node before checkout work', () => {
     checkRuntime('24.12.0', '26.13.0'); checkRuntime('24.12.0', '24.12.0');
-    for (const actual of ['24.11.9', '22.0.0', '24.12.0-rc.1', 'invalid']) assert.throws(() => checkRuntime('24.12.0', actual), 'Upgrade or activate Node');
+    for (const actual of ['24.11.9', '22.0.0', '24.12.0-rc.1', 'invalid']) assert.throws(() => checkRuntime('24.12.0', actual), 'Upgrade or activate Node.js, then retry.');
     assert.equal(compareVersions('1.2.0', '1.10.0'), -1);
   });
   it('requires consent for major, downgrade, unknown and track changes', () => {

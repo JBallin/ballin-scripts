@@ -27,7 +27,7 @@ ballin_json() {
     [[ "$actual" == "$expected" || ( "$expected" == number && ( "$actual" == integer || "$actual" == float ) ) ]] || { ballin_error "Invalid revision metadata type for $2."; return 1; }
     /usr/bin/plutil -extract "$2" raw -o - "$1" 2>/dev/null
   else
-    command -v node >/dev/null || { ballin_error 'Node.js is required for the direct installer. Install supported Node or use Quickstart.'; return 1; }
+    command -v node >/dev/null || { ballin_error 'Node.js is required for the direct installer. Install supported Node.js or use Quickstart.'; return 1; }
     node -e 'let v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); for(const k of process.argv[2].split(".")) v=v[k]; const expected=process.argv[3]==="bool"?"boolean":process.argv[3]; if(typeof v!==expected)process.exit(1); process.stdout.write(String(v));' "$1" "$2" "$expected" 2>/dev/null
   fi
   status=$?
@@ -37,7 +37,7 @@ ballin_json() {
 ballin_runtime() {
   # JavaScript template interpolation must reach Node literally.
   # shellcheck disable=SC2016
-  node -e 'const minimum=process.argv[1], actual=process.versions.node; const valid=v=>/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v); const a=actual.split(".").map(Number),b=minimum.split(".").map(Number); let ok=false; for(let i=0;i<3;i++){if(a[i]!==b[i]){ok=a[i]>b[i];break;}if(i===2)ok=true;} if(!valid(minimum)||!valid(actual)||!ok){process.stderr.write(`Selected revision requires Node.js ${minimum} or newer; active Node.js is ${actual}. Upgrade or activate Node and retry.\n`);process.exit(1);}' "${1:-$ballin_minimum}"
+  node -e 'const minimum=process.argv[1], actual=process.versions.node; const valid=v=>/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v); const a=actual.split(".").map(Number),b=minimum.split(".").map(Number); let ok=false; for(let i=0;i<3;i++){if(a[i]!==b[i]){ok=a[i]>b[i];break;}if(i===2)ok=true;} if(!valid(minimum)||!valid(actual)||!ok){process.stderr.write(`Selected revision requires Node.js ${minimum} or newer; active Node.js is ${actual}. Upgrade or activate Node.js and retry.\n`);process.exit(1);}' "${1:-$ballin_minimum}"
 }
 ballin_preflight() {
   local root="$HOME/.ballin-scripts" item state top origin status

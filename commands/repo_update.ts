@@ -41,7 +41,7 @@ const compareVersions = (a: string, b: string): number => {
 };
 const checkRuntime = (minimum: string, actual = process.versions.node): void => {
   if (!versionPattern.test(minimum) || !versionPattern.test(actual) || compareVersions(actual, minimum) < 0) {
-    throw new Error(`Selected revision requires Node.js ${minimum} or newer; active Node.js is ${actual}. Upgrade or activate Node, then retry. The checkout has not changed.`);
+    throw new Error(`Selected revision requires Node.js ${minimum} or newer; active Node.js is ${actual}. Upgrade or activate Node.js, then retry. The checkout has not changed.`);
   }
 };
 // Resolve the worktree's metadata directory through Git, without resolving the receipt leaf symlink.
