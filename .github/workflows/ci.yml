@@ -129,15 +129,27 @@ jobs:
             coverage/coverage-summary.json
           retention-days: 7
 
-      - name: Upload raw V8 coverage evidence
+      - name: Package raw V8 coverage evidence
+        id: raw_coverage_archive
         if: >-
           ${{ !cancelled() &&
             steps.coverage.outcome == 'failure' &&
             hashFiles('coverage/tmp/coverage-*.json') != '' }}
+        run: |
+          set -o pipefail
+          tar -cf - -C coverage tmp | gzip -1 > coverage/coverage-raw.tar.gz
+
+      - name: Upload raw V8 coverage evidence
+        if: >-
+          ${{ !cancelled() &&
+            steps.coverage.outcome == 'failure' &&
+            steps.raw_coverage_archive.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-raw-${{ github.run_id }}-${{ github.run_attempt }}
-          path: coverage/tmp/
+          path: coverage/coverage-raw.tar.gz
+          compression-level: 0
+          if-no-files-found: error
           retention-days: 7
 
   minimum-node:

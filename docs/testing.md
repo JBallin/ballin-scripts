@@ -325,8 +325,19 @@ excluding code.
 When the coverage step fails after producing raw V8 coverage, CI attempts to
 retain exact reports and runtime, commit, tree, and lockfile metadata in a compact
 artifact for seven days. Failures before coverage starts skip these diagnostics. A
-separate failure-only artifact upload retains the raw V8 data when available,
-even if compact report generation fails. An intentional successful
+separate failure-only artifact retains the complete raw V8 directory as
+`coverage-raw.tar.gz`, even if compact report generation fails. A single archive
+avoids per-file upload overhead; fast gzip packaging and uncompressed artifact
+upload avoid compressing it twice. To inspect downloaded raw evidence, extract
+it into an empty temporary directory and point the reporter at its `tmp` folder:
+
+```shell
+BALLIN_RAW_COVERAGE_DIR=$(mktemp -d)
+tar -xzf /path/to/download/coverage-raw.tar.gz -C "$BALLIN_RAW_COVERAGE_DIR"
+node --max-old-space-size=6144 test/coverage.ts report --check-coverage=false --temp-directory="$BALLIN_RAW_COVERAGE_DIR/tmp" --reporter=json --reporter=json-summary --reports-dir=coverage/ci
+```
+
+The archive includes auxiliary and nested files needed to interpret the profiles. An intentional successful
 `workflow_dispatch` run retains only the compact evidence. Ordinary successful
 pull request and push runs skip diagnostic report generation and artifact
 uploads. Compare retained evidence with the corresponding local run before
@@ -383,7 +394,7 @@ choices from the behavior and guards in each case.
 | Scope | Allowance | Purpose |
 | --- | --- | --- |
 | Tests without an override | 2s | Default Mocha limit |
-| Selected installer, analytics, backup and update cases | 5s | Coherent process workflows, concurrent repair, or bounded sender failures |
+| Selected installer, analytics, backup and update cases | 5s or 10s | Coherent process workflows, concurrent repair, or bounded sender failures |
 | Update interruption cases | 8s | Readiness handshake and a separate 5s child-process watchdog |
 | Repository lifecycle and nested-update backup | 15s | Multiple real CLI and fixture processes within one workflow |
 | Local snapshot budget cases | 30s | Capture size, recursive entry limits, and cache comparisons |
@@ -429,7 +440,7 @@ smoke check. Node supplies the CPU estimate through `os.availableParallelism()`.
 Benchmark reductions describe command wall time and exclude runner queue, setup
 and evidence capture. Machine load, platform, runtime and source changes can alter
 timing and coverage geometry. Use focused selection for feedback, retain the
-single complete final gate, and verify that the full CI job fits its 20-minute
+single complete final gate, and verify that the full CI job fits its 25-minute
 budget.
 
 ## Runtime and platform limits
