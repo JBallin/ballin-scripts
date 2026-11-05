@@ -47,8 +47,8 @@ Coordinate VM ownership first, preserve existing guests and use fresh disposable
 state under the [installation-testing safeguards](../../docs/installation-testing.md).
 Never run environment-affecting commands on the host. Authentication and backups
 need their separate authorization and disposable data. Retain meaningful prompts,
-answers, results and original output; exclude credentials, device codes, private
-backup names and personal data before saving evidence.
+answers, results and original output; exclude credentials, device codes, personal
+backup names and other private data before saving evidence.
 
 For a clean Quickstart capture, start without Homebrew or Ballin; for direct
 installation, prepare its prerequisites first. Record the disposable clone name,
