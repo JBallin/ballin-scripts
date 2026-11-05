@@ -40,6 +40,9 @@ Thanks also to [TypeScript](https://www.typescriptlang.org/),
 development checks, tests, and coverage tools. Ballin's Node.js CLI has no
 runtime npm dependencies.
 
+Thanks also to [Tart](https://github.com/openai/tart) for macOS virtual machines
+used to test installation.
+
 [GitHub Actions](https://github.com/features/actions) runs automated checks, and
 [Cloudflare Workers](https://developers.cloudflare.com/workers/) and
 [D1](https://developers.cloudflare.com/d1/) power the optional
