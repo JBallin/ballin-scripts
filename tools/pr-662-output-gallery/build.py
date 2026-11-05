@@ -96,7 +96,7 @@ const completeInstall=()=>{line();line(t.terminalComplete('Setup complete.'));pr
 line(t.terminalEmphasis('BALLIN — STAGED CURRENT-SOURCE OUTPUT GALLERY','bold'));
 line('Snapshot: '+manifest.state);
 line('Candidate: '+(manifest.candidateHead||'PENDING IMMUTABLE PIN'));
-line('Review baseline: '+manifest.reviewBaseline);
+line('Historical review baseline: '+manifest.reviewBaseline);
 line('Source snapshot: '+manifest.sourceSnapshotHash);
 line('STAGED SELECTED SYNTHETIC OUTPUT — not a live run or validation transcript.');
 line('Actual copied pure formatters; current source-owned wording and selected ordering.');
