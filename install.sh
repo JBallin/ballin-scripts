@@ -192,9 +192,7 @@ status_marker() {
   else printf '%s' "$symbol"; fi
 }
 choice_word() {
-  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" && "${2:-}" == default ]]; then
-    printf '\033[1m%s\033[0m' "$1"
-  else printf '%s' "$1"; fi
+  printf '%s' "$1"
 }
 fixed_prompt_layout() {
   prompt_redraw=false
@@ -473,7 +471,7 @@ if [ "$repo_existed" = false ]; then
     command_directory=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).directory)' "$command_preflight") || exit 1
     printf 'Installation will:\n'
     printf '  - Create Ballin and its settings in %s\n' "$(display_path "$repo_dir")"
-    printf '  - Link the Ballin command in %s\n' "$(display_path "$command_directory")"
+    printf '  - Link the ballin command in %s\n' "$(display_path "$command_directory")"
     documentation_pointer 'Installation details' "$docs_url#what-will-installation-change"
   fi
   if ! "$install_approved" && ! confirm 'Proceed with installation?'; then
@@ -586,8 +584,10 @@ fi
 
 # Quickstart owns the final guidance after its optional backup/browser work.
 if [[ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 && "$ballin_mode" != self-update ]]; then
-  printf '\n'; setup_complete; printf ' Open a new Terminal and run '
+  printf '\n'; setup_complete; printf '\nOpen a new Terminal and run '
   command_reference 'ballin help'
+  printf '.\nChange preferences later with '
+  command_reference 'ballin setup'
   printf '.\n'
 fi
 }

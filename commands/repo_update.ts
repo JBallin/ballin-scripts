@@ -88,7 +88,7 @@ const assertSafeCheckout = (root: string): string => {
   }
   return head;
 };
-const selectionLabel = (s: Selection): string => s.kind === 'release' ? s.value : `${s.kind} ${s.value} (${s.sha.slice(0, 12)})`;
+const selectionLabel = (s: Selection): string => s.kind === 'release' ? s.value : s.kind === 'sha' ? `sha ${s.sha.slice(0, 12)}` : `branch ${s.value} (${s.sha.slice(0, 12)})`;
 const needsConsent = (before: Identity, s: Selection, mode: string): boolean => {
   if (before.sha === s.sha && before.kind === s.kind && before.value === s.value) return false;
   if (mode !== 'self-update') return before.sha !== s.sha || before.kind !== s.kind || before.value !== s.value;
@@ -140,7 +140,7 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
   const styled = process.stdout.isTTY && process.env.TERM !== 'dumb' && !process.env.NO_COLOR;
   const plainPrompt = '? Change the installed revision/track? [y/N] ';
   const rendered = styled
-    ? '\x1b[0;32m?\x1b[0m Change the installed revision/track? [y/\x1b[1mN\x1b[0m] '
+    ? '\x1b[0;32m?\x1b[0m Change the installed revision/track? [y/N] '
     : plainPrompt;
   while (true) {
     const layout = selectionPromptLayout();

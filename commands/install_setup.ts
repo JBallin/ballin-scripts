@@ -1,4 +1,4 @@
-const { terminalCommand, terminalPath, terminalError } = require('./terminalStyle.ts');
+const { terminalCommand, terminalPath, terminalError, terminalComplete } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { offerCompletionSetup } = require('./completion_setup.ts');
 const path = require('path');
@@ -225,7 +225,7 @@ const setup = (
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
   const interactive = mode !== 'self-update' && promptInputState() === 'open';
-  if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine('\nBallin installed successfully.');
+  if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine(`\n${terminalComplete('Ballin installed successfully.')}`);
   if (backupConfigured || backupInvalid || (interactive && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1'
     && process.env.BALLIN_BACKUP_CHOICE !== 'no')) {
     let backupSetupCancelled = false;
@@ -242,7 +242,7 @@ const setup = (
   }
   if (interactive && promptInputState() === 'open') {
     const { readYesNo } = require('./commandHelpers.ts');
-    const review = readYesNo('\nReview your update and analytics preferences? [Y/n] ', true);
+    const review = readYesNo('\nReview your Ballin preferences? [Y/n] ', true);
     if (review === true) {
       const { reviewGeneralPreferences } = require('./setup.ts');
       if (reviewGeneralPreferences(configPathFor(repoDir), { installation: true }) === 'failed') return false;

@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
-const terminalGuidanceMessage = '✓ Setup complete. Open a new Terminal and run `ballin help`.';
+const terminalGuidanceMessage = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.\nChange preferences later with `ballin setup`.';
 const terminalGuidance = `\n${terminalGuidanceMessage}\n`;
 
 describe('beginner quickstart bootstrap', function() {
@@ -403,13 +403,14 @@ esac
       assert.notInclude(profile, 'versions/node/'); assert.include(profile, 'nvm use --silent default');
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
-      assert.equal(result.stdout.includes('Homebrew shows manual setup instructions above.'), route === 'homebrew');
-      assert.include(result.stdout, '==> Checking required tools\n  - Install NVM');
+      assert.equal(result.stdout.includes("Homebrew's instructions above are for manual setup."), route === 'homebrew');
+      const nodeDetails = 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs';
+      assert.include(result.stdout, '==> Checking required tools\n' + nodeDetails + '\n? Ballin requires Node.js. Install it using NVM? [y/N]');
       assert.notInclude(result.stdout, 'NVM can install and maintain');
-      assert.include(result.stdout, route === 'homebrew' ? '  - Install NVM using Homebrew.' : '  - Install NVM v0.40.8 using its official installer.');
-      assert.include(result.stdout, "Latest LTS will be active for this setup and become NVM's default.");
-      assert.include(result.stdout, 'Future terminals need shell setup; startup files change only\nwith your separate permission.');
-      assert.include(result.stdout, '  - Install latest LTS Node.js.');
+      assert.notInclude(result.stdout, 'Latest LTS will be active');
+      assert.notInclude(result.stdout, 'Global npm packages may need');
+      assert.notInclude(result.stdout, '  - Install NVM using');
+      assert.include(result.stdout, '✓ NVM ready; Node.js active for this setup.');
       assert.notInclude(result.stdout, '$ nvm install --lts\n$ nvm');
       assert.equal((result.stdout.match(route === 'homebrew' ? /^\$ brew install --formula nvm$/gmu : /^\$ PROFILE=\/dev\/null NVM_DIR=/gmu) ?? []).length, 1);
       if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
@@ -427,10 +428,10 @@ esac
       assert.equal(result.status, status, result.stdout + result.stderr);
       assert.include(result.stdout, 'upstream manual NVM profile instructions');
       assert.include(result.stderr, 'upstream NVM diagnostic');
-      const clarification = 'Homebrew shows manual setup instructions above. Ballin can configure your shell next, with your permission.';
+      const clarification = "Homebrew's instructions above are for manual setup. Ballin can configure your shell next, with your permission.";
       if (status === 0) {
         assert.equal(result.stdout.split(clarification).length - 1, 1);
-        assert.isAbove(result.stdout.indexOf(clarification), result.stdout.indexOf('NVM is ready in'));
+        assert.isAbove(result.stdout.indexOf(clarification), result.stdout.indexOf('NVM ready;'));
         assert.isBelow(result.stdout.indexOf(clarification), result.stdout.indexOf('Add Ballin setup to'));
       } else {
         assert.notInclude(result.stdout, clarification);
@@ -447,7 +448,7 @@ esac
     });
     assert.equal(result.status, 42, result.stdout + result.stderr);
     assert.include(result.stdout, 'upstream manual NVM profile instructions');
-    assert.notInclude(result.stdout, 'Homebrew shows manual setup instructions above.');
+    assert.notInclude(result.stdout, "Homebrew's instructions above are for manual setup.");
     assert.notInclude(result.stdout, 'Setup complete.');
   });
   for (const shell of ['bash', 'zsh']) {
@@ -501,7 +502,7 @@ esac
           FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: consent ? 'y\n' : 'n\n' });
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.notInclude(readLog(), 'native-brew:install');
-        assert.notInclude(result.stdout, 'Homebrew shows manual setup instructions above.');
+        assert.notInclude(result.stdout, "Homebrew's instructions above are for manual setup.");
         const sourceLink = path.join(nvm, 'nvm.sh');
         if (consent) assert.equal(fs.readlinkSync(sourceLink), path.join(libexec, 'nvm.sh'));
         else assert.isFalse(fs.existsSync(sourceLink));
@@ -577,9 +578,12 @@ esac
   it('keeps compatible Node by default and switches only after explicit runtime consent', () => {
     const kept = run('y\ny\n', { FAKE_EARLY_ANSWER: 'n\n' }); assert.equal(kept.status, 0, kept.stderr);
     assert.notInclude(readLog(), 'nvm:install:');
+    assert.include(kept.stdout, 'Use NVM with Node.js LTS instead? [y/N]');
+    assert.equal((kept.stdout + kept.stderr).split('optional-capabilities.md#nodejs').length - 1, 1);
     const switched = run('y\ny\ny\n', { FAKE_NVM_ANSWER: 'y\n', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(switched.status, 0, switched.stdout + switched.stderr);
-    assert.include(switched.stdout, 'Existing Node installations are preserved;'); assert.include(readLog(), 'nvm:install:--lts');
+    assert.include(switched.stdout, 'Use NVM with Node.js LTS instead?');
+    assert.notInclude(switched.stdout, 'Global npm packages may need'); assert.include(readLog(), 'nvm:install:--lts');
     assert.isTrue(fs.existsSync(path.join(tools, 'node')));
   });
   for (const linked of ['NVM directory', 'alias directory', 'default alias', 'hard-linked default alias']) {
@@ -605,7 +609,7 @@ esac
       const before = fs.statSync(original);
       const result = run('y\ny\n', { NVM_DIR: nvm, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: '\n' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Proceed? [y/N]');
+      assert.include(result.stdout, 'Use NVM with Node.js LTS instead? [y/N]');
       assert.equal(fs.readFileSync(original, 'utf8'), 'lts/*');
       assert.equal(fs.statSync(original).ino, before.ino); assert.equal(fs.statSync(original).nlink, before.nlink);
       assert.isFalse(fs.existsSync(path.join(nvm, 'probe-write'))); assert.isFalse(fs.existsSync(path.join(actual, 'probe-write')));
@@ -724,7 +728,7 @@ esac
       if (installerStatus === 0) {
         assert.notInclude(result.stdout + result.stderr, 'upstream reload instructions');
         assert.notInclude(result.stdout + result.stderr, 'upstream diagnostics');
-        assert.include(result.stdout, 'NVM is ready in ~/.nvm; Node v26.13.0 is active for this setup.');
+        assert.include(result.stdout, '✓ NVM ready; Node.js active for this setup.');
       } else {
         assert.include(result.stderr, 'upstream reload instructions'); assert.include(result.stderr, 'upstream diagnostics');
         assert.include(result.stderr, 'NVM installation did not finish.');
@@ -909,7 +913,8 @@ printf '0\\n'
     fs.writeFileSync(path.join(tools, 'node'), "#!/bin/bash\nprintf 'false\\n'\n", { mode: 0o755 });
     const result = run('', { PATH: tools + ':' + later });
     assert.equal(result.status, 1); assert.include(result.stderr, 'A compatible Node.js is required.');
-    assert.include(result.stdout, 'Proceed?');
+    assert.include(result.stdout, 'Ballin requires Node.js. Install it using NVM?');
+    assert.equal((result.stdout + result.stderr).split('optional-capabilities.md#nodejs').length - 1, 1);
     assert.notInclude(result.stderr, 'brew upgrade node');
     for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
   });
@@ -926,7 +931,7 @@ printf '0\\n'
       const result = run('', { PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: '1', FAKE_NVM_ANSWER: 'n\n' });
       assert.equal(result.status, 1, result.stdout + result.stderr);
       if (kind === 'relative' || kind === 'absolute') {
-        assert.include(result.stdout, 'Proceed?');
+        assert.include(result.stdout, 'Ballin requires Node.js. Install it using NVM?');
         assert.include(result.stderr, 'A compatible Node.js is required.');
       }
       else {
@@ -1809,7 +1814,7 @@ printf '0\\n'
         assert.equal(result.status, ['130', '143'].includes(state) ? Number(state) : 1, result.stdout + result.stderr);
         if (state === 'incompatible') {
           assert.include(result.stderr, 'A compatible Node.js is required.');
-          assert.include(result.stdout, 'Proceed?');
+          assert.include(result.stdout, 'Ballin requires Node.js. Install it using NVM?');
           assert.notInclude(result.stderr, 'could not be verified');
         } else if (['failed', 'unavailable', 'empty', 'malformed'].includes(state)) {
           assert.include(result.stderr, `Existing Node.js at ${path.join(prefix, 'bin/node')} could not be verified.`);
@@ -2268,7 +2273,7 @@ main
       FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
     }, home, 'brew() { touch "$FAKE_ROOT/exported-brew-ran"; printf "/wrong-prefix\\n"; }; export -f brew');
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '  - Link the Ballin command in ' + prefix + '/bin\n');
+    assert.include(result.stdout, '  - Link the ballin command in ' + prefix + '/bin\n');
     assert.isFalse(fs.existsSync(path.join(root, 'exported-brew-ran')));
   });
   it('combines missing tools and fresh Ballin consent before PATH setup', () => {
@@ -2282,7 +2287,7 @@ main
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
     assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools\n");
-    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the Ballin command in ~/.local/bin\n`);
+    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the ballin command in ~/.local/bin\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
     assert.isBelow(preview, approval);
@@ -2304,10 +2309,10 @@ main
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `Installation will:
   - Install Xcode Command Line Tools
-  - Set up NVM and latest LTS Node in ~/.nvm
+  - Set up NVM and Node.js LTS in ~/.nvm
   - Install GitHub CLI in ~/.local/bin
   - Create Ballin and its settings in ~/.ballin-scripts
-  - Link the Ballin command in ~/.local/bin
+  - Link the ballin command in ~/.local/bin
 i Installation details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
 ? Proceed with installation? [y/N] `);

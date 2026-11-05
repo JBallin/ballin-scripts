@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
-const terminalGuidance = '✓ Setup complete. Open a new Terminal and run `ballin help`.';
+const terminalGuidance = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.\nChange preferences later with `ballin setup`.';
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
@@ -280,7 +280,7 @@ ballin_download() { : > "$2"; }
     assert.notInclude(result.stdout, 'Detected Node.js');
     assert.notInclude(result.stdout, "let's ball");
     assert.include(result.stdout, 'Installation details:');
-    assert.include(result.stdout, `Installation will:\n  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the Ballin command in ~/.local/bin\n`);
+    assert.include(result.stdout, `Installation will:\n  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the ballin command in ~/.local/bin\n`);
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
@@ -298,7 +298,7 @@ ballin_download() { : > "$2"; }
     writeExecutable('brew', '#!/bin/sh\nprintf "%s\\n" "$HOME/custom-brew"\n');
     const result = runInstall({ input: 'n\n' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '  - Link the Ballin command in ~/custom-brew/bin\n');
+    assert.include(result.stdout, '  - Link the ballin command in ~/custom-brew/bin\n');
     assert.isFalse(fs.existsSync(repoDir));
   });
 

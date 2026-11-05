@@ -825,7 +825,7 @@ exit 2
   it('owns the analytics disclosure and default-aware prompt copy', () => {
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
-      'i Optional analytics report command results, not backup contents.\n'
+      'i Analytics report command results, not backup contents.\n'
       + 'i Analytics details:\nhttps://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
@@ -930,8 +930,9 @@ process.exitCode = configureAnalyticsPreference({
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.include(result.stdout, analyticsPromptFor(enabled === 'true'));
         assert.equal(readRepoConfig().analytics.enabled, enabled);
-        if (eof) assert.notInclude(result.stdout, 'Usage analytics:');
-        else assert.include(result.stdout, `Usage analytics: ${enabled === 'true' ? 'enabled' : 'disabled'} (\`analytics.enabled\` unchanged at \`${enabled}\`).`);
+        assert.notInclude(result.stdout, 'Usage analytics:');
+        assert.notInclude(result.stdout, 'unchanged at');
+        assert.isBelow(result.stdout.indexOf('i Analytics details:'), result.stdout.indexOf(analyticsPromptFor(enabled === 'true')));
       });
     });
   });
@@ -1039,7 +1040,7 @@ require('https').request = () => {
     assert.include(result.stdout.split("\n"), `✓ Created config: ${path.join(repoDir, 'ballin.config.json')}`);
     assert.isBelow(result.stdout.indexOf('Ballin installed successfully.'), result.stdout.indexOf('Set up private backups'));
     assert.include(result.stdout, 'Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
-    assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBallin installed successfully.`);
+    assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped.\nRun `ballin backup setup`');
     assert.notInclude(result.stdout, '😎 ballin!');
@@ -1064,7 +1065,7 @@ require('https').request = () => {
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: ');
-      if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBallin installed successfully.`);
+      if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
       assert.equal(readRepoConfig().update.backup, 'false');
@@ -1088,7 +1089,7 @@ require('https').request = () => {
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Tab completion setup could not finish. Ballin remains installed.');
       assert.notInclude(result.stdout, 'Tab completion skipped.');
-      assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\nBallin installed successfully.`);
+      assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
@@ -1137,7 +1138,7 @@ require('https').request = () => {
 
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(compact(result.stdout), 'current permissions');
     assert.include(compact(result.stdout), 'backup setup can continue normally');
-    assert.include(result.stdout, 'Review your update and analytics preferences?');
+    assert.include(result.stdout, 'Review your Ballin preferences?');
     assert.notInclude(result.stdout, 'Sensitive sources in backups:');
     assert.notInclude(result.stdout, 'before retrying `ballin backup setup`');
     assert.isTrue(fs.existsSync(path.join(repoDir, 'ballin.config.json')));

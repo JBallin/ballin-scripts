@@ -71,16 +71,8 @@ const terminalMarkers = (text: string, stream: { isTTY?: boolean } = process.std
   ));
 };
 const terminalPrompt = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
-  const choices = text.replace(/\[([^\[\]]+)\]/gu, (_match, content: string) => {
-    if (!supportsEmphasis(stream, env) || content.startsWith('Enter for ')) return `[${content}]`;
-    const separator = content.indexOf(';');
-    const options = separator < 0 ? content : content.slice(0, separator);
-    const instruction = separator < 0 ? '' : content.slice(separator);
-    return '[' + options.split('/').map((word) => /^[A-Z][A-Z0-9_-]*$/u.test(word)
-      ? terminalEmphasis(word, 'bold', stream, env) : word).join('/') + instruction + ']';
-  });
-  const leading = choices.match(/^\n*/u)![0];
-  return leading + terminalMarkers('? ', stream, env) + choices.slice(leading.length);
+  const leading = text.match(/^\n*/u)![0];
+  return leading + terminalMarkers('? ', stream, env) + text.slice(leading.length);
 };
 const terminalChoice = (label: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
   terminalColor(label, 36, stream, env)

@@ -112,16 +112,16 @@ describe('setup presentation roles', () => {
     assert.equal(styled, '🔗 Details:\nVisit \x1b[34mhttps://example.com/guide\x1b[0m, then \x1b[34mhttps://example.com/next\x1b[0m.');
     assert.equal(terminalUrls(styled, tty, {}), styled);
   });
-  it('keeps choices neutral and bolds uppercase defaults', () => {
-    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), '\x1b[0;32m?\x1b[0m Continue? [y/\x1b[1mN\x1b[0m] ');
-    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), '\x1b[0;32m?\x1b[0m Mode? [\x1b[1mCREATE\x1b[0m/reconnect] ');
+  it('keeps choices and uppercase defaults neutral', () => {
+    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), '\x1b[0;32m?\x1b[0m Continue? [y/N] ');
+    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), '\x1b[0;32m?\x1b[0m Mode? [CREATE/reconnect] ');
     assert.equal(terminalPrompt('Host [github.com]: ', tty, {}), '\x1b[0;32m?\x1b[0m Host [github.com]: ');
   });
-  it('preserves Enter-to-skip instructions and styles a declared NONE default', () => {
+  it('preserves Enter-to-skip instructions and a neutral uppercase NONE default', () => {
     assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', tty, {}),
       '\x1b[0;32m?\x1b[0m Startup [login/bashrc; Enter to skip] ');
     assert.equal(terminalPrompt('Choice [yes/no/NONE] ', tty, {}),
-      '\x1b[0;32m?\x1b[0m Choice [yes/no/\x1b[1mNONE\x1b[0m] ');
+      '\x1b[0;32m?\x1b[0m Choice [yes/no/NONE] ');
     assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', {}, {}), '? Startup [login/bashrc; Enter to skip] ');
     assert.equal(terminalPrompt('Directory [Enter for home (~), an absolute directory, or skip]: ', tty, {}),
       '\x1b[0;32m?\x1b[0m Directory [Enter for home (~), an absolute directory, or skip]: ');

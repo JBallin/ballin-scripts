@@ -196,9 +196,7 @@ status_marker() {
   else printf '%s' "$symbol"; fi
 }
 choice_word() {
-  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" && "${2:-}" == default ]]; then
-    printf '\033[1m%s\033[0m' "$1"
-  else printf '%s' "$1"; fi
+  printf '%s' "$1"
 }
 presentation_text() {
   local line
@@ -901,7 +899,7 @@ validate_nvm_alias_targets() {
 # it creates the working directory and compatibility links even with --no-use.
 discover_nvm() {
   local directory source candidate prefix='' status=0
-  nvm_source=''; nvm_method='official'; nvm_loadable=false; nvm_follows_lts=false
+  nvm_source=''; nvm_method='official'; nvm_follows_lts=false
   nvm_directory=${NVM_DIR:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}}
   nvm_directory=${nvm_directory:-$HOME/.nvm}
   normalize_nvm_directory
@@ -976,7 +974,6 @@ discover_nvm() {
     '. "$1" --no-use >/dev/null && declare -F nvm >/dev/null || exit 1; printf "loadable\n"; nvm version default' ballin-nvm-probe "$nvm_source") || status=$?
   stop_if_interrupted "$status"
   [[ "$result" == loadable || "$result" == loadable$'\n'* ]] || fail 'Existing NVM could not be loaded. Repair its source before retrying Quickstart.'
-  nvm_loadable=true
   for (( hops=0; hops<40; hops++ )); do
     if [[ "$alias" == 'lts/*' ]]; then
       [[ "$status" != 0 ]] || nvm_follows_lts=true
@@ -995,17 +992,13 @@ plan_nvm() {
   use_nvm=false; nvm_profile_needed=false
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
-  if [[ "$nvm_loadable" != true ]]; then
-    if [[ -n "$brew_tool" ]]; then printf '  - Install NVM using Homebrew.\n'
-    else printf '  - Install NVM v0.40.8 using its official installer.\n'; fi
-  fi
-  printf '  - Install latest LTS Node.js.\n'
-  printf "Latest LTS will be active for this setup and become NVM's default.\n"
-  printf 'Existing Node installations are preserved; global npm packages may need\nreinstalling. Future terminals need shell setup; startup files change only\nwith your separate permission.\n'
-  if ! confirm 'Proceed?'; then
+  documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+  local question='Ballin requires Node.js. Install it using NVM?'
+  [[ "$compatible" != true ]] || question='Use NVM with Node.js LTS instead?'
+  if ! confirm "$question"; then
     if [[ "$compatible" != true ]]; then
       "$input_ended" && fail 'No answer received. Node.js setup stopped.'
-      fail 'A compatible Node.js is required. Activate or install one, then rerun Quickstart.'$'\ni Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+      fail 'A compatible Node.js is required. Activate or install one, then rerun Quickstart.'
     fi
     return
   fi
@@ -1016,7 +1009,7 @@ plan_nvm() {
 
 install_nvm_lts() {
   local installed_with_brew=false
-  phase 'Setting up NVM and LTS Node'
+  phase 'Setting up NVM and Node.js LTS'
   validate_nvm_directory
   validate_nvm_alias_targets
   if [[ -z "$nvm_source" ]]; then
@@ -1091,7 +1084,7 @@ install_nvm_lts() {
       return "$nvm_status"
     fi
   fi
-  node_tool=$(type -P node) || fail 'NVM did not activate Node.'
+  node_tool=$(type -P node) || fail 'NVM did not activate Node.js.'
   node_compatible "$node_tool" || fail "Latest NVM LTS does not satisfy Ballin's Node.js requirement."
   npm_tool=$(type -P npm) || fail 'NVM did not provide npm.'
   npm_compatible "$npm_tool" || fail 'NVM npm could not run.'
@@ -1103,10 +1096,10 @@ install_nvm_lts() {
     return "$nvm_status"
   fi
   current=$(node --version)
-  [[ "$resolved_default" == "$current" ]] || fail 'NVM default and active Node differ. Inspect them before retrying.'
-  printf 'NVM is ready in %s; Node %s is active for this setup.\n' "$(display_path "$nvm_directory")" "$current"
+  [[ "$resolved_default" == "$current" ]] || fail 'NVM default and active Node.js differ. Inspect them before retrying.'
+  status_marker success; printf ' NVM ready; Node.js active for this setup.\n'
   if "$installed_with_brew"; then
-    printf '\nHomebrew shows manual setup instructions above. Ballin can configure your shell next, with your permission.\n'
+    printf "\nHomebrew's instructions above are for manual setup. Ballin can configure your shell next, with your permission.\n"
   fi
   # Do not add this version-specific bin directory to persistent command_path.
 }
@@ -1444,7 +1437,6 @@ main() {
   unset -f git node npm gh nvm
   normalize_absolute "$HOME/.local/bin"
   local_bin="$normalized"
-  phase 'Setting up Ballin'
   backup_choice=no
   if confirm 'Set up backups to GitHub?' y; then backup_choice=yes
   elif "$input_ended"; then printf "Quickstart stopped. Rerun it when you’re ready.\n"; return 0
@@ -1508,7 +1500,7 @@ main() {
     if "$need_git"; then
       if [[ -n "$brew_tool" ]]; then prerequisite_list+=(Git); else prerequisite_list+=('Xcode Command Line Tools'); fi
     fi
-    "$need_node" && prerequisite_list+=('NVM and latest LTS Node')
+    "$need_node" && prerequisite_list+=('NVM and Node.js LTS')
     "$need_gh" && prerequisite_list+=('GitHub CLI')
     for (( index=0; index<${#prerequisite_list[@]}; index++ )); do
       if (( index > 0 )); then
@@ -1527,7 +1519,7 @@ main() {
         printf '  - Install Xcode Command Line Tools\n'
       fi
       if "$need_node"; then
-        printf '  - Set up NVM and latest LTS Node in %s\n' "$(display_path "$nvm_directory")"
+        printf '  - Set up NVM and Node.js LTS in %s\n' "$(display_path "$nvm_directory")"
       fi
       if "$need_gh"; then
         printf '  - Install GitHub CLI in %s\n' "$(display_path "$local_bin")"
@@ -1539,7 +1531,7 @@ main() {
       approved_command="$command_bin/ballin"
       approved_snapshot=$(command_entry_snapshot "$approved_command") || fail "Refusing to replace an unsafe command entry at $(display_path "$approved_command")."
       printf '  - Create Ballin and its settings in %s\n' "$(display_path "$approved_root")"
-      printf '  - Link the Ballin command in %s\n' "$(display_path "$command_bin")"
+      printf '  - Link the ballin command in %s\n' "$(display_path "$command_bin")"
       if [[ "$approved_snapshot" != missing ]]; then
         printf 'Warning: installation will replace the existing command at %s' "$(display_path "$approved_command")"
         if [[ -L "$approved_command" ]]; then printf ' (link target: %s)' "$(display_path "$(readlink "$approved_command")")"; fi
@@ -1621,8 +1613,10 @@ main() {
     fi
   fi
   if "$path_setup_complete"; then
-    printf '\n'; setup_complete; printf ' Open a new Terminal and run '
+    printf '\n'; setup_complete; printf '\nOpen a new Terminal and run '
     command_reference 'ballin help'
+    printf '.\nChange preferences later with '
+    command_reference 'ballin setup'
     printf '.\n'
   else
     printf "\nBallin is installed. PATH setup wasn’t verified.\n"

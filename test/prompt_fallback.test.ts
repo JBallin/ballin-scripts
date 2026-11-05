@@ -98,6 +98,8 @@ describe('prompt presentation probe failures', function() {
       if (!fault.interrupt) assert.include(result.stdout, reader === 'shared' ? 'DONE:false' : 'Revision change cancelled.');
       if (fault.paint) assert.include(result.stdout, '\x1b[36mNo\x1b[0m');
       else assert.notInclude(result.stdout, '\x1b[36m');
+      assert.notInclude(result.stdout, '\x1b[1mN\x1b[0m');
+      if (!fault.interrupt) assert.include(result.stdout, reader === 'shared' ? 'Proceed? [y/N] ' : 'Change the installed revision/track? [y/N] ');
       assert.notInclude(result.stdout + result.stderr, 'private_probe_failure');
       assert.deepEqual(fs.readFileSync(receipt), before);
     });

@@ -79,13 +79,11 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
   const compact = (text: string): string => text.replace(/\s+/gu, ' ').trim();
-  const assertSavedSensitiveChoice = (result: { stdout: string }, value: 'true' | 'false'): void => {
-    const confirmations = compact(result.stdout).match(/[+✓] Sensitive sources in backups: (?:included|excluded) \(`backup\.includeSensitive` (?:set to|unchanged at) `(?:true|false)`\)\./gu) ?? [];
-    assert.lengthOf(confirmations, 1);
-    const confirmation = confirmations[0];
-    assert.include(['set to', 'unchanged at'].map(status => `${status === 'set to' ? '+' : '✓'} Sensitive sources in backups: ${value === 'true' ? 'included' : 'excluded'} (\`backup.includeSensitive\` ${status} \`${value}\`).`), confirmation);
-    const automaticPrompt = 'Automatically run `ballin backup` as part of `ballin update`?';
-    assert.notInclude(result.stdout, automaticPrompt);
+  const assertQuietSensitiveChoice = (result: { stdout: string }, value: 'true' | 'false'): void => {
+    assert.equal(config().backup.includeSensitive, value);
+    assert.notInclude(result.stdout, 'Sensitive sources in backups:');
+    assert.notMatch(result.stdout, /`backup\.includeSensitive` (?:set to|unchanged at)/u);
+    assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');
     assert.include(result.stdout, 'Run `ballin setup`');
   };
   const cacheFailure = (method: string, condition: string): string => `
@@ -638,7 +636,8 @@ describe('repository backup lifecycle', function() {
         assert.equal(result.stdout.split('Include sensitive sources in future backups?').length - 1, 1);
         assert.include(compact(result.stdout), 'Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
         assert.include(result.stdout, '✓ Setup complete.');
-        for (const key of ['backup.includeSensitive']) assert.lengthOf(compact(result.stdout).split('`' + key + '` unchanged at `' + enabled + '`'), 2);
+        assert.notInclude(result.stdout, 'Sensitive sources in backups:');
+        assert.notInclude(result.stdout, '`backup.includeSensitive` unchanged at');
         assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: String(enabled) },
           update: before.update });
         assert.notInclude(result.stdout, 'analytics');
@@ -654,7 +653,8 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'true' },
       update: before.update });
     assert.include(result.stdout, 'Sensitive source paths available now:');
-    for (const key of ['backup.includeSensitive']) assert.lengthOf(compact(result.stdout).split('`' + key + '` set to `true`'), 2);
+    assert.notInclude(result.stdout, 'Sensitive sources in backups:');
+    assert.notInclude(result.stdout, '`backup.includeSensitive` set to');
     assert.notInclude(result.stdout, 'SYNTHETIC_PRIVATE_CONTENT');
     assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
     assert.isFalse(fs.existsSync(cacheRoot));
@@ -671,7 +671,7 @@ describe('repository backup lifecycle', function() {
       const saved = input.startsWith('n\n');
       if (saved) {
         assert.equal(config().backup.includeSensitive, 'false');
-        assert.include(result.stdout, 'Sensitive sources in backups: excluded');
+        assert.notInclude(result.stdout, 'Sensitive sources in backups: excluded');
         assert.notInclude(result.stdout, 'Automatically run');
       } else assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.notInclude(result.stdout, '`update.backup` set to'); assert.notInclude(result.stderr, 'setup incomplete');
@@ -750,6 +750,28 @@ describe('repository backup lifecycle', function() {
       assert.equal(fs.readFileSync(configPath, 'utf8'), bytes); assert.lengthOf(mutations(), 0);
     });
   }
+  for (const presentation of ['standalone', 'installation']) for (const changed of [false, true]) for (const included of [false, true]) {
+    it(`quietly saves sensitive preference ${included} (changed=${changed}, presentation=${presentation})`, () => {
+      const before = config(); before.backup.includeSensitive = String(changed ? !included : included); saveConfig(before);
+      seedCache('zshrc.sh', 'preserved cached bytes\n'); const head = state().head;
+      const script = `const { configureRepositoryBackup } = require(${JSON.stringify(path.join(repoRoot, 'commands/backup_setup.ts'))});
+        process.exitCode = configureRepositoryBackup({configPath: process.env.BALLIN_TEST_CONFIG_PATH,
+          backupCacheDir: ${JSON.stringify(cacheRoot)}, repoDir: ${JSON.stringify(checkout)},
+          docsUrl: 'https://example.test/docs', presentation: ${JSON.stringify(presentation)}, reviewExistingSettings: true}) ? 0 : 1;`;
+      const result = spawnSync(process.execPath, ['-e', script], { input: included ? 'y\n' : 'n\n', encoding: 'utf8', cwd: checkout,
+        env: testChildEnvironment({ HOME: home, PATH: bin, TMPDIR: path.join(root, 'tmp'), BALLIN_TEST_CONFIG_PATH: configPath, BALLIN_TEST_REPO_DIR: checkout }) });
+      ok(result);
+      assert.equal(config().backup.includeSensitive, String(included));
+      assert.equal(config().update.backup, before.update.backup);
+      assert.deepEqual(config().backup.repository, fixtureDestination);
+      assert.include(result.stdout, 'Include sensitive sources in future backups?');
+      assert.notInclude(result.stdout, 'Sensitive sources in backups:');
+      assert.notMatch(result.stdout, /`backup\.includeSensitive` (?:set to|unchanged at)/u);
+      assert.equal(result.stdout.includes('✓ Setup complete.'), presentation === 'standalone');
+      assert.equal(result.stdout.includes('Run `ballin setup`'), presentation === 'standalone');
+      assert.equal(cached(), 'preserved cached bytes\n'); assert.equal(state().head, head); assert.isEmpty(mutations());
+    });
+  }
   it('keeps both settings unchanged when the final review save fails', () => {
     const before = fs.readFileSync(configPath, 'utf8');
     const result = run(['setup'], 'n\ny\n', { BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT: '1' });
@@ -765,7 +787,7 @@ describe('repository backup lifecycle', function() {
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const result = runSetup(mode); ok(result);
       if (mode === 'self-update') assert.equal(result.stdout, '');
-      else { assert.include(result.stdout, 'Ballin installed successfully.'); assert.include(result.stdout, '==> Setting up GitHub backup'); assert.include(result.stdout, 'Validated private backup:'); assert.include(result.stdout, 'Review your update and analytics preferences?'); }
+      else { assert.include(result.stdout, '✓ Ballin installed successfully.'); assert.include(result.stdout, '==> Setting up GitHub backup'); assert.include(result.stdout, 'Validated private backup:'); assert.include(result.stdout, 'Review your Ballin preferences?'); }
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);
       assert.equal(cached(), 'cached bytes\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
       assert.equal(state().head, head); assert.lengthOf(mutations(), 0);
@@ -1579,7 +1601,7 @@ describe('repository backup lifecycle', function() {
         assert.notInclude(result.stdout, 'Private backup created:');
         assert.notInclude(result.stdout, 'Automatically run');
         assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'false' } });
-        assert.include(result.stdout, 'Sensitive sources in backups: excluded');
+        assert.notInclude(result.stdout, 'Sensitive sources in backups: excluded');
         assert.equal(cached(), 'prior cache\n'); assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess);
         const after = state(); const last = after.requests.at(-1);
         assert.isTrue(after.exists);
@@ -2257,7 +2279,7 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups\n\n==> Backup preferences\n! Inventories and filtered preferences');
     assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups\n');
     assert.include(result.stdout, '✓ Setup complete.\nRun `ballin setup` to review your other preferences.\n');
-    assertSavedSensitiveChoice(result, 'false');
+    assertQuietSensitiveChoice(result, 'false');
     assert.deepEqual(Object.keys(state().commits[state().head].files).sort(), ['.ballin-backup.json', 'README.md']);
     assert.isFalse(fs.existsSync(cacheRoot)); assert.equal(mutations().length, 4);
     assert.isBelow(result.stdout.indexOf('Proposed backup:'), result.stdout.indexOf('this private GitHub backup '));
@@ -2339,7 +2361,8 @@ describe('repository backup lifecycle', function() {
           assert.equal(result.status, 0, result.stdout + result.stderr);
           assert.equal(config().backup.includeSensitive, String(included)); assert.isNull(config().backup.repository);
           assert.equal(cached(), 'untouched\n'); assert.isEmpty(mutations());
-          assert.isBelow(result.stdout.indexOf('Sensitive sources in backups:'), result.stdout.indexOf('this private GitHub backup'));
+          assert.notInclude(result.stdout, 'Sensitive sources in backups:');
+          assert.isBelow(result.stdout.indexOf('Include sensitive sources in future backups?'), result.stdout.indexOf('this private GitHub backup'));
           assert.include(result.stdout, 'Backup setup cancelled.');
         });
       }
@@ -2365,7 +2388,7 @@ describe('repository backup lifecycle', function() {
       });
       assert.isTrue(signalled); assert.equal(result.signal, 'SIGINT');
       assert.equal(config().backup.includeSensitive, 'false'); assert.isNull(config().backup.repository);
-      assert.include(output, 'Sensitive sources in backups: excluded'); assert.isEmpty(mutations());
+      assert.notInclude(output, 'Sensitive sources in backups: excluded'); assert.isEmpty(mutations());
     });
   }
   for (const change of ['unrelated', 'destination']) {
@@ -2491,7 +2514,7 @@ describe('repository backup lifecycle', function() {
       assert.include(result.stdout, 'Backup setup cancelled.');
       assert.notInclude(result.stdout, '😎 Backup setup complete.');
       assert.equal(result.stderr, '');
-      if (answered) assert.include(result.stdout, 'Sensitive sources in backups: excluded');
+      if (answered) assert.notInclude(result.stdout, 'Sensitive sources in backups: excluded');
       else assert.notMatch(result.stdout, /Sensitive sources in backups: (included|excluded) /u);
       assert.equal(mutations().length, 0); assert.equal(cached(), 'untrusted\n');
     });
@@ -2515,7 +2538,7 @@ describe('repository backup lifecycle', function() {
     assert.notInclude(result.stdout, 'zshrc.sh:');
     assert.notInclude(result.stdout, 'Unavailable now:');
     assert.notInclude(result.stdout, 'private-review-secret'); assert.equal(mutations().length, 0);
-    assert.include(result.stdout, 'Sensitive sources in backups: included');
+    assert.notInclude(result.stdout, 'Sensitive sources in backups: included');
     assert.include(result.stdout, 'this private GitHub backup ');
   });
   it('reports inaccessible sources before the inclusion choice and resumes after repair', () => {
@@ -2597,13 +2620,14 @@ describe('repository backup lifecycle', function() {
     assert.equal(result.stderr, '');
   });
   (['true', 'false'] as const).forEach((preference) => {
-    it(`confirms the independently reviewed sensitive-source choice once after reconnect saves ${preference}`, () => {
+    it(`quietly persists the independently reviewed sensitive-source choice after reconnect saves ${preference}`, () => {
       unconfigured(); const before = config(); before.backup.includeSensitive = preference === 'true' ? 'false' : 'true'; saveConfig(before);
       const result = run(['setup'], `\nreconnect\n\n${preference === 'true' ? 'y' : 'n'}\ny\nn\n`); ok(result);
       assert.include(result.stdout, 'Include sensitive sources in future backups? [y/N]');
       assert.equal(config().backup.includeSensitive, preference);
-      assertSavedSensitiveChoice(result, preference);
-      assert.isBelow(result.stdout.indexOf('Sensitive sources in backups:'), result.stdout.indexOf('Private backup reconnected:'));
+      assertQuietSensitiveChoice(result, preference);
+      assert.notInclude(result.stdout, 'Sensitive sources in backups:');
+      assert.isBelow(result.stdout.indexOf('Include sensitive sources in future backups?'), result.stdout.indexOf('Private backup reconnected:'));
       assert.include(result.stdout, 'Private backup reconnected: https://github.com/fixture-user/ballin-backups\n');
       assert.notInclude(result.stdout, 'Unrecognized backup entries:');
       assert.include(result.stdout, '! Stop backups on other installations before backing up here.');
@@ -2626,7 +2650,7 @@ describe('repository backup lifecycle', function() {
     const result = runGeneral('\n\n\n\ny\n', `require('fs').renameSync = () => { throw Error('Synthetic save failure'); };`);
     assert.equal(result.status, 1); assert.include(result.stderr, 'Unable to save preferences');
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().update.backup, 'false');
-    assertSavedSensitiveChoice(configured, 'false');
+    assertQuietSensitiveChoice(configured, 'false');
   });
   it('preserves completed backup linkage after input fails in the separate general review', () => {
     unconfigured(); const value = state(); value.exists = false; saveState(value);
@@ -2650,7 +2674,7 @@ describe('repository backup lifecycle', function() {
       } return write(file,data,...args); };`);
     assert.equal(result.status, 1); assert.deepEqual(config().backup.repository, fixtureDestination);
     assert.equal(config().update.backup, 'false'); assert.equal(config().backup.includeSensitive, 'false');
-    assertSavedSensitiveChoice(configured, 'false'); assert.notInclude(result.stdout, 'Automatic backup during updates:');
+    assertQuietSensitiveChoice(configured, 'false'); assert.notInclude(result.stdout, 'Automatic backup during updates:');
   });
   it('revalidates by stable identity after a rename and preserves local choices without prompting', () => {
     const value = state(); value.name = 'renamed'; value.login = 'renamed-user';
@@ -2680,7 +2704,8 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, '! The backup repository is missing or inaccessible.');
     assert.equal(result.stdout.split('Repository name').length - 1, 2);
     assert.deepEqual(config().backup.repository, fixtureDestination);
-    assert.isBelow(result.stdout.indexOf('Sensitive sources in backups:'), result.stdout.indexOf('Private backup reconnected:'));
+    assert.notInclude(result.stdout, 'Sensitive sources in backups:');
+      assert.isBelow(result.stdout.indexOf('Include sensitive sources in future backups?'), result.stdout.indexOf('Private backup reconnected:'));
     assert.lengthOf(publications(), 0);
   });
   for (const problem of ['unavailable', 'connection', 'authentication']) {
@@ -3026,7 +3051,7 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], '\ncreate\n\nn\ny\n', {}, preload);
     assert.equal(result.status, 1); assert.deepEqual(config(), { ...before, backup: { ...before.backup, includeSensitive: 'false' } });
     assert.include(result.stdout, 'Reconnect to the existing backup');
-    assert.include(result.stdout, 'Sensitive sources in backups: excluded');
+    assert.notInclude(result.stdout, 'Sensitive sources in backups: excluded');
     ok(run(['setup'], '\nreconnect\n\nn\ny\nn\n')); assert.equal(mutations().length, 4);
     assert.equal(rulesetWrites().length, 1);
   });
@@ -3047,7 +3072,7 @@ describe('repository backup lifecycle', function() {
     const result = run(['setup'], '\nreconnect\n\nn\ny\n', {}, cacheFailure('rmSync', `args[0] === ${JSON.stringify(cacheRoot)}`));
     assert.equal(result.status, 1); assert.isNull(config().backup.repository); assert.equal(cached(), 'stale\n');
     assert.equal(config().backup.includeSensitive, 'false');
-    assert.include(result.stdout, 'Sensitive sources in backups: excluded');
+    assert.notInclude(result.stdout, 'Sensitive sources in backups: excluded');
     assert.equal(mutations().length, 0);
   });
   it('disconnects locally and retries incomplete cleanup while writes stay disabled', () => {

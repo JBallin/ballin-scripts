@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const { terminalCommand, terminalHeading, terminalComplete, terminalProse, terminalError } = require('./terminalStyle.ts');
-const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { configPath } = require('../config/index.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { createDefaultConfig, saveSetupPreference, preferenceBoolean } = require('../config/setup.ts');
@@ -26,9 +25,9 @@ type SetupOutcome = 'completed' | 'cancelled' | 'failed';
 const backupHint = (): void => writeStdoutLine(terminalProse(`Run ${terminalCommand('ballin backup setup')} to configure or review your GitHub backup.`));
 const questions = [
   ['npm', 'Update global npm packages?'],
-  ['selfUpdate', 'Keep Ballin up to date?'],
-  ['cleanup', 'Clean up outdated Homebrew packages?'],
-  ['softwareupdate', 'Install available macOS updates?'],
+  ['selfUpdate', 'Update Ballin?'],
+  ['cleanup', 'Clean up Homebrew?'],
+  ['softwareupdate', 'Update macOS?'],
   ['nvm', 'Keep NVM-managed Node on latest LTS?'],
   ['backup', 'Back up to GitHub during updates?'],
 ] as const;
@@ -51,23 +50,22 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
     const nvm = inspectNvm();
     reviewing = true;
-    writeStdoutLine(terminalProse('Review your update and analytics preferences. Confirmed choices are saved; this does not run updates.'));
     writeStdoutLine(terminalProse('i Optional capabilities:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'));
-    writeStdoutLine(`\n${terminalHeading('Update preferences')}`);
+    writeStdoutLine(`\n${terminalHeading('ballin update')}`);
     const cancel = (): SetupOutcome => {
       writeStdoutLine('\nReview cancelled. Earlier confirmed choices remain saved.');
       backupHint();
       return 'cancelled';
     };
     const save = (section: 'update' | 'analytics', key: string, enabled: boolean): void => {
-      const previous = saveSetupPreference(file, section, key, enabled);
-      writeStdoutLine(terminalProse(savedPreferenceLine(`${section}.${key}`, enabled, previous)));
+      saveSetupPreference(file, section, key, enabled);
     };
     for (const [key, question] of questions) {
       const current = readSetupConfigContext(file, false);
       const saved = preferenceBoolean(current.update?.[key] === undefined ? defaults.update[key] : current.update[key], `update.${key}`);
       if (key === 'nvm' && !saved && !(nvm.loadable && nvm.followsLts)) {
-        writeStdoutLine(terminalProse('i NVM can maintain latest LTS Node when its default follows latest LTS.'));
+        const reason = !nvm.loadable ? 'NVM is unavailable to setup.' : "NVM’s default did not pass setup’s following-LTS check.";
+        writeStdoutLine(terminalProse(`i Node.js LTS updates are not offered: ${reason}\nSee Node.js setup in Optional capabilities.`));
         continue;
       }
       if (key === 'backup' && configuredBackupDestination(current).kind !== 'repository' && !saved) continue;
@@ -80,7 +78,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     const analytics = preferenceBoolean(current.analytics?.enabled === undefined ? defaults.analytics.enabled : current.analytics.enabled, 'analytics.enabled');
     let cancelled = false;
     const { configureAnalyticsPreference } = require('./analytics.ts');
-    if (!configureAnalyticsPreference({ configPath: file, defaultEnabled: analytics, detailsLink: false, reportFailure: false,
+    if (!configureAnalyticsPreference({ configPath: file, defaultEnabled: analytics, reportFailure: false,
       onCancelled: () => { cancelled = true; } })) throw new Error('Unable to save the analytics preference; the existing local setting is unchanged.');
     if (cancelled) return cancel();
     if (!options.installation) writeStdoutLine(`\n${terminalComplete('Setup complete.')}`);

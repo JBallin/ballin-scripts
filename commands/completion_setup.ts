@@ -139,21 +139,21 @@ const appendActivation = (target: CompletionTarget): boolean => {
 
 const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions = {}): void => {
   const write = options.write ?? ((text = '') => writeStdoutLine(terminalProse(text)));
-  const fallback = (needsContext = false): void => {
+  const fallback = (needsContext = false, declined = false): void => {
     if (needsContext) write('');
-    write(`Tab completion skipped.\ni Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
+    write(`${declined ? '' : 'Tab completion skipped.\n'}i Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
   };
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
   const prompt: typeof readPromptLine = options.prompt ?? readPromptLine;
   try {
     const env = options.env ?? process.env;
     let firstQuestion = true;
-    const completionPrompt: typeof prompt = (question: string, choiceLabel?: (text: string) => string | undefined) => {
-      if (firstQuestion) {
-        if (options.presentation === 'installation') write('');
-        write('Optional tab completion suggests Ballin commands as you type.');
-      }
+    const beginCompletion = (): void => {
+      if (firstQuestion && options.presentation === 'installation') write('');
       firstQuestion = false;
+    };
+    const completionPrompt: typeof prompt = (question: string, choiceLabel?: (text: string) => string | undefined) => {
+      beginCompletion();
       return prompt(question, choiceLabel);
     };
     const target = completionTarget(env, completionPrompt, write);
@@ -173,14 +173,16 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
         return;
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    beginCompletion();
+    write(`Startup file: ${terminalPath(target.profile, env.HOME)}`);
     while (true) {
-      const answer = completionPrompt(`Enable tab completion in ${terminalPath(target.profile, env.HOME)}? [y/N] `, (text: string) => {
+      const answer = completionPrompt(`Enable Ballin tab completion? [y/N] `, (text: string) => {
         const enabled = parseYesNo(text, false);
         return enabled === undefined ? undefined : enabled ? 'Yes' : 'No';
       });
       if (answer.eof) { fallback(); return; }
       const enabled = parseYesNo(answer.text, false);
-      if (enabled === false) { fallback(); return; }
+      if (enabled === false) { fallback(false, true); return; }
       if (enabled === true) break;
       write('Please enter yes or no.');
     }

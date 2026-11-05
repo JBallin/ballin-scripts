@@ -1,7 +1,6 @@
 const { terminalCommand, terminalHeading, terminalError, terminalProse, terminalComplete, terminalEmphasis } = require('./terminalStyle.ts');
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const fs = require('fs');
-const { savedPreferenceLine } = require('./preference_confirmation.ts');
 const { lastBackupSuccessLine } = require('./backup_status.ts');
 const { validatedBackupSummary } = require('./backup_summary.ts');
 const {
@@ -177,10 +176,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
         };
         const current = readSetupConfigContext(configPath);
         if (!validateReview(current)) return false;
-        const previousSensitive = current.backup.includeSensitive;
         current.backup.includeSensitive = String(included);
         if (!saveBackupConfig(configPath, current)) return false;
-        writeStdoutLine(savedPreferenceLine('backup.includeSensitive', included, previousSensitive));
         return complete();
       };
       return maintain();
@@ -289,10 +286,8 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       writeStdoutLine(`Backup configuration changed during review. Run ${terminalCommand('ballin backup setup')} again.`);
       return false;
     }
-    const previousSensitive = current.backup.includeSensitive;
     current.backup.includeSensitive = String(includeSensitive);
     if (!saveBackupConfig(configPath, current)) return false;
-    if (options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('backup.includeSensitive', includeSensitive, previousSensitive));
     const validateDestination = (): ReturnType<typeof readSetupConfigContext> | undefined => {
       const latest = readSetupConfigContext(configPath);
       if (JSON.stringify(latest.backup.repository) !== initialDestination || latest.backup.includeSensitive !== String(includeSensitive)) {

@@ -382,7 +382,8 @@ Markers and wording must remain meaningful without color.
 
 Interactive prompts start with a green `?` and neutral question text. Available
 options, brackets, slashes, separators and instructions stay neutral; a declared
-choice-word default is bold uppercase, including `NONE` when actually declared.
+choice-word default is uppercase but regular weight, including `NONE` when
+actually declared.
 Do not change the case of literal hostnames or paths.
 
 Typed input stays neutral while editing. After Enter accepts a fixed choice,
@@ -436,10 +437,14 @@ Doctor status labels retain their existing contracts. These roles apply to
 Ballin-owned presentation, not native child-tool output or machine-readable data.
 
 In explanatory terminal prose, including help and recovery guidance, use sparse
-bold without backticks for complete command invocations on supported TTYs. For
-example, emphasize only the command in “Run **ballin backup setup** when you’re
-ready.” In plain output, retain literal backticks: “Run `ballin backup setup`
-when you’re ready.” Apply the TTY policy to the stream receiving that message.
+bold without backticks for complete command invocations the user is asked to run
+on supported TTYs. For example, emphasize only the command in
+“Run **ballin backup setup** when you’re ready.” In plain output, retain literal
+backticks: “Run `ballin backup setup` when you’re ready.” Apply the TTY policy to
+the stream receiving that message.
+
+Commands Ballin reports executing itself, such as `$ brew install --formula nvm`
+and `$ nvm install --lts`, remain regular weight.
 
 Configuration keys, values, flags, paths, and command shorthand retain backticks
 without newly added emphasis. For example, `update.backup`, `true`, `--verbose`,

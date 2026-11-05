@@ -32,6 +32,8 @@ describe('selected checkout integration', () => {
   });
   it('checks out exactly the selected SHA and preserves local data', () => {
     const r = run(); assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+    assert.include(r.stdout, `Selected sha ${target.slice(0, 12)}\n`); assert.notInclude(r.stdout, target);
+    assert.include(r.stdout, `→ sha ${target.slice(0, 12)}\n`);
     assert.equal(fs.readFileSync(path.join(installed, 'ballin.config.json'), 'utf8'), '{"preserve":true}'); assert.equal(fs.readFileSync(path.join(installed, '.analytics/install-id'), 'utf8'), 'preserved');
     const receipt = JSON.parse(fs.readFileSync(path.join(installed, '.git/ballin-install.json'), 'utf8')); assert.equal(receipt.kind, 'sha'); assert.equal(receipt.sha, target);
   });
@@ -146,6 +148,7 @@ describe('selected checkout integration', () => {
   it('verifies the selected tag and records release provenance', () => {
     const r = run({ kind: 'release', value: 'v1.0.0' }); assert.equal(r.status, 0, r.stderr); assert.equal(git(installed, ['rev-parse', 'v1.0.0^{commit}']), target);
     assert.equal(require('../commands/repo_update.ts').readIdentity(installed).version, '1.0.0');
+    assert.include(r.stdout, 'Selected v1.0.0\n'); assert.notInclude(r.stdout, target);
   });
   it('refuses a conflicting local tag', () => {
     git(installed, ['tag', 'v1.0.0']); const r = run({ kind: 'release', value: 'v1.0.0' }); assert.equal(r.status, 1); assert.include(r.stderr, 'conflicts'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
@@ -157,6 +160,7 @@ describe('selected checkout integration', () => {
   });
   it('fast-forwards main and explicitly permits a confirmed backward install', () => {
     let r = run({ kind: 'branch', value: 'main' }); assert.equal(r.status, 0, r.stderr);
+    assert.include(r.stdout, `Selected branch main (${target.slice(0, 12)})\n`); assert.notInclude(r.stdout, target);
     assert.equal(git(installed, ['symbolic-ref', 'HEAD']), 'refs/heads/main');
     r = run({ kind: 'branch', value: 'main', sha: before }); assert.equal(r.status, 0, r.stderr);
     assert.equal(git(installed, ['rev-parse', 'HEAD']), before);

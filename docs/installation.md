@@ -35,6 +35,10 @@ Choose a route:
 
 Both guides provide the command to paste into Terminal. Zsh and Bash are supported.
 
+Homebrew remains optional with either route. See
+[Getting the most out of Ballin](getting-the-most-out-of-ballin.md) for optional
+tools that let Ballin maintain more of your environment.
+
 A fresh install checks Git and Node.js, previews installation details, and asks for `[y/N]`
 before making installation changes. After installing the command and offering
 shell completion, it offers backup setup, then general preferences including
@@ -226,13 +230,15 @@ destination setup and run-now. An existing configured backup retains installer
 verification. Existing tools, accounts and backups remain.
 Later `ballin backup setup` checks current prerequisites and GitHub access.
 
-Quickstart accepts Node.js 24.12 or newer. When Node is missing or incompatible,
-it offers NVM and latest compatible LTS Node. With compatible Node, switching is
-optional and defaults to keeping the current setup. Before consent it explains
-activation, the future default, retained installations and the need to reinstall
-any global npm packages you still use. An existing loadable NVM is reused.
-A fresh installation uses `nvm install --lts` to activate LTS and create a
-following-LTS default; changing an existing default requires switch consent.
+Quickstart accepts Node.js 24.12 or newer. When Node.js is missing or
+incompatible, it offers to install Node.js using NVM. With compatible Node.js,
+using NVM with Node.js LTS is optional and defaults to keeping the current setup.
+The [Node.js details](optional-capabilities.md#nodejs) link before the question
+explains activation, the following-LTS default, separate shell-startup consent,
+and existing installations and global packages. An existing loadable NVM is reused.
+Consented NVM setup uses `nvm install --lts` to activate LTS for this setup and
+sets the following-LTS default; changing an existing default requires switch
+consent.
 
 For missing NVM, Quickstart uses suitable existing Homebrew, otherwise the
 versioned official NVM installer. It does not install Homebrew for this purpose.

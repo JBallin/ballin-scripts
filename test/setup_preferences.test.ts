@@ -57,13 +57,20 @@ describe('general preference review', () => {
       assert.equal(read().backup.includeSensitive, 'true'); assert.deepEqual(read().custom, { retained: true });
       assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
       assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
-      assert.include(result.stdout, '==> Update preferences'); assert.include(result.stdout, '==> Analytics');
+      assert.include(result.stdout, '==> ballin update'); assert.include(result.stdout, '==> Analytics');
+      assert.notInclude(result.stdout, 'unchanged at'); assert.notInclude(result.stdout, 'set to `');
+      assert.notInclude(result.stdout, 'Review your update and analytics preferences.');
+      assert.isBelow(result.stdout.indexOf('==> Analytics'), result.stdout.indexOf('i Analytics report command results, not backup contents.'));
+      assert.isBelow(result.stdout.indexOf('i Analytics report command results, not backup contents.'), result.stdout.indexOf('i Analytics details:'));
+      assert.isBelow(result.stdout.indexOf('i Analytics details:'), result.stdout.indexOf('Share usage analytics'));
+      assert.equal(result.stdout.split('docs/analytics.md').length - 1, 1);
+      assert.notInclude(result.stdout, 'Change preferences later');
     });
   }
   it('falls back only for absent preferences and retains bundled macOS default Yes', () => {
     write({ custom: true }); const result = run('\n'.repeat(5));
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Install available macOS updates? [Y/n]');
+    assert.include(result.stdout, 'Update macOS? [Y/n]');
     assert.equal(read().update.softwareupdate, 'true');
   });
   for (const key of ['npm', 'selfUpdate', 'cleanup', 'softwareupdate', 'nvm', 'backup', 'analytics']) {
@@ -72,7 +79,7 @@ describe('general preference review', () => {
       if (key === 'analytics') config.analytics.enabled = value; else config.update[key] = value;
       write(config); const before = fs.readFileSync(file, 'utf8');
       const result = run('y\n'.repeat(9)); assert.equal(result.status, 1);
-      assert.include(result.stderr, 'expected true or false'); assert.notInclude(result.stdout, 'Update preferences');
+      assert.include(result.stderr, 'expected true or false'); assert.notInclude(result.stdout, '==> ballin update');
       assert.equal(fs.readFileSync(file, 'utf8'), before);
     });
   }
@@ -91,9 +98,38 @@ describe('general preference review', () => {
       const result = run('\n'.repeat(6)); assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stdout.includes('Keep NVM-managed Node on latest LTS?'), eligible || enabled);
       if (eligible || enabled) assert.include(result.stdout, `latest LTS? ${enabled ? '[Y/n]' : '[y/N]'}`);
-      else assert.include(result.stdout, 'NVM can maintain latest LTS Node');
+      else assert.include(result.stdout, 'NVM is unavailable to setup.');
+      assert.equal(result.stdout.includes('See Node.js setup in Optional capabilities.'), !eligible && !enabled);
+      assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
     });
   }
+  it('explains an ineligible NVM default without claiming runtime updates require it', () => {
+    installNvm('v26.13.0');
+    const result = run('\n'.repeat(5));
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout.replace(/\s+/gu, ' '), 'NVM’s default did not pass setup’s following-LTS check.');
+    assert.include(result.stdout, 'See Node.js setup in Optional capabilities.');
+    assert.notInclude(result.stdout, 'Keep NVM-managed Node');
+    assert.notInclude(result.stdout, 'NVM is unavailable');
+    assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
+    assert.equal(read().update.nvm, 'false');
+  });
+  for (const installation of [false, true]) for (const changed of [false, true]) it(`saves ${changed ? 'changed' : 'unchanged'} preferences quietly (installation=${installation})`, () => {
+    const script = `const { reviewGeneralPreferences } = require(${JSON.stringify(path.resolve(__dirname, '../commands/setup.ts'))});
+      process.exitCode = reviewGeneralPreferences(process.env.BALLIN_TEST_CONFIG_PATH, { installation: ${installation} }) === 'failed' ? 1 : 0;`;
+    const result = spawnSync(process.execPath, ['-e', script], { input: changed ? 'y\nn\nn\nn\ny\n' : '\n'.repeat(5), encoding: 'utf8',
+      env: testChildEnvironment({ HOME: root, PATH: '/usr/bin:/bin', BALLIN_TEST_CONFIG_PATH: file, NODE_OPTIONS: `--require ${JSON.stringify(guard)}` }) });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(read().update.npm, String(changed)); assert.equal(read().update.selfUpdate, String(!changed));
+    assert.equal(read().update.cleanup, String(!changed)); assert.equal(read().update.softwareupdate, String(!changed));
+    assert.equal(read().analytics.enabled, String(changed));
+    assert.notInclude(result.stdout, 'set to `'); assert.notInclude(result.stdout, 'unchanged at');
+    assert.notInclude(result.stdout, 'Usage analytics:');
+    assert.equal(result.stdout.includes('Setup complete.'), !installation);
+    assert.notInclude(result.stdout, 'Change preferences later');
+    const prompts = ['Update global npm packages?', 'Update Ballin?', 'Clean up Homebrew?', 'Update macOS?'];
+    prompts.forEach((prompt, index) => { assert.include(result.stdout, prompt); if (index) assert.isAbove(result.stdout.indexOf(prompt), result.stdout.indexOf(prompts[index - 1])); });
+  });
   it('retains first eligible recommendation across ineligibility and cancelled reviews, then preserves No', () => {
     fs.rmSync(file); assert.isTrue(createDefaultConfig(path.resolve(__dirname, '..'), file));
     run('\n'.repeat(5)); assert.isTrue(read()._setup.unreviewedNvm);
@@ -148,7 +184,7 @@ describe('general preference review', () => {
       fs.readSync = (fd,...args) => { if(fd===0 && !changed) { changed=true; fs.unlinkSync(process.env.BALLIN_TEST_CONFIG_PATH); }
       return readSync(fd,...args); };`);
     const result = run('y\n'); assert.equal(result.status, 1);
-    assert.isFalse(fs.existsSync(file)); assert.notInclude(result.stdout, 'Keep Ballin');
+    assert.isFalse(fs.existsSync(file)); assert.notInclude(result.stdout, 'Update Ballin');
   });
   it('restores explicit remote NVM choices over pending defaults without exporting intent', () => {
     const local = { ...structuredClone(defaults), _setup: { unreviewedNvm: true } };
@@ -180,13 +216,13 @@ describe('general preference review', () => {
   it('stops on save failure before later prompts, with recovery last and no backup-specific error', () => {
     fs.appendFileSync(guard, "fs.renameSync = () => { throw Error('Synthetic save failure'); };\n");
     const before = fs.readFileSync(file, 'utf8'); const result = run('y\n'.repeat(6));
-    assert.equal(result.status, 1); assert.notInclude(result.stdout, 'Keep Ballin');
+    assert.equal(result.status, 1); assert.notInclude(result.stdout, 'Update Ballin');
     assert.notInclude(result.stderr, 'save backup configuration'); assert.include(result.stderr, 'run `ballin setup` again.');
     assert.equal(fs.readFileSync(file, 'utf8'), before);
   });
   for (const signal of ['SIGINT', 'SIGTERM'] as const) it(`preserves current choice on ${signal}`, async () => {
     const child = spawn(process.execPath, [ballin, 'setup'], { env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: file }) });
-    let text = ''; child.stdout.on('data', (chunk: Buffer) => { text += chunk; if (text.includes('Keep Ballin')) child.kill(signal); });
+    let text = ''; child.stdout.on('data', (chunk: Buffer) => { text += chunk; if (text.includes('Update Ballin')) child.kill(signal); });
     child.stdin.write('y\n');
     const ended = await new Promise<string | null>((resolve, reject) => { child.once('error', reject); child.once('exit', (_code: number, end: string | null) => resolve(end)); });
     assert.equal(ended, signal); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'true');
