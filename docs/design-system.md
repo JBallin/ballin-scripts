@@ -359,13 +359,14 @@ Use Homebrew-style phase headings throughout setup and update: a blue
 `==>` marker without bold (`SGR 34`), followed by bold heading text in the
 terminal's default foreground (`SGR 1;39`), then a reset (`SGR 0`).
 
-Use simple, regular-weight markers for Ballin-owned terminal roles. Keep the
-message neutral; color the marker, not the entire line. This palette is available
-when needed, not a requirement to add a marker or message to every line:
+Use simple markers for Ballin-owned terminal roles. Bold only the leading `?`
+that marks interactive input; all other role markers remain regular weight.
+Keep the message neutral; color the marker, not the entire line. This palette is
+available when needed, not a requirement to add a marker or message to every line:
 
-| Role | Marker | TTY color |
+| Role | Marker | TTY styling |
 | --- | --- | --- |
-| Interactive prompt | `?` | Green (`SGR 32`) |
+| Interactive prompt | `?` | Bold green (`SGR 1;32`) |
 | Actionable warning | `!` | Yellow (`SGR 33`) |
 | Information or documentation pointer | `i` | Blue (`SGR 34`) |
 | Successful result | `✓` | Green (`SGR 32`) |
@@ -387,8 +388,8 @@ normal blue URL treatment. For example, a new repository's URL stays plain in
 this exception only to the not-yet-created backup URL; other links retain their
 existing styling.
 
-Interactive prompts start with a green `?` and neutral question text. Available
-options, brackets, slashes, separators and instructions stay neutral; a declared
+Interactive prompts start with a bold green `?` and neutral question text.
+Available options, brackets, slashes, separators and instructions stay neutral; a declared
 choice-word default is uppercase but regular weight, including `NONE` when
 actually declared.
 Do not change the case of literal hostnames or paths.

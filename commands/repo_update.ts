@@ -154,7 +154,7 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
   const styled = process.stdout.isTTY && process.env.TERM !== 'dumb' && !process.env.NO_COLOR;
   const plainPrompt = '? Change the installed revision/track? [y/N] ';
   const rendered = styled
-    ? '\x1b[0;32m?\x1b[0m Change the installed revision/track? [y/N] '
+    ? '\x1b[1;32m?\x1b[0m Change the installed revision/track? [y/N] '
     : plainPrompt;
   while (true) {
     const layout = selectionPromptLayout();

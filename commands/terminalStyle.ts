@@ -67,7 +67,7 @@ const terminalUrls = (text: string, stream: { isTTY?: boolean } = process.stdout
 const terminalMarkers = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
   const colors: Record<string, number> = { '?': 32, '!': 33, i: 34, '✓': 32, '✗': 31 };
   return text.replace(/(^|\n)([?!i✓✗])(?= )/gu, (_match, start: string, marker: string) => (
-    start + (supportsEmphasis(stream, env) ? `\x1b[0;${colors[marker]}m${marker}\x1b[0m` : marker)
+    start + (supportsEmphasis(stream, env) ? `\x1b[${marker === '?' ? 1 : 0};${colors[marker]}m${marker}\x1b[0m` : marker)
   ));
 };
 const terminalPrompt = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {

@@ -122,22 +122,27 @@ describe('setup presentation roles', () => {
     }
   });
   it('keeps choices and uppercase defaults neutral', () => {
-    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), '\x1b[0;32m?\x1b[0m Continue? [y/N] ');
-    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), '\x1b[0;32m?\x1b[0m Mode? [CREATE/reconnect] ');
-    assert.equal(terminalPrompt('Host [github.com]: ', tty, {}), '\x1b[0;32m?\x1b[0m Host [github.com]: ');
+    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), '\x1b[1;32m?\x1b[0m Continue? [y/N] ');
+    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), '\x1b[1;32m?\x1b[0m Mode? [CREATE/reconnect] ');
+    assert.equal(terminalPrompt('Host [github.com]: ', tty, {}), '\x1b[1;32m?\x1b[0m Host [github.com]: ');
+  });
+  it('resets marker emphasis before prompt wording and leaves interior question marks neutral', () => {
+    const prompt = '\nContinue? ? Maybe [y/N] ';
+    assert.equal(terminalPrompt(prompt, tty, { NO_COLOR: '' }), '\n\x1b[1;32m?\x1b[0m Continue? ? Maybe [y/N] ');
+    assert.equal(terminalPrompt(prompt, { isTTY: false }, { FORCE_COLOR: '1' }), '\n? Continue? ? Maybe [y/N] ');
   });
   it('preserves Enter-to-skip instructions and a neutral uppercase NONE default', () => {
     assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', tty, {}),
-      '\x1b[0;32m?\x1b[0m Startup [login/bashrc; Enter to skip] ');
+      '\x1b[1;32m?\x1b[0m Startup [login/bashrc; Enter to skip] ');
     assert.equal(terminalPrompt('Choice [yes/no/NONE] ', tty, {}),
-      '\x1b[0;32m?\x1b[0m Choice [yes/no/NONE] ');
+      '\x1b[1;32m?\x1b[0m Choice [yes/no/NONE] ');
     assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', {}, {}), '? Startup [login/bashrc; Enter to skip] ');
     assert.equal(terminalPrompt('Directory [Enter for home (~), an absolute directory, or skip]: ', tty, {}),
-      '\x1b[0;32m?\x1b[0m Directory [Enter for home (~), an absolute directory, or skip]: ');
+      '\x1b[1;32m?\x1b[0m Directory [Enter for home (~), an absolute directory, or skip]: ');
   });
-  it('provides regular-weight markers without changing prose or adding messages', () => {
-    for (const [marker, color] of [['?', 32], ['!', 33], ['i', 34], ['✓', 32], ['✗', 31]]) {
-      assert.equal(terminalProse(`${marker} Message.`, tty, {}), `\x1b[0;${color}m${marker}\x1b[0m Message.`);
+  it('bolds only the prompt marker without changing role colors or prose', () => {
+    for (const [marker, sgr] of [['?', '1;32'], ['!', '0;33'], ['i', '0;34'], ['✓', '0;32'], ['✗', '0;31']]) {
+      assert.equal(terminalProse(`${marker} Message.`, tty, {}), `\x1b[${sgr}m${marker}\x1b[0m Message.`);
       assert.equal(terminalProse(`${marker} Message.`, tty, { NO_COLOR: '1' }), `${marker} Message.`);
     }
     assert.equal(terminalProse('Ordinary progress.', tty, {}), 'Ordinary progress.');
