@@ -78,6 +78,34 @@ mutations; login alone grants no new mutation authority. Preserve the guest and
 captures at handoff, and document cleanup. Delete test repositories only with the
 required specific approval; do not remove existing guest data or repositories.
 
+### Private login launcher
+
+After separately authorizing persistent GitHub access in the guest, stop all
+recorders, screen capture and session logging. In its private interactive Terminal,
+run `bash tools/output-gallery/private-login.sh` from a copy of this tooling.
+The helper requires official GitHub CLI (tested with 2.103.3), working Git and a
+TTY for all three standard streams. Prepare prerequisites separately; it does not
+install anything. On macOS it checks selected developer tools before probing the
+Apple Git placeholder, which can otherwise trigger a Command Line Tools installer.
+Browser login inspects Git credential helpers even when optional Git integration
+is declined; declining that integration does not remove the Git prerequisite.
+
+The launcher starts github.com web/device login with optional Git integration and
+clipboard copying disabled, suppresses automatic browser opening, and leaves
+instructions privately in the Terminal for you to follow manually. It writes no
+capture files. A TTY check cannot detect a screen recorder: keeping authentication
+out of recordings remains your responsibility. Review the service's actual access
+request privately. Never include its codes, tokens or authentication screens in
+gallery output. The launcher does not supply credentials or verify the account;
+a successful command exit is distinct from independently verifying the intended
+account and deciding to retain authentication in this guest. After private login,
+clear the screen/scrollback before handing control back for a suppressed read-only
+account check. Stop and preserve an authenticated base for disposable clones;
+keep a separate clean no-GitHub-CLI/no-authentication baseline for first-run tests.
+
+Run launcher checks without real authentication with
+`python3 tools/output-gallery/test_private_login.py`.
+
 Pass `--captures /path/to/manifest.json` to import reviewed recordings. No manifest
 command is executed. The manifest format is:
 
