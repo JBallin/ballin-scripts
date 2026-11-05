@@ -13,6 +13,39 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = Path(__file__).resolve().parent
 LEGACY = TOOLS.parent / 'pr-662-output-gallery'
 SGR = re.compile(r'\x1b\[[0-9;]*m')
+CATEGORIES = ('Install & Quickstart', 'Setup & Backup', 'Update', 'Diagnostics')
+STAGED_TOPICS = [
+    ('Diagnostics', 'Gallery overview'),
+    ('Install & Quickstart', 'Lean Node.js decisions'),
+    ('Install & Quickstart', 'Quickstart installation'),
+    ('Setup & Backup', 'General preferences and analytics'),
+    ('Setup & Backup', 'Backup creation'),
+    ('Setup & Backup', 'Backup reconnect and protection'),
+    ('Setup & Backup', 'Context-sensitive follow-ups'),
+    ('Setup & Backup', 'Cancellation and saved choices'),
+    ('Setup & Backup', 'Invalid answers and shell setup'),
+    ('Update', 'Revision transitions, errors and recovery'),
+    ('Diagnostics', 'Doctor and help'),
+]
+
+
+def write_index(work, entries, source):
+    lines = ['# Local output gallery', '', 'Source: `' + source + '`', '',
+             'Each entry links the same content as Terminal ANSI, accessible text and rendered PNGs.',
+             'Actual recordings and staged examples remain labeled separately.', '']
+    for category in CATEGORIES:
+        lines += ['## ' + category, '']
+        for entry in entries:
+            if entry['category'] != category:
+                continue
+            folder = work / entry['id']
+            links = [f'[ANSI]({entry["id"]}/preview.ansi)', f'[text]({entry["id"]}/text.txt)']
+            links += [f'[PNG {index}]({entry["id"]}/{png.name})' for index, png in enumerate(sorted(folder.glob('output-*.png')), 1)]
+            lines += [f'- {entry["title"]} ({entry["kind"]}): ' + ' · '.join(links)]
+        if not any(entry['category'] == category for entry in entries):
+            lines += ['No entries recorded yet.']
+        lines += ['']
+    (work / 'index.md').write_text('\n'.join(lines))
 
 
 def run(command, **kwargs):
@@ -67,8 +100,11 @@ def main():
     # Each preserved scenario is its own readable group; full raw captures remain intact.
     ansi = (staged / 'terminal-preview.ansi').read_text()
     sections = re.split(r'(?=\n==========================================================================\n)', ansi)
+    if len(sections) != len(STAGED_TOPICS):
+        raise ValueError('Review gallery index topics after changing staged sections')
     for index, section in enumerate(sections):
         entries.append({'id': f'staged-{index:02}', 'kind': 'staged', 'ansi': section,
+                        'category': STAGED_TOPICS[index][0], 'title': STAGED_TOPICS[index][1],
                         'sourceRevision': args.source, 'edits': 'Source-informed synthetic prompts, answers and outcomes; inline labels disclose selected excerpts/omissions. No live execution.'})
     capture_manifest = None
     if args.captures:
@@ -84,6 +120,8 @@ def main():
                     parser.error('Missing capture provenance: ' + key)
             if capture['sensitiveDataReviewed'] is not True:
                 parser.error('Review capture for sensitive data before importing')
+            if capture.get('category', 'Diagnostics') not in CATEGORIES:
+                parser.error('Unknown capture category; see README')
             source = (args.captures.resolve().parent / capture['raw']).resolve()
             if digest(source) != capture['rawSha256']:
                 parser.error('Raw capture hash mismatch')
@@ -91,7 +129,8 @@ def main():
             plain_text(text)  # Reject unsupported controls before retaining anything.
             if any(e['id'] == capture['id'] for e in entries):
                 parser.error('Duplicate capture id')
-            entries.append({**capture, 'ansi': text})
+            entries.append({**capture, 'category': capture.get('category', 'Diagnostics'),
+                            'title': capture.get('title', capture['id']), 'ansi': text})
     renderer = work / 'render'
     run(['swiftc', '-module-cache-path', str(work / 'swift-cache'), str(work / 'render.swift'), '-o', str(renderer)])
     for entry in entries:
@@ -112,6 +151,7 @@ def main():
             raise ValueError('Renderer/text fidelity mismatch: ' + entry['id'])
         entry['files'] = {file.name: digest(file) for file in folder.iterdir()}
         (folder / 'provenance.json').write_text(json.dumps(entry, indent=2) + '\n')
+    write_index(work, entries, args.source)
     # Retain exact generation inputs; regenerate from the repository layout.
     if args.captures:
         (work / 'capture-input.json').write_text(json.dumps({'captures': [{**e, 'raw': e['id'] + '/raw.ansi'} for e in entries if e['kind'] == 'actual-vm']}, indent=2) + '\n')
@@ -137,6 +177,7 @@ def main():
     renderer.unlink()
     work.rename(output)
     print('Gallery: ' + str(output))
+    print('Grouped index: ' + str(output / 'index.md'))
     print('Terminal preview: cat ' + str(output / 'staged-02' / 'preview.ansi'))
     print('All images, matching text and provenance: ' + str(output / 'manifest.json'))
 

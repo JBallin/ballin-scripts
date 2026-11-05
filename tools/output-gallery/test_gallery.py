@@ -67,6 +67,24 @@ class GalleryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
 
+    def test_index_exposes_update_and_preserves_evidence_labels(self):
+        with tempfile.TemporaryDirectory(prefix='ballin-index-test-') as temp:
+            root = Path(temp)
+            entries = []
+            for identifier, kind in [('staged-update', 'staged'), ('recorded-update', 'actual-vm')]:
+                folder = root / identifier
+                folder.mkdir()
+                (folder / 'output-001.png').touch()
+                entries.append({'id': identifier, 'kind': kind, 'category': 'Update', 'title': identifier})
+            gallery.write_index(root, entries, 'a' * 40)
+            text = (root / 'index.md').read_text()
+            headings = [line for line in text.splitlines() if line.startswith('## ')]
+            self.assertEqual(headings, ['## ' + category for category in gallery.CATEGORIES])
+            for entry in entries:
+                self.assertIn(entry['id'] + ' (' + entry['kind'] + ')', text)
+                for name in ['preview.ansi', 'text.txt', 'output-001.png']:
+                    self.assertIn('(' + entry['id'] + '/' + name + ')', text)
+
 
 class GallerySecurityTests(unittest.TestCase):
     def test_candidate_formatter_and_expression_never_execute(self):

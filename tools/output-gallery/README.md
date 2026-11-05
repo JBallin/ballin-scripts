@@ -35,7 +35,9 @@ those pins as a tooling change. Candidate help and other source remain data. Use
 a trusted checkout of the tooling itself.
 
 Each entry contains labeled ANSI preview, matching `text.txt`, paginated PNGs and
-provenance. Compare these together for wording, flow, color, spacing and wrapping.
+provenance. Start with the generated `index.md`, grouped into Install & Quickstart,
+Setup & Backup, Update, and Diagnostics. Compare these together for wording, flow,
+color, spacing and wrapping.
 The renderer preserves supported ANSI styling; its logical text must match the
 text file exactly. Images are rendered output, not native Terminal screenshots.
 **Staged** entries contain source-informed synthetic prompts/answers/outcomes;
@@ -79,6 +81,8 @@ command is executed. The manifest format is:
   "captures": [{
     "id": "direct-install",
     "kind": "actual-vm",
+    "category": "Install & Quickstart",
+    "title": "Clean direct installation",
     "sourceRevision": "FULL_40_CHARACTER_COMMIT_SHA",
     "raw": "direct-install.ansi",
     "rawSha256": "SHA256_OF_RETAINED_SANITIZED_BYTES",
@@ -93,12 +97,15 @@ command is executed. The manifest format is:
 ```
 
 `raw` resolves relative to the manifest; its hash and source SHA must match.
+Use one of the four index categories above (`Diagnostics` is the default).
 Supported input is UTF-8 with SGR styling and LF/CRLF. Tabs, redraw controls and
 unsupported styles are refused. If normalization is needed, retain the safe
 original and disclose edits. Capture declarations come from the maintainer; the
 importer cannot prove execution. Keep inputs with local evidence; successful
 imports retain `capture-input.json` for regeneration from the repository layout.
-Missing live direct-install, no-Homebrew Quickstart and core-journey recordings
-remain pending; synthetic output never substitutes for them.
+Coverage is recorded per generation; synthetic output never substitutes for a
+missing live journey. The Update entry is the coordination point for eventually
+reusing the same canonical image and text in the README Update example; this
+tooling does not publish or independently change that example.
 
 Run focused checks with `python3 tools/output-gallery/test_gallery.py`.
