@@ -60,7 +60,7 @@ def main():
         shutil.copy2(LEGACY / name, work / name)
     staged = work / 'staged'
     staged.mkdir()
-    shutil.copy2(LEGACY / 'verify.py', staged)
+    shutil.copy2(work / 'verify.py', staged)
     run(['python3', str(work / 'build.py'), '--root', str(ROOT), '--output', str(staged), '--candidate', args.source])
     run(['python3', str(staged / 'verify.py')], stdout=subprocess.PIPE)
     entries = []
@@ -115,8 +115,6 @@ def main():
     # Retain exact generation inputs; regenerate from the repository layout.
     if args.captures:
         (work / 'capture-input.json').write_text(json.dumps({'captures': [{**e, 'raw': e['id'] + '/raw.ansi'} for e in entries if e['kind'] == 'actual-vm']}, indent=2) + '\n')
-    shutil.copy2(LEGACY / 'build.py', work / 'build.py')
-    shutil.copy2(LEGACY / 'verify.py', work / 'verify.py')
     tool_head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     manifest = {'sourceRevision': args.source, 'toolCheckoutHead': tool_head,
                 'toolFiles': {name: digest(work / name) for name in ['run.py', 'render.swift', 'build.py', 'verify.py']},
