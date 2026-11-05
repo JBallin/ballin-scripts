@@ -89,7 +89,7 @@ def main():
     work = Path(tempfile.mkdtemp(prefix='.gallery-build-', dir=output.parent))
     for name in ['run.py', 'render.swift', 'README.md']:
         shutil.copy2(TOOLS / name, work / name)
-    for name in ['build.py', 'verify.py', 'trusted-runtime.json']:
+    for name in ['build.py', 'verify.py', 'generation-runtime.json']:
         shutil.copy2(LEGACY / name, work / name)
     staged = work / 'staged'
     staged.mkdir()
@@ -157,7 +157,7 @@ def main():
         (work / 'capture-input.json').write_text(json.dumps({'captures': [{**e, 'raw': e['id'] + '/raw.ansi'} for e in entries if e['kind'] == 'actual-vm']}, indent=2) + '\n')
     tool_head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     manifest = {'sourceRevision': args.source, 'toolCheckoutHead': tool_head,
-                'toolFiles': {name: digest(work / name) for name in ['run.py', 'render.swift', 'build.py', 'verify.py', 'trusted-runtime.json']},
+                'toolFiles': {name: digest(work / name) for name in ['run.py', 'render.swift', 'build.py', 'verify.py', 'generation-runtime.json']},
                 'toolWorktreeDirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip()),
                 'preservedToolingRevision': 'c2f09af4636cc394adfc69666c6749ed5f91b9bf',
                 'rendererPrecedentRevision': '64d48dca63fc8833c366539a487d615dbda45d3f',

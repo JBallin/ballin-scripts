@@ -6,9 +6,9 @@ On macOS, use Node.js 26 (`.nvmrc`), Python 3 and Xcode command line tools
 repository root:
 
 ```sh
-python3 tools/output-gallery/run.py --source b801649dbcd878e2bd66fee50eba85446323df6b
-cat .output-gallery/b801649dbcd878e2bd66fee50eba85446323df6b/staged-02/preview.ansi
-open .output-gallery/b801649dbcd878e2bd66fee50eba85446323df6b/staged-02/output-001.png
+python3 tools/output-gallery/run.py --source 1f0c793d7bc6567af7ed2a580ad831c3a1567cc8
+cat .output-gallery/1f0c793d7bc6567af7ed2a580ad831c3a1567cc8/staged-02/preview.ansi
+open .output-gallery/1f0c793d7bc6567af7ed2a580ad831c3a1567cc8/staged-02/output-001.png
 ```
 
 Use a full source SHA available in local Git objects. The example selects the
@@ -29,9 +29,10 @@ Historical fixtures/provenance remain in `../pr-662-output-gallery`; new builds
 record the selected source, exact tool bytes/hashes, dependencies and regeneration
 command. Scenarios are maintained for the current stack; review their source
 anchors and flow when refreshing. Executable formatter/helper bytes must match
-`../pr-662-output-gallery/trusted-runtime.json`, reviewed independently of the
+`../pr-662-output-gallery/generation-runtime.json`, reviewed independently of the
 candidate. Changed formatters are refused before Node runs; review them and update
-those pins as a tooling change. Candidate help and other source remain data. Use
+those pins as a tooling change. Historical replay keeps its separate original
+`trusted-runtime.json` pins. Candidate help and other source remain data. Use
 a trusted checkout of the tooling itself.
 
 Each entry contains labeled ANSI preview, matching `text.txt`, paginated PNGs and

@@ -17,7 +17,7 @@ base=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).stri
 sources={name:read(name) for name in FILES}
 # Trust comes from reviewed tooling pins, never from candidate provenance.
 # Candidate snapshots/help remain data; only these exact reviewed bytes execute.
-trusted=json.loads((pathlib.Path(__file__).resolve().parent/'trusted-runtime.json').read_text())
+trusted=json.loads((pathlib.Path(__file__).resolve().parent/'generation-runtime.json').read_text())
 runtime={name:sources['commands/'+name] for name in ['terminalStyle.ts','help_format.ts','doctor_report.ts']}
 runtime['diagnostics.ts']=sources['config/diagnostics.ts']
 selection=re.search(r'^const selectionLabel = \(s: Selection\): string => ([^\n]+);$',sources['commands/repo_update.ts'],re.M)
@@ -25,7 +25,7 @@ if not selection:raise SystemExit('Unrecognized pure selection formatter')
 runtime['selection_label.cjs']='const selectionLabel = (s) => '+selection.group(1)+';\nmodule.exports={selectionLabel};\n'
 for name,text in runtime.items():
     if hashlib.sha256(text.encode()).hexdigest()!=trusted['executableHashes'][name]:
-        raise SystemExit('Unreviewed gallery runtime: '+name+'. Review formatter changes and update trusted-runtime.json before generation.')
+        raise SystemExit('Unreviewed gallery runtime: '+name+'. Review formatter changes and update generation-runtime.json before generation.')
 (OUT/'source-evidence').mkdir(exist_ok=True)
 hashes={}
 for name,text in sources.items():
