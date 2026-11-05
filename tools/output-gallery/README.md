@@ -18,7 +18,8 @@ examples. The separately approved v1.0.0 capture/publication sequence is unchang
 
 `--output /tmp/ballin-gallery-review` selects another new directory. Existing
 output is refused to preserve evidence. Generated assets stay out of Git; the
-default `.output-gallery/` is ignored. Failed builds retain a `.gallery-build-*`
+default `.output-gallery/` is ignored. With approval for the specific files and
+destination, attach useful sanitized captures/transcripts to the relevant PR. Failed builds retain a `.gallery-build-*`
 directory for diagnosis.
 
 The workflow reuses the preserved PR #662 scenarios, pure formatters, source
