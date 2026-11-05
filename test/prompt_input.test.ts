@@ -103,7 +103,7 @@ describe('plain prompt input contracts', function() {
     sandbox = createSandbox();
     const result = runInteractiveSetup(sandbox, [process.execPath, '-e',
       `require(process.argv[1]).readYesNo('Proceed? [y/N] ');`, path.resolve(__dirname, '../commands/commandHelpers.ts')],
-    [{ prompt: 'Proceed? [y/N] ', answer: 'invalid' }, { prompt: 'Please enter yes or no.', answer: 'Y' }]);
+    [{ prompt: 'Proceed? [y/N] ', answer: 'invalid' }, { prompt: 'Enter Yes or No.', answer: 'Y' }]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.notInclude(result.stdout, '\x1b[36minvalid');
     const screen = promptScreen(result.stdout, 120);
@@ -182,6 +182,27 @@ describe('plain prompt input contracts', function() {
       assert.include(promptScreen(result.stdout, 120), 'KEEP\n? Proceed? ' + choices + ' ' + label + '\nDONE:' + String(label === 'Yes'));
     });
   }
+  for (const file of ['install.sh', 'quickstart.sh']) {
+    it(`uses concise Yes/No retry guidance without confirming invalid input in ${file}`, () => {
+      sandbox = createSandbox();
+      const source = fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8');
+      const helpers = ['status_marker', 'choice_word', 'fixed_prompt_layout', 'render_fixed_prompt', 'confirm_fixed_choice', 'prompt_choices', 'read_prompt_answer', 'confirm'].map((name) => {
+        const helper = source.match(new RegExp('^' + name + '\\(\\) \\{\\n[\\s\\S]*?^\\}', 'mu'))?.[0];
+        assert.isString(helper); return helper;
+      }).join('\n');
+      const script = `${helpers}\nprompt_error=''; input_ended=false; if confirm 'Proceed?'; then printf 'DONE:true\\n'; else printf 'DONE:false\\n'; fi`;
+      const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', script], [
+        { prompt: 'Proceed? [y/N] ', answer: 'invalid' },
+        { prompt: 'Enter Yes or No.', answer: 'Y' },
+      ]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Enter Yes or No.');
+      assert.notInclude(result.stdout, 'Please enter');
+      assert.notInclude(result.stdout, '\x1b[36minvalid');
+      assert.include(result.stdout, '\x1b[36mYes\x1b[0m');
+      assert.include(result.stdout, 'DONE:true');
+    });
+  }
   for (const [answer, label] of [['Y', 'Yes'], ['N', 'No'], ['', 'No'], ['\x04', undefined]]) {
     it(`keeps the completion consent target visible and preserves ${JSON.stringify(answer)} behavior`, () => {
       sandbox = createSandbox();
@@ -239,7 +260,7 @@ describe('plain prompt input contracts', function() {
     const result = spawnSync(process.execPath, ['-e', `const h=require(process.argv[1]); console.log(h.readYesNo('First? '),h.readYesNo('Second? ',true));`, path.resolve(__dirname, '../commands/commandHelpers.ts')], {
       encoding: 'utf8', input: 'PRIVATE_INVALID\n  YeS \r\n \t nO \t\n', env: testChildEnvironment(),
     });
-    assert.equal(result.status, 0); assert.equal(result.stdout, '? First? \nPlease enter yes or no.\n? First? \n? Second? \ntrue false\n');
+    assert.equal(result.status, 0); assert.equal(result.stdout, '? First? \nEnter Yes or No.\n? First? \n? Second? \ntrue false\n');
   });
   for (const fault of ['closed-stdin', 'temporary-file']) {
     it(`reports Bash ${fault} failure instead of choosing No or EOF`, () => {

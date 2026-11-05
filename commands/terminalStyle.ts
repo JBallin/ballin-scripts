@@ -91,9 +91,9 @@ const visibleWidth = (text: string): number => {
   }
   return width;
 };
-const terminalProse = (text: string, stream: { isTTY?: boolean; columns?: number } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
+const terminalProse = (text: string, stream: { isTTY?: boolean; columns?: number } = process.stdout, env: NodeJS.ProcessEnv = process.env, options: { colorUrls?: boolean } = {}): string => {
   const width = Math.min(80, Math.max(1, stream.columns || 80));
-  return terminalMarkers(terminalUrls(text, stream, env), stream, env).split('\n').map((paragraph) => {
+  return terminalMarkers(options.colorUrls === false ? text : terminalUrls(text, stream, env), stream, env).split('\n').map((paragraph) => {
     const lines: string[] = [];
     let line = '';
     // Explicit references and adjacent punctuation stay copyable, even when one

@@ -472,6 +472,11 @@ include them, defaulting to “No.” Choosing No excludes them and continues. R
 [what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
 baseline, sensitive-source scope, and privacy limitations.
 
+Excluding sensitive sources still includes the baseline inventories and filtered
+preferences; those can reveal private tool choices, identities, paths or URLs.
+A private repository limits access but does not make its contents invisible to
+GitHub, the hosting operator or authorized repository users.
+
 The preview shows available resolved source paths. For synced Claude
 skills, Ballin reads local collection manifests to select plugin packages; it does
 not read selected file contents or create backup snapshots during this preview.
@@ -485,11 +490,12 @@ destination, creates or reconnects to the repository, attempts optional branch
 protection, clears local backup comparison state, and then saves the destination
 and any supported preferences recovered from the backup.
 Successful new protection gets one concise confirmation during standalone setup;
-installation keeps that success silent. Unsupported protection is silent. A permission note or warning about unconfirmed protection is nonfatal
-and does not mean backup
-setup failed. After updating GitHub access, rerun `ballin backup setup` to make a
-bounded protection attempt on the configured repository without changing local
-backup choices.
+installation keeps that success silent. Unsupported protection is silent. A
+permission note or warning about unconfirmed protection is nonfatal and does not
+mean backup setup failed. Optional protection can need additional GitHub authority beyond
+normal backup access. After updating access, rerun `ballin backup setup` to retry
+protection on the same linked destination; do not disconnect it. The usual
+sensitive-source review still follows, and confirmed choices are saved.
 
 Reconnect restores only
 [supported Ballin preferences](optional-capabilities.md#recovering-ballin-preferences), and

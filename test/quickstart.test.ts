@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
-const terminalGuidanceMessage = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.\nChange preferences later with `ballin setup`.';
+const terminalGuidanceMessage = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.';
 const terminalGuidance = `\n${terminalGuidanceMessage}\n`;
 
 describe('beginner quickstart bootstrap', function() {
@@ -2188,10 +2188,10 @@ printf '0\\n'
     it(`repeats the first-backup prompt for an invalid answer without accepting it with PATH complete ${pathComplete}`, () => {
       const result = run(pathComplete ? 'y\ny\n' : 'n\ny\n', {}, home, '', 'maybe\nn\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Please enter yes or no.');
+      assert.include(result.stdout, 'Enter Yes or No.');
       assert.equal(result.stdout.split('Run a backup now and open its GitHub destination?').length - 1, 2);
       assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)),
-        firstBackupPrompt + '\nPlease enter yes or no.\n' + firstBackupPrompt.slice(1) + '\n' + (pathComplete ? terminalGuidance : incompletePathGuidance));
+        firstBackupPrompt + '\nEnter Yes or No.\n' + firstBackupPrompt.slice(1) + '\n' + (pathComplete ? terminalGuidance : incompletePathGuidance));
       assert.notInclude(readLog(), 'ballin:');
     });
   }

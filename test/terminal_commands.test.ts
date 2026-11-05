@@ -150,7 +150,7 @@ describe('bootstrap command references on a real PTY without running an installe
       const helper = source.match(/^command_reference\(\) \{\n[\s\S]*?^\}/mu)?.[0];
       const marker = source.match(/^status_marker\(\) \{\n[\s\S]*?^\}/mu)?.[0];
       const complete = source.match(/^setup_complete\(\) \{\n[\s\S]*?^\}/mu)?.[0];
-      const completion = source.match(/^[ \t]*printf '\\n'; setup_complete; printf '\\nOpen a new Terminal and run '\n[ \t]*command_reference 'ballin help'\n[ \t]*printf '\.\\nChange preferences later with '\n[ \t]*command_reference 'ballin setup'\n[ \t]*printf '\.\\n'/mu)?.[0];
+      const completion = source.match(/^[ \t]*printf '\\n'; setup_complete; printf '\\nOpen a new Terminal and run '\n[ \t]*command_reference 'ballin help'\n[ \t]*printf '\.\\n'/mu)?.[0];
       assert.isString(helper); assert.isString(marker); assert.isString(complete); assert.isString(completion);
       // Execute only the extracted pure formatter and print statements. No source,
       // eval of the bootstrap, installer entry, platform discovery or setup runs.
@@ -167,7 +167,7 @@ describe('bootstrap command references on a real PTY without running an installe
       const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', program], []);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, `\x1b[0;32m✓\x1b[0m Setup complete.\nOpen a new Terminal and run ${bold}.\nChange preferences later with \x1b[1mballin setup\x1b[0m.\n`);
+      assert.include(output, `\x1b[0;32m✓\x1b[0m Setup complete.\nOpen a new Terminal and run ${bold}.\n`);
       for (const label of ['PIPE', 'DUMB', 'ZERO', 'NO_COLOR']) assert.include(output, `${label}:${plain}`);
       for (const label of ['STDERR', 'EMPTY']) assert.include(output, `${label}:${bold}`);
       assert.notInclude(output, '`\x1b[1m');

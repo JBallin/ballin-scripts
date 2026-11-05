@@ -94,7 +94,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('! Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+  writeStdoutLine('! Backups may contain private information or secrets.');
   writeStdoutLine('i Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
   let reviewSucceeded = false;
   if (!process.env.HOME) writeStdoutLine('HOME is required to review sensitive sources.');

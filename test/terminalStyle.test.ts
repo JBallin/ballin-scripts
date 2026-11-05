@@ -112,6 +112,15 @@ describe('setup presentation roles', () => {
     assert.equal(styled, '🔗 Details:\nVisit \x1b[34mhttps://example.com/guide\x1b[0m, then \x1b[34mhttps://example.com/next\x1b[0m.');
     assert.equal(terminalUrls(styled, tty, {}), styled);
   });
+  it('opts a proposed URL out of coloring without changing other presentation', () => {
+    const url = 'https://example.com/backup';
+    assert.equal(terminalProse(`i Proposed backup: ${url}`, tty, {}, { colorUrls: false }), `\x1b[0;34mi\x1b[0m Proposed backup: ${url}`);
+    assert.equal(terminalProse(`Private backup created: ${url}`, tty, {}), `Private backup created: \x1b[34m${url}\x1b[0m`);
+    for (const env of [{ NO_COLOR: '1' }, { TERM: 'dumb' }]) {
+      assert.equal(terminalProse(`Proposed backup: ${url}`, tty, env, { colorUrls: false }), `Proposed backup: ${url}`);
+      assert.equal(terminalProse(`Private backup created: ${url}`, tty, env), `Private backup created: ${url}`);
+    }
+  });
   it('keeps choices and uppercase defaults neutral', () => {
     assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), '\x1b[0;32m?\x1b[0m Continue? [y/N] ');
     assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), '\x1b[0;32m?\x1b[0m Mode? [CREATE/reconnect] ');

@@ -67,7 +67,7 @@ describe('selected checkout integration', () => {
     it(`reprompts a completed invalid revision answer before a confirmed transition (${JSON.stringify(input)})`, () => {
       const r = run({ input });
       assert.equal(r.status, 0, r.stdout + r.stderr);
-      assert.include(r.stdout, 'Please enter yes or no.');
+      assert.include(r.stdout, 'Enter Yes or No.');
       assert.equal(r.stdout.split('Change the installed revision/track?').length - 1, 2);
       assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
       assert.notInclude(r.stdout, 'cancelled');

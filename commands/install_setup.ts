@@ -1,4 +1,4 @@
-const { terminalCommand, terminalPath, terminalError, terminalComplete } = require('./terminalStyle.ts');
+const { terminalCommand, terminalPath, terminalError, terminalComplete, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { offerCompletionSetup } = require('./completion_setup.ts');
 const path = require('path');
@@ -39,6 +39,7 @@ type ConfigureBackupOptions = {
   onCancelled?: () => void;
   initialConsent?: boolean;
   presentation?: 'installation' | 'standalone';
+  deferFollowUp?: boolean;
   showValidationSummary?: boolean;
   maintenanceOnly?: boolean;
   reviewExistingSettings?: boolean;
@@ -82,6 +83,7 @@ const configureBackup = (
     configPath, repoDir, docsUrl, configPrepared: options.configPrepared, originalConfig: options.originalConfig, repositoryName: options.repositoryName, hostname: options.hostname, onCancelled: options.onCancelled,
     initialConsent: options.initialConsent,
     presentation: options.presentation,
+    deferFollowUp: options.deferFollowUp,
     showValidationSummary: options.showValidationSummary,
     maintenanceOnly: options.maintenanceOnly,
     reviewExistingSettings: options.reviewExistingSettings,
@@ -224,14 +226,17 @@ const setup = (
   const backupConfigured = destination.kind === 'repository';
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
+  let backupFlow = false;
+  let backupSetupCancelled = false;
+  let generalReview = false;
   const interactive = mode !== 'self-update' && promptInputState() === 'open';
   if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine(`\n${terminalComplete('Ballin installed successfully.')}`);
   if (backupConfigured || backupInvalid || (interactive && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1'
     && process.env.BALLIN_BACKUP_CHOICE !== 'no')) {
-    let backupSetupCancelled = false;
+    backupFlow = true;
     if (mode !== 'self-update') writeStdoutLine();
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
-      presentation: mode === 'self-update' ? 'standalone' : 'installation', configPrepared: true,
+      presentation: mode === 'self-update' ? 'standalone' : 'installation', configPrepared: true, deferFollowUp: true,
       initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',
       hostname, originalConfig, onCancelled: () => { backupSetupCancelled = true; },
       showValidationSummary: mode !== 'self-update',
@@ -244,12 +249,22 @@ const setup = (
     const { readYesNo } = require('./commandHelpers.ts');
     const review = readYesNo('\nReview your Ballin preferences? [Y/n] ', true);
     if (review === true) {
+      generalReview = true;
       const { reviewGeneralPreferences } = require('./setup.ts');
-      if (reviewGeneralPreferences(configPathFor(repoDir), { installation: true }) === 'failed') return false;
+      if (reviewGeneralPreferences(configPathFor(repoDir), { installation: true, deferFollowUp: true }) === 'failed') return false;
     }
   }
 
   setupAnalytics(repoDir);
+
+  if (mode !== 'self-update') {
+    const general = `Change preferences later with ${terminalCommand('ballin setup')}.`;
+    const backup = backupSetupCancelled ? `Run ${terminalCommand('ballin backup setup')} when you’re ready.`
+      : backupFlow ? `Change backup settings later with ${terminalCommand('ballin backup setup')}.`
+      : `Run ${terminalCommand('ballin backup setup')} to configure or review your GitHub backup.`;
+    const followUp = generalReview ? [general, backup] : backupFlow ? [backup, general] : [general];
+    writeStdoutLine('\n' + terminalProse(followUp.join('\n')));
+  }
 
   if (!configExisted && fs.existsSync(configPathFor(repoDir)) && mode !== 'fresh') {
     writeStdoutLine(`\n${docsUrl}#what-will-installation-change`);

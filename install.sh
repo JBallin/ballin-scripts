@@ -411,7 +411,7 @@ confirm() {
         if [[ "$default" == y ]]; then confirm_fixed_choice Yes; return 0
         else confirm_fixed_choice No; return 1; fi
         ;;
-      *) printf 'Please enter yes or no.\n' ;;
+      *) printf 'Enter Yes or No.\n' ;;
     esac
   done
 }
@@ -591,8 +591,6 @@ fi
 if [[ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 && "$ballin_mode" != self-update ]]; then
   printf '\n'; setup_complete; printf '\nOpen a new Terminal and run '
   command_reference 'ballin help'
-  printf '.\nChange preferences later with '
-  command_reference 'ballin setup'
   printf '.\n'
 fi
 }

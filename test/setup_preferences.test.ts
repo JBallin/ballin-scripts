@@ -194,17 +194,49 @@ describe('general preference review', () => {
     const explicit = { ...local }; delete explicit._setup;
     assert.equal(restorePortablePreferences(explicit, explicit, { update: { nvm: true } }).update.nvm, 'false');
   });
-  for (const input of ['', 'y', 'n\n', 'n\ny']) {
+  for (const input of ['', 'y', 'invalid\n', 'n\n', 'n\ny', 'y\n', '\n'.repeat(4)]) {
     it(`preserves pending and earlier confirmed choices on EOF ${JSON.stringify(input)}`, () => {
       const result = run(input); assert.equal(result.status, 0, result.stderr);
-      assert.equal(read().update.npm, 'false'); assert.equal(read().update.selfUpdate, 'true');
+      assert.equal(read().update.npm, input.startsWith('y\n') ? 'true' : 'false'); assert.equal(read().update.selfUpdate, 'true');
+      const saved = input.includes('\n') && !input.startsWith('invalid');
+      assert.include(result.stdout, `\nReview cancelled.${saved ? ' Earlier choices saved.' : ''}\n`);
+      assert.equal(result.stdout.includes('Earlier choices saved.'), saved);
+      assert.notInclude(result.stdout, 'Earlier confirmed choices remain saved.');
       assert.include(result.stdout, 'Review cancelled'); assert.notInclude(result.stdout, 'Setup complete.');
       assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
     });
   }
+  for (const installation of [false, true]) for (const outcome of ['completed', 'first EOF', 'saved then EOF']) {
+    it(`defers only backup follow-up for ${outcome} (installation=${installation})`, () => {
+      const input = outcome === 'completed' ? '\n'.repeat(5) : outcome === 'saved then EOF' ? 'y\n' : '';
+      const script = `const { reviewGeneralPreferences } = require(${JSON.stringify(path.resolve(__dirname, '../commands/setup.ts'))});
+        process.exitCode = reviewGeneralPreferences(process.env.BALLIN_TEST_CONFIG_PATH, {installation: ${installation}, deferFollowUp: true}) === 'failed' ? 1 : 0;`;
+      const result = spawnSync(process.execPath, ['-e', script], { input, encoding: 'utf8',
+        env: testChildEnvironment({ HOME: root, PATH: '/usr/bin:/bin', BALLIN_TEST_CONFIG_PATH: file, NODE_OPTIONS: `--require ${JSON.stringify(guard)}` }) });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'Run `ballin backup setup`');
+      assert.equal(result.stdout.includes('Setup complete.'), outcome === 'completed' && !installation);
+      if (outcome !== 'completed') assert.include(result.stdout, `\nReview cancelled.${outcome === 'saved then EOF' ? ' Earlier choices saved.' : ''}\n`);
+      assert.equal(read().update.npm, outcome === 'saved then EOF' ? 'true' : 'false');
+      assert.notInclude(result.stdout, 'set to `'); assert.notInclude(result.stdout, 'unchanged at');
+    });
+  }
+  it('keeps save failure recovery when follow-up guidance is deferred', () => {
+    const before = fs.readFileSync(file, 'utf8');
+    fs.appendFileSync(guard, "fs.renameSync = () => { throw Error('Synthetic save failure'); };\n");
+    const script = `const { reviewGeneralPreferences } = require(${JSON.stringify(path.resolve(__dirname, '../commands/setup.ts'))});
+      process.exitCode = reviewGeneralPreferences(process.env.BALLIN_TEST_CONFIG_PATH, {installation: true, deferFollowUp: true}) === 'failed' ? 1 : 0;`;
+    const result = spawnSync(process.execPath, ['-e', script], {input: 'y\n', encoding: 'utf8',
+      env: testChildEnvironment({ HOME: root, PATH: '/usr/bin:/bin', BALLIN_TEST_CONFIG_PATH: file, NODE_OPTIONS: `--require ${JSON.stringify(guard)}` }) });
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, 'Unable to save preferences; the pending choice is unchanged.');
+    assert.include(result.stderr, 'run `ballin setup` again.');
+    assert.notInclude(result.stdout, 'Review cancelled.'); assert.notInclude(result.stdout, 'Setup complete.');
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
+  });
   it('reprompts invalid answers and saves only complete decisions', () => {
     const result = run('private invalid answer\n YeS \nno\n\n\n\n');
-    assert.equal(result.status, 0, result.stderr); assert.include(result.stdout, 'Please enter yes or no.');
+    assert.equal(result.status, 0, result.stderr); assert.include(result.stdout, 'Enter Yes or No.');
     assert.notInclude(result.stdout, 'private invalid answer'); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'false');
   });
   it('rereads config before every save so concurrent unrelated edits survive', () => {

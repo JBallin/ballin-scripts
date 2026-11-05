@@ -201,7 +201,7 @@ fs.readFileSync = (file, ...args) => {
     assert.isBelow(result.stdout.indexOf(disclosure), result.stdout.indexOf('Include sensitive sources in future backups?'));
     assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Include sensitive sources in future backups?'));
     const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Include sensitive sources in future backups?'));
-    assert.include(result.stdout.replace(/\s+/gu, ' '), 'Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+    assert.include(result.stdout.replace(/\s+/gu, ' '), 'Backups may contain private information or secrets.');
     assert.include(consent, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\n');
     assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
     assert.notInclude(result.stdout, 'Excluding sources does not remove');

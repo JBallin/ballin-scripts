@@ -81,7 +81,7 @@ describe('integrated setup with delayed terminal answers', function() {
     assert.notInclude(output, '\n\n\n');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'true'); assert.equal(config().analytics.enabled, 'false');
     assert.deepEqual(Object.keys(remote().commits[remote().head].files).sort(), ['.ballin-backup.json', 'README.md']);
-    assert.notInclude(result.stdout, '\x1b[34m[y/N]'); // Brackets stay neutral; only the default carries bold emphasis.
+    assert.notInclude(result.stdout, '\x1b[34m[y/N]'); // Brackets and uppercase defaults stay neutral.
     assert.include(result.stdout, '[y/N]');
     assert.notInclude(result.stdout, '[y/\x1b[1mN\x1b[0m]');
     assert.include(result.stdout, '\x1b[0;32m✓\x1b[0m Setup complete.');
@@ -154,11 +154,48 @@ describe('integrated setup with delayed terminal answers', function() {
       { prompt: 'Update global npm packages? [y/N] ', answer: 'yes' },
       { prompt: 'Update Ballin? [Y/n] ', answer: 'no\x04\x04', raw: true },
     ]);
-    assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'Please enter yes or no.');
+    assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'Enter Yes or No.');
     assert.equal(config().update.npm, 'true'); assert.equal(config().update.selfUpdate, 'true');
     assert.notInclude(result.stdout, 'Setup complete.'); assert.include(result.stdout, 'Review cancelled.');
     assert.equal(plain(result.stdout).split('Run ballin backup setup').length - 1, 1);
   });
+
+  for (const mode of ['styled', 'NO_COLOR', 'dumb']) {
+    it(`preserves native Bash Enter-to-skip consent and rendering in ${mode}`, () => {
+      sandbox = createSandbox({ quickstart: true });
+      const files = ['.bash_profile', '.bash_login', '.bashrc', '.profile'].map(name => path.join(sandbox.home, name));
+      const before = files.map(file => fs.existsSync(file) ? fs.readFileSync(file) : undefined);
+      const command = mode === 'NO_COLOR' ? ['/usr/bin/env', 'NO_COLOR=1', sandbox.quickstartEntry] : [sandbox.quickstartEntry];
+      const result = runInteractiveSetup(sandbox, command, [
+        { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
+        { prompt: 'Use NVM with Node.js LTS instead? [y/N] ', answer: 'n' },
+        { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: '' },
+        { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
+        { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: '' },
+        { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'n' },
+      ], 'bash', { term: mode === 'dumb' ? 'dumb' : 'xterm' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const output = plain(result.stdout);
+      assert.include(output, 'PATH setup skipped.');
+      assert.include(output, 'Tab completion skipped.');
+      assert.include(output, 'Ballin is installed. PATH setup wasn’t verified.');
+      assert.notInclude(output, 'Setup complete.');
+      const cyanSkip = '\x1b[36mSkip\x1b[0m';
+      if (mode === 'styled') {
+        assert.equal(result.stdout.split(cyanSkip).length - 1, 2);
+        assert.include(result.stdout, '[login/bashrc; Enter to skip] ' + cyanSkip);
+        assert.include(result.stdout, '\x1b[1A\r\x1b[J');
+      } else {
+        assert.notInclude(result.stdout, '\x1b[');
+        assert.notInclude(result.stdout, cyanSkip);
+      }
+      files.forEach((file, index) => {
+        if (before[index] === undefined) assert.isFalse(fs.existsSync(file));
+        else assert.deepEqual(fs.readFileSync(file), before[index]);
+      });
+      assert.isEmpty(remote().requests);
+    });
+  }
 
   it('keeps the PATH-unverified ending after shell activation is declined', () => {
     sandbox = createSandbox({ quickstart: true });

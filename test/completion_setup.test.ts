@@ -44,6 +44,14 @@ describe('optional completion setup', () => {
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     });
   }
+  it('uses the concise Yes/No guidance before accepting a valid completion retry', () => {
+    const output = offer(['invalid', 'y']);
+    assert.include(output, 'Enter Yes or No.');
+    assert.notInclude(output, 'Please enter');
+    assert.equal(output.split('Enable Ballin tab completion? [y/N] ').length - 1, 2);
+    assert.include(output, 'Tab completion enabled.');
+    assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
+  });
   it('does not show later-enablement guidance after accepting setup', () => {
     const output = offer(['y']);
     assert.include(output, 'Tab completion enabled.');

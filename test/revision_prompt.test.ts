@@ -30,10 +30,10 @@ describe('revision confirmation in a real terminal', function() {
       const sha = 'a'.repeat(40);
       const result = runInteractiveSetup(sandbox, [process.execPath, path.resolve(__dirname, '../commands/repo_update.ts'), 'apply', sandbox.repo, 'sha', sha, sha, '24.12.0', '-', 'install', 'false'], [
         { prompt: 'Change the installed revision/track? [y/N]', answer: 'maybe' },
-        { prompt: 'Please enter yes or no.', answer: 'Y' },
+        { prompt: 'Enter Yes or No.', answer: 'Y' },
       ]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Please enter yes or no.');
+      assert.include(result.stdout, 'Enter Yes or No.');
       assert.include(result.stdout, '\x1b[36mYes\x1b[0m');
       assert.notInclude(result.stdout, '\x1b[36mmaybe');
       assert.equal(JSON.parse(fs.readFileSync(path.join(sandbox.repo, '.git/ballin-install.json'), 'utf8')).kind, 'sha');

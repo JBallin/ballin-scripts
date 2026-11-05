@@ -158,7 +158,7 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
       }
     }
     if (!complete) throw new RevisionChangeCancelled('Revision change cancelled. The installed checkout is unchanged.');
-    if (overflow || !label) { process.stdout.write('Please enter yes or no.\n'); continue; }
+    if (overflow || !label) { process.stdout.write('Enter Yes or No.\n'); continue; }
     if (label === 'No') throw new RevisionChangeCancelled('Revision change cancelled. The installed checkout is unchanged.');
     return;
   }

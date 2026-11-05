@@ -380,6 +380,13 @@ in CLI output. Use functional text symbols for status and convey personality
 through wording.
 Markers and wording must remain meaningful without color.
 
+For backup destinations, keep a proposed URL plain until the repository exists.
+After successful creation, or when an existing destination is available, use the
+normal blue URL treatment. For example, a new repository's URL stays plain in
+“Proposed backup,” then becomes blue in the created-destination result. Apply
+this exception only to the not-yet-created backup URL; other links retain their
+existing styling.
+
 Interactive prompts start with a green `?` and neutral question text. Available
 options, brackets, slashes, separators and instructions stay neutral; a declared
 choice-word default is uppercase but regular weight, including `NONE` when

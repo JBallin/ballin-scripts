@@ -1136,8 +1136,8 @@ require('https').request = () => {
       encoding: 'utf8', input: 'y\n\ncreate\n\nn\ny\nn\n', env: childEnvironment(),
     });
 
-    assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(compact(result.stdout), 'current permissions');
-    assert.include(compact(result.stdout), 'backup setup can continue normally');
+    assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(compact(result.stdout), 'Branch protection wasn’t enabled.');
+    assert.include(compact(result.stdout), 'Backups still work.');
     assert.include(result.stdout, 'Review your Ballin preferences?');
     assert.notInclude(result.stdout, 'Sensitive sources in backups:');
     assert.notInclude(result.stdout, 'before retrying `ballin backup setup`');
@@ -1159,7 +1159,10 @@ require('https').request = () => {
       encoding: 'utf8', input: 'y\n\ncreate\n\nn\nn\nn\n', env: childEnvironment(),
     });
     assert.equal(result.status, 0);
-    assert.include(result.stdout.replace(/\s+/gu, ' '), 'Backup setup cancelled. Destination unchanged; confirmed local preferences remain saved. Run `ballin backup setup` when you’re ready.');
+    assert.include(result.stdout.replace(/\s+/gu, ' '), 'Backup setup cancelled. Destination unchanged; earlier choices saved.');
+    assert.include(result.stdout, '\nRun `ballin backup setup` when you’re ready.\n');
+    assert.equal(result.stdout.split('Run `ballin backup setup` when you’re ready.').length - 1, 1);
+    assert.isBelow(result.stdout.indexOf('Backup setup cancelled.'), result.stdout.indexOf('Run `ballin backup setup` when you’re ready.'));
     assert.notInclude(result.stdout + result.stderr, 'ERROR:');
     assert.notInclude(result.stdout, 'Backup setup complete.');
     assert.isNull(readRepoConfig().backup.repository ?? null);

@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
-const terminalGuidance = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.\nChange preferences later with `ballin setup`.';
+const terminalGuidance = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.';
 const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
 const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';

@@ -219,7 +219,7 @@ const readYesNo = (prompt: string, defaultValue = false): boolean | null => {
     if (response.eof) return null;
     const answer = parseYesNo(response.text, defaultValue);
     if (answer !== undefined) return answer;
-    writeStdoutLine('Please enter yes or no.');
+    writeStdoutLine('Enter Yes or No.');
   }
 };
 

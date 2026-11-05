@@ -32,7 +32,7 @@ const questions = [
   ['backup', 'Back up to GitHub during updates?'],
 ] as const;
 
-const reviewGeneralPreferences = (file: string, options: { installation?: boolean } = {}): SetupOutcome => {
+const reviewGeneralPreferences = (file: string, options: { installation?: boolean; deferFollowUp?: boolean } = {}): SetupOutcome => {
   let reviewing = false;
   try {
     try { fs.lstatSync(file); } catch (error) {
@@ -52,13 +52,15 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     reviewing = true;
     writeStdoutLine(terminalProse('i Optional capabilities:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'));
     writeStdoutLine(`\n${terminalHeading('ballin update')}`);
+    let savedChoice = false;
     const cancel = (): SetupOutcome => {
-      writeStdoutLine('\nReview cancelled. Earlier confirmed choices remain saved.');
-      backupHint();
+      writeStdoutLine(`\nReview cancelled.${savedChoice ? ' Earlier choices saved.' : ''}`);
+      if (!options.deferFollowUp) backupHint();
       return 'cancelled';
     };
     const save = (section: 'update' | 'analytics', key: string, enabled: boolean): void => {
       saveSetupPreference(file, section, key, enabled);
+      savedChoice = true;
     };
     for (const [key, question] of questions) {
       const current = readSetupConfigContext(file, false);
@@ -82,7 +84,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
       onCancelled: () => { cancelled = true; } })) throw new Error('Unable to save the analytics preference; the existing local setting is unchanged.');
     if (cancelled) return cancel();
     if (!options.installation) writeStdoutLine(`\n${terminalComplete('Setup complete.')}`);
-    backupHint();
+    if (!options.deferFollowUp) backupHint();
     return 'completed';
   } catch (error) {
     rethrowInterruption(error);

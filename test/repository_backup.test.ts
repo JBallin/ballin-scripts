@@ -156,6 +156,84 @@ describe('repository backup lifecycle', function() {
   };
   const statusClock = (time: number) => `Date.now = () => ${time};`;
 
+  for (const mode of ['create', 'reconnect']) for (const display of ['color', 'plain', 'no-color', 'dumb']) {
+    it(`keeps proposed versus available backup URL styling scoped (${mode}, ${display})`, () => {
+      unconfigured(); const value = state(); value.exists = mode === 'reconnect'; saveState(value);
+      const styled = display === 'color';
+      const result = run(['setup'], `\n${mode}\n\nn\ny\n`, {
+        TERM: display === 'dumb' ? 'dumb' : 'xterm', NO_COLOR: display === 'no-color' ? '1' : '',
+      }, `Object.defineProperty(process.stdout,'isTTY',{value:${display !== 'plain'}});`);
+      ok(result);
+      const url = 'https://github.com/fixture-user/ballin-backups';
+      const blue = `\x1b[34m${url}\x1b[0m`;
+      assert.include(result.stdout, `Proposed backup: ${styled && mode === 'reconnect' ? blue : url}`);
+      assert.include(result.stdout, `Private backup ${mode === 'create' ? 'created' : 'reconnected'}: ${styled ? blue : url}`);
+      assert.notInclude(result.stdout, 'Change backup settings later');
+      assert.include(result.stdout, 'to review your other preferences.');
+      if (!styled) assert.notInclude(result.stdout, '\x1b');
+      assert.deepEqual(config().backup.repository, fixtureDestination);
+    });
+  }
+  for (const context of ['create', 'reconnect', 'initial-install', 'configured']) {
+    it(`uses only an actually shown protection details label (${context})`, () => {
+      if (context !== 'configured') unconfigured();
+      const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied';
+      value.exists = context === 'reconnect' || context === 'configured'; saveState(value);
+      const result = context === 'initial-install'
+        ? runSetup('refresh', {}, '', 'y\n\ncreate\n\nn\ny\nn\n')
+        : run(['setup'], context === 'configured' ? 'n\n' : `\n${context}\n\nn\ny\n`);
+      ok(result);
+      const note = compact(result.stdout);
+      assert.include(note, 'Branch protection wasn’t enabled. Backups still work.');
+      if (context === 'reconnect' || context === 'initial-install') {
+        const label = context === 'reconnect' ? 'Reconnect details' : 'Backup details';
+        assert.include(note, `See ${label} above.`);
+        assert.equal(result.stdout.split(`i ${label}:`).length - 1, 1);
+        assert.isBelow(result.stdout.indexOf(`i ${label}:`), result.stdout.indexOf('Branch protection wasn’t enabled.'));
+      } else { assert.notInclude(note, 'See Reconnect details above.'); assert.notInclude(note, 'See Backup details above.'); }
+      assert.deepEqual(config().backup.repository, fixtureDestination);
+    });
+  }
+  for (const general of [false, true]) {
+    it(`consolidates installation reminders in current-flow order (general review ${general})`, () => {
+      const result = runSetup('refresh', { BALLIN_BACKUP_CHOICE: 'yes' }, '', general ? 'y\n' + '\n'.repeat(6) : 'n\n');
+      ok(result);
+      const backup = 'Change backup settings later with `ballin backup setup`.';
+      const preferences = 'Change preferences later with `ballin setup`.';
+      for (const line of [backup, preferences]) assert.equal(result.stdout.split(line).length - 1, 1);
+      assert.isBelow(result.stdout.indexOf(general ? preferences : backup), result.stdout.indexOf(general ? backup : preferences));
+      assert.notInclude(result.stdout, 'to review your other preferences.');
+      assert.notInclude(result.stdout, 'to configure or review your GitHub backup.');
+      assert.deepEqual(config().backup.repository, fixtureDestination);
+      assert.lengthOf(publications(), 0);
+    });
+  }
+  for (const general of [false, true]) {
+    it(`defers the skipped backup reminder to the installer once (general review ${general})`, () => {
+      unconfigured(); const result = runSetup('refresh', {}, '', 'n\n' + (general ? 'y\n' + '\n'.repeat(6) : 'n\n')); ok(result);
+      assert.include(result.stdout, 'Backup setup skipped.');
+      const backup = 'Change backup settings later with `ballin backup setup`.';
+      const preferences = 'Change preferences later with `ballin setup`.';
+      for (const line of [backup, preferences]) assert.equal(result.stdout.split(line).length - 1, 1);
+      assert.notInclude(result.stdout, 'Run `ballin backup setup` when you’re ready.');
+      assert.isBelow(result.stdout.indexOf(general ? preferences : backup), result.stdout.indexOf(general ? backup : preferences));
+      assert.isNull(config().backup.repository); assert.isEmpty(state().requests);
+    });
+  }
+  for (const confirmed of [false, true]) {
+    it(`states only confirmed saved choices when backup setup cancels (confirmed ${confirmed})`, () => {
+      unconfigured(); const value = state(); value.exists = false; saveState(value);
+      const before = fs.readFileSync(configPath, 'utf8');
+      const result = run(['setup'], confirmed ? '\ncreate\n\nn\nn\n' : '\n'); ok(result);
+      assert.include(compact(result.stdout), confirmed
+        ? 'Backup setup cancelled. Destination unchanged; earlier choices saved.'
+        : 'Backup setup cancelled. Destination unchanged.');
+      if (!confirmed) { assert.notInclude(result.stdout, 'earlier choices saved'); assert.equal(fs.readFileSync(configPath, 'utf8'), before); }
+      assert.include(result.stdout, '\nRun `ballin backup setup` when you’re ready.\n');
+      assert.isNull(config().backup.repository); assert.isEmpty(mutations());
+    });
+  }
+
   describe('custom-host backup setup', () => {
     const host = 'git.example.com';
     const selectHost = (exists = false): void => {
@@ -634,7 +712,7 @@ describe('repository backup lifecycle', function() {
         assert.include(result.stdout, `Include sensitive sources in future backups? ${suffix}`);
         assert.notInclude(result.stdout, `Automatically run \`ballin backup\` as part of \`ballin update\`? ${suffix}`);
         assert.equal(result.stdout.split('Include sensitive sources in future backups?').length - 1, 1);
-        assert.include(compact(result.stdout), 'Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+        assert.include(compact(result.stdout), 'Backups may contain private information or secrets.');
         assert.include(result.stdout, '✓ Setup complete.');
         assert.notInclude(result.stdout, 'Sensitive sources in backups:');
         assert.notInclude(result.stdout, '`backup.includeSensitive` unchanged at');
@@ -665,7 +743,7 @@ describe('repository backup lifecycle', function() {
       const before = fs.readFileSync(configPath, 'utf8'); const head = state().head;
       const result = run(['setup'], input);
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      if (!input.startsWith('n\n')) assert.include(result.stdout, 'Review cancelled. Earlier confirmed choices remain saved.');
+      if (!input.startsWith('n\n')) assert.include(result.stdout, 'Review cancelled.');
       else assert.include(result.stdout, '✓ Setup complete.');
       assert.notInclude(result.stdout, '😎 Backup settings review complete.');
       const saved = input.startsWith('n\n');
@@ -768,7 +846,8 @@ describe('repository backup lifecycle', function() {
       assert.notInclude(result.stdout, 'Sensitive sources in backups:');
       assert.notMatch(result.stdout, /`backup\.includeSensitive` (?:set to|unchanged at)/u);
       assert.equal(result.stdout.includes('✓ Setup complete.'), presentation === 'standalone');
-      assert.equal(result.stdout.includes('Run `ballin setup`'), presentation === 'standalone');
+      assert.include(result.stdout, 'Run `ballin setup`');
+      assert.equal(result.stdout.includes('Change backup settings later with `ballin backup setup`.'), presentation === 'installation');
       assert.equal(cached(), 'preserved cached bytes\n'); assert.equal(state().head, head); assert.isEmpty(mutations());
     });
   }
@@ -862,7 +941,7 @@ describe('repository backup lifecycle', function() {
     const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
     const before = config(); seedCache('zshrc.sh', 'cached bytes\n'); seedSuccess();
     const result = runSetup(); ok(result);
-    assert.include(compact(result.stdout), 'Optional GitHub branch protection was not enabled with the current permissions');
+    assert.include(compact(result.stdout), 'Branch protection wasn’t enabled. Backups still work.');
     assert.notInclude(result.stdout, 'Validated private backup:');
     assert.deepEqual(config(), before); assert.equal(cached(), 'cached bytes\n');
     assert.equal(fs.readFileSync(statusFile(), 'utf8'), priorSuccess); assert.lengthOf(publications(), 0);
@@ -2157,7 +2236,7 @@ describe('repository backup lifecycle', function() {
     const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
     const result = runSetup('self-update', ttyEnv, progressPreload()); ok(result);
     assert.equal(result.stderr, '');
-    assert.include(compact(result.stdout), 'Optional GitHub branch protection was not enabled with the current permissions');
+    assert.include(compact(result.stdout), 'Branch protection wasn’t enabled. Backups still work.');
     assert.notInclude(result.stdout, 'Updating...');
     assert.lengthOf(publications(), 0);
   });
@@ -2276,7 +2355,7 @@ describe('repository backup lifecycle', function() {
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
     assert.equal(config().update.backup, 'false');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup`');
-    assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups\n\n==> Backup preferences\n! Inventories and filtered preferences');
+    assert.include(result.stdout, 'Proposed backup: https://github.com/fixture-user/ballin-backups\n\n==> Backup preferences\n! Backups may contain private information or secrets.');
     assert.include(result.stdout, 'Private backup created: https://github.com/fixture-user/ballin-backups\n');
     assert.include(result.stdout, '✓ Setup complete.\nRun `ballin setup` to review your other preferences.\n');
     assertQuietSensitiveChoice(result, 'false');
@@ -2296,7 +2375,7 @@ describe('repository backup lifecycle', function() {
   });
   [
     { name: 'unsupported capability', faults: { rulesetCreate: 'plan' }, message: undefined },
-    { name: 'missing administration', faults: { rulesetCreate: 'denied' }, message: 'current permissions' },
+    { name: 'missing administration', faults: { rulesetCreate: 'denied' }, message: 'Branch protection wasn’t enabled.' },
     { name: 'ordinary rejection', faults: { rulesetCreate: 'reject' }, message: 'could not be confirmed' },
     { name: 'transient response', faults: { rulesetCreate: 'server' }, message: 'protection is unconfirmed' },
     { name: 'ambiguous no-effect response', faults: { rulesetCreate: 'ambiguous-no-effect' }, message: 'protection is unconfirmed' },
@@ -2336,7 +2415,7 @@ describe('repository backup lifecycle', function() {
     unconfigured(); seedCache('zshrc.sh', 'untrusted\n');
     const value = state(); value.rulesets = []; value.faults.rulesetCreate = 'denied'; saveState(value);
     const result = run(['setup'], '\nreconnect\n\nn\ny\n');
-    ok(result); assert.include(compact(result.stdout), 'current permissions'); assert.include(result.stdout, 'backup setup can continue normally');
+    ok(result); assert.include(compact(result.stdout), 'Branch protection wasn’t enabled.'); assert.include(result.stdout, 'Backups still work.');
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.isUndefined(cached());
     assert.equal(state().requests.filter((request) => request.endpoint === 'user/repos').length, 0);
     assert.equal(rulesetWrites().length, 1);
@@ -3005,11 +3084,11 @@ describe('repository backup lifecycle', function() {
     assert.include(result.stdout, 'Enter a repository name using letters, digits, dots, hyphens, or underscores.');
     assert.equal(result.stdout.split('GitHub hostname [github.com]:').length - 1, 2);
     assert.equal(result.stdout.split('Repository name').length - 1, 2);
-    assert.include(compact(result.stdout), 'Backup setup cancelled. Destination unchanged; confirmed local preferences remain saved.');
+    assert.include(compact(result.stdout), 'Backup setup cancelled. Destination unchanged; earlier choices saved.');
     assert.include(result.stdout, '\n\nBackup setup cancelled.');
     const outcome = result.stdout.split('Backup setup cancelled.')[1].split('\nRun ')[0];
     assert.notInclude(outcome, '\n\n');
-    assert.equal(outcome.replaceAll('\n', ' '), ' Destination unchanged; confirmed local preferences remain saved.');
+    assert.equal(outcome.replaceAll('\n', ' '), ' Destination unchanged; earlier choices saved.');
     assert.include(result.stdout, '\nRun `ballin backup setup` when you’re ready.\n');
     assert.notInclude(result.stdout, 'Ctrl-D');
     assert.deepEqual(config().backup.repository, before.backup.repository);

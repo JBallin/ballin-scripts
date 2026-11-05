@@ -184,7 +184,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       const enabled = parseYesNo(answer.text, false);
       if (enabled === false) { fallback(false, true); return; }
       if (enabled === true) break;
-      write('Please enter yes or no.');
+      write('Enter Yes or No.');
     }
     const appended = appendActivation(target);
     if (options.presentation !== 'installation') write(appended ? 'Tab completion enabled.' : 'Tab completion is already enabled.');
