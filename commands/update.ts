@@ -129,7 +129,7 @@ const resolveUpdateSettings = (
   });
 
   if (defaultedKeys.length > 0) {
-    reportWarning(terminalProse(`! Using bundled defaults for missing settings: ${defaultedKeys.join(', ')}.`, process.stderr));
+    reportWarning(terminalProse(`! Using bundled defaults for missing settings: ${defaultedKeys.map((key) => `\`${key}\``).join(', ')}.`, process.stderr));
   }
   return settings;
 };

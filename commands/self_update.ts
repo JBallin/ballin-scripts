@@ -1,3 +1,4 @@
+import type { Identity } from './repo_update.ts';
 const path = require('path');
 const {
   requireUninterrupted,
@@ -124,24 +125,25 @@ const newCommitCount = (repoDir: string, before: string, after: string): number 
     return Number.isSafeInteger(count) ? count : undefined;
   } catch (error) { rethrowInterruption(error); return undefined; }
 };
-const identityFingerprint = (repoDir: string): string => {
-  try { const identity = readIdentity(repoDir); return JSON.stringify([identity.kind, identity.value, identity.version, identity.dirty]); }
+const installedIdentity = (repoDir: string): Identity => {
+  try { return readIdentity(repoDir); }
   catch (error) { requireUninterrupted({ status: (error as { status?: number }).status }); throw error; }
 };
-const updateResult = (repoDir: string, before: string | undefined, previousIdentity: string): string => {
+const identityFingerprint = (identity: Identity): string => JSON.stringify([identity.kind, identity.value, identity.version, identity.dirty]);
+// A display label belongs only to the HEAD inspected with its receipt. Separate
+// Git observations may fail or change; never attach that label to another SHA.
+const revisionLabel = (identity: Identity, sha: string | undefined): string => identity.sha === sha && sha
+  ? identity.label : sha ? `development ${sha.slice(0, 12)}` : 'unknown revision';
+const updateResult = (repoDir: string, before: string | undefined, previousIdentity: Identity): string => {
   try {
     const after = installedRevision(repoDir);
-    if (!before || !after) return 'Ballin updated.';
-    if (before === after) return previousIdentity === identityFingerprint(repoDir) ? 'Ballin is already up to date.' : 'Ballin revision identity updated.';
-    const shortBefore = localGitOutput(repoDir, ['rev-parse', '--short=7', '--verify', before]);
-    const shortAfter = localGitOutput(repoDir, ['rev-parse', '--short=7', '--verify', after]);
-    if (!shortBefore || !shortAfter || !/^[a-f0-9]{7,64}$/u.test(shortBefore)
-      || !/^[a-f0-9]{7,64}$/u.test(shortAfter) || !before.startsWith(shortBefore) || !after.startsWith(shortAfter)) {
-      return 'Ballin updated.';
-    }
-    const count = newCommitCount(repoDir, before, after);
+    const currentIdentity = installedIdentity(repoDir);
+    const from = revisionLabel(previousIdentity, before), to = revisionLabel(currentIdentity, after);
+    if (before && before === after) return identityFingerprint(previousIdentity) === identityFingerprint(currentIdentity)
+      ? 'Ballin is already up to date.' : `Ballin revision identity updated: ${from} to ${to}.`;
+    const count = before && after ? newCommitCount(repoDir, before, after) : undefined;
     const suffix = count === undefined ? '' : ` (${count} new commit${count === 1 ? '' : 's'})`;
-    return `Ballin updated: ${shortBefore} to ${shortAfter}${suffix}.`;
+    return `Ballin updated: ${from} to ${to}${suffix}.`;
   } catch (error) { rethrowInterruption(error); return 'Ballin updated.'; }
 };
 
@@ -149,7 +151,7 @@ const refreshInstalledBallin = (): void => {
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
   const previousSources = installedScope(repoDir);
   const previousRevision = installedRevision(repoDir);
-  const previousIdentity = identityFingerprint(repoDir);
+  const previousIdentity = installedIdentity(repoDir);
 
   try {
     const outcome = updateInstalledRepo(repoDir);

@@ -2,6 +2,7 @@ const { terminalPath, terminalProse, terminalCommand, terminalError } = require(
 const fs = require('fs');
 const path = require('path');
 const { stringify } = require('../config/store.ts');
+const { configurationPath, filesystemCause } = require('../config/diagnostics.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
 const { readYesNo, writeStdoutLine: writeRawStdoutLine } = require('./commandHelpers.ts');
 const writeStdoutLine = (text = ''): void => writeRawStdoutLine(terminalProse(text));
@@ -17,9 +18,12 @@ const saveBackupConfig = (configPath: string, config: Record<string, unknown>): 
     if (process.env.BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT === '1') throw new Error('Simulated final config commit failure');
     fs.renameSync(temporary, configPath);
     return true;
-  } catch {
+  } catch (error) {
     writeStdoutLine(`\n${terminalError('Unable to save backup configuration; the previous destination and local choices remain authoritative.')}`);
-    writeStdoutLine(`Check the config file and its directory, then rerun ${terminalCommand('ballin backup setup')}.`);
+    writeRawStdoutLine(`Configuration file: ${configurationPath(configPath)}`);
+    const cause = filesystemCause(error);
+    if (cause) writeStdoutLine(cause);
+    writeStdoutLine(`Check write access to this file and its containing folder, and resolve any filesystem error above. Then run ${terminalCommand('ballin backup setup')} again.`);
     return false;
   } finally {
     if (created) {

@@ -702,7 +702,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     const events = analyticsLog.filter(({ type }: { type: string }) => type === 'event');
     const nested = analyticsLog.filter(({ type }: { type: string }) => type === 'nested');
     assert.notInclude(result.stdout, 'getting fresh kicks');
-    assert.equal(result.stdout.match(/Ballin updated\./gu)?.length, 1);
+    assert.equal(result.stdout.match(/Ballin updated:/gu)?.length, 1);
     const integrations = analyticsLog.filter(({ type }: { type: string }) => type === 'integration');
 
     assert.equal(result.status, 0, result.stderr);
@@ -906,7 +906,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
   });
 
   it('keeps confirmation-only self-update noninteractive and continues configured backup', () => {
-    const guidance = 'Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.';
+    const guidance = 'Confirmation required. Run `ballin self-update` manually to continue.';
     writeTestExecutable('ballin', `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$UPDATE_TEST_LOG"
 if [[ "$1" == self-update ]]; then
@@ -1472,7 +1472,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stderr,
-      '! Using bundled defaults for missing settings: update.cleanup, update.nvm,\nupdate.npm, update.softwareupdate, update.selfUpdate, update.backup.\n',
+      '! Using bundled defaults for missing settings: `update.cleanup`, `update.nvm`,\n`update.npm`, `update.softwareupdate`, `update.selfUpdate`, `update.backup`.\n',
     );
     assert.deepEqual(commandLog(), [
       'softwareupdate|,|-ia',
@@ -1498,7 +1498,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 0);
     assert.equal(
       result.stderr,
-      '! Using bundled defaults for missing settings: update.backup.\n',
+      '! Using bundled defaults for missing settings: `update.backup`.\n',
     );
     assert.deepEqual(commandLog(), []);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
@@ -1519,7 +1519,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     const result = spawnUpdate();
 
     assert.equal(result.status, 127);
-    assert.include(result.stderr, 'Using bundled defaults for missing settings: update.selfUpdate.');
+    assert.include(result.stderr, 'Using bundled defaults for missing settings: `update.selfUpdate`.');
     assert.include(result.stderr, 'ballin: command not found');
     assert.equal(result.stdout, '\n==> Updating Ballin\n');
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
@@ -1541,7 +1541,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     const result = spawnUpdate();
 
     assert.equal(result.status, 23);
-    assert.include(result.stderr, 'Using bundled defaults for missing settings: update.selfUpdate.');
+    assert.include(result.stderr, 'Using bundled defaults for missing settings: `update.selfUpdate`.');
     assert.deepEqual(commandLog(), ['ballin|,|self-update']);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
   });

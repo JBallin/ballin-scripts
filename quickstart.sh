@@ -1071,7 +1071,7 @@ install_nvm_lts() {
   nvm install --lts || nvm_status=$?
   stop_if_interrupted "$nvm_status"
   if [[ "$nvm_status" != 0 ]]; then
-    failure_message 'NVM LTS installation did not finish. Inspect its output, then rerun Quickstart.'
+    failure_message 'Node.js LTS installation did not finish. Inspect its output, then rerun Quickstart.'
     return "$nvm_status"
   fi
   if "$nvm_default_exists"; then
@@ -1085,7 +1085,7 @@ install_nvm_lts() {
     fi
   fi
   node_tool=$(type -P node) || fail 'NVM did not activate Node.js.'
-  node_compatible "$node_tool" || fail "Latest NVM LTS does not satisfy Ballin's Node.js requirement."
+  node_compatible "$node_tool" || fail "Latest Node.js LTS does not satisfy Ballin's requirement."
   npm_tool=$(type -P npm) || fail 'NVM did not provide npm.'
   npm_compatible "$npm_tool" || fail 'NVM npm could not run.'
   local resolved_default current

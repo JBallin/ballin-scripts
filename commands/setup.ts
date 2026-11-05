@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { terminalCommand, terminalHeading, terminalComplete, terminalProse, terminalError } = require('./terminalStyle.ts');
 const { configPath } = require('../config/index.ts');
+const { configurationPath } = require('../config/diagnostics.ts');
 const { readSetupConfigContext } = require('../config/portable.ts');
 const { createDefaultConfig, saveSetupPreference, preferenceBoolean } = require('../config/setup.ts');
 const { configuredBackupDestination } = require('./backup_config.ts');
@@ -11,7 +12,7 @@ const { readYesNo, promptInputState, rethrowInterruption, writeStdoutLine, write
 const setupHelp = `Usage: ballin setup
 
 Review update and analytics preferences, using saved choices as defaults.
-NVM updates are offered when NVM follows latest LTS or updates are already enabled. Automatic backup is offered when configured or already enabled.
+Node.js LTS updates through NVM are offered when NVM is loadable and its default follows latest LTS, or when this preference is already enabled. Automatic backup is offered when configured or already enabled.
 
 Use \`ballin backup setup\` for backup destinations and sensitive sources. Use \`ballin config get/set/reset\` for direct configuration.
 
@@ -28,7 +29,7 @@ const questions = [
   ['selfUpdate', 'Update Ballin?'],
   ['cleanup', 'Clean up Homebrew?'],
   ['softwareupdate', 'Update macOS?'],
-  ['nvm', 'Keep NVM-managed Node on latest LTS?'],
+  ['nvm', 'Update Node.js LTS through NVM?'],
   ['backup', 'Back up to GitHub during updates?'],
 ] as const;
 
@@ -98,7 +99,9 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     const recovery = !reviewing && /^(?:Invalid |Config is not valid JSON)/u.test((error as Error).message)
       ? `Repair the file, or run ${terminalCommand('ballin config reset', process.stderr)} to replace it with defaults, then run ${terminalCommand('ballin setup', process.stderr)} again.`
       : `Check the config file and its directory, then run ${terminalCommand('ballin setup', process.stderr)} again.`;
-    writeStderrLine(terminalProse(`${message}\n${recovery}`, process.stderr));
+    writeStderrLine(terminalProse(message, process.stderr));
+    writeStderrLine(`Configuration file: ${configurationPath(file)}`);
+    writeStderrLine(terminalProse(recovery, process.stderr));
     return 'failed';
   }
 };

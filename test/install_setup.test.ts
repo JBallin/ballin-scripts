@@ -138,7 +138,8 @@ describe('install setup', () => {
   });
 
   for (const absent of ['nvm', 'update']) {
-    it(`preserves absent ${absent} intent through installer migration, delayed eligibility, and saved-No reruns`, () => {
+    it(`preserves absent ${absent} intent through installer migration, delayed eligibility, and saved-No reruns`, function() {
+      this.timeout(10000); // Several sequential child reviews also run under instrumented parallel CI.
       installConfigSources(); fs.symlinkSync(process.execPath, path.join(binDir, 'node'));
       const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config/.defaultConfig.json'), 'utf8'));
       if (absent === 'nvm') delete config.update.nvm; else delete config.update;
@@ -149,17 +150,17 @@ describe('install setup', () => {
       const skipped = run('n\n'); assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
       assert.equal(readRepoConfig().update.nvm, 'false'); assert.isTrue(readRepoConfig()._setup.unreviewedNvm);
       const ineligible = run('y\n' + '\n'.repeat(5)); assert.equal(ineligible.status, 0, ineligible.stderr);
-      assert.notInclude(ineligible.stdout, 'Keep NVM-managed Node'); assert.isTrue(readRepoConfig()._setup.unreviewedNvm);
+      assert.notInclude(ineligible.stdout, 'Update Node.js LTS through NVM'); assert.isTrue(readRepoConfig()._setup.unreviewedNvm);
       const nvm = path.join(testDir, 'home/.nvm'); fs.mkdirSync(path.join(nvm, 'alias/lts'), { recursive: true });
       fs.writeFileSync(path.join(nvm, 'alias/default'), 'lts/*'); fs.writeFileSync(path.join(nvm, 'alias/lts/*'), 'v26.13.0');
       fs.writeFileSync(path.join(nvm, 'nvm.sh'), 'nvm() { [ "$1" = version ] && printf "v26.13.0\\n"; }\n');
       const cancelled = run('y\n'); assert.equal(cancelled.status, 0, cancelled.stderr);
       assert.isTrue(readRepoConfig()._setup.unreviewedNvm);
       const reviewed = run('y\n' + '\n'.repeat(4) + 'n\nn\n'); assert.equal(reviewed.status, 0, reviewed.stderr);
-      assert.include(reviewed.stdout, 'latest LTS? [Y/n]'); assert.equal(readRepoConfig().update.nvm, 'false');
+      assert.include(reviewed.stdout, 'NVM? [Y/n]'); assert.equal(readRepoConfig().update.nvm, 'false');
       assert.notProperty(readRepoConfig(), '_setup');
       const rerun = run('\n'.repeat(7)); assert.equal(rerun.status, 0, rerun.stderr);
-      assert.include(rerun.stdout, 'latest LTS? [y/N]'); assert.equal(readRepoConfig().update.nvm, 'false');
+      assert.include(rerun.stdout, 'NVM? [y/N]'); assert.equal(readRepoConfig().update.nvm, 'false');
     });
   }
   it('creates the default config through setup code', () => {
@@ -1042,7 +1043,9 @@ require('https').request = () => {
     assert.include(result.stdout, 'Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
-    assert.include(result.stdout, 'Backup setup skipped.\nRun `ballin backup setup`');
+    assert.include(result.stdout, 'Backup setup skipped.');
+    assert.equal(result.stdout.split('Change backup settings later with `ballin backup setup`.').length - 1, 1);
+    assert.notInclude(result.stdout, 'Run `ballin backup setup` when you’re ready.');
     assert.notInclude(result.stdout, '😎 ballin!');
     assert.notInclude(result.stdout, 'symlinked binaries');
     assert.notInclude(result.stdout, 'Automatically run `ballin backup` as part of `ballin update`?');

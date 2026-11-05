@@ -18,7 +18,7 @@ and analytics using your saved choices as defaults. Answering a question saves
 that preference; it does not run an update.
 
 The NVM question appears when NVM can load and its default follows latest LTS,
-or when NVM updates are already enabled. A default pinned to one version or
+or when Node.js LTS updates through NVM are already enabled. A default pinned to one version or
 one named LTS line does not follow future LTS releases. For an unset NVM
 preference, the first eligible review recommends Yes, even if NVM becomes
 eligible later.

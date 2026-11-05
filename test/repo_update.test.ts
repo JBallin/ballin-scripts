@@ -32,11 +32,44 @@ describe('selected checkout integration', () => {
   });
   it('checks out exactly the selected SHA and preserves local data', () => {
     const r = run(); assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
-    assert.include(r.stdout, `Selected sha ${target.slice(0, 12)}\n`); assert.notInclude(r.stdout, target);
-    assert.include(r.stdout, `→ sha ${target.slice(0, 12)}\n`);
+    assert.include(r.stdout, `Selected commit ${target.slice(0, 12)}\n`); assert.notInclude(r.stdout, target);
+    assert.include(r.stdout, `→ commit ${target.slice(0, 12)}\n`);
     assert.equal(fs.readFileSync(path.join(installed, 'ballin.config.json'), 'utf8'), '{"preserve":true}'); assert.equal(fs.readFileSync(path.join(installed, '.analytics/install-id'), 'utf8'), 'preserved');
     const receipt = JSON.parse(fs.readFileSync(path.join(installed, '.git/ballin-install.json'), 'utf8')); assert.equal(receipt.kind, 'sha'); assert.equal(receipt.sha, target);
   });
+  for (const scenario of [
+    ['stable', 'release', 'v1.0.0', 'release', 'v1.1.0'],
+    ['major', 'release', 'v1.0.0', 'release', 'v2.0.0'],
+    ['downgrade', 'release', 'v2.0.0', 'release', 'v1.0.0'],
+    ['main fast-forward', 'branch', 'main', 'branch', 'main'],
+    ['release to commit', 'release', 'v1.0.0', 'sha', ''],
+    ['commit to release', 'sha', '', 'release', 'v1.0.0'],
+    ['branch to commit', 'branch', 'feature/synthetic', 'sha', ''],
+    ['commit to branch', 'sha', '', 'branch', 'feature/synthetic'],
+    ['missing provenance', 'missing', '', 'branch', 'main'],
+    ['stale provenance', 'stale', '', 'branch', 'main'],
+    ['same-SHA selection', 'sha', '', 'branch', 'main'],
+  ]) it(`shows verified identities in the ${scenario[0]} confirmation`, () => {
+    const [name, fromKind, fromValue, toKind, toValue] = scenario;
+    const selected = name === 'same-SHA selection' ? before : target;
+    if (fromKind !== 'missing') {
+      if (fromKind === 'release') git(installed,['tag',fromValue,before]);
+      const kind = fromKind === 'stale' ? 'branch' : fromKind;
+      fs.writeFileSync(path.join(installed,'.git/ballin-install.json'),JSON.stringify({kind,value:kind==='sha'?before:fromValue||'main',sha:fromKind==='stale'?target:before,minimumNode:'24.12.0',releaseId:kind==='release'?'123':'-'}));
+    }
+    if (toKind === 'release' && toValue !== 'v1.0.0') git(upstream,['tag',toValue,target]);
+    const label=(kind:string,value:string,sha:string)=>kind==='release'?value:kind==='branch'?`branch ${value} (${sha.slice(0,12)})`:kind==='sha'?`commit ${sha.slice(0,12)}`:`development ${sha.slice(0,12)}`;
+    const r=run({kind:toKind,value:toKind==='sha'?selected:toValue,sha:selected,mode:'self-update'});
+    assert.equal(r.status,0,r.stdout+r.stderr);
+    assert.include(r.stdout,`Ballin: ${label(fromKind,fromValue,before)} → ${label(toKind,toValue,selected)}\n`);
+    assert.include(r.stdout,`Selected ${label(toKind,toValue,selected)}\n`);
+    const automaticCompatible=name==='stable'||name==='main fast-forward';
+    assert.equal(r.stdout.includes('Change the installed revision/track?'),!automaticCompatible);
+    assert.equal(r.stdout.includes('Release notes:'),toKind==='release');
+    const receipt=JSON.parse(fs.readFileSync(path.join(installed,'.git/ballin-install.json'),'utf8'));
+    assert.equal(receipt.sha,selected); assert.equal(receipt.kind,toKind); assert.lengthOf(receipt.sha,40);
+  });
+
   it('installs into a fresh clone without checking out its default branch first', () => {
     installed = path.join(root, 'fresh'); git(root, ['clone', '-q', '--no-checkout', upstream, installed]);
     git(installed, ['remote', 'set-url', 'origin', 'https://github.com/JBallin/ballin-scripts.git']);
@@ -74,7 +107,14 @@ describe('selected checkout integration', () => {
     });
   }
   for (const [automatic, tty] of [['1', '0'], ['1', '1'], ['0', '0']]) it(`refuses track changes requiring consent without checkout changes (automatic ${automatic}, TTY ${tty})`, () => {
-    const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: automatic, FIXTURE_TTY: tty }, mode: 'self-update' }); assert.equal(r.status, 21); assert.isTrue(r.stderr.endsWith('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.\n')); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+    const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: automatic, FIXTURE_TTY: tty }, mode: 'self-update' }); assert.equal(r.status, 21); assert.isTrue(r.stderr.endsWith('Confirmation required. Run `ballin self-update` manually to continue.\n')); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  for (const mode of ['tty', 'redirected', 'NO_COLOR', 'dumb']) it(`styles self-update recovery for the receiving stderr (${mode})`, () => {
+    fs.appendFileSync(preload, `Object.defineProperty(process.stderr,'isTTY',{value:${mode !== 'redirected'}}); Object.defineProperty(process.stdout,'isTTY',{value:${mode === 'redirected'}});`);
+    const r = run({ mode:'self-update', env:{ BALLIN_AUTOMATIC_UPDATE:'1',TERM:mode==='dumb'?'dumb':'xterm',...(mode==='NO_COLOR'?{NO_COLOR:'1'}:{})} });
+    assert.equal(r.status,21); assert.notInclude(r.stdout,'manually to continue');
+    assert.isTrue(r.stderr.endsWith(mode==='tty' ? 'Confirmation required. Run \x1b[1mballin self-update\x1b[0m manually to continue.\n' : 'Confirmation required. Run `ballin self-update` manually to continue.\n'));
+    assert.equal(git(installed,['rev-parse','HEAD']),before);
   });
   it('refuses noninteractive revision changes even with affirmative input', () => {
     const r = run({ env: { FIXTURE_TTY: '0' }, input: 'yes\n' }); assert.equal(r.status, 21); assert.include(r.stderr, 'requires confirmation');

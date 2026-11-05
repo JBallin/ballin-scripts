@@ -96,8 +96,8 @@ describe('general preference review', () => {
       if (eligible) installNvm();
       const config = structuredClone(defaults); config.update.nvm = String(enabled); write(config);
       const result = run('\n'.repeat(6)); assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout.includes('Keep NVM-managed Node on latest LTS?'), eligible || enabled);
-      if (eligible || enabled) assert.include(result.stdout, `latest LTS? ${enabled ? '[Y/n]' : '[y/N]'}`);
+      assert.equal(result.stdout.includes('Update Node.js LTS through NVM?'), eligible || enabled);
+      if (eligible || enabled) assert.include(result.stdout, `NVM? ${enabled ? '[Y/n]' : '[y/N]'}`);
       else assert.include(result.stdout, 'NVM is unavailable to setup.');
       assert.equal(result.stdout.includes('See Node.js setup in Optional capabilities.'), !eligible && !enabled);
       assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
@@ -109,7 +109,7 @@ describe('general preference review', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout.replace(/\s+/gu, ' '), 'NVM’s default did not pass setup’s following-LTS check.');
     assert.include(result.stdout, 'See Node.js setup in Optional capabilities.');
-    assert.notInclude(result.stdout, 'Keep NVM-managed Node');
+    assert.notInclude(result.stdout, 'Update Node.js LTS through NVM');
     assert.notInclude(result.stdout, 'NVM is unavailable');
     assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
     assert.equal(read().update.nvm, 'false');
@@ -135,9 +135,9 @@ describe('general preference review', () => {
     run('\n'.repeat(5)); assert.isTrue(read()._setup.unreviewedNvm);
     installNvm(); run('n\n'); assert.isTrue(read()._setup.unreviewedNvm);
     const result = run('\n\n\n\nn\nn\n');
-    assert.equal(result.status, 0, result.stderr); assert.include(result.stdout, 'latest LTS? [Y/n]');
+    assert.equal(result.status, 0, result.stderr); assert.include(result.stdout, 'NVM? [Y/n]');
     assert.notProperty(read(), '_setup'); assert.equal(read().update.nvm, 'false');
-    assert.include(run('\n'.repeat(6)).stdout, 'latest LTS? [y/N]');
+    assert.include(run('\n'.repeat(6)).stdout, 'NVM? [y/N]');
   });
   for (const absent of ['nvm', 'update']) for (const delayed of [false, true]) {
     it(`recommends the first absent ${absent} NVM choice and preserves confirmed No (delayed=${delayed})`, () => {
@@ -146,14 +146,14 @@ describe('general preference review', () => {
       write(config);
       if (delayed) {
         const ineligible = run('\n'.repeat(5)); assert.equal(ineligible.status, 0, ineligible.stderr);
-        assert.notInclude(ineligible.stdout, 'Keep NVM-managed Node'); assert.isUndefined(read().update?.nvm);
+        assert.notInclude(ineligible.stdout, 'Update Node.js LTS through NVM'); assert.isUndefined(read().update?.nvm);
       }
       installNvm();
       const cancelled = run(''); assert.equal(cancelled.status, 0, cancelled.stderr); assert.isUndefined(read().update?.nvm);
       const reviewed = run('\n'.repeat(4) + 'n\nn\n'); assert.equal(reviewed.status, 0, reviewed.stderr);
-      assert.include(reviewed.stdout, 'latest LTS? [Y/n]'); assert.equal(read().update.nvm, 'false');
+      assert.include(reviewed.stdout, 'NVM? [Y/n]'); assert.equal(read().update.nvm, 'false');
       const rerun = run('\n'.repeat(6)); assert.equal(rerun.status, 0, rerun.stderr);
-      assert.include(rerun.stdout, 'latest LTS? [y/N]'); assert.equal(read().update.nvm, 'false');
+      assert.include(rerun.stdout, 'NVM? [y/N]'); assert.equal(read().update.nvm, 'false');
     });
   }
   it('retires pending intent on direct set of false and explicit reset', () => {
@@ -176,7 +176,7 @@ describe('general preference review', () => {
       require(${JSON.stringify(path.resolve(__dirname, '../config/store.ts'))}).createConfigStore({ configPath: process.env.BALLIN_TEST_CONFIG_PATH }).setConfig('update.nvm','false');
       } return readSync(fd,...args); };`);
     const result = run('\n'.repeat(6)); assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'latest LTS? [y/N]'); assert.equal(read().update.nvm, 'false');
+    assert.include(result.stdout, 'NVM? [y/N]'); assert.equal(read().update.nvm, 'false');
     assert.notProperty(read(), '_setup');
   });
   it('does not recreate config removed while a choice is pending', () => {
@@ -262,6 +262,14 @@ describe('general preference review', () => {
   for (const contents of ['{', '[]', '{"update":[]}']) it(`preserves malformed config ${contents}`, () => {
     fs.writeFileSync(file, contents); assert.equal(run().status, 1); assert.equal(fs.readFileSync(file, 'utf8'), contents);
   });
+  for (const custom of [false, true]) it(`names the actual invalid JSON config without printing contents (custom=${custom})`, () => {
+    const target = custom ? path.join(root, 'custom preferences.json') : file;
+    const contents = '{"private":"SYNTHETIC_PRIVATE_VALUE",'; fs.writeFileSync(target, contents);
+    const result = run('', { BALLIN_TEST_CONFIG_PATH: target });
+    assert.equal(result.status, 1); assert.include(result.stderr, `Configuration file: ${JSON.stringify(target)}`);
+    assert.include(result.stderr, 'replace it with defaults'); assert.include(result.stderr, '`ballin config reset`');
+    assert.notInclude(result.stderr, 'SYNTHETIC_PRIVATE_VALUE'); assert.equal(fs.readFileSync(target, 'utf8'), contents);
+  });
   it('does not replace a dangling config link', () => {
     fs.rmSync(file); const missing = path.join(root, 'missing'); fs.symlinkSync(missing, file);
     assert.equal(run().status, 1); assert.equal(fs.readlinkSync(file), missing); assert.isFalse(fs.existsSync(missing));
@@ -291,6 +299,7 @@ describe('general preference review', () => {
   it('keeps help offline and rejects extra setup arguments', () => {
     fs.writeFileSync(file, '{'); const help = run('', {}, ['setup', '--help']);
     assert.equal(help.status, 0); assert.include(help.stdout, 'update and analytics');
+    assert.include(help.stdout.replace(/\s+/gu, ' '), 'Node.js LTS updates through NVM are offered when NVM is loadable and its default follows latest LTS, or when this preference is already enabled.');
     assert.equal(run('', {}, ['setup', 'extra']).status, 2);
   });
 });

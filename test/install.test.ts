@@ -200,7 +200,7 @@ ballin_download() { : > "$2"; }
 
   it('reports confirmation-only self-update refusal without checkout-repair guidance', () => {
     installBaseCommands(); writeCurrentCheckout();
-    const guidance = 'Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.';
+    const guidance = 'Confirmation required. Run `ballin self-update` manually to continue.';
     const result = runInstall({ env: { FAKE_INSTALL_MODE: 'self-update', FAKE_REPO_UPDATE_STATUS: '21', FAKE_REPO_UPDATE_ERROR: guidance } });
     assert.equal(result.status, 1);
     assert.equal(result.stderr, guidance + '\n');

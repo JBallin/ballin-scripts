@@ -766,7 +766,7 @@ esac
   it('retains native NVM failure status and ends with recovery before installing Ballin', () => {
     const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_NVM_FAIL: 'install', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(result.status, 42, result.stdout + result.stderr);
-    assert.include(result.stderr, 'NVM LTS installation did not finish.');
+    assert.include(result.stderr, 'Node.js LTS installation did not finish.');
     assert.notInclude(readLog(), '/main/install.sh'); assert.notInclude(result.stdout, 'Setup complete.');
   });
   for (const declined of [false, true]) {

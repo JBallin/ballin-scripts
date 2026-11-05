@@ -98,14 +98,14 @@ describe('integrated setup with delayed terminal answers', function() {
       { prompt: 'Enable Ballin tab completion? ', answer: 'n' },
       { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'y' },
       ...updates,
-      { prompt: 'Keep NVM-managed Node on latest LTS? [Y/n] ', answer: 'n' },
+      { prompt: 'Update Node.js LTS through NVM? [Y/n] ', answer: 'n' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
     ], 'bash');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(config().update.nvm, 'false'); assert.notProperty(config(), '_setup'); assert.isEmpty(remote().requests);
     assert.notInclude(fs.readFileSync(sandbox.log, 'utf8'), 'gh-auth:');
     const rerun = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'setup'], [
-      ...updates, { prompt: 'Keep NVM-managed Node on latest LTS? [y/N] ', answer: '' },
+      ...updates, { prompt: 'Update Node.js LTS through NVM? [y/N] ', answer: '' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
     ]);
     assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr); assert.equal(config().update.nvm, 'false');

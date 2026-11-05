@@ -46,6 +46,7 @@ const checkRuntime = (minimum: string, actual = process.versions.node): void => 
 };
 // Resolve the worktree's metadata directory through Git, without resolving the receipt leaf symlink.
 const receiptPath = (root: string): string => path.join(git(root, ['rev-parse', '--absolute-git-dir']), 'ballin-install.json');
+const selectionLabel = (s: Selection): string => s.kind === 'release' ? s.value : s.kind === 'sha' ? `commit ${s.sha.slice(0, 12)}` : `branch ${s.value} (${s.sha.slice(0, 12)})`;
 const readIdentity = (root: string): Identity => {
   try {
     const sha = git(root, ['rev-parse', '--verify', 'HEAD']);
@@ -62,7 +63,7 @@ const readIdentity = (root: string): Identity => {
       const receipt = JSON.parse(fs.readFileSync(file, 'utf8')) as Selection;
       validateSelection(receipt);
       if (receipt.sha !== sha) return development;
-      if (receipt.kind !== 'release') return { ...development, kind: receipt.kind, value: receipt.value };
+      if (receipt.kind !== 'release') return { ...development, label: `${selectionLabel(receipt)}${dirty ? ' (dirty)' : ''}`, kind: receipt.kind, value: receipt.value };
       if (dirty || git(root, ['rev-parse', '--verify', `refs/tags/${receipt.value}^{commit}`], true) !== sha) return development;
       return { sha, label: receipt.value, version: receipt.value.slice(1), kind: 'release', value: receipt.value, dirty: false };
     } catch (error) { if ((error as { status?: number }).status) throw error; return development; }
@@ -88,7 +89,6 @@ const assertSafeCheckout = (root: string): string => {
   }
   return head;
 };
-const selectionLabel = (s: Selection): string => s.kind === 'release' ? s.value : s.kind === 'sha' ? `sha ${s.sha.slice(0, 12)}` : `branch ${s.value} (${s.sha.slice(0, 12)})`;
 const needsConsent = (before: Identity, s: Selection, mode: string): boolean => {
   if (before.sha === s.sha && before.kind === s.kind && before.value === s.value) return false;
   if (mode !== 'self-update') return before.sha !== s.sha || before.kind !== s.kind || before.value !== s.value;
@@ -127,6 +127,9 @@ const selectionPromptLayout = (): SelectionPromptLayout | undefined => {
     }
   } catch (error) { if ((error as { status?: number }).status) throw error; }
 };
+// Keep this downloaded helper standalone; mirror terminalCommand's stderr policy.
+const stderrCommand = (command: string): string => process.stderr.isTTY && process.env.TERM !== 'dumb' && !process.env.NO_COLOR
+  ? `\x1b[1m${command}\x1b[0m` : `\`${command}\``;
 class RevisionChangeCancelled extends Error {}
 class RevisionChangeRequiresConfirmation extends Error { status = 21; }
 const confirmTransition = (before: Identity, selection: Selection, mode: string): void => {
@@ -134,7 +137,7 @@ const confirmTransition = (before: Identity, selection: Selection, mode: string)
   if (selection.kind === 'release') process.stdout.write(`Release notes: https://github.com/JBallin/ballin-scripts/releases/tag/${selection.value}\n`);
   if (!needsConsent(before, selection, mode)) return;
   if (process.env.BALLIN_AUTOMATIC_UPDATE === '1' || !require('node:tty').isatty(0)) {
-    if (mode === 'self-update') throw new RevisionChangeRequiresConfirmation('Ballin self-update requires confirmation. Run `ballin self-update` manually to continue.');
+    if (mode === 'self-update') throw new RevisionChangeRequiresConfirmation(`Confirmation required. Run ${stderrCommand('ballin self-update')} manually to continue.`);
     throw new RevisionChangeRequiresConfirmation('This revision/track change requires confirmation. The requested revision was not applied. `ballin self-update` follows the default selection; it cannot select an explicit revision.');
   }
   const styled = process.stdout.isTTY && process.env.TERM !== 'dumb' && !process.env.NO_COLOR;
@@ -240,3 +243,5 @@ const runRepoUpdateCli = (): void => {
 };
 if (require.main === module) runRepoUpdateCli();
 module.exports = { commandEnv, readIdentity, validateSelection, compareVersions, checkRuntime, assertSafeCheckout, needsConsent, applySelection, updateInstalledRepo, runRepoUpdateCli };
+
+export type { Identity };

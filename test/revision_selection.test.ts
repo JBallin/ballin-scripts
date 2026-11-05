@@ -64,6 +64,18 @@ describe('revision selection and checkout safety', () => {
     fs.writeFileSync(receipt, JSON.stringify(selection));
     assert.equal(readIdentity(root).version, 'development');
   });
+  for (const kind of ['branch', 'sha']) for (const dirty of [false, true]) it(`labels verified ${kind} receipts with full provenance (dirty=${dirty})`, () => {
+    const head = git('rev-parse', 'HEAD');
+    const receipt = { ...selection, sha: head, kind, value: kind === 'branch' ? 'feature/synthetic' : head, releaseId: '-' };
+    fs.writeFileSync(path.join(root, '.git/ballin-install.json'), JSON.stringify(receipt));
+    if (dirty) fs.writeFileSync(path.join(root, 'tracked'), 'synthetic local edit');
+    const identity = readIdentity(root);
+    assert.equal(identity.label, (kind === 'branch' ? `branch feature/synthetic (${head.slice(0, 12)})` : `commit ${head.slice(0, 12)}`) + (dirty ? ' (dirty)' : ''));
+    assert.equal(identity.sha, head); assert.equal(identity.value, receipt.value); assert.equal(identity.version, 'development');
+  });
+  it('shows unknown when HEAD cannot be inspected', () => {
+    assert.deepEqual(readIdentity(path.join(root, 'not-a-checkout')), { label: 'unknown revision', version: 'unknown' });
+  });
   it('uses per-worktree Git metadata rather than assuming .git is a directory', () => {
     const linked = path.join(root, 'linked'); git('worktree', 'add', '--detach', linked, 'HEAD');
     const head = git('rev-parse', 'HEAD'); git('tag', 'v1.0.0');

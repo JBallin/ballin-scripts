@@ -93,6 +93,28 @@ fs.readFileSync = (file, ...args) => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  for (const method of ['openSync', 'writeFileSync', 'closeSync', 'renameSync']) it(`preserves config after a ${method} save failure and reports a safe cause`, () => {
+    const before = fs.readFileSync(configPath, 'utf8');
+    const script = `const fs=require('fs');const {saveBackupConfig}=require(${JSON.stringify(preferencesPath)});const original=fs.${method};let fired=false;
+      fs.${method}=function(...args){
+        const owned=${JSON.stringify(method)}==='openSync' ? String(args[0]).endsWith('.backup.tmp')
+          : ${JSON.stringify(method)}==='renameSync' ? String(args[0]).endsWith('.backup.tmp') : typeof args[0]==='number';
+        if(owned&&!fired){fired=true;if(${JSON.stringify(method)}==='closeSync')original.apply(this,args);
+          if(${JSON.stringify(method)}==='writeFileSync')original.call(this,args[0],'partial synthetic staging bytes');
+          throw Object.assign(Error('PRIVATE_FILESYSTEM_MESSAGE'),{code:'ENOSPC',path:'PRIVATE_CAUSE_PATH'});}
+        return original.apply(this,args);};
+      console.log(saveBackupConfig(process.env.BALLIN_TEST_CONFIG_PATH,{changed:true}));`;
+    const result = spawnSync(process.execPath, ['-e', script], { encoding:'utf8', env:testChildEnvironment({
+      HOME:root,PATH:root,BALLIN_TEST_CONFIG_PATH:configPath,NODE_OPTIONS:`--require ${JSON.stringify(guardPath)}`,
+    }) });
+    assert.equal(result.status,0,result.stderr); assert.include(result.stdout,'false');
+    assert.include(result.stdout,'ENOSPC: no space left on the filesystem.');
+    assert.include(result.stdout,`Configuration file: ${JSON.stringify(configPath)}`);
+    assert.notInclude(result.stdout,'PRIVATE_FILESYSTEM_MESSAGE'); assert.notInclude(result.stdout,'PRIVATE_CAUSE_PATH');
+    assert.equal(fs.readFileSync(configPath,'utf8'),before);
+    assert.isEmpty(fs.readdirSync(root).filter((name:string)=>name.endsWith('.backup.tmp')));
+  });
+
   for (const mode of ['tty', 'redirected', 'NO_COLOR', 'dumb']) {
     it(`owns one separated primary save error and adjacent recovery for ${mode}`, () => {
       const before = fs.readFileSync(configPath, 'utf8');
@@ -116,8 +138,12 @@ fs.readFileSync = (file, ...args) => {
       const block = plain.slice('BEFORE\n\n'.length, plain.indexOf('RETURN:false'));
       assert.notInclude(block, '\n\n');
       const lines = block.trimEnd().split('\n');
-      assert.match(lines.at(-1)!, /^Check the config file and its directory, then rerun /u);
+      assert.include(block, 'Check write access to this file and its containing folder');
+      assert.include(block, `Configuration file: ${JSON.stringify(configPath)}`);
       assert.include(lines.at(-1)!, 'ballin backup setup');
+      assert.notInclude(block, 'Simulated final config commit failure');
+      if (mode === 'tty') assert.include(result.stdout, '\x1b[1mballin backup setup\x1b[0m');
+      else assert.include(result.stdout, '`ballin backup setup`');
       if (mode === 'tty') assert.include(result.stdout, '\x1b[0;31m✗\x1b[0m');
       else assert.notInclude(result.stdout, '\x1b');
       assert.equal(fs.readFileSync(configPath, 'utf8'), before);

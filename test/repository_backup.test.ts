@@ -2196,7 +2196,7 @@ describe('repository backup lifecycle', function() {
       });
       ok(result);
       assert.equal(result.stderr, diagnostic);
-      assert.equal(result.stdout, 'Ballin updated.\n');
+      assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
       assert.lengthOf(publications(), 0);
     });
   }
