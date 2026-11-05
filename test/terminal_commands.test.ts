@@ -87,7 +87,13 @@ describe('command references at prose output boundaries', () => {
       assert.isTrue(recovery.stderr.startsWith(`\n${icon} Unable to read or validate local preferences.\nConfig is not valid JSON.\n`));
       assert.include(recovery.stderr.replace(/\s+/gu, ' '), `Repair the file, or run ${command('ballin config reset')} to replace it with defaults, then run ${command('ballin setup')} again.`);
       assert.notInclude(recovery.stderr, '\n\n', 'the final error and recovery stay consecutive');
-      for (const line of recovery.stderr.trim().split('\n')) assert.isAtMost(require('../commands/terminalStyle.ts').visibleWidth(line), 80);
+      // Keep the resolved path complete and copyable, even when the platform's
+      // temporary directory is longer than the prose wrapping width.
+      const diagnostic = `Configuration file: ${JSON.stringify(path.resolve(config))}`;
+      assert.include(recovery.stderr.split('\n'), diagnostic);
+      for (const line of recovery.stderr.trim().split('\n').filter((line: string) => line !== diagnostic)) {
+        assert.isAtMost(require('../commands/terminalStyle.ts').visibleWidth(line), 80);
+      }
       assert.equal(fs.readFileSync(config, 'utf8'), '{invalid');
     });
   }
@@ -179,11 +185,10 @@ describe('bootstrap command references on a real PTY without running an installe
     const command = source.match(/^command_reference\(\) \{\n[\s\S]*?^\}/mu)?.[0];
     const retry = source.match(/^print_retry_guidance\(\) \{\n[\s\S]*?^\}/mu)?.[0];
     const prerequisite = source.match(/^    printf '\\nUpdate or activate Node\.js[^\n]+$/mu)?.[0];
-    const refresh = source.match(/^    \{\n      printf 'Ballin checkout[^\n]+\n      command_reference 'ballin self-update' 2\n      printf ' to finish\.\\n'\n    \} >&2/mu)?.[0];
     const preflight = source.match(/"\$\(print_retry_guidance 2\)"/u)?.[0];
-    for (const fragment of [command, retry, prerequisite, refresh, preflight]) assert.isString(fragment);
+    for (const fragment of [command, retry, prerequisite, preflight]) assert.isString(fragment);
     // Execute the actual output fragments only, never the installer or tools.
-    const render = `${prerequisite}\n${refresh}\nprintf 'ARG:%s\\n' ${preflight} >&2`;
+    const render = `${prerequisite}\nprintf 'ARG:%s\\n' ${preflight} >&2`;
     const program = `${command}\n${retry}
       export TERM=xterm NO_COLOR=''
       ballin_sha=fixture; ballin_mode=self-update; setup_mode=self-update
@@ -208,11 +213,8 @@ describe('bootstrap command references on a real PTY without running an installe
     const plain = '`ballin self-update`';
     const bold = '\x1b[1mballin self-update\x1b[0m';
     const prefix = 'Update or activate Node.js using your existing installation method, then run ';
-    const failure = 'Ballin checkout is now fixture, but setup refresh failed. Fix the reported error, then run ';
     assert.include(output, `${prefix}${plain} again.\n`);
     assert.include(output, `${prefix}${bold} again.\n`);
-    assert.include(output, `${failure}${bold} to finish.\n`);
-    assert.include(output, `${failure}${plain} to finish.\n`);
     assert.include(output, `ARG:run ${bold} again\n`);
     assert.include(output, `ARG:run ${plain} again\n`);
     assert.include(output, `EXISTING:use ${bold} for the default selection\n`);
@@ -221,6 +223,37 @@ describe('bootstrap command references on a real PTY without running an installe
     for (const gate of ['NO-COLOR', 'DUMB']) assert.include(output, `${gate}:run ${plain} again\n`);
     assert.notInclude(output, '`\x1b[1m');
   });
+
+  it('styles trusted self-update refresh recovery for its receiving stream', () => {
+    sandbox = createSandbox();
+    const source = fs.readFileSync(path.join(__dirname, '../commands/repo_update.ts'), 'utf8');
+    const command = source.match(/^const stderrCommand = [\s\S]*?^  \?[^\n]+;/mu)?.[0];
+    const incomplete = source.match(/^  const incomplete = \(status: number\): void => \{[\s\S]*?^  \};/mu)?.[0];
+    assert.isString(command); assert.isString(incomplete);
+    // Only these actual pure output fragments run, with their two parameter
+    // annotations removed. No updater import, Git, installer or setup executes.
+    const renderer = path.join(sandbox.scratch, 'refresh-output.cjs');
+    fs.writeFileSync(renderer, `${command.replace('(command: string): string', '(command)')}\nconst selection = { sha: 'fixture' };\n${incomplete.replace('(status: number): void', '(status)')}\nincomplete(0);\n`);
+    const program = `
+      export TERM=xterm NO_COLOR=''
+      printf 'TTY:'; node '${renderer}'
+      printf 'STDERR-PIPE:'; node '${renderer}' 2> '${sandbox.scratch}/recovery'; /bin/cat '${sandbox.scratch}/recovery'
+      export NO_COLOR=0 FORCE_COLOR=1
+      printf 'NO-COLOR:'; node '${renderer}'
+      export NO_COLOR='' TERM=dumb
+      printf 'DUMB:'; node '${renderer}'
+    `;
+    const result = runInteractiveSetup(sandbox, ['/bin/bash', '-c', program], []);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const output = result.stdout.replace(/\r\n/gu, '\n');
+    const failure = 'Ballin checkout is now fixture, but setup refresh failed. Fix the reported error, then run ';
+    assert.include(output, `TTY:${failure}\x1b[1mballin self-update\x1b[0m to finish.\n`);
+    for (const label of ['STDERR-PIPE', 'NO-COLOR', 'DUMB']) {
+      assert.include(output, `${label}:${failure}\`ballin self-update\` to finish.\n`);
+    }
+    assert.notInclude(output, '`\x1b[1m');
+  });
+
 });
 
 describe('bootstrap marker and choice palette on a real PTY', function() {

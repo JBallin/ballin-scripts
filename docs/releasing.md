@@ -16,8 +16,9 @@ and known install URLs in README, Quickstart, and installation guidance. It
 produces an ordinary Git diff and never creates tags, publishes, merges, or
 deploys. Run `npm run release:check` and review the complete diff and all documented
 installation commands. The minimum Node version derives only from `package.json`
-engines. Bootstrap protocol 1 supports only revisions carrying compatible package
-metadata; older revisions are unsupported.
+engines. Bootstrap protocol 2 supports only revisions carrying compatible package
+metadata; older revisions are unsupported. For prelaunch entrypoint recovery, see
+[Installation testing](installation-testing.md#prelaunch-entrypoint-recovery).
 
 Stable is the permanent installer default. Before the first release, the public
 commands temporarily use the main script URL and explicitly set
