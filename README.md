@@ -21,7 +21,7 @@ alongside other tools.
 ## Installation
 
 > [!TIP]
-> Want guided setup? The interactive [Quickstart](docs/quickstart.md) helps install missing prerequisites. 🚀
+> Want guided setup? The interactive [Quickstart](docs/quickstart.md) offers NVM/LTS Node and missing prerequisites. 🚀
 
 Start with Git and [Node.js 24.12 or newer](docs/optional-capabilities.md#nodejs)
 on your `PATH`. Homebrew is optional; backups require

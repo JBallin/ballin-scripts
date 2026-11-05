@@ -11,6 +11,34 @@ command_reference() {
   else printf "\`%s\`" "$1"; fi
 }
 
+url_reference() {
+  if [[ -t "${2:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[34m%s\033[0m' "$1"
+  else printf '%s' "$1"; fi
+}
+documentation_pointer() {
+  printf '🔗 %s:\n' "$1"
+  url_reference "$2"
+  printf '\n'
+}
+error_icon() {
+  if [[ -t "${1:-1}" && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[31m❌\033[0m'
+  else printf '❌'; fi
+}
+setup_complete() {
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    printf '\033[32m😎 Setup complete.\033[0m'
+  else printf '😎 Setup complete.'; fi
+}
+prompt_choices() {
+  local choices=$1 default=$2
+  if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
+    if [[ "$default" == y ]]; then printf '\033[34m[\033[1mY\033[22m/n]\033[0m '
+    else printf '\033[34m[y/\033[1mN\033[22m]\033[0m '; fi
+  else printf '%s ' "$choices"; fi
+}
+
 # Abbreviate only paths inside HOME for display; filesystem operations stay absolute.
 display_path() {
   local home_path=${HOME%/}
@@ -44,7 +72,7 @@ setup_mode='refresh'
 print_stale_checkout_guidance() {
   printf '\n⚠️  ERROR: Unable to update %s before setup.\n' "$(display_path "$repo_dir")"
   printf 'Update or delete %s, then run this installer again.\n' "$(display_path "$repo_dir")"
-  printf '🔗 Troubleshooting:\n%s#health-and-recovery\n' "$docs_url"
+  documentation_pointer 'Troubleshooting' "$docs_url#health-and-recovery"
 }
 
 ############################### CHECK PREREQUISITES ############################
@@ -61,20 +89,37 @@ if [[ -n "${BALLIN_APPROVED_INSTALL_ROOT:-}" && ( "$BALLIN_APPROVED_INSTALL_ROOT
   exit 1
 fi
 
+system_git='/usr/bin/git'
+system_xcode_select='/usr/bin/xcode-select'
+git_tool=$(type -P git) || git_tool=''
+if [[ -z "$git_tool" ]]; then
+  printf '\n'; error_icon; printf ' Git is required before install can continue.\n'
+  printf 'Install Git, then run this installer again.\n'
+  exit 1
+fi
 prerequisite_status=0
-if command -v git >/dev/null 2>&1; then git --version >/dev/null 2>&1 || prerequisite_status=$?
-else prerequisite_status=127; fi
+if [[ "$(uname -s)" == Darwin && "$git_tool" -ef "$system_git" ]]; then
+  "$system_xcode_select" -p >/dev/null 2>&1 || prerequisite_status=$?
+  [[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
+  if [[ "$prerequisite_status" != 0 ]]; then
+    printf '\n'; error_icon; printf " Xcode Command Line Tools are required to use Apple’s Git.\n"
+    printf 'Run '; command_reference 'xcode-select --install'; printf ', finish installation, then rerun this installer.\n'
+    exit 1
+  fi
+fi
+git_diagnostics=$("$git_tool" --version 2>&1) || prerequisite_status=$?
 [[ "$prerequisite_status" != 130 && "$prerequisite_status" != 143 ]] || exit "$prerequisite_status"
-if [ "$prerequisite_status" -ne 0 ]; then
-  printf '\n⚠️  ERROR: Git is required before install can continue.\n'
-  printf '\nInstall Git, then run this installer again.\n'
+if [[ "$prerequisite_status" != 0 ]]; then
+  [[ -z "$git_diagnostics" ]] || printf '%s\n' "$git_diagnostics"
+  printf '\n'; error_icon; printf ' Git was found but could not run.\n'
+  printf 'Make sure '; command_reference 'git --version'; printf ' works, then rerun this installer.\n'
   exit 1
 fi
 
 if [ ! -x "$(command -v node)" ]; then
   printf '\n⚠️  ERROR: Node.js %s or newer is required.\n' "$required_node_version"
   printf "\nInstall supported Node.js, then run this installer again.\n"
-  printf '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
+  documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
   exit 1
 else
   node_check=$(node -p "
@@ -93,7 +138,7 @@ else
     fi
     printf '\n'
     printf "\nUpdate or activate Node.js using your existing installation method, then run this installer again.\n"
-    printf '🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n'
+    documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
     exit 1
   fi
 fi
@@ -123,7 +168,8 @@ read_prompt_answer() {
 confirm() {
   local default=${2:-n} normalized
   while :; do
-    if [[ "$default" == y ]]; then printf '%s [Y/n] ' "$1"; else printf '%s [y/N] ' "$1"; fi
+    printf '%s ' "$1"
+    if [[ "$default" == y ]]; then prompt_choices '[Y/n]' y; else prompt_choices '[y/N]' n; fi
     read_prompt_answer || return 1
     normalized=$prompt_answer
     normalized="${normalized#"${normalized%%[![:space:]]*}"}"
@@ -194,7 +240,7 @@ if [ "$repo_existed" = false ]; then
     printf 'Installation will:\n'
     printf '  - Create Ballin and its settings in %s\n' "$(display_path "$repo_dir")"
     printf '  - Link the Ballin command in %s\n' "$(display_path "$command_directory")"
-    printf '🔗 Installation details:\n%s#what-will-installation-change\n' "$docs_url"
+    documentation_pointer 'Installation details' "$docs_url#what-will-installation-change"
   fi
   if ! "$install_approved" && ! confirm 'Proceed with installation?'; then
     if "$input_ended"; then
@@ -220,7 +266,7 @@ else
   prepare_status=$?
   [[ "$prepare_status" != 130 && "$prepare_status" != 143 ]] || exit "$prepare_status"
   printf '\n⚠️  ERROR: Unable to prepare %s\n' "$(display_path "$repo_dir")"
-  printf '🔗 Troubleshooting:\n%s#health-and-recovery\n' "$docs_url"
+  documentation_pointer 'Troubleshooting' "$docs_url#health-and-recovery"
   exit 1
 fi
 
@@ -277,7 +323,7 @@ fi
 
 # Quickstart owns the final guidance after its optional backup/browser work.
 if [ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 ]; then
-  printf '\n😎 Setup complete! Open a new Terminal and run '
+  printf '\n'; setup_complete; printf ' Open a new Terminal and run '
   command_reference 'ballin help'
   printf '.\n'
 fi

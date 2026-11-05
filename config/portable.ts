@@ -79,8 +79,8 @@ const validateSetupObject = (config: unknown): ConfigObject => {
 };
 
 // Capture this before configure() fills defaults, so existing choices stay authoritative.
-const readSetupConfigContext = (configPath: string): ConfigObject => (
-  validateSetupObject(readConfig(configPath, true))
+const readSetupConfigContext = (configPath: string, allowMissing = true): ConfigObject => (
+  validateSetupObject(readConfig(configPath, allowMissing))
 );
 
 const projectPortablePreferences = (input: unknown): ConfigObject => {
@@ -110,9 +110,13 @@ const restorePortablePreferences = (
   const remoteUpdate = objectSection(remote, 'update') ?? {};
 
   restoredUpdateKeys.forEach((key) => {
-    if (hasOwn(originalUpdate, key) || !hasOwn(remoteUpdate, key)) return;
+    const pendingNvm = key === 'nvm' && objectSection(originalConfig, '_setup')?.unreviewedNvm === true;
+    if ((hasOwn(originalUpdate, key) && !pendingNvm) || !hasOwn(remoteUpdate, key)) return;
     const value = parseBoolean(remoteUpdate[key]);
-    if (value !== null) setLeaf(config, 'update', key, String(value));
+    if (value !== null) {
+      setLeaf(config, 'update', key, String(value));
+      if (key === 'nvm') delete config._setup;
+    }
   });
 
   return config;

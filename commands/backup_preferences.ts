@@ -1,14 +1,11 @@
-const { terminalCommand, terminalPath } = require('./terminalStyle.ts');
+const { terminalPath, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
-const { createConfigStore, stringify } = require('../config/store.ts');
-const { readSetupConfigContext } = require('../config/portable.ts');
-const { savedPreferenceLine } = require('./preference_confirmation.ts');
+const { stringify } = require('../config/store.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
-const { readYesNo, writeStdoutLine } = require('./commandHelpers.ts');
+const { readYesNo, writeStdoutLine: writeRawStdoutLine } = require('./commandHelpers.ts');
+const writeStdoutLine = (text = ''): void => writeRawStdoutLine(terminalProse(text));
 import type { SnapshotDefinition } from './backup_snapshots.ts';
-
-export type PreferenceOutcome = 'confirmed' | 'cancelled' | 'failed';
 
 const saveBackupConfig = (configPath: string, config: Record<string, unknown>): boolean => {
   const temporary = `${configPath}.${process.pid}.backup.tmp`;
@@ -29,44 +26,6 @@ const saveBackupConfig = (configPath: string, config: Record<string, unknown>): 
     }
   }
 };
-const preferenceBoolean = (value: unknown, key: string): boolean => {
-  if (value === true || value === 'true') return true;
-  if (value === false || value === 'false') return false;
-  throw new Error(`Invalid \`${key}\`; expected true or false.`);
-};
-type AutomaticBackupOptions = { defaultEnabled?: boolean; cancelOnEof?: boolean; presentation?: 'installation' | 'standalone'; validateConfig?: (config: ReturnType<typeof readSetupConfigContext>) => boolean };
-const selectAutomaticUpdateBackup = (options: AutomaticBackupOptions = {}): boolean | null => {
-  const defaultEnabled = options.defaultEnabled ?? false;
-  return readYesNo(`\nAutomatically run ${terminalCommand('ballin backup')} as part of ${terminalCommand('ballin update')}? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `, defaultEnabled);
-};
-const reviewAutomaticUpdateBackup = (configPath: string, options: AutomaticBackupOptions = {}): PreferenceOutcome => {
-  const enabled = selectAutomaticUpdateBackup(options);
-  if (enabled === null) return 'cancelled';
-  const preference = String(enabled);
-  let saved = false;
-  let previous: unknown;
-  if (createConfigStore({ configPath }).readLeafValue('update.backup') !== undefined) {
-    try {
-      const config = readSetupConfigContext(configPath);
-      if (options.validateConfig && !options.validateConfig(config)) return 'failed';
-      previous = config.update.backup;
-      config.update.backup = preference;
-      saved = saveBackupConfig(configPath, config);
-    } catch { /* Preserve existing local choices when preference persistence fails. */ }
-  }
-  if (!saved) {
-    writeStdoutLine(options.cancelOnEof
-      ? 'Unable to save the automatic-backup preference; the existing local setting is unchanged.'
-      : `Backup destination saved, but the automatic-backup preference was not saved. Set \`update.backup\` to ${preference} in \`ballin.config.json\`.`);
-    return 'failed';
-  }
-  if (options.presentation !== 'installation') writeStdoutLine(savedPreferenceLine('update.backup', enabled, previous));
-  return 'confirmed';
-};
-const offerAutomaticUpdateBackup = (configPath: string): boolean => (
-  reviewAutomaticUpdateBackup(configPath) !== 'failed'
-);
-
 // Quote unusual paths so control sequences cannot alter the terminal or impersonate another line.
 const displayPath = (value: string): string => {
   const unsafe = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
@@ -128,13 +87,13 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   }
   writeStdoutLine();
   writeStdoutLine(available.length ? 'Sensitive source paths available now:' : 'Sensitive source paths available now: none.');
-  [...new Set(available)].forEach((line) => writeStdoutLine(`  ${line}`));
+  [...new Set(available)].forEach((line) => writeRawStdoutLine(`  ${line}`));
   if (pipxAvailable) writeStdoutLine('pipx installation metadata is also available.');
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('ℹ️  Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
+  writeStdoutLine('⚠️  Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
   writeStdoutLine('🔗 Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
   let reviewSucceeded = false;
   if (!process.env.HOME) writeStdoutLine('HOME is required to review sensitive sources.');
@@ -148,7 +107,4 @@ const confirmSensitiveSourceChoice = (defaultIncluded: boolean): boolean | null 
   selectSensitiveSources(defaultIncluded)
 );
 
-module.exports = {
-  saveBackupConfig, offerAutomaticUpdateBackup, reviewAutomaticUpdateBackup, selectSensitiveSources,
-  preferenceBoolean, selectAutomaticUpdateBackup, confirmSensitiveSourceChoice,
-};
+module.exports = { saveBackupConfig, selectSensitiveSources, confirmSensitiveSourceChoice };

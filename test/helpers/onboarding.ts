@@ -13,7 +13,7 @@ type Sandbox = {
 };
 const markerName = '.ballin-onboarding-sandbox.json';
 const source = path.resolve(__dirname, '../..');
-const systemTools = ['bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'rm', 'tail'];
+const systemTools = ['uname', 'bash', 'cat', 'cmp', 'cp', 'ls', 'mkdir', 'mktemp', 'rm', 'tail'];
 const quickstartSystemTools = ['awk', 'chmod', 'grep', 'ln', 'mv', 'readlink', 'shasum'];
 const sandboxCommandTimeout = 120000;
 const sandboxSuiteTimeout = 300000;
@@ -57,7 +57,7 @@ const validateSandbox = (sandbox: Sandbox): void => {
     || fs.realpathSync(sandbox.repo) !== sandbox.repo)) throw new Error('Sandbox checkout was replaced');
   const state = path.join(sandbox.remote, 'repository.json');
   if (existsWithoutFollowingLinks(state) && fs.lstatSync(state).isSymbolicLink()) throw new Error('Sandbox remote state was replaced');
-  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, ...(sandbox.quickstart ? [...quickstartSystemTools, 'uname', 'sw_vers', 'curl'] : []), 'node', 'git', 'gh', 'softwareupdate'].sort().join(',')
+  if (fs.readdirSync(sandbox.tools).sort().join(',') !== [...systemTools, ...(sandbox.quickstart ? [...quickstartSystemTools, 'sw_vers', 'curl'] : []), 'node', 'git', 'gh', 'softwareupdate'].sort().join(',')
     || fs.readdirSync(sandbox.bin).some((name: string) => name !== 'ballin')) throw new Error('Unexpected sandbox command');
   for (const [file, contents] of sandbox.expected) {
     if (fs.readFileSync(file, 'utf8') !== contents || fs.lstatSync(file).isSymbolicLink()) {
@@ -81,7 +81,7 @@ const sandboxEnvironment = (sandbox: Sandbox): NodeJS.ProcessEnv => {
     ...(sandbox.quickstart ? { SHELL: '/bin/bash' } : {}),
     TMPDIR: sandbox.scratch, PWD: sandbox.home,
     GH_CONFIG_DIR: path.join(sandbox.home, '.config/gh'), XDG_CONFIG_HOME: path.join(sandbox.home, '.config'),
-    BALLIN_NO_ANALYTICS: '1', BALLIN_QA_ROOT: sandbox.root,
+    BALLIN_NO_ANALYTICS: '1', BALLIN_QA_ROOT: sandbox.root, BALLIN_QA_NODE: process.execPath,
     BALLIN_UNINSTALL_TEST_SYSTEM_ROOT: path.join(sandbox.root, 'system'),
     NODE_OPTIONS: `--require=${JSON.stringify(sandbox.guard)}`,
   };
@@ -138,7 +138,7 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
     fs.writeFileSync(scenarioPath(sandbox), JSON.stringify({ name: 'none' }));
     fs.writeFileSync(path.join(root, markerName), JSON.stringify({ version: 1, root, quickstart: sandbox.quickstart }));
     [sandbox.home, sandbox.tools, sandbox.bin, sandbox.remote, sandbox.scratch].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
-    for (const name of [...systemTools, ...(sandbox.quickstart ? quickstartSystemTools : [])]) {
+    for (const name of [...systemTools.filter(name => !sandbox.quickstart || name !== 'uname'), ...(sandbox.quickstart ? quickstartSystemTools : [])]) {
       const target = ['/bin', '/usr/bin'].map((directory) => path.join(directory, name)).find((file) => fs.existsSync(file));
       if (!target) throw new Error(`Required system tool is unavailable: ${name}`);
       fs.accessSync(target, fs.constants.X_OK);
@@ -154,6 +154,13 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
     const softwareUpdate = path.join(sandbox.tools, 'softwareupdate');
     fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); const scenario = JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name;\n  if (scenario === 'update-failure') { process.stderr.write('Simulated sandbox macOS update failure\\n'); process.exitCode = 1; }\n  else if (scenario === 'update-interrupt') { fs.writeFileSync(${JSON.stringify(path.join(sandbox.root, 'update-stage.ready'))}, 'ready'); process.stdout.write('Sandbox update stage ready for interruption\\n'); setInterval(() => {}, 1000); }\n  else process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
     if (sandbox.quickstart) {
+      const nvmFixture = path.join(sandbox.root, 'nvm-fixture.sh');
+      fs.copyFileSync(path.join(__dirname, 'onboarding_nvm.sh'), nvmFixture);
+      fs.chmodSync(nvmFixture, 0o700);
+      sandbox.expected.set(nvmFixture, fs.readFileSync(nvmFixture, 'utf8'));
+      const nvmInstaller = path.join(sandbox.root, 'nvm-install.sh');
+      fs.writeFileSync(nvmInstaller, '#!/bin/bash\nset -eu\n[[ "$PROFILE" == /dev/null && "$NVM_DIR" == "$BALLIN_QA_ROOT/home/.config/nvm" ]] || exit 97\nmkdir -p "$NVM_DIR"\ncp "$BALLIN_QA_ROOT/nvm-fixture.sh" "$NVM_DIR/nvm.sh"\n', { mode: 0o700 });
+      sandbox.expected.set(nvmInstaller, fs.readFileSync(nvmInstaller, 'utf8'));
       // Explicit test-only mode: downloads resolve only to the local installer,
       // prerequisites are fixture tools, and completion uses its existing TTY seam.
       const gh = path.join(sandbox.tools, 'gh');
@@ -169,9 +176,9 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
         curl: `const fs = require('fs'); const args = process.argv.slice(2);\n`
           + `const publicScripts = new Map(['install.sh', 'quickstart.sh'].map(file => ['https://raw.githubusercontent.com/JBallin/ballin-scripts/main/' + file, file]));\n`
           + `if (args.length === 3 && args[0] === '-q' && args[1] === '-fsSL' && publicScripts.has(args[2])) { fs.writeFileSync(1, fs.readFileSync(${JSON.stringify(source)} + '/' + publicScripts.get(args[2]))); process.exit(0); }\n`
-          + `const url=args.at(-3); const file=url==='https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh'?'install.sh':null; if(!file || JSON.stringify(args.slice(0,-3))!==JSON.stringify(['-q','-fsSL','--proto','=https','--proto-redir','=https','--tlsv1.2'])) process.exit(97);\n`
+          + `const url=args.at(-3); const nvm=url==='https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh'; const file=nvm?'nvm-install.sh':url==='https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh'?'install.sh':null; if(!file || JSON.stringify(args.slice(0,-3))!==JSON.stringify(['-q','-fsSL','--proto','=https','--proto-redir','=https','--tlsv1.2'])) process.exit(97);\n`
           + `const target = args.at(-1); if (!target.startsWith(${JSON.stringify(sandbox.scratch + '/ballin-quickstart.')})) process.exit(97);\n`
-          + `fs.copyFileSync(${JSON.stringify(source)} + '/' + file, target);`,
+          + `fs.copyFileSync((nvm ? ${JSON.stringify(sandbox.root)} : ${JSON.stringify(source)}) + '/' + file, target);`,
       })) {
         const file = path.join(sandbox.tools, name);
         fs.writeFileSync(file, '#!/usr/bin/env node\n' + body + '\n', { mode: 0o755 });
