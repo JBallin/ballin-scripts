@@ -15,22 +15,25 @@ else:
     head=None;read=lambda name:(ROOT/name).read_text()
 base=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 sources={name:read(name) for name in FILES}
+# Trust comes from reviewed tooling pins, never from candidate provenance.
+# Candidate snapshots/help remain data; only these exact reviewed bytes execute.
+trusted=json.loads((pathlib.Path(__file__).resolve().parent/'trusted-runtime.json').read_text())
+runtime={name:sources['commands/'+name] for name in ['terminalStyle.ts','help_format.ts','doctor_report.ts']}
+runtime['diagnostics.ts']=sources['config/diagnostics.ts']
+selection=re.search(r'^const selectionLabel = \(s: Selection\): string => ([^\n]+);$',sources['commands/repo_update.ts'],re.M)
+if not selection:raise SystemExit('Unrecognized pure selection formatter')
+runtime['selection_label.cjs']='const selectionLabel = (s) => '+selection.group(1)+';\nmodule.exports={selectionLabel};\n'
+for name,text in runtime.items():
+    if hashlib.sha256(text.encode()).hexdigest()!=trusted['executableHashes'][name]:
+        raise SystemExit('Unreviewed gallery runtime: '+name+'. Review formatter changes and update trusted-runtime.json before generation.')
 (OUT/'source-evidence').mkdir(exist_ok=True)
 hashes={}
 for name,text in sources.items():
     target=OUT/'source-evidence'/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_text(text)
     hashes[str(target.relative_to(OUT))]=hashlib.sha256(target.read_bytes()).hexdigest()
-for name in ['terminalStyle.ts','help_format.ts','doctor_report.ts']:
-    (OUT/name).write_text(sources['commands/'+name]);hashes[name]=hashlib.sha256((OUT/name).read_bytes()).hexdigest()
-# Copy a pure diagnostics module; never load its stateful callers.
-(OUT/'diagnostics.ts').write_text(sources['config/diagnostics.ts'])
-hashes['diagnostics.ts']=hashlib.sha256((OUT/'diagnostics.ts').read_bytes()).hexdigest()
-# The standalone repo helper imports Git. Extract only its pure display expression,
-# removing its TypeScript annotations without evaluating or importing product code.
-selection=re.search(r'^const selectionLabel = \(s: Selection\): string => ([^\n]+);$',sources['commands/repo_update.ts'],re.M)
-if not selection:raise SystemExit('Unrecognized pure selection formatter')
-(OUT/'selection_label.cjs').write_text('const selectionLabel = (s) => '+selection.group(1)+';\nmodule.exports={selectionLabel};\n')
-hashes['selection_label.cjs']=hashlib.sha256((OUT/'selection_label.cjs').read_bytes()).hexdigest()
+for name,text in runtime.items():
+    (OUT/name).write_text(text);hashes[name]=hashlib.sha256((OUT/name).read_bytes()).hexdigest()
+(OUT/'trusted-runtime.json').write_text(json.dumps(trusted,indent=2)+'\n')
 helptext=re.search(r'const setupHelp = `([\s\S]*?)`;',sources['commands/setup.ts']).group(1).replace('\\`','`')
 (OUT/'help.json').write_text(json.dumps(helptext))
 hashes['help.json']=hashlib.sha256((OUT/'help.json').read_bytes()).hexdigest()
@@ -61,6 +64,10 @@ for file,phrases in checks.items():
 (OUT/'provenance.json').write_text(json.dumps({'candidateHead':head,'frozenFeedback':'https://github.com/JBallin/ballin-scripts/pull/662#issuecomment-6648360748','reviewBaseline':'866db4ae4c796d5ca3b02caa2398b6222affc61a','worktreeHeadAtBuild':base,'state':'IMMUTABLE CANDIDATE' if head else 'UNCOMMITTED WORKTREE DRAFT','reviewedPatchSHA256':'46f21d31ee617da0ea4e6110db17037972eebdbbe790e4438b4bcf2e281f0360' if head=='8d3b1ab785d98e9a7c3e37f662dda891120da71d' else None,'sourceSnapshotHash':hashlib.sha256(''.join(name+'\0'+sources[name] for name in FILES).encode()).hexdigest(),'sources':hashes,'method':'Copied pure formatters/diagnostics and extracted pure selection display; staged selected excerpts; no stateful product modules are loaded.'},indent=2)+'\n')
 GALLERY=r'''// DISPLAY ONLY: no child processes, network requests, input, or filesystem writes.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+const trustedRuntime = require('./trusted-runtime.json');
+for (const [file, expected] of Object.entries(trustedRuntime.executableHashes)) {
+  if (crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,file))).digest('hex') !== expected) throw Error('Unreviewed gallery runtime: '+file);
+}
 const manifest = require('./provenance.json');
 for (const [file, expected] of Object.entries(manifest.sources)) {
   if (crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,file))).digest('hex') !== expected) throw Error('Gallery source changed: '+file);

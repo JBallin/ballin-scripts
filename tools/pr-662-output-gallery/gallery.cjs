@@ -1,5 +1,9 @@
 // DISPLAY ONLY: no child processes, network requests, input, or filesystem writes.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+const trustedRuntime = require('./trusted-runtime.json');
+for (const [file, expected] of Object.entries(trustedRuntime.executableHashes)) {
+  if (crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,file))).digest('hex') !== expected) throw Error('Unreviewed gallery runtime: '+file);
+}
 const manifest = require('./provenance.json');
 for (const [file, expected] of Object.entries(manifest.sources)) {
   if (crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,file))).digest('hex') !== expected) throw Error('Gallery source changed: '+file);

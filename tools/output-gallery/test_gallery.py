@@ -2,6 +2,8 @@
 """Focused data-fidelity and renderer rejection tests; no product execution."""
 import importlib.util
 import json
+import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -64,6 +66,63 @@ class GalleryTests(unittest.TestCase):
         result = subprocess.run(['python3', str(TOOLS / 'run.py'), '--source', 'HEAD', '--output', str(output)], capture_output=True, timeout=15)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
+
+
+class GallerySecurityTests(unittest.TestCase):
+    def test_candidate_formatter_and_expression_never_execute(self):
+        repo = TOOLS.parents[1]
+        with tempfile.TemporaryDirectory(prefix='ballin-candidate-security-') as temp:
+            root = Path(temp)
+            clone = root / 'repo.git'
+            subprocess.run(['git', 'clone', '--bare', '--shared', '--quiet', str(repo), str(clone)], check=True, timeout=20)
+            env = {**os.environ, 'GIT_INDEX_FILE': str(root / 'index'),
+                   'GIT_AUTHOR_NAME': 'Gallery test fixture', 'GIT_AUTHOR_EMAIL': 'fixture@example.invalid',
+                   'GIT_COMMITTER_NAME': 'Gallery test fixture', 'GIT_COMMITTER_EMAIL': 'fixture@example.invalid'}
+            def git(*args, data=None):
+                return subprocess.check_output(['git', '--git-dir', str(clone), *args], input=data, env=env).decode().strip()
+            baseline = git('rev-parse', 'HEAD')
+            for index, name in enumerate(['commands/terminalStyle.ts', 'commands/repo_update.ts']):
+                marker = root / ('executed-' + str(index))
+                source = subprocess.check_output(['git', '--git-dir', str(clone), 'show', baseline + ':' + name]).decode()
+                payload = "require('node:fs').writeFileSync(" + json.dumps(str(marker)) + ", 'executed')"
+                if index == 0:
+                    source += '\n' + payload + ';\n'
+                else:
+                    source = source.replace("s.kind === 'release' ? s.value :", "(" + payload + ", s.kind === 'release') ? s.value :", 1)
+                blob = git('hash-object', '-w', '--stdin', data=source.encode())
+                git('read-tree', baseline)
+                git('update-index', '--cacheinfo', '100644,' + blob + ',' + name)
+                tree = git('write-tree')
+                candidate = git('commit-tree', tree, '-p', baseline, data=b'Test-only candidate data\n')
+                output = root / ('output-' + str(index))
+                result = subprocess.run(['python3', str(TOOLS.parent / 'pr-662-output-gallery' / 'build.py'),
+                                         '--root', str(clone), '--output', str(output), '--candidate', candidate], capture_output=True, timeout=30)
+                if result.returncode == 0:
+                    shutil.copy2(TOOLS.parent / 'pr-662-output-gallery' / 'verify.py', output)
+                    subprocess.run(['python3', str(output / 'verify.py')], capture_output=True, timeout=30)
+                self.assertFalse(marker.exists(), 'Unreviewed candidate executed its marker payload')
+                self.assertNotEqual(result.returncode, 0, 'Builder accepted unreviewed executable bytes')
+                self.assertIn(b'Unreviewed gallery runtime', result.stderr)
+
+
+    def test_direct_replay_rejects_mutated_runtime_even_with_matching_provenance(self):
+        with tempfile.TemporaryDirectory(prefix='ballin-replay-security-') as temp:
+            output = Path(temp) / 'runtime'
+            shutil.copytree(TOOLS.parent / 'pr-662-output-gallery', output)
+            marker = Path(temp) / 'executed'
+            name = 'selection_label.cjs'
+            target = output / name
+            target.write_text(target.read_text() + "\nrequire('node:fs').writeFileSync(" + json.dumps(str(marker)) + ", 'executed');\n")
+            manifest = json.loads((output / 'provenance.json').read_text())
+            manifest['sources'][name] = gallery.digest(target)
+            (output / 'provenance.json').write_text(json.dumps(manifest))
+            for command in [['python3', str(output / 'verify.py')],
+                            ['node', str(output / 'gallery.cjs')],
+                            ['bash', str(output / 'run.command')]]:
+                result = subprocess.run(command, capture_output=True, timeout=30)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(b'Unreviewed gallery runtime', result.stderr)
+                self.assertFalse(marker.exists(), 'Direct replay executed unreviewed runtime')
 
 
 if __name__ == '__main__':

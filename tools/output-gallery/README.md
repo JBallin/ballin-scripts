@@ -28,7 +28,11 @@ snapshots and PTY verifier, with the AppKit renderer adapted from PR #667 at
 Historical fixtures/provenance remain in `../pr-662-output-gallery`; new builds
 record the selected source, exact tool bytes/hashes, dependencies and regeneration
 command. Scenarios are maintained for the current stack; review their source
-anchors and flow when refreshing.
+anchors and flow when refreshing. Executable formatter/helper bytes must match
+`../pr-662-output-gallery/trusted-runtime.json`, reviewed independently of the
+candidate. Changed formatters are refused before Node runs; review them and update
+those pins as a tooling change. Candidate help and other source remain data. Use
+a trusted checkout of the tooling itself.
 
 Each entry contains labeled ANSI preview, matching `text.txt`, paginated PNGs and
 provenance. Compare these together for wording, flow, color, spacing and wrapping.

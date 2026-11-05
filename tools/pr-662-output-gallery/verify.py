@@ -4,6 +4,10 @@ import errno,fcntl,hashlib,json,os,pathlib,pty,re,select,shutil,struct,subproces
 ROOT=pathlib.Path(__file__).resolve().parent
 NODE=shutil.which('node')
 if NODE is None:raise SystemExit('Node.js 26 must be available on PATH')
+# Check reviewed executable bytes before the first child process, including direct replay.
+trusted=json.loads((ROOT/'trusted-runtime.json').read_text())
+for file,expected in trusted['executableHashes'].items():
+ if hashlib.sha256((ROOT/file).read_bytes()).hexdigest()!=expected:raise SystemExit('Unreviewed gallery runtime: '+file)
 command=[NODE,str(ROOT/'gallery.cjs')]
 env={'PATH':os.environ.get('PATH',os.defpath),'TERM':'xterm','LANG':'en_US.UTF-8'}
 def capture(name,changes=None,tty=False):
