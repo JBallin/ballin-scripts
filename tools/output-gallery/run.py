@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Build a local review gallery; never execute product/install commands."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+TOOLS = Path(__file__).resolve().parent
+LEGACY = TOOLS.parent / 'pr-662-output-gallery'
+SGR = re.compile(r'\x1b\[[0-9;]*m')
+
+
+def run(command, **kwargs):
+    return subprocess.run(command, check=True, timeout=120, **kwargs)
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def plain_text(ansi):
+    text = SGR.sub('', ansi.replace('\r\n', '\n'))
+    if any(ord(char) < 32 and char != '\n' for char in text):
+        raise ValueError('Unsupported terminal controls: retain the raw capture and normalize explicitly before import')
+    return text
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--source', required=True, help='Full immutable product commit SHA available locally')
+    parser.add_argument('--output', type=Path, help='New local output directory (default: ignored .output-gallery/<source>)')
+    parser.add_argument('--captures', type=Path, help='Optional reviewed VM capture manifest; see README')
+    args = parser.parse_args()
+    if not re.fullmatch('[0-9a-f]{40}', args.source):
+        parser.error('--source must be a full immutable commit SHA')
+    resolved = subprocess.check_output(['git', 'rev-parse', args.source + '^{commit}'], cwd=ROOT, text=True).strip()
+    if resolved != args.source:
+        parser.error('Source revision did not resolve exactly')
+    output = (args.output or ROOT / '.output-gallery' / args.source).resolve()
+    if output.exists():
+        parser.error('Output already exists; choose a new directory to preserve previous evidence')
+    # Generated artifacts cannot accidentally enter the source tree unignored.
+    if output.is_relative_to(ROOT):
+        ignored = subprocess.run(['git', 'check-ignore', '--no-index', '-q', str(output / 'probe')], cwd=ROOT)
+        if ignored.returncode != 0:
+            parser.error('Output inside the checkout must be Git-ignored')
+    if subprocess.check_output(['node', '-p', 'process.versions.node.split(".")[0]'], text=True).strip() != '26':
+        parser.error('Use Node.js 26 from .nvmrc')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Retain failed builds for diagnosis, clearly separate from successful output.
+    work = Path(tempfile.mkdtemp(prefix='.gallery-build-', dir=output.parent))
+    staged = work / 'staged'
+    staged.mkdir()
+    shutil.copy2(LEGACY / 'verify.py', staged)
+    run(['python3', str(LEGACY / 'build.py'), '--root', str(ROOT), '--output', str(staged), '--candidate', args.source])
+    run(['python3', str(staged / 'verify.py')], stdout=subprocess.PIPE)
+    entries = []
+    # Each preserved scenario is its own readable group; full raw captures remain intact.
+    ansi = (staged / 'terminal-preview.ansi').read_text()
+    sections = re.split(r'(?=\n==========================================================================\n)', ansi)
+    for index, section in enumerate(sections):
+        entries.append({'id': f'staged-{index:02}', 'kind': 'staged', 'ansi': section,
+                        'sourceRevision': args.source, 'edits': 'Source-informed synthetic prompts, answers and outcomes; inline labels disclose selected excerpts/omissions. No live execution.'})
+    capture_manifest = None
+    if args.captures:
+        capture_manifest = json.loads(args.captures.read_text())
+        for capture in capture_manifest['captures']:
+            # Identifiers become file names; all inputs are data, never shell commands.
+            if not re.fullmatch('[a-z0-9][a-z0-9-]{0,63}', capture['id']):
+                parser.error('Invalid capture id')
+            if capture['sourceRevision'] != args.source or capture['kind'] != 'actual-vm':
+                parser.error('VM capture must identify this exact source revision and actual-vm kind')
+            for key in ['command', 'answers', 'result', 'environment', 'rawSha256', 'edits', 'sensitiveDataReviewed']:
+                if key not in capture:
+                    parser.error('Missing capture provenance: ' + key)
+            if capture['sensitiveDataReviewed'] is not True:
+                parser.error('Review capture for sensitive data before importing')
+            source = (args.captures.resolve().parent / capture['raw']).resolve()
+            if digest(source) != capture['rawSha256']:
+                parser.error('Raw capture hash mismatch')
+            text = source.read_bytes().decode('utf-8')
+            plain_text(text)  # Reject unsupported controls before retaining anything.
+            if any(e['id'] == capture['id'] for e in entries):
+                parser.error('Duplicate capture id')
+            entries.append({**capture, 'ansi': text})
+    renderer = work / 'render'
+    run(['swiftc', '-module-cache-path', str(work / 'swift-cache'), str(TOOLS / 'render.swift'), '-o', str(renderer)])
+    for entry in entries:
+        folder = work / entry['id']
+        folder.mkdir()
+        original = entry.pop('ansi')
+        canonical = original.replace('\r\n', '\n')
+        text = plain_text(canonical)
+        label = ('STAGED — source-informed synthetic output; no live execution.' if entry['kind'] == 'staged'
+                 else 'ACTUAL VM CAPTURE — rendered recorded output; not a Terminal screenshot.')
+        header = label + '\nSource: ' + args.source + '\n\n'
+        (folder / 'raw.ansi').write_bytes(original.encode('utf-8'))
+        (folder / 'preview.ansi').write_text(header + canonical)
+        (folder / 'text.txt').write_text(header + text)
+        run([str(renderer), str(folder / 'output')], input=(header + canonical).encode())
+        render_report = json.loads((folder / 'output.json').read_text())
+        if render_report['text'] != header + text:
+            raise ValueError('Renderer/text fidelity mismatch: ' + entry['id'])
+        entry['files'] = {file.name: digest(file) for file in folder.iterdir()}
+        (folder / 'provenance.json').write_text(json.dumps(entry, indent=2) + '\n')
+    # Retain exact generation inputs. Regenerate from the documented repository layout.
+    for name in ['run.py', 'render.swift', 'README.md']:
+        shutil.copy2(TOOLS / name, work / name)
+    if args.captures:
+        (work / 'capture-input.json').write_text(json.dumps({'captures': [{**e, 'raw': e['id'] + '/raw.ansi'} for e in entries if e['kind'] == 'actual-vm']}, indent=2) + '\n')
+    shutil.copy2(LEGACY / 'build.py', work / 'build.py')
+    shutil.copy2(LEGACY / 'verify.py', work / 'verify.py')
+    tool_head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    manifest = {'sourceRevision': args.source, 'toolCheckoutHead': tool_head,
+                'toolFiles': {name: digest(work / name) for name in ['run.py', 'render.swift', 'build.py', 'verify.py']},
+                'toolWorktreeDirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip()),
+                'preservedToolingRevision': 'c2f09af4636cc394adfc69666c6749ed5f91b9bf',
+                'rendererPrecedentRevision': '64d48dca63fc8833c366539a487d615dbda45d3f',
+                'dependencies': {name: subprocess.check_output(command, text=True).strip() for name, command in {
+                    'node': ['node', '--version'], 'python': ['python3', '--version'],
+                    'swift': ['swift', '--version'], 'macOS': ['sw_vers', '-productVersion']}.items()},
+                'scenarios': entries,
+                'coverage': 'Staged current-stack review only unless individual actual-vm entries exist. Presentation checks are not end-to-end evidence.',
+                'regenerate': f'python3 tools/output-gallery/run.py --source {args.source}' + (' --captures /path/to/reviewed/manifest.json' if args.captures else ''),
+                'capturesManifest': capture_manifest,
+                'vmCoverage': {'directInstallation': 'pending unless an actual-vm entry records it',
+                               'quickstartWithoutHomebrew': 'pending unless an actual-vm entry records it',
+                               'coreJourneys': 'pending unless actual-vm entries record them'}}
+    (work / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    # Drop compiler cache/binary from retained evidence; renderer source remains.
+    shutil.rmtree(work / 'swift-cache')
+    renderer.unlink()
+    work.rename(output)
+    print('Gallery: ' + str(output))
+    print('Terminal preview: cat ' + str(output / 'staged-02' / 'preview.ansi'))
+    print('All images, matching text and provenance: ' + str(output / 'manifest.json'))
+
+
+if __name__ == '__main__':
+    main()
