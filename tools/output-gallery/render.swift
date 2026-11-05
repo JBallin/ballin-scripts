@@ -69,7 +69,7 @@ for line in logicalLines {
     if cursor < source.length {
         rendered.append(NSAttributedString(string: source.substring(from: cursor), attributes: attributes()))
     }
-    if rendered.string.unicodeScalars.contains(where: { $0.value < 32 && $0 != "\n" }) {
+    if rendered.string.unicodeScalars.contains(where: { ($0.value < 32 && $0 != "\n") || (127...159).contains($0.value) }) {
         fail("Unsupported terminal control sequence; normalize explicitly before rendering")
     }
     renderedLines.append(rendered)

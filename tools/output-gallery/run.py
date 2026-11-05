@@ -25,7 +25,7 @@ def digest(path):
 
 def plain_text(ansi):
     text = SGR.sub('', ansi.replace('\r\n', '\n'))
-    if any(ord(char) < 32 and char != '\n' for char in text):
+    if any((ord(char) < 32 and char != '\n') or 127 <= ord(char) <= 159 for char in text):
         raise ValueError('Unsupported terminal controls: retain the raw capture and normalize explicitly before import')
     return text
 
@@ -54,10 +54,14 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     # Retain failed builds for diagnosis, clearly separate from successful output.
     work = Path(tempfile.mkdtemp(prefix='.gallery-build-', dir=output.parent))
+    for name in ['run.py', 'render.swift', 'README.md']:
+        shutil.copy2(TOOLS / name, work / name)
+    for name in ['build.py', 'verify.py']:
+        shutil.copy2(LEGACY / name, work / name)
     staged = work / 'staged'
     staged.mkdir()
     shutil.copy2(LEGACY / 'verify.py', staged)
-    run(['python3', str(LEGACY / 'build.py'), '--root', str(ROOT), '--output', str(staged), '--candidate', args.source])
+    run(['python3', str(work / 'build.py'), '--root', str(ROOT), '--output', str(staged), '--candidate', args.source])
     run(['python3', str(staged / 'verify.py')], stdout=subprocess.PIPE)
     entries = []
     # Each preserved scenario is its own readable group; full raw captures remain intact.
@@ -89,7 +93,7 @@ def main():
                 parser.error('Duplicate capture id')
             entries.append({**capture, 'ansi': text})
     renderer = work / 'render'
-    run(['swiftc', '-module-cache-path', str(work / 'swift-cache'), str(TOOLS / 'render.swift'), '-o', str(renderer)])
+    run(['swiftc', '-module-cache-path', str(work / 'swift-cache'), str(work / 'render.swift'), '-o', str(renderer)])
     for entry in entries:
         folder = work / entry['id']
         folder.mkdir()
@@ -108,9 +112,7 @@ def main():
             raise ValueError('Renderer/text fidelity mismatch: ' + entry['id'])
         entry['files'] = {file.name: digest(file) for file in folder.iterdir()}
         (folder / 'provenance.json').write_text(json.dumps(entry, indent=2) + '\n')
-    # Retain exact generation inputs. Regenerate from the documented repository layout.
-    for name in ['run.py', 'render.swift', 'README.md']:
-        shutil.copy2(TOOLS / name, work / name)
+    # Retain exact generation inputs; regenerate from the repository layout.
     if args.captures:
         (work / 'capture-input.json').write_text(json.dumps({'captures': [{**e, 'raw': e['id'] + '/raw.ansi'} for e in entries if e['kind'] == 'actual-vm']}, indent=2) + '\n')
     shutil.copy2(LEGACY / 'build.py', work / 'build.py')

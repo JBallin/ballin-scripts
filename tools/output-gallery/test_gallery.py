@@ -42,7 +42,7 @@ class GalleryTests(unittest.TestCase):
             self.assertEqual((self.root / page).read_bytes()[:8], b'\x89PNG\r\n\x1a\n')
 
     def test_rejects_mixed_supported_and_unsupported_escapes(self):
-        for index, text in enumerate(['\x1b[32mok\x1b[2Jhidden', '\x1b[38;5;100munsupported', '\x1b[999999999999999999999999999999moverflow', 'tab\there', '\x1b]8;;https://example.com\x07link']):
+        for index, text in enumerate(['\x1b[32mok\x1b[2Jhidden', '\x1b[38;5;100munsupported', '\x1b[999999999999999999999999999999moverflow', 'tab\there', 'delete\x7fhere', 'c1\x9bhere', '\x1b]8;;https://example.com\x07link']):
             result, _ = self.render(text, 'bad-' + str(index))
             self.assertNotEqual(result.returncode, 0)
 
@@ -55,7 +55,7 @@ class GalleryTests(unittest.TestCase):
 
     def test_plain_text_normalization_rejects_redraw(self):
         self.assertEqual(gallery.plain_text('\x1b[1mhello\x1b[0m\r\n'), 'hello\n')
-        for control in ['\r', '\b', '\x1b[2K', '\x07']:
+        for control in ['\r', '\b', '\x1b[2K', '\x07', '\x7f', '\x9b']:
             with self.assertRaises(ValueError):
                 gallery.plain_text('safe' + control)
 
