@@ -168,7 +168,7 @@ describe('repository backup lifecycle', function() {
       const blue = `\x1b[34m${url}\x1b[0m`;
       assert.include(result.stdout, `Proposed backup: ${styled && mode === 'reconnect' ? blue : url}`);
       assert.include(result.stdout, `Private backup ${mode === 'create' ? 'created' : 'reconnected'}: ${styled ? blue : url}`);
-      assert.notInclude(result.stdout, 'Change backup settings later');
+      assert.notInclude(result.stdout, 'Change backup settings');
       assert.include(result.stdout, 'to review your other preferences.');
       if (!styled) assert.notInclude(result.stdout, '\x1b');
       assert.deepEqual(config().backup.repository, fixtureDestination);
@@ -198,8 +198,8 @@ describe('repository backup lifecycle', function() {
     it(`consolidates installation reminders in current-flow order (general review ${general})`, () => {
       const result = runSetup('refresh', { BALLIN_BACKUP_CHOICE: 'yes' }, '', general ? 'y\n' + '\n'.repeat(6) : 'n\n');
       ok(result);
-      const backup = 'Change backup settings later with `ballin backup setup`.';
-      const preferences = 'Change preferences later with `ballin setup`.';
+      const backup = 'Change backup settings with `ballin backup setup`.';
+      const preferences = 'Change preferences with `ballin setup`.';
       for (const line of [backup, preferences]) assert.equal(result.stdout.split(line).length - 1, 1);
       assert.isBelow(result.stdout.indexOf(general ? preferences : backup), result.stdout.indexOf(general ? backup : preferences));
       assert.notInclude(result.stdout, 'to review your other preferences.');
@@ -212,8 +212,8 @@ describe('repository backup lifecycle', function() {
     it(`defers the skipped backup reminder to the installer once (general review ${general})`, () => {
       unconfigured(); const result = runSetup('refresh', {}, '', 'n\n' + (general ? 'y\n' + '\n'.repeat(6) : 'n\n')); ok(result);
       assert.include(result.stdout, 'Backup setup skipped.');
-      const backup = 'Change backup settings later with `ballin backup setup`.';
-      const preferences = 'Change preferences later with `ballin setup`.';
+      const backup = 'Change backup settings with `ballin backup setup`.';
+      const preferences = 'Change preferences with `ballin setup`.';
       for (const line of [backup, preferences]) assert.equal(result.stdout.split(line).length - 1, 1);
       assert.notInclude(result.stdout, 'Run `ballin backup setup` when you’re ready.');
       assert.isBelow(result.stdout.indexOf(general ? preferences : backup), result.stdout.indexOf(general ? backup : preferences));
@@ -847,7 +847,7 @@ describe('repository backup lifecycle', function() {
       assert.notMatch(result.stdout, /`backup\.includeSensitive` (?:set to|unchanged at)/u);
       assert.equal(result.stdout.includes('✓ Setup complete.'), presentation === 'standalone');
       assert.include(result.stdout, 'Run `ballin setup`');
-      assert.equal(result.stdout.includes('Change backup settings later with `ballin backup setup`.'), presentation === 'installation');
+      assert.equal(result.stdout.includes('Change backup settings with `ballin backup setup`.'), presentation === 'installation');
       assert.equal(cached(), 'preserved cached bytes\n'); assert.equal(state().head, head); assert.isEmpty(mutations());
     });
   }

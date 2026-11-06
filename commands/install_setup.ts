@@ -259,9 +259,9 @@ const setup = (
   setupAnalytics(repoDir);
 
   if (mode !== 'self-update') {
-    const general = `Change preferences later with ${terminalCommand('ballin setup')}.`;
+    const general = `Change preferences with ${terminalCommand('ballin setup')}.`;
     const backup = backupSetupCancelled ? `Run ${terminalCommand('ballin backup setup')} when you’re ready.`
-      : backupFlow ? `Change backup settings later with ${terminalCommand('ballin backup setup')}.`
+      : backupFlow ? `Change backup settings with ${terminalCommand('ballin backup setup')}.`
       : `Run ${terminalCommand('ballin backup setup')} to configure or review your GitHub backup.`;
     const followUp = generalReview ? [general, backup] : backupFlow ? [backup, general] : [general];
     writeStdoutLine('\n' + terminalProse(followUp.join('\n')));

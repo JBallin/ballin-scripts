@@ -257,8 +257,8 @@ ballin_download() { : > "$2"; }
   });
 
   for (const scenario of ['clone', 'refresh', 'initial configuration']) {
-    for (const noColor of [false, true]) {
-      it(`keeps exactly one separator before setup after ${scenario} (NO_COLOR: ${noColor})`, () => {
+    for (const display of ['plain', 'no-color', 'dumb']) {
+      it(`keeps exactly one separator before setup after ${scenario} (${display})`, () => {
         const existing = scenario !== 'clone';
         installBaseCommands();
         if (existing) writeCurrentCheckout();
@@ -268,18 +268,31 @@ ballin_download() { : > "$2"; }
         fs.writeFileSync(tool, fs.readFileSync(tool, 'utf8').replace(marker, '    printf \'Git output fixture.\\n\'\n' + marker));
         const node = path.join(toolDir, 'node');
         fs.writeFileSync(node, fs.readFileSync(node, 'utf8').replace('    exit "$FAKE_SETUP_STATUS"', '    printf \'Typed setup fixture.\\n\'\n    exit "$FAKE_SETUP_STATUS"'));
-        const result = runInstall({ env: noColor ? { NO_COLOR: '1' } : {} });
+        const result = runInstall({ env: { TERM: display === 'dumb' ? 'dumb' : 'xterm', ...(display === 'no-color' ? { NO_COLOR: '1' } : {}) } });
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.isTrue(result.stdout.startsWith(existing ? '==> Updating Ballin\n' : '==> Setting up Ballin\n'), result.stdout);
         if (existing) assert.notInclude(result.stdout, '==> Setting up Ballin');
         const separator = scenario === 'initial configuration'
-          ? `\nInitial configuration\ni Installation details:\n${docsUrl}#what-will-installation-change\n`
+          ? `\n==> Initial configuration\ni Installation details:\n${docsUrl}#what-will-installation-change\n`
           : existing ? '' : '\n';
         assert.include(result.stdout, `Git output fixture.\n${separator}Typed setup fixture.\n\n${terminalGuidance}\n`);
         assert.notInclude(result.stdout, '\n\n\n');
+        assert.notInclude(result.stdout, '\x1b');
+        assert.equal(result.stdout.split('==> Initial configuration').length - 1, scenario === 'initial configuration' ? 1 : 0);
         assert.equal(result.stdout.split('Setup complete.').length - 1, 1);
       });
     }
+  }
+
+  for (const configured of [false, true]) {
+    it(`omits initial configuration during self-update (configured: ${configured})`, () => {
+      installBaseCommands(); writeCurrentCheckout();
+      if (!configured) fs.unlinkSync(path.join(repoDir, 'ballin.config.json'));
+      const result = runInstall({ env: { FAKE_INSTALL_MODE: 'self-update' } });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.notInclude(result.stdout, 'Initial configuration');
+      assert.include(commandLog(), setupCommand('self-update'));
+    });
   }
 
   it('clones a missing checkout and delegates fresh setup to typed code', () => {

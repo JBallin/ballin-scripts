@@ -63,7 +63,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
   let protectionDetailsLabel: 'Backup details' | 'Reconnect details' | undefined;
   const complete = (): boolean => {
     if (!options.deferFollowUp && !options.maintenanceOnly) {
-      if (options.presentation === 'installation') writeStdoutLine(`Change backup settings later with ${terminalCommand('ballin backup setup')}.`);
+      if (options.presentation === 'installation') writeStdoutLine(`Change backup settings with ${terminalCommand('ballin backup setup')}.`);
       else writeStdoutLine(`\n${terminalComplete('Setup complete.')}`);
       writeStdoutLine(`Run ${terminalCommand('ballin setup')} to review your other preferences.`);
     }
