@@ -619,7 +619,9 @@ if [ "$repo_existed" = false ]; then
 fi
 
 if [ "$repo_existed" = true ] && [ "$setup_mode" = fresh ]; then
-  printf '\nInitial configuration\n'; documentation_pointer 'Installation details' "$docs_url#what-will-installation-change"
+  printf '\n'
+  phase 'Initial configuration'
+  documentation_pointer 'Installation details' "$docs_url#what-will-installation-change"
 fi
 
 (
