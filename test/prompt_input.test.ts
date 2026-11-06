@@ -213,7 +213,7 @@ describe('plain prompt input contracts', function() {
       ]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, 'Startup file: ~/.bashrc\n');
+      assert.include(output, 'File to update: ~/.bashrc\n');
       assert.include(output, '\x1b[1;32m?\x1b[0m Enable Ballin tab completion? [y/N] ');
       assert.notInclude(output, 'Optional tab completion');
       assert.notInclude(output, '\x1b[1mN\x1b[0m');

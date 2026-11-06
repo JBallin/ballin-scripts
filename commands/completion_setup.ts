@@ -174,7 +174,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     beginCompletion();
-    write(`Startup file: ${terminalPath(target.profile, env.HOME)}`);
+    write(`File to update: ${terminalPath(target.profile, env.HOME)}`);
     while (true) {
       const answer = completionPrompt(`Enable Ballin tab completion? [y/N] `, (text: string) => {
         const enabled = parseYesNo(text, false);
