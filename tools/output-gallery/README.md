@@ -6,9 +6,9 @@ On macOS, use Node.js 26 (`.nvmrc`), Python 3 and Xcode command line tools
 repository root:
 
 ```sh
-python3 tools/output-gallery/run.py --source 1f0c793d7bc6567af7ed2a580ad831c3a1567cc8
-cat .output-gallery/1f0c793d7bc6567af7ed2a580ad831c3a1567cc8/staged-02/preview.ansi
-open .output-gallery/1f0c793d7bc6567af7ed2a580ad831c3a1567cc8/staged-02/output-001.png
+python3 tools/output-gallery/run.py --source 4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9
+cat .output-gallery/4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9/staged-02/preview.ansi
+open .output-gallery/4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9/staged-02/output-001.png
 ```
 
 Use a full source SHA available in local Git objects. The example selects the
