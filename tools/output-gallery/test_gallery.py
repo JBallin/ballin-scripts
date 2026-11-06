@@ -119,6 +119,32 @@ class GalleryTests(unittest.TestCase):
             self.assertIn('Normalization/omissions: Redraw normalization. Omitted: Guard status; Inspector boilerplate', text)
 
 
+class GalleryBuildTests(unittest.TestCase):
+    def test_current_setup_copy_and_preserved_historical_replay(self):
+        legacy = TOOLS.parent / 'pr-662-output-gallery'
+        source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=TOOLS, text=True).strip()
+        with tempfile.TemporaryDirectory(prefix='ballin-gallery-source-test-') as temp:
+            current = Path(temp) / 'current'
+            subprocess.run(['python3', str(legacy / 'build.py'), '--candidate', source,
+                            '--output', str(current)], check=True, capture_output=True, timeout=30)
+            shutil.copy2(legacy / 'verify.py', current)
+            subprocess.run(['python3', str(current / 'verify.py')], check=True, capture_output=True, timeout=30)
+            text = (current / 'plain.txt').read_text()
+            self.assertIn('Enable Ballin tab completion in ~/.bash_profile? [y/N] Yes', text)
+            self.assertIn('Enable Ballin tab completion in ~/.bash_profile? [y/N] No', text)
+            self.assertNotIn('Startup file:', text)
+            self.assertNotIn('Change preferences later with', text)
+            self.assertNotIn('Change backup settings later with', text)
+            self.assertIn('Change backup settings with', text)
+            self.assertIn('Change preferences with', text)
+            anchors = json.loads((current / 'source-anchors.json').read_text())
+            self.assertIn("phase 'Initial configuration'", [a['anchor'] for a in anchors])
+            historical = Path(temp) / 'historical'
+            shutil.copytree(legacy, historical)
+            subprocess.run(['python3', str(historical / 'verify.py')], check=True, capture_output=True, timeout=30)
+            self.assertIn('Change preferences later with', (historical / 'plain.txt').read_text())
+
+
 class GallerySecurityTests(unittest.TestCase):
     def test_candidate_formatter_and_expression_never_execute(self):
         repo = TOOLS.parents[1]
