@@ -1098,7 +1098,7 @@ require('https').request = () => {
     assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped.');
-    assert.equal(result.stdout.split('Change backup settings later with `ballin backup setup`.').length - 1, 1);
+    assert.equal(result.stdout.split('Change backup settings with `ballin backup setup`.').length - 1, 1);
     assert.notInclude(result.stdout, 'Run `ballin backup setup` when you’re ready.');
     assert.notInclude(result.stdout, '😎 ballin!');
     assert.notInclude(result.stdout, 'symlinked binaries');
