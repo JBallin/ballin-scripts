@@ -36,6 +36,13 @@ class Preview(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
         return str(selected_file(self.site, self.base, path))
 
+    def copyfile(self, source, outputfile):
+        try:
+            super().copyfile(source, outputfile)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+            self.log_message('Client disconnected while sending response body')
+
     def do_GET(self):
         if self.path in ('/', self.base):
             self.send_response(302)

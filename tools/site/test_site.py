@@ -456,6 +456,37 @@ class BuildTests(unittest.TestCase):
                 with self.subTest(path=path):
                     self.assertIsNone(preview.selected_file(selected, '/ballin-scripts', path))
 
+    def test_preview_handles_only_disconnected_response_writes(self):
+        class FailedWriter:
+            def __init__(self, error):
+                self.error = error
+            def write(self, data):
+                raise self.error
+        for error in [BrokenPipeError('closed pipe'), ConnectionResetError('reset peer')]:
+            with self.subTest(error=type(error).__name__):
+                handler = object.__new__(preview.Preview)
+                handler.close_connection = False
+                messages = []
+                handler.log_message = lambda message: messages.append(message)
+                handler.copyfile(io.BytesIO(b'complete HTML'), FailedWriter(error))
+                self.assertTrue(handler.close_connection)
+                self.assertEqual(messages, ['Client disconnected while sending response body'])
+        for error in [OSError(5, 'unexpected I/O failure'), TimeoutError('unexpected timeout')]:
+            handler = object.__new__(preview.Preview)
+            handler.log_message = lambda message: self.fail('Unexpected errors must propagate')
+            with self.subTest(error=type(error).__name__), self.assertRaises(type(error)):
+                handler.copyfile(io.BytesIO(b'HTML'), FailedWriter(error))
+
+    def test_preview_normal_body_copy_is_unchanged(self):
+        handler = object.__new__(preview.Preview)
+        handler.close_connection = False
+        handler.log_message = lambda message: self.fail('Normal transfer must not log a disconnect')
+        output = io.BytesIO()
+        data = b'<html>complete response</html>\x00binary'
+        handler.copyfile(io.BytesIO(data), output)
+        self.assertEqual(output.getvalue(), data)
+        self.assertFalse(handler.close_connection)
+
     def test_heading_number_suffix_collisions_reserve_every_emitted_id(self):
         payload = {'pages': [{'path': 'README.md', 'text': '# Heading\n\n## Setup\n\n## Setup\n\n## Setup-1\n\n## Setup\n\n## Setup-1\n'}], 'base': '/ballin-scripts', 'sourceBase': 'https://example.com/source'}
         page = json.loads(subprocess.check_output(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload)))[0]
