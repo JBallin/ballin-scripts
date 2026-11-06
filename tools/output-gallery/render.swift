@@ -7,10 +7,36 @@ func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data((message + "\n").utf8))
     exit(1)
 }
-guard CommandLine.arguments.count == 2,
+guard (2...3).contains(CommandLine.arguments.count),
       let input = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8),
       !input.isEmpty else { fail("Expected UTF-8 ANSI on stdin and an output prefix") }
 let prefix = CommandLine.arguments[1]
+struct Presentation: Decodable {
+    let label: String
+    let source: String
+    let scenario: String
+    let keepTogether: [[Int]]
+}
+var presentation: Presentation?
+var transcriptHeader = ""
+var body = input
+if CommandLine.arguments.count == 3 {
+    do {
+        presentation = try JSONDecoder().decode(Presentation.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2])))
+    } catch { fail("Invalid presentation metadata") }
+    let context = presentation!
+    for value in [context.label, context.source, context.scenario] {
+        guard !value.isEmpty, value.count <= 240,
+              !value.unicodeScalars.contains(where: { $0.value < 32 || (127...159).contains($0.value) }) else {
+            fail("Presentation captions must be short single-line text")
+        }
+    }
+    transcriptHeader = context.label + "\nSource: " + context.source + "\n\n"
+    guard input.hasPrefix(transcriptHeader) else { fail("Presentation context does not match transcript header") }
+    // Reposition the existing review header as a repeated image caption. The
+    // logical text export still contains its original single header verbatim.
+    body = String(input.dropFirst(transcriptHeader.count))
+}
 let pattern = try NSRegularExpression(pattern: "\u{001B}\\[([0-9;]*)m")
 let regular = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
 let boldFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .bold)
@@ -36,7 +62,7 @@ func attributes() -> [NSAttributedString.Key: Any] {
             .paragraphStyle: style]
 }
 var renderedLines: [NSAttributedString] = []
-var logicalLines = input.components(separatedBy: "\n")
+var logicalLines = body.components(separatedBy: "\n")
 if logicalLines.last == "" { logicalLines.removeLast() }
 for line in logicalLines {
     let source = line as NSString
@@ -78,22 +104,60 @@ let width = 1280
 let margin: CGFloat = 48
 let contentWidth = CGFloat(width) - margin * 2
 let options: NSString.DrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
-var pages: [[(NSAttributedString, CGFloat)]] = [[]]
-var used: CGFloat = 0
-for line in renderedLines {
+let captionAttributes: [NSAttributedString.Key: Any] = [
+    .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+    .foregroundColor: normal,
+]
+func caption(_ page: Int, _ count: Int) -> NSAttributedString {
+    guard let context = presentation else { return NSAttributedString(string: "") }
+    return NSAttributedString(string: context.label + "\nSource: " + context.source
+        + "\nScenario: " + context.scenario + "\nPage \(page) of \(count)", attributes: captionAttributes)
+}
+let captionHeight: CGFloat = presentation == nil ? 0 : ceil(caption(1, 1).boundingRect(
+    with: NSSize(width: contentWidth, height: 100000), options: options).height) + 24
+let contentLimit = 1400 - captionHeight
+guard contentLimit > 0 else { fail("Presentation caption is too tall") }
+let heights = renderedLines.map { line -> CGFloat in
     let size = line.boundingRect(with: NSSize(width: contentWidth, height: 100000), options: options)
-    let height = max(28, ceil(size.height) + 8)
-    guard height <= 1400 else { fail("One logical line is too tall; normalize the capture explicitly") }
-    if used + height > 1400 {
+    return max(28, ceil(size.height) + 8)
+}
+var groupEnds: [Int: Int] = [:]
+var previousEnd = 0
+for range in presentation?.keepTogether ?? [] {
+    guard range.count == 2, range[0] >= previousEnd, range[1] > range[0], range[1] <= renderedLines.count else {
+        fail("Invalid presentation block range")
+    }
+    groupEnds[range[0]] = range[1]
+    previousEnd = range[1]
+}
+var pages: [[Int]] = [[]]
+var used: CGFloat = 0
+var lineIndex = 0
+while lineIndex < renderedLines.count {
+    let end = groupEnds[lineIndex] ?? lineIndex + 1
+    let blockHeight = heights[lineIndex..<end].reduce(0, +)
+    // Keep a declared case together when it fits; oversized blocks still use
+    // ordinary line pagination rather than clipping or changing the transcript.
+    if blockHeight <= contentLimit && used > 0 && used + blockHeight > contentLimit {
         pages.append([])
         used = 0
     }
-    pages[pages.count - 1].append((line, height))
-    used += height
+    for index in lineIndex..<end {
+        let height = heights[index]
+        guard height <= contentLimit else { fail("One logical line is too tall; normalize the capture explicitly") }
+        if used + height > contentLimit {
+            pages.append([])
+            used = 0
+        }
+        pages[pages.count - 1].append(index)
+        used += height
+    }
+    lineIndex = end
 }
 var filenames: [String] = []
+var captions: [String] = []
 for (index, page) in pages.enumerated() {
-    let height = max(240, Int(ceil(page.reduce(0) { $0 + $1.1 } + margin * 2)))
+    let height = max(240, Int(ceil(page.reduce(0) { $0 + heights[$1] } + captionHeight + margin * 2)))
     guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
                                        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                                        isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
@@ -103,7 +167,14 @@ for (index, page) in pages.enumerated() {
     graphics.cgContext.setFillColor(NSColor(calibratedRed: 0.105, green: 0.118, blue: 0.141, alpha: 1).cgColor)
     graphics.cgContext.fill(CGRect(x: 0, y: 0, width: width, height: height))
     var top = CGFloat(height) - margin
-    for (line, lineHeight) in page {
+    let pageCaption = caption(index + 1, pages.count)
+    if presentation != nil {
+        top -= captionHeight
+        pageCaption.draw(with: NSRect(x: margin, y: top + 16, width: contentWidth, height: captionHeight - 16), options: options)
+    }
+    captions.append(pageCaption.string)
+    for lineIndex in page {
+        let line = renderedLines[lineIndex], lineHeight = heights[lineIndex]
         top -= lineHeight
         line.draw(with: NSRect(x: margin, y: top, width: contentWidth, height: lineHeight), options: options)
     }
@@ -113,7 +184,8 @@ for (index, page) in pages.enumerated() {
     try png.write(to: URL(fileURLWithPath: filename))
     filenames.append(URL(fileURLWithPath: filename).lastPathComponent)
 }
-let report: [String: Any] = ["text": renderedLines.map { $0.string }.joined(separator: "\n") + (input.hasSuffix("\n") ? "\n" : ""),
+let report: [String: Any] = ["text": transcriptHeader + renderedLines.map { $0.string }.joined(separator: "\n") + (body.hasSuffix("\n") ? "\n" : ""),
                            "pages": filenames, "width": width,
-                           "presentation": "Rendered ANSI; visual wrapping only; logical text and order unchanged"]
+                           "pageCaptions": captions, "pageLineIndexes": pages,
+                           "presentation": "Rendered ANSI; repeated review captions and visual pagination; logical text and order unchanged"]
 try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: prefix + ".json"))

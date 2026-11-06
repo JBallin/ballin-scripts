@@ -359,6 +359,9 @@ Use Homebrew-style phase headings throughout setup and update: a blue
 `==>` marker without bold (`SGR 34`), followed by bold heading text in the
 terminal's default foreground (`SGR 1;39`), then a reset (`SGR 0`).
 
+[GitHub CLI](https://cli.github.com/) informed the design of Ballin’s prompts and
+status markers.
+
 Use simple markers for Ballin-owned terminal roles. Bold only the leading `?`
 that marks interactive input; all other role markers remain regular weight.
 Keep the message neutral; color the marker, not the entire line. This palette is
