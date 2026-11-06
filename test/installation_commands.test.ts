@@ -14,7 +14,7 @@ describe('canonical installation commands', () => {
     assert.include(command('docs/quickstart.md'), '/main/quickstart.sh');
     const all = [readme, quick, details].join('\n');
     for (const route of ['install', 'quickstart']) {
-      assert.lengthOf(all.match(new RegExp('raw\\.githubusercontent\\.com/JBallin/ballin-scripts/main/' + route + '\\.sh', 'gu')) ?? [], 1);
+      assert.lengthOf(all.match(new RegExp('raw\\.githubusercontent\\.com/JBallin/ballin-scripts/main/' + route + '\\.sh', 'gu')) ?? [], route === 'install' ? 2 : 1);
     }
     assert.notInclude(all, 'BALLIN_SHELL_');
     assert.include(details, '../README.md#installation'); assert.include(details, 'quickstart.md#quickstart-install-ballin');
@@ -43,10 +43,10 @@ exit ${status}
           return result;
         } finally { fs.rmSync(root, { recursive: true, force: true }); }
       };
-      it(`uses the familiar command without a buffer variable for ${script} in ${shell}`, () => {
-        assert.equal(command(guide), `/bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/${script})"`);
+      it(`uses the familiar short command with explicit pre-release main selection for ${script} in ${shell}`, () => {
+        assert.equal(command(guide), `BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/${script})"`);
       });
-      it(`reports curl's empty download error but returns success for ${script} in ${shell}`, () => {
+      it(`accepts the short command's zero exit for an empty failed download for ${script} in ${shell}`, () => {
         const result = runDownloaded('', 22);
         assert.equal(result.status, 0, result.stderr);
         assert.equal(result.stdout, '');
@@ -63,6 +63,8 @@ exit ${status}
           const result = runDownloaded(body.slice(0, end), 22);
           assert.equal(result.status, 2, result.stderr);
           assert.equal(result.stdout, '');
+          assert.include(result.stderr, 'Fixture curl failure');
+          // Bash reports unmatched quotes as unexpected EOF on some platforms.
           assert.match(result.stderr, /syntax error|unexpected EOF/u);
         });
       }
@@ -75,9 +77,9 @@ exit ${status}
         assert.include(result.stderr, 'syntax error');
       });
       it(`can execute a complete ${script} body despite curl failure in ${shell}`, () => {
-        const result = runDownloaded('{ printf "complete-body-ran\\n"; }\n', 22);
+        const result = runDownloaded('{ printf "complete-body-ran:%s\\n" "$BALLIN_UPDATE_TRACK"; }\n', 22);
         assert.equal(result.status, 0, result.stderr);
-        assert.equal(result.stdout, 'complete-body-ran\n');
+        assert.equal(result.stdout, 'complete-body-ran:main\n');
         assert.include(result.stderr, 'Fixture curl failure');
       });
       it(`retains the script's failure status for ${script} in ${shell}`, () => {

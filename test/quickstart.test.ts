@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
-const terminalGuidanceMessage = '😎 Setup complete. Open a new Terminal and run `ballin help`.';
+const terminalGuidanceMessage = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.';
 const terminalGuidance = `\n${terminalGuidanceMessage}\n`;
 
 describe('beginner quickstart bootstrap', function() {
@@ -19,8 +19,8 @@ describe('beginner quickstart bootstrap', function() {
   const source = path.resolve(__dirname, '../quickstart.sh');
   const nodeInstallPrompt = 'Proceed with installation? [y/N]';
   const cltInstallQuestion = 'Proceed with installation?';
-  const firstBackupPrompt = '\nRun a backup now and open its GitHub destination? [Y/n] ';
-  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
+  const firstBackupPrompt = '\n? Run a backup now and open its GitHub destination? [Y/n] ';
+  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\ni Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
   printf 'brew-interruption:%s:%s\\n' "$stage" "$FAKE_BREW_INTERRUPTION" >> "$FAKE_COMMAND_LOG"
@@ -64,6 +64,11 @@ case "$1" in
     for tool in "$@"; do
       [[ "$tool" == nvm || "$tool" == gh || "$tool" == git ]] || exit 96
       if [[ "$tool" == nvm ]]; then
+        if [[ "\${FAKE_NVM_CAVEATS:-0}" == 1 ]]; then
+          printf 'upstream manual NVM profile instructions\\n'
+          printf 'upstream NVM diagnostic\\n' >&2
+        fi
+        [[ "\${FAKE_NVM_BREW_STATUS:-0}" == 0 ]] || exit "$FAKE_NVM_BREW_STATUS"
         mkdir -p "$FAKE_NATIVE_PREFIX/opt/nvm/libexec" "$FAKE_NATIVE_PREFIX/opt/nvm/etc/bash_completion.d"
         cp "$FAKE_ROOT/nvm-source.sh" "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm.sh"
         printf '#!/bin/bash\\n. "$NVM_DIR/nvm.sh" --no-use\\nexec "$@"\\n' > "$FAKE_NATIVE_PREFIX/opt/nvm/libexec/nvm-exec"
@@ -140,7 +145,7 @@ esac
     }
 
     return spawnSync('/bin/bash', ['-c', `
-source "$FAKE_SOURCE"
+source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }
 system_node_bin="$FAKE_SYSTEM_NODE"
 system_brew_arm="$FAKE_ROOT/native-brew-arm"
 system_brew_intel="$FAKE_ROOT/native-brew-intel"
@@ -323,7 +328,7 @@ case "$name" in
         if [[ -n "$target" && "$target" != - ]]; then cp "$payload" "$target"
         else cat "$payload"; fi
         if [[ "$FAKE_QUICK_DOWNLOAD" == complete-error ]]; then printf 'Fixture curl failure\\n' >&2; exit 22; fi ;;
-      https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)
+      https://raw.githubusercontent.com/JBallin/ballin-scripts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/install.sh)
         [[ "\${FAKE_DOWNLOAD_FAIL:-0}" != 1 ]] || exit 22
         cp "\${FAKE_CORE_INSTALL_SOURCE:-$FAKE_ROOT/fake-tool}" "$target" ;;
       *) exit 97 ;;
@@ -391,15 +396,61 @@ esac
         ...(prefix ? { PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix } : {}) });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const profile = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-      assert.include(profile, '# NVM (Ballin Quickstart)'); assert.include(profile, '# Ballin');
-      assert.equal(profile.split('https://github.com/JBallin/ballin-scripts').length - 1, 1);
+      assert.include(profile, '# NVM (Ballin Quickstart)');
+      if (prefix) assert.notInclude(profile, '# Ballin');
+      else assert.include(profile, '# Ballin');
+      assert.equal(profile.split('https://github.com/JBallin/ballin-scripts').length - 1, prefix ? 0 : 1);
       assert.notInclude(profile, 'versions/node/'); assert.include(profile, 'nvm use --silent default');
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
+      assert.equal(result.stdout.includes("Homebrew's instructions above are for manual setup."), route === 'homebrew');
+      const nodeDetails = 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs';
+      assert.include(result.stdout, '==> Checking required tools\n' + nodeDetails + '\n? Ballin requires Node.js. Install it using NVM? [y/N]');
+      assert.notInclude(result.stdout, 'NVM can install and maintain');
+      assert.notInclude(result.stdout, 'Latest LTS will be active');
+      assert.notInclude(result.stdout, 'Global npm packages may need');
+      assert.notInclude(result.stdout, '  - Install NVM using');
+      assert.include(result.stdout, '✓ NVM ready; Node.js active for this setup.');
+      assert.notInclude(result.stdout, '$ nvm install --lts\n$ nvm');
+      assert.equal((result.stdout.match(route === 'homebrew' ? /^\$ brew install --formula nvm$/gmu : /^\$ PROFILE=\/dev\/null NVM_DIR=/gmu) ?? []).length, 1);
       if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
       else assert.include(readLog(), '/nvm-sh/nvm/v0.40.8/install.sh');
     });
   }
+  for (const status of [0, 42, 130, 143]) {
+    it(`clarifies successful new Homebrew NVM setup without hiding caveats or changing status ${status}`, () => {
+      const prefix = nativeBrew();
+      const result = run('y\ny\ny\n', {
+        PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
+        FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n',
+        FAKE_NVM_BREW_STATUS: String(status), FAKE_NVM_CAVEATS: '1',
+      });
+      assert.equal(result.status, status, result.stdout + result.stderr);
+      assert.include(result.stdout, 'upstream manual NVM profile instructions');
+      assert.include(result.stderr, 'upstream NVM diagnostic');
+      const clarification = "Homebrew's instructions above are for manual setup. Ballin can configure your shell next, with your permission.";
+      if (status === 0) {
+        assert.equal(result.stdout.split(clarification).length - 1, 1);
+        assert.isAbove(result.stdout.indexOf(clarification), result.stdout.indexOf('NVM ready;'));
+        assert.isBelow(result.stdout.indexOf(clarification), result.stdout.indexOf('Add Ballin setup to'));
+      } else {
+        assert.notInclude(result.stdout, clarification);
+        assert.notInclude(result.stdout, 'Setup complete.');
+        assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+      }
+    });
+  }
+  it('does not offer shell clarification when Node setup fails after new Homebrew NVM installation', () => {
+    const prefix = nativeBrew();
+    const result = run('y\ny\ny\n', {
+      PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
+      FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_FAIL: 'install', FAKE_NVM_CAVEATS: '1',
+    });
+    assert.equal(result.status, 42, result.stdout + result.stderr);
+    assert.include(result.stdout, 'upstream manual NVM profile instructions');
+    assert.notInclude(result.stdout, "Homebrew's instructions above are for manual setup.");
+    assert.notInclude(result.stdout, 'Setup complete.');
+  });
   for (const shell of ['bash', 'zsh']) {
     it(`initializes fresh Homebrew compatibility links once and loads libexec in a new ${shell}`, () => {
       const prefix = nativeBrew(); const nvm = path.join(home, '.nvm');
@@ -451,6 +502,7 @@ esac
           FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: consent ? 'y\n' : 'n\n' });
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.notInclude(readLog(), 'native-brew:install');
+        assert.notInclude(result.stdout, "Homebrew's instructions above are for manual setup.");
         const sourceLink = path.join(nvm, 'nvm.sh');
         if (consent) assert.equal(fs.readlinkSync(sourceLink), path.join(libexec, 'nvm.sh'));
         else assert.isFalse(fs.existsSync(sourceLink));
@@ -526,9 +578,12 @@ esac
   it('keeps compatible Node by default and switches only after explicit runtime consent', () => {
     const kept = run('y\ny\n', { FAKE_EARLY_ANSWER: 'n\n' }); assert.equal(kept.status, 0, kept.stderr);
     assert.notInclude(readLog(), 'nvm:install:');
+    assert.include(kept.stdout, 'Use NVM with Node.js LTS instead? [y/N]');
+    assert.equal((kept.stdout + kept.stderr).split('optional-capabilities.md#nodejs').length - 1, 1);
     const switched = run('y\ny\ny\n', { FAKE_NVM_ANSWER: 'y\n', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(switched.status, 0, switched.stdout + switched.stderr);
-    assert.include(switched.stdout, 'Older Node installations and versions remain'); assert.include(readLog(), 'nvm:install:--lts');
+    assert.include(switched.stdout, 'Use NVM with Node.js LTS instead?');
+    assert.notInclude(switched.stdout, 'Global npm packages may need'); assert.include(readLog(), 'nvm:install:--lts');
     assert.isTrue(fs.existsSync(path.join(tools, 'node')));
   });
   for (const linked of ['NVM directory', 'alias directory', 'default alias', 'hard-linked default alias']) {
@@ -554,7 +609,7 @@ esac
       const before = fs.statSync(original);
       const result = run('y\ny\n', { NVM_DIR: nvm, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: '\n' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Use NVM and latest LTS Node? [y/N]');
+      assert.include(result.stdout, 'Use NVM with Node.js LTS instead? [y/N]');
       assert.equal(fs.readFileSync(original, 'utf8'), 'lts/*');
       assert.equal(fs.statSync(original).ino, before.ino); assert.equal(fs.statSync(original).nlink, before.nlink);
       assert.isFalse(fs.existsSync(path.join(nvm, 'probe-write'))); assert.isFalse(fs.existsSync(path.join(actual, 'probe-write')));
@@ -665,6 +720,23 @@ esac
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.equal(fs.readFileSync(active, 'utf8'), old);
     assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:');
   });
+  for (const installerStatus of [0, 37]) {
+    it(`summarizes successful upstream NVM output and preserves installer failure diagnostics (${installerStatus})`, () => {
+      fs.appendFileSync(path.join(root, 'nvm-install.sh'), `printf 'upstream reload instructions\\n'\nprintf 'upstream diagnostics\\n' >&2\nexit ${installerStatus}\n`);
+      const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' });
+      assert.equal(result.status, installerStatus, result.stdout + result.stderr);
+      if (installerStatus === 0) {
+        assert.notInclude(result.stdout + result.stderr, 'upstream reload instructions');
+        assert.notInclude(result.stdout + result.stderr, 'upstream diagnostics');
+        assert.include(result.stdout, '✓ NVM ready; Node.js active for this setup.');
+      } else {
+        assert.include(result.stderr, 'upstream reload instructions'); assert.include(result.stderr, 'upstream diagnostics');
+        assert.include(result.stderr, 'NVM installation did not finish.');
+        assert.notInclude(result.stdout, 'Setup complete.'); assert.notInclude(readLog(), '/main/install.sh');
+      }
+    });
+  }
+
   for (const action of ['alias', 'version']) {
     it(`reports NVM ${action} failure explicitly before installing Ballin`, () => {
       const nvm = path.join(home, '.nvm');
@@ -694,7 +766,7 @@ esac
   it('retains native NVM failure status and ends with recovery before installing Ballin', () => {
     const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_NVM_FAIL: 'install', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(result.status, 42, result.stdout + result.stderr);
-    assert.include(result.stderr, 'NVM LTS installation did not finish.');
+    assert.include(result.stderr, 'Node.js LTS installation did not finish.');
     assert.notInclude(readLog(), '/main/install.sh'); assert.notInclude(result.stdout, 'Setup complete.');
   });
   for (const declined of [false, true]) {
@@ -827,7 +899,11 @@ printf '0\\n'
         assert.notInclude(result.stderr, 'brew upgrade node');
       }
       if (!['130', '143'].includes(state)) {
-        assert.include(result.stderr, '\n🔗 Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+        const url = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs';
+        const details = `i Node.js details:\n${url}\n`;
+        assert.include(state === 'unknown' ? result.stderr : result.stdout, details);
+        assert.equal((result.stdout + result.stderr).split(url).length - 1, 1);
+        if (state !== 'unknown') assert.isBelow(result.stdout.indexOf(details), result.stdout.indexOf('Ballin requires Node.js. Install it using NVM?'));
       }
       assert.equal(fs.readFileSync(installed, 'utf8'), contents);
       assert.equal(fs.readlinkSync(path.join(prefix, 'bin/node')), '../Cellar/node/25.0.0/bin/node');
@@ -841,7 +917,8 @@ printf '0\\n'
     fs.writeFileSync(path.join(tools, 'node'), "#!/bin/bash\nprintf 'false\\n'\n", { mode: 0o755 });
     const result = run('', { PATH: tools + ':' + later });
     assert.equal(result.status, 1); assert.include(result.stderr, 'A compatible Node.js is required.');
-    assert.include(result.stdout, 'Use NVM and latest LTS Node?');
+    assert.include(result.stdout, 'Ballin requires Node.js. Install it using NVM?');
+    assert.equal((result.stdout + result.stderr).split('optional-capabilities.md#nodejs').length - 1, 1);
     assert.notInclude(result.stderr, 'brew upgrade node');
     for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
   });
@@ -858,7 +935,7 @@ printf '0\\n'
       const result = run('', { PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: '1', FAKE_NVM_ANSWER: 'n\n' });
       assert.equal(result.status, 1, result.stdout + result.stderr);
       if (kind === 'relative' || kind === 'absolute') {
-        assert.include(result.stdout, 'Use NVM and latest LTS Node?');
+        assert.include(result.stdout, 'Ballin requires Node.js. Install it using NVM?');
         assert.include(result.stderr, 'A compatible Node.js is required.');
       }
       else {
@@ -1056,7 +1133,8 @@ printf '0\\n'
         fs.writeFileSync(executable, `#!/bin/bash\n${tool === 'gh-help' ? 'if [[ "$*" == --version ]]; then exit 0; fi\n' : ''}kill -${signal} $$\n`, { mode: 0o755 });
         const result = run('yes\nyes\n');
         assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
-        assert.notInclude(result.stdout, 'Install ');
+        assert.notInclude(result.stdout, 'Proceed with installation?');
+        assert.notInclude(result.stdout, '==> Setting up NVM and LTS Node');
         assert.notInclude(result.stderr, 'needs manual attention');
         assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
         for (const forbidden of ['auth status --active', 'auth login', 'install.sh:', 'ballin:', 'sudo:']) assert.notInclude(readLog(), forbidden);
@@ -1488,7 +1566,7 @@ printf '0\\n'
       const result = spawnSync('/bin/bash', ['-c', [
         'brew() { printf "function-brew:%s\\n" "$*" >> "$FAKE_COMMAND_LOG"; printf "%s\\n" "$FAKE_FUNCTION_BREW_PREFIX"; }',
         'export -f brew',
-        '/bin/bash -c \'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main\'',
+        '/bin/bash -c \'source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main\'',
       ].join('\n')], {
         encoding: 'utf8', input: 'y\nn\n\nhome\ny\ny\n\n', cwd: home, timeout: 12000,
         env: testChildEnvironment({
@@ -1606,7 +1684,7 @@ printf '0\\n'
   for (const name of ['git', 'node', 'gh']) {
     it(`ignores an exported ${name} function while selecting prerequisites for the actual core installer`, () => {
       linkFake('node', systemNode);
-      const inner = 'source "$FAKE_SOURCE"; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main';
+      const inner = 'source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }; system_node_bin="$FAKE_SYSTEM_NODE"; system_git="$FAKE_ROOT/tools/git"; system_xcode_select="$FAKE_ROOT/tools/xcode-select"; trap cleanup EXIT; main';
       const result = spawnSync('/bin/bash', ['-c', [
         `${name}() { printf "exported-${name}:called\\n" >> "$FAKE_COMMAND_LOG"; return 73; }`,
         `export -f ${name}`,
@@ -1615,7 +1693,7 @@ printf '0\\n'
         `declare -F ${name} >/dev/null && printf 'parent-function-preserved\\n' >> "$FAKE_COMMAND_LOG"`,
         'exit "$status"',
       ].join('\n')], {
-        encoding: 'utf8', input: 'y\n\nhome\ny\nn\n', cwd: home, timeout: 12000,
+        encoding: 'utf8', input: 'y\n\n\nhome\ny\nn\n', cwd: home, timeout: 12000,
         env: testChildEnvironment({ HOME: home, PATH: tools, TMPDIR: path.join(root, 'tmp'), SHELL: '/bin/zsh',
           FAKE_ROOT: root, FAKE_COMMAND_LOG: log, FAKE_SOURCE: source, FAKE_SYSTEM_NODE: systemNode,
           TEST_NODE_RUNTIME: process.execPath, FAKE_CORE_INSTALL_SOURCE: path.resolve(__dirname, '../install.sh') }),
@@ -1740,7 +1818,7 @@ printf '0\\n'
         assert.equal(result.status, ['130', '143'].includes(state) ? Number(state) : 1, result.stdout + result.stderr);
         if (state === 'incompatible') {
           assert.include(result.stderr, 'A compatible Node.js is required.');
-          assert.include(result.stdout, 'Use NVM and latest LTS Node?');
+          assert.include(result.stdout, 'Ballin requires Node.js. Install it using NVM?');
           assert.notInclude(result.stderr, 'could not be verified');
         } else if (['failed', 'unavailable', 'empty', 'malformed'].includes(state)) {
           assert.include(result.stderr, `Existing Node.js at ${path.join(prefix, 'bin/node')} could not be verified.`);
@@ -2110,16 +2188,16 @@ printf '0\\n'
     it(`repeats the first-backup prompt for an invalid answer without accepting it with PATH complete ${pathComplete}`, () => {
       const result = run(pathComplete ? 'y\ny\n' : 'n\ny\n', {}, home, '', 'maybe\nn\n');
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Please enter yes or no.');
+      assert.include(result.stdout, 'Enter Yes or No.');
       assert.equal(result.stdout.split('Run a backup now and open its GitHub destination?').length - 1, 2);
       assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)),
-        firstBackupPrompt + '\nPlease enter yes or no.\n' + firstBackupPrompt.slice(1) + '\n' + (pathComplete ? terminalGuidance : incompletePathGuidance));
+        firstBackupPrompt + '\nEnter Yes or No.\n' + firstBackupPrompt.slice(1) + '\n' + (pathComplete ? terminalGuidance : incompletePathGuidance));
       assert.notInclude(readLog(), 'ballin:');
     });
   }
   it('stops after SIGINT at the first-backup prompt without capture or open', async () => {
     const child = spawn('/bin/bash', ['-c', `
-source "$FAKE_SOURCE"
+source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }
 system_node_bin="$FAKE_SYSTEM_NODE"
 system_git="$FAKE_ROOT/tools/git"
 system_xcode_select="$FAKE_ROOT/tools/xcode-select"
@@ -2159,7 +2237,7 @@ main
     });
     child.stderr.on('data', (data: Buffer) => { output += data.toString(); });
     const timeout = setTimeout(() => child.kill('SIGKILL'), 8000);
-    child.stdin.write('y\n\nhome\ny\ny\n');
+    child.stdin.write('y\n\n\nhome\ny\ny\n');
     try {
       const status = await new Promise((resolve, reject) => {
         child.once('error', reject);
@@ -2199,7 +2277,7 @@ main
       FAKE_MISSING_NODE: '1', PATH: path.join(prefix, 'bin') + ':' + tools, FAKE_NATIVE_PREFIX: prefix,
     }, home, 'brew() { touch "$FAKE_ROOT/exported-brew-ran"; printf "/wrong-prefix\\n"; }; export -f brew');
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stdout, '  - Link the Ballin command in ' + prefix + '/bin\n');
+    assert.include(result.stdout, '  - Link the ballin command in ' + prefix + '/bin\n');
     assert.isFalse(fs.existsSync(path.join(root, 'exported-brew-ran')));
   });
   it('combines missing tools and fresh Ballin consent before PATH setup', () => {
@@ -2213,7 +2291,7 @@ main
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
     assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools\n");
-    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the Ballin command in ~/.local/bin\n`);
+    assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the ballin command in ~/.local/bin\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
     assert.isBelow(preview, approval);
@@ -2227,7 +2305,7 @@ main
     assert.isTrue(result.stdout.endsWith(terminalGuidance));
     assert.include(readLog(), 'clt-softwareupdate:--install Command Line Tools for Xcode-16.4');
     assert.notInclude(readLog(), 'xcode-select:--install');
-    assert.isBelow(result.stdout.indexOf('Setting up shell startup'), result.stdout.indexOf('==> Installing Ballin'));
+    assert.isBelow(result.stdout.indexOf('Setting up Ballin in your shell'), result.stdout.indexOf('==> Installing Ballin'));
   });
   it('previews all missing prerequisites in one-line bullets without an administrator notice', () => {
     fs.unlinkSync(path.join(tools, 'gh'));
@@ -2235,13 +2313,13 @@ main
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(result.stdout, `Installation will:
   - Install Xcode Command Line Tools
-  - Set up NVM and latest LTS Node in ~/.nvm
+  - Set up NVM and Node.js LTS in ~/.nvm
   - Install GitHub CLI in ~/.local/bin
   - Create Ballin and its settings in ~/.ballin-scripts
-  - Link the Ballin command in ~/.local/bin
-🔗 Installation details:
+  - Link the ballin command in ~/.local/bin
+i Installation details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
-Proceed with installation? [y/N] `);
+? Proceed with installation? [y/N] `);
     assert.notInclude(result.stdout, 'graphical');
     assert.notInclude(result.stdout, 'verified official');
     assert.notInclude(result.stdout, 'Administrator access is required.');
@@ -2467,7 +2545,7 @@ Proceed with installation? [y/N] `);
           FAKE_QUICK_DOWNLOAD: ['empty', 'partial', 'complete-error'].includes(failure) ? failure : 'success',
           FAKE_QUICKSTART_EXIT: failure === 'helper' ? '7' : '0',
         });
-        const expected = failure === 'empty' ? 0 : failure === 'partial' ? 2 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
+        const expected = failure === 'partial' ? 2 : failure === 'helper' ? 7 : failure === 'eof' ? 1 : 0;
         assert.equal(result.status, expected, result.stdout + result.stderr);
         const executed = ['complete-error', 'helper', 'eof', 'none'].includes(failure);
         assert.equal(fs.existsSync(path.join(root, 'entrypoint-ran')), executed);
@@ -2582,7 +2660,7 @@ Proceed with installation? [y/N] `);
   }
   const pathLine = () => `export PATH=$PATH:'${path.join(home, '.local/bin')}'`;
   const runPathSetup = (input: string, overrides: NodeJS.ProcessEnv = {}) => spawnSync('/bin/bash', ['-c', `
-    source "$FAKE_SOURCE"
+    source "$FAKE_SOURCE"; ballin_select() { ballin_kind=sha; ballin_value=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; ballin_sha=$ballin_value; ballin_minimum=24.12.0; ballin_release_id=-; ballin_mode=install; }
     node_tool="$TEST_NODE_RUNTIME"
     command_path="$HOME/.local/bin"
     git_tool="$HOME/selected/git"; gh_tool=''; npm_tool=''
@@ -2610,13 +2688,27 @@ Proceed with installation? [y/N] `);
       assert.isFalse(fs.existsSync(path.join(root, 'startup-ran')));
     });
   }
-  it('retains the manual warning for an invalid Bash startup selection', () => {
+  it('retries an invalid Bash startup selection before accepting login', () => {
+    const result = runPathSetup('other\nlogin\ny\n', { SHELL: '/bin/bash' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter login or bashrc.');
+    assert.equal((result.stdout.match(/Which Bash startup file/gu) ?? []).length, 2);
+    assert.include(readProfile(path.join(home, '.bash_profile')), pathLine());
+    assert.equal(result.stderr, '');
+  });
+  it('retries an invalid Zsh directory before accepting home', () => {
+    const result = runPathSetup('relative\nhome\ny\n');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter an absolute directory, home, or skip.');
+    assert.equal((result.stdout.match(/Zsh settings directory/gu) ?? []).length, 2);
+    assert.include(readProfile(path.join(home, '.zshrc')), pathLine());
+    assert.equal(result.stderr, '');
+  });
+  it('preserves startup files when EOF follows an invalid Bash choice', () => {
     const result = runPathSetup('other\n', { SHELL: '/bin/bash' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.include(result.stderr, 'No Bash startup file selected.');
-    assert.include(result.stderr, 'The startup file was left unchanged.');
-    assert.include(result.stderr, 'Review your shell startup and PATH setup');
-    assert.notInclude(result.stdout, 'PATH setup skipped.');
+    assert.include(result.stdout, 'Enter login or bashrc.');
+    assert.include(result.stdout, 'PATH setup skipped.');
     for (const profile of ['.bash_profile', '.bashrc']) assert.isFalse(fs.existsSync(path.join(home, profile)));
   });
   for (const initial of ['', '# Existing settings\n', '# No final newline']) {
@@ -2644,7 +2736,7 @@ Proceed with installation? [y/N] `);
       const result = runPathSetup('home\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'already mentions a setup directory');
       assert.include(result.stderr, 'Review its PATH entries before changing PATH.');
-      assert.include(result.stderr, '\n🔗 Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
+      assert.include(result.stderr, '\ni Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
       assert.notInclude(result.stderr, 'command below');
       assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
       assert.notInclude(result.stderr, pathLine());
@@ -2884,7 +2976,9 @@ Proceed with installation? [y/N] `);
     for (const value of ['~', '~/outside-home-zsh']) {
       const rejected = runPathSetup(value + '\n');
       assert.equal(rejected.status, 0, rejected.stderr);
-      assert.include(rejected.stderr, 'No absolute zsh startup directory selected.');
+      assert.include(rejected.stdout, 'Enter an absolute directory, home, or skip.');
+      assert.include(rejected.stdout, 'PATH setup skipped.');
+      assert.equal(rejected.stderr, '');
       assert.notInclude(rejected.stdout, 'Add Ballin setup');
     }
     assert.isFalse(fs.existsSync(path.join(directory, '.zshrc')));
@@ -3039,10 +3133,20 @@ confirm() {
       assert.isBelow(readLog().indexOf('gh:auth status --active'), readLog().indexOf('install.sh:'));
     });
   }
+  it('retries an invalid Quickstart hostname before authenticating only the accepted host', () => {
+    const result = run('y\ny\n', { FAKE_HOST_ANSWER: 'bad_host\ngit.example.com' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Enter a GitHub hostname only, such as github.com or git.example.com.');
+    assert.lengthOf(result.stdout.match(/GitHub hostname \[github.com\]:/gu) ?? [], 2);
+    assert.notInclude(readLog(), '--hostname bad_host');
+    assert.include(readLog(), 'gh:auth status --active --hostname git.example.com');
+    assert.include(readLog(), 'installer-host:git.example.com');
+  });
   for (const hostname of ['https://git.example.com', 'git.example.com:443', 'bad_host', 'K.example.com']) {
-    it(`refuses invalid Quickstart hostname ${hostname} before authentication`, () => {
-      const result = run('y\ny\n', { FAKE_HOST_ANSWER: hostname });
-      assert.equal(result.status, 1);
+    it(`retries invalid Quickstart hostname ${hostname} before authentication`, () => {
+      const result = run('', { FAKE_HOST_ANSWER: hostname }, home, '', '');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Enter a GitHub hostname only, such as github.com or git.example.com.');
       assert.notInclude(readLog(), 'gh:auth status --active');
       assert.notInclude(readLog(), 'install.sh:');
     });
@@ -3070,8 +3174,16 @@ confirm() {
     assert.notInclude(readLog(), 'install.sh:');
   });
   it('rejects unsupported platforms before changing home files', () => {
-    for (const env of [{ FAKE_OS: 'Linux' }, { FAKE_MACOS: '13.4' }, { FAKE_ARCH: 'i386' }]) {
-      assert.equal(run('', env).status, 1);
+    for (const [env, message] of [
+      [{ FAKE_OS: 'Linux' }, 'This quickstart is for macOS.'],
+      [{ FAKE_MACOS: '13.4' }, 'This quickstart requires macOS 13.5 or newer.'],
+      [{ FAKE_ARCH: 'i386' }, 'Unsupported Mac architecture: i386.'],
+    ] as const) {
+      const result = run('', env, home,
+        'ballin_select() { printf "revision-resolution\\n" >> "$FAKE_COMMAND_LOG"; return 1; }');
+      assert.equal(result.status, 1);
+      assert.include(result.stderr, message);
+      assert.notInclude(readLog(), 'revision-resolution');
       assert.isFalse(fs.existsSync(path.join(home, '.local')));
     }
   });
@@ -3112,7 +3224,11 @@ describe('quickstart with the real guarded onboarding sandbox', function() {
           if (choice !== 'analytics-eof') assert.isEmpty(publishes);
           assert.notInclude(result.stdout, 'Run a backup now and open');
           if (choice.startsWith('final-')) assert.include(result.stdout, 'Backup setup cancelled.');
-          if (choice === 'analytics-eof') assert.notInclude(result.stdout.slice(result.stdout.indexOf('Analytics details:')), 'Which Bash startup file');
+          if (choice === 'analytics-eof') {
+            const analyticsPrompt = result.stdout.indexOf('Share usage analytics to help improve Ballin?');
+            assert.isAtLeast(analyticsPrompt, 0, result.stdout);
+            assert.notInclude(result.stdout.slice(analyticsPrompt), 'Which Bash startup file');
+          }
         }
       } finally { cleanupSandbox(sandbox.root); }
     });

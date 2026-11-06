@@ -26,8 +26,11 @@ The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;
 unexecuted included files still count as uncovered. Use the same wrapper when
 reporting saved profiles, and review the compatibility correction when updating c8.
-Coverage reporting runs with a 6 GiB JavaScript heap limit to merge the full suite's
-profiles. This process-local Node flag does not change test subprocess heap limits.
+The wrapper reads raw profiles one at a time before filtering, then keeps c8's
+standard single merge and branch accounting. Reporting retains its existing
+6 GiB JavaScript heap limit; this process-local flag does not change test
+subprocess heap limits. All-file accounting and coverage thresholds are unchanged.
+CI reports runner memory and the configured reporter heap alongside tool versions.
 
 ## Pull request review
 
@@ -262,10 +265,12 @@ are intended for the current published scripts, within the host's argument-size
 limit. Copied-command fixtures cover current script sizes, inherited settings,
 prompt input, empty downloads, and incomplete bodies.
 
-Each script's outer brace group must parse before its executable contents run,
-so a syntactically incomplete body is refused. This does not verify integrity or
-require curl to succeed: an empty failed download can return 0, and a complete
-script can run even if curl reports a transfer error.
+The familiar public commands pass curl output directly to Bash. An empty failed
+download can therefore produce a successful Bash exit, and a complete body can
+execute even when curl reports a transfer failure. A downloaded script's outer
+brace group must parse before its body runs, so a syntactically incomplete body
+is refused. Fixtures record this accepted command-simplicity tradeoff; they do
+not verify integrity or establish that a successful download is nonempty.
 
 ## Test environment and analytics safety
 
@@ -332,10 +337,24 @@ excluding code.
 When the coverage step fails after producing raw V8 coverage, CI attempts to
 retain exact reports and runtime, commit, tree, and lockfile metadata in a compact
 artifact for seven days. Failures before coverage starts skip these diagnostics. A
-separate failure-only artifact upload retains the raw V8 data when available,
-even if compact report generation fails. An intentional successful
-`workflow_dispatch` run retains only the compact evidence. Ordinary successful
-pull request and push runs skip diagnostic report generation and artifact
+separate artifact retains the complete raw V8 directory as
+`coverage-raw.tar.gz`, even if compact report generation fails. A single archive
+avoids per-file upload overhead; fast gzip packaging and uncompressed artifact
+upload avoid compressing it twice. To inspect downloaded raw evidence, extract
+it into an empty temporary directory and point the reporter at its `tmp` folder:
+
+```shell
+BALLIN_RAW_COVERAGE_DIR=$(mktemp -d)
+tar -xzf /path/to/download/coverage-raw.tar.gz -C "$BALLIN_RAW_COVERAGE_DIR"
+node --max-old-space-size=6144 test/coverage.ts report --check-coverage=false --temp-directory="$BALLIN_RAW_COVERAGE_DIR/tmp" --reporter=json --reporter=json-summary --reports-dir=coverage/ci
+```
+
+The archive includes auxiliary and nested files needed to interpret the profiles.
+An intentional `workflow_dispatch` run also retains raw evidence after successful
+coverage, downloads the uploaded archive, and verifies the extracted directory
+against the original byte for byte. Packaging, extraction and comparison timings
+are logged; upload and download durations are available in the job steps.
+Ordinary successful pull request and push runs skip diagnostic report generation and artifact
 uploads. Compare retained evidence with the corresponding local run before
 attributing a difference to the OS or runtime. Platform-dependent execution can
 also change V8's range boundaries, so one newly uncovered branch may change
@@ -390,7 +409,7 @@ choices from the behavior and guards in each case.
 | Scope | Allowance | Purpose |
 | --- | --- | --- |
 | Tests without an override | 2s | Default Mocha limit |
-| Selected installer, analytics, backup and update cases | 5s | Coherent process workflows, concurrent repair, or bounded sender failures |
+| Selected installer, analytics, backup and update cases | 5s or 10s | Coherent process workflows, concurrent repair, or bounded sender failures |
 | Update interruption cases | 8s | Readiness handshake and a separate 5s child-process watchdog |
 | Repository lifecycle and nested-update backup | 15s | Multiple real CLI and fixture processes within one workflow |
 | Local snapshot budget cases | 30s | Capture size, recursive entry limits, and cache comparisons |
@@ -436,7 +455,7 @@ smoke check. Node supplies the CPU estimate through `os.availableParallelism()`.
 Benchmark reductions describe command wall time and exclude runner queue, setup
 and evidence capture. Machine load, platform, runtime and source changes can alter
 timing and coverage geometry. Use focused selection for feedback, retain the
-single complete final gate, and verify that the full CI job fits its 20-minute
+single complete final gate, and verify that the full CI job fits its 35-minute
 budget.
 
 ## Runtime and platform limits

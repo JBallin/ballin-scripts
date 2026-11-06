@@ -91,7 +91,7 @@ const allowedStatuses = new Set(['success', 'failure', 'unknown']);
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const dateBucketPattern = /^\d{4}-\d{2}-\d{2}$/;
-const versionPattern = /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/;
+const versionPattern = /^(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})$/;
 const majorVersionPattern = /^[0-9]{1,3}$/;
 const coarseOsVersionPattern = /^[0-9]{1,3}(?:\.[0-9]{1,3})?$|^unknown$/;
 const maxBodyBytes = 2048;
@@ -268,8 +268,8 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
   if (!allowedDurations.has(durationBucket)) {
     return 'durationBucket is not supported';
   }
-  if (!appVersion || !versionPattern.test(appVersion)) {
-    return 'appVersion must be a released semantic version';
+  if (!appVersion || (!versionPattern.test(appVersion) && !['development', 'unknown'].includes(appVersion))) {
+    return 'appVersion must be a released semantic version, development, or unknown';
   }
   if (!nodeMajor || !majorVersionPattern.test(nodeMajor)) {
     return 'nodeMajor must be a major version number';

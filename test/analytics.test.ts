@@ -45,7 +45,6 @@ type SenderOptions = {
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const packageJson = require('../package.json');
 const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 const alternateInstallId = '123e4567-e89b-42d3-a456-426614174000';
 const fixedNow = new Date('2026-06-27T20:15:00.000Z');
@@ -132,7 +131,7 @@ const runConfigWithAnalytics = async (
   try {
     await runWithCommandAnalytics('ballin config', () => runConfigCli(args), {
       analyticsConfig: { enabled: 'true' },
-      appVersion: packageJson.version,
+      appVersion: 'development',
       env: {},
       installId: fixedInstallId,
       nowMs: () => 1000,
@@ -791,9 +790,9 @@ process.stdout.write(JSON.stringify({ result }));
     fs.writeFileSync(malformedPackagePath, '{not json', 'utf8');
     fs.writeFileSync(invalidVersionPackagePath, JSON.stringify({ version: 2 }), 'utf8');
 
-    assert.equal(loadAppVersion(malformedPackagePath), '0.0.0');
-    assert.equal(loadAppVersion(invalidVersionPackagePath), '0.0.0');
-    assert.equal(loadAppVersion(path.join(tempDir, 'missing-package.json')), '0.0.0');
+    assert.equal(loadAppVersion(malformedPackagePath), 'unknown');
+    assert.equal(loadAppVersion(invalidVersionPackagePath), 'unknown');
+    assert.equal(loadAppVersion(path.join(tempDir, 'missing-package.json')), 'unknown');
   });
 
   it('never throws when analytics config or sender behavior fails', async () => {
@@ -845,7 +844,7 @@ process.stdout.write(JSON.stringify({ result }));
       status: 'failure',
       durationBucket: '1-10s',
     });
-    assert.match(payload.appVersion, /^[0-9]+(?:\.[0-9]+){0,2}$/);
+    assert.equal(payload.appVersion, 'development');
     assert.match(payload.nodeMajor, /^[0-9]+$/);
     assert.match(payload.osVersion, /^[0-9]+(?:\.[0-9]+)?$|^unknown$/);
   });
@@ -1092,7 +1091,7 @@ process.stdout.write(JSON.stringify({ result }));
 
     assert.deepInclude(payloads[0], {
       command: 'ballin uninstall',
-      appVersion: packageJson.version,
+      appVersion: 'development',
       installId: fixedInstallId,
       status: 'success',
     });

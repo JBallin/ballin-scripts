@@ -22,9 +22,9 @@ describe('integrated setup with delayed terminal answers', function() {
     : { prompt: 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: ', answer: '' };
   const updates = [
     { prompt: 'Update global npm packages? [y/N] ', answer: '' },
-    { prompt: 'Keep Ballin up to date? [Y/n] ', answer: '' },
-    { prompt: 'Clean up outdated Homebrew packages? [Y/n] ', answer: '' },
-    { prompt: 'Install available macOS updates? [Y/n] ', answer: '' },
+    { prompt: 'Update Ballin? [Y/n] ', answer: '' },
+    { prompt: 'Clean up Homebrew? [Y/n] ', answer: '' },
+    { prompt: 'Update macOS? [Y/n] ', answer: '' },
   ];
   const backup = [
     { prompt: 'Create a new backup or reconnect to an existing one? [CREATE/reconnect] ', answer: '' },
@@ -56,14 +56,14 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true });
     const result = runInteractiveSetup(sandbox, publicCommand('docs/quickstart.md'), [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'yes' },
-      { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'no' },
+      { prompt: 'Use NVM with Node.js LTS instead? [y/N] ', answer: 'no' },
       { prompt: 'GitHub hostname [github.com]: ', answer: '' },
       startup(shell),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
-      { prompt: 'Enable tab completion in ', answer: 'y' },
+      { prompt: `Enable Ballin tab completion in ~/${shell === 'bash' ? '.bash_profile' : '.zshrc'}? [y/N] `, answer: 'y' },
       ...backup,
-      { prompt: 'Review your update and analytics preferences? [Y/n] ', answer: 'y' },
+      { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'y' },
       ...updates,
       { prompt: 'Back up to GitHub during updates? [y/N] ', answer: 'y' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
@@ -76,35 +76,36 @@ describe('integrated setup with delayed terminal answers', function() {
     assert.notInclude(output, 'Set up private backups to GitHub?');
     assert.equal(output.split('Setup complete.').length - 1, 1);
     assert.isBelow(output.indexOf('Ballin installed successfully.'), output.indexOf('==> Setting up GitHub backup'));
-    assert.isBelow(output.indexOf('Private backup created:'), output.indexOf('==> Update preferences'));
+    assert.isBelow(output.indexOf('Private backup created:'), output.indexOf('==> ballin update'));
     assert.isBelow(output.indexOf('==> Analytics'), output.indexOf('Run a backup now'));
     assert.notInclude(output, '\n\n\n');
     assert.equal(config().backup.includeSensitive, 'true'); assert.equal(config().update.backup, 'true'); assert.equal(config().analytics.enabled, 'false');
     assert.deepEqual(Object.keys(remote().commits[remote().head].files).sort(), ['.ballin-backup.json', 'README.md']);
-    assert.notInclude(result.stdout, '\x1b[34m[y/N]'); // Default is bold inside the blue bracket span.
-    assert.include(result.stdout, '\x1b[34m[y/\x1b[1mN\x1b[22m]\x1b[0m');
-    assert.include(result.stdout, '\x1b[32m😎 Setup complete.\x1b[0m');
+    assert.notInclude(result.stdout, '\x1b[34m[y/N]'); // Brackets and uppercase defaults stay neutral.
+    assert.include(result.stdout, '[y/N]');
+    assert.notInclude(result.stdout, '[y/\x1b[1mN\x1b[0m]');
+    assert.include(result.stdout, '\x1b[0;32m✓\x1b[0m Setup complete.');
   });
 
   it('switches to controlled NVM/LTS, persists No, and keeps backup decline independent of general review', () => {
     sandbox = createSandbox({ quickstart: true });
-    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+    const result = runInteractiveSetup(sandbox, [sandbox.quickstartEntry], [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
-      { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'y' },
+      { prompt: 'Use NVM with Node.js LTS instead? [y/N] ', answer: 'y' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       startup('bash'),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
-      { prompt: 'Enable tab completion in ', answer: 'n' },
-      { prompt: 'Review your update and analytics preferences? [Y/n] ', answer: 'y' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
+      { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'y' },
       ...updates,
-      { prompt: 'Keep NVM-managed Node on latest LTS? [Y/n] ', answer: 'n' },
+      { prompt: 'Update Node.js LTS through NVM? [Y/n] ', answer: 'n' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
     ], 'bash');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(config().update.nvm, 'false'); assert.notProperty(config(), '_setup'); assert.isEmpty(remote().requests);
     assert.notInclude(fs.readFileSync(sandbox.log, 'utf8'), 'gh-auth:');
     const rerun = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'setup'], [
-      ...updates, { prompt: 'Keep NVM-managed Node on latest LTS? [y/N] ', answer: '' },
+      ...updates, { prompt: 'Update Node.js LTS through NVM? [y/N] ', answer: '' },
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: '' },
     ]);
     assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr); assert.equal(config().update.nvm, 'false');
@@ -114,9 +115,9 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true });
     const result = runInteractiveSetup(sandbox, publicCommand('README.md'), [
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' }, startup('bash'),
-      { prompt: 'Enable tab completion in ', answer: 'n' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
       { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'n' },
-      { prompt: 'Review your update and analytics preferences? [Y/n] ', answer: 'y' }, ...updates,
+      { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'y' }, ...updates,
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
     ], 'bash');
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.isEmpty(remote().requests);
@@ -127,16 +128,16 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true }); selectScenario(sandbox, 'auth');
     const failed = runInteractiveSetup(sandbox, publicCommand('README.md'), [
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' }, startup('bash'),
-      { prompt: 'Enable tab completion in ', answer: 'n' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
       { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
       { prompt: 'GitHub hostname [github.com]: ', answer: '' },
     ], 'bash');
     assert.equal(failed.status, 1, failed.stdout + failed.stderr);
     const output = plain(failed.stdout);
-    assert.include(output, '\n\n❌ GitHub CLI authentication is required.\nRun gh auth login --hostname github.com, then run ballin backup setup.\n');
+    assert.include(output, '\n\n✗ GitHub CLI authentication is required.\nRun gh auth login --hostname github.com, then run ballin backup setup.\n');
     assert.equal(output.split('authentication is required.').length - 1, 1);
     assert.notInclude(output, 'Review your update'); assert.notInclude(output, 'Setup complete.'); assert.notInclude(output, 'setup incomplete');
-    assert.include(failed.stdout, '\x1b[31m❌\x1b[0m GitHub CLI');
+    assert.include(failed.stdout, '\x1b[0;31m✗\x1b[0m GitHub CLI');
     selectScenario(sandbox, 'none');
     const recovered = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'backup', 'setup'], [
       { prompt: 'GitHub hostname [github.com]: ', answer: '' }, ...backup,
@@ -151,23 +152,60 @@ describe('integrated setup with delayed terminal answers', function() {
     const result = runInteractiveSetup(sandbox, [path.join(sandbox.bin, 'ballin'), 'setup'], [
       { prompt: 'Update global npm packages? [y/N] ', answer: 'invalid' },
       { prompt: 'Update global npm packages? [y/N] ', answer: 'yes' },
-      { prompt: 'Keep Ballin up to date? [Y/n] ', answer: 'no\x04\x04', raw: true },
+      { prompt: 'Update Ballin? [Y/n] ', answer: 'no\x04\x04', raw: true },
     ]);
-    assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'Please enter yes or no.');
+    assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'Enter Yes or No.');
     assert.equal(config().update.npm, 'true'); assert.equal(config().update.selfUpdate, 'true');
     assert.notInclude(result.stdout, 'Setup complete.'); assert.include(result.stdout, 'Review cancelled.');
     assert.equal(plain(result.stdout).split('Run ballin backup setup').length - 1, 1);
   });
 
+  for (const mode of ['styled', 'NO_COLOR', 'dumb']) {
+    it(`preserves native Bash Enter-to-skip consent and rendering in ${mode}`, () => {
+      sandbox = createSandbox({ quickstart: true });
+      const files = ['.bash_profile', '.bash_login', '.bashrc', '.profile'].map(name => path.join(sandbox.home, name));
+      const before = files.map(file => fs.existsSync(file) ? fs.readFileSync(file) : undefined);
+      const command = mode === 'NO_COLOR' ? ['/usr/bin/env', 'NO_COLOR=1', sandbox.quickstartEntry] : [sandbox.quickstartEntry];
+      const result = runInteractiveSetup(sandbox, command, [
+        { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
+        { prompt: 'Use NVM with Node.js LTS instead? [y/N] ', answer: 'n' },
+        { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: '' },
+        { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
+        { prompt: 'Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', answer: '' },
+        { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'n' },
+      ], 'bash', { term: mode === 'dumb' ? 'dumb' : 'xterm' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const output = plain(result.stdout);
+      assert.include(output, 'PATH setup skipped.');
+      assert.include(output, 'Tab completion skipped.');
+      assert.include(output, 'Ballin is installed. PATH setup wasn’t verified.');
+      assert.notInclude(output, 'Setup complete.');
+      const cyanSkip = '\x1b[36mSkip\x1b[0m';
+      if (mode === 'styled') {
+        assert.equal(result.stdout.split(cyanSkip).length - 1, 2);
+        assert.include(result.stdout, '[login/bashrc; Enter to skip] ' + cyanSkip);
+        assert.include(result.stdout, '\x1b[1A\r\x1b[J');
+      } else {
+        assert.notInclude(result.stdout, '\x1b[');
+        assert.notInclude(result.stdout, cyanSkip);
+      }
+      files.forEach((file, index) => {
+        if (before[index] === undefined) assert.isFalse(fs.existsSync(file));
+        else assert.deepEqual(fs.readFileSync(file), before[index]);
+      });
+      assert.isEmpty(remote().requests);
+    });
+  }
+
   it('keeps the PATH-unverified ending after shell activation is declined', () => {
     sandbox = createSandbox({ quickstart: true });
-    const result = runInteractiveSetup(sandbox, [path.join(sandbox.source, 'quickstart.sh')], [
+    const result = runInteractiveSetup(sandbox, [sandbox.quickstartEntry], [
       { prompt: 'Set up backups to GitHub? [Y/n] ', answer: 'n' },
-      { prompt: 'Use NVM and latest LTS Node? [y/N] ', answer: 'n' }, startup('bash'),
+      { prompt: 'Use NVM with Node.js LTS instead? [y/N] ', answer: 'n' }, startup('bash'),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
-      { prompt: 'Enable tab completion in ', answer: 'n' },
-      { prompt: 'Review your update and analytics preferences? [Y/n] ', answer: 'n' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
+      { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'n' },
     ], 'bash');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.include(plain(result.stdout), 'Ballin is installed. PATH setup wasn’t verified.');

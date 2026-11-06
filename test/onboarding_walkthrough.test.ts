@@ -46,14 +46,16 @@ describe('first-run onboarding walkthroughs', function() {
     assert.include(installResult.stdout, 'Installation details:');
     assert.lengthOf(installResult.stdout.match(/installation\.md#what-will-installation-change/gu) ?? [], 1);
     assert.include(installResult.stdout, 'Share usage analytics to help improve Ballin? [y/N]');
-    assert.include(installResult.stdout, 'Backup setup skipped.\nRun `ballin backup setup`');
+    assert.include(installResult.stdout, 'Backup setup skipped.');
+    assert.equal(installResult.stdout.split('Change backup settings with `ballin backup setup`.').length - 1, 1);
+    assert.notInclude(installResult.stdout, 'Run `ballin backup setup` when you’re ready.');
     assert.isTrue(fs.lstatSync(path.join(userBinDir, 'ballin')).isSymbolicLink());
     assert.notProperty(JSON.parse(fs.readFileSync(path.join(installedRepoDir, 'ballin.config.json'), 'utf8')).backup, 'repository');
 
     const doctorResult = runInstalled(['doctor']);
     const verboseDoctorResult = runInstalled(['doctor', '--verbose']);
     assert.equal(doctorResult.status, 0, doctorResult.stderr);
-    assert.equal(doctorResult.stdout, '😎 You\'re ballin.\n');
+    assert.equal(doctorResult.stdout, '✓ You\'re ballin.\n');
     assert.equal(verboseDoctorResult.status, 0, verboseDoctorResult.stderr);
     assert.include(verboseDoctorResult.stdout, 'INFO  Optional backup');
     assert.include(verboseDoctorResult.stdout, 'ballin backup setup');
@@ -72,12 +74,13 @@ describe('first-run onboarding walkthroughs', function() {
     const backupResult = runInstalled(['backup']);
     assert.equal(updateResult.status, 0, updateResult.stderr);
     assert.equal(selfUpdateResult.status, 0, selfUpdateResult.stderr);
-    assert.equal(selfUpdateResult.stdout, 'Ballin updated.\n');
+    assert.include(selfUpdateResult.stdout, 'Selected branch main (aaaaaaaaaaaa)');
+    assert.include(selfUpdateResult.stdout, 'Ballin is already up to date.');
     assert.lengthOf(commandLog().match(/^git:show HEAD:commands\/backup_scope\.json$/gmu) ?? [], 2);
     assert.equal(backupResult.status, 1);
     assert.include(backupResult.stderr, "run `ballin backup setup` to enable it");
     assert.notInclude(commandLog(), 'gh:');
-    assert.include(commandLog(), 'git:fetch --quiet origin +main:refs/remotes/origin/main');
+    assert.include(commandLog(), 'git:fetch --no-tags https://github.com/JBallin/ballin-scripts.git ' + 'a'.repeat(40));
   });
 
   it('preserves one created destination through first backup, open, read, and uninstall', () => {
@@ -95,7 +98,7 @@ describe('first-run onboarding walkthroughs', function() {
     fs.writeFileSync(path.join(homeDir, '.zshrc'), zshrc);
     const backupResult = runInstalled(['backup']);
     assert.equal(backupResult.status, 0, backupResult.stderr);
-    assert.include(backupResult.stdout, '✚ zshrc');
+    assert.include(backupResult.stdout, '+ zshrc');
     assert.equal(remoteFile('zshrc.sh'), zshrc);
     assert.equal(
       fs.readFileSync(path.join(repositoryCacheDirectory(path.join(installedRepoDir, '.backup-cache'), fixtureDestination), 'zshrc.sh'), 'utf8'),

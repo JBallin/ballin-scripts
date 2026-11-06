@@ -466,7 +466,7 @@ exit 0
     assert.include(result.stdout, 'simulated cleanup failure');
     assert.include(result.stdout, 'Checking Homebrew installation');
     assert.include(result.stdout, 'Updating Ballin');
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'brew|1,1|update',
       'brew|1,1|upgrade',
@@ -574,6 +574,7 @@ fs.appendFileSync(process.env.ANALYTICS_TEST_LOG, JSON.stringify({
     fs.writeFileSync(path.join(nvmBinDir, 'git'), `#!${process.execPath}
 process.exit(0);
 `, { mode: 0o755 });
+    fs.writeFileSync(path.join(installedCommandsDir, '..', 'install.sh'), '#!/bin/bash\nexec node commands/install_setup.ts\n');
     fs.writeFileSync(path.join(installedCommandsDir, 'install_setup.ts'), `const {
   ensureAnalyticsInstallId,
 } = require(${JSON.stringify(analyticsPath)});
@@ -701,7 +702,7 @@ const { runUpdateCommand } = require(${JSON.stringify(updatePath)});
     const events = analyticsLog.filter(({ type }: { type: string }) => type === 'event');
     const nested = analyticsLog.filter(({ type }: { type: string }) => type === 'nested');
     assert.notInclude(result.stdout, 'getting fresh kicks');
-    assert.equal(result.stdout.match(/Ballin updated\./gu)?.length, 1);
+    assert.equal(result.stdout.match(/Ballin updated:/gu)?.length, 1);
     const integrations = analyticsLog.filter(({ type }: { type: string }) => type === 'integration');
 
     assert.equal(result.status, 0, result.stderr);
@@ -904,6 +905,26 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     assert.deepEqual(commandLog(), ['mas|,|upgrade']);
   });
 
+  it('keeps confirmation-only self-update noninteractive and continues configured backup', () => {
+    const guidance = 'Confirmation required. Run `ballin self-update` manually to continue.';
+    writeTestExecutable('ballin', `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$UPDATE_TEST_LOG"
+if [[ "$1" == self-update ]]; then
+  printf 'automatic:%s\\n' "$BALLIN_AUTOMATIC_UPDATE" >> "$UPDATE_TEST_LOG"
+  printf '%s\\n' '${guidance}' >&2
+  exit 1
+fi
+exit 0
+`);
+    const result = runUpdate({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true' });
+    assert.equal(result.status, 1);
+    assert.include(result.stderr, guidance);
+    assert.notInclude(result.stdout + result.stderr, 'preserve local work');
+    assert.notInclude(result.stdout, 'Checking Ballin readiness');
+    assert.notInclude(result.stdout, 'Change the installed revision');
+    assert.deepEqual(commandLog(), ['self-update', 'automatic:1', 'backup']);
+  });
+
   it('checks Ballin readiness after a successful ballin update', () => {
     installCommandStub('ballin', { output: 'updated ballin-scripts' });
     installHealthyReadinessCommands();
@@ -920,7 +941,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
     const readinessState = JSON.parse(fs.readFileSync(path.join(tempDir, 'readiness-repository.json'), 'utf8'));
     assert.isAbove(readinessState.requests.length, 0);
     assert.isFalse(readinessState.requests.some((request: { payload?: { query?: string } }) => request.payload?.query?.includes('BallinPublish')));
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
     ]);
@@ -967,7 +988,7 @@ ${recorderThrows ? `require(${JSON.stringify(path.join(__dirname, '..', 'command
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'updated maintenance-only Ballin');
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), ['ballin|,|self-update']);
   });
 
@@ -1049,7 +1070,7 @@ exit 2
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Checking Ballin readiness');
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog().slice(1), [
       'node|,|-e process.stdout.write(JSON.stringify(process.env))',
       'ballin|,|self-update',
@@ -1073,7 +1094,7 @@ exit 2
       assert.include(result.stdout, 'Checking Ballin readiness');
       assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.');
       assert.notInclude(result.stdout, 'Backing up development environment');
-      assert.notInclude(result.stdout, "😎 You're ballin.");
+      assert.notInclude(result.stdout, "✓ You're ballin.");
       assert.deepEqual(commandLog(), ['ballin|,|self-update', 'interrupted readiness']);
       assert.equal(result.stderr, '');
     });
@@ -1099,7 +1120,7 @@ exit 0
     assert.include(result.stdout, 'Checking Ballin readiness');
     assert.include(result.stdout, 'ERROR Command shims on PATH: Missing command shims on PATH: `ballin`.');
     assert.include(result.stdout, 'Next: Run the installer again or add the Ballin command directory to PATH.');
-    assert.notInclude(result.stdout, '😎 You\'re ballin.');
+    assert.notInclude(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
       'ballin|,|backup',
@@ -1118,7 +1139,7 @@ exit 0
     assert.equal(result.status, 23);
     assert.include(result.stdout, 'simulated update failure');
     assert.notInclude(result.stdout, 'Checking Ballin readiness');
-    assert.notInclude(result.stdout, '😎 You\'re ballin.');
+    assert.notInclude(result.stdout, '✓ You\'re ballin.');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
     ]);
@@ -1179,7 +1200,7 @@ exit 0
     });
 
     assert.equal(result.status, 17);
-    assert.include(result.stdout, '😎 You\'re ballin.');
+    assert.include(result.stdout, '✓ You\'re ballin.');
     assert.include(result.stdout, 'simulated backup failure');
     assert.deepEqual(commandLog(), [
       'ballin|,|self-update',
@@ -1264,7 +1285,7 @@ exit 2
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.include(result.stdout, "😎 You're ballin.");
+    assert.include(result.stdout, "✓ You're ballin.");
     assert.include(commandLog(), 'node|,|-p process.versions.node');
   });
 
@@ -1395,7 +1416,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 
     assert.equal(result.status, 1);
     assert.include(result.stdout, 'Updating Node.js LTS');
-    assert.include(result.stderr, 'unable to load nvm');
+    assert.include(result.stderr, '✗ Unable to update Node.js LTS: unable to load nvm.');
     assert.include(result.stderr, 'Set `NVM_DIR` to your nvm installation or disable this update with: `ballin config set update.nvm false`');
     assert.include(result.stderr, 'ballin config set update.nvm false');
     assert.isFalse(fs.existsSync(logPath));
@@ -1451,7 +1472,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 0, result.stderr);
     assert.equal(
       result.stderr,
-      'Warning: using bundled defaults for missing settings: update.cleanup, update.nvm, update.npm, update.softwareupdate, update.selfUpdate, update.backup.\n',
+      '! Using bundled defaults for missing settings: `update.cleanup`, `update.nvm`,\n`update.npm`, `update.softwareupdate`, `update.selfUpdate`, `update.backup`.\n',
     );
     assert.deepEqual(commandLog(), [
       'softwareupdate|,|-ia',
@@ -1477,7 +1498,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     assert.equal(result.status, 0);
     assert.equal(
       result.stderr,
-      'Warning: using bundled defaults for missing settings: update.backup.\n',
+      '! Using bundled defaults for missing settings: `update.backup`.\n',
     );
     assert.deepEqual(commandLog(), []);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
@@ -1498,7 +1519,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     const result = spawnUpdate();
 
     assert.equal(result.status, 127);
-    assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
+    assert.include(result.stderr, 'Using bundled defaults for missing settings: `update.selfUpdate`.');
     assert.include(result.stderr, 'ballin: command not found');
     assert.equal(result.stdout, '\n==> Updating Ballin\n');
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
@@ -1520,7 +1541,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
     const result = spawnUpdate();
 
     assert.equal(result.status, 23);
-    assert.include(result.stderr, 'using bundled defaults for missing settings: update.selfUpdate.');
+    assert.include(result.stderr, 'Using bundled defaults for missing settings: `update.selfUpdate`.');
     assert.deepEqual(commandLog(), ['ballin|,|self-update']);
     assert.equal(fs.readFileSync(configPath, 'utf8'), beforeConfig);
   });
@@ -1549,6 +1570,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 
       assert.equal(result.status, 1);
       assert.include(result.stderr, diagnostic);
+      assert.equal(result.stderr.split('✗').length - 1, 1);
       if (name !== 'nvm') {
         assert.equal(result.stdout, '\n==> Backing up development environment\n');
       }
@@ -1583,12 +1605,12 @@ exit 17
     writeConfig([]);
     const arrayResult = spawnUpdate();
     assert.equal(arrayResult.status, 1);
-    assert.include(arrayResult.stderr, 'Ballin config must contain a JSON object.');
+    assert.include(arrayResult.stderr.replace(/\s+/gu, ' '), '✗ Unable to resolve update configuration: Ballin config must contain a JSON object.');
 
     writeConfig({ update: null });
     const updateResult = spawnUpdate();
     assert.equal(updateResult.status, 1);
-    assert.include(updateResult.stderr, 'Ballin config update section must contain a JSON object.');
+    assert.include(updateResult.stderr.replace(/\s+/gu, ' '), '✗ Unable to resolve update configuration: Ballin config update section must contain a JSON object.');
     assert.deepEqual(commandLog(), []);
   });
 
@@ -1627,7 +1649,7 @@ exit 17
     const result = spawnUpdate();
 
     assert.equal(result.status, 1);
-    assert.include(result.stderr, 'Ballin config update.cleanup must be true or false.');
+    assert.include(result.stderr.replace(/\s+/gu, ' '), '✗ Unable to resolve update configuration: Ballin config update.cleanup must be true or false.');
     assert.deepEqual(commandLog(), []);
   });
 

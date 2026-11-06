@@ -359,27 +359,74 @@ Use Homebrew-style phase headings throughout setup and update: a blue
 `==>` marker without bold (`SGR 34`), followed by bold heading text in the
 terminal's default foreground (`SGR 1;39`), then a reset (`SGR 0`).
 
-Use sparse bold emphasis for changed backup entries. Help uses bold for the
-`Usage:` label, command synopses, command and option table terms, and section
-headings, with plain descriptions and example command lines. Put `Usage:` and
-the synopsis on one line when it fits, then a short
-description; keep longer caveats after the essentials. Wrap narrow synopses at
-argument boundaries and keep wrapped examples copyable. Documentation-link labels
-keep their sparse `🔗 ` prefix and put the URL on the next line.
-Setup uses blue documentation URLs with neutral labels, blue interactive choice
-brackets with an uppercase bold default, and neutral question text. Error icons
-are red with neutral explanations; final “Setup complete.” is green. Help keeps
-plain optional-argument brackets, including nested syntax; prompt styling never
-applies to help synopses. Backup symbols and phase labels retain their meaning
-without color. Do not dim unchanged entries.
+[GitHub CLI](https://cli.github.com/) informed the design of Ballin’s prompts and
+status markers.
 
-Use these status meanings in setup prose:
+Use simple markers for Ballin-owned terminal roles. Bold only the leading `?`
+that marks interactive input; all other role markers remain regular weight.
+Keep the message neutral; color the marker, not the entire line. This palette is
+available when needed, not a requirement to add a marker or message to every line:
 
-- ❌ The requested action failed; give a specific next action.
-- ⚠️ An actionable caution, including sensitive-data or credential exposure and
-  stopping backups on another installation.
-- ℹ️ Neutral context or disclosure.
-- 🔗 A documentation pointer with a neutral label and the URL on the next line.
+| Role | Marker | TTY styling |
+| --- | --- | --- |
+| Interactive prompt | `?` | Bold green (`SGR 1;32`) |
+| Actionable warning | `!` | Yellow (`SGR 33`) |
+| Information or documentation pointer | `i` | Blue (`SGR 34`) |
+| Successful result | `✓` | Green (`SGR 32`) |
+| Failed action | `✗` | Red (`SGR 31`) |
+
+Warnings include sensitive-data exposure and stopping backups on another
+installation. A failure needs a specific next action. Documentation pointers use
+a neutral label and put the blue URL on the next line. Final completion uses a
+green `✓` followed by neutral text. Ordinary progress stays plain and quiet;
+do not add a status marker solely to fill the palette. Avoid decorative emoji
+in CLI output. Use functional text symbols for status and convey personality
+through wording.
+Markers and wording must remain meaningful without color.
+
+For backup destinations, keep a proposed URL plain until the repository exists.
+After successful creation, or when an existing destination is available, use the
+normal blue URL treatment. For example, a new repository's URL stays plain in
+“Proposed backup,” then becomes blue in the created-destination result. Apply
+this exception only to the not-yet-created backup URL; other links retain their
+existing styling.
+
+Interactive prompts start with a bold green `?` and neutral question text.
+Available options, brackets, slashes, separators and instructions stay neutral; a declared
+choice-word default is uppercase but regular weight, including `NONE` when
+actually declared.
+Do not change the case of literal hostnames or paths.
+
+Typed input stays neutral while editing. After Enter accepts a fixed choice,
+replace the entered answer in place on the same prompt line with its cyan
+canonical label: `y`/`Y` becomes `Yes`, `n`/`N` becomes `No`, and `reconnect`
+becomes `Reconnect`. Technical choice tokens such as `login` and `bashrc`
+keep their lowercase option spelling. Accept a completed answer once; never
+require a second
+Enter to confirm this presentation. Invalid or incomplete input, EOF and
+interruption must not appear confirmed. Free text and paths stay exactly as
+entered. Redraw only an owned prompt region when the terminal supports it; never
+erase preceding output. Redirected output remains plain and must not echo input.
+The existing emphasis policy also governs confirmation color and redraw. Keep
+redirected, dumb and `NO_COLOR` output plain. If queued typeahead, changed terminal
+geometry or unsupported input makes the prompt region uncertain, preserve input
+and preceding output rather than guessing where to repaint.
+
+Preserve Enter-to-skip instructions and accepted inputs: for example,
+`[login/bashrc; Enter to skip]` still means Enter skips, not that literal `none`
+is accepted. Apply the same rule to future prompts rather than adding new input
+aliases for presentation alone.
+
+Use sparse bold emphasis for changed backup entry names; their markers remain
+regular weight. Preserve distinct unchanged/created/removed/updated meanings.
+`+`, `-` and `~` distinguish created, removed and updated backup entries.
+Do not dim unchanged entries. Help uses bold for the `Usage:` label, command
+synopses, command and option table terms, and section headings, with plain
+descriptions and example command lines. Put `Usage:` and the synopsis on one
+line when it fits, then a short description; keep longer caveats after the
+essentials. Wrap narrow synopses at argument boundaries and keep wrapped
+examples copyable. Help keeps plain optional-argument brackets, including nested
+syntax; prompt styling never applies to help synopses.
 
 Separate a final error/recovery block from preceding output with one blank line.
 Keep the error and next action consecutive, without duplicate generic footers.
@@ -397,14 +444,18 @@ this policy. Child tools retain their own presentation behavior.
 Never add styling to config values, configuration read/write results, or backed-up
 file contents, even on a TTY. Human-facing config recovery diagnostics follow the
 prose convention below.
-Doctor status labels and unrelated Quickstart prefixes retain their existing
-contracts; these setup roles do not imply a global output normalization.
+Doctor status labels retain their existing contracts. These roles apply to
+Ballin-owned presentation, not native child-tool output or machine-readable data.
 
 In explanatory terminal prose, including help and recovery guidance, use sparse
-bold without backticks for complete command invocations on supported TTYs. For
-example, emphasize only the command in “Run **ballin backup setup** when you’re
-ready.” In plain output, retain literal backticks: “Run `ballin backup setup`
-when you’re ready.” Apply the TTY policy to the stream receiving that message.
+bold without backticks for complete command invocations the user is asked to run
+on supported TTYs. For example, emphasize only the command in
+“Run **ballin backup setup** when you’re ready.” In plain output, retain literal
+backticks: “Run `ballin backup setup` when you’re ready.” Apply the TTY policy to
+the stream receiving that message.
+
+Commands Ballin reports executing itself, such as `$ brew install --formula nvm`
+and `$ nvm install --lts`, remain regular weight.
 
 Configuration keys, values, flags, paths, and command shorthand retain backticks
 without newly added emphasis. For example, `update.backup`, `true`, `--verbose`,
