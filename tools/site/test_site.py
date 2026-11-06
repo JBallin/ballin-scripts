@@ -10,6 +10,7 @@ import struct
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 import zlib
 
@@ -63,6 +64,146 @@ class BundleTests(unittest.TestCase):
 
     def test_roundtrip(self):
         self.assertEqual(site.read_bundle(self.data, site.digest(self.data)), (self.manifest, self.files))
+
+    def test_replace_preserves_complete_untouched_examples_and_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, files = copy.deepcopy(self.manifest), dict(self.files)
+            retained = copy.deepcopy(manifest['entries'][0])
+            retained.update(id='older', title='Older actual example', kind='actual-vm',
+                            text='gallery/older/text.txt', images=['gallery/older/output-001.png'], readmeUpdate=False)
+            manifest['entries'].insert(0, retained)
+            for name, data in [(retained['text'], b'ACTUAL older source retained verbatim\n'), (retained['images'][0], png())]:
+                files[name] = data
+                manifest['files'][name] = {'size': len(data), 'sha256': site.digest(data)}
+            base = archive(manifest, files)
+            replacement, changed_files = copy.deepcopy(self.manifest), dict(self.files)
+            replacement['entries'][0].update(sourceRevision='b' * 40, edits='Reviewed replacement; staged, not actual.')
+            changed_files['gallery/update/text.txt'] = b'STAGED replacement; entire matching transcript\n'
+            changed_files['gallery/update/output-002.png'] = png()
+            replacement['entries'][0]['images'].append('gallery/update/output-002.png')
+            replacement['files'] = {name: {'size': len(data), 'sha256': site.digest(data)} for name, data in changed_files.items()}
+            update = archive(replacement, changed_files)
+            pin = pin_for(base)
+            (root / 'pin.json').write_bytes(site.json_bytes(pin))
+            (root / 'base.zip').write_bytes(base)
+            (root / 'replacement.zip').write_bytes(update)
+            for index in range(2):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    site.replace_examples(root / 'pin.json', root / 'base.zip', root / 'replacement.zip',
+                                          site.digest(update), ['update'], root / f'candidate-{index}.zip')
+                evidence = json.loads(out.getvalue())
+                self.assertEqual(evidence['retained'], ['older'])
+                self.assertEqual(evidence['baseSha256'], pin['asset']['sha256'])
+            data = (root / 'candidate-0.zip').read_bytes()
+            result, result_files = site.read_bundle(data, evidence['sha256'])
+            self.assertEqual(result['entries'], [retained, replacement['entries'][0]])
+            for name in [retained['text']] + retained['images']:
+                self.assertEqual(result_files[name], files[name])
+                self.assertEqual(result['files'][name], manifest['files'][name])
+            for name, value in changed_files.items():
+                self.assertEqual(result_files[name], value)
+            self.assertEqual(data, (root / 'candidate-1.zip').read_bytes())
+            self.assertEqual((root / 'base.zip').read_bytes(), base)
+            self.assertEqual((root / 'pin.json').read_bytes(), site.json_bytes(pin))
+            with self.assertRaisesRegex(ValueError, 'Output exists'):
+                site.replace_examples(root / 'pin.json', root / 'base.zip', root / 'replacement.zip',
+                                      site.digest(update), ['update'], root / 'candidate-0.zip')
+
+    def test_replace_rejects_identity_changes_omissions_and_invalid_replacements(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def attempt(pin=None, base=None, replacement=None, sha=None, ids=None):
+                (root / 'pin.json').write_bytes(site.json_bytes(self.pin if pin is None else pin))
+                (root / 'base.zip').write_bytes(self.data if base is None else base)
+                data = self.data if replacement is None else replacement
+                (root / 'replacement.zip').write_bytes(data)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    site.replace_examples(root / 'pin.json', root / 'base.zip', root / 'replacement.zip',
+                                          site.digest(data) if sha is None else sha,
+                                          ['update'] if ids is None else ids, root / 'candidate.zip')
+            missing = copy.deepcopy(self.manifest)
+            del missing['entries'][0]['sourceRevision']
+            bad_files = dict(self.files)
+            del bad_files['gallery/update/text.txt']
+            unsafe = archive(self.manifest, self.files, [('../private.txt', b'unsafe')])
+            undesignated = copy.deepcopy(self.manifest)
+            undesignated['entries'][0]['readmeUpdate'] = False
+            for case in [
+                {'pin': {'mode': 'bootstrap', 'reason': 'No approved bundle'}},
+                {'pin': {**self.pin, 'asset': {**self.pin['asset'], 'size': len(self.data) + 1}}},
+                {'base': self.data + b'altered'},
+                {'sha': 'f' * 64}, {'sha': 'main'},
+                {'ids': ['update', 'update']}, {'ids': []}, {'ids': ['../update']},
+                {'ids': ['missing']}, {'ids': ['update', 'missing']},
+                {'replacement': archive(missing, self.files)},
+                {'replacement': archive(self.manifest, bad_files)}, {'replacement': unsafe},
+                {'replacement': archive(undesignated, self.files)},
+            ]:
+                with self.subTest(case=case), self.assertRaises((ValueError, KeyError)):
+                    attempt(**case)
+                self.assertFalse((root / 'candidate.zip').exists())
+            # A valid replacement cannot add a new ID, even with an exact selection.
+            changed = copy.deepcopy(self.manifest)
+            changed['entries'][0].update(id='new', text='gallery/new/text.txt', images=['gallery/new/output-001.png'])
+            changed_files = {name.replace('/update/', '/new/'): data for name, data in self.files.items()}
+            changed['files'] = {name: {'size': len(data), 'sha256': site.digest(data)} for name, data in changed_files.items()}
+            with self.assertRaisesRegex(ValueError, 'unknown entries'):
+                attempt(replacement=archive(changed, changed_files), ids=['new'])
+            # A second designated README Update in a partial replacement must not
+            # conflict with a retained designation in the complete result.
+            by_id = copy.deepcopy(changed)
+            by_id['entries'][0]['readmeUpdate'] = False
+            base_manifest = copy.deepcopy(self.manifest)
+            base_manifest['entries'] += by_id['entries']
+            base_files = {**self.files, **changed_files}
+            base_manifest['files'].update(by_id['files'])
+            base = archive(base_manifest, base_files)
+            with self.assertRaisesRegex(ValueError, 'repeated Update'):
+                attempt(pin=pin_for(base), base=base, replacement=archive(changed, changed_files), ids=['new'])
+
+    def test_replace_downloads_pinned_base_when_no_offline_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'pin.json').write_bytes(site.json_bytes(self.pin))
+            (root / 'replacement.zip').write_bytes(self.data)
+            with mock.patch.object(site, 'retrieve', return_value=self.data) as retrieve, contextlib.redirect_stdout(io.StringIO()):
+                site.replace_examples(root / 'pin.json', None, root / 'replacement.zip', site.digest(self.data), ['update'], root / 'candidate.zip')
+            retrieve.assert_called_once_with(self.pin)
+            self.assertEqual(site.read_bundle((root / 'candidate.zip').read_bytes()), (self.manifest, self.files))
+
+    def test_replace_can_remove_old_continuation_page_and_transfer_readme_designation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base, files = copy.deepcopy(self.manifest), dict(self.files)
+            extra = copy.deepcopy(base['entries'][0])
+            extra.update(id='other', text='gallery/other/text.txt', images=['gallery/other/output-001.png'], readmeUpdate=False)
+            base['entries'].append(extra)
+            base['entries'][0]['images'].append('gallery/update/output-002.png')
+            files.update({'gallery/update/output-002.png': png(), extra['text']: b'STAGED other complete transcript\n', extra['images'][0]: png()})
+            base['files'] = {name: {'size': len(data), 'sha256': site.digest(data)} for name, data in files.items()}
+            original = archive(base, files)
+            replacements = copy.deepcopy(base)
+            replacements['entries'][0]['readmeUpdate'] = False
+            replacements['entries'][0]['images'].pop()
+            replacements['entries'][1]['readmeUpdate'] = True
+            del replacements['files']['gallery/update/output-002.png']
+            replacements_files = {name: data for name, data in files.items() if name in replacements['files']}
+            replacement = archive(replacements, replacements_files)
+            (root / 'pin.json').write_bytes(site.json_bytes(pin_for(original)))
+            (root / 'base.zip').write_bytes(original)
+            (root / 'replacement.zip').write_bytes(replacement)
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.replace_examples(root / 'pin.json', root / 'base.zip', root / 'replacement.zip', site.digest(replacement),
+                                      ['update', 'other'], root / 'candidate.zip')
+            manifest, result_files = site.read_bundle((root / 'candidate.zip').read_bytes())
+            self.assertEqual(manifest, replacements)
+            self.assertNotIn('gallery/update/output-002.png', result_files)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                site.readme_example(root / 'candidate.zip')
+            self.assertIn('STAGED other complete transcript', out.getvalue())
 
     def test_bundle_and_file_hashes_fail_closed(self):
         with self.assertRaisesRegex(ValueError, 'SHA-256'):

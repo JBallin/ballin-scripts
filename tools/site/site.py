@@ -243,6 +243,12 @@ def pack(gallery, selection_path, output):
                 files[prefix + name] = public_png(data) if name.endswith('.png') else data
         entries.append(entry)
     manifest = {'schema': 1, 'entries': entries, 'files': {name: {'sha256': digest(data), 'size': len(data)} for name, data in files.items()}}
+    data = write_bundle(manifest, files, output)
+    print(json.dumps({'bundle': str(output), 'size': len(data), 'sha256': digest(data), 'entries': len(entries)}))
+
+
+def write_bundle(manifest, files, output):
+    """Write a deterministic, verified complete bundle without replacing prior output."""
     validate_manifest(manifest, files)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
@@ -256,7 +262,42 @@ def pack(gallery, selection_path, output):
     new_output(output)
     with output.open('xb') as handle:
         handle.write(data)
-    print(json.dumps({'bundle': str(output), 'size': len(data), 'sha256': digest(data), 'entries': len(entries)}))
+    return data
+
+
+def replace_examples(pin_path, bundle, replacement, replacement_sha256, entry_ids, output):
+    """Replace an explicit exact set of entries; never add or drop gallery entries."""
+    pin = load_json(read_regular(pin_path, 1024 * 1024))
+    validate_pin(pin)
+    require(pin['mode'] == 'release', 'Replacement requires an approved release pin, not bootstrap mode')
+    require(isinstance(replacement_sha256, str) and SHA.fullmatch(replacement_sha256), 'Invalid replacement SHA-256')
+    require(entry_ids and all(isinstance(name, str) and SLUG.fullmatch(name) for name in entry_ids)
+            and len(entry_ids) == len(set(entry_ids)), 'Expected unique replacement entry IDs')
+    original = read_regular(bundle, MAX_ZIP) if bundle is not None else retrieve(pin)
+    require(len(original) == pin['asset']['size'], 'Pinned bundle length mismatch')
+    manifest, files = read_bundle(original, pin['asset']['sha256'])
+    replacements, replacement_files = read_bundle(read_regular(replacement, MAX_ZIP), replacement_sha256)
+    selected = set(entry_ids)
+    by_id = {entry['id']: entry for entry in replacements['entries']}
+    require(set(by_id) == selected, 'Replacement bundle must contain exactly the selected entries')
+    require(selected <= {entry['id'] for entry in manifest['entries']}, 'Cannot replace unknown entries')
+    entries, combined = [], {}
+    for entry in manifest['entries']:
+        replaced = entry['id'] in selected
+        current = by_id[entry['id']] if replaced else entry
+        entries.append(current)
+        source = replacement_files if replaced else files
+        for name in [current['text']] + current['images']:
+            combined[name] = source[name]
+    result = {'schema': 1, 'entries': entries,
+              'files': {name: {'sha256': digest(data), 'size': len(data)} for name, data in combined.items()}}
+    require(not any(entry['readmeUpdate'] for entry in manifest['entries'])
+            or any(entry['readmeUpdate'] for entry in entries), 'Cannot remove the canonical README Update designation')
+    data = write_bundle(result, combined, output)
+    print(json.dumps({'bundle': str(output), 'size': len(data), 'sha256': digest(data), 'entries': len(entries),
+                      'replaced': entry_ids, 'retained': [entry['id'] for entry in entries if entry['id'] not in selected],
+                      'baseAssetId': pin['asset']['id'], 'baseSha256': pin['asset']['sha256'],
+                      'replacementSha256': replacement_sha256}))
 
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -529,6 +570,13 @@ def main():
     package.add_argument('--gallery', type=Path, required=True)
     package.add_argument('--selection', type=Path, required=True)
     package.add_argument('--output', type=Path, required=True)
+    refresh = commands.add_parser('replace', help='Replace selected complete examples in a verified pinned bundle')
+    refresh.add_argument('--pin', type=Path, default=ROOT / 'site/bundle.json')
+    refresh.add_argument('--bundle', type=Path, help='Offline base bundle; must match the release pin exactly')
+    refresh.add_argument('--replacement', type=Path, required=True, help='ZIP containing only the reviewed replacement entries')
+    refresh.add_argument('--replacement-sha256', required=True, help='Reviewed replacement ZIP SHA-256')
+    refresh.add_argument('--entry', action='append', required=True, help='Existing public entry ID to replace; repeat for each entry')
+    refresh.add_argument('--output', type=Path, required=True)
     inspect = commands.add_parser('inspect', help='Validate and print only public bundle metadata')
     inspect.add_argument('bundle', type=Path)
     compile_site = commands.add_parser('build')
@@ -545,6 +593,8 @@ def main():
     try:
         if args.command == 'pack':
             pack(args.gallery, args.selection, args.output)
+        elif args.command == 'replace':
+            replace_examples(args.pin, args.bundle, args.replacement, args.replacement_sha256, args.entry, args.output)
         elif args.command == 'inspect':
             manifest, _ = read_bundle(read_regular(args.bundle, MAX_ZIP))
             print(json.dumps(manifest, indent=2))

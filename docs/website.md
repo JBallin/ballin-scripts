@@ -182,8 +182,8 @@ the README example. Do not relabel staged output as actual execution.
 python3 tools/site/site.py pack \
   --gallery .output-gallery/FULL_SOURCE_SHA \
   --selection .site-output/selection.json \
-  --output .site-output/ballin-gallery-v1.0.0.zip
-python3 tools/site/site.py inspect .site-output/ballin-gallery-v1.0.0.zip
+  --output .site-output/ballin-gallery-assets-v1.0.0.zip
+python3 tools/site/site.py inspect .site-output/ballin-gallery-assets-v1.0.0.zip
 ```
 
 Packaging verifies generation hashes and the renderer's exact logical-text match.
@@ -205,21 +205,87 @@ separately authorized evidence handoff. Do not require captures for
 unrelated engineering changes. Generation cost and recurring refresh scope remain
 unmeasured rather than an every-release refresh requirement.
 
+## Refresh selected examples
+
+Normal site builds reuse the approved pinned bundle; docs edits do not regenerate
+captures. To refresh one or more examples, first review their complete replacement
+images, matching text and public provenance, then use `pack` above to create a
+replacement-only ZIP. Keep each existing public `id` and include every page of
+each selected example. Update its source revision, actual/staged classification
+and omission disclosure honestly; do not mix a new image with an older transcript.
+Retained examples keep their own revisions; a refresh does not make the whole
+gallery evidence for the replacement's product or rendering-tool version.
+Compare the new examples with retained neighbors for font, color, terminal width,
+page captions and readability. A visual style change may justify refreshing more
+examples, but does not require recapturing the whole gallery.
+
+Record the reviewed replacement ZIP's SHA-256 from `pack`. With a release-mode
+`site/bundle.json`, create a new complete candidate:
+
+```sh
+python3 tools/site/site.py replace \
+  --replacement .site-output/replacement-examples.zip \
+  --replacement-sha256 REVIEWED_REPLACEMENT_SHA256 \
+  --entry update \
+  --output .site-output/ballin-gallery-assets-v1.0.0-refresh-1.zip
+python3 tools/site/site.py inspect .site-output/ballin-gallery-assets-v1.0.0-refresh-1.zip
+```
+
+Repeat `--entry` for each existing ID being replaced. The command retrieves the
+exact release/asset identified by the pin and verifies its identity and hash.
+For offline reuse, supply `--bundle PATH_TO_PRIOR_ZIP`; its bytes must match the
+pin's size and SHA-256, but this does not recheck the remote release state.
+`--pin PATH` selects another reviewed release pin. Bootstrap mode is rejected
+because there is no approved complete bundle to preserve.
+
+The replacement ZIP must contain exactly the named entries, with complete images,
+text and public provenance. The command preserves entry order and every untouched
+entry and file byte, rebuilds per-file hashes, and validates the complete candidate
+against the same archive/path/image safety rules as a normal bundle. It refuses
+missing or extra entries, unknown IDs, invalid inputs and an existing output path.
+An existing canonical README Update designation must remain; to transfer it,
+replace both affected entries together and designate exactly one of them.
+Use a separately reviewed full `pack` selection to intentionally add or remove
+entries. The result reports its hash, size, replaced/retained IDs and base identity;
+it does not modify the release pin or establish publication approval.
+
+Review the complete candidate using the offline build/preview procedure below,
+with a separate ignored candidate pin containing its new size/hash. Retain the
+base bundle and pin. After separate publication approval, upload the complete ZIP
+under its new clearly named `ballin-gallery-assets-vX.Y.Z-refresh-N.zip` asset name
+on the mutable product release. Verify retrieval and review the actual new
+release/asset identity before
+repinning through an ordinary source change. Deployment remains a separate stage.
+
 ## Attach to the actual product Release
 
-Release publication and asset upload are separate authorized operations. Initial
-real stable-install captures happen after stable publication. Before relying on
-post-publication attachment, inspect current repository and owner-enforced release
-immutability, effective version-tag rules and the actual published release.
-Version-tag protection and asset immutability are different controls. If immutability
-forbids later attachments, stop for a reviewed resolution; do not relax controls or
-create a workaround asset-only prerelease. A 404 from the legacy tag-protection
-endpoint does not establish whether tags are protected.
+Name the ZIP clearly as gallery assets, for example
+`ballin-gallery-assets-v1.0.0.zip` or
+`ballin-gallery-assets-v1.0.0-refresh-1.zip`. These fit the supported
+`ballin-gallery-` filename prefix; use lowercase letters, digits, dots and hyphens
+before `.zip`. The clear filename is sufficient; releases do not need a repeated
+gallery explanation or link. If useful, add an optional release note: “The gallery
+assets ZIP contains website example images and matching text. You do not need it
+to install or use Ballin.” Keep published release notes canonical in GitHub Releases.
+
+Release publication and asset upload are separate authorized operations. GitHub
+supports adding assets to an already published mutable release. A published
+immutable release cannot have assets added, replaced or deleted; see
+[GitHub's release editing guidance](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository#editing-a-release).
+Initial real stable-install captures happen after stable publication. Before
+publishing a product release intended for later gallery attachment, verify that
+it will remain mutable under the current repository and owner-enforced release
+policy. Before uploading, verify the actual target release is mutable and inspect
+effective version-tag rules. Version-tag protection and asset immutability are
+different controls. If immutability forbids later attachments, stop for a reviewed
+resolution; do not relax controls or create a workaround asset-only prerelease.
+A 404 from the legacy tag-protection endpoint does not establish whether tags are
+protected.
 
 After separate upload authorization, the ordinary candidate command is:
 
 ```sh
-gh release upload v1.0.0 .site-output/ballin-gallery-v1.0.0.zip \
+gh release upload v1.0.0 .site-output/ballin-gallery-assets-v1.0.0.zip \
   --repo JBallin/ballin-scripts
 ```
 
@@ -243,7 +309,7 @@ bootstrap object in `site/bundle.json` through an ordinary reviewed change:
   "release": {"id": 123, "tag": "v1.0.0", "commit": "FULL_40_CHARACTER_COMMIT_SHA"},
   "asset": {
     "id": 456,
-    "name": "ballin-gallery-v1.0.0.zip",
+    "name": "ballin-gallery-assets-v1.0.0.zip",
     "size": 789,
     "sha256": "EXACT_64_CHARACTER_SHA256"
   }
@@ -263,7 +329,7 @@ oversize content, suspicious compression ratios and hash disagreement. It never
 extracts arbitrary archive paths. A local offline verification uses the same pin:
 
 ```sh
-python3 tools/site/site.py build --bundle .site-output/ballin-gallery-v1.0.0.zip \
+python3 tools/site/site.py build --bundle .site-output/ballin-gallery-assets-v1.0.0.zip \
   --output .site-output/pinned-review
 ```
 

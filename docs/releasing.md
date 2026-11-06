@@ -62,3 +62,9 @@ outcome is uncertain, inspect existing state before retrying. Finally verify a
 fresh versioned install and existing-install self-update select the published
 release and preserve local state. GitHub Releases are the release-note history;
 do not maintain a duplicate changelog.
+
+For optional website gallery assets, follow
+[the gallery release-asset procedure](website.md#attach-to-the-actual-product-release)
+for ZIP naming, release-note wording, mutability checks and separate upload approval.
+Use [selected-example refresh](website.md#refresh-selected-examples) for later
+updates and the subsequent review/repin workflow.
