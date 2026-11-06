@@ -59,4 +59,9 @@ const rendered = input.pages.map(page => {
   const heading = tokens.findIndex(t => t.type === 'heading_open');
   return { path: outputPath(page.path), source: page.path, title: heading >= 0 ? tokens[heading + 1].content : 'Ballin', content: md.renderer.render(tokens, md.options, {}) };
 });
+const outputPaths = new Set();
+for (const page of rendered) {
+  if (outputPaths.has(page.path)) throw new Error('Duplicate site output path: ' + page.path);
+  outputPaths.add(page.path);
+}
 process.stdout.write(JSON.stringify(rendered));

@@ -356,6 +356,13 @@ class BuildTests(unittest.TestCase):
         ids = __import__('re').findall('id="([^"]+)"', page['content'])
         self.assertEqual(ids, ['heading', 'setup', 'setup-1', 'setup-1-1', 'setup-2', 'setup-1-2'])
 
+    def test_readme_and_index_cannot_overwrite_the_same_output(self):
+        payload = {'pages': [{'path': 'docs/README.md', 'text': '# Canonical index'}, {'path': 'docs/index.md', 'text': '# Colliding index'}], 'base': '/ballin-scripts', 'sourceBase': 'https://example.com/source'}
+        result = subprocess.run(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload), capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'Duplicate site output path: docs/index.html', result.stderr)
+        self.assertEqual(result.stdout, b'')
+
     def test_relative_url_contract_preserves_encoded_filename_delimiters(self):
         payload = {'pages': [{'path': 'docs/intro.md', 'text': '# Intro\n\n[Hash](a%23b.md)\n\n[Source](../tools/a%23b.py)'}, {'path': 'docs/a#b.md', 'text': '# Hash'}], 'base': '/ballin-scripts', 'sourceBase': 'https://example.com/source'}
         page = json.loads(subprocess.check_output(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload)))[0]
