@@ -32,7 +32,7 @@ look after.
 Ballin's Node.js CLI has no runtime npm dependencies.
 
 [Tart](https://github.com/openai/tart) provides macOS virtual machines used to
-test installation.
+[test installation](installation-testing.md).
 
 [GitHub Actions](https://github.com/features/actions) runs automated checks, and
 [Cloudflare Workers](https://developers.cloudflare.com/workers/) and
