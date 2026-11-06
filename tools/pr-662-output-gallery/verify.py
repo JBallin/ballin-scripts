@@ -65,15 +65,26 @@ assert 'confirmed local preferences remain saved' not in plain
 assert 'Enter Yes or No.' in plain and 'Enter Create or Reconnect.' in plain
 assert 'Backups may contain private information or secrets.' in plain
 assert 'See Reconnect details above.' in canonical(plain) and 'See Backup details above.' in canonical(plain)
+# The retained historical fixtures keep their original wording. Read source
+# evidence as data to select expectations; never execute stateful setup modules.
+setup_source=(ROOT/'source-evidence/commands/install_setup.ts').read_text()
+completion_source=(ROOT/'source-evidence/commands/completion_setup.ts').read_text()
+reminder_later=' later' if 'Change preferences later with' in setup_source else ''
+general_reminder='Change preferences'+reminder_later+' with'
+backup_reminder='Change backup settings'+reminder_later+' with'
+completion_question='Enable Ballin tab completion in ~/.bash_profile? [y/N] Yes' if 'Enable Ballin tab completion in ${terminalPath' in completion_source else 'Enable Ballin tab completion? [y/N] Yes'
+if 'Enable Ballin tab completion in ${terminalPath' in completion_source:
+ assert 'Startup file:' not in plain
+ assert 'Enable Ballin tab completion? [y/N]' not in plain
 followups=plain.split('6. Context-sensitive follow-ups')[1].split('7. Truthful cancellation')[0]
 initial=followups.split('[STAGED alternative')[0]
-assert initial.count('Change backup settings later with')==1
+assert initial.count(backup_reminder)==1
 assert 'Run `ballin backup setup` when' not in initial
-assert initial.index('Change backup settings later')<initial.index('Change preferences later')
+assert initial.index(backup_reminder)<initial.index(general_reminder)
 standalone_backup=followups.split('standalone backup success: related flow only')[1].split('[STAGED alternative')[0]
-assert 'Change backup settings later' not in standalone_backup
+assert backup_reminder not in standalone_backup
 standalone_general=followups.split('standalone general success: related flow only')[1]
-assert 'Change preferences later' not in standalone_general
+assert general_reminder not in standalone_general
 config='Configuration file: "/synthetic-home/custom Ballin settings/projects/isolated-fixture/configuration/ballin.config.json"'
 for output in [plain,normal,no_color,dumb]:
  assert output.splitlines().count(config)==4
@@ -96,12 +107,12 @@ for output in [plain,normal,no_color,dumb]:
 assert 'Confirmation required. Run \x1b[1mballin self-update\x1b[0m manually to continue.' in normal
 assert 'Confirmation required. Run `ballin self-update` manually to continue.' in plain
 main=plain.split('2. Coherent Quickstart installation')[1].split('3. General preferences and analytics')[0]
-expected_questions=['Set up backups to GitHub? [Y/n] No','Use NVM with Node.js LTS instead? [y/N] Yes','Proceed with installation? [y/N] Yes','Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] login','Add Ballin setup to ~/.bash_profile so it works in new Terminal windows? [y/N] Yes','Enable Ballin tab completion? [y/N] Yes','Review your Ballin preferences? [Y/n] Yes','Update global npm packages? [y/N] No','Update Ballin? [Y/n] Yes','Clean up Homebrew? [Y/n] Yes','Update macOS? [Y/n] No','Update Node.js LTS through NVM? [Y/n] Yes','Share usage analytics to help improve Ballin? [y/N] No']
+expected_questions=['Set up backups to GitHub? [Y/n] No','Use NVM with Node.js LTS instead? [y/N] Yes','Proceed with installation? [y/N] Yes','Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] login','Add Ballin setup to ~/.bash_profile so it works in new Terminal windows? [y/N] Yes',completion_question,'Review your Ballin preferences? [Y/n] Yes','Update global npm packages? [y/N] No','Update Ballin? [Y/n] Yes','Clean up Homebrew? [Y/n] Yes','Update macOS? [Y/n] No','Update Node.js LTS through NVM? [Y/n] Yes','Share usage analytics to help improve Ballin? [y/N] No']
 positions=[main.index('? '+question) for question in expected_questions]
 assert positions==sorted(positions)
 assert sum(line.startswith('? ') for line in main.splitlines())==len(expected_questions)
 assert main.count('Setup complete.')==1
-assert main.index('Change preferences later with')<main.index('to configure or review your GitHub backup.')<main.index('✓ Setup complete.')
+assert main.index(general_reminder)<main.index('to configure or review your GitHub backup.')<main.index('✓ Setup complete.')
 assert 'complete standalone review prompts' in plain
 assert 'standalone backup preference review cancelled after a saved answer' not in plain
 for file in ['gallery.cjs','terminalStyle.ts','help_format.ts','doctor_report.ts','diagnostics.ts','selection_label.cjs']:
