@@ -64,7 +64,8 @@ rendering are tested against the canonical docs, rather than promising universal
 GitHub rendering parity. Non-documentation source links lead to
 the exact site source commit on GitHub. The build emits a sitemap and canonical
 URLs for the expected project address, `https://jballin.github.io/ballin-scripts/`.
-That address is a configuration target until actual Pages publication verifies it.
+When setting up or changing hosting, verify the configured origin and project
+base against the deployed pages, asset URLs and section links.
 
 ## Curate a bundle
 
@@ -125,8 +126,8 @@ identity, not absence of secrets or faithful execution. The importer cannot prov
 that a declared actual run happened.
 
 Retain useful PNGs and matching text with source revision and actual/staged labels
-for affected-flow PR review. Authenticated PR attachment remains unverified; use
-only a supported, separately authorized handoff. Do not require captures for
+for affected-flow PR review. Use a verified supported attachment method or another
+separately authorized evidence handoff. Do not require captures for
 unrelated engineering changes. Generation cost and recurring refresh scope remain
 unmeasured rather than an every-release refresh requirement.
 
