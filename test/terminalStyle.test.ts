@@ -102,3 +102,86 @@ describe('terminal emphasis', () => {
     }
   });
 });
+
+describe('setup presentation roles', () => {
+  const { terminalUrls, terminalPrompt, terminalProse, terminalError, terminalComplete, visibleWidth } = require('../commands/terminalStyle.ts');
+  const tty = { isTTY: true, columns: 80 };
+  it('colors URLs while keeping labels and punctuation neutral and styling idempotent', () => {
+    const text = '🔗 Details:\nVisit https://example.com/guide, then https://example.com/next.';
+    const styled = terminalUrls(text, tty, {});
+    assert.equal(styled, '🔗 Details:\nVisit \x1b[34mhttps://example.com/guide\x1b[0m, then \x1b[34mhttps://example.com/next\x1b[0m.');
+    assert.equal(terminalUrls(styled, tty, {}), styled);
+  });
+  it('opts a proposed URL out of coloring without changing other presentation', () => {
+    const url = 'https://example.com/backup';
+    assert.equal(terminalProse(`i Proposed backup: ${url}`, tty, {}, { colorUrls: false }), `\x1b[0;34mi\x1b[0m Proposed backup: ${url}`);
+    assert.equal(terminalProse(`Private backup created: ${url}`, tty, {}), `Private backup created: \x1b[34m${url}\x1b[0m`);
+    for (const env of [{ NO_COLOR: '1' }, { TERM: 'dumb' }]) {
+      assert.equal(terminalProse(`Proposed backup: ${url}`, tty, env, { colorUrls: false }), `Proposed backup: ${url}`);
+      assert.equal(terminalProse(`Private backup created: ${url}`, tty, env), `Private backup created: ${url}`);
+    }
+  });
+  it('keeps choices and uppercase defaults neutral', () => {
+    assert.equal(terminalPrompt('Continue? [y/N] ', tty, {}), '\x1b[1;32m?\x1b[0m Continue? [y/N] ');
+    assert.equal(terminalPrompt('Mode? [CREATE/reconnect] ', tty, {}), '\x1b[1;32m?\x1b[0m Mode? [CREATE/reconnect] ');
+    assert.equal(terminalPrompt('Host [github.com]: ', tty, {}), '\x1b[1;32m?\x1b[0m Host [github.com]: ');
+  });
+  it('resets marker emphasis before prompt wording and leaves interior question marks neutral', () => {
+    const prompt = '\nContinue? ? Maybe [y/N] ';
+    assert.equal(terminalPrompt(prompt, tty, { NO_COLOR: '' }), '\n\x1b[1;32m?\x1b[0m Continue? ? Maybe [y/N] ');
+    assert.equal(terminalPrompt(prompt, { isTTY: false }, { FORCE_COLOR: '1' }), '\n? Continue? ? Maybe [y/N] ');
+  });
+  it('preserves Enter-to-skip instructions and a neutral uppercase NONE default', () => {
+    assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', tty, {}),
+      '\x1b[1;32m?\x1b[0m Startup [login/bashrc; Enter to skip] ');
+    assert.equal(terminalPrompt('Choice [yes/no/NONE] ', tty, {}),
+      '\x1b[1;32m?\x1b[0m Choice [yes/no/NONE] ');
+    assert.equal(terminalPrompt('Startup [login/bashrc; Enter to skip] ', {}, {}), '? Startup [login/bashrc; Enter to skip] ');
+    assert.equal(terminalPrompt('Directory [Enter for home (~), an absolute directory, or skip]: ', tty, {}),
+      '\x1b[1;32m?\x1b[0m Directory [Enter for home (~), an absolute directory, or skip]: ');
+  });
+  it('bolds only the prompt marker without changing role colors or prose', () => {
+    for (const [marker, sgr] of [['?', '1;32'], ['!', '0;33'], ['i', '0;34'], ['✓', '0;32'], ['✗', '0;31']]) {
+      assert.equal(terminalProse(`${marker} Message.`, tty, {}), `\x1b[${sgr}m${marker}\x1b[0m Message.`);
+      assert.equal(terminalProse(`${marker} Message.`, tty, { NO_COLOR: '1' }), `${marker} Message.`);
+    }
+    assert.equal(terminalProse('Ordinary progress.', tty, {}), 'Ordinary progress.');
+  });
+  for (const env of [{ TERM: 'dumb' }, { NO_COLOR: '0', FORCE_COLOR: '1' }, { NO_COLOR: 'yes' }]) {
+    it(`respects all emphasis guards: ${JSON.stringify(env)}`, () => {
+      assert.equal(terminalPrompt('Continue? [Y/n]', tty, env), '? Continue? [Y/n]');
+      assert.equal(terminalUrls('https://example.com', tty, env), 'https://example.com');
+      assert.equal(terminalError('Failed.', tty, env), '✗ Failed.');
+      assert.equal(terminalComplete('Setup complete.', tty, env), '✓ Setup complete.');
+    });
+  }
+  it('uses the receiving stream, red error icons, and green final completion', () => {
+    assert.equal(terminalError('Failed.', tty, {}), '\x1b[0;31m✗\x1b[0m Failed.');
+    assert.equal(terminalError('Failed.', {}, { FORCE_COLOR: '1' }), '✗ Failed.');
+    assert.equal(terminalComplete('Setup complete.', tty, {}), '\x1b[0;32m✓\x1b[0m Setup complete.');
+  });
+  it('wraps host-specific recovery commands using visible Unicode/ANSI columns', () => {
+    assert.equal(visibleWidth('A😎⚠️中e\u0301'), 8);
+    const command = terminalCommand('gh auth login --hostname ' + 'enterprise.'.repeat(3) + 'example.com', tty, {});
+    for (const columns of [80, 47]) {
+      const text = terminalProse(`✗ GitHub CLI authentication is required.\nRun ${command}, then run ${terminalCommand('ballin backup setup', tty, {})}.`, { ...tty, columns }, {});
+      assert.include(text, command + ',');
+      for (const line of text.split('\n')) {
+        if (visibleWidth(line) > columns) assert.equal(line, command + ',');
+      }
+      assert.notInclude(text, '\n\n'); assert.include(stripAnsi(text).replaceAll('\n', ' '), 'gh auth login --hostname');
+    }
+    assert.equal(terminalProse('\n'), '\n');
+  });
+  it('counts combining marks, invisible controls, and wide scripts by their displayed columns', () => {
+    assert.equal(visibleWidth('e\u0301👩🏽‍💻汉字한글'), 11);
+    assert.equal(visibleWidth('\u200d\u0301'), 0);
+    assert.equal(visibleWidth('Ａ！𠀀'), 6);
+    assert.equal(terminalProse('汉字 한글 e\u0301', { columns: 5 }, {}), '汉字\n한글\ne\u0301');
+  });
+  for (const styled of [false, true]) it(`keeps command references and adjoining punctuation copyable (styled=${styled})`, () => {
+    const stream = { isTTY: styled, columns: 18 };
+    const reference = terminalCommand('ballin backup setup', stream, {});
+    assert.equal(terminalProse(`Run (${reference}), then retry.`, stream, {}), `Run\n(${reference}),\nthen retry.`);
+  });
+});

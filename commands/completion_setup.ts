@@ -1,4 +1,4 @@
-const { terminalPath } = require('./terminalStyle.ts');
+const { terminalPath, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const tty = require('tty');
@@ -31,7 +31,8 @@ const inspectProfile = (profile: string): void => {
 
 const completionTarget = (
   env: NodeJS.ProcessEnv,
-  prompt: (text: string) => { text: string; eof: boolean },
+  prompt: (text: string, choiceLabel?: (text: string) => string | undefined) => { text: string; eof: boolean },
+  write: (text: string) => void = (text) => writeStdoutLine(terminalProse(text)),
 ): CompletionTarget | null => {
   const home = env.HOME;
   if (!home || !path.isAbsolute(home) || !env.SHELL || !path.isAbsolute(env.SHELL)) return null;
@@ -48,26 +49,38 @@ const completionTarget = (
   } else if (shell === 'zsh') {
     const suggested = env.ZDOTDIR && path.isAbsolute(env.ZDOTDIR) && !/[\r\n\0]/u.test(env.ZDOTDIR) ? env.ZDOTDIR : home;
     const defaultLabel = suggested === home ? 'home (~), an absolute directory' : `${terminalPath(suggested, home)}, another absolute directory`;
-    const choice = prompt(`Zsh settings directory [Enter for ${defaultLabel}, or skip]: `);
-    if (choice.eof || choice.text === 'skip') return null;
-    const directory = choice.text === '' ? suggested : choice.text === 'home' ? home : choice.text;
-    if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) return null;
-    profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
+    while (true) {
+      const choice = prompt(`Zsh settings directory [Enter for ${defaultLabel}, or skip]: `);
+      if (choice.eof || choice.text === 'skip') return null;
+      const directory = choice.text === '' ? suggested : choice.text === 'home' ? home : choice.text;
+      if (!path.isAbsolute(directory) || /[\r\n\0]/u.test(directory)) {
+        write('Enter an absolute directory.');
+        continue;
+      }
+      profile = `${directory.replace(/\/$/u, '')}/.zshrc`;
+      break;
+    }
   } else if (shell === 'bash') {
-    const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ');
-    if (choice.eof) return null;
-    if (choice.text === 'bashrc') profile = path.join(home, '.bashrc');
-    else if (choice.text === 'login') {
-      // Bash reads only the first existing login startup file.
-      const existing = ['.bash_profile', '.bash_login', '.profile'].find((name) => {
-        try { fs.lstatSync(path.join(home, name)); return true; } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          return false;
-        }
-      });
-      if (existing === '.profile') return null;
-      profile = path.join(home, existing ?? '.bash_profile');
-    } else return null;
+    while (true) {
+      const choice = prompt('Which Bash startup file does your terminal read? [login/bashrc; Enter to skip] ', (text) => text === 'login' ? 'login' : text === 'bashrc' ? 'bashrc' : text === '' ? 'Skip' : undefined);
+      if (choice.eof || choice.text === '') return null;
+      if (choice.text === 'bashrc') profile = path.join(home, '.bashrc');
+      else if (choice.text === 'login') {
+        // Bash reads only the first existing login startup file.
+        const existing = ['.bash_profile', '.bash_login', '.profile'].find((name) => {
+          try { fs.lstatSync(path.join(home, name)); return true; } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            return false;
+          }
+        });
+        if (existing === '.profile') return null;
+        profile = path.join(home, existing ?? '.bash_profile');
+      } else {
+        write('Enter login or bashrc.');
+        continue;
+      }
+      break;
+    }
   } else return null;
   inspectProfile(profile);
   return { shell, profile, line: activationLine(shell) };
@@ -125,22 +138,25 @@ const appendActivation = (target: CompletionTarget): boolean => {
 };
 
 const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions = {}): void => {
-  const write = options.write ?? writeStdoutLine;
-  const fallback = (needsContext = false): void => {
-    if (needsContext) write();
-    write(`Tab completion skipped.\n🔗 Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
+  const write = options.write ?? ((text = '') => writeStdoutLine(terminalProse(text)));
+  const fallback = (needsContext = false, declined = false): void => {
+    if (needsContext) write('');
+    write(`${declined ? '' : 'Tab completion skipped.\n'}i Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
   };
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
-  const prompt = options.prompt ?? readPromptLine;
+  const prompt: typeof readPromptLine = options.prompt ?? readPromptLine;
   try {
     const env = options.env ?? process.env;
     let firstQuestion = true;
-    const completionPrompt: typeof prompt = (question: string) => {
+    const beginCompletion = (): void => {
       if (firstQuestion && options.presentation === 'installation') write('');
       firstQuestion = false;
-      return prompt(question);
     };
-    const target = completionTarget(env, completionPrompt);
+    const completionPrompt: typeof prompt = (question: string, choiceLabel?: (text: string) => string | undefined) => {
+      beginCompletion();
+      return prompt(question, choiceLabel);
+    };
+    const target = completionTarget(env, completionPrompt, write);
     if (!target) { fallback(true); return; }
     // Inspect only the selected file; a conventional location is not activation proof.
     try {
@@ -157,13 +173,18 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
         return;
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    beginCompletion();
+    write(`Startup file: ${terminalPath(target.profile, env.HOME)}`);
     while (true) {
-      const answer = completionPrompt(`Enable tab completion in ${terminalPath(target.profile, env.HOME)}? [y/N] `);
+      const answer = completionPrompt(`Enable Ballin tab completion? [y/N] `, (text: string) => {
+        const enabled = parseYesNo(text, false);
+        return enabled === undefined ? undefined : enabled ? 'Yes' : 'No';
+      });
       if (answer.eof) { fallback(); return; }
       const enabled = parseYesNo(answer.text, false);
-      if (enabled === false) { fallback(); return; }
+      if (enabled === false) { fallback(false, true); return; }
       if (enabled === true) break;
-      write('Please enter yes or no.');
+      write('Enter Yes or No.');
     }
     const appended = appendActivation(target);
     if (options.presentation !== 'installation') write(appended ? 'Tab completion enabled.' : 'Tab completion is already enabled.');
@@ -171,7 +192,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     rethrowInterruption(error);
     if (error instanceof CompletionProfileError) write(error.message);
     write('Tab completion setup could not finish. Ballin remains installed.');
-    write(`🔗 Manual setup:\n${docsUrl}#startup-files-and-manual-activation`);
+    write(`i Manual setup:\n${docsUrl}#startup-files-and-manual-activation`);
   }
 };
 

@@ -4,9 +4,14 @@ const path = require('path');
 const root = process.env.BALLIN_QA_ROOT;
 const fail = (): never => { throw new Error('Onboarding sandbox safeguard refused the operation'); };
 const quickstart = root && JSON.parse(fs.readFileSync(path.join(root, '.ballin-onboarding-sandbox.json'), 'utf8')).quickstart === true;
+const nvmBin = root && path.join(root, 'home/.config/nvm/versions/node/v26.13.0/bin');
 const allowedPaths = root && (quickstart
   ? [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter), path.join(root, 'tools')]
   : [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)]);
+if (Array.isArray(allowedPaths) && quickstart && nvmBin && fs.existsSync(path.join(nvmBin, 'node'))) {
+  if (!fs.lstatSync(path.join(nvmBin, 'node')).isSymbolicLink() || fs.realpathSync(path.join(nvmBin, 'node')) !== fs.realpathSync(process.execPath)) fail();
+  allowedPaths.push(...allowedPaths.map(value => `${nvmBin}:${value}`));
+}
 if (process.env.BALLIN_NO_ANALYTICS !== '1' || !root || fs.realpathSync(root) !== root || process.env.HOME !== path.join(root, 'home')
   || !allowedPaths?.includes(process.env.PATH ?? '')) fail();
 
@@ -39,7 +44,30 @@ for (const name of ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork']) {
   childProcess[name] = (command: string, ...args: unknown[]) => {
     if (name === 'fork') fail();
     const candidate = command.includes(path.sep) ? path.resolve(command) : path.join(root, 'tools', command);
-    if (candidate !== process.execPath && !candidate.startsWith(path.join(root, 'tools') + path.sep)
+    const probeArgs = args[0] as string[];
+    const probeEnv = (args[1] as { env?: NodeJS.ProcessEnv })?.env;
+    if (quickstart && command === '/bin/bash' && probeArgs?.[0] === '--noprofile' && probeArgs[1] === '--norc'
+      && probeArgs[4] === 'ballin-nvm-probe' && probeArgs.length === 6
+      && probeArgs[3] === '. "$1" --no-use >/dev/null && declare -F nvm >/dev/null || exit 1; printf "loadable\\n"; nvm version default'
+      && probeArgs[5] === path.join(root, 'home/.config/nvm/nvm.sh')
+      && fs.readFileSync(probeArgs[5], 'utf8') === fs.readFileSync(path.join(root, 'nvm-fixture.sh'), 'utf8')
+      && probeEnv?.HOME?.startsWith(path.join(root, 'tmp/ballin-nvm-probe-')) && probeEnv.NVM_DIR === path.join(probeEnv.HOME, 'nvm')
+      && probeEnv.PATH === process.env.PATH && probeEnv.BASH_ENV === '' && probeEnv.ENV === '') return original(command, ...args);
+    const appliedUpdate = name === 'spawnSync' && command === '/bin/bash' && probeArgs?.length === 9
+      && probeArgs[0] === path.join(root, 'home/.ballin-scripts/install.sh') && probeArgs[1] === '--ballin-applied-v2'
+      && probeArgs[2] === path.join(root, 'home/.ballin-scripts') && probeArgs[3] === 'branch' && probeArgs[4] === 'main'
+      && probeArgs[5] === 'a'.repeat(40) && probeArgs[6] === '24.12.0' && probeArgs[7] === '-'
+      && probeEnv?.BASH_ENV === '' && probeEnv.ENV === '';
+    if (appliedUpdate) {
+      const preflight = JSON.parse(probeArgs[8]);
+      if (fs.realpathSync(probeArgs[0]) !== probeArgs[0] || !fs.lstatSync(probeArgs[0]).isFile()
+        || preflight.directory !== path.join(root, 'home/.local/bin') || preflight.target !== installedBallin.replace('/.ballin-scripts/bin/', '/.local/bin/')
+        || typeof preflight.snapshot !== 'string') fail();
+    }
+    const terminalMetadata = name === 'spawnSync' && command === '/bin/stty' && probeArgs?.length === 1 && probeArgs[0] === '-a';
+    const inputReadiness = name === 'spawnSync' && command === '/bin/zsh' && JSON.stringify(probeArgs) === JSON.stringify(['-d', '-f', '-c', 'zmodload zsh/zselect || exit 2; zselect -r 0 -t 0'])
+      && probeEnv?.BASH_ENV === '' && probeEnv.ENV === '' && probeEnv.ZDOTDIR === '' && !Object.keys(probeEnv).some(key => key.startsWith('BASH_FUNC_'));
+    if (!terminalMetadata && !inputReadiness && !appliedUpdate && candidate !== process.execPath && !candidate.startsWith(path.join(root, 'tools') + path.sep)
       && candidate !== path.join(root, 'home/.local/bin/ballin') && candidate !== installedBallin) fail();
     if (candidate === installedBallin) {
       if (fs.realpathSync(candidate) !== installedBallin || !fs.lstatSync(candidate).isFile()) fail();

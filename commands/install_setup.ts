@@ -1,18 +1,10 @@
-const { terminalCommand, terminalPath } = require('./terminalStyle.ts');
+const { terminalCommand, terminalPath, terminalError, terminalComplete, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { offerCompletionSetup } = require('./completion_setup.ts');
 const path = require('path');
 const {
-  configureAnalyticsPreference,
   ensureAnalyticsInstallId,
 } = require('./analytics.ts');
-const {
-  stringify,
-} = require('../config/store.ts');
-const {
-  PortableConfigError,
-  readSetupConfigContext,
-} = require('../config/portable.ts');
 const {
   configuredBackupDestination,
   resolveBackupSetupHost,
@@ -20,11 +12,9 @@ const {
 const {
   promptInputState,
   CommandInterrupted,
-  rethrowInterruption,
   commandExists,
-  runCommand,
   requireUninterrupted,
-  runNodeScript,
+  runCommand,
   writeStdoutLine,
 } = require('./commandHelpers.ts');
 const { configureRepositoryBackup, disconnectBackup } = require('./backup_setup.ts');
@@ -44,35 +34,18 @@ type ConfigureBackupOptions = {
   hostname?: string;
   backupCacheDir?: string;
   configPath?: string;
+  configPrepared?: boolean;
   originalConfig?: Record<string, unknown>;
   onCancelled?: () => void;
   initialConsent?: boolean;
   presentation?: 'installation' | 'standalone';
+  deferFollowUp?: boolean;
   showValidationSummary?: boolean;
   maintenanceOnly?: boolean;
   reviewExistingSettings?: boolean;
 };
 
-const isConfigObject = (value: unknown): value is ConfigObject => (
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-);
-
-const configPathFor = (repoDir: string): string => path.join(repoDir, 'ballin.config.json');
-
-// Capture choices before configure() supplies defaults for this invocation.
-const readOriginalSetupConfig = (configPath: string): Record<string, unknown> | null => {
-  try {
-    return readSetupConfigContext(configPath);
-  } catch (error) {
-    const message = error instanceof PortableConfigError
-      ? (error as Error).message
-      : 'Unable to inspect local configuration.';
-    writeStdoutLine(`\n⚠️  ERROR: ${message}`);
-    writeStdoutLine('Repair the local configuration before retrying setup.');
-    return null;
-  }
-};
-
+const { isConfigObject, configPathFor, readOriginalSetupConfig, createDefaultConfig, configure } = require('../config/setup.ts');
 const setupAnalyticsInstallId = (repoDir: string, configPath: string): void => {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as ConfigObject;
@@ -92,68 +65,13 @@ const setupAnalytics = (repoDir: string, configPath = configPathFor(repoDir)): b
   return true;
 };
 
-const commandEnv = (cwd: string): NodeJS.ProcessEnv => ({
-  ...process.env,
-  PWD: cwd,
-});
-
 const readJsonObject = (filePath: string): ConfigObject | null => {
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
-    return isConfigObject(parsed) ? parsed : null;
+    return isConfigObject(parsed) ? parsed as ConfigObject : null;
   } catch {
     return null;
   }
-};
-
-const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathFor(repoDir), deferBackupSelection = false): boolean => {
-  const updateConfigPath = path.join(repoDir, 'config', 'updateConfig.ts');
-  const childEnv = commandEnv(path.join(repoDir, 'config'));
-  childEnv.BALLIN_TEST_CONFIG_PATH = configPath;
-  childEnv.BALLIN_DEFER_BACKUP_SELECTION = deferBackupSelection ? '1' : '0';
-
-  const updateResult = runNodeScript(updateConfigPath, {
-    cwd: path.join(repoDir, 'config'),
-    env: childEnv,
-  });
-
-  requireUninterrupted(updateResult);
-  if (updateResult.stderr) {
-    process.stderr.write(updateResult.stderr);
-  }
-
-  if (updateResult.status !== 0 || updateResult.error) {
-    return false;
-  }
-
-  const updateOutput = updateResult.stdout.trimEnd();
-  if (updateOutput) {
-    writeStdoutLine(`\n🙌 ${updateOutput}`);
-    writeStdoutLine(`\n${docsUrl}#what-installation-changes`);
-  }
-
-  return true;
-};
-
-const createDefaultConfig = (repoDir: string, configPath: string, deferBackupSelection = false): boolean => {
-  const defaultConfigPath = path.join(repoDir, 'config', '.defaultConfig.json');
-  try {
-    if (deferBackupSelection) {
-      const defaults = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
-      delete defaults.backup.repository;
-      delete defaults.backup.includeSensitive;
-      fs.writeFileSync(configPath, stringify(defaults), { flag: 'wx' });
-    } else fs.copyFileSync(defaultConfigPath, configPath, fs.constants.COPYFILE_EXCL);
-  } catch {
-    return false;
-  }
-  writeStdoutLine(`⚙️  Created config: ${terminalPath(configPath)}`);
-  return true;
-};
-
-const configure = (repoDir: string, docsUrl: string, configPath = configPathFor(repoDir), deferBackupSelection = false): boolean => {
-  if (!fs.existsSync(configPath)) return createDefaultConfig(repoDir, configPath, deferBackupSelection);
-  return updateConfig(repoDir, docsUrl, configPath, deferBackupSelection);
 };
 
 const configureBackup = (
@@ -161,12 +79,11 @@ const configureBackup = (
   options: ConfigureBackupOptions & { repositoryName?: string } = {},
 ): boolean => {
   const configPath = options.configPath ?? configPathFor(repoDir);
-  const originalConfig = options.originalConfig ?? readOriginalSetupConfig(configPath);
-  if (!originalConfig) return false;
   return configureRepositoryBackup({
-    configPath, originalConfig, repositoryName: options.repositoryName, hostname: options.hostname, onCancelled: options.onCancelled,
+    configPath, repoDir, docsUrl, configPrepared: options.configPrepared, originalConfig: options.originalConfig, repositoryName: options.repositoryName, hostname: options.hostname, onCancelled: options.onCancelled,
     initialConsent: options.initialConsent,
     presentation: options.presentation,
+    deferFollowUp: options.deferFollowUp,
     showValidationSummary: options.showValidationSummary,
     maintenanceOnly: options.maintenanceOnly,
     reviewExistingSettings: options.reviewExistingSettings,
@@ -192,7 +109,7 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
   try {
     fs.mkdirSync(binDir, { recursive: true });
   } catch {
-    writeStdoutLine(`\n⚠️  ERROR: Unable to create ${terminalPath(binDir)}`);
+    writeStdoutLine(`\n${terminalError(`Unable to create ${terminalPath(binDir)}`)}`);
     return false;
   }
 
@@ -202,21 +119,24 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
       const targetPath = path.join(binDir, binName);
       const current = commandTargetSnapshot(targetPath);
       if (preflight && (preflight.target !== targetPath || preflight.snapshot !== current)) {
-        writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying installation.`);
+        writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying.`);
         return false;
       }
       fs.rmSync(targetPath, { force: true });
       fs.symlinkSync(sourcePath, targetPath);
     }
   } catch {
-    writeStdoutLine(`\n⚠️  ERROR: Unable to symlink binaries into ${terminalPath(binDir)}`);
+    writeStdoutLine(`\n${terminalError(`Unable to symlink binaries into ${terminalPath(binDir)}`)}`);
     return false;
   }
 
   return true;
 };
 
-const resolveBinDir = (): string | null => {
+const setupRetry = (mode: SetupMode): string => mode === 'fresh' ? 'run the installer again'
+  : mode === 'self-update' ? `run ${terminalCommand('ballin self-update')} again`
+    : `use ${terminalCommand('ballin self-update')} for the default selection`;
+const resolveBinDir = (mode: SetupMode): string | null => {
   if (commandExists('brew')) {
     const result = runCommand('brew', ['--prefix']);
     requireUninterrupted(result);
@@ -224,7 +144,8 @@ const resolveBinDir = (): string | null => {
     if (brewPrefix !== null) {
       const prefix = brewPrefix.trimEnd();
       if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) {
-        writeStdoutLine(`Homebrew returned an invalid installation prefix. Inspect ${terminalCommand('brew --prefix')}, then rerun installation.`);
+        writeStdoutLine(terminalError('Homebrew returned an invalid installation prefix.'));
+        writeStdoutLine(`Inspect ${terminalCommand('brew --prefix')}, then ${setupRetry(mode)}.`);
         return null;
       }
       return path.join(prefix, 'bin');
@@ -235,15 +156,15 @@ const resolveBinDir = (): string | null => {
   return homeDir ? path.join(homeDir, '.local', 'bin') : null;
 };
 
-const validateBinDirInPath = (binDir: string): boolean => {
+const validateBinDirInPath = (binDir: string, mode: SetupMode): boolean => {
   const envPath = process.env.PATH ?? '';
   if (envPath.split(path.delimiter).includes(binDir)) {
     return true;
   }
 
-  writeStdoutLine(`\n⚠️  ERROR: ${terminalPath(binDir)} doesn't seem to be in your path.`);
+  writeStdoutLine(`\n${terminalError(`${terminalPath(binDir)} doesn't seem to be in your path.`)}`);
   writeStdoutLine(`Add ${terminalCommand(`export PATH="${binDir}:$PATH"`)} to your shell profile.`);
-  writeStdoutLine('Then open a new terminal window and run the installer again.');
+  writeStdoutLine(`Then open a new terminal window and ${setupRetry(mode)}.`);
   return false;
 };
 
@@ -264,12 +185,12 @@ const setup = (
       if (destination.kind === 'invalid') throw new Error('Invalid backup destination; disconnect before choosing another host.');
       hostname = resolveBackupSetupHost(originalConfig, process.env.BALLIN_BACKUP_HOSTNAME);
     } catch (error) {
-      writeStdoutLine((error as Error).message);
+      writeStdoutLine(terminalError((error as Error).message));
       return false;
     }
   }
-  const binDir = resolveBinDir();
-  if (!binDir || !validateBinDirInPath(binDir)) {
+  const binDir = resolveBinDir(mode);
+  if (!binDir || !validateBinDirInPath(binDir, mode)) {
     return false;
   }
   let preflight: CommandPreflight;
@@ -281,28 +202,16 @@ const setup = (
     if (preflight.directory !== binDir || preflight.target !== target || typeof preflight.snapshot !== 'string'
       || preflight.snapshot !== commandTargetSnapshot(target)) throw new Error('Command target changed');
   } catch {
-    writeStdoutLine('Unable to verify the reviewed command target. Inspect it before retrying installation.');
+    writeStdoutLine(terminalError('Unable to verify the reviewed command target.'));
+    writeStdoutLine('Inspect it before retrying.');
     return false;
   }
 
   const configExisted = fs.existsSync(configPathFor(repoDir));
 
   if (!configure(repoDir, docsUrl, configPathFor(repoDir), true)) {
-    writeStdoutLine('\n⚠️  ERROR: Unable to create or update ballin.config.json');
+    writeStdoutLine(`\n${terminalError('Unable to create or update ballin.config.json')}`);
     return false;
-  }
-
-  if (mode === 'fresh') {
-    try {
-      configureAnalyticsPreference({
-        configPath: configPathFor(repoDir),
-        docsUrl: analyticsDocsUrl,
-        presentation: 'installation',
-      });
-    } catch (error) {
-      rethrowInterruption(error);
-      // Analytics setup must never block install.
-    }
   }
 
   if (!symlinkBinaries(repoDir, binDir, preflight)) {
@@ -317,27 +226,46 @@ const setup = (
   const backupConfigured = destination.kind === 'repository';
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
-  if (process.env.BALLIN_SKIP_BACKUP_SETUP === '1' || process.env.BALLIN_BACKUP_CHOICE === 'no' || promptInputState() !== 'open') {
-    // A prior complete No or input end must not reopen optional onboarding.
-  } else if (mode === 'fresh' || process.env.BALLIN_BACKUP_CHOICE === 'yes' || backupConfigured || backupInvalid) {
-    let backupSetupCancelled = false;
-    if ((mode === 'fresh' && !(process.env.BALLIN_BACKUP_CHOICE === 'yes' && destination.kind === 'unconfigured'))
-      || (mode === 'refresh' && backupConfigured)) writeStdoutLine();
+  let backupFlow = false;
+  let backupSetupCancelled = false;
+  let generalReview = false;
+  const interactive = mode !== 'self-update' && promptInputState() === 'open';
+  const backupSetupAllowed = mode === 'self-update' || process.env.BALLIN_BACKUP_CHOICE !== 'no';
+  if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine(`\n${terminalComplete('Ballin installed successfully.')}`);
+  if (backupSetupAllowed && (backupConfigured || backupInvalid
+    || (interactive && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1'))) {
+    backupFlow = true;
+    if (mode !== 'self-update') writeStdoutLine();
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
-      presentation: mode === 'self-update' ? 'standalone' : 'installation',
+      presentation: mode === 'self-update' ? 'standalone' : 'installation', configPrepared: true, deferFollowUp: true,
       initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',
       hostname, originalConfig, onCancelled: () => { backupSetupCancelled = true; },
       showValidationSummary: mode !== 'self-update',
       maintenanceOnly: mode === 'self-update',
     });
+    if (!backupSetupSucceeded && !backupSetupCancelled) return false;
     if (backupSetupCancelled) backupSetupSucceeded = true;
-    else if (!backupSetupSucceeded) {
-      writeStdoutLine('\n⚠️  ERROR: Unable to configure backup');
-      writeStdoutLine(`\nBallin remains installed. Follow the backup recovery guidance above before retrying ${terminalCommand('ballin backup setup')}.`);
+  }
+  if (interactive && promptInputState() === 'open') {
+    const { readYesNo } = require('./commandHelpers.ts');
+    const review = readYesNo('\nReview your Ballin preferences? [Y/n] ', true);
+    if (review === true) {
+      generalReview = true;
+      const { reviewGeneralPreferences } = require('./setup.ts');
+      if (reviewGeneralPreferences(configPathFor(repoDir), { installation: true, deferFollowUp: true }) === 'failed') return false;
     }
   }
 
   setupAnalytics(repoDir);
+
+  if (mode !== 'self-update') {
+    const general = `Change preferences later with ${terminalCommand('ballin setup')}.`;
+    const backup = backupSetupCancelled ? `Run ${terminalCommand('ballin backup setup')} when you’re ready.`
+      : backupFlow ? `Change backup settings later with ${terminalCommand('ballin backup setup')}.`
+      : `Run ${terminalCommand('ballin backup setup')} to configure or review your GitHub backup.`;
+    const followUp = generalReview ? [general, backup] : backupFlow ? [backup, general] : [general];
+    writeStdoutLine('\n' + terminalProse(followUp.join('\n')));
+  }
 
   if (!configExisted && fs.existsSync(configPathFor(repoDir)) && mode !== 'fresh') {
     writeStdoutLine(`\n${docsUrl}#what-will-installation-change`);

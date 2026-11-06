@@ -3,7 +3,7 @@ import type { BackupCommandName } from './backup_commands.ts';
 const { isBackupCommandName } = require('./backup_commands.ts') as {
   isBackupCommandName: (value: unknown) => value is BackupCommandName;
 };
-const { terminalCommand, terminalEmphasis } = require('./terminalStyle.ts');
+const { terminalCommand, terminalEmphasis, terminalMarkers, terminalError } = require('./terminalStyle.ts');
 const { compareBackupFileNames } = require('./backup_file_names.ts');
 const fs = require('fs');
 const tty = require('tty');
@@ -20,13 +20,10 @@ const {
   isConfigObject,
   sensitiveSourceConsent,
   parseBackupSetupArgs,
-  resolveBackupSetupHost,
 } = require('./backup_config.ts');
 const {
-  configure,
   configureBackup,
   disconnectBackup,
-  readOriginalSetupConfig,
 } = require('./install_setup.ts');
 const {
   makeTempFile,
@@ -246,13 +243,13 @@ const writeSnapshotStatus = (
 ): void => {
   const fileWithoutExtension = snapshot.fileName.replace(/\.[^.]*$/, '').replace(/\.bundle$/, '');
   if (resultState === 'unchanged') {
-    writeStdoutLine(`✔ ${fileWithoutExtension}`);
+    writeStdoutLine(terminalMarkers(`✓ ${fileWithoutExtension}`));
   } else if (resultState === 'created') {
-    writeStdoutLine(terminalEmphasis(`✚ ${fileWithoutExtension}`, 'bold'));
+    writeStdoutLine(`+ ${terminalEmphasis(fileWithoutExtension, 'bold')}`);
   } else if (resultState === 'removed') {
-    writeStdoutLine(terminalEmphasis(`✖︎ ${fileWithoutExtension}`, 'bold'));
+    writeStdoutLine(`- ${terminalEmphasis(fileWithoutExtension, 'bold')}`);
   } else {
-    writeStdoutLine(terminalEmphasis(`✎ ${fileWithoutExtension}`, 'bold'));
+    writeStdoutLine(`~ ${terminalEmphasis(fileWithoutExtension, 'bold')}`);
   }
 };
 
@@ -630,13 +627,13 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
 
   if (!homeDir) {
     observeBackupFailure(evidence, 'local_state');
-    writeStderrLine('ballin backup: HOME is not set; unable to collect backup sources safely');
+    writeStderrLine(terminalError('ballin backup: HOME is not set; unable to collect backup sources safely', process.stderr));
     return 1;
   }
 
   if (config.includeSensitive === null) {
     observeBackupFailure(evidence, 'local_state');
-    writeStderrLine('ballin backup: invalid `backup.includeSensitive`; expected true or false');
+    writeStderrLine(terminalError('ballin backup: invalid `backup.includeSensitive`; expected true or false', process.stderr));
     return 1;
   }
   if (!secureExistingBackupCache(backupCacheDir)) { observeBackupFailure(evidence, 'local_state'); return 1; }
@@ -690,35 +687,13 @@ function runBackupCommand(args = process.argv.slice(2)): void {
       return;
     }
 
-    const originalConfig = readOriginalSetupConfig(configPath);
-    if (!originalConfig) {
-      writeStderrLine('ballin backup setup: unable to inspect config');
-      process.exitCode = 1;
-      return;
-    }
-    try { resolveBackupSetupHost(originalConfig, setup.hostname); } catch (error) {
-      writeStderrLine(`ballin backup setup: ${(error as Error).message}`);
-      process.exitCode = 1;
-      return;
-    }
-    if (!configure(repoDir, backupSetupDocsUrl, configPath, true)) {
-      writeStderrLine('ballin backup setup: unable to create or update config');
-      process.exitCode = 1;
-      return;
-    }
-    let cancelled = false;
     const configured = configureBackup(repoDir, backupSetupDocsUrl, {
       backupCacheDir,
       configPath,
-      originalConfig,
       repositoryName: setup.repositoryName,
       hostname: setup.hostname,
       reviewExistingSettings: true,
-      onCancelled: () => { cancelled = true; },
     });
-    if (!configured && !cancelled) {
-      writeStderrLine(`ballin backup setup: setup incomplete; follow the recovery guidance above before running ${terminalCommand('ballin backup setup', process.stderr)} again.`);
-    }
     process.exitCode = configured ? 0 : 1;
     return;
   }

@@ -191,7 +191,7 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
     it(`labels documentation links on a separate line for ${['help', ...args].join(' ')}`, () => {
       const result = run(['help', ...args]);
       assert.equal(result.status, 0, result.stderr);
-      const links = result.stdout.match(/🔗 [^\n]+:\nhttps:\/\/[^\n]+/gu) ?? [];
+      const links = result.stdout.match(/i [^\n]+:\nhttps:\/\/[^\n]+/gu) ?? [];
       assert.lengthOf(links, args.join(' ') === 'backup setup' ? 2 : 1);
     });
   }

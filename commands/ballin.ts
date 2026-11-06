@@ -68,7 +68,7 @@ Commands:
 
 You can also append \`--help\` to any command.
 
-🔗 Project and documentation:
+i Project and documentation:
 https://github.com/JBallin/ballin-scripts
 `;
 const updateHelp = `Usage: ballin update
@@ -90,7 +90,7 @@ Commands:
     read                  print a snapshot or inspect files in a bundle
     disconnect            disconnect this Mac and disable automatic backups
 
-Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`. Run \`ballin help backup <subcommand>\` for subcommand-specific help.
+Repository backups include only locally approved sensitive sources; review them with \`ballin backup setup\`. Run \`ballin help backup <subcommand>\` for subcommand-specific help.
 `;
 
 const backupSubcommandHelp: Record<BackupCommandName, string> = {
@@ -101,16 +101,16 @@ Create, reconnect to, or validate a private GitHub backup repository.
 Options:
     --hostname <host>  skip the new-setup host question (default: github.com)
 
-New setup: Choose Create or Reconnect. Omit the repository name to choose it during setup. Choose whether to include sensitive sources, confirm the destination, then choose whether updates should run backups automatically.
+New setup: Choose Create or Reconnect. Omit the repository name to choose it during setup. Choose whether to include sensitive sources, then confirm the destination. Use \`ballin setup\` to review automatic backup and other update preferences.
 
-Existing backup: Validate the saved repository and review backup preferences. The saved host is retained; disconnect before choosing a different destination.
+Existing backup: Validate the saved repository and review sensitive-source inclusion. The saved host is retained; disconnect before choosing a different destination.
 
 Authenticate gh for the selected host before setup. Backups belong to your individual account on that host. Use a hostname, not a URL. Review local Ballin preferences with \`ballin setup\`.
 
-🔗 Setup and recovery:
+i Setup and recovery:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
 
-🔗 Backup sources and sensitivity:
+i Backup sources and sensitivity:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
 `,
   open: `Usage: ballin backup open
@@ -140,7 +140,7 @@ Examples:
 
 Requires remote read access. Use \`ballin backup list\` to find supported snapshot names. Without a snapshot selector, report the missing argument and list saved options when readable.
 
-🔗 Inspect saved backups:
+i Inspect saved backups:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#inspect-saved-backups
 `,
   disconnect: `Usage: ballin backup disconnect
@@ -162,13 +162,20 @@ Options:
 const selfUpdateHelp = `Usage: ballin self-update
 
 Update Ballin itself.
+
+Use the default update selection. Ballin asks before revision or track changes that require consent.
+
+Local settings are preserved; conflicting local changes stop the update.
+
+i Updates and recovery:
+https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#health-and-recovery
 `;
 
 const uninstallHelp = `Usage: ballin uninstall
 
 Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
 
-🔗 Removal details:
+i Removal details:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall
 `;
 
@@ -279,11 +286,11 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       return;
     case 'backup': {
       if (isCommandHelp(args)) {
-        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin backup setup', 'ballin help backup <subcommand>']));
         return;
       }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
-        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin backup setup', 'ballin help backup <subcommand>']));
         return;
       }
       const helpCommand = backupHelpCommand(args);

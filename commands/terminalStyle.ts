@@ -52,4 +52,67 @@ const terminalCommandReferences = (
   prose.replaceAll(`\`${command}\``, () => terminalCommand(command, stream, env))
 ), text);
 
-module.exports = { terminalPath, terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences };
+
+const terminalColor = (text: string, color: number, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
+  supportsEmphasis(stream, env) ? `\x1b[${color}m${text}\x1b[0m` : text
+);
+const terminalUrls = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
+  text.replace(/https?:\/\/[^\s\x1b]+/gu, (token: string, offset: number) => {
+    if (text.slice(0, offset).endsWith('\x1b[34m')) return token;
+    const url = token.replace(/[.,;:!?)]+$/u, '');
+    return terminalColor(url, 34, stream, env) + token.slice(url.length);
+  })
+);
+// Ballin-owned prose only; never pass config values, snapshots or child output.
+const terminalMarkers = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
+  const colors: Record<string, number> = { '?': 32, '!': 33, i: 34, '✓': 32, '✗': 31 };
+  return text.replace(/(^|\n)([?!i✓✗])(?= )/gu, (_match, start: string, marker: string) => (
+    start + (supportsEmphasis(stream, env) ? `\x1b[${marker === '?' ? 1 : 0};${colors[marker]}m${marker}\x1b[0m` : marker)
+  ));
+};
+const terminalPrompt = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => {
+  const leading = text.match(/^\n*/u)![0];
+  return leading + terminalMarkers('? ', stream, env) + text.slice(leading.length);
+};
+const terminalChoice = (label: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
+  terminalColor(label, 36, stream, env)
+);
+const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/gu, '');
+const visibleWidth = (text: string): number => {
+  let width = 0;
+  for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(stripAnsi(text))) {
+    if (/^[\p{Mark}\p{Cf}]*$/u.test(segment)) continue;
+    const code = segment.codePointAt(0)!;
+    width += /\p{Extended_Pictographic}/u.test(segment) || (code >= 0x1100 && (
+      code <= 0x115f || code >= 0x2e80 && code <= 0xa4cf || code >= 0xac00 && code <= 0xd7a3
+      || code >= 0xf900 && code <= 0xfaff || code >= 0xfe10 && code <= 0xfe6f
+      || code >= 0xff01 && code <= 0xff60 || code >= 0xffe0 && code <= 0xffe6
+      || code >= 0x20000)) ? 2 : 1;
+  }
+  return width;
+};
+const terminalProse = (text: string, stream: { isTTY?: boolean; columns?: number } = process.stdout, env: NodeJS.ProcessEnv = process.env, options: { colorUrls?: boolean } = {}): string => {
+  const width = Math.min(80, Math.max(1, stream.columns || 80));
+  return terminalMarkers(options.colorUrls === false ? text : terminalUrls(text, stream, env), stream, env).split('\n').map((paragraph) => {
+    const lines: string[] = [];
+    let line = '';
+    // Explicit references and adjacent punctuation stay copyable, even when one
+    // complete reference is wider than the terminal, as in help output.
+    const words = paragraph.match(/(?:`[^`]*`|\x1b\[1m[^\x1b]*\x1b\[0m|\S)+/gu) ?? [];
+    for (const word of words) {
+      if (line && visibleWidth(`${line} ${word}`) > width) { lines.push(line); line = ''; }
+      line += `${line ? ' ' : ''}${word}`;
+    }
+    lines.push(line);
+    return lines.join('\n');
+  }).join('\n');
+};
+const terminalError = (text: string, stream: { isTTY?: boolean; columns?: number } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => (
+  terminalProse(`✗ ${text}`, stream, env)
+);
+const terminalComplete = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => terminalMarkers(`✓ ${text}`, stream, env);
+
+module.exports = {
+  terminalPath, terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences,
+  terminalUrls, terminalMarkers, terminalPrompt, terminalChoice, supportsEmphasis, stripAnsi, visibleWidth, terminalProse, terminalError, terminalComplete,
+};

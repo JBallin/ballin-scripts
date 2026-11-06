@@ -20,7 +20,6 @@
     "analytics-worker/wrangler.ts",
     "commands/**/*.ts",
     "config/**/*.ts",
-    "docs/assets/**/*.ts",
     "test/**/*.ts",
     "test/helpers/repository-runtime.js"
   ]

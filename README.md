@@ -21,7 +21,7 @@ alongside other tools.
 ## Installation
 
 > [!TIP]
-> Want guided setup? The interactive [Quickstart](docs/quickstart.md) helps install missing prerequisites. 🚀
+> Want guided setup? The interactive [Quickstart](docs/quickstart.md) offers NVM/LTS Node and missing prerequisites. 🚀
 
 Start with Git and [Node.js 24.12 or newer](docs/optional-capabilities.md#nodejs)
 on your `PATH`. Homebrew is optional; backups require
@@ -32,8 +32,12 @@ Backups use a private repository owned by your user account on
 Open Terminal and run the [install script](https://github.com/JBallin/ballin-scripts/blob/main/install.sh):
 
 ```shell
-/bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)"
+BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)"
 ```
+
+Before the first stable release, this command explicitly selects `main`.
+See [revision selection](docs/installation.md#selecting-a-revision) for the
+stable-release and development tracks.
 
 Backups are optional; you can configure them later with `ballin backup setup`.
 
@@ -43,36 +47,46 @@ troubleshooting.
 ## Example output
 
 Run `ballin update` for routine maintenance and optional automatic backups. This
-example shows a fully configured run.
+condensed, illustrative example shows a fully configured run. Actual output
+depends on your enabled tools and preferences.
 
-![Terminal output from `ballin update`, with blue arrows and bold headings.](docs/assets/readme-update-example.png)
+<img src="https://getballin.com/gallery/update/output-001.png" alt="Staged demonstration: Routine Update — condensed illustration, page 1">
+
+<details>
+<summary>Example output</summary>
+
+staged · Source: [`4ea163e91978`](https://github.com/JBallin/ballin-scripts/tree/4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9)
+
+<p>Condensed illustrative fully configured run, not a live recording. Ellipses replace upstream output; backup time, file states and destination are synthetic. Optional tools/preferences determine actual stages.</p>
 
 <details>
 <summary>Text version</summary>
 
-```text
+<pre><code>STAGED — source-informed synthetic output; no live execution.
+Source: 4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9
+
 $ ballin update
-==> Updating Homebrew...
+==&gt; Updating Homebrew...
 ...
-==> Updating Homebrew packages
+==&gt; Updating Homebrew packages
 ...
-==> Cleaning up Homebrew packages
+==&gt; Cleaning up Homebrew packages
 ...
-==> Checking Homebrew installation
+==&gt; Checking Homebrew installation
 ...
-==> Updating Node.js LTS
+==&gt; Updating Node.js LTS
 ...
-==> Updating global npm packages
+==&gt; Updating global npm packages
 ...
-==> Updating App Store apps
+==&gt; Updating App Store apps
 ...
-==> Installing macOS updates
+==&gt; Installing macOS updates
 ...
-==> Updating Ballin
+==&gt; Updating Ballin
 ...
-==> Checking Ballin readiness
+==&gt; Checking Ballin readiness
 ...
-==> Backing up development environment
+==&gt; Backing up development environment
 Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✓ ballin_config
 ✓ bash_completions
@@ -80,8 +94,9 @@ Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ...
 ~ zshrc
 View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
-```
+</code></pre>
 
+</details>
 </details>
 
 ## Using saved state on another Mac

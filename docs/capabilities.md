@@ -89,14 +89,15 @@ On a successful run, `ballin backup` prints one line per collected snapshot.
 
 | Marker | Meaning |
 | --- | --- |
-| `✚` | Newly saved or newly meaningful snapshot. |
-| `✎` | Existing snapshot content changed. |
-| `✖︎` | Existing snapshot became empty. |
-| `✔` | Unchanged snapshot. |
+| `+` | Newly saved or newly meaningful snapshot. |
+| `~` | Existing snapshot content changed. |
+| `-` | Previously saved snapshot became empty; the snapshot file was not deleted. |
+| `✓` | Unchanged snapshot. |
 
-On a terminal, changed entries use bold emphasis; unchanged entries keep the
-normal foreground. The symbols above identify each state without emphasis.
-Set `NO_COLOR=1` to disable Ballin's bold and underline emphasis; `TERM=dumb`
+On a terminal, unchanged entries use a green check and neutral filenames;
+changed filenames are bold and their markers remain neutral. The symbols above
+identify each state without emphasis.
+Set `NO_COLOR=1` to disable Ballin's color and emphasis; `TERM=dumb`
 also disables it. This applies to Ballin's help and update stage headings too,
 while child tools control their own output.
 

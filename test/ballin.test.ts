@@ -305,7 +305,11 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         assert.include(result.stdout, `ballin ${command}`);
         assert.notInclude(result.stdout, 'ballin config help');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
-        if (command === 'self-update') assert.include(result.stdout, 'Update Ballin itself.');
+        if (command === 'self-update') {
+          assert.include(result.stdout, 'Update Ballin itself.');
+          assert.notInclude(result.stdout, 'installer');
+          assert.include(result.stdout, '#health-and-recovery');
+        }
         if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
         if (command === 'update') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get update` to inspect settings.');
         if (command === 'setup') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
@@ -315,7 +319,8 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
             assert.match(result.stdout, new RegExp(`^    ${command} {2,}`, 'mu'));
           });
           assert.include(result.stdout.replace(/\s+/gu, ' '), 'disconnect this Mac and disable automatic backups');
-          assert.include(result.stdout.replace(/\s+/gu, ' '), 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');
+          assert.deepEqual(result.stdout.split('\n').slice(0, 2), ['Usage: ballin backup', '       ballin backup <command>']);
+          assert.include(result.stdout.replace(/\s+/gu, ' '), 'Repository backups include only locally approved sensitive sources; review them with `ballin backup setup`.');
         }
         assert.deepEqual(commandLog(), []);
         assert.isFalse(fs.existsSync(networkMarker));
@@ -624,7 +629,7 @@ require('https').request = () => {
         const ordinary = runBallin(args);
         const interactive = runBallin(args, interactiveEnv());
         assert.equal(interactive.status, healthy ? 0 : 1);
-        assert.equal(interactive.stdout, ordinary.stdout.replaceAll('`ballin backup setup`', '\x1b[1mballin backup setup\x1b[0m'));
+        assert.equal(interactive.stdout, ordinary.stdout.replaceAll('`ballin backup setup`', '\x1b[1mballin backup setup\x1b[0m').replace('✓ ', '\x1b[0;32m✓\x1b[0m '));
         assert.equal(interactive.stderr, 'Checking readiness...\r\x1b[2K');
       });
     }
@@ -637,7 +642,8 @@ require('https').request = () => {
       if (mode === 'NO_COLOR') env.NO_COLOR = '1';
       const result = runBallin(['doctor'], env);
       assert.equal(result.status, ordinary.status);
-      assert.equal(result.stdout, ordinary.stdout);
+      assert.equal(result.stdout, ['stdin', 'stderr', 'narrow'].includes(mode)
+        ? ordinary.stdout.replace('✓ ', '\x1b[0;32m✓\x1b[0m ') : ordinary.stdout);
       assert.equal(result.stderr, ordinary.stderr);
     });
   }
@@ -655,7 +661,7 @@ require('https').request = () => {
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '😎 You\'re ballin.\n');
+    assert.equal(result.stdout, '✓ You\'re ballin.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), []);
   });
@@ -670,7 +676,7 @@ require('https').request = () => {
     assert.include(result.stdout, 'OK    Config readability:');
     assert.include(result.stdout, 'INFO  Optional backup:');
     assert.include(result.stdout, 'Result: Ballin-managed environment health looks good.');
-    assert.notInclude(result.stdout, '😎 You\'re ballin.');
+    assert.notInclude(result.stdout, '✓ You\'re ballin.');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), []);
   });

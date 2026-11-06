@@ -1,4 +1,4 @@
-const { terminalCommandReferences } = require('./terminalStyle.ts');
+const { terminalCommandReferences, terminalComplete } = require('./terminalStyle.ts');
 
 type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
 type DoctorCheck = {
@@ -62,7 +62,7 @@ const formatVerboseDoctorReport = (report: DoctorReport): string => {
 
 const formatDefaultDoctorReport = (report: DoctorReport): string => {
   if (report.status === 'pass') {
-    return '😎 You\'re ballin.\n';
+    return terminalComplete("You're ballin.") + '\n';
   }
 
   const visibleStatuses = report.status === 'fail' ? ['fail', 'warn'] : ['warn'];

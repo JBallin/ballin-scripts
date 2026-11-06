@@ -13,23 +13,25 @@ Run `ballin setup` to review local Ballin preferences without reinstalling:
 ballin setup
 ```
 
-Your current valid choices are the prompt defaults. Repository backups offer
-the single sensitive-source choice; any configured backup offers automatic
-backup after `ballin update`. Analytics can always be reviewed. With no backup
-configured, use `ballin backup setup` first if you want backups.
+Review global npm updates, Ballin self-updates, Homebrew cleanup, macOS updates,
+and analytics using your saved choices as defaults. Answering a question saves
+that preference; it does not run an update.
 
-Review [what Ballin will back up](backup-sources.md#what-will-ballin-back-up)
-before changing the sensitive-source choice. Ballin previews local paths and
-readability before asking whether to include the sources. Your answer saves the choice for future backups.
+The NVM question appears when NVM can load and its default follows latest LTS,
+or when Node.js LTS updates through NVM are already enabled. A default pinned to one version or
+one named LTS line does not follow future LTS releases. For an unset NVM
+preference, the first eligible review recommends Yes, even if NVM becomes
+eligible later.
+A confirmed No remains No on reruns. Existing saved values stay authoritative.
 
-Each confirmed choice is saved locally. Cancelling or closing input leaves the
-pending choice unchanged; earlier confirmed choices remain saved. Invalid
-configuration must be repaired before review; a missing config is created with
-defaults. The command does not reinstall
-Ballin, change or validate remote destinations, or run backup/update operations.
+The automatic-backup question appears when a valid backup is configured or the
+setting is already enabled. Use `ballin backup setup` to choose or validate a
+destination and review sensitive sources; general setup does not do that work.
 
-Use `ballin config get/set/reset` for direct configuration. Guided
-review covers these onboarding choices rather than every setting.
+Each confirmed choice is saved locally. Closing input or interrupting leaves the
+pending choice unchanged and retains earlier confirmed choices. Repair invalid
+configuration before reviewing it; missing config is created with defaults.
+Use `ballin config get/set/reset` for direct configuration.
 
 ## Working with settings
 
@@ -63,18 +65,40 @@ Ballin requires Node.js 24.12 or newer to run its TypeScript directly with
 [stable built-in type stripping](https://nodejs.org/api/typescript.html#type-stripping).
 We recommend the latest Node.js long-term support (LTS) release.
 
-Consider [nvm](https://github.com/nvm-sh/nvm) if you want Ballin to install newer
-LTS releases during `ballin update`. For installation choices, see
+[Quickstart](quickstart.md) offers [NVM](https://github.com/nvm-sh/nvm) with
+Node.js LTS when compatible Node.js is missing. If compatible Node.js is already
+available, using NVM is optional and keeping your existing setup is the default.
+Other installation choices remain available through
 [Node.js downloads](https://nodejs.org/en/download).
 
-Installed commands use the `node` found on your shell `PATH`, so make sure new
-terminal sessions use a supported Node.js version too.
+We recommend NVM so `ballin update` can keep Node.js on LTS. This requires opting
+in to `update.nvm=true` and having NVM available; the bundled default is off.
+Updates run when you invoke `ballin update`, not on a background schedule.
 
-Enable optional nvm updates with `ballin config set update.nvm true`.
-`update.nvm` defaults to `false` and applies only to an existing nvm installation.
-It runs `nvm install --lts`; it does not update nvm itself or migrate globally
-installed npm packages to the new Node.js version. Other Node installations
-remain managed by their existing installation method.
+Accepting Quickstart's NVM setup activates the latest compatible Node.js LTS for
+this setup and makes `lts/*` NVM's following-LTS default. Existing Node.js
+versions and installations are preserved. Global npm packages may need
+reinstalling for the selected version.
+
+Future terminals need shell setup to load NVM and select its default. Ballin
+asks separately before changing shell startup files; accepting NVM does not
+grant that permission. If you decline startup changes or automatic setup is
+unavailable, follow [manual NVM activation](installation.md#manual-nvm-activation).
+Installed commands use the `node` on your shell `PATH`, so new terminals must
+also use a supported Node.js version.
+
+Run `ballin setup` to review the NVM update option, or enable it directly with
+`ballin config set update.nvm true`. Setup offers the question when NVM can load
+and its default follows LTS, or when the option is already enabled. A default
+pinned to one version or named LTS line does not follow future LTS releases.
+If setup skips the question, check NVM availability and its default; your active
+Node.js version alone does not determine eligibility.
+
+At update time, the requirements are different: with `update.nvm` enabled,
+`ballin update` loads NVM and runs `nvm install --lts`. It does not require a
+following-LTS default. This updates NVM-managed Node.js, not NVM itself, and does
+not migrate global npm packages. Other Node.js installations remain managed by
+their existing installation method.
 
 ## Mac App Store apps
 
@@ -128,8 +152,8 @@ ballin config set backup.includeSensitive true
 ballin config set backup.includeSensitive false
 ```
 
-After new linkage, setup asks whether updates should run backups automatically,
-with “No” as the default. Change that independent choice later with:
+Use `ballin setup` to review automatic backup during updates, defaulting to No
+unless you have saved another choice. You can also change it directly:
 
 ```shell
 ballin config set update.backup true
@@ -191,6 +215,11 @@ and retention.
 
 ## `ballin update` settings
 
+Homebrew cleanup removes stale lock files, outdated downloads and older installed
+formula versions. See [Homebrew's cleanup reference](https://docs.brew.sh/Manpage#cleanup-options-formulacask-).
+The `update.cleanup` preference controls this step during `ballin update`;
+answering the setup question saves the preference without running cleanup.
+
 Change a setting with `ballin config set update.<name> true` or
 `ballin config set update.<name> false`.
 
@@ -207,7 +236,7 @@ integration runs. Later stages continue after ordinary child-command failures.
 | `update.selfUpdate` | `true` | Updates `ballin-scripts` when `ballin update` runs, then checks Ballin readiness if the update succeeds. |
 | `update.backup` | `false` | Runs `ballin backup` to back up your development environment. Configure a destination with `ballin backup setup` before enabling it; an explicitly requested unconfigured backup stage fails with setup guidance. |
 | `update.softwareupdate` | `true` | Installs available macOS updates with `softwareupdate`. |
-| `update.nvm` | `false` | Installs the latest Node.js LTS release through a configured nvm installation. See [Node.js](#nodejs) for the setup and tradeoffs. |
+| `update.nvm` | `false` | Runs `nvm install --lts` when NVM can load, updating NVM-managed Node.js LTS. See [Node.js](#nodejs) for the setup and tradeoffs. |
 | `update.npm` | `false` | Runs `npm update -g` across globally installed packages. This is a separate update step from the npm version supplied with Node.js. It defaults to `false` because it can change all global tools at once, while many tools can instead stay project-local or run through `npx`. |
 
 ### Interrupting updates

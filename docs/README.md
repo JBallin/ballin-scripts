@@ -24,11 +24,12 @@ For the project overview, see the [main README](../README.md).
 
 | Guide | Purpose |
 | --- | --- |
+| [Releasing Ballin](releasing.md) | Prepare and approve a versioned release. |
+| [Documentation site and public gallery](website.md) | Build complete docs snapshots, curate approved assets and operate the Pages handoff. |
 | [Testing and coverage](testing.md) | Test isolation, coverage comparisons, and runtime and platform limits. |
 | [Installation testing](installation-testing.md) | Test Ballin installation in a macOS VM. |
 | [Code scanning](code-scanning.md) | Advanced CodeQL coverage, fork trust boundary, verification, and recovery. |
 | [Coverage boundaries](coverage-boundaries.md) | Reviewed production gaps and their test, ignore, or measured dispositions. |
 | [Backup design](backup-design.md) | Backup safety model and GitHub constraints. |
 | [Design system](design-system.md) | Ballin identity, product messaging, visual guidance, and brand asset conventions. |
-| [README example image](assets/README.md) | Regenerate the styled `ballin update` image shown in the main README. |
 | [Analytics backend](analytics-backend.md) | Backend deployment and data-policy notes for usage analytics. |

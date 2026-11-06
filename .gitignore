@@ -6,3 +6,16 @@ ballin.config.json
 /.analytics
 /analytics-worker/.wrangler/
 /analytics-worker/wrangler.toml
+
+# On-demand output gallery: generated captures, images and evidence stay local.
+/.output-gallery/
+/tools/pr-662-output-gallery/*.txt
+/tools/pr-662-output-gallery/*.ansi
+/tools/pr-662-output-gallery/verification.json
+
+/tools/output-gallery/__pycache__/
+
+# Complete site snapshots, curated publication bundles and local selection files.
+/.site-output/
+/site/node_modules/
+/tools/site/__pycache__/

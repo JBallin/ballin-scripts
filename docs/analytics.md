@@ -182,3 +182,10 @@ do not store IP addresses; request source metadata is used transiently for rate
 limiting. Cloudflare may process request metadata for its own operation.
 Public events can be spoofed, and participation and delivery are incomplete, so
 counts are directional maintenance signals.
+
+### Application version
+
+Command analytics use the verified release version, `development`, or `unknown`.
+Development includes explicit branch/SHA installations and locally modified
+checkouts. Neither branch names nor commit SHAs are transmitted. Version identity
+does not change analytics consent or the local install identifier.

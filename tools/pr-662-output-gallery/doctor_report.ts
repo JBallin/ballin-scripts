@@ -1,0 +1,82 @@
+const { terminalCommandReferences, terminalComplete } = require('./terminalStyle.ts');
+
+type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
+type DoctorCheck = {
+  id: string;
+  label: string;
+  status: DoctorStatus;
+  summary: string;
+};
+type DoctorReport = {
+  status: Exclude<DoctorStatus, 'info'>;
+  checks: DoctorCheck[];
+};
+
+const statusLabels: Record<DoctorStatus, string> = {
+  pass: 'OK',
+  warn: 'WARN',
+  fail: 'ERROR',
+  info: 'INFO',
+};
+
+const nextSteps: Record<string, string> = {
+  'runtime.node': 'Install a supported Node.js version and reopen your shell.',
+  'commands.path': 'Run the installer again or add the Ballin command directory to PATH.',
+  'config.read': 'Run `ballin config reset` to recreate the config.',
+  'backup.gh': 'Install GitHub CLI and authenticate it for GitHub.',
+  'backup.read': 'Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.',
+  'backup.config': 'Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.',
+  'backup.consent': 'Set `backup.includeSensitive` to true or false; read-only recovery remains available.',
+};
+
+const formatDoctorCheck = (check: DoctorCheck, nextPrefix = '      Next: '): string => {
+  const lines = [
+    `${statusLabels[check.status].padEnd(5)} ${check.label}: ${check.summary}`,
+  ];
+  if (check.status === 'warn' || check.status === 'fail') {
+    lines.push(`${nextPrefix}${nextSteps[check.id] ?? 'Review the check output above.'}`);
+  }
+  return terminalCommandReferences(lines.join('\n'), [
+    'ballin config reset', 'ballin doctor', 'ballin backup setup', 'ballin backup disconnect',
+    ...[...check.summary.matchAll(/`(gh auth login --hostname [a-z0-9.-]+)`/gu)].map((match) => match[1]),
+    'ballin backup open',
+  ]);
+};
+
+const formatVerboseDoctorReport = (report: DoctorReport): string => {
+  const statusSummary = report.status === 'pass'
+    ? 'Ballin-managed environment health looks good.'
+    : report.status === 'warn'
+      ? 'Ballin-managed environment has warnings. Warnings do not fail this command.'
+      : 'Ballin-managed environment has errors.';
+
+  return [
+    'Ballin doctor',
+    '',
+    ...report.checks.map((check) => formatDoctorCheck(check)),
+    '',
+    `Result: ${statusSummary}`,
+    '',
+  ].join('\n');
+};
+
+const formatDefaultDoctorReport = (report: DoctorReport): string => {
+  if (report.status === 'pass') {
+    return terminalComplete("You're ballin.") + '\n';
+  }
+
+  const visibleStatuses = report.status === 'fail' ? ['fail', 'warn'] : ['warn'];
+  const visibleChecks = report.checks.filter(({ status }) => visibleStatuses.includes(status));
+  return `${visibleChecks.map((check) => formatDoctorCheck(check, 'Next: ')).join('\n\n')}\n`;
+};
+
+module.exports = {
+  formatDefaultDoctorReport,
+  formatVerboseDoctorReport,
+};
+
+export type {
+  DoctorCheck,
+  DoctorReport,
+  DoctorStatus,
+};

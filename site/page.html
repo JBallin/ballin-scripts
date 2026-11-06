@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{description}}">
+  <title>{{pageTitle}}</title>
+  <link rel="canonical" href="{{canonical}}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Ballin">
+  <meta property="og:title" content="{{pageTitle}}">
+  <meta property="og:description" content="{{description}}">
+  <meta property="og:url" content="{{canonical}}">
+  <meta property="og:image" content="{{shareImage}}">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="{{shareAlt}}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{pageTitle}}">
+  <meta name="twitter:description" content="{{description}}">
+  <meta name="twitter:image" content="{{shareImage}}">
+  <meta name="twitter:image:alt" content="{{shareAlt}}">
+  <link rel="stylesheet" href="{{base}}/style.css">
+  <link rel="icon" href="{{base}}/favicon.svg" type="image/svg+xml" sizes="any">
+  <script src="{{base}}/gallery.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header><a class="wordmark" href="{{base}}/index.html"><span aria-hidden="true">&gt;_ </span>ballin</a>
+    <nav aria-label="Main"><a href="{{base}}/docs/index.html">Documentation</a>{{galleryNav}}<a href="https://github.com/JBallin/ballin-scripts">GitHub ↗</a></nav>
+  </header>
+  <main id="content">{{content}}</main>
+  <footer><a href="{{source}}">View source on GitHub</a><span>Back up dotfiles. Keep your tools current.</span></footer>
+</body>
+</html>

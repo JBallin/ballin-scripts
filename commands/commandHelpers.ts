@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const tty = require('tty');
 const { clearTemporaryStatus } = require('./temporaryStatus.ts');
-const { terminalHeading } = require('./terminalStyle.ts');
+const { terminalHeading, terminalPrompt, terminalChoice, supportsEmphasis, stripAnsi, visibleWidth } = require('./terminalStyle.ts');
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
 
@@ -111,8 +111,73 @@ const writeStderrLine = (text = ''): void => {
   process.stderr.write(`${text}\n`);
 };
 
-const readPromptLine = (prompt: string): PromptLine => {
-  process.stdout.write(prompt);
+class CommandInterrupted extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super('Interrupted. Earlier completed changes remain.');
+    this.status = status;
+  }
+}
+const rethrowInterruption = (error: unknown): void => {
+  if (error instanceof CommandInterrupted) throw error;
+};
+const requireUninterrupted = (result: { signal?: string | null; status: number | null; error?: unknown }): void => {
+  if (result.error) return; // Timeouts/resource-limit kills retain their actual error classification.
+  const number = result.signal && ['SIGINT', 'SIGTERM'].includes(result.signal) ? os.constants.signals[result.signal] : undefined;
+  if (typeof number === 'number') throw new CommandInterrupted(128 + number);
+  if (result.status === 130 || result.status === 143) throw new CommandInterrupted(result.status);
+};
+
+type FixedChoiceLabel = (text: string) => string | undefined;
+type PromptLayout = { rows: number; columns: number; echo: boolean };
+const promptLayout = (): PromptLayout | undefined => {
+  if (!supportsEmphasis(process.stdout, process.env) || !tty.isatty(0)) return;
+  try {
+    const input = fs.fstatSync(0), output = fs.fstatSync(1);
+    if (!input.isCharacterDevice() || !output.isCharacterDevice() || input.rdev !== output.rdev) return;
+    // Read metadata only. Never change terminal modes or initialize process.stdin.
+    const result = runCommand('/bin/stty', ['-a'], { stdio: [0, 'pipe', 'ignore'], timeout: 1000 });
+    if (result.error) return;
+    requireUninterrupted(result);
+    if (result.status !== 0) return;
+    const flags = result.stdout;
+    const row = /\brows\s*=?\s*(\d+)|(\d+)\s+rows\b/u.exec(flags);
+    const column = /\bcolumns\s*=?\s*(\d+)|(\d+)\s+columns\b/u.exec(flags);
+    const echo = /(?:^|[\s;])(-?echo)(?=[\s;]|$)/u.exec(flags);
+    if (!row || !column || !echo || !/(?:^|[\s;])icanon(?=[\s;]|$)/u.test(flags)
+      || !/(?:^|[\s;])onlcr(?=[\s;]|$)/u.test(flags)) return;
+    const rows = Number(row[1] || row[2]), columns = Number(column[1] || column[2]);
+    if (rows > 1 && columns > 0) return { rows, columns, echo: echo[1] === 'echo' };
+  } catch (error) { rethrowInterruption(error); }
+};
+const promptInputIdle = (): boolean => {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('BASH_FUNC_')));
+  const result = runCommand('/bin/zsh', ['-d', '-f', '-c', 'zmodload zsh/zselect || exit 2; zselect -r 0 -t 0'], {
+    env: { ...env, BASH_ENV: '', ENV: '', ZDOTDIR: '' }, stdio: [0, 'ignore', 'ignore'], timeout: 1000,
+  });
+  if (result.error) return false;
+  requireUninterrupted(result);
+  // The native macOS shell polls readiness without consuming an input byte.
+  return result.status === 1;
+};
+const confirmPromptChoice = (prompt: string, answer: string, label: string, layout: PromptLayout): void => {
+  if (!promptInputIdle()) return;
+  const current = promptLayout();
+  if (!current || current.columns !== layout.columns || current.rows !== layout.rows || current.echo !== layout.echo) return;
+  const lastLine = prompt.slice(prompt.lastIndexOf('\n') + 1);
+  // Do not guess how a terminal echoed control bytes, or reach outside the
+  // visible prompt region. Free text never enters this fixed-choice path.
+  if (/[\x00-\x1f\x7f]/u.test(stripAnsi(lastLine) + answer)) return;
+  const rows = Math.max(1, Math.ceil((visibleWidth(lastLine) + (layout.echo ? visibleWidth(answer) : 0)) / layout.columns));
+  if (rows >= layout.rows) return;
+  process.stdout.write(`\x1b[${rows}A\r\x1b[J${lastLine}${terminalChoice(label)}\n`);
+};
+
+const readPromptLine = (prompt: string, fixedChoiceLabel?: FixedChoiceLabel): PromptLine => {
+  const rendered = terminalPrompt(prompt);
+  const candidateLayout = fixedChoiceLabel ? promptLayout() : undefined;
+  const layout = candidateLayout && promptInputIdle() ? candidateLayout : undefined;
+  process.stdout.write(rendered);
   const bytes: number[] = [];
   const byte = Buffer.alloc(1);
   let complete = false;
@@ -138,35 +203,24 @@ const readPromptLine = (prompt: string): PromptLine => {
     throw error;
   }
   if (!complete) inputState = 'ended';
-  if (!tty.isatty(0)) process.stdout.write('\n');
-  return { text: Buffer.from(bytes).toString('utf8'), eof: !complete };
+  if (!tty.isatty(0) || layout?.echo === false) process.stdout.write('\n');
+  const text = Buffer.from(bytes).toString('utf8');
+  const label = complete && layout ? fixedChoiceLabel?.(text) : undefined;
+  if (label && layout) confirmPromptChoice(rendered, text, label, layout);
+  return { text, eof: !complete };
 };
 
 const readYesNo = (prompt: string, defaultValue = false): boolean | null => {
   while (true) {
-    const response = readPromptLine(prompt);
+    const response = readPromptLine(prompt, (text) => {
+      const answer = parseYesNo(text, defaultValue);
+      return answer === undefined ? undefined : answer ? 'Yes' : 'No';
+    });
     if (response.eof) return null;
     const answer = parseYesNo(response.text, defaultValue);
     if (answer !== undefined) return answer;
-    writeStdoutLine('Please enter yes or no.');
+    writeStdoutLine('Enter Yes or No.');
   }
-};
-
-class CommandInterrupted extends Error {
-  readonly status: number;
-  constructor(status: number) {
-    super('Interrupted. Earlier completed changes remain.');
-    this.status = status;
-  }
-}
-const rethrowInterruption = (error: unknown): void => {
-  if (error instanceof CommandInterrupted) throw error;
-};
-const requireUninterrupted = (result: { signal?: string | null; status: number | null; error?: unknown }): void => {
-  if (result.error) return; // Timeouts/resource-limit kills retain their actual error classification.
-  const number = result.signal && ['SIGINT', 'SIGTERM'].includes(result.signal) ? os.constants.signals[result.signal] : undefined;
-  if (typeof number === 'number') throw new CommandInterrupted(128 + number);
-  if (result.status === 130 || result.status === 143) throw new CommandInterrupted(result.status);
 };
 
 const progress = (text: string, leadingNewline = true): void => {

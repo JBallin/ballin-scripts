@@ -1,0 +1,4 @@
+# Preserve exact capture bytes, including native PTY CRLF and ANSI escapes.
+*-pty.txt -text whitespace=cr-at-eol
+terminal-preview.ansi -text whitespace=cr-at-eol
+plain.txt -text

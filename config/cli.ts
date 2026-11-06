@@ -26,7 +26,7 @@ Examples:
 
 Reset replaces all saved settings with defaults, including backup linkage; remote backups remain unchanged.
 
-🔗 Configuration guide:
+i Configuration guide:
 https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#working-with-settings
 `;
 

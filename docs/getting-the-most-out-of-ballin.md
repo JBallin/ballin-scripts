@@ -8,6 +8,10 @@ Use supported package managers to keep more of your tools up to date through
 `ballin update`. Keep track of apps that use their own updater; Ballin does not
 update every app on your Mac.
 
+We recommend [Homebrew](https://brew.sh/) for tools it supports: Ballin can keep
+those packages current through `ballin update`. Homebrew is optional; you do not
+need to install it before setting up Ballin.
+
 - **Homebrew casks:** Consider [Homebrew casks](https://docs.brew.sh/Cask-Cookbook)
   for apps available through Homebrew. Ballin runs ordinary `brew upgrade` when
   Homebrew is on `PATH`. Homebrew's [upgrade rules](https://docs.brew.sh/FAQ#how-does-brew-upgrade-handle-apps-that-update-themselves)
@@ -18,11 +22,11 @@ update every app on your Mac.
   Ballin to run `mas upgrade` during `ballin update`. Ballin discovers `mas` on
   `PATH`; no Ballin setting is needed. App Store account and app eligibility
   requirements still apply.
-- **Node.js:** [nvm](https://github.com/nvm-sh/nvm) lets you switch Node.js versions
+- **Node.js:** [NVM](https://github.com/nvm-sh/nvm) lets you switch Node.js versions
   and use project-specific `.nvmrc` files. To let `ballin update` install the latest
-  LTS release through an existing nvm installation, enable
+  LTS release through an existing NVM installation, enable
   `ballin config set update.nvm true`. This is off by default; it does not update
-  nvm itself or migrate global npm packages. See [Node.js setup and tradeoffs](optional-capabilities.md#nodejs).
+  NVM itself or migrate global npm packages. See [Node.js setup and tradeoffs](optional-capabilities.md#nodejs).
 
 ## Make maintenance a habit
 

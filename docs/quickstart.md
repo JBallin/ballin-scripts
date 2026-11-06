@@ -5,7 +5,16 @@ You’ll need a [GitHub account](https://github.com/signup) only if you choose t
 Open Terminal and paste:
 
 ```shell
-/bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)"
+BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/quickstart.sh)"
 ```
+
+Quickstart offers NVM and latest LTS Node when needed. If your existing Node
+works with Ballin, keeping it is the default. Switching requires consent and
+retains older installations; global npm tools may need reinstalling. Shell
+startup changes have separate permission.
+
+Quickstart asks about GitHub backup before installation and reuses your choice
+after the core installation. It then offers update and analytics preferences. You can revisit preferences with `ballin setup` and backup destinations
+or sensitive sources with `ballin backup setup`.
 
 Optional reading: [installation details](installation.md#quickstart-helper) · [backup sources and privacy](backup-sources.md).
