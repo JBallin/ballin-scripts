@@ -332,6 +332,112 @@ class BuildTests(unittest.TestCase):
         self.assertIn('&lt;untrusted &amp; text&gt;', viewer)
         self.assertEqual((self.output / 'favicon.svg').read_bytes(), (site.ROOT / 'site/favicon.svg').read_bytes())
 
+    def test_titles_and_static_share_metadata(self):
+        from html.parser import HTMLParser
+        class Head(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.meta = {}
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'meta':
+                    self.meta[attrs.get('property', attrs.get('name'))] = attrs.get('content')
+        expected = {'index.html': 'Ballin', 'LICENSE.html': 'LICENSE · Ballin', 'gallery.html': 'Output gallery · Ballin',
+                    'gallery/update/output-001.html': 'Synthetic update fixture — page 1 of 1 · Ballin'}
+        for path in self.output.rglob('*.html'):
+            source = path.read_text()
+            title = __import__('re').search(r'<title>(.*?)</title>', source).group(1)
+            self.assertTrue(title.strip())
+            self.assertNotEqual('Ballin · Ballin', title)
+            if path.relative_to(self.output).as_posix() in expected:
+                self.assertEqual(title, expected[path.relative_to(self.output).as_posix()])
+            head = Head()
+            head.feed(source)
+            self.assertEqual(head.meta['og:title'], __import__('html').unescape(title))
+            self.assertEqual(head.meta['twitter:card'], 'summary_large_image')
+            self.assertEqual(head.meta['og:url'], 'https://jballin.github.io/ballin-scripts/' + path.relative_to(self.output).as_posix())
+            self.assertEqual(head.meta['og:image'], 'https://jballin.github.io/ballin-scripts/docs/assets/brand/social-preview.png')
+            self.assertEqual(head.meta['og:image:type'], 'image/png')
+            self.assertTrue(head.meta['og:image:alt'])
+        image = (self.output / 'docs/assets/brand/social-preview.png').read_bytes()
+        self.assertEqual(image[:8], b'\x89PNG\r\n\x1a\n')
+        self.assertEqual(struct.unpack('>II', image[16:24]), (1280, 640))
+        self.assertEqual(image, (site.ROOT / 'docs/assets/brand/social-preview.png').read_bytes())
+
+    def test_metadata_escaping_empty_titles_and_multi_page_titles(self):
+        values = site.page_metadata({'path': 'docs/a & b.html', 'title': 'A "quote" <tag> & topic'}, '/project', 'https://example.com')
+        self.assertEqual(values['pageTitle'], 'A &quot;quote&quot; &lt;tag&gt; &amp; topic · Ballin')
+        self.assertEqual(values['canonical'], 'https://example.com/project/docs/a%20%26%20b.html')
+        with self.assertRaises(ValueError):
+            site.page_metadata({'path': 'empty.html', 'title': '  '}, '', 'https://example.com')
+        manifest, files = fixture()
+        manifest['entries'][0]['images'].append('gallery/update/output-002.png')
+        files['gallery/update/output-002.png'] = png()
+        pages = site.image_pages(manifest, files, '/ballin-scripts')
+        self.assertEqual([page['title'] for page in pages], ['Synthetic update fixture — page 1 of 2', 'Synthetic update fixture — page 2 of 2'])
+
+    def test_root_custom_domain_complete_snapshot_and_project_cli_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            custom = root / 'custom'
+            subprocess.run(['python3', str(site.ROOT / 'tools/site/site.py'), 'build', '--output', str(custom),
+                            '--pin', str(self.pin), '--bundle', str(self.bundle)], check=True, capture_output=True)
+            project = root / 'project'
+            subprocess.run(['python3', str(site.ROOT / 'tools/site/site.py'), 'build', '--output', str(project),
+                            '--origin', 'https://jballin.github.io', '--base', '/ballin-scripts',
+                            '--pin', str(self.pin), '--bundle', str(self.bundle)], check=True, capture_output=True)
+            for output, origin, base in [(custom, 'https://getballin.com', ''), (project, 'https://jballin.github.io', '/ballin-scripts')]:
+                metadata = json.loads((output / 'build.json').read_text())
+                self.assertEqual(metadata['hosting'], {'origin': origin, 'base': base})
+                site.verify_site(output, base)
+                for relative in ['index.html', 'docs/quickstart.html', 'gallery.html', 'gallery/update/output-001.html']:
+                    page = (output / relative).read_text()
+                    self.assertIn('href="' + origin + base + '/' + relative + '"', page)
+                    self.assertIn('content="' + origin + base + '/docs/assets/brand/social-preview.png"', page)
+                    self.assertEqual(preview.selected_file(output, base, base + '/' + relative), (output / relative).resolve())
+                self.assertIn(origin + base + '/gallery.html', (output / 'sitemap.xml').read_text())
+                self.assertIn(origin + base + '/sitemap.xml', (output / 'robots.txt').read_text())
+                self.assertFalse((output / 'CNAME').exists())
+                for name, data in self.files.items():
+                    self.assertEqual((output / name).read_bytes(), data)
+                self.assertIn('github.com/JBallin/ballin-scripts/blob/', (output / 'gallery.html').read_text())
+
+    def test_deployment_configuration_refuses_invalid_inputs(self):
+        self.assertEqual(site.deployment_config(site.ROOT / 'site/deployment.json'), {'origin': 'https://getballin.com', 'base': ''})
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'deployment.json'
+            for value in [{'origin': 'https://getballin.com', 'base': '/', 'extra': True},
+                          {'origin': 'http://getballin.com', 'base': ''},
+                          {'origin': 'https://getballin.com/path', 'base': ''},
+                          {'origin': 'https://getballin.com', 'base': '/unsafe/..'},
+                          {'origin': 'https://getballin.com', 'base': None}]:
+                config.write_bytes(site.json_bytes(value))
+                with self.assertRaises(ValueError):
+                    site.deployment_config(config)
+
+    def test_output_readability_and_provenance_disclosures(self):
+        gallery = (self.output / 'gallery.html').read_text()
+        viewer = (self.output / 'gallery/update/output-001.html').read_text()
+        self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', gallery)
+        self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', viewer)
+        self.assertIn('href="/ballin-scripts/gallery/update/output-001.png">Open original PNG</a>', viewer)
+        self.assertIn('Scroll horizontally and vertically', viewer)
+        self.assertIn('Complete image, fitted to available width.', viewer)
+        self.assertIn('Native resolution — scroll or use arrow keys', viewer)
+        self.assertIn('Synthetic fixture only.', gallery)
+        self.assertIn('Synthetic fixture only.', viewer)
+        self.assertIn('Copy text', viewer)
+        self.assertIn('Download text', viewer)
+
+    def test_intro_gallery_link_keeps_readme_and_respects_bootstrap(self):
+        complete = (self.output / 'docs/what-is-ballin.html').read_text()
+        self.assertIn('class="gallery-related"', complete)
+        self.assertIn('href="/ballin-scripts/gallery.html">Browse the output gallery</a>', complete)
+        self.assertIn('href="/ballin-scripts/index.html#example-output"', complete)
+        self.assertEqual(site.related_gallery('docs/what-is-ballin.md', '', False), '')
+        self.assertEqual(site.related_gallery('docs/quickstart.md', '', True), '')
+        self.assertIn('href="/gallery.html"', site.related_gallery('docs/what-is-ballin.md', '', True))
+
     def test_copy_success_failure_and_repeat_activation(self):
         subprocess.run(['node', str(site.ROOT / 'tools/site/test_interactions.cjs')], check=True)
 
@@ -376,7 +482,7 @@ class BuildTests(unittest.TestCase):
 
     def test_accessible_nested_details_and_escaped_text(self):
         value = (self.output / 'gallery.html').read_text()
-        self.assertEqual(value.count('<details'), 2)
+        self.assertEqual(value.count('<details'), 3)
         self.assertNotIn('<details open', value)
         self.assertIn('<summary>Text version</summary>', value)
         self.assertIn('&lt;untrusted &amp; text&gt;', value)

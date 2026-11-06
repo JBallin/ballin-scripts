@@ -24,19 +24,25 @@ Use Node.js from `.nvmrc` and Python 3.9 or newer. From the repository root:
 npm ci --ignore-scripts
 npm ci --prefix site --ignore-scripts
 python3 tools/site/test_site.py
-python3 tools/site/site.py build --output .site-output/review/ballin-scripts
-python3 tools/site/preview.py --site .site-output/review/ballin-scripts
+python3 tools/site/site.py build --output .site-output/review/root
+python3 tools/site/preview.py --site .site-output/review/root
 ```
 
-Open `http://127.0.0.1:8000/ballin-scripts/index.html`. The preview server binds
+Open `http://127.0.0.1:8000/index.html`. The preview server binds
 only to loopback and serves only the selected complete snapshot, not its parent
 or other ignored evidence. `--port 0` chooses a free port and prints its URL/PID.
-Use the same `--base` for build and preview if changing the default project path.
+The preview reads its base from the snapshot; `--base` overrides it. Older
+snapshots without hosting metadata retain the `/ballin-scripts` preview default.
 Stop with Control-C, or send TERM to that printed PID. Restart the same command
 to serve that snapshot again.
 
 These are one-time builds: there is no file watcher or browser live reload.
-Rebuild into a new directory and serve that output to inspect source changes.
+The server reads the selected output files on each request. If a local review
+adapter changes those files in place, a browser reload or fresh request can show
+the changes without restarting the server; an already open page is not pushed
+updates. Browser caching can affect when an asset is refreshed. Editing README,
+docs or tooling source alone does not update generated pages. Rebuild into a new
+directory and serve that output to inspect source changes.
 The root package has no site build/serve wrapper; `npm --prefix site test` runs
 the site checks after both dependency installs. Existing output is refused.
 Failed builds retain a `.site-build-*`
@@ -63,9 +69,72 @@ actionable error. Encoded filename delimiters remain path data. Heading IDs and
 rendering are tested against the canonical docs, rather than promising universal
 GitHub rendering parity. Non-documentation source links lead to
 the exact site source commit on GitHub. The build emits a sitemap and canonical
-URLs for the expected project address, `https://jballin.github.io/ballin-scripts/`.
-When setting up or changing hosting, verify the configured origin and project
-base against the deployed pages, asset URLs and section links.
+URLs using the configured canonical origin and base.
+
+## Hosting configuration
+
+`site/deployment.json` defines the intended canonical origin and base for the
+Actions build: `https://getballin.com` and an empty base for root hosting. This
+controls navigation, gallery/image/text paths, canonical URLs, sitemap and social
+metadata together. Source links continue to point to the exact GitHub revision.
+The existing branded PNG is copied to `docs/assets/brand/social-preview.png` and
+used in static Open Graph and Twitter large-card metadata with absolute URLs.
+
+For a GitHub project-site snapshot, override both values explicitly:
+
+```sh
+python3 tools/site/site.py build --output .site-output/review/project \
+  --origin https://jballin.github.io --base /ballin-scripts
+python3 tools/site/preview.py --site .site-output/review/project
+```
+
+That preview prints `http://127.0.0.1:8000/ballin-scripts/index.html`. To select a
+different durable deployment target, edit the same configuration, or supply
+`--config /path/to/config.json` with exactly `origin` and `base`. Overrides affect
+one build only. Local serving stays loopback-only while canonical/share URLs
+remain those of the intended public target.
+
+For an Actions deployment, configure the same custom domain separately in
+GitHub Pages settings and maintain its DNS and HTTPS configuration. A source or
+artifact `CNAME` does not configure this: [GitHub ignores CNAME files for custom
+Actions workflows](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
+When changing hosting, verify the configured origin/base against deployed pages,
+assets, gallery viewers, transcripts, fragments, sitemap and social metadata.
+Check certificate/redirect behavior and inspect sharing-platform previews after
+publication; local metadata checks cannot establish crawler behavior.
+
+## Website QA
+
+Build a fresh complete snapshot and open the URL printed by the loopback preview
+helper in an authorized local browser. Inspect the rendered page and interactions;
+an HTTP response or source inspection alone does not establish visual quality.
+
+- Compare home, gallery, documentation index and a user guide at ordinary desktop,
+  wide and narrow widths (for example 1280, 1600 and 390 pixels). Keep the shared
+  navigation order Documentation, Gallery, GitHub; bootstrap intentionally omits
+  Gallery. Check aligned page widths, readable text and no page-wide overflow.
+- Follow the intro's Gallery link when present, the README example and
+  Acknowledgments links. Repeat navigation and browser Back/Forward. Capture
+  disclaimers belong with capture evidence, not unrelated prose pages.
+- Open an example and a continuation page. Check the complete fitted image and
+  native-resolution scrolling/arrow keys. Narrow images need readable transcript
+  and original-image alternatives; never fix clipping by cropping evidence.
+- Activate matching-text links with the target collapsed, expanded and collapsed
+  again at the same fragment. Each click should open its ancestors and align the
+  target after layout settles. Check long transcript lines and Copy spacing.
+- Test keyboard Copy and its visible result without reading pre-existing clipboard
+  contents. Verify the Download target and, when permitted, the saved transcript.
+  A timeout or permission prompt is not successful completion; inspect an uncertain
+  outcome before retrying. Keep browser permissions and unrelated files unchanged.
+- Check command-before-output context and concise actual/staged, historical and
+  incomplete labels. Keep technical provenance accessible without burying examples.
+  Use the [CLI-output review workflow](../tools/output-gallery/README.md#review-command-line-output)
+  to establish source fidelity separately from presentation quality.
+
+Run `python3 tools/site/test_site.py` and relevant lint/typechecks after source
+changes; build both the configured root target and explicit project-path mode.
+Record the source revision/dirty state, snapshot, widths, concrete results and
+unrun or blocked checks. Keep local screenshots/evidence ignored and private.
 
 ## Curate a bundle
 
@@ -200,8 +269,10 @@ establish remote Release identity or storage durability. Review `build.json`,
 
 ## Shared Update example and public links
 
-Stable public images use `/ballin-scripts/gallery/ENTRY_ID/output-001.png` (and
-subsequent page numbers); matching text uses `text.txt` in that directory. Keep the
+Stable public images use the configured origin/base followed by
+`/gallery/ENTRY_ID/output-001.png` (and subsequent page numbers); matching text
+uses `text.txt` in that directory. For root hosting this is
+`https://getballin.com/gallery/ENTRY_ID/output-001.png`. Keep the
 approved entry ID stable during refreshes. The site serves current examples only.
 Historical README revisions embedding these unversioned URLs will show current
 images alongside their historical text; Git history cannot freeze an external URL.
@@ -210,7 +281,8 @@ Source labels and the gallery's matching transcript identify the current example
 `python3 tools/site/site.py readme-example BUNDLE.zip` prints expandable canonical
 Update text directly from the selected gallery entry without editing the README.
 After the real public asset URLs are verified, use `--image-base
-https://jballin.github.io/ballin-scripts` to include those same images. Review the
+https://getballin.com` to include those same images for root hosting. In project
+mode, use `--image-base https://jballin.github.io/ballin-scripts` instead. Review the
 fragment in the follow-on README integration; preserve expandable actual text and
 labels. Image, site transcript and generated README fragment share the one bundle
 input derived from the canonical scenario/capture source. Do not maintain a second

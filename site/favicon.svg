@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <title>Ballin</title>
-  <!-- Reuses the prompt accent from docs/assets/brand/social-preview.svg. -->
-  <rect width="96" height="96" rx="18" fill="#171b1f"/>
-  <text x="14" y="64" fill="#9be675" font-family="SF Mono, Menlo, Cascadia Mono, Roboto Mono, monospace" font-size="57" font-weight="600">&gt;_</text>
+  <!-- Geometric version of the established social-preview prompt accent. -->
+  <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="5.25" fill="#171b1f" stroke="#b5c0b9" stroke-width="1.5"/>
+  <path fill="#9be675" d="M4 8h4l8 8-8 8H4l8-8zM18 22h10v4H18z"/>
 </svg>

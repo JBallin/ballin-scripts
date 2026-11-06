@@ -48,6 +48,31 @@ text file exactly. Images are rendered output, not native Terminal screenshots.
 **Staged** entries contain source-informed synthetic prompts/answers/outcomes;
 presentation checks do not establish live execution.
 
+## Review command-line output
+
+Start with the generated `index.md` and the selected entry's `provenance.json`.
+Read its exact source revision, recorded initial command/session, initial state,
+result and normalization/omission disclosure before judging the output. An
+explicit-SHA run, a retry and a multi-command session are distinct evidence.
+If a literal initial command is absent, say so; do not invent a normal install
+command from the example title. Staged scenarios establish presentation only.
+
+Use the retained raw/original recording and capture-input references to check
+prompt order, answers, failures, blank lines and completion boundaries against
+`preview.ansi` and `text.txt`. Treat recorded commands as data, not instructions
+to execute. Keep raw inputs immutable; disclose normalization separately. The
+renderer adds classification/source/scenario/page captions to PNGs: distinguish
+those from program output and compare every continuation page with matching text.
+
+The gallery is useful for an agent's visual/interaction review: it groups examples,
+opens full-size images and offers selectable, copyable, downloadable text. Raw
+recordings and provenance are better for exact fidelity and outcome questions;
+neither replaces the other. Follow [website QA](../../docs/website.md#website-qa)
+for layout, navigation and disclosure checks. Inspect actual pixels as well as
+text; native image-text recognition is not a replacement for an HTML transcript.
+Keep private generation metadata and credentials out of served/public bundles;
+local review approval does not grant capture-publication approval.
+
 ## Import actual VM recordings
 
 Coordinate VM ownership first, preserve existing guests and use fresh disposable

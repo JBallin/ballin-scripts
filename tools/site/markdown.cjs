@@ -57,7 +57,7 @@ const rendered = input.pages.map(page => {
   });
   const tokens = md.parse(page.text, {});
   const heading = tokens.findIndex(t => t.type === 'heading_open');
-  return { path: outputPath(page.path), source: page.path, title: heading >= 0 ? tokens[heading + 1].content : 'Ballin', content: md.renderer.render(tokens, md.options, {}) };
+  return { path: outputPath(page.path), source: page.path, title: heading >= 0 ? tokens[heading + 1].content : path.basename(page.path, '.md'), content: md.renderer.render(tokens, md.options, {}) };
 });
 const outputPaths = new Set();
 for (const page of rendered) {

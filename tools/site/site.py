@@ -337,7 +337,7 @@ def gallery_html(manifest, files, base):
             label = 'Actual VM capture · rendered recorded output' if entry['kind'] == 'actual-vm' else 'Staged · source-informed synthetic output'
             lines.append(f'<article class="gallery-entry" id="entry-{entry["id"]}"><h3>{html.escape(entry["title"])}</h3><p>{label}; not a native Terminal screenshot.</p>')
             revision = entry['sourceRevision']
-            lines.append(f'<p class="provenance">Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>{html.escape(entry["edits"])}</p>')
+            lines.append(f'<details class="provenance"><summary>Source and capture details</summary><p>Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>{html.escape(entry["edits"])}</p></details>')
             lines.append('<details><summary>Example output</summary>')
             for index, image in enumerate(entry['images'], 1):
                 viewer = image.removesuffix('.png') + '.html'
@@ -364,13 +364,14 @@ def image_pages(manifest, files, base):
             width, height = struct.unpack('>II', files[image][16:24])
             title = html.escape(entry['title'])
             content = (f'<h1>{title}</h1><p class="image-actions"><a href="{base}/gallery.html#entry-{entry["id"]}">Back to gallery example</a>'
-                       f'<a href="#transcript-{entry["id"]}-image">Matching text</a></p>'
-                       f'<p>Full-size rendered image, {width} × {height} pixels. Scroll the image area or pinch to zoom. '
+                       f'<a href="#transcript-{entry["id"]}-image">Matching text</a><a href="{base}/{image}">Open original PNG</a></p>'
+                       f'<p>Full-size rendered image, {width} × {height} pixels. Scroll horizontally and vertically, or open the original PNG to zoom. '
                        f'Page {index} of {len(entry["images"])}. {html.escape(entry["kind"])} · Source: <code>{entry["sourceRevision"]}</code></p>'
-                       f'<p>{html.escape(entry["edits"])}</p>'
-                       f'<div class="full-image" tabindex="0" role="region" aria-label="Full-resolution terminal output"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Matching text follows."></div>'
+                       f'<details class="provenance"><summary>Source and capture details</summary><p>{html.escape(entry["edits"])}</p></details>'
+                       f'<figure class="image-preview"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Matching text follows."><figcaption>Complete image, fitted to available width. For larger text, open Native resolution or the original PNG.</figcaption></figure>'
+                       f'<details class="native-mode"><summary>Native resolution — scroll or use arrow keys</summary><div class="full-image" tabindex="0" role="region" aria-label="Full-resolution terminal output"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Native resolution."></div></details>'
                        + transcript_html(entry, files, base, '-image'))
-            pages.append({'path': image.removesuffix('.png') + '.html', 'title': entry['title'], 'source': 'tools/output-gallery/README.md', 'content': content})
+            pages.append({'path': image.removesuffix('.png') + '.html', 'title': f"{entry['title']} — page {index} of {len(entry['images'])}", 'source': 'tools/output-gallery/README.md', 'content': content})
     return pages
 
 
@@ -414,6 +415,29 @@ def verify_site(output, base):
                 require(path in parsed and urllib.parse.unquote(url.fragment) in parsed[path].ids, 'Broken local anchor from ' + name + ': ' + link)
 
 
+def related_gallery(source, base, enabled):
+    if enabled and source == 'docs/what-is-ballin.md':
+        return f'<p class="gallery-related"><a href="{base}/gallery.html">Browse the output gallery</a></p>'
+    return ''
+
+
+def page_metadata(page, base, origin):
+    """Static sharing metadata; titles stay topic-first except the product home."""
+    topic = page['title'].strip()
+    require(bool(topic), 'Page title must not be empty: ' + page['path'])
+    title = 'Ballin' if page['path'] == 'index.html' else topic + ' · Ballin'
+    description = 'Back up your dotfiles and keep your macOS development tools current.'
+    if page['path'] != 'index.html':
+        description = topic + ' — ' + description
+    values = {
+        'pageTitle': title, 'description': description,
+        'canonical': origin + base + '/' + urllib.parse.quote(page['path']),
+        'shareImage': origin + base + '/docs/assets/brand/social-preview.png',
+        'shareAlt': 'Ballin: Back up dotfiles. Keep your tools current.',
+    }
+    return {key: html.escape(value, quote=True) for key, value in values.items()}
+
+
 def build(output, pin_path, base, local_bundle=None, origin='https://jballin.github.io'):
     require(base == '' or re.fullmatch(r'/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*', base), 'Invalid site base path')
     require(re.fullmatch(r'https://[a-zA-Z0-9.-]+', origin), 'Invalid canonical origin')
@@ -442,9 +466,9 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
     work = Path(tempfile.mkdtemp(prefix='.site-build-', dir=output.parent))
     try:
         for page in pages:
-            values = {'title': html.escape(page['title']), 'canonical': origin + base + '/' + urllib.parse.quote(page['path']), 'base': base,
+            values = {**page_metadata(page, base, origin), 'base': base,
                       'galleryNav': f'<a href="{base}/gallery.html">Gallery</a>' if manifest else '',
-                      'content': page['content'], 'source': source_base + '/' + urllib.parse.quote(page['source'])}
+                      'content': page['content'] + related_gallery(page['source'], base, manifest is not None), 'source': source_base + '/' + urllib.parse.quote(page['source'])}
             rendered = re.sub(r'\{\{(\w+)\}\}', lambda m: values[m[1]], template)
             target = work / page['path']
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -464,7 +488,7 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
         if manifest:
             (work / 'gallery/manifest.json').write_bytes(json_bytes(manifest))
         (work / '.nojekyll').write_text('')
-        (work / 'build.json').write_bytes(json_bytes({'sourceRevision': revision, 'sourceWorktreeDirty': dirty, 'bundle': pin}))
+        (work / 'build.json').write_bytes(json_bytes({'sourceRevision': revision, 'sourceWorktreeDirty': dirty, 'hosting': {'origin': origin, 'base': base}, 'bundle': pin}))
         urls = ''.join('<url><loc>' + html.escape(origin + base + '/' + urllib.parse.quote(p['path'])) + '</loc></url>' for p in pages)
         (work / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + urls + '</urlset>')
         (work / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: ' + origin + base + '/sitemap.xml\n')
@@ -490,6 +514,14 @@ def readme_example(bundle, image_base=None):
     print('<details>\n<summary>Example output</summary>\n\n' + html.escape(entry['kind']) + ' · Source: `' + entry['sourceRevision'] + '`\n\n<p>' + disclosure + '</p>\n\n' + images + '<details>\n<summary>Text version</summary>\n\n<pre><code>' + html.escape(files[entry['text']].decode()) + '</code></pre>\n\n</details>\n</details>')
 
 
+def deployment_config(path):
+    config = load_json(read_regular(path, 4096))
+    require(isinstance(config, dict) and set(config) == {'origin', 'base'}, 'Deployment configuration requires only origin and base')
+    require(isinstance(config['origin'], str) and re.fullmatch(r'https://[a-zA-Z0-9.-]+', config['origin']), 'Invalid canonical origin')
+    require(isinstance(config['base'], str) and re.fullmatch(r'(?:/[a-zA-Z0-9_-]+)*', config['base']), 'Invalid site base path')
+    return config
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -502,7 +534,9 @@ def main():
     compile_site = commands.add_parser('build')
     compile_site.add_argument('--output', type=Path, default=ROOT / '.site-output/site')
     compile_site.add_argument('--pin', type=Path, default=ROOT / 'site/bundle.json')
-    compile_site.add_argument('--base', default='/ballin-scripts')
+    compile_site.add_argument('--config', type=Path, default=ROOT / 'site/deployment.json', help='Canonical origin and base configuration')
+    compile_site.add_argument('--origin', help='Override the configured HTTPS canonical origin')
+    compile_site.add_argument('--base', help='Override the configured path; use an empty string for a root site')
     compile_site.add_argument('--bundle', type=Path, help='Offline bundle; still checked against the release pin')
     example = commands.add_parser('readme-example', help='Print matching expandable Update text; never edit README')
     example.add_argument('bundle', type=Path)
@@ -517,7 +551,9 @@ def main():
         elif args.command == 'readme-example':
             readme_example(args.bundle, args.image_base)
         else:
-            build(args.output, args.pin, args.base, args.bundle)
+            config = deployment_config(args.config)
+            build(args.output, args.pin, args.base if args.base is not None else config['base'], args.bundle,
+                  args.origin if args.origin is not None else config['origin'])
     except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as error:
         parser.exit(1, 'Site operation failed: ' + str(error) + '\n')
 
