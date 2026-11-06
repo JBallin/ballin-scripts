@@ -550,9 +550,11 @@ def readme_example(bundle, image_base=None):
     disclosure = html.escape(entry['edits']).replace('\n', '<br>')
     if image_base:
         require(re.fullmatch(r'https://[a-zA-Z0-9.-]+(?:/[a-zA-Z0-9_-]+)*', image_base), 'Invalid image base')
-        images = '\n'.join(f'<img src="{image_base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}">' for index, image in enumerate(entry['images'], 1)) + '\n\n'
+        label = 'Staged demonstration: ' if entry['kind'] == 'staged' else 'Actual VM capture: '
+        images = '\n'.join(f'<img src="{image_base}/{image}" alt="{html.escape(label + entry["title"], quote=True)}, page {index}">' for index, image in enumerate(entry['images'], 1)) + '\n\n'
     # HTML escaping prevents recorded text from closing the details or code block.
-    print('<details>\n<summary>Example output</summary>\n\n' + html.escape(entry['kind']) + ' · Source: `' + entry['sourceRevision'] + '`\n\n<p>' + disclosure + '</p>\n\n' + images + '<details>\n<summary>Text version</summary>\n\n<pre><code>' + html.escape(files[entry['text']].decode()) + '</code></pre>\n\n</details>\n</details>')
+    source = '[`' + entry['sourceRevision'][:12] + '`](https://github.com/' + REPO + '/tree/' + entry['sourceRevision'] + ')'
+    print(images + '<details>\n<summary>Example output</summary>\n\n' + html.escape(entry['kind']) + ' · Source: ' + source + '\n\n<p>' + disclosure + '</p>\n\n<details>\n<summary>Text version</summary>\n\n<pre><code>' + html.escape(files[entry['text']].decode()) + '</code></pre>\n\n</details>\n</details>')
 
 
 def deployment_config(path):

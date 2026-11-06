@@ -64,7 +64,7 @@ describe('general preference review', () => {
       assert.isBelow(result.stdout.indexOf('i Analytics report command results, not backup contents.'), result.stdout.indexOf('i Analytics details:'));
       assert.isBelow(result.stdout.indexOf('i Analytics details:'), result.stdout.indexOf('Share usage analytics'));
       assert.equal(result.stdout.split('docs/analytics.md').length - 1, 1);
-      assert.notInclude(result.stdout, 'Change preferences later');
+      assert.notInclude(result.stdout, 'Change preferences');
     });
   }
   it('falls back only for absent preferences and retains bundled macOS default Yes', () => {
@@ -126,7 +126,7 @@ describe('general preference review', () => {
     assert.notInclude(result.stdout, 'set to `'); assert.notInclude(result.stdout, 'unchanged at');
     assert.notInclude(result.stdout, 'Usage analytics:');
     assert.equal(result.stdout.includes('Setup complete.'), !installation);
-    assert.notInclude(result.stdout, 'Change preferences later');
+    assert.notInclude(result.stdout, 'Change preferences');
     const prompts = ['Update global npm packages?', 'Update Ballin?', 'Clean up Homebrew?', 'Update macOS?'];
     prompts.forEach((prompt, index) => { assert.include(result.stdout, prompt); if (index) assert.isAbove(result.stdout.indexOf(prompt), result.stdout.indexOf(prompts[index - 1])); });
   });

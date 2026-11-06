@@ -306,8 +306,10 @@ class BundleTests(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 site.readme_example(bundle, 'https://jballin.github.io/ballin-scripts')
-            self.assertIn('<img src="https://jballin.github.io/ballin-scripts/gallery/update/output-001.png" alt="Update ]', out.getvalue())
+            self.assertIn('<img src="https://jballin.github.io/ballin-scripts/gallery/update/output-001.png" alt="Staged demonstration: Update ]', out.getvalue())
             self.assertIn('&quot; &lt;tag&gt;', out.getvalue())
+            self.assertLess(out.getvalue().index('<img '), out.getvalue().index('<details>'))
+            self.assertIn('[`aaaaaaaaaaaa`](https://github.com/JBallin/ballin-scripts/tree/' + 'a' * 40 + ')', out.getvalue())
 
     def test_readme_disclosure_is_literal_markdown_and_html(self):
         self.manifest['entries'][0]['edits'] = 'Reviewed omission.\n\n[Injected link](https://example.invalid/) and ![tracking](https://example.invalid/image.png) <img src="https://example.invalid/html.png">'

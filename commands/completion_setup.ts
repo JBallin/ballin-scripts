@@ -173,10 +173,8 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
         return;
       }
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    beginCompletion();
-    write(`Startup file: ${terminalPath(target.profile, env.HOME)}`);
     while (true) {
-      const answer = completionPrompt(`Enable Ballin tab completion? [y/N] `, (text: string) => {
+      const answer = completionPrompt(`Enable Ballin tab completion in ${terminalPath(target.profile, env.HOME)}? [y/N] `, (text: string) => {
         const enabled = parseYesNo(text, false);
         return enabled === undefined ? undefined : enabled ? 'Yes' : 'No';
       });

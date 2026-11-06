@@ -40,8 +40,8 @@ hashes['help.json']=hashlib.sha256((OUT/'help.json').read_bytes()).hexdigest()
 checks={
  'quickstart.sh':['Ballin requires Node.js. Install it using NVM?','Use NVM with Node.js LTS instead?','Node.js details','NVM ready; Node.js active for this setup.','Homebrew\'s instructions above are for manual setup.','confirm_fixed_choice Skip',"if confirm 'Set up backups to GitHub?' y","if ! confirm 'Proceed with installation?'",'configure_path','manual_nvm_guidance','confirm_first_backup','Enter Yes or No.','Setting up NVM and Node.js LTS','$ brew install --formula nvm','Node.js LTS installation did not finish. Inspect its output, then rerun Quickstart.','NVM installation did not finish. Inspect its output, then rerun Quickstart.'],
  'commands/backup_preferences.ts':['Backups may contain private information or secrets.','Configuration file:','Check write access to this file and its containing folder','filesystemCause(error)'],
- 'commands/backup_setup.ts':['colorUrls: Boolean(previous)','Branch protection wasn’t enabled. Backups still work.','Reconnect details','Backup details',"earlierChoicesSaved ? '; earlier choices saved.'",'Enter Create or Reconnect.','Change backup settings later with'],
- 'commands/completion_setup.ts':['Startup file:','Enable Ballin tab completion?','Enter Yes or No.'],
+ 'commands/backup_setup.ts':['colorUrls: Boolean(previous)','Branch protection wasn’t enabled. Backups still work.','Reconnect details','Backup details',"earlierChoicesSaved ? '; earlier choices saved.'",'Enter Create or Reconnect.','Change backup settings with'],
+ 'commands/completion_setup.ts':['Enable Ballin tab completion in ${terminalPath(target.profile, env.HOME)}?','Enter Yes or No.'],
  'config/setup.ts':['defaults._setup = { unreviewedNvm: true }'],
  'config/.defaultConfig.json':['\"backup\": \"false\"','\"nvm\": \"false\"'],
  'config/portable.ts':["throw new PortableConfigError('Config is not valid JSON.')"],
@@ -51,9 +51,9 @@ checks={
  'scripts/revision-bootstrap.sh':['Install supported Node.js or use Quickstart.','Upgrade or activate Node.js and retry.'],
  'commands/repo_update.ts':['Checkout changed after confirmation. Retry after inspecting it.', 'but setup refresh failed. Fix the reported error, then run', 'Upgrade or activate Node.js, then retry.','Confirmation required. Run','const selectionLabel',"label: `development ${sha.slice(0, 12)}",'unknown revision'],
  'commands/setup.ts':['Configuration file:','replace it with defaults','Update Node.js LTS through NVM?','Node.js LTS updates through NVM are offered when NVM is loadable', 'Review cancelled.','Earlier choices saved.','Update Ballin?','Clean up Homebrew?'],
- 'commands/install_setup.ts':['const backupSetupAllowed =', 'backupSetupAllowed && (backupConfigured || backupInvalid', 'offerCompletionSetup(docsUrl',"process.env.BALLIN_BACKUP_CHOICE !== 'no'",'Review your Ballin preferences?', 'setupAnalytics(repoDir)', 'deferFollowUp: true','const followUp = generalReview ? [general, backup]','Change preferences later with'],
+ 'commands/install_setup.ts':['const backupSetupAllowed =', 'backupSetupAllowed && (backupConfigured || backupInvalid', 'offerCompletionSetup(docsUrl',"process.env.BALLIN_BACKUP_CHOICE !== 'no'",'Review your Ballin preferences?', 'setupAnalytics(repoDir)', 'deferFollowUp: true','const followUp = generalReview ? [general, backup]','Change preferences with'],
  'package.json':['\"installerProtocol\": 2'],
- 'install.sh':['Installed updater uses an unsupported contract. See',"setup_complete; printf '\\nOpen a new Terminal and run '"]}
+ 'install.sh':["phase 'Initial configuration'",'Installed updater uses an unsupported contract. See',"setup_complete; printf '\\nOpen a new Terminal and run '"]}
 evidence=[]
 for file,phrases in checks.items():
  for phrase in phrases:
@@ -95,8 +95,8 @@ const sensitive = () => {
   line();line('Sensitive source paths available now: none.');
   choice('Include sensitive sources in future backups? [y/N] ','No');
 };
-const generalLater=()=>prose('Change preferences later with '+command('ballin setup')+'.');
-const backupLater=()=>prose('Change backup settings later with '+command('ballin backup setup')+'.');
+const generalLater=()=>prose('Change preferences with '+command('ballin setup')+'.');
+const backupLater=()=>prose('Change backup settings with '+command('ballin backup setup')+'.');
 const backupRelated=()=>prose('Run '+command('ballin backup setup')+' to configure or review your GitHub backup.');
 const generalRelated=()=>prose('Run '+command('ballin setup')+' to review your other preferences.');
 const completeInstall=()=>{line();line(t.terminalComplete('Setup complete.'));prose('Open a new Terminal and run '+command('ballin help')+'.');};
@@ -155,8 +155,7 @@ line('Selected '+selectionLabel({kind:'sha',value:'a'.repeat(40),sha:'a'.repeat(
 line('[STAGED omitted noninteractive stage: publish the prepared checkout; no prompt omitted.]');
 line();line(t.terminalMarkers('✓ Created config: ~/.ballin-scripts/ballin.config.json'));
 line('[STAGED omitted noninteractive stage: create/verify the command link; no prompt omitted.]');
-line();line('Startup file: ~/.bash_profile');
-choice('Enable Ballin tab completion? [y/N] ','Yes');
+line();choice('Enable Ballin tab completion in ~/.bash_profile? [y/N] ','Yes');
 line();line(t.terminalComplete('Ballin installed successfully.'));
 choice('\nReview your Ballin preferences? [Y/n] ','Yes');
 details('Optional capabilities',docs+'optional-capabilities.md');
@@ -256,7 +255,7 @@ line('[STAGED ending-only excerpt: later installation confirmation, completion-t
 prose('Ballin is installed. PATH setup wasn’t verified.');
 details('Manual setup',docs+'installation.md#manual-path-setup');
 alternative('consent-only excerpt: startup target previously selected; installation/general/backup choices and later outcomes omitted');
-line('Startup file: ~/.bash_profile');choice('Enable Ballin tab completion? [y/N] ','No');
+choice('Enable Ballin tab completion in ~/.bash_profile? [y/N] ','No');
 details('Enable it later',docs+'installation.md#startup-files-and-manual-activation');
 alternative('outcome-only excerpt: unanswered completion consent or unsupported-target branch; preceding target/installation choices omitted');
 prose('Tab completion skipped.');details('Enable it later',docs+'installation.md#startup-files-and-manual-activation');
