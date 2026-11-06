@@ -8,29 +8,21 @@ look after.
 
 ## Tools Ballin works with
 
-Git and Node.js are installer prerequisites. The update integrations and backup
-sources below are optional; you can use Ballin without adopting every tool.
-
 | Project | How Ballin uses it |
 | --- | --- |
-| [macOS](https://www.apple.com/macos/) and [Xcode Command Line Tools](https://developer.apple.com/xcode/resources/) | The platform Ballin runs on. Quickstart can obtain Git through Command Line Tools; optional system updates use macOS `softwareupdate`. |
-| [Git](https://git-scm.com/) | Installs and updates the Ballin checkout. Git configuration and global ignore files are also supported backup sources. |
-| [Node.js](https://nodejs.org/) and [npm](https://docs.npmjs.com/) | Node.js runs Ballin. npm supplies development dependencies, global-package inventories, and optional global-package updates. |
-| [Bash](https://www.gnu.org/software/bash/) and [Zsh](https://www.zsh.org/) | Shells used for setup scripts and command completion. Ballin can back up supported shell startup files and inventory Homebrew Bash completions. |
-| [curl](https://curl.se/) | Downloads installer scripts and prerequisite releases during Quickstart. |
-| [GitHub](https://github.com/) and [GitHub CLI](https://cli.github.com/) | GitHub hosts Ballin; `gh` connects optional backups to a GitHub repository. |
-| [Homebrew](https://brew.sh/) | Optional package and app updates, health checks, and inventories of installed packages, apps, and services. |
-| [nvm](https://github.com/nvm-sh/nvm) | Optional Node.js LTS installation during `ballin update`. The home-directory `.nvmrc` is also a supported backup source. |
-| [mas](https://github.com/mas-cli/mas) | Optional Mac App Store app updates and installed-app inventories. |
-| [Visual Studio Code](https://code.visualstudio.com/) | Settings, keybindings, and extension inventories are supported backup sources for both stable and Insiders editions. |
-| [Vim](https://www.vim.org/) and [GNU nano](https://www.nano-editor.org/) | Their `.vimrc` and `.nanorc` editor configuration files are supported backup sources. |
-| [Codex](https://developers.openai.com/codex/) and [Claude Code](https://code.claude.com/docs/en/overview) | Supported personal instructions, configuration, and authoring files, including skills, can be backed up. |
-| [pipx](https://pipx.pypa.io/), [uv](https://docs.astral.sh/uv/), and [pyenv](https://github.com/pyenv/pyenv) | Backups can record Python tool installations and installed Python versions. |
-
-Raw configuration and some tool metadata require the sensitive-source opt-in.
-See [Backup sources and sensitivity](backup-sources.md) for what is collected,
-[Supported capabilities](capabilities.md) for update behavior, and
-[Optional capabilities](optional-capabilities.md) for setup and settings.
+| [macOS](https://www.apple.com/macos/) and [Xcode Command Line Tools](https://developer.apple.com/xcode/resources/) | Ballin's macOS platform and command-line foundation. |
+| [Git](https://git-scm.com/) | Tracks Ballin's source and supports repository backups. |
+| [Node.js](https://nodejs.org/) and [npm](https://docs.npmjs.com/) | Node.js runs Ballin; npm supports development. |
+| [Bash](https://www.gnu.org/software/bash/) and [Zsh](https://www.zsh.org/) | Run Ballin's shell scripts and support command completion. |
+| [curl](https://curl.se/) | Downloads resources used by Ballin. |
+| [GitHub](https://github.com/) and [GitHub CLI](https://cli.github.com/) | GitHub hosts Ballin; the CLI connects optional backups. |
+| [Homebrew](https://brew.sh/) | Supports optional macOS package management. |
+| [nvm](https://github.com/nvm-sh/nvm) | Manages Node.js versions. |
+| [mas](https://github.com/mas-cli/mas) | Updates Mac App Store apps. |
+| [Visual Studio Code](https://code.visualstudio.com/) | Supports editor-configuration backups. |
+| [Vim](https://www.vim.org/) and [GNU nano](https://www.nano-editor.org/) | Support backups of editor configuration. |
+| [Codex](https://developers.openai.com/codex/) and [Claude Code](https://code.claude.com/docs/en/overview) | Support backups of personal instructions and configuration. |
+| [pipx](https://pipx.pypa.io/), [uv](https://docs.astral.sh/uv/), and [pyenv](https://github.com/pyenv/pyenv) | Support backups of Python tooling. |
 
 ## Building and running the project
 
