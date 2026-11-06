@@ -115,5 +115,3 @@ not scan or redact secrets. Review
 See the [documentation index](docs/README.md) for user and maintainer guides,
 including [supported capabilities](docs/capabilities.md) and
 [optional tools and settings](docs/optional-capabilities.md).
-
-[Acknowledgments](docs/acknowledgments.md)
