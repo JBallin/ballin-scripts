@@ -113,7 +113,8 @@ an HTTP response or source inspection alone does not establish visual quality.
   wide and narrow widths (for example 1280, 1600 and 390 pixels). Keep the shared
   navigation order Documentation, Gallery, GitHub; bootstrap intentionally omits
   Gallery. Check aligned page widths, readable text and no page-wide overflow.
-- Follow the intro's Gallery link when present, the README example and
+- Complete a docs → gallery → example → matching text → download → return journey.
+  Follow the intro's Gallery link when present, the README example and
   Acknowledgments links. Repeat navigation and browser Back/Forward. Capture
   disclaimers belong with capture evidence, not unrelated prose pages.
 - Open an example and a continuation page. Check the complete fitted image and
@@ -133,8 +134,12 @@ an HTTP response or source inspection alone does not establish visual quality.
 
 Run `python3 tools/site/test_site.py` and relevant lint/typechecks after source
 changes; build both the configured root target and explicit project-path mode.
-Record the source revision/dirty state, snapshot, widths, concrete results and
-unrun or blocked checks. Keep local screenshots/evidence ignored and private.
+Check keyboard reachability and visible focus across navigation, disclosures and
+controls, and sample text/link contrast. Inspect browser errors and failed resource
+requests; scroll long examples and confirm images load without shifting controls.
+Use comparable before/after views at the same widths when changing layout. Record
+the source revision/dirty state, snapshot and passed/failed/blocked checks; distinguish
+observed bugs from unverified causes. Keep local screenshots/evidence ignored and private.
 
 ## Curate a bundle
 

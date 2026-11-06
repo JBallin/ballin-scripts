@@ -102,6 +102,11 @@
   `python3 tools/site/test_site.py` for site tooling/template/workflow changes.
   Include a local complete-site build
   and inspect changed navigation, project base paths, fragments and nested details.
+  For layout, navigation or gallery interaction changes, follow
+  [Website QA](docs/website.md#website-qa) on the rendered complete snapshot.
+- When changing CLI messages, prompts or terminal rendering, follow
+  [Review command-line output](tools/output-gallery/README.md#review-command-line-output)
+  for source fidelity and visual review.
 - For affected output flows, useful review evidence is a labeled PNG plus its
   matching actual text and exact source revision from the local output-gallery
   tooling. Do not require captures for unrelated changes or regenerate on docs
