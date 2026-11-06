@@ -61,7 +61,7 @@ describe('integrated setup with delayed terminal answers', function() {
       startup(shell),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
-      { prompt: 'Enable Ballin tab completion? ', answer: 'y' },
+      { prompt: `Enable Ballin tab completion in ~/${shell === 'bash' ? '.bash_profile' : '.zshrc'}? [y/N] `, answer: 'y' },
       ...backup,
       { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'y' },
       ...updates,
@@ -95,7 +95,7 @@ describe('integrated setup with delayed terminal answers', function() {
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
       startup('bash'),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'y' },
-      { prompt: 'Enable Ballin tab completion? ', answer: 'n' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
       { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'y' },
       ...updates,
       { prompt: 'Update Node.js LTS through NVM? [Y/n] ', answer: 'n' },
@@ -115,7 +115,7 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true });
     const result = runInteractiveSetup(sandbox, publicCommand('README.md'), [
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' }, startup('bash'),
-      { prompt: 'Enable Ballin tab completion? ', answer: 'n' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
       { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'n' },
       { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'y' }, ...updates,
       { prompt: 'Share usage analytics to help improve Ballin? [y/N] ', answer: 'n' },
@@ -128,7 +128,7 @@ describe('integrated setup with delayed terminal answers', function() {
     sandbox = createSandbox({ quickstart: true }); selectScenario(sandbox, 'auth');
     const failed = runInteractiveSetup(sandbox, publicCommand('README.md'), [
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' }, startup('bash'),
-      { prompt: 'Enable Ballin tab completion? ', answer: 'n' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
       { prompt: 'Set up private backups to GitHub? [y/N] ', answer: 'y' },
       { prompt: 'GitHub hostname [github.com]: ', answer: '' },
     ], 'bash');
@@ -204,7 +204,7 @@ describe('integrated setup with delayed terminal answers', function() {
       { prompt: 'Use NVM with Node.js LTS instead? [y/N] ', answer: 'n' }, startup('bash'),
       { prompt: 'so it works in new Terminal windows? [y/N] ', answer: 'n' },
       { prompt: 'Proceed with installation? [y/N] ', answer: 'y' },
-      { prompt: 'Enable Ballin tab completion? ', answer: 'n' },
+      { prompt: 'Enable Ballin tab completion in ~/.bash_profile? [y/N] ', answer: 'n' },
       { prompt: 'Review your Ballin preferences? [Y/n] ', answer: 'n' },
     ], 'bash');
     assert.equal(result.status, 0, result.stdout + result.stderr);

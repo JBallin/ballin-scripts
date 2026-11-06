@@ -37,7 +37,7 @@ describe('optional completion setup', () => {
   for (const answer of ['n', 'N', '']) {
     it(`shows only the later-enablement link after a completed No (${JSON.stringify(answer)})`, () => {
       const output = offer([answer]);
-      assert.include(output, 'File to update: ~/.zshrc\nEnable Ballin tab completion? [y/N] ');
+      assert.include(output, 'Enable Ballin tab completion in ~/.zshrc? [y/N] ');
       assert.include(output, 'i Enable it later:\nhttps://example.test/install#startup-files-and-manual-activation');
       assert.notInclude(output, 'Tab completion skipped.');
       assert.notInclude(output, 'Optional tab completion');
@@ -48,7 +48,7 @@ describe('optional completion setup', () => {
     const output = offer(['invalid', 'y']);
     assert.include(output, 'Enter Yes or No.');
     assert.notInclude(output, 'Please enter');
-    assert.equal(output.split('Enable Ballin tab completion? [y/N] ').length - 1, 2);
+    assert.equal(output.split('Enable Ballin tab completion in ~/.zshrc? [y/N] ').length - 1, 2);
     assert.include(output, 'Tab completion enabled.');
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
   });
@@ -82,7 +82,7 @@ describe('optional completion setup', () => {
           },
         });
         assert.isFalse(events.some(event => event.includes('Optional tab completion')));
-        if (eofAt !== 0) assert.include(events, 'write:File to update: ~/.zshrc');
+        if (eofAt !== 0) assert.include(events, 'prompt:Enable Ballin tab completion in ~/.zshrc? [y/N] ');
         if (presentation === 'installation') assert.equal(events[0], 'write:');
         assert.equal(events.filter(event => event === 'write:').length, (presentation === 'installation' ? 1 : 0) + (eofAt === 0 ? 1 : 0));
         assert.equal(question, eofAt === 0 ? 1 : 2);
@@ -91,7 +91,7 @@ describe('optional completion setup', () => {
     }
   }
   for (const alreadyEnabled of [false, true]) {
-    it(`separates a resolved installation completion target only when needed (already enabled: ${alreadyEnabled})`, () => {
+    it(`separates a resolved installation completion question only when needed (already enabled: ${alreadyEnabled})`, () => {
       if (alreadyEnabled) fs.writeFileSync(path.join(home, '.zshrc'), `${activationLine('zsh')}\n`);
       const modulePath = path.resolve(__dirname, '../commands/completion_setup.ts');
       const script = 'require(process.argv[1]).offerCompletionSetup("guide", { presentation: "installation", interactive: true,'
@@ -102,7 +102,7 @@ describe('optional completion setup', () => {
       assert.equal(result.status, 0, result.stderr);
       if (alreadyEnabled) assert.equal(result.stdout, '');
       else {
-        assert.include(result.stdout, '\nFile to update: ~/.zshrc\nQUESTION:Enable Ballin tab completion?');
+        assert.include(result.stdout, '\nQUESTION:Enable Ballin tab completion in ~/.zshrc?');
         assert.notInclude(result.stdout, 'Optional tab completion');
         assert.equal(result.stdout.split('QUESTION:').length - 1, 1);
       }
@@ -185,7 +185,7 @@ describe('optional completion setup', () => {
         prompt: (text: string) => { questions.push(text); return { text: answers.shift()!, eof: false }; },
       });
       assert.equal(questions[0], `Zsh settings directory [Enter for home (~), an absolute directory, or skip]: `);
-      assert.equal(questions[1], `Enable Ballin tab completion? [y/N] `);
+      assert.equal(questions[1], `Enable Ballin tab completion in ~/.zshrc? [y/N] `);
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
     });
   }
@@ -196,12 +196,13 @@ describe('optional completion setup', () => {
       const questions: string[] = []; const output: string[] = [];
       offerCompletionSetup('guide', { env, interactive: true, write: (text: string) => output.push(text),
         prompt: (text: string) => {
-          assert.deepEqual(output, ['File to update: ~/custom/.zshrc']);
+          assert.isEmpty(output);
+          assert.equal(text, 'Enable Ballin tab completion in ~/custom/.zshrc? [y/N] ');
           assert.isFalse(fs.existsSync(env.BALLIN_SETUP_PROFILE));
           questions.push(text); return answer;
         },
       });
-      assert.deepEqual(questions, ['Enable Ballin tab completion? [y/N] ']);
+      assert.deepEqual(questions, ['Enable Ballin tab completion in ~/custom/.zshrc? [y/N] ']);
       assert.isFalse(fs.existsSync(env.BALLIN_SETUP_PROFILE));
     }
     fs.symlinkSync(path.join(home, 'elsewhere'), env.BALLIN_SETUP_PROFILE);
@@ -241,7 +242,7 @@ describe('optional completion setup', () => {
     fs.mkdirSync(profile);
     assert.include(offer(['y']), 'could not finish');
     fs.rmdirSync(profile);
-    assert.include(offer(['y'], true, (prompt) => { if (prompt.startsWith('Enable Ballin tab completion?')) fs.symlinkSync(outside, profile); }), 'could not finish');
+    assert.include(offer(['y'], true, (prompt) => { if (prompt.startsWith('Enable Ballin tab completion in ')) fs.symlinkSync(outside, profile); }), 'could not finish');
     assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'keep');
   });
   it('contains filesystem and prompt failures with manual fallback', () => {
@@ -271,7 +272,7 @@ describe('optional completion setup', () => {
     const script = 'require("tty").isatty = (fd) => fd === 0; require(process.argv[1]).offerCompletionSetup("guide");';
     const result = spawnSync(process.execPath, ['-e', script, path.join(__dirname, '..', 'commands', 'completion_setup.ts')], { encoding: 'utf8', input: 'home\ny\n', env: testChildEnvironment(env) });
     assert.strictEqual(result.status, 0, result.stderr);
-    assert.include(result.stdout, 'Enable Ballin tab completion?');
+    assert.include(result.stdout, 'Enable Ballin tab completion in ~/.zshrc?');
     assert.include(fs.readFileSync(path.join(home, '.zshrc'), 'utf8'), activationLine('zsh'));
   });
   it('rejects a startup directory that is a file or link', () => {

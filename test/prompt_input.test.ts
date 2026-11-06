@@ -209,12 +209,13 @@ describe('plain prompt input contracts', function() {
       sandbox = createSandbox();
       const script = `const c=require(process.argv[1]); c.offerCompletionSetup('https://example.test/install', {interactive:true,env:{...process.env,SHELL:'/bin/bash',BALLIN_SETUP_PROFILE:process.env.HOME+'/.bashrc'}});`;
       const result = runInteractiveSetup(sandbox, [process.execPath, '-e', script, path.resolve(__dirname, '../commands/completion_setup.ts')], [
-        { prompt: 'Enable Ballin tab completion? [y/N] ', answer, raw: label === undefined },
+        { prompt: 'Enable Ballin tab completion in ~/.bashrc? [y/N] ', answer, raw: label === undefined },
       ]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const output = result.stdout.replace(/\r\n/gu, '\n');
-      assert.include(output, 'File to update: ~/.bashrc\n');
-      assert.include(output, '\x1b[1;32m?\x1b[0m Enable Ballin tab completion? [y/N] ');
+      assert.notInclude(output, 'File to update:');
+      assert.notInclude(output, 'Startup file:');
+      assert.include(output, '\x1b[1;32m?\x1b[0m Enable Ballin tab completion in ~/.bashrc? [y/N] ');
       assert.notInclude(output, 'Optional tab completion');
       assert.notInclude(output, '\x1b[1mN\x1b[0m');
       if (label) assert.include(output, '\x1b[36m' + label + '\x1b[0m');
@@ -230,6 +231,37 @@ describe('plain prompt input contracts', function() {
         assert.equal(output.includes('Tab completion skipped.'), label === undefined);
         assert.isFalse(fs.existsSync(path.join(sandbox.home, '.bashrc')));
       }
+    });
+  }
+  for (const display of [
+    { name: 'wide', columns: 120, term: 'xterm', noColor: false },
+    { name: 'narrow', columns: 32, term: 'xterm', noColor: false },
+    { name: 'dumb', columns: 32, term: 'dumb', noColor: false },
+    { name: 'NO_COLOR', columns: 32, term: 'xterm', noColor: true },
+  ]) {
+    it(`keeps a long custom completion target inline before default-No consent (${display.name})`, () => {
+      sandbox = createSandbox();
+      const directory = path.join(sandbox.home, 'custom settings', 'z'.repeat(90));
+      fs.mkdirSync(directory, { recursive: true });
+      const target = path.join(directory, '.zshrc');
+      const question = `Enable Ballin tab completion in ~/custom settings/${'z'.repeat(90)}/.zshrc? [y/N] `;
+      const script = `if(process.argv[3]==='true')process.env.NO_COLOR='1';
+        console.log('KEEP');require(process.argv[1]).offerCompletionSetup('guide',
+        {interactive:true,env:{...process.env,SHELL:'/bin/zsh',BALLIN_SETUP_PROFILE:process.argv[2]}});console.log('DONE');`;
+      const result = runInteractiveSetup(sandbox, [process.execPath, '-e', script,
+        path.resolve(__dirname, '../commands/completion_setup.ts'), target, String(display.noColor)],
+      [{ prompt: question, answer: '' }], undefined, { columns: display.columns, term: display.term });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, question);
+      assert.notInclude(result.stdout, 'File to update:');
+      assert.notInclude(result.stdout, 'Zsh settings directory');
+      assert.isFalse(fs.existsSync(target));
+      const screen = promptScreen(result.stdout, display.columns).replaceAll('\n', '');
+      assert.include(screen, 'KEEP'); assert.include(screen, 'z'.repeat(90)); assert.include(screen, 'DONE');
+      assert.isBelow(screen.indexOf('KEEP'), screen.indexOf('Enable Ballin tab completion'));
+      assert.isBelow(screen.indexOf('Enable Ballin tab completion'), screen.indexOf('DONE'));
+      if (display.term === 'dumb' || display.noColor) assert.notInclude(result.stdout, '\x1b');
+      else assert.include(result.stdout, '\x1b[36mNo\x1b[0m');
     });
   }
   it('confirms empty Enter as Create in the actual backup setup flow without creating a destination', () => {
