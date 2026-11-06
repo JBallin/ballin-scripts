@@ -340,10 +340,38 @@ def gallery_html(manifest, files, base):
             lines.append(f'<p class="provenance">Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>{html.escape(entry["edits"])}</p>')
             lines.append('<details><summary>Example output</summary>')
             for index, image in enumerate(entry['images'], 1):
-                lines.append(f'<figure><a href="{base}/{image}"><img loading="lazy" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, rendered page {index}. Matching text follows."></a><figcaption>Page {index} of {len(entry["images"])}</figcaption></figure>')
-            text = html.escape(files[entry['text']].decode('utf-8'))
-            lines.append(f'<details><summary>Text version</summary><pre><code>{text}</code></pre><a href="{base}/{entry["text"]}">Download text</a></details></details></article>')
+                viewer = image.removesuffix('.png') + '.html'
+                width, height = struct.unpack('>II', files[image][16:24])
+                lines.append(f'<figure><a href="{base}/{viewer}"><img loading="lazy" width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, rendered page {index}. Open full-size image."></a><figcaption>Page {index} of {len(entry["images"])} · <a href="{base}/{viewer}">Open full-size image ({width} × {height})</a></figcaption></figure>')
+            lines.append(transcript_html(entry, files, base) + '</details></article>')
     return '\n'.join(lines)
+
+
+def transcript_html(entry, files, base, suffix=''):
+    identifier = entry['id'] + suffix
+    text = html.escape(files[entry['text']].decode('utf-8'))
+    return (f'<details id="transcript-{identifier}"><summary>Text version</summary>'
+            f'<button type="button" hidden data-copy="text-{identifier}" data-status="copy-status-{identifier}" aria-describedby="copy-status-{identifier}">Copy text</button>'
+            f'<span id="copy-status-{identifier}" class="copy-status" role="status" aria-live="polite"></span>'
+            f'<pre><code id="text-{identifier}">{text}</code></pre>'
+            f'<a download href="{base}/{entry["text"]}">Download text</a></details>')
+
+
+def image_pages(manifest, files, base):
+    pages = []
+    for entry in manifest['entries']:
+        for index, image in enumerate(entry['images'], 1):
+            width, height = struct.unpack('>II', files[image][16:24])
+            title = html.escape(entry['title'])
+            content = (f'<h1>{title}</h1><p class="image-actions"><a href="{base}/gallery.html#entry-{entry["id"]}">Back to gallery example</a>'
+                       f'<a href="#transcript-{entry["id"]}-image">Matching text</a></p>'
+                       f'<p>Full-size rendered image, {width} × {height} pixels. Scroll the image area or pinch to zoom. '
+                       f'Page {index} of {len(entry["images"])}. {html.escape(entry["kind"])} · Source: <code>{entry["sourceRevision"]}</code></p>'
+                       f'<p>{html.escape(entry["edits"])}</p>'
+                       f'<div class="full-image" tabindex="0" role="region" aria-label="Full-resolution terminal output"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Matching text follows."></div>'
+                       + transcript_html(entry, files, base, '-image'))
+            pages.append({'path': image.removesuffix('.png') + '.html', 'title': entry['title'], 'source': 'tools/output-gallery/README.md', 'content': content})
+    return pages
 
 
 class Links(HTMLParser):
@@ -410,17 +438,20 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
     template = (ROOT / 'site/page.html').read_text()
     if manifest:
         pages.append({'path': 'gallery.html', 'title': 'Output gallery', 'source': 'tools/output-gallery/README.md', 'content': gallery_html(manifest, files, base)})
+        pages.extend(image_pages(manifest, files, base))
     work = Path(tempfile.mkdtemp(prefix='.site-build-', dir=output.parent))
     try:
         for page in pages:
-            values = {'title': html.escape(page['title']), 'canonical': origin + base + '/' + page['path'], 'base': base,
+            values = {'title': html.escape(page['title']), 'canonical': origin + base + '/' + urllib.parse.quote(page['path']), 'base': base,
                       'galleryNav': f'<a href="{base}/gallery.html">Gallery</a>' if manifest else '',
-                      'content': page['content'], 'source': source_base + '/' + page['source']}
+                      'content': page['content'], 'source': source_base + '/' + urllib.parse.quote(page['source'])}
             rendered = re.sub(r'\{\{(\w+)\}\}', lambda m: values[m[1]], template)
             target = work / page['path']
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(rendered)
         shutil.copyfile(ROOT / 'site/style.css', work / 'style.css')
+        for asset in ('favicon.svg', 'gallery.js'):
+            shutil.copyfile(ROOT / 'site' / asset, work / asset)
         for path in tracked:
             if path.startswith('docs/assets/') and Path(path).suffix in ('.png', '.svg'):
                 target = work / path
@@ -434,7 +465,7 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
             (work / 'gallery/manifest.json').write_bytes(json_bytes(manifest))
         (work / '.nojekyll').write_text('')
         (work / 'build.json').write_bytes(json_bytes({'sourceRevision': revision, 'sourceWorktreeDirty': dirty, 'bundle': pin}))
-        urls = ''.join('<url><loc>' + html.escape(origin + base + '/' + p['path']) + '</loc></url>' for p in pages)
+        urls = ''.join('<url><loc>' + html.escape(origin + base + '/' + urllib.parse.quote(p['path'])) + '</loc></url>' for p in pages)
         (work / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + urls + '</urlset>')
         (work / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: ' + origin + base + '/sitemap.xml\n')
         verify_site(work, base)
@@ -451,11 +482,12 @@ def readme_example(bundle, image_base=None):
     require(len(entries) == 1, 'Designate exactly one canonical README Update entry')
     entry = entries[0]
     images = ''
+    disclosure = html.escape(entry['edits']).replace('\n', '<br>')
     if image_base:
         require(re.fullmatch(r'https://[a-zA-Z0-9.-]+(?:/[a-zA-Z0-9_-]+)*', image_base), 'Invalid image base')
         images = '\n'.join(f'<img src="{image_base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}">' for index, image in enumerate(entry['images'], 1)) + '\n\n'
     # HTML escaping prevents recorded text from closing the details or code block.
-    print('<details>\n<summary>Example output</summary>\n\n' + html.escape(entry['kind']) + ' · Source: `' + entry['sourceRevision'] + '`\n\n' + html.escape(entry['edits']) + '\n\n' + images + '<details>\n<summary>Text version</summary>\n\n<pre><code>' + html.escape(files[entry['text']].decode()) + '</code></pre>\n\n</details>\n</details>')
+    print('<details>\n<summary>Example output</summary>\n\n' + html.escape(entry['kind']) + ' · Source: `' + entry['sourceRevision'] + '`\n\n<p>' + disclosure + '</p>\n\n' + images + '<details>\n<summary>Text version</summary>\n\n<pre><code>' + html.escape(files[entry['text']].decode()) + '</code></pre>\n\n</details>\n</details>')
 
 
 def main():

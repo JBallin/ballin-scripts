@@ -19,6 +19,9 @@ import importlib.util
 spec = importlib.util.spec_from_file_location('ballin_site', Path(__file__).with_name('site.py'))
 site = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(site)
+preview_spec = importlib.util.spec_from_file_location('ballin_preview', Path(__file__).with_name('preview.py'))
+preview = importlib.util.module_from_spec(preview_spec)
+preview_spec.loader.exec_module(preview)
 
 
 def png():
@@ -165,6 +168,21 @@ class BundleTests(unittest.TestCase):
             self.assertIn('<img src="https://jballin.github.io/ballin-scripts/gallery/update/output-001.png" alt="Update ]', out.getvalue())
             self.assertIn('&quot; &lt;tag&gt;', out.getvalue())
 
+    def test_readme_disclosure_is_literal_markdown_and_html(self):
+        self.manifest['entries'][0]['edits'] = 'Reviewed omission.\n\n[Injected link](https://example.invalid/) and ![tracking](https://example.invalid/image.png) <img src="https://example.invalid/html.png">'
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / 'disclosure.zip'
+            bundle.write_bytes(archive(self.manifest, self.files))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                site.readme_example(bundle)
+            payload = {'pages': [{'path': 'README.md', 'text': out.getvalue()}], 'base': '', 'sourceBase': 'https://example.com/source'}
+            content = json.loads(subprocess.check_output(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload)))[0]['content']
+            self.assertIn('[Injected link](https://example.invalid/)', content)
+            self.assertNotIn('<img ', content)
+            self.assertNotIn('<a href="https://example.invalid', content)
+            self.assertIn('&lt;img src=', content)
+
     def mock_api(self, mutation=None, annotated=False):
         release = {'id': 11, 'tag_name': 'v1.0.0', 'draft': False, 'prerelease': False, 'published_at': '2026-11-05', 'assets': [{'id': 22}]}
         asset = {**self.pin['asset'], 'state': 'uploaded', 'digest': 'sha256:' + site.digest(self.data)}
@@ -300,9 +318,58 @@ class BuildTests(unittest.TestCase):
         self.assertIn('github.com/JBallin/ballin-scripts/blob/', source)
         site.verify_site(self.output, '/ballin-scripts')
 
+    def test_favicon_copy_download_and_full_resolution_pages(self):
+        page = (self.output / 'gallery.html').read_text()
+        self.assertIn('href="/ballin-scripts/favicon.svg"', page)
+        self.assertIn('data-copy="text-update"', page)
+        self.assertIn('role="status"', page)
+        self.assertIn('download href="/ballin-scripts/gallery/update/text.txt"', page)
+        self.assertIn('href="/ballin-scripts/gallery/update/output-001.html"', page)
+        viewer = (self.output / 'gallery/update/output-001.html').read_text()
+        self.assertIn('width="1" height="1"', viewer)
+        self.assertIn('tabindex="0" role="region"', viewer)
+        self.assertIn('/ballin-scripts/gallery.html#entry-update', viewer)
+        self.assertIn('&lt;untrusted &amp; text&gt;', viewer)
+        self.assertEqual((self.output / 'favicon.svg').read_bytes(), (site.ROOT / 'site/favicon.svg').read_bytes())
+
+    def test_copy_success_failure_and_repeat_activation(self):
+        subprocess.run(['node', str(site.ROOT / 'tools/site/test_interactions.cjs')], check=True)
+
+    def test_preview_selects_only_one_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            selected = parent / 'chosen'
+            selected.mkdir()
+            (selected / 'index.html').write_text('public')
+            (parent / 'private.txt').write_text('private')
+            (selected / 'escape').symlink_to(parent / 'private.txt')
+            (selected / 'nested').mkdir()
+            (selected / 'nested/index.html').symlink_to(parent / 'private.txt')
+            self.assertEqual(preview.selected_file(selected, '/ballin-scripts', '/ballin-scripts/index.html'), (selected / 'index.html').resolve())
+            for path in ['/private.txt', '/ballin-scripts/../private.txt', '/ballin-scripts/%2e%2e/private.txt', '/ballin-scripts/escape', '/ballin-scripts/nested/']:
+                with self.subTest(path=path):
+                    self.assertIsNone(preview.selected_file(selected, '/ballin-scripts', path))
+
+    def test_heading_number_suffix_collisions_reserve_every_emitted_id(self):
+        payload = {'pages': [{'path': 'README.md', 'text': '# Heading\n\n## Setup\n\n## Setup\n\n## Setup-1\n\n## Setup\n\n## Setup-1\n'}], 'base': '/ballin-scripts', 'sourceBase': 'https://example.com/source'}
+        page = json.loads(subprocess.check_output(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload)))[0]
+        ids = __import__('re').findall('id="([^"]+)"', page['content'])
+        self.assertEqual(ids, ['heading', 'setup', 'setup-1', 'setup-1-1', 'setup-2', 'setup-1-2'])
+
+    def test_relative_url_contract_preserves_encoded_filename_delimiters(self):
+        payload = {'pages': [{'path': 'docs/intro.md', 'text': '# Intro\n\n[Hash](a%23b.md)\n\n[Source](../tools/a%23b.py)'}, {'path': 'docs/a#b.md', 'text': '# Hash'}], 'base': '/ballin-scripts', 'sourceBase': 'https://example.com/source'}
+        page = json.loads(subprocess.check_output(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload)))[0]
+        self.assertIn('href="/ballin-scripts/docs/a%23b.html"', page['content'])
+        self.assertIn('href="https://example.com/source/tools/a%23b.py"', page['content'])
+        for link in ['/README.md', 'a%2Fb.md']:
+            payload['pages'][0]['text'] = '# Intro\n\n[Unsupported](' + link + ')'
+            result = subprocess.run(['node', str(site.ROOT / 'tools/site/markdown.cjs')], input=site.json_bytes(payload), capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b'Error:', result.stderr)
+
     def test_accessible_nested_details_and_escaped_text(self):
         value = (self.output / 'gallery.html').read_text()
-        self.assertEqual(value.count('<details>'), 2)
+        self.assertEqual(value.count('<details'), 2)
         self.assertNotIn('<details open', value)
         self.assertIn('<summary>Text version</summary>', value)
         self.assertIn('&lt;untrusted &amp; text&gt;', value)

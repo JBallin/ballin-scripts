@@ -8,6 +8,14 @@ preparation belongs to [Releasing Ballin](releasing.md); VM validation belongs t
 [Installation testing](installation-testing.md). The site does not change the
 installer's stable release selection or require gallery regeneration per release.
 
+## Build approach
+
+The bounded Python and markdown-it builder reuses the project's existing
+Node/Python toolchain and keeps the tested documentation output together with
+the separate bundle-safety pipeline. Jekyll is also a valid option. Keeping this
+builder means maintaining its dependencies, Markdown rendering, link rewriting
+and heading compatibility as the documentation evolves.
+
 ## Build locally
 
 Use Node.js from `.nvmrc` and Python 3.9 or newer. From the repository root:
@@ -16,15 +24,22 @@ Use Node.js from `.nvmrc` and Python 3.9 or newer. From the repository root:
 npm ci --ignore-scripts
 npm ci --prefix site --ignore-scripts
 python3 tools/site/test_site.py
-python3 tools/site/site.py build --output .site-output/review --base /review
-python3 -m http.server 8000 --directory .site-output
+python3 tools/site/site.py build --output .site-output/review/ballin-scripts
+python3 tools/site/preview.py --site .site-output/review/ballin-scripts
 ```
 
-Open `http://localhost:8000/review/index.html`. The default build targets
-`/ballin-scripts`. For a default-base
-preview, use `--output .site-output/ballin-scripts` and open
-`http://localhost:8000/ballin-scripts/index.html`. Use a new output directory for
-each build. Existing output is refused. Failed builds retain a `.site-build-*`
+Open `http://127.0.0.1:8000/ballin-scripts/index.html`. The preview server binds
+only to loopback and serves only the selected complete snapshot, not its parent
+or other ignored evidence. `--port 0` chooses a free port and prints its URL/PID.
+Use the same `--base` for build and preview if changing the default project path.
+Stop with Control-C, or send TERM to that printed PID. Restart the same command
+to serve that snapshot again.
+
+These are one-time builds: there is no file watcher or browser live reload.
+Rebuild into a new directory and serve that output to inspect source changes.
+The root package has no site build/serve wrapper; `npm --prefix site test` runs
+the site checks after both dependency installs. Existing output is refused.
+Failed builds retain a `.site-build-*`
 directory beside the chosen output for diagnosis; successful snapshots replace
 nothing. Never point build or packaging output at raw captures or source inputs.
 `.site-output/`, `site/node_modules/` and Python caches are ignored.
@@ -35,8 +50,18 @@ Changing it to `release` mode activates one approved bundle. Missing, altered or
 unavailable pinned assets stop the build; they never fall back to bootstrap.
 The previous live deployment remains available when assembly or validation fails.
 
+For integrated offline review, pass `--pin /path/to/reviewed-pin.json` and
+`--bundle /path/to/matching.zip` to `build`, then serve that selected output.
+The ZIP still must match its pin. Synthetic review bundles must remain labeled
+as synthetic; an offline review does not establish a live approved product
+Release. The committed bootstrap configuration does not require any bundle.
+
 The build checks local pages, project base paths, fragments and image alt text.
-Headings retain GitHub-style fragment IDs. Non-documentation source links lead to
+It supports repository-relative Markdown/asset links and section fragments;
+root-relative repository links and encoded path separators are refused with an
+actionable error. Encoded filename delimiters remain path data. Heading IDs and
+rendering are tested against the canonical docs, rather than promising universal
+GitHub rendering parity. Non-documentation source links lead to
 the exact site source commit on GitHub. The build emits a sitemap and canonical
 URLs for the expected project address, `https://jballin.github.io/ballin-scripts/`.
 That address is a configuration target until actual Pages publication verifies it.
@@ -125,10 +150,9 @@ gh release upload v1.0.0 .site-output/ballin-gallery-v1.0.0.zip \
 
 Do not use `--clobber`. Use a new asset name for replacement output. Preserve the
 previous asset and pin until the replacement has been reviewed and retrieved.
-No release asset upload/download or post-publication attachment has been verified
-against a live Release by this implementation. Local mock tests cover the contract;
-the first actual handoff must verify permissions, identity, hashes and protection
-compatibility without changing settings. Actions artifacts are transient build
+Local mock tests cover the transfer contract. Verify permissions, identity,
+hashes and post-publication attachment/protection compatibility through an actual
+handoff before relying on it, without changing settings. Actions artifacts are transient build
 transport, not the approved gallery's durable storage.
 
 ## Pin and verify
@@ -191,11 +215,8 @@ labels. Image, site transcript and generated README fragment share the one bundl
 input derived from the canonical scenario/capture source. Do not maintain a second
 example. Actual capture sources remain private unless separately approved.
 
-Do not add public image links, repository About metadata, launch-blog links or a
-published-gallery link in the introduction before the destination exists and is
-verified. Confirm browser, image-download and fragment behavior after publication.
-Keep the README self-contained. Do not change acknowledgments to claim Pages
-hosting before it happens.
+Validate browser navigation, full-size image viewing, text copy/download and
+fragments when publishing or changing public links. Keep the README self-contained.
 
 ## Deploy and recover
 
