@@ -34,14 +34,13 @@ See [Backup sources and sensitivity](backup-sources.md) for what is collected,
 
 ## Building and running the project
 
-Thanks also to [TypeScript](https://www.typescriptlang.org/),
-[ESLint](https://eslint.org/), [Mocha](https://mochajs.org/),
-[Chai](https://www.chaijs.com/), and [c8](https://github.com/bcoe/c8) for the
-development checks, tests, and coverage tools. Ballin's Node.js CLI has no
-runtime npm dependencies.
+[TypeScript](https://www.typescriptlang.org/), [ESLint](https://eslint.org/),
+[Mocha](https://mochajs.org/), [Chai](https://www.chaijs.com/), and
+[c8](https://github.com/bcoe/c8) support development checks, tests, and coverage.
+Ballin's Node.js CLI has no runtime npm dependencies.
 
-Thanks also to [Tart](https://github.com/openai/tart) for macOS virtual machines
-used to test installation.
+[Tart](https://github.com/openai/tart) provides macOS virtual machines used to
+test installation.
 
 [GitHub Actions](https://github.com/features/actions) runs automated checks, and
 [Cloudflare Workers](https://developers.cloudflare.com/workers/) and
