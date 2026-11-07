@@ -1,39 +1,39 @@
 # Local output gallery
 
-Maintainer review tooling for [#620](https://github.com/JBallin/ballin-scripts/issues/620).
-On macOS, use Node.js 26 (`.nvmrc`), Python 3 and Xcode command line tools
-(Swift/AppKit). No npm dependencies or product execution are needed. From the
-repository root:
+Maintainer tooling for generating and reviewing terminal examples. For the full
+release-to-site sequence, start with the
+[site/gallery runbook](../../docs/website.md#start-to-finish-workflow).
+
+## Generate review output
+
+Use a trusted tooling checkout on macOS, Node.js from `.nvmrc` (26), Python 3.9+
+and Xcode command line tools with Swift/AppKit. Generation needs no npm packages
+and never executes product installation or maintenance. Site preview additionally
+needs the [site dependencies](../../docs/website.md#build-locally). Actual recordings
+need separately authorized disposable VM work and the access safeguards below.
+
+Choose the reviewed full product SHA, available in local Git objects. Replace the
+placeholder below, and choose a new output directory for each attempt:
 
 ```sh
-python3 tools/output-gallery/run.py --source 4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9
-cat .output-gallery/4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9/staged-02/preview.ansi
-open .output-gallery/4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9/staged-02/output-001.png
+GALLERY_SOURCE=FULL_40_CHARACTER_PRODUCT_SHA
+git rev-parse "${GALLERY_SOURCE}^{commit}"
+python3 tools/output-gallery/run.py --source "$GALLERY_SOURCE" \
+  --output .output-gallery/review-1
+cat .output-gallery/review-1/index.md
 ```
 
-Use a full source SHA available in local Git objects. The example selects the
-repaired `version-aware-install` stack; refresh it as reviewed product source
-changes. These are current-stack review examples, not stable-release documentation
-examples. The separately approved v1.0.0 capture/publication sequence is unchanged.
+Confirm the resolved SHA is exactly the selected SHA. Review the generated index,
+PNGs, matching text and provenance using an authorized viewer. Identify whether
+the source is a candidate, an explicit-SHA run or a published stable release;
+these are different claims. Initial real stable-install captures follow approved
+release publication, not an unpublished version URL.
 
-`--output /tmp/ballin-gallery-review` selects another new directory. Existing
-output is refused to preserve evidence. Generated assets stay out of Git; the
-default `.output-gallery/` is ignored. With approval for the specific files and
-destination, attach useful sanitized captures/transcripts to the relevant PR. Failed builds retain a `.gallery-build-*`
-directory for diagnosis.
-
-The workflow reuses the preserved PR #662 scenarios, pure formatters, source
-snapshots and PTY verifier, with the AppKit renderer adapted from PR #667 at
-`64d48dca63fc8833c366539a487d615dbda45d3f`. The update example is unchanged.
-Historical fixtures/provenance remain in `../pr-662-output-gallery`; new builds
-record the selected source, exact tool bytes/hashes, dependencies and regeneration
-command. Scenarios are maintained for the current stack; review their source
-anchors and flow when refreshing. Executable formatter/helper bytes must match
-`../pr-662-output-gallery/generation-runtime.json`, reviewed independently of the
-candidate. Changed formatters are refused before Node runs; review them and update
-those pins as a tooling change. Historical replay keeps its separate original
-`trusted-runtime.json` pins. Candidate help and other source remain data. Use
-a trusted checkout of the tooling itself.
+Existing output is refused to preserve evidence. `.output-gallery/` stays ignored;
+never use a raw-input path as output. A failed attempt retains `.gallery-build-*`
+for diagnosis. Inspect the cause, preserve original evidence and choose a new
+output path; do not remove trust checks to make generation succeed. Formatter
+changes require review against `generation-runtime.json` before they can execute.
 
 Each entry contains labeled ANSI preview, matching `text.txt`, paginated PNGs and
 provenance. Start with the generated `index.md`, grouped into Install & Quickstart,
@@ -64,7 +64,7 @@ to execute. Keep raw inputs immutable; disclose normalization separately. The
 renderer adds classification/source/scenario/page captions to PNGs: distinguish
 those from program output and compare every continuation page with matching text.
 
-The gallery is useful for an agent's visual/interaction review: it groups examples,
+The gallery supports visual/interaction review: it groups examples,
 opens full-size images and offers selectable, copyable, downloadable text. Raw
 recordings and provenance are better for exact fidelity and outcome questions;
 neither replaces the other. Follow [website QA](../../docs/website.md#website-qa)
@@ -210,7 +210,7 @@ missing live journey. The Update entry is the coordination point for eventually
 reusing the same canonical image and text in the README Update example; this
 tooling does not publish or independently change that example.
 
-### Canonical README Update illustration
+## Canonical README Update illustration
 
 `update-example.txt` is the shared condensed, staged Update sample. Its ellipses,
 backup time and destination are illustrative, not an actual completed run. The
@@ -229,10 +229,196 @@ and provenance together. A matching phase list does not prove that every
 illustrated outcome occurred. Recheck the synthetic backup details and upstream
 Homebrew heading when editing the sample.
 
-Use the existing [site bundle/export workflow](../../docs/website.md#curate-a-bundle)
-to select this entry with `readmeUpdate: true` and export the same matching text
-through `site.py readme-example`. Include `--image-base` only for a verified public
-destination. The exporter keeps the image visible and the matching text expandable;
-do not add a second sample printer/renderer or commit its generated PNG to Git.
+Select this entry with `readmeUpdate: true` in the bundle recipe below. Whenever
+that canonical Update entry changes during generation or refresh, exporting and
+checking the README's complete fragment is required:
 
-Run focused checks with `python3 tools/output-gallery/test_gallery.py`.
+```sh
+python3 tools/site/site.py readme-example .site-output/ballin-gallery-assets-v1.0.0.zip
+```
+
+Compare all image pages, actual/staged/source labels and full embedded text with
+README. Update the consumer from this same bundle when the fragment differs;
+do not maintain a separate transcript or wait for a later cleanup task. An
+identical export needs a recorded match check, not an artificial edit. The tool
+prints a fragment; it does not modify README or enforce this synchronization.
+
+After verifying the public destination, add `--image-base https://getballin.com`
+for root hosting (or the configured origin/base for project hosting). The exporter
+keeps images visible and matching text expandable. Prepare a first image-link
+consumer before activation but gate its merge on verified live delivery. For an
+already linked example, coordinate the bundle pin and matching README text in the
+same reviewed publication state. Never add a second renderer or commit its PNG.
+
+## Package approved examples
+
+Review the exact images, text and public disclosures before setting publication
+approval. Local review alone does not authorize public distribution. Create the
+ignored `.site-output/` directory if needed, then use a selection file such as
+`.site-output/selection.json`:
+
+```json
+{
+  "schema": 1,
+  "entries": [{
+    "scenario": "staged-update-example",
+    "id": "update",
+    "title": "Routine Update — condensed illustration",
+    "edits": "Condensed staged illustration; ellipses, backup time and destination are synthetic. No live execution.",
+    "approvedForPublication": false,
+    "readmeUpdate": true
+  }]
+}
+```
+
+Keep approval false until the actual selected files and disclosures are approved;
+`pack` will refuse it. `scenario` selects a generated entry; `id` defines its stable
+public path. Source revision, category and actual/staged classification come from
+the generation manifest. `edits` discloses meaningful edits/omissions publicly.
+Use exactly one canonical README Update designation when exporting that example.
+
+After file-publication approval, set the selected entries' approval to true.
+`--gallery` must name the exact output directory from the generation being
+reviewed, not a neighboring or earlier run. The example below uses `review-1`;
+for the canonical-only command above, use `--gallery .output-gallery/readme-update`.
+Verify that directory's manifest/source and selected entry before packaging:
+
+```sh
+python3 tools/site/site.py pack --gallery .output-gallery/review-1 \
+  --selection .site-output/selection.json \
+  --output .site-output/ballin-gallery-assets-v1.0.0.zip
+python3 tools/site/site.py inspect .site-output/ballin-gallery-assets-v1.0.0.zip
+```
+
+Record the successful command's ZIP size/hash and entry list. Packaging checks
+source hashes and renderer/text equality, removes PNG EXIF/text/time metadata
+without changing encoded pixels or color, and hashes the resulting public bytes.
+The ZIP includes only selected PNGs, UTF-8 text and minimal public provenance;
+raw ANSI, capture manifests, command/answer/environment records, source snapshots
+and tools stay private. Never upload the entire generation directory. Hashes do
+not prove faithful execution or absence of secrets; review still matters.
+
+## Replace selected examples
+
+For a partial refresh, `pack` a replacement-only selection using the existing
+public IDs. Include every page and matching text for each selected entry. Then
+combine it with the approved release-mode pin:
+
+```sh
+python3 tools/site/site.py replace \
+  --replacement .site-output/replacement-examples.zip \
+  --replacement-sha256 REVIEWED_REPLACEMENT_SHA256 --entry update \
+  --output .site-output/ballin-gallery-assets-v1.0.0-refresh-1.zip
+python3 tools/site/site.py inspect .site-output/ballin-gallery-assets-v1.0.0-refresh-1.zip
+```
+
+Use `pack --output .site-output/replacement-examples.zip` for that intermediate ZIP;
+only the final complete ZIP is a release asset. Repeat `--entry` for each selected
+ID. `replace` retrieves the exact pinned release/asset, or accepts `--bundle
+PATH_TO_PRIOR_ZIP` for offline bytes that match the pin's size/hash. `--pin PATH`
+selects another reviewed base. Bootstrap mode has no approved base to preserve.
+
+The replacement must contain exactly the named existing entries. The tool retains
+all other entry metadata/file bytes and order, rebuilds hashes, and applies the
+normal archive/path/image checks. It refuses omissions, unexpected files/IDs and
+existing output. Preserve the README designation, or transfer it by replacing both
+entries together and designating exactly one. Intentional additions/removals need
+a reviewed full selection. Compare the replacement's font, color, width, captions
+and readability with retained neighbors; older entries keep their own revisions.
+
+If the canonical Update entry changed, perform the required
+[README export/compare/update](#canonical-readme-update-illustration) from the final
+complete bundle before activation. If another entry alone changed, verify the
+canonical Update was retained unchanged. Keep the known-good bundle/pin and record
+the candidate hash and replaced/retained IDs. `replace` neither repins nor approves
+publication.
+
+## Preview a candidate bundle
+
+Use a new ignored review pin to inspect a complete site **before uploading**.
+Offline `build --bundle` checks the ZIP bytes but cannot verify a not-yet-uploaded
+asset's GitHub identity. The following recipe deliberately uses placeholder IDs;
+it is not an activation pin, a live release claim or publication approval.
+
+Replace the tag and full product commit below with the intended release target
+(not the tooling commit). Choose fresh paths to preserve previous review records:
+
+```sh
+python3 - .site-output/ballin-gallery-assets-v1.0.0.zip v1.0.0 FULL_PRODUCT_SHA \
+  .site-output/offline-review-pin.json <<'PY'
+import hashlib, json, re, sys
+from pathlib import Path
+bundle, tag, commit, output = sys.argv[1:]
+if not re.fullmatch(r'[0-9a-f]{40}', commit):
+    raise SystemExit('Use the selected full product commit SHA')
+path = Path(bundle)
+data = path.read_bytes()
+pin = {
+    'mode': 'release',
+    'release': {'id': 1, 'tag': tag, 'commit': commit},
+    'asset': {'id': 1, 'name': path.name, 'size': len(data),
+              'sha256': hashlib.sha256(data).hexdigest()}
+}
+with Path(output).open('x') as handle:
+    json.dump(pin, handle, indent=2)
+    handle.write('\n')
+PY
+python3 tools/site/site.py build --pin .site-output/offline-review-pin.json \
+  --bundle .site-output/ballin-gallery-assets-v1.0.0.zip \
+  --output .site-output/candidate-site
+python3 tools/site/preview.py --site .site-output/candidate-site
+```
+
+For a refresh use the final complete refresh ZIP in both commands. Install the
+[site dependencies](../../docs/website.md#build-locally) first, open the printed
+loopback URL and follow [Website QA](../../docs/website.md#website-qa). Inspect
+`build.json`, the complete gallery, every selected page and matching text, and the
+required README fragment. Stop the preview with Control-C. Failed builds preserve
+`.site-build-*`; fix the cause and use a new output path.
+
+**Always supply `--bundle` with this offline pin.** Do not use its placeholder IDs
+for live retrieval or copy it into `site/bundle.json`. After authorized upload,
+replace them with verified real release/asset IDs and recheck tag/commit, name,
+size and hash using [Pin and verify](../../docs/website.md#pin-and-verify).
+
+## Upload the reviewed bundle
+
+First verify the actual stable product release/tag/commit, mutability and intended
+GitHub account/access under
+[the site release-asset procedure](../../docs/website.md#attach-to-the-actual-product-release).
+Use an installed GitHub CLI with existing authorized repository access. Resolve
+missing login/access with the maintainer; do not change accounts or permissions
+automatically. With approval to upload the exact complete ZIP to that release:
+
+```sh
+gh release upload v1.0.0 .site-output/ballin-gallery-assets-v1.0.0.zip \
+  --repo JBallin/ballin-scripts
+```
+
+Use a clear gallery-assets name, including a fresh suffix for replacement output.
+Do not use `--clobber`. If the result is uncertain, inspect the actual release and
+assets before retrying; do not infer success from a partial log or create a
+workaround release. Continue with real-ID retrieval, reviewed pin/README activation
+and authorized Pages deployment in
+[the ordered runbook](../../docs/website.md#start-to-finish-workflow).
+Record the completed steps, exact identities/hashes and next blocked action for
+resumption. Do not put raw capture paths or credentials in public handoff records.
+
+## Tool provenance and checks
+
+The workflow reuses the preserved PR #662 scenarios, pure formatters, source
+snapshots and PTY verifier, with the AppKit renderer adapted from PR #667 at
+`64d48dca63fc8833c366539a487d615dbda45d3f`. Historical fixtures/provenance remain
+in `../pr-662-output-gallery`; new builds
+record the selected source, exact tool bytes/hashes, dependencies and regeneration
+command. Scenarios are maintained for the current stack; review their source
+anchors and flow when refreshing. Executable formatter/helper bytes must match
+`../pr-662-output-gallery/generation-runtime.json`, reviewed independently of the
+candidate. Changed formatters are refused before Node runs; review them and update
+those pins as a tooling change. Historical replay keeps its separate original
+`trusted-runtime.json` pins. Candidate help and other source remain data. Use
+a trusted checkout of the tooling itself.
+
+Run focused checks with `python3 tools/output-gallery/test_gallery.py` for tooling
+changes. Documentation-only edits follow the repository's docs-only validation
+rule; do not run product flows as a documentation check.

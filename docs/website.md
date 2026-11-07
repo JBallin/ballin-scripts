@@ -8,13 +8,42 @@ preparation belongs to [Releasing Ballin](releasing.md); VM validation belongs t
 [Installation testing](installation-testing.md). The site does not change the
 installer's stable release selection or require gallery regeneration per release.
 
-## Build approach
+## Start-to-finish workflow
 
-The bounded Python and markdown-it builder reuses the project's existing
-Node/Python toolchain and keeps the tested documentation output together with
-the separate bundle-safety pipeline. Jekyll is also a valid option. Keeping this
-builder means maintaining its dependencies, Markdown rendering, link rewriting
-and heading compatibility as the documentation evolves.
+Follow this route directly or delegate it. Reuse existing specific approvals;
+bring the maintainer in for missing authority or a new material decision.
+Preparation/review does not authorize access changes or publication.
+
+- **Docs only:** keep the pin, [build/review](#build-locally), then submit; no capture
+  or upload. Consider automatic deployment before merge, as in step 5.
+- **Initial gallery:** follow all steps; retain explicit bootstrap until activation.
+- **Selected refresh:** begin at step 2 with the [replacement recipe](../tools/output-gallery/README.md#replace-selected-examples)
+  and verified pinned base; preserve untouched entries and their source revisions.
+
+1. **Prepare:** choose source and scope under [Releasing Ballin](releasing.md).
+   Test the exact merged SHA before publication; real stable-install captures
+   follow approved publication. Confirm [prerequisites/access](../tools/output-gallery/README.md#generate-review-output).
+2. **Generate and review:** check commands, every image page, matching text and
+   actual/staged/source claims. With approval of the selected public files,
+   [pack/replace and preview](../tools/output-gallery/README.md#package-approved-examples) a verified complete candidate.
+3. **Synchronize README:** export a changed canonical Update from the same bundle
+   using the [shared-example recipe](../tools/output-gallery/README.md#canonical-readme-update-illustration).
+   Check/update every image, label and full embedded transcript before activation;
+   the tools do not edit README automatically.
+4. **Upload separately:** verify the product release/tag/commit, mutability and
+   uploader access, then [upload the exact approved ZIP](../tools/output-gallery/README.md#upload-the-reviewed-bundle).
+   Confirm its actual identity; inspect uncertain results before retrying.
+5. **Activate:** replace offline placeholders with [verified real IDs](#pin-and-verify),
+   retrieve and QA the complete snapshot, including coordinated README text.
+   Authorize deployment **before** relevant `main` merges, which trigger Pages.
+6. **Verify delivery:** check deployment results, public PNG/text bytes and
+   navigation. A first README image-link consumer waits for the verified URL and
+   its own checks/reviews and merge authorization; later refreshes repeat step 3.
+
+Record completed steps, exact revisions/identities/hashes, README consumer and
+next blocked action in ignored records without credentials. On resume, recheck
+branch and external release/workflow state before retrying; an attempt is not
+success. Preserve evidence and follow [recovery](#deploy-and-recover) on failure.
 
 ## Build locally
 
@@ -143,119 +172,39 @@ observed bugs from unverified causes. Keep local screenshots/evidence ignored an
 
 ## Curate a bundle
 
-Generate review evidence deliberately on the local Mac using the
-[output-gallery tooling](../tools/output-gallery/README.md): Node.js 26, Python 3,
-Swift/AppKit and, for actual recordings, separately authorized disposable Tart
-VM work. No capture or rendering runs in Pages CI. Keep private authentication
-outside recordings. Review meaningful prompts, answers, outcomes, redactions,
-wrapping and labels in both PNGs and matching text. Current-stack review captures
-are not the initial stable-release installation examples: those follow the
-approved stable release and verified real runs described in the installation guide.
+Generate and review output deliberately on the local Mac using the
+[gallery recipes](../tools/output-gallery/README.md#generate-review-output).
+Nothing captures or renders in Pages CI. Use the
+[publication selection and packaging recipe](../tools/output-gallery/README.md#package-approved-examples)
+to include only approved images, matching UTF-8 text and minimal public provenance.
+Raw ANSI, command/answer/environment metadata and generation inputs stay private.
+Hash agreement proves byte identity, not faithful execution or absence of secrets.
 
-Select only files separately approved for public distribution. Review approval of
-a local capture alone is not permission to publish it. Put a selection JSON in
-the ignored `.site-output/` directory, for example:
-
-```json
-{
-  "schema": 1,
-  "entries": [{
-    "scenario": "staged-09",
-    "id": "update",
-    "title": "Update and recovery",
-    "edits": "Source-informed staged output; no live execution.",
-    "approvedForPublication": false,
-    "readmeUpdate": true
-  }]
-}
-```
-
-Set `approvedForPublication` to `true` only after approval of the actual selected
-images, display text and public title/disclosure. `scenario` selects a generated
-entry; `id` defines its stable public path. Each entry inherits its source commit,
-category and `actual-vm`/`staged` classification. `edits` is an intentionally public
-disclosure of substantive edits or omissions; review it alongside the output.
-Choose a single canonical Update entry with `readmeUpdate` when ready to coordinate
-the README example. Do not relabel staged output as actual execution.
-
-```sh
-python3 tools/site/site.py pack \
-  --gallery .output-gallery/FULL_SOURCE_SHA \
-  --selection .site-output/selection.json \
-  --output .site-output/ballin-gallery-assets-v1.0.0.zip
-python3 tools/site/site.py inspect .site-output/ballin-gallery-assets-v1.0.0.zip
-```
-
-Packaging verifies generation hashes and the renderer's exact logical-text match.
-It produces a deterministic ZIP and reports its SHA-256, byte size and entry count.
-It removes PNG EXIF, text and time metadata without changing encoded pixels or
-color chunks. Bundle hashes describe those publication bytes, after source hashes
-have verified the original generated files.
-The ZIP contains only selected PNGs, matching UTF-8 text and a minimal public
-manifest with per-file hashes and intentionally public provenance. It excludes raw
-ANSI, command/answer/environment data, capture manifests, private input paths,
-source snapshots, renderer reports and generation tools. Never upload the whole
-gallery directory. Human review is still necessary: hash agreement proves byte
-identity, not absence of secrets or faithful execution. The importer cannot prove
-that a declared actual run happened.
-
-Retain useful PNGs and matching text with source revision and actual/staged labels
-for affected-flow PR review. Use a verified supported attachment method or another
-separately authorized evidence handoff. Do not require captures for
-unrelated engineering changes. Generation cost and recurring refresh scope remain
-unmeasured rather than an every-release refresh requirement.
+Choose one canonical Update entry with `readmeUpdate: true` when preparing the
+shared README example. A staged example remains staged. Review every image page,
+the matching text and disclosures, and record the candidate ZIP's size and SHA-256.
+Use the [offline candidate preview](../tools/output-gallery/README.md#preview-a-candidate-bundle)
+for a complete-site check before upload; its placeholder identity is not a live
+release pin or publication approval.
 
 ## Refresh selected examples
 
-Normal site builds reuse the approved pinned bundle; docs edits do not regenerate
-captures. To refresh one or more examples, first review their complete replacement
-images, matching text and public provenance, then use `pack` above to create a
-replacement-only ZIP. Keep each existing public `id` and include every page of
-each selected example. Update its source revision, actual/staged classification
-and omission disclosure honestly; do not mix a new image with an older transcript.
-Retained examples keep their own revisions; a refresh does not make the whole
-gallery evidence for the replacement's product or rendering-tool version.
-Compare the new examples with retained neighbors for font, color, terminal width,
-page captions and readability. A visual style change may justify refreshing more
-examples, but does not require recapturing the whole gallery.
+Normal builds reuse the pinned bundle. For an asset refresh, follow the
+[replacement recipe](../tools/output-gallery/README.md#replace-selected-examples):
+verify the base pin, replace complete explicitly named entries, and preserve the
+rest byte-for-byte. Compare rendering with retained neighbors for visual consistency.
+The canonical README designation must remain, or transfer within the selected set.
 
-Record the reviewed replacement ZIP's SHA-256 from `pack`. With a release-mode
-`site/bundle.json`, create a new complete candidate:
+If the canonical Update entry changes, the same task must export and check the
+README's image list, labels and full embedded text against the candidate bundle,
+and update the consumer when they differ. Coordinate that source change with pin
+activation; do not deploy the new image and leave README text for later. The
+[shared Update instructions](#shared-update-example-and-public-links) cover the
+stable URL and historical README caveat. If only another entry changed, verify
+that the canonical Update entry was retained unchanged.
 
-```sh
-python3 tools/site/site.py replace \
-  --replacement .site-output/replacement-examples.zip \
-  --replacement-sha256 REVIEWED_REPLACEMENT_SHA256 \
-  --entry update \
-  --output .site-output/ballin-gallery-assets-v1.0.0-refresh-1.zip
-python3 tools/site/site.py inspect .site-output/ballin-gallery-assets-v1.0.0-refresh-1.zip
-```
-
-Repeat `--entry` for each existing ID being replaced. The command retrieves the
-exact release/asset identified by the pin and verifies its identity and hash.
-For offline reuse, supply `--bundle PATH_TO_PRIOR_ZIP`; its bytes must match the
-pin's size and SHA-256, but this does not recheck the remote release state.
-`--pin PATH` selects another reviewed release pin. Bootstrap mode is rejected
-because there is no approved complete bundle to preserve.
-
-The replacement ZIP must contain exactly the named entries, with complete images,
-text and public provenance. The command preserves entry order and every untouched
-entry and file byte, rebuilds per-file hashes, and validates the complete candidate
-against the same archive/path/image safety rules as a normal bundle. It refuses
-missing or extra entries, unknown IDs, invalid inputs and an existing output path.
-An existing canonical README Update designation must remain; to transfer it,
-replace both affected entries together and designate exactly one of them.
-Use a separately reviewed full `pack` selection to intentionally add or remove
-entries. The result reports its hash, size, replaced/retained IDs and base identity;
-it does not modify the release pin or establish publication approval.
-
-Review the complete candidate using the offline build/preview procedure below,
-with a separate ignored candidate pin containing its new size/hash. Retain the
-base bundle and pin. After separate publication approval, upload the complete ZIP
-under its new clearly named `ballin-gallery-assets-vX.Y.Z-refresh-N.zip` asset name
-on the mutable product release. Verify retrieval and review the actual new
-release/asset identity before
-repinning through an ordinary source change. Deployment remains a separate stage.
+Retain the known-good bundle/pin, use a fresh candidate output path, and keep
+review, public upload, real-ID repinning and deployment as separate stages.
 
 ## Attach to the actual product Release
 
@@ -282,26 +231,22 @@ resolution; do not relax controls or create a workaround asset-only prerelease.
 A 404 from the legacy tag-protection endpoint does not establish whether tags are
 protected.
 
-After separate upload authorization, the ordinary candidate command is:
-
-```sh
-gh release upload v1.0.0 .site-output/ballin-gallery-assets-v1.0.0.zip \
-  --repo JBallin/ballin-scripts
-```
-
-Do not use `--clobber`. Use a new asset name for replacement output. Preserve the
-previous asset and pin until the replacement has been reviewed and retrieved.
-Local mock tests cover the transfer contract. Verify permissions, identity,
-hashes and post-publication attachment/protection compatibility through an actual
-handoff before relying on it, without changing settings. Actions artifacts are transient build
-transport, not the approved gallery's durable storage.
+Use the [reviewed-bundle upload recipe](../tools/output-gallery/README.md#upload-the-reviewed-bundle)
+only after separate authorization for the exact release and file. Use a new asset
+name for replacement output; preserve the previous asset and pin until the new
+one is reviewed and retrieved. If the upload result is uncertain, inspect the
+release's actual assets before retrying. Local mocks do not establish live access
+or storage durability. Actions artifacts are transient build transport, not the
+approved gallery's durable storage.
 
 ## Pin and verify
 
 After an authorized upload, obtain exact product Release and asset IDs through
 `gh api repos/JBallin/ballin-scripts/releases/tags/v1.0.0`. Verify the tag resolves
-to the approved product commit, dereferencing annotated tags. Replace the
-bootstrap object in `site/bundle.json` through an ordinary reviewed change:
+to the approved product commit, dereferencing annotated tags. Form an ignored
+proposed pin using those verified identities first; only after retrieval and
+complete-site review, put it in `site/bundle.json` through an ordinary reviewed
+change:
 
 ```json
 {
@@ -316,7 +261,8 @@ bootstrap object in `site/bundle.json` through an ordinary reviewed change:
 }
 ```
 
-These numbers are schema examples, not usable pins. The retriever addresses the
+These numbers are schema examples, not usable live pins. Do not copy the offline
+review pin's placeholder IDs into a committed activation pin. The retriever addresses the
 Release and asset by ID, checks stable published status, membership, tag/commit,
 name, size and available GitHub digest, then verifies the downloaded ZIP hash.
 It never selects `latest` or a newest asset. Optional `GH_TOKEN`/`GITHUB_TOKEN`
@@ -329,13 +275,15 @@ oversize content, suspicious compression ratios and hash disagreement. It never
 extracts arbitrary archive paths. A local offline verification uses the same pin:
 
 ```sh
-python3 tools/site/site.py build --bundle .site-output/ballin-gallery-assets-v1.0.0.zip \
+python3 tools/site/site.py build --pin .site-output/verified-pin.json \
+  --bundle .site-output/ballin-gallery-assets-v1.0.0.zip \
   --output .site-output/pinned-review
 ```
 
-Omit `--bundle` to exercise actual authenticated retrieval only when the real pin
-and network access exist. Local file builds validate pin integrity but cannot
-establish remote Release identity or storage durability. Review `build.json`,
+Build a second new output with the same `--pin` but without `--bundle` to exercise
+live retrieval after the real IDs and network access are available. Local file
+builds validate pin integrity but cannot establish remote Release identity or
+storage durability. Review `build.json`,
 `gallery/manifest.json`, all four sections, text and images before activation.
 
 ## Shared Update example and public links
@@ -354,9 +302,14 @@ Update text directly from the selected gallery entry without editing the README.
 After the real public asset URLs are verified, use `--image-base
 https://getballin.com` to include those same images for root hosting. In project
 mode, use `--image-base https://jballin.github.io/ballin-scripts` instead. Review the
-fragment in the follow-on README integration; preserve expandable actual text and
-labels. Image, site transcript and generated README fragment share the one bundle
-input derived from the canonical scenario/capture source. Do not maintain a second
+fragment in the README consumer; preserve the full expandable matching text and
+labels. Whenever generation or refresh changes that canonical Update entry, this
+export/compare/update is required before activating the bundle. Include all its
+image pages and use the same bundle for the image and embedded text; `readme-example`
+prints a fragment but does not modify README. Follow the
+[detailed shared-example recipe](../tools/output-gallery/README.md#canonical-readme-update-illustration).
+Image, site transcript and generated README fragment share the one bundle input
+derived from the canonical scenario/capture source. Do not maintain a second
 example. Actual capture sources remain private unless separately approved.
 
 Validate browser navigation, full-size image viewing, text copy/download and
@@ -384,8 +337,9 @@ for an older event. Before deployment, changed publication inputs invalidate a
 superseded snapshot; the newer relevant run or a manual rerun builds fresh state.
 Unrelated product commits do not block the same complete documentation snapshot.
 
-Once Pages settings and the `github-pages` environment are separately configured
-and deployment is authorized, the manual recovery command is:
+Once Pages settings and the `github-pages` environment are separately configured,
+obtain deployment authorization before merging relevant `main` changes as well as
+before a manual rerun. With that authority, the manual recovery command is:
 
 ```sh
 gh workflow run pages.yml --ref main --repo JBallin/ballin-scripts
