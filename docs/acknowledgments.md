@@ -12,17 +12,17 @@ look after.
 | --- | --- |
 | [macOS](https://www.apple.com/macos/) and [Xcode Command Line Tools](https://developer.apple.com/xcode/resources/) | Ballin's macOS platform and command-line foundation. |
 | [Git](https://git-scm.com/) | Tracks Ballin's source and supports repository backups. |
-| [Node.js](https://nodejs.org/) and [npm](https://docs.npmjs.com/) | Node.js runs Ballin; npm supports development. |
+| [Node.js](https://nodejs.org/) and [npm](https://docs.npmjs.com/) | Node.js runs Ballin; npm supports development, global-package updates, and inventories. |
 | [Bash](https://www.gnu.org/software/bash/) and [Zsh](https://www.zsh.org/) | Run Ballin's shell scripts and support command completion. |
 | [curl](https://curl.se/) | Downloads resources used by Ballin. |
 | [GitHub](https://github.com/) and [GitHub CLI](https://cli.github.com/) | GitHub hosts Ballin; the CLI connects optional backups. |
-| [Homebrew](https://brew.sh/) | Supports optional macOS package management. |
-| [nvm](https://github.com/nvm-sh/nvm) | Manages Node.js versions. |
+| [Homebrew](https://brew.sh/) | Supports optional package updates, health checks, and inventories. |
+| [nvm](https://github.com/nvm-sh/nvm) | Installs Node.js LTS during optional updates. |
 | [mas](https://github.com/mas-cli/mas) | Updates Mac App Store apps. |
-| [Visual Studio Code](https://code.visualstudio.com/) | Supports editor-configuration backups. |
-| [Vim](https://www.vim.org/) and [GNU nano](https://www.nano-editor.org/) | Support backups of editor configuration. |
-| [Codex](https://developers.openai.com/codex/) and [Claude Code](https://code.claude.com/docs/en/overview) | Support backups of personal instructions and configuration. |
-| [pipx](https://pipx.pypa.io/), [uv](https://docs.astral.sh/uv/), and [pyenv](https://github.com/pyenv/pyenv) | Support backups of Python tooling. |
+| [Visual Studio Code](https://code.visualstudio.com/) | Ballin can back up its settings, keybindings, and extension inventories. |
+| [Vim](https://www.vim.org/) and [GNU nano](https://www.nano-editor.org/) | Ballin can back up their editor configuration. |
+| [Codex](https://developers.openai.com/codex/) and [Claude Code](https://code.claude.com/docs/en/overview) | Ballin can back up supported personal instructions, configuration, and skills. |
+| [pipx](https://pipx.pypa.io/), [uv](https://docs.astral.sh/uv/), and [pyenv](https://github.com/pyenv/pyenv) | Ballin can back up inventories of installed Python tools and versions. |
 
 ## Building and running the project
 
