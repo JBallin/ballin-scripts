@@ -92,6 +92,37 @@ class GalleryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gallery.plain_text('safe' + control)
 
+    def test_canonical_update_example_is_static_and_matches_rendered_text(self):
+        staged = self.root / 'update-example-runtime'
+        staged.mkdir()
+        (staged / 'terminalStyle.ts').write_bytes((TOOLS.parents[1] / 'commands/terminalStyle.ts').read_bytes())
+        source = staged / 'source-evidence/commands/update.ts'
+        source.parent.mkdir(parents=True)
+        source.write_bytes((TOOLS.parents[1] / 'commands/update.ts').read_bytes())
+        sample = TOOLS / 'update-example.txt'
+        ansi = gallery.update_example(staged, sample)
+        self.assertEqual(gallery.plain_text(ansi), sample.read_text())
+        self.assertTrue(ansi.startswith('\x1b[1m$ ballin update'))
+        self.assertIn('\x1b[0;32m✓\x1b[0m ballin_config', ansi)
+        self.assertIn('~ \x1b[1mzshrc\x1b[0m', ansi)
+        header = 'STAGED — source-informed synthetic output; no live execution.\nSource: ' + 'a' * 40 + '\n\n'
+        result, prefix = self.render(header + ansi, 'canonical-update',
+                                     {'label': 'STAGED — source-informed synthetic output; no live execution.', 'source': 'a' * 40,
+                                      'scenario': 'Routine Update — condensed illustration', 'keepTogether': []})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(prefix.with_suffix('.json').read_text())
+        self.assertEqual(report['text'], header + sample.read_text())
+        self.assertEqual(len(report['pages']), 1)
+        self.assertIn('STAGED', report['pageCaptions'][0])
+        # An altered candidate formatter must never execute, even when the
+        # caller supplies source data that otherwise passes the phase checks.
+        marker = staged / 'must-not-exist'
+        runtime = staged / 'terminalStyle.ts'
+        runtime.write_text(runtime.read_text() + '\nrequire("node:fs").writeFileSync(' + json.dumps(str(marker)) + ', "bad");\n')
+        with self.assertRaisesRegex(ValueError, 'Unreviewed gallery runtime'):
+            gallery.update_example(staged, sample)
+        self.assertFalse(marker.exists())
+
     def test_refuses_moving_source_without_creating_output(self):
         output = self.root / 'must-not-exist'
         result = subprocess.run(['python3', str(TOOLS / 'run.py'), '--source', 'HEAD', '--output', str(output)], capture_output=True, timeout=15)
