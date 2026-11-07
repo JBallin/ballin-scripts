@@ -267,11 +267,28 @@ confirm_fixed_choice() {
   render_fixed_prompt
   printf '\033[36m%s\033[0m\n' "$1"
 }
+supports_hyperlinks() {
+  [[ -t "${1:-1}" && "${TERM:-}" =~ ^(xterm|wezterm)(-|$) && -z "${NO_COLOR:-}" && -z "${TMUX:-}" && -z "${STY:-}" && -z "${SSH_CONNECTION:-}" && -z "${SSH_TTY:-}" && -z "${CI:-}" ]] || return 1
+  case "${TERM_PROGRAM:-}" in
+    iTerm.app)
+      [[ "${TERM_PROGRAM_VERSION:-}" =~ ^([0-9]{1,3})\.([0-9]{1,3})(\.[0-9]{1,5})?([a-zA-Z][a-zA-Z0-9.-]*)?$ ]] || return 1
+      (( 10#${BASH_REMATCH[1]} > 3 || (10#${BASH_REMATCH[1]} == 3 && 10#${BASH_REMATCH[2]} >= 1) )) ;;
+    WezTerm) [[ "${TERM_PROGRAM_VERSION:-}" =~ ^[0-9]{8}-[0-9]{6}-[a-fA-F0-9]+$ ]] ;;
+    *) return 1 ;;
+  esac
+}
 documentation_pointer() {
-  status_marker info
-  printf ' %s:\n' "$1"
-  url_reference "$2"
-  printf '\n'
+  local label=$1 url=$2 stream=${3:-1} target='' safe_label safe_url
+  status_marker info "$stream" >&"$stream"
+  printf ' ' >&"$stream"
+  case "$url" in https://*) target=$url ;; getballin.com/*) target="https://$url" ;; esac
+  safe_label=${label//[[:cntrl:]]/}; safe_url=${url//[[:cntrl:]]/}
+  if supports_hyperlinks "$stream" && [[ "$url" != *[[:cntrl:][:space:]]* && "$label" != *[[:cntrl:]]* && "$target" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?(/|[?#]|$) && "$target" != *'@'* ]]; then
+    printf '\033]8;;%s\033\\\033[34m%s\033[0m\033]8;;\033\\\n' "$target" "$label" >&"$stream"
+  else
+    safe_url=${safe_url#https://}; safe_url=${safe_url#http://}
+    printf '%s: %s\n' "$safe_label" "$safe_url" >&"$stream"
+  fi
 }
 error_icon() {
   status_marker failure "${1:-1}"
@@ -313,8 +330,8 @@ ballin_select "$@" || exit $?
 if [[ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 && "$ballin_mode" != self-update && ! -d "$HOME/.ballin-scripts" ]]; then phase 'Setting up Ballin'; fi
 
 repo_dir="$HOME/.ballin-scripts"
-docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
-analytics_docs_url='https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share'
+docs_url='getballin.com/docs/installation.html'
+analytics_docs_url='getballin.com/docs/analytics.html#what-will-analytics-share'
 required_node_version=$ballin_minimum
 repo_existed=true
 setup_mode='refresh'
@@ -379,7 +396,7 @@ fi
 if [ ! -x "$(command -v node)" ]; then
   printf '\n'; error_icon; printf ' Node.js %s or newer is required.\n' "$required_node_version"
   printf '\nInstall supported Node.js, then '; print_retry_guidance; printf '.\n'
-  documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
   exit 1
 else
   node_check=$(node -p "
@@ -398,7 +415,7 @@ else
     fi
     printf '\n'
     printf '\nUpdate or activate Node.js using your existing installation method, then '; print_retry_guidance; printf '.\n'
-    documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+    documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
     exit 1
   fi
 fi
@@ -540,7 +557,8 @@ if [[ "$ballin_mode" == self-update && "$ballin_applied" != true ]]; then
   else
     status=$?
     [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
-    ballin_error "Installed updater uses an unsupported contract. See https://github.com/JBallin/ballin-scripts/blob/main/docs/installation-testing.md#prelaunch-entrypoint-recovery."
+    ballin_error "Installed updater uses an unsupported contract."
+    documentation_pointer 'Recovery' 'getballin.com/docs/installation-testing.html#prelaunch-entrypoint-recovery' >&2
     exit 1
   fi
   if node "$repo_dir/commands/repo_update.ts" self-update "$repo_dir" "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" "$command_preflight"; then exit 0

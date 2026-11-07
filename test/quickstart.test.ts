@@ -20,7 +20,7 @@ describe('beginner quickstart bootstrap', function() {
   const nodeInstallPrompt = 'Proceed with installation? [y/N]';
   const cltInstallQuestion = 'Proceed with installation?';
   const firstBackupPrompt = '\n? Run a backup now and open its GitHub destination? [Y/n] ';
-  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\ni Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup\n';
+  const incompletePathGuidance = '\nBallin is installed. PATH setup wasn’t verified.\ni Manual setup: getballin.com/docs/installation.html#manual-path-setup\n';
   const readLog = (): string => fs.readFileSync(log, 'utf8');
   const brewInterruption = `if [[ "\${FAKE_BREW_INTERRUPT_AT:-}" == "$stage" ]]; then
   printf 'brew-interruption:%s:%s\\n' "$stage" "$FAKE_BREW_INTERRUPTION" >> "$FAKE_COMMAND_LOG"
@@ -404,7 +404,7 @@ esac
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
       assert.equal(result.stdout.includes("Homebrew's instructions above are for manual setup."), route === 'homebrew');
-      const nodeDetails = 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs';
+      const nodeDetails = 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs';
       assert.include(result.stdout, '==> Checking required tools\n' + nodeDetails + '\n? Ballin requires Node.js. Install it using NVM? [y/N]');
       assert.notInclude(result.stdout, 'NVM can install and maintain');
       assert.notInclude(result.stdout, 'Latest LTS will be active');
@@ -539,7 +539,7 @@ esac
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, incompletePathGuidance);
-      assert.include(result.stdout, 'installation.md#manual-nvm-activation');
+      assert.include(result.stdout, 'installation.html#manual-nvm-activation');
       if (outcome === 'declined') assert.isFalse(fs.existsSync(profile));
       else assert.equal(fs.readFileSync(profile, 'utf8'), '# preserved\n');
       const guide = fs.readFileSync(path.join(__dirname, '../docs/installation.md'), 'utf8');
@@ -566,7 +566,7 @@ esac
         ...(location === 'xdg' ? { XDG_CONFIG_HOME: path.dirname(selected) } : { NVM_DIR: selected }),
       });
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.include(result.stdout, 'installation.md#manual-nvm-activation');
+      assert.include(result.stdout, 'installation.html#manual-nvm-activation');
       const command = result.stdout.match(/^export NVM_DIR=.+$/mu)![0];
       const recovered = spawnSync('/bin/bash', ['-c', command + '; printf "%s" "$NVM_DIR"'], { encoding: 'utf8', env: testChildEnvironment({ HOME: home }) });
       assert.equal(recovered.status, 0); assert.equal(recovered.stdout, selected);
@@ -579,7 +579,7 @@ esac
     const kept = run('y\ny\n', { FAKE_EARLY_ANSWER: 'n\n' }); assert.equal(kept.status, 0, kept.stderr);
     assert.notInclude(readLog(), 'nvm:install:');
     assert.include(kept.stdout, 'Use NVM with Node.js LTS instead? [y/N]');
-    assert.equal((kept.stdout + kept.stderr).split('optional-capabilities.md#nodejs').length - 1, 1);
+    assert.equal((kept.stdout + kept.stderr).split('optional-capabilities.html#nodejs').length - 1, 1);
     const switched = run('y\ny\ny\n', { FAKE_NVM_ANSWER: 'y\n', FAKE_EARLY_ANSWER: 'n\n' });
     assert.equal(switched.status, 0, switched.stdout + switched.stderr);
     assert.include(switched.stdout, 'Use NVM with Node.js LTS instead?');
@@ -899,8 +899,8 @@ printf '0\\n'
         assert.notInclude(result.stderr, 'brew upgrade node');
       }
       if (!['130', '143'].includes(state)) {
-        const url = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs';
-        const details = `i Node.js details:\n${url}\n`;
+        const url = 'getballin.com/docs/optional-capabilities.html#nodejs';
+        const details = `i Node.js details: ${url}\n`;
         assert.include(state === 'unknown' ? result.stderr : result.stdout, details);
         assert.equal((result.stdout + result.stderr).split(url).length - 1, 1);
         if (state !== 'unknown') assert.isBelow(result.stdout.indexOf(details), result.stdout.indexOf('Ballin requires Node.js. Install it using NVM?'));
@@ -918,7 +918,7 @@ printf '0\\n'
     const result = run('', { PATH: tools + ':' + later });
     assert.equal(result.status, 1); assert.include(result.stderr, 'A compatible Node.js is required.');
     assert.include(result.stdout, 'Ballin requires Node.js. Install it using NVM?');
-    assert.equal((result.stdout + result.stderr).split('optional-capabilities.md#nodejs').length - 1, 1);
+    assert.equal((result.stdout + result.stderr).split('optional-capabilities.html#nodejs').length - 1, 1);
     assert.notInclude(result.stderr, 'brew upgrade node');
     for (const forbidden of ['nodejs.org', 'auth status --active', 'install.sh:', 'native-brew:install']) assert.notInclude(readLog(), forbidden);
   });
@@ -2317,8 +2317,7 @@ main
   - Install GitHub CLI in ~/.local/bin
   - Create Ballin and its settings in ~/.ballin-scripts
   - Link the ballin command in ~/.local/bin
-i Installation details:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes
+i Installation details: getballin.com/docs/installation.html#what-installation-changes
 ? Proceed with installation? [y/N] `);
     assert.notInclude(result.stdout, 'graphical');
     assert.notInclude(result.stdout, 'verified official');
@@ -2736,7 +2735,7 @@ https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-in
       const result = runPathSetup('home\ny\n'); assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'already mentions a setup directory');
       assert.include(result.stderr, 'Review its PATH entries before changing PATH.');
-      assert.include(result.stderr, '\ni Manual setup:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup');
+      assert.include(result.stderr, '\ni Manual setup: getballin.com/docs/installation.html#manual-path-setup');
       assert.notInclude(result.stderr, 'command below');
       assert.notInclude(result.stdout, 'PATH entry already present; activation not verified.'); assert.notInclude(result.stdout, 'Add this PATH line');
       assert.notInclude(result.stderr, pathLine());

@@ -28,6 +28,7 @@ describe('install setup', () => {
   let binDir: string;
   let commandLogPath: string;
   const docsUrl = 'https://example.test/docs';
+  const displayDocsUrl = 'example.test/docs';
   const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 
   const withoutStdout = (action: () => boolean): boolean => {
@@ -881,7 +882,7 @@ exit 2
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
       'i Analytics report command results, not backup contents.\n'
-      + 'i Analytics details:\nhttps://example.test/analytics',
+      + 'i Analytics details: https://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
     assert.equal(analyticsPromptFor(true), 'Share usage analytics to help improve Ballin? [Y/n] ');
@@ -1003,7 +1004,7 @@ process.exitCode = configureAnalyticsPreference({
         docsUrl: 'https://example.test/analytics',
       }));
       assert.isFalse(result);
-      assert.include(output, analyticsDisclosureFor('https://example.test/analytics'));
+      assert.include(output, analyticsDisclosureFor('https://example.test/analytics').replace('https://', ''));
     } finally {
       fs.readSync = originalRead;
     }
@@ -1094,8 +1095,8 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout.split("\n"), `✓ Created config: ${path.join(repoDir, 'ballin.config.json')}`);
     assert.isBelow(result.stdout.indexOf('Ballin installed successfully.'), result.stdout.indexOf('Set up private backups'));
-    assert.include(result.stdout, 'Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
-    assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
+    assert.include(result.stdout, 'Backup details: getballin.com/docs/installation.html#optional-backup-setup-and-reconnect');
+    assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped.');
     assert.equal(result.stdout.split('Change backup settings with `ballin backup setup`.').length - 1, 1);
@@ -1122,7 +1123,7 @@ require('https').request = () => {
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: ');
-      if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
+      if (!enableCompletion) assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
       assert.equal(readRepoConfig().update.backup, 'false');
@@ -1146,7 +1147,7 @@ require('https').request = () => {
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Tab completion setup could not finish. Ballin remains installed.');
       assert.notInclude(result.stdout, 'Tab completion skipped.');
-      assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
+      assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());

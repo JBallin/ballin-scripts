@@ -26,8 +26,7 @@ Examples:
 
 Reset replaces all saved settings with defaults, including backup linkage; remote backups remain unchanged.
 
-i Configuration guide:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#working-with-settings
+i Configuration guide: getballin.com/docs/optional-capabilities.html#working-with-settings
 `;
 
 const isConfigHelp = (args: string[]): boolean => (

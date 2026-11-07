@@ -1,6 +1,6 @@
 const fs = require('fs');
 const crypto = require('crypto');
-const { terminalCommandReferences } = require('./terminalStyle.ts');
+const { terminalCommandReferences, isDocumentationRow, terminalProse } = require('./terminalStyle.ts');
 const { backupCommitMessage } = require('./backup_commit_message.ts');
 const { repositoryCacheDirectory } = require('./backup_cache.ts');
 const { makeTempFile, removeTempFile, runCommand, requireUninterrupted, rethrowInterruption, writeStderrLine } = require('./commandHelpers.ts');
@@ -17,7 +17,7 @@ import type { SpawnSyncOptions } from 'child_process';
 type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
 const repositoryMessages: Record<RepositoryProblem, string> = {
-  'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
+  'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub.\ni Details: getballin.com/docs/backup-design.html#normal-repository-resource-limits',
   prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
   authentication: 'GitHub.com authentication is required. Run `gh auth login --hostname github.com`, or check the effective gh account and environment token, then retry.',
   connection: 'Unable to connect to GitHub.com. Check the network connection and GitHub service availability.',
@@ -44,7 +44,7 @@ const formatRepositoryMessage = (
   }
   return message === undefined ? undefined : terminalCommandReferences(message, [
     'ballin backup setup', 'ballin backup open', `gh auth login --hostname ${host}`,
-  ], stream);
+  ], stream).split('\n').map((line: string) => isDocumentationRow(line) ? terminalProse(line, stream) : line).join('\n');
 };
 
 class RepositoryError extends Error {
@@ -331,7 +331,7 @@ This repository was created by [Ballin](https://github.com/JBallin/ballin-script
 
 \`ballin_config\` stores selected Ballin preferences that are portable between installations, not a complete copy of your local Ballin configuration.
 
-For current backup behavior and guidance, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
+For current backup behavior and guidance, see the [Ballin documentation](https://getballin.com/docs/index.html).
 
 Ballin uses \`.ballin-backup.json\` to identify this repository as a Ballin backup.
 `;

@@ -30,7 +30,7 @@ describe('optional completion setup', () => {
     assert.include(output, '~/.zshrc');
     assert.notInclude(output, activationLine('zsh'));
     assert.isFalse(fs.existsSync(profile));
-    assert.include(offer([], false), 'Tab completion skipped.\ni Enable it later:\nhttps://example.test/install#startup-files-and-manual-activation');
+    assert.include(offer([], false), 'Tab completion skipped.\ni Enable it later: https://example.test/install#startup-files-and-manual-activation');
     offer([]);
     assert.isFalse(fs.existsSync(profile));
   });
@@ -38,7 +38,7 @@ describe('optional completion setup', () => {
     it(`shows only the later-enablement link after a completed No (${JSON.stringify(answer)})`, () => {
       const output = offer([answer]);
       assert.include(output, 'Enable Ballin tab completion in ~/.zshrc? [y/N] ');
-      assert.include(output, 'i Enable it later:\nhttps://example.test/install#startup-files-and-manual-activation');
+      assert.include(output, 'i Enable it later: https://example.test/install#startup-files-and-manual-activation');
       assert.notInclude(output, 'Tab completion skipped.');
       assert.notInclude(output, 'Optional tab completion');
       assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
@@ -250,7 +250,7 @@ describe('optional completion setup', () => {
     offerCompletionSetup('guide', { env, interactive: true, write: (text: string) => output.push(text), prompt: () => { throw new Error('input failed'); } });
     assert.deepEqual(output, [
       'Tab completion setup could not finish. Ballin remains installed.',
-      'i Manual setup:\nguide#startup-files-and-manual-activation',
+      'i Manual setup: guide#startup-files-and-manual-activation',
     ]);
   });
   it('refuses a hardlink added between inspection and opening the startup file', () => {

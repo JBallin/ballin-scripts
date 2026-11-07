@@ -232,9 +232,10 @@ choice_word() {
   printf '%s' "$1"
 }
 presentation_text() {
-  local line
+  local line label
   while IFS= read -r line; do
     case "$line" in
+      'i '*': getballin.com/'*) label=${line#i }; documentation_pointer "${label%%: *}" "${line#*: }" "${2:-1}" ;;
       'i '*) status_marker info "${2:-1}"; printf ' %s\n' "${line#i }" ;;
       *) printf '%s\n' "$line" ;;
     esac
@@ -282,11 +283,28 @@ confirm_fixed_choice() {
   render_fixed_prompt
   printf '\033[36m%s\033[0m\n' "$1"
 }
+supports_hyperlinks() {
+  [[ -t "${1:-1}" && "${TERM:-}" =~ ^(xterm|wezterm)(-|$) && -z "${NO_COLOR:-}" && -z "${TMUX:-}" && -z "${STY:-}" && -z "${SSH_CONNECTION:-}" && -z "${SSH_TTY:-}" && -z "${CI:-}" ]] || return 1
+  case "${TERM_PROGRAM:-}" in
+    iTerm.app)
+      [[ "${TERM_PROGRAM_VERSION:-}" =~ ^([0-9]{1,3})\.([0-9]{1,3})(\.[0-9]{1,5})?([a-zA-Z][a-zA-Z0-9.-]*)?$ ]] || return 1
+      (( 10#${BASH_REMATCH[1]} > 3 || (10#${BASH_REMATCH[1]} == 3 && 10#${BASH_REMATCH[2]} >= 1) )) ;;
+    WezTerm) [[ "${TERM_PROGRAM_VERSION:-}" =~ ^[0-9]{8}-[0-9]{6}-[a-fA-F0-9]+$ ]] ;;
+    *) return 1 ;;
+  esac
+}
 documentation_pointer() {
-  status_marker info
-  printf ' %s:\n' "$1"
-  url_reference "$2"
-  printf '\n'
+  local label=$1 url=$2 stream=${3:-1} target='' safe_label safe_url
+  status_marker info "$stream" >&"$stream"
+  printf ' ' >&"$stream"
+  case "$url" in https://*) target=$url ;; getballin.com/*) target="https://$url" ;; esac
+  safe_label=${label//[[:cntrl:]]/}; safe_url=${url//[[:cntrl:]]/}
+  if supports_hyperlinks "$stream" && [[ "$url" != *[[:cntrl:][:space:]]* && "$label" != *[[:cntrl:]]* && "$target" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?(/|[?#]|$) && "$target" != *'@'* ]]; then
+    printf '\033]8;;%s\033\\\033[34m%s\033[0m\033]8;;\033\\\n' "$target" "$label" >&"$stream"
+  else
+    safe_url=${safe_url#https://}; safe_url=${safe_url#http://}
+    printf '%s: %s\n' "$safe_label" "$safe_url" >&"$stream"
+  fi
 }
 error_icon() {
   status_marker failure "${1:-1}"
@@ -715,7 +733,7 @@ existing_hidden_node() {
 }
 
 manual_node_guidance() {
-  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\ni Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\ni Node.js details: '"getballin.com/docs/optional-capabilities.html#nodejs"
 }
 
 brew_checked() {
@@ -1025,7 +1043,7 @@ plan_nvm() {
   use_nvm=false; nvm_profile_needed=false
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
-  documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
   local question='Ballin requires Node.js. Install it using NVM?'
   [[ "$compatible" != true ]] || question='Use NVM with Node.js LTS instead?'
   if ! confirm "$question"; then
@@ -1192,7 +1210,7 @@ manual_nvm_guidance() {
   if [[ "${nvm_profile_needed:-false}" == true && "${path_setup_complete:-false}" != true ]]; then
     printf 'Activate NVM in your shell startup file before running Ballin in a new Terminal.\nUse this NVM working directory:\n'
     printf 'export NVM_DIR=%q\n' "$nvm_directory"
-    documentation_pointer 'NVM activation' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-nvm-activation'
+    documentation_pointer 'NVM activation' 'getballin.com/docs/installation.html#manual-nvm-activation'
   fi
 }
 
@@ -1262,7 +1280,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=true
   else
-    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\ni Manual setup:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
+    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\ni Manual setup: '"getballin.com/docs/installation.html#manual-path-setup"
   fi
   return 0
 }
@@ -1571,7 +1589,7 @@ main() {
         printf '.\n'
       fi
     fi
-    documentation_pointer 'Installation details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes'
+    documentation_pointer 'Installation details' 'getballin.com/docs/installation.html#what-installation-changes'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n"
@@ -1651,7 +1669,7 @@ main() {
     printf '.\n'
   else
     printf "\nBallin is installed. PATH setup wasn’t verified.\n"
-    documentation_pointer 'Manual setup' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup'
+    documentation_pointer 'Manual setup' 'getballin.com/docs/installation.html#manual-path-setup'
   fi
 }
 

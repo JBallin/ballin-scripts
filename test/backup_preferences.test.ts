@@ -184,7 +184,7 @@ fs.readFileSync = (file, ...args) => {
       assert.equal(readConfig().backup.includeSensitive, String(included));
       assert.notInclude(result.stdout, 'SYNTHETIC_OVERRIDE_CONTENT');
       assert.include(result.stdout, '~/.codex/AGENTS.override.md\n');
-      assert.include(result.stdout, 'docs/backup-sources.md#what-will-ballin-back-up');
+      assert.include(result.stdout, 'docs/backup-sources.html#what-will-ballin-back-up');
       assert.notProperty(readConfig().backup, 'sensitiveSourcesVersion');
     });
   });
@@ -228,8 +228,8 @@ fs.readFileSync = (file, ...args) => {
     assert.isBelow(result.stdout.indexOf('even without sensitive sources.'), result.stdout.indexOf('Include sensitive sources in future backups?'));
     const consent = result.stdout.slice(result.stdout.indexOf('Backup source details:'), result.stdout.indexOf('Include sensitive sources in future backups?'));
     assert.include(result.stdout.replace(/\s+/gu, ' '), 'Backups may contain private information or secrets.');
-    assert.include(consent, 'Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up\n');
-    assert.deepEqual(consent.match(/https:\/\/[^\s]+/gu), ['https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up']);
+    assert.include(consent, 'Backup source details: getballin.com/docs/backup-sources.html#what-will-ballin-back-up\n');
+    assert.deepEqual(consent.match(/getballin\.com\/[^\s]+/gu), ['getballin.com/docs/backup-sources.html#what-will-ballin-back-up']);
     assert.notInclude(result.stdout, 'Excluding sources does not remove');
     assert.deepEqual(Object.keys(readConfig().backup).sort(), Object.keys(initial.backup).sort());
     assert.equal(readConfig().backup.includeSensitive, 'false');
