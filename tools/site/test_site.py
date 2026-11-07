@@ -470,7 +470,8 @@ class BuildTests(unittest.TestCase):
         self.assertIn('href="/ballin-scripts/gallery/update/output-001.html"', page)
         viewer = (self.output / 'gallery/update/output-001.html').read_text()
         self.assertIn('width="1" height="1"', viewer)
-        self.assertIn('tabindex="0" role="region"', viewer)
+        self.assertNotIn('class="native-mode"', viewer)
+        self.assertEqual(viewer.count('class="image-preview"'), 1)
         self.assertIn('/ballin-scripts/gallery.html#entry-update', viewer)
         self.assertIn('&lt;untrusted &amp; text&gt;', viewer)
         self.assertEqual((self.output / 'favicon.svg').read_bytes(), (site.ROOT / 'site/favicon.svg').read_bytes())
@@ -485,7 +486,7 @@ class BuildTests(unittest.TestCase):
                 attrs = dict(attrs)
                 if tag == 'meta':
                     self.meta[attrs.get('property', attrs.get('name'))] = attrs.get('content')
-        expected = {'index.html': 'Ballin', 'LICENSE.html': 'LICENSE · Ballin', 'gallery.html': 'Output gallery · Ballin',
+        expected = {'index.html': 'Ballin — Back up dotfiles and update your Mac', 'LICENSE.html': 'LICENSE · Ballin', 'gallery.html': 'Output gallery · Ballin',
                     'gallery/update/output-001.html': 'Synthetic update fixture — page 1 of 1 · Ballin'}
         for path in self.output.rglob('*.html'):
             source = path.read_text()
@@ -497,6 +498,11 @@ class BuildTests(unittest.TestCase):
             head = Head()
             head.feed(source)
             self.assertEqual(head.meta['og:title'], __import__('html').unescape(title))
+            self.assertEqual(head.meta['twitter:title'], __import__('html').unescape(title))
+            if path.relative_to(self.output).as_posix() == 'index.html':
+                description = 'Back up your dotfiles and keep your macOS development tools current.'
+                for key in ('description', 'og:description', 'twitter:description'):
+                    self.assertEqual(head.meta[key], description)
             self.assertEqual(head.meta['twitter:card'], 'summary_large_image')
             self.assertEqual(head.meta['og:url'], 'https://jballin.github.io/ballin-scripts/' + path.relative_to(self.output).as_posix())
             self.assertEqual(head.meta['og:image'], 'https://jballin.github.io/ballin-scripts/docs/assets/brand/social-preview.png')
@@ -518,6 +524,12 @@ class BuildTests(unittest.TestCase):
         files['gallery/update/output-002.png'] = png()
         pages = site.image_pages(manifest, files, '/ballin-scripts')
         self.assertEqual([page['title'] for page in pages], ['Synthetic update fixture — page 1 of 2', 'Synthetic update fixture — page 2 of 2'])
+        for index, page in enumerate(pages, 1):
+            self.assertIn(f'<span aria-current="page">Page {index}</span>', page['content'])
+            other = 3 - index
+            self.assertIn(f'href="/ballin-scripts/gallery/update/output-{other:03}.html">Page {other}</a>', page['content'])
+            self.assertEqual(page['content'].count('class="image-pages"'), 2)
+        self.assertEqual(site.image_page_navigation(fixture()[0]['entries'][0], 1, ''), '')
 
     def test_root_custom_domain_complete_snapshot_and_project_cli_override(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -564,13 +576,23 @@ class BuildTests(unittest.TestCase):
         self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', gallery)
         self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', viewer)
         self.assertIn('href="/ballin-scripts/gallery/update/output-001.png">Open original PNG</a>', viewer)
-        self.assertIn('Scroll horizontally and vertically', viewer)
-        self.assertIn('Complete image, fitted to available width.', viewer)
-        self.assertIn('Native resolution — scroll or use arrow keys', viewer)
+        self.assertIn('Open the original PNG to zoom.', viewer)
+        self.assertIn('Complete image, fitted to the page.', viewer)
+        self.assertNotIn('Native resolution', viewer)
         self.assertIn('Synthetic fixture only.', gallery)
         self.assertIn('Synthetic fixture only.', viewer)
         self.assertIn('Copy text', viewer)
         self.assertIn('Download text', viewer)
+
+    def test_gallery_orientation_precedes_examples_and_preserves_shared_width(self):
+        gallery = (self.output / 'gallery.html').read_text()
+        self.assertLess(gallery.index('Choose a topic'), gallery.index('<article'))
+        for label in ['Installing', 'Backups &amp; preferences', 'Updating', 'Diagnostics']:
+            self.assertIn(label, gallery)
+        self.assertIn('How to read this gallery', gallery)
+        style = (self.output / 'style.css').read_text()
+        self.assertNotIn('max-width:1440px', style)
+        self.assertNotIn('.full-image', style)
 
     def test_intro_gallery_link_keeps_readme_and_respects_bootstrap(self):
         complete = (self.output / 'docs/what-is-ballin.html').read_text()
@@ -656,7 +678,7 @@ class BuildTests(unittest.TestCase):
 
     def test_accessible_nested_details_and_escaped_text(self):
         value = (self.output / 'gallery.html').read_text()
-        self.assertEqual(value.count('<details'), 3)
+        self.assertEqual(value.count('<details'), 4)
         self.assertNotIn('<details open', value)
         self.assertIn('<summary>Text version</summary>', value)
         self.assertIn('&lt;untrusted &amp; text&gt;', value)

@@ -333,6 +333,24 @@ canonical Update was retained unchanged. Keep the known-good bundle/pin and reco
 the candidate hash and replaced/retained IDs. `replace` neither repins nor approves
 publication.
 
+### Review the refresh summary
+
+`replace` prints a JSON summary with `replaced` and `retained` entry IDs, the
+candidate bundle's size and SHA-256, and the base/replacement identities. Save
+that output with the local review evidence. At the top of the review handoff,
+list the replaced IDs and the retained count, identify the candidate bundle/hash,
+and link each replaced ID to `gallery.html#entry-ID` on the running local preview.
+Use the preview's printed origin and base path; keep the full retained list in
+the saved summary.
+
+Build and serve the **complete candidate bundle** using the recipe below. Review
+every replaced example's image pages, matching text and source/capture labels in
+the browser, and compare its presentation with retained neighbors. Follow
+[Website QA](../../docs/website.md#website-qa) for navigation and responsive checks.
+Record passed, failed or blocked results beside the replaced IDs before upload
+or activation. The summary identifies the entries selected for replacement; it
+does not determine which product states changed or replace visual review.
+
 ## Preview a candidate bundle
 
 Use a new ignored review pin to inspect a complete site **before uploading**.

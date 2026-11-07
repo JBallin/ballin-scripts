@@ -90,6 +90,9 @@ attachment, real pin verification and Pages activation. Whenever the canonical
 Update example changes, exporting and updating the README's matching embedded
 text from that same bundle is a required dependency, not later cleanup. Coordinate
 it with pin activation; first image links wait for verified public delivery.
+For a partial gallery refresh, put the
+[replaced/retained summary and local-review results](../tools/output-gallery/README.md#review-the-refresh-summary)
+in the review handoff so reviewers can go directly to the replaced examples.
 
 Before a merge, account for automatic Pages and Worker deployment triggers, not
 only manual release/deploy commands. Record completed steps, tested SHA, approved

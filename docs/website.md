@@ -100,6 +100,45 @@ GitHub rendering parity. Non-documentation source links lead to
 the exact site source commit on GitHub. The build emits a sitemap and canonical
 URLs using the configured canonical origin and base.
 
+### Review locally before hosted previews
+
+Use this process for human or agent review while hosted PR previews are unavailable:
+
+1. **Select the snapshot.** Build a fresh complete output, or use the exact private
+   review snapshot recorded in the task handoff. Record its directory, source
+   revision and dirty state. An older snapshot with local presentation changes
+   is not an exact current-head build. Bootstrap outputs intentionally have no
+   gallery; use the reviewed bundle or existing private gallery snapshot when
+   gallery QA is needed. Preserve capture hashes and publication boundaries.
+2. **Serve it on the review computer.** Run
+   `python3 tools/site/preview.py --site SNAPSHOT_DIRECTORY --port 0`, using that
+   directory, then keep the process running. Use the printed URL,
+   including its project base path. The browser must run on the same computer:
+   `127.0.0.1` in a cloud browser points to that cloud computer, not the local Mac.
+   Keep the server loopback-only; local QA needs no public tunnel or deployment.
+3. **Open an inspectable browser tab.** In the existing Codex task attached to
+   that Mac, inspect the current browser inventory and use the built-in provider
+   it actually returns. Create or select a tab and navigate to the printed URL;
+   do not copy a provider ID from another task. Confirm the page title, URL and
+   screenshot before starting the [Website QA](#website-qa) checklist. Use fresh
+   page state for interactions. A human can open the same URL in a browser on
+   that Mac.
+4. **If the task has no browser connection, check the existing local task.**
+   Another authorized task on the same Mac may already have working built-in
+   browser access. Reuse that task for review rather than assuming the site or
+   localhost is inaccessible. A queued browser panel has not opened an
+   inspectable tab. If no authorized browser is available, report the specific
+   access gap and leave rendered QA incomplete while continuing static checks.
+   An external browser needs its own applicable authorization; do not retry
+   denied access or change permissions as a workaround.
+5. **Review, refresh and record.** Check desktop, wide and narrow layouts and the
+   image/text/navigation flows below. After source changes, build and serve a
+   new output. After an authorized presentation-only update to the selected
+   snapshot, reload the page and confirm the changed content; there is no live
+   reload. Record observed results, failed or blocked checks and any capture
+   provenance limits. Reset temporary viewport changes and close review-only
+   tabs afterward. HTTP success alone does not complete rendered QA.
+
 ## Hosting configuration
 
 `site/deployment.json` defines the intended canonical origin and base for the
@@ -146,9 +185,9 @@ an HTTP response or source inspection alone does not establish visual quality.
   Follow the intro's Gallery link when present, the README example and
   Acknowledgments links. Repeat navigation and browser Back/Forward. Capture
   disclaimers belong with capture evidence, not unrelated prose pages.
-- Open an example and a continuation page. Check the complete fitted image and
-  native-resolution scrolling/arrow keys. Narrow images need readable transcript
-  and original-image alternatives; never fix clipping by cropping evidence.
+- Open an example and use its page links to reach a continuation page and return.
+  Check the complete fitted image, original-PNG zoom link and readable transcript
+  at narrow widths; never fix clipping by cropping evidence.
 - Activate matching-text links with the target collapsed, expanded and collapsed
   again at the same fragment. Each click should open its ancestors and align the
   target after layout settles. Check long transcript lines and Copy spacing.
@@ -156,8 +195,9 @@ an HTTP response or source inspection alone does not establish visual quality.
   contents. Verify the Download target and, when permitted, the saved transcript.
   A timeout or permission prompt is not successful completion; inspect an uncertain
   outcome before retrying. Keep browser permissions and unrelated files unchanged.
-- Check command-before-output context and concise actual/staged, historical and
-  incomplete labels. Keep technical provenance accessible without burying examples.
+- Check concise actual/staged, historical and incomplete labels. Keep recorded
+  invocations accessible in capture details, separate from recommended commands
+  in the installation guides. Keep technical provenance accessible without burying examples.
   Use the [CLI-output review workflow](../tools/output-gallery/README.md#review-command-line-output)
   to establish source fidelity separately from presentation quality.
 
@@ -194,6 +234,13 @@ Normal builds reuse the pinned bundle. For an asset refresh, follow the
 verify the base pin, replace complete explicitly named entries, and preserve the
 rest byte-for-byte. Compare rendering with retained neighbors for visual consistency.
 The canonical README designation must remain, or transfer within the selected set.
+
+Make the [refresh summary](../tools/output-gallery/README.md#review-the-refresh-summary)
+easy to find in the review handoff: list replaced IDs, the retained count and the
+candidate bundle/hash, with local preview links to the replaced examples. Save
+the full `replace` output with the evidence. Build the complete candidate site
+and review those examples in the browser before upload or activation; record
+the result for each replaced ID.
 
 If the canonical Update entry changes, the same task must export and check the
 README's image list, labels and full embedded text against the candidate bundle,

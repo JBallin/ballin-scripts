@@ -363,10 +363,12 @@ def retrieve(pin, request=github):
 
 
 def gallery_html(manifest, files, base):
-    lines = ['<h1 id="gallery">Output gallery</h1>', '<p>Rendered output and matching text. Actual VM recordings and staged demonstrations are labeled separately. Presentation examples do not establish end-to-end correctness.</p>', '<nav aria-label="Gallery sections">']
+    lines = ['<h1 id="gallery">Output gallery</h1>', '<p>See what Ballin looks like in Terminal. Choose a topic, then open an example to view its output or read the matching text.</p>']
+    lines.append('<nav class="gallery-topics" aria-label="Gallery sections">')
+    topic_labels = {'Install & Quickstart': 'Installing', 'Setup & Backup': 'Backups & preferences', 'Update': 'Updating', 'Diagnostics': 'Diagnostics'}
     for category in CATEGORIES:
         slug = category.lower().replace(' & ', '-').replace(' ', '-')
-        lines.append(f'<a href="#{slug}">{html.escape(category)}</a> ')
+        lines.append(f'<a href="#{slug}">{html.escape(topic_labels[category])}</a> ')
     lines.append('</nav>')
     for category in CATEGORIES:
         slug = category.lower().replace(' & ', '-').replace(' ', '-')
@@ -385,6 +387,7 @@ def gallery_html(manifest, files, base):
                 width, height = struct.unpack('>II', files[image][16:24])
                 lines.append(f'<figure><a href="{base}/{viewer}"><img loading="lazy" width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, rendered page {index}. Open full-size image."></a><figcaption>Page {index} of {len(entry["images"])} · <a href="{base}/{viewer}">Open full-size image ({width} × {height})</a></figcaption></figure>')
             lines.append(transcript_html(entry, files, base) + '</details></article>')
+    lines.append('<details class="review-context"><summary>How to read this gallery</summary><p>Actual recordings show a particular VM session. Staged examples illustrate output without live execution. Images are rendered from terminal output, not native Terminal screenshots. Each example keeps its source revision and capture details; presentation examples do not establish end-to-end correctness.</p></details>')
     return '\n'.join(lines)
 
 
@@ -398,6 +401,19 @@ def transcript_html(entry, files, base, suffix=''):
             f'<a download href="{base}/{entry["text"]}">Download text</a></details>')
 
 
+def image_page_navigation(entry, index, base):
+    if len(entry['images']) < 2:
+        return ''
+    links = []
+    for number, image in enumerate(entry['images'], 1):
+        label = f'Page {number}'
+        if number == index:
+            links.append(f'<span aria-current="page">{label}</span>')
+        else:
+            links.append(f'<a href="{base}/{image.removesuffix(".png")}.html">{label}</a>')
+    return '<nav class="image-pages" aria-label="Example pages">' + ''.join(links) + '</nav>'
+
+
 def image_pages(manifest, files, base):
     pages = []
     for entry in manifest['entries']:
@@ -406,11 +422,12 @@ def image_pages(manifest, files, base):
             title = html.escape(entry['title'])
             content = (f'<h1>{title}</h1><p class="image-actions"><a href="{base}/gallery.html#entry-{entry["id"]}">Back to gallery example</a>'
                        f'<a href="#transcript-{entry["id"]}-image">Matching text</a><a href="{base}/{image}">Open original PNG</a></p>'
-                       f'<p>Full-size rendered image, {width} × {height} pixels. Scroll horizontally and vertically, or open the original PNG to zoom. '
+                       f'<p>Rendered image, {width} × {height} pixels. Open the original PNG to zoom. '
                        f'Page {index} of {len(entry["images"])}. {html.escape(entry["kind"])} · Source: <code>{entry["sourceRevision"]}</code></p>'
                        f'<details class="provenance"><summary>Source and capture details</summary><p>{html.escape(entry["edits"])}</p></details>'
-                       f'<figure class="image-preview"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Matching text follows."><figcaption>Complete image, fitted to available width. For larger text, open Native resolution or the original PNG.</figcaption></figure>'
-                       f'<details class="native-mode"><summary>Native resolution — scroll or use arrow keys</summary><div class="full-image" tabindex="0" role="region" aria-label="Full-resolution terminal output"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Native resolution."></div></details>'
+                       + image_page_navigation(entry, index, base) +
+                       f'<figure class="image-preview"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Matching text follows."><figcaption>Complete image, fitted to the page. Open the original PNG to zoom, or read the text version.</figcaption></figure>'
+                       + image_page_navigation(entry, index, base)
                        + transcript_html(entry, files, base, '-image'))
             pages.append({'path': image.removesuffix('.png') + '.html', 'title': f"{entry['title']} — page {index} of {len(entry['images'])}", 'source': 'tools/output-gallery/README.md', 'content': content})
     return pages
@@ -466,7 +483,7 @@ def page_metadata(page, base, origin):
     """Static sharing metadata; titles stay topic-first except the product home."""
     topic = page['title'].strip()
     require(bool(topic), 'Page title must not be empty: ' + page['path'])
-    title = 'Ballin' if page['path'] == 'index.html' else topic + ' · Ballin'
+    title = 'Ballin — Back up dotfiles and update your Mac' if page['path'] == 'index.html' else topic + ' · Ballin'
     description = 'Back up your dotfiles and keep your macOS development tools current.'
     if page['path'] != 'index.html':
         description = topic + ' — ' + description
