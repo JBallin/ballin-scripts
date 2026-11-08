@@ -487,6 +487,15 @@ class BuildTests(unittest.TestCase):
     def test_analytics_loader_offline_origin_and_token_guards(self):
         subprocess.run(['node', str(site.ROOT / 'tools/site/test_analytics.cjs')], check=True)
 
+    def test_netlify_credit_in_shared_footer(self):
+        credit = '<a href="https://www.netlify.com/">This site is powered by Netlify</a>'
+        for page in self.output.rglob('*.html'):
+            source = page.read_text()
+            footer = source.split('<footer>', 1)[1].split('</footer>', 1)[0]
+            self.assertEqual(footer.count(credit), 1)
+            self.assertIn('View source on GitHub', footer)
+            self.assertIn('Back up dotfiles. Keep your tools current.', footer)
+
     def test_complete_site_contains_docs_and_same_bundle_bytes(self):
         self.assertTrue((self.output / 'docs/installation.html').is_file())
         self.assertTrue((self.output / 'sitemap.xml').is_file())
