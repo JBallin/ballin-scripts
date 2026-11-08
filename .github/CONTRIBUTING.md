@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Run the [install script](README.md#installation). Use the installed checkout
+1. Run the [install script](../README.md#installation). Use the installed checkout
    at `~/.ballin-scripts` for contributor development; its `origin` points to
    the upstream `JBallin/ballin-scripts` repository.
 2. Fork the repository on GitHub.
@@ -15,7 +15,7 @@
 
 ## Development
 
-For development, use the [main-tracking environment default](docs/installation.md#selecting-a-revision).
+For development, use the [main-tracking environment default](../docs/installation.md#selecting-a-revision).
 Self-update refuses unsafe local work and confirms track changes. Preserve work
 before updating, then create your feature branch. It never automatically stashes
 or merges local work.
@@ -35,11 +35,11 @@ $ git push --set-upstream fork "$BRANCH_NAME"
 the change and how you tested it.
 
 For faster focused testing and the additional hosted CI checks, see
-[Testing and coverage](docs/testing.md). Agent operational instructions live in
-[AGENTS.md](AGENTS.md).
+[Testing and coverage](../docs/testing.md). Agent operational instructions live in
+[AGENTS.md](../AGENTS.md).
 
 For deeper user and maintainer documentation, see the
-[documentation index](docs/README.md).
+[documentation index](../docs/README.md).
 
 ## Feedback and Discussions
 

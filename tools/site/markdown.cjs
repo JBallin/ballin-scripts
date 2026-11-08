@@ -5,7 +5,11 @@ const MarkdownIt = require('../../site/node_modules/markdown-it');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const pages = new Set(input.pages.map(page => page.path));
 const encodePath = value => value.split('/').map(encodeURIComponent).join('/');
-const outputPath = file => file === 'README.md' ? 'index.html' : file.replace(/README\.md$/, 'index.md').replace(/\.md$/, '.html');
+// Community source files live in .github; keep their existing public page URLs.
+const outputPath = file => {
+  const publicPath = file.replace(/^\.github\/(CONTRIBUTING|SUPPORT|SECURITY)\.md$/, '$1.md');
+  return publicPath === 'README.md' ? 'index.html' : publicPath.replace(/README\.md$/, 'index.md').replace(/\.md$/, '.html');
+};
 const rendered = input.pages.map(page => {
   const md = new MarkdownIt({ html: true, linkify: false });
   const counts = new Map();
