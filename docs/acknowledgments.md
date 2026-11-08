@@ -31,6 +31,10 @@ look after.
 [c8](https://github.com/bcoe/c8) support development checks, tests, and coverage.
 Ballin's Node.js CLI has no runtime npm dependencies.
 
+[Codex](https://developers.openai.com/codex/) and [Claude Code](https://code.claude.com/docs/en/overview)
+assist with Ballin's development and code review. The [Claude Review Runtime](https://github.com/JBallin/claude-review-runtime)
+coordinates Claude PR reviews and reports their status.
+
 [Tart](https://github.com/openai/tart) provides macOS virtual machines used to
 [test installation](installation-testing.md).
 
