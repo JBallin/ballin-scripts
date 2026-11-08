@@ -668,7 +668,7 @@ git clone https://github.com/example-user/ballin-backups.git
 
 For an unexpected problem, run `ballin self-update` first. If it succeeds and the
 problem remains, run `ballin doctor` and follow its guidance. If you still need
-help, see [Support](../SUPPORT.md). Review output before sharing it and remove
+help, see [Support](../.github/SUPPORT.md). Review output before sharing it and remove
 credentials or sensitive backup contents.
 
 If `ballin self-update` fails during setup, the checkout may already be updated;

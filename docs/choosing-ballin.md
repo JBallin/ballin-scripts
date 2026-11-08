@@ -124,4 +124,4 @@ requires deciding which configuration to manage and how to apply it.
 ## Missing a capability?
 
 [Start a discussion](https://github.com/JBallin/ballin-scripts/discussions)
-or propose a change through a [pull request](../CONTRIBUTING.md).
+or propose a change through a [pull request](../.github/CONTRIBUTING.md).
