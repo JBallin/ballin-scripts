@@ -247,6 +247,8 @@ const runAutomaticStage = (
 };
 
 function runUpdateCommand(): void {
+  const homebrewManaged = require('./installation.ts').isHomebrewInstallation();
+  let deferHomebrewCleanup = false;
   let needsPhaseSeparator = false;
   const reportDiagnostic = (text = ''): void => {
     writeStderrLine(text);
@@ -292,6 +294,8 @@ function runUpdateCommand(): void {
       ...process.env,
       HOMEBREW_NO_ENV_HINTS: '1',
       HOMEBREW_NO_ASK: '1',
+      // Keep the running keg and its runtime until all Ballin stages finish.
+      ...(homebrewManaged ? { HOMEBREW_NO_INSTALL_CLEANUP: '1' } : {}),
     };
     // Homebrew prints its own update heading.
     const updateStatus = runIntegrationCommand('brew', ['update'], { env: childEnv });
@@ -302,7 +306,8 @@ function runUpdateCommand(): void {
       runIntegrationCommand('brew', ['upgrade'], { env: childEnv });
     }
 
-    if (settings.cleanup) {
+    if (settings.cleanup && homebrewManaged) deferHomebrewCleanup = true;
+    if (settings.cleanup && !homebrewManaged) {
       progress('Cleaning up Homebrew packages');
       runIntegrationCommand('brew', ['cleanup'], { env: childEnv });
     }
@@ -355,7 +360,7 @@ function runUpdateCommand(): void {
     }
   }
 
-  if (settings.selfUpdate) {
+  if (settings.selfUpdate && !homebrewManaged) {
     progress('Updating Ballin');
     const updateStatus = runAutomaticStage('update.self-update', () => runIntegrationCommand(ballinCommandPath(), ['self-update'], {
       env: {
@@ -381,6 +386,16 @@ function runUpdateCommand(): void {
     }));
   }
 
+  // No subsequent stage may load code or launch a child from the running keg.
+  // On interruption, retaining an old keg is safer than cleanup in a finally.
+  if (deferHomebrewCleanup && exitStatus === 0) {
+    progress('Cleaning up Homebrew packages');
+    runIntegrationCommand('brew', ['cleanup'], { env: childEnv });
+  }
+
+  if (deferHomebrewCleanup && exitStatus !== 0) {
+    reportDiagnostic('Homebrew cleanup was not completed; older kegs may remain for recovery.');
+  }
   if (exitStatus !== 0) {
     process.exitCode = exitStatus;
   }

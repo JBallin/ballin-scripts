@@ -87,7 +87,7 @@ const configureBackup = (
     showValidationSummary: options.showValidationSummary,
     maintenanceOnly: options.maintenanceOnly,
     reviewExistingSettings: options.reviewExistingSettings,
-    backupCacheDir: options.backupCacheDir ?? path.join(repoDir, '.backup-cache'),
+    backupCacheDir: options.backupCacheDir ?? path.join(require('./installation.ts').stateDirectory(repoDir), '.backup-cache'),
   });
 };
 
@@ -104,6 +104,10 @@ const commandTargetSnapshot = (target: string): string => {
 };
 type CommandPreflight = { directory: string; target: string; snapshot: string };
 const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPreflight): boolean => {
+  if (require('./installation.ts').isHomebrewInstallation(repoDir)) {
+    writeStdoutLine('Homebrew owns package command links. Use `ballin setup --initial` for onboarding.');
+    return false;
+  }
   const sourceBinDir = path.join(repoDir, 'bin');
 
   try {
@@ -117,6 +121,10 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
     for (const binName of fs.readdirSync(sourceBinDir)) {
       const sourcePath = path.join(sourceBinDir, binName);
       const targetPath = path.join(binDir, binName);
+      if (require('./installation.ts').homebrewCommandOwner(targetPath)) {
+        writeStdoutLine(`Homebrew owns ${terminalPath(targetPath)}. No command links were changed. Unlink the package with Homebrew before choosing a Git installation.`);
+        return false;
+      }
       const current = commandTargetSnapshot(targetPath);
       if (preflight && (preflight.target !== targetPath || preflight.snapshot !== current)) {
         writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying.`);

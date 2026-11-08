@@ -656,7 +656,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
 function runBackupCommand(args = process.argv.slice(2)): void {
   const homeDir = process.env.HOME ?? '';
   const repoDir = process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..');
-  const backupCacheDir = path.join(repoDir, '.backup-cache');
+  const backupCacheDir = path.join(require('./installation.ts').stateDirectory(repoDir), '.backup-cache');
   const requestedCommand = args[0];
 
   if (requestedCommand === 'help') {

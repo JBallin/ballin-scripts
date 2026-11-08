@@ -3,7 +3,6 @@ const { terminalCommand, terminalCommandReferences } = require('./terminalStyle.
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   ensureAnalyticsInstallId,
-  installIdPathForRepo,
   rethrowCommandError,
   runWithCommandAnalytics,
 } = require('./analytics.ts');
@@ -43,14 +42,17 @@ const {
   isTopLevelCommandName,
   commandHelpOptionName,
   doctorVerboseOptionName,
+  setupInitialOptionName,
 } = require('./top_level_commands.ts') as {
   isTopLevelCommandName: (value: unknown) => value is TopLevelCommandName;
   commandHelpOptionName: string;
   doctorVerboseOptionName: string;
+  setupInitialOptionName: string;
 };
 import type { DoctorReport } from './doctor_report.ts';
 
-const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
+// configPath already identifies writable state for both Git and package installs.
+const analyticsInstallIdPath = path.join(path.dirname(configPath), '.analytics', 'install-id');
 
 const ballinHelp = `Usage: ballin <command> [options]
        ballin help [command...]
@@ -314,6 +316,10 @@ function runBallinCommand(args = process.argv.slice(2)): void {
     case 'setup':
       if (commandArgs.length === 1 && commandArgs[0] === commandHelpOptionName) {
         writeStdout(terminalCommandReferences(formatHelp(setupHelp), ['ballin backup setup']));
+        return;
+      }
+      if (commandArgs.length === 1 && commandArgs[0] === setupInitialOptionName) {
+        require('./package_setup.ts').runPackageSetupCommand();
         return;
       }
       runNoArgCommand('ballin setup', commandArgs, () => {

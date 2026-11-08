@@ -88,6 +88,8 @@ describe('install setup', () => {
   });
 
   const installConfigSources = () => {
+    fs.mkdirSync(path.join(repoDir, 'commands'), { recursive: true });
+    fs.copyFileSync(path.join(repoRoot, 'commands', 'installation.ts'), path.join(repoDir, 'commands', 'installation.ts'));
     fs.mkdirSync(path.join(repoDir, 'config'), { recursive: true });
     ['.defaultConfig.json', 'commands.ts', 'index.ts', 'store.ts', 'updateConfig.ts', 'writeConfigFile.ts'].forEach((fileName) => {
       fs.copyFileSync(

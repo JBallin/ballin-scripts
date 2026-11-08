@@ -3,7 +3,7 @@ import type { BackupCommandName } from './backup_commands.ts';
 import type { ConfigOperationName } from '../config/commands.ts';
 const fs = require('fs');
 const path = require('path');
-const { topLevelCommandNames, commandHelpOptionName, doctorVerboseOptionName } = require('./top_level_commands.ts');
+const { topLevelCommandNames, commandHelpOptionName, doctorVerboseOptionName, setupInitialOptionName } = require('./top_level_commands.ts');
 const { backupCommandNames, backupReadOptionNames, backupSetupOptionNames } = require('./backup_commands.ts') as {
   backupCommandNames: readonly BackupCommandName[];
   backupReadOptionNames: readonly string[];
@@ -24,6 +24,7 @@ const topLevelCompletionNames = [...topLevelCommandNames, 'help', commandHelpOpt
 const commandCompletionNames = (topLevelCommandNames as readonly TopLevelCommandName[]).map((command) => [command, [
   ...(nestedCommandNames[command] ?? []),
   ...(command === 'doctor' ? [doctorVerboseOptionName] : []),
+  ...(command === 'setup' ? [setupInitialOptionName] : []),
   commandHelpOptionName,
 ]] as const);
 const configNames: { readable: string[]; leaves: string[]; booleans: string[] } = configCompletionNames();
@@ -73,9 +74,9 @@ const selection = (shell: 'bash' | 'zsh'): string[] => {
     `      if [[ "${word(1)}" == backup && "${word(2)}" == read && "${word(4)}" == --file ]]; then`,
     ...(shell === 'bash' ? [
       '        member=1',
-      `        while IFS= read -r candidate; do candidates+=("$candidate"); done < <(command node "$_ballin_completion_helper" "${word(3)}" 2>/dev/null)`,
+      `        while IFS= read -r candidate; do candidates+=("$candidate"); done < <(command "\${_ballin_completion_node:-node}" "$_ballin_completion_helper" "${word(3)}" 2>/dev/null)`,
     ] : [
-      `        member_paths="$(command node "$_ballin_completion_helper" "${word(3)}" 2>/dev/null)"`,
+      `        member_paths="$(command "\${_ballin_completion_node:-node}" "$_ballin_completion_helper" "${word(3)}" 2>/dev/null)"`,
       '        [[ -n "$member_paths" ]] && candidates=("${(@f)member_paths}")',
     ]),
     '      fi',
@@ -86,6 +87,7 @@ const selection = (shell: 'bash' | 'zsh'): string[] => {
 
 const renderZshCompletion = (): string => [
   '#compdef ballin',
+  '_ballin_completion_node=node',
   '',
   '_ballin_completion_helper="${${(%):-%x}:A:h:h}/commands/completion_members.ts"',
   '',
@@ -107,6 +109,7 @@ const renderZshCompletion = (): string => [
 ].join('\n');
 
 const renderBashCompletion = (): string => [
+  '_ballin_completion_node=node',
   '_ballin_completion_helper="$(builtin cd -- "${BASH_SOURCE[0]%/*}/.." && builtin pwd -P)/commands/completion_members.ts"',
   '',
   // Readline words retain quotes and escapes. Decode literals without eval or expansion.

@@ -307,7 +307,7 @@ const overallStatus = (checks: SetupReadinessCheck[]): SetupReadinessOverallStat
 
 const collectSetupReadiness = ({
   repoDir,
-  configPath = path.join(repoDir, 'ballin.config.json'),
+  configPath = require('./installation.ts').configurationFile(repoDir),
   env = process.env,
   nodeVersion = process.versions.node,
   nodeEngine,
@@ -317,6 +317,11 @@ const collectSetupReadiness = ({
     nodeRuntimeCheck(repoDir, nodeVersion, nodeEngine),
     commandShimCheck(env),
   ];
+  const packageCommand = require('./installation.ts').selectedPackageCommand(repoDir, env);
+  if (packageCommand) checks.push({ id: 'commands.package', label: 'Package command ownership', ...packageCommand });
+  const metadata = require('./installation.ts').readPackageMetadata(repoDir);
+  if (metadata?.schema === 2) checks.push({ id: 'package.provenance', label: 'Package provenance', status: 'info',
+    summary: `Development package ${metadata.version}, archive ${metadata.archiveSha256}. Declared source revision: ${metadata.sourceRevision}. This does not establish a published release.` });
   const { check: configCheck, config } = readConfig(configPath);
   checks.push(configCheck);
   checks.push(...guConfigChecks(config, env, runCommand));

@@ -1,4 +1,5 @@
 #compdef ballin
+_ballin_completion_node=node
 
 _ballin_completion_helper="${${(%):-%x}:A:h:h}/commands/completion_members.ts"
 
@@ -18,7 +19,7 @@ _ballin() {
         config) candidates=('get' 'set' 'reset' '--help') ;;
         doctor) candidates=('--verbose' '--help') ;;
         self-update) candidates=('--help') ;;
-        setup) candidates=('--help') ;;
+        setup) candidates=('--initial' '--help') ;;
         uninstall) candidates=('--help') ;;
         update) candidates=('--help') ;;
         help) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update') ;;
@@ -49,7 +50,7 @@ _ballin() {
       ;;
     6)
       if [[ "${words[2]}" == backup && "${words[3]}" == read && "${words[5]}" == --file ]]; then
-        member_paths="$(command node "$_ballin_completion_helper" "${words[4]}" 2>/dev/null)"
+        member_paths="$(command "${_ballin_completion_node:-node}" "$_ballin_completion_helper" "${words[4]}" 2>/dev/null)"
         [[ -n "$member_paths" ]] && candidates=("${(@f)member_paths}")
       fi
       ;;

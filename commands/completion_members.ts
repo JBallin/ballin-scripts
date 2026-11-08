@@ -37,14 +37,14 @@ const readLocalFile = (file: string, limit: number): Buffer => inDirectory(
   path.dirname(file), '.', () => readPinnedFile(path.basename(file), limit, false),
 );
 
-const completionMemberPaths = (bundle: string, repoRoot = path.join(__dirname, '..'), configPath = path.join(repoRoot, 'ballin.config.json')): string[] => {
+const completionMemberPaths = (bundle: string, repoRoot = path.join(__dirname, '..'), configPath = require('./installation.ts').configurationFile(repoRoot)): string[] => {
   try {
     if (!directorySnapshotFileNames.has(bundle) || !bundle.endsWith('.bundle.json')) return [];
     const config = readLocalFile(configPath, configByteLimit);
     if (!isUtf8(config)) return [];
     const destination = configuredBackupDestination(JSON.parse(config.toString('utf8')));
     if (destination.kind !== 'repository') return [];
-    const root = path.join(repoRoot, '.backup-cache');
+    const root = path.join(require('./installation.ts').stateDirectory(repoRoot), '.backup-cache');
     const directory = repositoryCacheDirectory(root, destination.repository);
     const bytes: Buffer = inDirectory(root, '.', () => {
       if (!privateEntry(fs.statSync('.'))) throw new Error('Unsafe cache root');

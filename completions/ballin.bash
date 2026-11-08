@@ -1,3 +1,4 @@
+_ballin_completion_node=node
 _ballin_completion_helper="$(builtin cd -- "${BASH_SOURCE[0]%/*}/.." && builtin pwd -P)/commands/completion_members.ts"
 
 _ballin_completion_unquote() {
@@ -72,7 +73,7 @@ _ballin_completion() {
         config) candidates=('get' 'set' 'reset' '--help') ;;
         doctor) candidates=('--verbose' '--help') ;;
         self-update) candidates=('--help') ;;
-        setup) candidates=('--help') ;;
+        setup) candidates=('--initial' '--help') ;;
         uninstall) candidates=('--help') ;;
         update) candidates=('--help') ;;
         help) candidates=('backup' 'config' 'doctor' 'self-update' 'setup' 'uninstall' 'update') ;;
@@ -104,7 +105,7 @@ _ballin_completion() {
     5)
       if [[ "${words[1]}" == backup && "${words[2]}" == read && "${words[4]}" == --file ]]; then
         member=1
-        while IFS= read -r candidate; do candidates+=("$candidate"); done < <(command node "$_ballin_completion_helper" "${words[3]}" 2>/dev/null)
+        while IFS= read -r candidate; do candidates+=("$candidate"); done < <(command "${_ballin_completion_node:-node}" "$_ballin_completion_helper" "${words[3]}" 2>/dev/null)
       fi
       ;;
   esac

@@ -161,6 +161,8 @@ done
       remoteDir,
       scratchDir,
     ].forEach((directory) => fs.mkdirSync(directory, { recursive: true }));
+    fs.mkdirSync(path.join(path.join(testHomeDir, '.ballin-scripts'), 'commands'), { recursive: true });
+    fs.copyFileSync(path.join(repoRoot, 'commands/installation.ts'), path.join(path.join(testHomeDir, '.ballin-scripts'), 'commands/installation.ts'));
     fs.cpSync(path.join(repoRoot, 'config'), path.join(testHomeDir, '.ballin-scripts', 'config'), { recursive: true });
     requiredCommands.forEach(linkRequiredCommand);
     realCatPath = installControllableCatCommand();
