@@ -30,11 +30,15 @@ def selected_file(site, base, request_path):
 
 class Preview(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, site, base, **kwargs):
-        self.site, self.base = site, base
+        self.site, self.base = site.resolve(), base
         super().__init__(*args, directory=str(site), **kwargs)
 
     def translate_path(self, path):
         return str(selected_file(self.site, self.base, path))
+
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
 
     def copyfile(self, source, outputfile):
         try:
@@ -66,7 +70,7 @@ def main():
     parser.add_argument('--base', help='Override the snapshot base; legacy snapshots default to /ballin-scripts')
     parser.add_argument('--port', type=int, default=8000, help='Use 0 to choose a free port')
     args = parser.parse_args()
-    site = args.site.resolve()
+    site = args.site.absolute()
     if not (site / 'build.json').is_file() or not (site / 'index.html').is_file():
         parser.error('--site must select a complete generated snapshot')
     metadata = json.loads((site / 'build.json').read_text())

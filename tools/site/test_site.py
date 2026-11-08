@@ -27,6 +27,10 @@ preview_spec = importlib.util.spec_from_file_location('ballin_preview', Path(__f
 preview = importlib.util.module_from_spec(preview_spec)
 preview_spec.loader.exec_module(preview)
 
+local_spec = importlib.util.spec_from_file_location('ballin_local', Path(__file__).with_name('local.py'))
+local = importlib.util.module_from_spec(local_spec)
+local_spec.loader.exec_module(local)
+
 
 def png():
     def chunk(name, data):
@@ -694,6 +698,78 @@ class BuildTests(unittest.TestCase):
             for path in ['/private.txt', '/ballin-scripts/../private.txt', '/ballin-scripts/%2e%2e/private.txt', '/ballin-scripts/escape', '/ballin-scripts/nested/']:
                 with self.subTest(path=path):
                     self.assertIsNone(preview.selected_file(selected, '/ballin-scripts', path))
+
+    def test_local_rebuild_switches_running_preview_only_after_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            storage = Path(directory) / 'local'
+            version = ['first']
+            def fake_build(output, *args, **kwargs):
+                output.mkdir()
+                (output / 'index.html').write_text(version[0])
+                (output / 'build.json').write_text('{"hosting":{"base":""}}')
+            with mock.patch.object(local.site, 'build', side_effect=fake_build):
+                current = local.rebuild(storage)
+                first = current.resolve()
+                server = preview.http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(preview.Preview, site=current, base=''))
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                def fetch():
+                    connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+                    try:
+                        connection.request('GET', '/')
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.getheader('Cache-Control'), 'no-store')
+                        return response.read()
+                    finally:
+                        connection.close()
+                try:
+                    self.assertEqual(fetch(), b'first')
+                    version[0] = 'second'
+                    local.rebuild(storage)
+                    self.assertEqual(fetch(), b'second')
+                    self.assertNotEqual(first, current.resolve())
+                    self.assertTrue(first.is_dir())
+                    with mock.patch.object(local.site, 'build', side_effect=ValueError('failed validation')):
+                        with self.assertRaisesRegex(ValueError, 'failed validation'):
+                            local.rebuild(storage)
+                    self.assertEqual(fetch(), b'second')
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
+
+    def test_local_rebuild_refuses_unmanaged_output_and_storage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            storage = Path(directory) / 'local'
+            storage.mkdir()
+            current = storage / 'current'
+            current.mkdir()
+            (current / 'keep.txt').write_text('evidence')
+            with self.assertRaisesRegex(ValueError, 'existing local preview'):
+                local.rebuild(storage)
+            self.assertEqual((current / 'keep.txt').read_text(), 'evidence')
+            alias = Path(directory) / 'alias'
+            alias.symlink_to(storage)
+            with self.assertRaisesRegex(ValueError, 'must not be a symlink'):
+                local.rebuild(alias)
+
+    def test_local_rebuild_rejects_parallel_build_and_unmanaged_link(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as directory:
+            storage = Path(directory) / 'local'
+            storage.mkdir()
+            with (storage / 'build.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaisesRegex(ValueError, 'Another local rebuild'):
+                    local.rebuild(storage)
+            target = Path(directory) / 'unmanaged'
+            target.mkdir()
+            (target / 'build.json').write_text('{}')
+            (storage / 'current').symlink_to(target)
+            with self.assertRaisesRegex(ValueError, 'unmanaged local preview link'):
+                local.rebuild(storage)
+            self.assertTrue((target / 'build.json').is_file())
 
     def test_preview_preserves_clean_directory_urls(self):
         with tempfile.TemporaryDirectory() as directory:

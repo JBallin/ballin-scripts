@@ -60,36 +60,54 @@ npm ci --ignore-scripts
 npm ci --prefix site --ignore-scripts
 ```
 
-Build a fresh snapshot and serve it on **port 8000**:
+Use **one output path, `.site-output/local/current`, and port 8000** for routine
+local work. Build it, then start the server once:
 
 ```sh
-snapshot=".site-output/review/root-$(date +%Y%m%d-%H%M%S)"
-python3 tools/site/site.py build --output "$snapshot" &&
-  python3 tools/site/preview.py --site "$snapshot" --port 8000
+python3 tools/site/local.py build && python3 tools/site/local.py serve
 ```
 
-**Validation URL: `http://127.0.0.1:8000/`.** This uses the current
-root-hosting configuration in `site/deployment.json`. The server prints its
-exact URL, selected directory, PID, source revision and dirty state at startup.
-Check those values before validation; the directory name alone does not prove
-which revision it contains. Keep this terminal running and open that URL in a
-browser on the **same computer**. Stop with Control-C. Neither command opens a
-browser, publishes the website or changes hosting settings.
+**Validation URL: `http://127.0.0.1:8000/`.** Keep that terminal running. Open
+the URL in a browser on the same computer. This standard local preview always
+uses root hosting, without `/ballin-scripts/`.
 
-The existing `site.py build` and `preview.py` scripts are the build/run entry
-points; there is no npm build/serve wrapper. `preview.py` **only serves existing
-files**. It does not build, watch source files or reload the browser. After
-editing README, docs or site source, stop the server and repeat the build/run
-block to create a new snapshot, then reload the page. Existing output directories
-are refused, so use a new timestamp/name if you repeat within the same second.
-A failed build does not start the preview in this recipe.
+After editing source, run this in a second terminal from the **same checkout**:
+
+```sh
+python3 tools/site/local.py build
+```
+
+Wait for a successful build, then refresh the same browser URL. **Do not restart
+the server, choose another output directory or change ports.** The existing
+server reads the current build on subsequent requests. There is no file watcher
+or automatic browser reload. Local responses disable browser caching.
+
+The helper builds and validates a complete candidate before atomically switching
+`current` to it. A failed rebuild leaves the previous site available; it does not
+mean your edits are visible. Old builds remain private under `.site-output/local/builds/`
+for existing requests and diagnosis, not as additional review destinations. The
+helper refuses to replace an unmanaged file, directory or link at `current` and
+serializes rebuilds. It never deletes source, captures or prior build evidence.
+Refresh after completion rather than navigating during the switch: individual
+responses use one snapshot, but a browser's multiple requests can straddle a rebuild.
+
+Stop with Control-C only when finished, or when changing the preview helper
+itself. To resume serving later, run `python3 tools/site/local.py serve`; rebuild
+first if source has changed. If port 8000 is already occupied, check which
+checkout/server owns it. Reuse the standard server for this checkout; do not
+silently start another port or stop an unrelated process. An older private gallery
+server is separate and remains untouched until an intentional switch.
+
+The startup output records the stable path and revision at server start. After a
+rebuild, inspect `.site-output/local/current/build.json` for the current source
+revision and dirty state. Neither command opens a browser or publishes the site.
 
 For tooling/template/workflow changes, also run `python3 tools/site/test_site.py`
 (or `npm --prefix site test`) after both dependency installs. Follow
 [Website QA](#website-qa) for rendered validation; successfully serving HTML
 alone is not visual QA.
 
-### Serve an existing snapshot
+### Advanced: serve an existing snapshot
 
 To resume review without rebuilding, use the exact previously recorded output:
 
@@ -156,13 +174,16 @@ URLs using the configured canonical origin and base.
 
 Use this process for human or agent review while hosted PR previews are unavailable:
 
-1. **Select the snapshot.** Build a fresh complete output, or use the exact private
+1. **Select the snapshot.** For routine work, rebuild `.site-output/local/current`
+   with `python3 tools/site/local.py build` and reuse its running server. For
+   specialized gallery evidence, use the exact private
    review snapshot recorded in the task handoff. Record its directory, source
    revision and dirty state. An older snapshot with local presentation changes
    is not an exact current-head build. Bootstrap outputs intentionally have no
    gallery; use the reviewed bundle or existing private gallery snapshot when
    gallery QA is needed. Preserve capture hashes and publication boundaries.
-2. **Serve it on the review computer.** Run
+2. **Serve it on the review computer.** Use `python3 tools/site/local.py serve`
+   for the standard preview if it is not already running. For a specialized snapshot, run
    `python3 tools/site/preview.py --site SNAPSHOT_DIRECTORY --port 8000`, using that
    directory, then keep the process running. Use the printed URL,
    including its project base path. The browser must run on the same computer:
@@ -184,8 +205,9 @@ Use this process for human or agent review while hosted PR previews are unavaila
    An external browser needs its own applicable authorization; do not retry
    denied access or change permissions as a workaround.
 5. **Review, refresh and record.** Check desktop, wide and narrow layouts and the
-   image/text/navigation flows below. After source changes, build and serve a
-   new output. After an authorized presentation-only update to the selected
+   image/text/navigation flows below. After source changes, rebuild the standard
+   output and refresh its existing server. For a specialized snapshot, rebuild
+   and serve the selected output. After an authorized presentation-only update to the selected
    snapshot, reload the page and confirm the changed content; there is no live
    reload. Record observed results, failed or blocked checks and any capture
    provenance limits. Reset temporary viewport changes and close review-only
@@ -200,7 +222,8 @@ metadata together. Source links continue to point to the exact GitHub revision.
 The existing branded PNG is copied to `docs/assets/brand/social-preview.png` and
 used in static Open Graph and Twitter large-card metadata with absolute URLs.
 
-For a GitHub project-site snapshot, override both values explicitly:
+The standard local preview above stays root-hosted. For a separate GitHub
+project-site compatibility check, override both values explicitly:
 
 ```sh
 snapshot=".site-output/review/project-$(date +%Y%m%d-%H%M%S)"
