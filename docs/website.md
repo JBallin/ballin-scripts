@@ -67,7 +67,7 @@ local work. Build it, then start the server once:
 python3 tools/site/local.py build && python3 tools/site/local.py serve
 ```
 
-**Validation URL: `http://127.0.0.1:8000/`.** Keep that terminal running. Open
+**Validation URL: `http://localhost:8000/`.** Keep that terminal running. Open
 the URL in a browser on the same computer. This standard local preview always
 uses root hosting, without `/ballin-scripts/`.
 
@@ -119,8 +119,8 @@ python3 tools/site/preview.py --site PATH_TO_COMPLETE_SNAPSHOT --port 8000
 parent. The server binds only to `127.0.0.1` and serves only that snapshot.
 The URL depends on the **snapshot's hosting base**, not its directory name:
 
-- Root-hosted snapshot: `http://127.0.0.1:8000/`.
-- Project-hosted snapshot: `http://127.0.0.1:8000/ballin-scripts/`.
+- Root-hosted snapshot: `http://localhost:8000/`.
+- Project-hosted snapshot: `http://localhost:8000/ballin-scripts/`.
   Older snapshots without hosting metadata also default to `/ballin-scripts`.
 
 These directory URLs serve `index.html` without changing the browser address.
@@ -187,7 +187,7 @@ Use this process for human or agent review while hosted PR previews are unavaila
    `python3 tools/site/preview.py --site SNAPSHOT_DIRECTORY --port 8000`, using that
    directory, then keep the process running. Use the printed URL,
    including its project base path. The browser must run on the same computer:
-   `127.0.0.1` in a cloud browser points to that cloud computer, not the local Mac.
+   `localhost` in a cloud browser points to that cloud computer, not the local Mac.
    Keep the server loopback-only; local QA needs no public tunnel or deployment.
 3. **Open an inspectable browser tab.** In the existing Codex task attached to
    that Mac, inspect the current browser inventory and use the built-in provider
@@ -233,7 +233,7 @@ python3 tools/site/site.py build --output "$snapshot" \
 ```
 
 Stop your previous review server before reusing port 8000. This project snapshot's
-validation URL is **`http://127.0.0.1:8000/ballin-scripts/`**, including
+validation URL is **`http://localhost:8000/ballin-scripts/`**, including
 the project base path. The default root build above does not use that prefix.
 To select a
 different durable deployment target, edit the same configuration, or supply

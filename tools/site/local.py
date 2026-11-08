@@ -48,7 +48,7 @@ def rebuild(local=LOCAL):
         link.symlink_to(candidate.relative_to(local))
         os.replace(link, current)
     print('Local preview rebuilt: ' + str(current))
-    print('Refresh http://127.0.0.1:8000/ (no server restart needed)')
+    print('Refresh http://localhost:8000/ (no server restart needed)')
     return current
 
 

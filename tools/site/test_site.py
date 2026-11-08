@@ -714,7 +714,7 @@ class BuildTests(unittest.TestCase):
                 thread = threading.Thread(target=server.serve_forever, daemon=True)
                 thread.start()
                 def fetch():
-                    connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+                    connection = http.client.HTTPConnection('localhost', server.server_port, timeout=5)
                     try:
                         connection.request('GET', '/')
                         response = connection.getresponse()
@@ -771,6 +771,21 @@ class BuildTests(unittest.TestCase):
                 local.rebuild(storage)
             self.assertTrue((target / 'build.json').is_file())
 
+    def test_preview_prints_localhost_but_binds_only_loopback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = Path(directory)
+            (selected / 'index.html').write_text('public home')
+            (selected / 'build.json').write_text(json.dumps({
+                'hosting': {'base': ''}, 'sourceRevision': 'a' * 40,
+                'sourceWorktreeDirty': False, 'bundle': {'mode': 'bootstrap'}}))
+            with mock.patch.object(preview.http.server, 'ThreadingHTTPServer') as factory:
+                factory.return_value.server_port = 8000
+                output = io.StringIO()
+                with mock.patch('sys.argv', ['preview.py', '--site', str(selected)]), contextlib.redirect_stdout(output):
+                    preview.main()
+                self.assertEqual(factory.call_args.args[0], ('127.0.0.1', 8000))
+                self.assertEqual(json.loads(output.getvalue())['url'], 'http://localhost:8000/')
+
     def test_preview_preserves_clean_directory_urls(self):
         with tempfile.TemporaryDirectory() as directory:
             selected = Path(directory)
@@ -784,7 +799,7 @@ class BuildTests(unittest.TestCase):
                     for method in ['GET', 'HEAD']:
                         for path in [base + '/', base + '/index.html', base + '/?review=1']:
                             with self.subTest(base=base, method=method, path=path):
-                                connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+                                connection = http.client.HTTPConnection('localhost', server.server_port, timeout=5)
                                 try:
                                     connection.request(method, path)
                                     response = connection.getresponse()
@@ -795,7 +810,7 @@ class BuildTests(unittest.TestCase):
                                     connection.close()
                     if base:
                         for path in ['/', base]:
-                            connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+                            connection = http.client.HTTPConnection('localhost', server.server_port, timeout=5)
                             try:
                                 connection.request('GET', path)
                                 response = connection.getresponse()

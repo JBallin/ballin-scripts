@@ -78,7 +78,7 @@ def main():
     if not isinstance(base, str) or not re.fullmatch(r'(?:/[a-zA-Z0-9_-]+)*', base) or not 0 <= args.port <= 65535:
         parser.error('Invalid snapshot base or port')
     server = http.server.ThreadingHTTPServer(('127.0.0.1', args.port), functools.partial(Preview, site=site, base=base))
-    print(json.dumps({'pid': os.getpid(), 'url': f'http://127.0.0.1:{server.server_port}{base}/',
+    print(json.dumps({'pid': os.getpid(), 'url': f'http://localhost:{server.server_port}{base}/',
                       'site': str(site), 'sourceRevision': metadata['sourceRevision'],
                       'sourceWorktreeDirty': metadata['sourceWorktreeDirty'], 'bundleMode': metadata['bundle']['mode']}), flush=True)
     try:
