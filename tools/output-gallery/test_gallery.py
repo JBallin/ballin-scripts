@@ -75,7 +75,8 @@ class GalleryTests(unittest.TestCase):
             self.assertEqual((self.root / page).read_bytes()[:8], b'\x89PNG\r\n\x1a\n')
 
     def test_rejects_mixed_supported_and_unsupported_escapes(self):
-        for index, text in enumerate(['\x1b[32mok\x1b[2Jhidden', '\x1b[38;5;100munsupported', '\x1b[999999999999999999999999999999moverflow', 'tab\there', 'delete\x7fhere', 'c1\x9bhere', '\x1b]8;;https://example.com\x07link']):
+        for index, text in enumerate(['\x1b[32mok\x1b[2Jhidden', '\x1b[38;5;100munsupported', '\x1b[999999999999999999999999999999moverflow', 'tab\there', 'delete\x7fhere', 'c1\x9bhere', '\x1b]8;;https://example.com\x07link',
+                                     '\x1b[34m\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\\x1b[0m']):
             result, _ = self.render(text, 'bad-' + str(index))
             self.assertNotEqual(result.returncode, 0)
 
@@ -88,7 +89,9 @@ class GalleryTests(unittest.TestCase):
 
     def test_plain_text_normalization_rejects_redraw(self):
         self.assertEqual(gallery.plain_text('\x1b[1mhello\x1b[0m\r\n'), 'hello\n')
-        for control in ['\r', '\b', '\x1b[2K', '\x07', '\x7f', '\x9b']:
+        for control in ['\r', '\b', '\x1b[2K', '\x07', '\x7f', '\x9b',
+                        '\x1b]8;;https://example.com\x1b\\label\x1b]8;;\x1b\\',
+                        '\x1b[34m\x1b]8;;https://example.com\x07label\x1b]8;;\x07\x1b[0m']:
             with self.assertRaises(ValueError):
                 gallery.plain_text('safe' + control)
 
@@ -146,6 +149,30 @@ class GalleryBuildTests(unittest.TestCase):
 
 
 class GallerySecurityTests(unittest.TestCase):
+    def test_runtime_profiles_require_one_complete_reviewed_set(self):
+        legacy = TOOLS.parent / 'pr-662-output-gallery'
+        with tempfile.TemporaryDirectory(prefix='ballin-runtime-profile-') as temp:
+            root = Path(temp)
+            builder = root / 'build.py'
+            shutil.copy2(legacy / 'build.py', builder)
+            trusted = json.loads((legacy / 'generation-runtime.json').read_text())
+            original = {'sourceRevision': trusted['sourceRevision'], 'executableHashes': trusted['executableHashes']}
+            wrong = {**original, 'executableHashes': {**original['executableHashes'], 'terminalStyle.ts': '0' * 64}}
+            pins = root / 'generation-runtime.json'
+            pins.write_text(json.dumps({**wrong, 'reviewedProfiles': [original]}))
+            repo = TOOLS.parents[1]
+            source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
+            command = ['python3', str(builder), '--root', str(repo), '--candidate', source]
+            output = root / 'accepted'
+            subprocess.run(command + ['--output', str(output)], check=True, capture_output=True, timeout=30)
+            self.assertEqual(json.loads((output / 'trusted-runtime.json').read_text()), original)
+            partial = {**original, 'executableHashes': {**original['executableHashes'], 'help_format.ts': '0' * 64}}
+            pins.write_text(json.dumps({**wrong, 'reviewedProfiles': [partial]}))
+            result = subprocess.run(command + ['--output', str(root / 'rejected')], capture_output=True, timeout=30)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b'Unreviewed gallery runtime', result.stderr)
+            self.assertFalse((root / 'rejected' / 'gallery.cjs').exists())
+
     def test_candidate_formatter_and_expression_never_execute(self):
         repo = TOOLS.parents[1]
         with tempfile.TemporaryDirectory(prefix='ballin-candidate-security-') as temp:

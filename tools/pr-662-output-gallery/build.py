@@ -17,15 +17,18 @@ base=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).stri
 sources={name:read(name) for name in FILES}
 # Trust comes from reviewed tooling pins, never from candidate provenance.
 # Candidate snapshots/help remain data; only these exact reviewed bytes execute.
-trusted=json.loads((pathlib.Path(__file__).resolve().parent/'generation-runtime.json').read_text())
+profiles=json.loads((pathlib.Path(__file__).resolve().parent/'generation-runtime.json').read_text())
 runtime={name:sources['commands/'+name] for name in ['terminalStyle.ts','help_format.ts','doctor_report.ts']}
 runtime['diagnostics.ts']=sources['config/diagnostics.ts']
 selection=re.search(r'^const selectionLabel = \(s: Selection\): string => ([^\n]+);$',sources['commands/repo_update.ts'],re.M)
 if not selection:raise SystemExit('Unrecognized pure selection formatter')
 runtime['selection_label.cjs']='const selectionLabel = (s) => '+selection.group(1)+';\nmodule.exports={selectionLabel};\n'
-for name,text in runtime.items():
-    if hashlib.sha256(text.encode()).hexdigest()!=trusted['executableHashes'][name]:
-        raise SystemExit('Unreviewed gallery runtime: '+name+'. Review formatter changes and update generation-runtime.json before generation.')
+runtime_hashes={name:hashlib.sha256(text.encode()).hexdigest() for name,text in runtime.items()}
+trusted=next((profile for profile in [profiles]+profiles.get('reviewedProfiles', [])
+              if runtime_hashes==profile['executableHashes']), None)
+if trusted is None:
+    raise SystemExit('Unreviewed gallery runtime: complete formatter profile mismatch. Review formatter changes and update generation-runtime.json before generation.')
+trusted={key:value for key,value in trusted.items() if key!='reviewedProfiles'}
 (OUT/'source-evidence').mkdir(exist_ok=True)
 hashes={}
 for name,text in sources.items():
@@ -53,7 +56,7 @@ checks={
  'commands/setup.ts':['Configuration file:','replace it with defaults','Update Node.js LTS through NVM?','Node.js LTS updates through NVM are offered when NVM is loadable', 'Review cancelled.','Earlier choices saved.','Update Ballin?','Clean up Homebrew?'],
  'commands/install_setup.ts':['const backupSetupAllowed =', 'backupSetupAllowed && (backupConfigured || backupInvalid', 'offerCompletionSetup(docsUrl',"process.env.BALLIN_BACKUP_CHOICE !== 'no'",'Review your Ballin preferences?', 'setupAnalytics(repoDir)', 'deferFollowUp: true','const followUp = generalReview ? [general, backup]','Change preferences with'],
  'package.json':['\"installerProtocol\": 2'],
- 'install.sh':["phase 'Initial configuration'",'Installed updater uses an unsupported contract. See',"setup_complete; printf '\\nOpen a new Terminal and run '"]}
+ 'install.sh':["phase 'Initial configuration'",'Installed updater uses an unsupported contract.',"setup_complete; printf '\\nOpen a new Terminal and run '"]}
 evidence=[]
 for file,phrases in checks.items():
  for phrase in phrases:
@@ -83,10 +86,13 @@ const heading = s => line(t.terminalHeading(s));
 const choice = (q,a) => line(t.terminalPrompt(q)+t.terminalChoice(a));
 const typed = (q,a) => line(t.terminalPrompt(q)+a);
 const command = s => t.terminalCommand(s);
-const details = (label,url) => prose('i '+label+':\n'+url);
+const linkedDocs = typeof t.terminalDocumentation === 'function';
+const details = (label,url) => linkedDocs
+  ? line(t.terminalDocumentation(label,url.replace('.md','.html')))
+  : prose('i '+label+':\n'+url);
 const section = (n,title,note) => {line();line('==========================================================================');line(t.terminalEmphasis(n+'. '+title,'bold'));line('[STAGED / SELECTED — '+note+']');line();};
 const alternative = s => {line();line('[STAGED alternative — '+s+']');line();};
-const docs = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/';
+const docs = linkedDocs ? 'getballin.com/docs/' : 'https://github.com/JBallin/ballin-scripts/blob/main/docs/';
 const destination = 'https://github.com/example-user/synthetic-ballin-backup';
 const backupDetails = () => details('Backup details',docs+'installation.md#optional-backup-setup-and-reconnect');
 const sensitive = () => {
@@ -324,7 +330,8 @@ line('Revision change cancelled. The installed checkout is unchanged.');
 
 alternative('security repair: outcome-only excerpts, prior preflight/consent/checkout stages omitted; no live transition executed');
 line('Checkout changed after confirmation. Retry after inspecting it.');
-line(t.terminalMarkers('✗ Ballin: Installed updater uses an unsupported contract. See https://github.com/JBallin/ballin-scripts/blob/main/docs/installation-testing.md#prelaunch-entrypoint-recovery.'));
+line(t.terminalMarkers('✗ Ballin: Installed updater uses an unsupported contract.'+(linkedDocs ? '' : ' See https://github.com/JBallin/ballin-scripts/blob/main/docs/installation-testing.md#prelaunch-entrypoint-recovery.')));
+if (linkedDocs) details('Recovery',docs+'installation-testing.html#prelaunch-entrypoint-recovery');
 line('Ballin checkout is now '+manifest.candidateHead+', but setup refresh failed. Fix the reported error, then run '+command('ballin self-update')+' to finish.');
 
 section(10,'Doctor and help','actual pure current formatters with synthetic doctor data and extracted setup help');
