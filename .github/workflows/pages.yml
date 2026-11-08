@@ -5,9 +5,9 @@ on:
     branches: [main]
     paths:
       - README.md
-      - CONTRIBUTING.md
-      - SUPPORT.md
-      - SECURITY.md
+      - .github/CONTRIBUTING.md
+      - .github/SUPPORT.md
+      - .github/SECURITY.md
       - LICENSE.md
       - 'docs/**'
       - 'site/**'
@@ -81,7 +81,7 @@ jobs:
           SITE_SOURCE: ${{ needs.build.outputs.source }}
         run: |
           git diff --exit-code "$SITE_SOURCE" HEAD -- \
-            README.md CONTRIBUTING.md SUPPORT.md SECURITY.md LICENSE.md \
+            README.md .github/CONTRIBUTING.md .github/SUPPORT.md .github/SECURITY.md LICENSE.md \
             docs site tools/site .nvmrc .github/workflows/pages.yml
       - name: Deploy complete snapshot
         id: deployment

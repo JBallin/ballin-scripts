@@ -15,7 +15,7 @@
 
 ## Development
 
-For development, use the [main-tracking environment default](docs/installation.md#selecting-a-revision).
+For development, use the [main-tracking environment default](../docs/installation.md#selecting-a-revision).
 Self-update refuses unsafe local work and confirms track changes. Preserve work
 before updating, then create your feature branch. It never automatically stashes
 or merges local work.

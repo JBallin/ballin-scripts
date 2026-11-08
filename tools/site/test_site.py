@@ -461,6 +461,31 @@ class BuildTests(unittest.TestCase):
         self.assertIn('github.com/JBallin/ballin-scripts/blob/', source)
         site.verify_site(self.output, '/ballin-scripts')
 
+    def test_community_guides_keep_public_urls_and_source_links(self):
+        root_output = self.folder / 'community-root'
+        with contextlib.redirect_stdout(io.StringIO()):
+            site.build(root_output, self.bootstrap_pin, '', origin='https://getballin.com')
+        revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=site.ROOT, text=True).strip()
+        for output, origin, base in [(self.output, 'https://jballin.github.io', '/ballin-scripts'),
+                                     (root_output, 'https://getballin.com', '')]:
+            with self.subTest(base=base):
+                sitemap = (output / 'sitemap.xml').read_text()
+                for name in ['CONTRIBUTING', 'SUPPORT', 'SECURITY']:
+                    page = (output / (name + '.html')).read_text()
+                    self.assertIn(f'<loc>{origin}{base}/{name}.html</loc>', sitemap)
+                    self.assertIn(f'href="https://github.com/{site.REPO}/blob/{revision}/.github/{name}.md"', page)
+                    self.assertFalse((output / '.github' / (name + '.html')).exists())
+                contributing = (output / 'CONTRIBUTING.html').read_text()
+                support = (output / 'SUPPORT.html').read_text()
+                self.assertIn(f'href="{base}/index.html#installation"', contributing)
+                self.assertIn(f'href="{base}/docs/index.html"', contributing)
+                self.assertIn(f'href="{base}/docs/installation.html#selecting-a-revision"', contributing)
+                self.assertIn(f'href="{base}/SUPPORT.html"', contributing)
+                self.assertIn(f'href="{base}/docs/installation.html#health-and-recovery"', support)
+                self.assertIn(f'href="{base}/SECURITY.html"', support)
+                self.assertIn(f'/blob/{revision}/AGENTS.md', contributing)
+                site.verify_site(output, base)
+
     def test_favicon_copy_download_and_full_resolution_pages(self):
         page = (self.output / 'gallery.html').read_text()
         self.assertIn('href="/ballin-scripts/favicon.svg"', page)
@@ -734,7 +759,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(set(workflow['on']), {'push', 'workflow_dispatch'})
         self.assertEqual(workflow['on']['push']['branches'], ['main'])
         paths = set(workflow['on']['push']['paths'])
-        expected = {'README.md', 'CONTRIBUTING.md', 'SUPPORT.md', 'SECURITY.md', 'LICENSE.md', 'docs/**', 'site/**', 'tools/site/**', '.nvmrc', '.github/workflows/pages.yml'}
+        expected = {'README.md', '.github/CONTRIBUTING.md', '.github/SUPPORT.md', '.github/SECURITY.md', 'LICENSE.md', 'docs/**', 'site/**', 'tools/site/**', '.nvmrc', '.github/workflows/pages.yml'}
         self.assertEqual(paths, expected)
         self.assertEqual(workflow['permissions'], {'contents': 'read'})
         self.assertFalse(workflow['concurrency']['cancel-in-progress'])
@@ -747,6 +772,9 @@ class BuildTests(unittest.TestCase):
         freshness = next(step['run'] for step in deploy['steps'] if step.get('name') == 'Refuse a superseded snapshot')
         self.assertIn('git diff --exit-code', freshness)
         self.assertIn('docs site tools/site .nvmrc .github/workflows/pages.yml', freshness)
+        for name in ['CONTRIBUTING.md', 'SUPPORT.md', 'SECURITY.md']:
+            self.assertIn('.github/' + name, freshness.split())
+            self.assertNotIn(name, freshness.split())
 
 
 if __name__ == '__main__':

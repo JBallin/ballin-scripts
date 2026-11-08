@@ -513,7 +513,7 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
     dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT).strip())
     tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
     candidates = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=ROOT).decode().split('\0')
-    sources = sorted(p for p in candidates if p in ('README.md', 'CONTRIBUTING.md', 'SUPPORT.md', 'SECURITY.md', 'LICENSE.md') or re.fullmatch(r'docs/[^/]+\.md', p))
+    sources = sorted(p for p in candidates if p in ('README.md', '.github/CONTRIBUTING.md', '.github/SUPPORT.md', '.github/SECURITY.md', 'LICENSE.md') or re.fullmatch(r'docs/[^/]+\.md', p))
     source_base = f'https://github.com/{REPO}/blob/{revision}'
     payload = {'pages': [{'path': p, 'text': (ROOT / p).read_text()} for p in sources], 'base': base, 'sourceBase': source_base}
     pages = json.loads(subprocess.check_output(['node', str(ROOT / 'tools/site/markdown.cjs')], input=json_bytes(payload), cwd=ROOT))
