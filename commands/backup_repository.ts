@@ -331,7 +331,7 @@ This repository was created by [Ballin](https://github.com/JBallin/ballin-script
 
 \`ballin_config\` stores selected Ballin preferences that are portable between installations, not a complete copy of your local Ballin configuration.
 
-For current backup behavior and guidance, see the [Ballin documentation](https://getballin.com/docs/index.html).
+For current backup behavior and guidance, see the [Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs).
 
 Ballin uses \`.ballin-backup.json\` to identify this repository as a Ballin backup.
 `;
