@@ -123,10 +123,11 @@ running inside it may use any credentials introduced there, including after
 installation. It can replace `gh` or persist other code. A merged commit, `main`,
 an immutable SHA, or a successful version check does not establish safety.
 
-For code and a guest environment you have reviewed and trust, a normal account
-can be reasonable after explicitly accepting that account-exposure risk. For
-candidate-exposed guests requiring login, prefer one dedicated limited-access
-test identity with disposable synthetic data, reused across tests.
+For authenticated candidate testing, use only a dedicated minimal-access
+disposable GitHub test account with synthetic data, reused across authorized tests.
+Do not introduce a personal or maintainer account into a guest that has run
+candidate code. The test account's token is available to code running in that
+guest; this workflow accepts that exposure and limits what the account can reach.
 Give it no organization memberships, production collaborator access, valuable
 repositories, unrelated secrets, valuable credentials or payment methods. Start
 with no repositories; add a disposable synthetic fixture only when a test needs
@@ -199,7 +200,11 @@ After choosing the trust model above and separately authorizing persistent
 GitHub access in that guest, stop all recorders, screen capture and session logging.
 In its private interactive Terminal, run
 `bash tools/output-gallery/private-login.sh` from a trusted copy of this tooling.
-The current helper checks prerequisites and TTY readiness; it does not verify
+Before probing Git or GitHub CLI, the helper asks you to type `test-account` to
+confirm the dedicated account choice and accept guest-token exposure. Press Return
+or send EOF to cancel before any tool probes or login. This acknowledgement helps
+prevent accidental account use; it cannot enforce account permissions or identity.
+The helper checks prerequisites and TTY readiness; it does not verify
 executable or guest trust. Do not treat it as protection from candidate code.
 The helper requires official GitHub CLI (tested with 2.103.3), working Git and a
 TTY for all three standard streams. Prepare prerequisites separately; it does not
