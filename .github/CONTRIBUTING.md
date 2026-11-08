@@ -43,4 +43,4 @@ For deeper user and maintainer documentation, see the
 
 ## Feedback and Discussions
 
-See [Support](SUPPORT.md) for questions, bug reports, and private security reporting.
+See [Support](.github/SUPPORT.md) for questions, bug reports, and private security reporting.
