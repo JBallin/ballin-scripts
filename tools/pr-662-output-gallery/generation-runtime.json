@@ -6,5 +6,17 @@
     "doctor_report.ts": "b1839122fed6c98f15957ed19c5158bd65aa6cf663c2c4ee3ba927f67462abd3",
     "diagnostics.ts": "2e475fceeaa4255201d48acbc5e207401bcc3d3c2c39dc43e5c182b4528f21a5",
     "selection_label.cjs": "e1c24dddb2d68e6e34b0e3ed9e696f1c03957691527eb0620d2a9c4456cb2835"
-  }
+  },
+  "reviewedProfiles": [
+    {
+      "sourceRevision": "a92ef82fa45f13c260af0969a0c946b3d893808c",
+      "executableHashes": {
+        "terminalStyle.ts": "e32ceb735d3cefc4eb5b71d7a0865283419b9ee3fb35179066685f6850587b68",
+        "help_format.ts": "dc61497b9c8a5e638bb18b8b65103e72b8f0b231cd9f5113bbd737673a322efa",
+        "doctor_report.ts": "b1839122fed6c98f15957ed19c5158bd65aa6cf663c2c4ee3ba927f67462abd3",
+        "diagnostics.ts": "2e475fceeaa4255201d48acbc5e207401bcc3d3c2c39dc43e5c182b4528f21a5",
+        "selection_label.cjs": "e1c24dddb2d68e6e34b0e3ed9e696f1c03957691527eb0620d2a9c4456cb2835"
+      }
+    }
+  ]
 }

@@ -94,6 +94,52 @@ script checksum. Do not enable key logging. If using Tart folder shares, expose
 only dedicated capture inputs (read-only) and generated output, never host HOME or
 credentials; clipboard sharing is unnecessary.
 
+### Guest local admin access
+
+The basic installation-testing guide selects the Cirrus Labs Golden Gate vanilla
+image. [Tart's image documentation](https://tart.run/quick-start/#vm-images)
+publishes username `admin` and password `admin` for its listed Cirrus Labs images;
+the [Golden Gate vanilla template](https://github.com/cirruslabs/macos-image-templates/blob/main/templates/vanilla-golden-gate.pkr.hcl)
+also provisions that public default. Check the selected image/tag or digest and
+its template history before relying on it. A reused or modified guest may have a
+different password; do not assume the default applies to arbitrary images or
+versions. Obtain any changed password privately from the template owner or your
+trusted credential record.
+
+Use the verified public image default only at the intended **guest** login or
+local admin prompt within authorized test work. For a changed or private password,
+have the maintainer enter it through a secure private handoff, with recording and
+screenshots paused. Do not put private passwords in scripts, command arguments,
+environment variables, repository files, logs or chat. Guest admin access is
+separate from GitHub authentication and does not sign in to GitHub or authorize
+account access.
+
+### Guest command entry
+
+For long commands, use a reviewed script in a dedicated read-only Tart input
+share, invoked by a short lowercase command, with a separate disposable results
+share. Check the actual guest mount path first; lowercase paths require verified
+case-insensitive resolution. For example, with an input share named `inputs`:
+
+```sh
+bash /volumes/my\ shared\ files/inputs/run.sh
+```
+
+Check guest Terminal focus and a harmless marker before submitting work. Console
+entry can lose shifted characters: uppercase can become lowercase, `$` can become
+`4`, `_` can become `-`, and `:` can become `;`. Do not assume explicit Shift
+combinations or paste prevent this. Inspect the submitted text before treating
+unexpected output as a product result. Verify the script's marker/result and exit
+status; retain its readable source, revision, hashes and logs. Keep host HOME/credentials unshared and clipboard
+sharing disabled, as above.
+
+If using octal `printf` data and shell command substitution as a console fallback,
+verify that route in the selected guest first; encoding is not a safety boundary.
+Review the decoded command before submission and retain its readable form. A long
+encoded input can time out while still composed at the prompt. After a timeout,
+inspect the composed text, process/result state and prompt before sending Return,
+retrying or claiming cancellation or completion.
+
 ### Choose an authentication trust model
 
 Prefer unauthenticated testing when it covers the journey: decline backup setup
@@ -105,7 +151,7 @@ an immutable SHA, or a successful version check does not establish safety.
 For code and a guest environment you have reviewed and trust, a normal account
 can be reasonable after explicitly accepting that account-exposure risk. For
 candidate-exposed guests requiring login, prefer one dedicated limited-access
-GitHub Free machine identity with disposable synthetic data, reused across tests.
+test identity with disposable synthetic data, reused across tests.
 Give it no organization memberships, production collaborator access, valuable
 repositories, unrelated secrets, valuable credentials or payment methods. Start
 with no repositories; add a disposable synthetic fixture only when a test needs
@@ -114,7 +160,12 @@ clean base first does not protect the account if its clones later run untrusted
 code; the clones inherit that exposure. Keep recovery methods and two-factor
 authentication outside exposed guests.
 
-Follow [GitHub's account requirements](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#3-account-requirements):
+Use of a dedicated test account for this workflow has not yet been confirmed as
+permitted by GitHub. Treat this account approach as provisional, not as GitHub
+approval. Confirm that the intended use is permitted before creating or
+authenticating a test account.
+
+Under [GitHub's account requirements](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#3-account-requirements),
 a human must create the account, and one additional free machine account is
 permitted exclusively for automated tasks. Check whether that allowance is
 already in use. Do not assume manually assisted VM testing qualifies, or create
@@ -143,6 +194,29 @@ GitHub CLI authorization remotely from a trusted environment.
 configuration without revoking tokens; deleting a VM does not revoke copies
 either. Revoking GitHub CLI application access invalidates its tokens across
 all devices, so the dedicated test identity should have no unrelated CLI use.
+
+### Authenticated test base
+
+Use an authenticated base only after confirming that the account and its intended
+use are permitted. Apply the
+[authentication trust model](#choose-an-authentication-trust-model) above:
+
+1. Keep a separate clean, unauthenticated baseline for genuine first-run tests.
+   Prefer unauthenticated clones whenever they cover the required behavior.
+2. Once the limited-access test account and its use and access are authorized,
+   have the maintainer privately sign into it in one reviewed base VM, with
+   recording and screenshots paused. Keep recovery methods and two-factor
+   authentication outside exposed test guests.
+3. Stop and preserve that base, then use disposable clones for future authorized
+   tests with synthetic data only. Clones inherit reusable credentials; a reviewed
+   base does not make candidate or untrusted code safe. Do not expose host HOME or
+   credentials through shares.
+4. When handling suspected exposure or cleaning up credentials, revoke the test
+   identity's GitHub CLI authorization remotely from a trusted environment. This
+   affects its CLI tokens across devices; local logout or VM deletion is
+   insufficient.
+   Preserved authenticated snapshots are not fresh credential state. Reassess
+   their exposure and obtain separate authorization before fresh authentication.
 
 ### Private login launcher
 

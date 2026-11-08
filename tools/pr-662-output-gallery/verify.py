@@ -9,7 +9,7 @@ trusted=json.loads((ROOT/'trusted-runtime.json').read_text())
 for file,expected in trusted['executableHashes'].items():
  if hashlib.sha256((ROOT/file).read_bytes()).hexdigest()!=expected:raise SystemExit('Unreviewed gallery runtime: '+file)
 command=[NODE,str(ROOT/'gallery.cjs')]
-env={'PATH':os.environ.get('PATH',os.defpath),'TERM':'xterm','LANG':'en_US.UTF-8'}
+env={'PATH':os.environ.get('PATH',os.defpath),'TERM':'xterm','TERM_PROGRAM':'Apple_Terminal','LANG':'en_US.UTF-8'}
 def capture(name,changes=None,tty=False):
  e={**env,**(changes or {})}
  if tty:
@@ -49,6 +49,11 @@ assert canonical(normal)==canonical(plain)
 assert normal.count('\n\n')==plain.count('\n\n')
 assert no_color==plain and dumb==plain
 assert '\x1b[' not in plain+no_color+dumb
+assert '\x1b]8;' not in plain+normal+no_color+dumb
+if 'terminalDocumentation' in (ROOT/'terminalStyle.ts').read_text():
+ assert 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs' in plain
+ assert 'i Node.js details:\n' not in plain
+ assert 'github.com/JBallin/ballin-scripts/blob/main/docs/' not in plain
 url='https://github.com/example-user/synthetic-ballin-backup'
 assert '\nProposed backup: '+url+'\n' in normal
 assert '\nProposed backup: \x1b[34m'+url+'\x1b[0m\n' in normal
