@@ -496,9 +496,19 @@ def page_metadata(page, base, origin):
     return {key: html.escape(value, quote=True) for key, value in values.items()}
 
 
-def build(output, pin_path, base, local_bundle=None, origin='https://jballin.github.io'):
+def analytics_config(path):
+    config = load_json(read_regular(path, 4096))
+    require(isinstance(config, dict) and set(config) == {'token'}, 'Analytics configuration requires only token')
+    token = config['token']
+    require(token is None or (isinstance(token, str) and re.fullmatch(r'[a-f0-9]{32}', token)),
+            'Analytics token must be null or a 32-character lowercase hexadecimal public site token')
+    return token
+
+
+def build(output, pin_path, base, local_bundle=None, origin='https://jballin.github.io', analytics_token=None):
     require(base == '' or re.fullmatch(r'/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*', base), 'Invalid site base path')
     require(re.fullmatch(r'https://[a-zA-Z0-9.-]+', origin), 'Invalid canonical origin')
+    require(analytics_token is None or (isinstance(analytics_token, str) and re.fullmatch(r'[a-f0-9]{32}', analytics_token)), 'Invalid analytics token')
     pin = load_json(read_regular(pin_path, 1024 * 1024))
     validate_pin(pin)
     manifest, files = None, {}
@@ -525,6 +535,7 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
     try:
         for page in pages:
             values = {**page_metadata(page, base, origin), 'base': base,
+                      'analytics': (f'<script src="{base}/analytics.js" data-token="{analytics_token}" data-origin="{origin}" defer></script>' if analytics_token else ''),
                       'galleryNav': f'<a href="{base}/gallery.html">Gallery</a>' if manifest else '',
                       'content': page['content'] + related_gallery(page['source'], base, manifest is not None), 'source': source_base + '/' + urllib.parse.quote(page['source'])}
             rendered = re.sub(r'\{\{(\w+)\}\}', lambda m: values[m[1]], template)
@@ -532,7 +543,7 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(rendered)
         shutil.copyfile(ROOT / 'site/style.css', work / 'style.css')
-        for asset in ('favicon.svg', 'gallery.js'):
+        for asset in ('favicon.svg', 'gallery.js', 'analytics.js'):
             shutil.copyfile(ROOT / 'site' / asset, work / asset)
         for path in tracked:
             if path.startswith('docs/assets/') and Path(path).suffix in ('.png', '.svg'):
@@ -604,6 +615,8 @@ def main():
     compile_site.add_argument('--config', type=Path, default=ROOT / 'site/deployment.json', help='Canonical origin and base configuration')
     compile_site.add_argument('--origin', help='Override the configured HTTPS canonical origin')
     compile_site.add_argument('--base', help='Override the configured path; use an empty string for a root site')
+    compile_site.add_argument('--analytics', action='store_true', help='Enable the configured public Cloudflare site token; omitted for local builds')
+    compile_site.add_argument('--analytics-config', type=Path, default=ROOT / 'site/analytics.json')
     compile_site.add_argument('--bundle', type=Path, help='Offline bundle; still checked against the release pin')
     example = commands.add_parser('readme-example', help='Print matching expandable Update text; never edit README')
     example.add_argument('bundle', type=Path)
@@ -622,7 +635,8 @@ def main():
         else:
             config = deployment_config(args.config)
             build(args.output, args.pin, args.base if args.base is not None else config['base'], args.bundle,
-                  args.origin if args.origin is not None else config['origin'])
+                  args.origin if args.origin is not None else config['origin'],
+                  analytics_config(args.analytics_config) if args.analytics else None)
     except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as error:
         parser.exit(1, 'Site operation failed: ' + str(error) + '\n')
 

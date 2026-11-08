@@ -450,6 +450,43 @@ class BuildTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
+    def test_analytics_disabled_by_default_and_null_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'analytics.json'
+            path.write_text(json.dumps({'token': None}))
+            self.assertIsNone(site.analytics_config(path))
+        for page in self.output.rglob('*.html'):
+            self.assertNotIn('src="/ballin-scripts/analytics.js"', page.read_text())
+
+    def test_analytics_configuration_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'analytics.json'
+            for token in ('', 'not-a-token', 'A' * 32, '<script>', 12, False, []):
+                path.write_text(json.dumps({'token': token}))
+                with self.subTest(token=token), self.assertRaises(ValueError):
+                    site.analytics_config(path)
+            for config in ({}, {'token': None, 'secret': 'no'}):
+                path.write_text(json.dumps(config))
+                with self.assertRaises(ValueError):
+                    site.analytics_config(path)
+            path.write_text(json.dumps({'token': 'a' * 32}))
+            self.assertEqual(site.analytics_config(path), 'a' * 32)
+
+    def test_analytics_enabled_on_every_page_in_both_hosting_modes(self):
+        for index, base in enumerate(('', '/ballin-scripts')):
+            output = self.folder / f'analytics-{index}'
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.build(output, self.pin, base, self.bundle, 'https://getballin.com', 'a' * 32)
+            for page in output.rglob('*.html'):
+                self.assertEqual(page.read_text().count(f'src="{base}/analytics.js"'), 1)
+                self.assertIn('data-origin="https://getballin.com"', page.read_text())
+                self.assertIn('data-token="' + 'a' * 32 + '"', page.read_text())
+            self.assertTrue((output / 'analytics.js').is_file())
+            site.verify_site(output, base)
+
+    def test_analytics_loader_offline_origin_and_token_guards(self):
+        subprocess.run(['node', str(site.ROOT / 'tools/site/test_analytics.cjs')], check=True)
+
     def test_complete_site_contains_docs_and_same_bundle_bytes(self):
         self.assertTrue((self.output / 'docs/installation.html').is_file())
         self.assertTrue((self.output / 'sitemap.xml').is_file())

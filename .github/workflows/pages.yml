@@ -52,7 +52,7 @@ jobs:
       - name: Build current docs and the explicitly pinned bundle
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 tools/site/site.py build
+        run: python3 tools/site/site.py build --analytics
       - name: Upload complete Pages snapshot
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:

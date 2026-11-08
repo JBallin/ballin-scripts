@@ -173,6 +173,34 @@ assets, gallery viewers, transcripts, fragments, sitemap and social metadata.
 Check certificate/redirect behavior and inspect sharing-platform previews after
 publication; local metadata checks cannot establish crawler behavior.
 
+## Website analytics
+
+Cloudflare Web Analytics is the selected website analytics service, separate from
+Ballin's CLI analytics Worker and D1 data. The shared page template supports the
+Cloudflare beacon on home, documentation, gallery and image-viewer pages.
+
+**Setup to-do:** in Cloudflare Web Analytics, add the intended public hostname
+(`getballin.com`) and obtain its public site token. This account setup has not
+been performed. Put that beacon token in `site/analytics.json` in place of `null`
+in a reviewed change. It is a public identifier embedded in HTML, not an API
+credential; never put a Cloudflare API token or account secret there. Use manual
+beacon installation and avoid enabling automatic injection as well, which could
+count visits twice. No CLI analytics credentials or data are reused.
+
+The committed null token disables collection. The Pages workflow passes
+`--analytics`; it includes the beacon loader only once a valid token is configured.
+Ordinary local builds omit it. Even an analytics-enabled snapshot loads the
+third-party script only when the browser origin exactly matches the build's
+canonical HTTPS origin, keeping loopback and other preview hosts out of reports.
+Use `--analytics-config /path/to/config.json` for isolated fixture checks without
+editing the committed token. Do not serve a fixture token on the public site.
+
+After separately authorized setup and deployment, verify one beacon per page,
+successful requests and page views in the Cloudflare dashboard. Local fixture
+checks do not verify live ingestion. Set the token back to `null` and deploy the
+reviewed change to disable future collection. See Cloudflare's
+[manual installation guide](https://developers.cloudflare.com/web-analytics/get-started/).
+
 ## Website QA
 
 Build a fresh complete snapshot and open the URL printed by the loopback preview
