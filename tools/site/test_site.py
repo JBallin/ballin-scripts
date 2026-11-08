@@ -3,6 +3,9 @@
 import contextlib
 import copy
 import io
+import functools
+import http.client
+import threading
 import json
 from pathlib import Path
 import stat
@@ -691,6 +694,44 @@ class BuildTests(unittest.TestCase):
             for path in ['/private.txt', '/ballin-scripts/../private.txt', '/ballin-scripts/%2e%2e/private.txt', '/ballin-scripts/escape', '/ballin-scripts/nested/']:
                 with self.subTest(path=path):
                     self.assertIsNone(preview.selected_file(selected, '/ballin-scripts', path))
+
+    def test_preview_preserves_clean_directory_urls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = Path(directory)
+            (selected / 'index.html').write_text('public home')
+            for base in ['', '/ballin-scripts']:
+                handler = functools.partial(preview.Preview, site=selected, base=base)
+                server = preview.http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    for method in ['GET', 'HEAD']:
+                        for path in [base + '/', base + '/index.html', base + '/?review=1']:
+                            with self.subTest(base=base, method=method, path=path):
+                                connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+                                try:
+                                    connection.request(method, path)
+                                    response = connection.getresponse()
+                                    self.assertEqual(response.status, 200)
+                                    self.assertIsNone(response.getheader('Location'))
+                                    self.assertEqual(response.read(), b'public home' if method == 'GET' else b'')
+                                finally:
+                                    connection.close()
+                    if base:
+                        for path in ['/', base]:
+                            connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+                            try:
+                                connection.request('GET', path)
+                                response = connection.getresponse()
+                                self.assertEqual(response.status, 302)
+                                self.assertEqual(response.getheader('Location'), base + '/')
+                                response.read()
+                            finally:
+                                connection.close()
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
 
     def test_preview_handles_only_disconnected_response_writes(self):
         class FailedWriter:

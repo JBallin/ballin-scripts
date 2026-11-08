@@ -44,9 +44,9 @@ class Preview(http.server.SimpleHTTPRequestHandler):
             self.log_message('Client disconnected while sending response body')
 
     def do_GET(self):
-        if self.path in ('/', self.base):
+        if self.base and self.path in ('/', self.base):
             self.send_response(302)
-            self.send_header('Location', self.base + '/index.html')
+            self.send_header('Location', self.base + '/')
             self.end_headers()
         elif selected_file(self.site, self.base, self.path) is None:
             self.send_error(404)
@@ -74,7 +74,7 @@ def main():
     if not isinstance(base, str) or not re.fullmatch(r'(?:/[a-zA-Z0-9_-]+)*', base) or not 0 <= args.port <= 65535:
         parser.error('Invalid snapshot base or port')
     server = http.server.ThreadingHTTPServer(('127.0.0.1', args.port), functools.partial(Preview, site=site, base=base))
-    print(json.dumps({'pid': os.getpid(), 'url': f'http://127.0.0.1:{server.server_port}{base}/index.html',
+    print(json.dumps({'pid': os.getpid(), 'url': f'http://127.0.0.1:{server.server_port}{base}/',
                       'site': str(site), 'sourceRevision': metadata['sourceRevision'],
                       'sourceWorktreeDirty': metadata['sourceWorktreeDirty'], 'bundleMode': metadata['bundle']['mode']}), flush=True)
     try:

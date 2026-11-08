@@ -49,37 +49,87 @@ success. Preserve evidence and follow [recovery](#deploy-and-recover) on failure
 
 ## Build locally
 
-Use Node.js from `.nvmrc` and Python 3.9 or newer. From the repository root:
+### Build and run the current checkout
+
+Use Node.js from `.nvmrc` and Python 3.9 or newer. Run these commands from
+the root of the repository checkout you want to validate, not an older review checkout.
+Install dependencies once per checkout (and again when its lockfiles change):
 
 ```sh
 npm ci --ignore-scripts
 npm ci --prefix site --ignore-scripts
-python3 tools/site/test_site.py
-python3 tools/site/site.py build --output .site-output/review/root
-python3 tools/site/preview.py --site .site-output/review/root
 ```
 
-Open `http://127.0.0.1:8000/index.html`. The preview server binds
-only to loopback and serves only the selected complete snapshot, not its parent
-or other ignored evidence. `--port 0` chooses a free port and prints its URL/PID.
-The preview reads its base from the snapshot; `--base` overrides it. Older
-snapshots without hosting metadata retain the `/ballin-scripts` preview default.
-Stop with Control-C, or send TERM to that printed PID. Restart the same command
-to serve that snapshot again.
+Build a fresh snapshot and serve it on **port 8000**:
 
-These are one-time builds: there is no file watcher or browser live reload.
-The server reads the selected output files on each request. If a local review
-adapter changes those files in place, a browser reload or fresh request can show
-the changes without restarting the server; an already open page is not pushed
-updates. Browser caching can affect when an asset is refreshed. Editing README,
-docs or tooling source alone does not update generated pages. Rebuild into a new
-directory and serve that output to inspect source changes.
-The root package has no site build/serve wrapper; `npm --prefix site test` runs
-the site checks after both dependency installs. Existing output is refused.
-Failed builds retain a `.site-build-*`
-directory beside the chosen output for diagnosis; successful snapshots replace
-nothing. Never point build or packaging output at raw captures or source inputs.
-`.site-output/`, `site/node_modules/` and Python caches are ignored.
+```sh
+snapshot=".site-output/review/root-$(date +%Y%m%d-%H%M%S)"
+python3 tools/site/site.py build --output "$snapshot" &&
+  python3 tools/site/preview.py --site "$snapshot" --port 8000
+```
+
+**Validation URL: `http://127.0.0.1:8000/`.** This uses the current
+root-hosting configuration in `site/deployment.json`. The server prints its
+exact URL, selected directory, PID, source revision and dirty state at startup.
+Check those values before validation; the directory name alone does not prove
+which revision it contains. Keep this terminal running and open that URL in a
+browser on the **same computer**. Stop with Control-C. Neither command opens a
+browser, publishes the website or changes hosting settings.
+
+The existing `site.py build` and `preview.py` scripts are the build/run entry
+points; there is no npm build/serve wrapper. `preview.py` **only serves existing
+files**. It does not build, watch source files or reload the browser. After
+editing README, docs or site source, stop the server and repeat the build/run
+block to create a new snapshot, then reload the page. Existing output directories
+are refused, so use a new timestamp/name if you repeat within the same second.
+A failed build does not start the preview in this recipe.
+
+For tooling/template/workflow changes, also run `python3 tools/site/test_site.py`
+(or `npm --prefix site test`) after both dependency installs. Follow
+[Website QA](#website-qa) for rendered validation; successfully serving HTML
+alone is not visual QA.
+
+### Serve an existing snapshot
+
+To resume review without rebuilding, use the exact previously recorded output:
+
+```sh
+python3 tools/site/preview.py --site PATH_TO_COMPLETE_SNAPSHOT --port 8000
+```
+
+`--site` selects the directory containing `build.json` and `index.html`, not its
+parent. The server binds only to `127.0.0.1` and serves only that snapshot.
+The URL depends on the **snapshot's hosting base**, not its directory name:
+
+- Root-hosted snapshot: `http://127.0.0.1:8000/`.
+- Project-hosted snapshot: `http://127.0.0.1:8000/ballin-scripts/`.
+  Older snapshots without hosting metadata also default to `/ballin-scripts`.
+
+These directory URLs serve `index.html` without changing the browser address.
+Explicit `/index.html` URLs still work. In project mode, `/` and the base without
+its trailing slash redirect to `/ballin-scripts/`. This is local preview behavior;
+public-host redirects are configured separately. Use the startup URL as the authority. `--base` overrides routing only; it does
+not rebuild the HTML or fix embedded links. Build with the intended base using
+[Hosting configuration](#hosting-configuration) instead of overriding the server
+to compensate for a mismatched snapshot.
+
+If port 8000 is occupied, preserve the existing server. Stop it only if it belongs
+to your review, or choose an explicit unused port with `--port PORT` and use that
+port in the printed URL. `--port 0` is an optional free-port allocation, not the
+repeatable default: it may choose a different port on every launch. Never reuse
+an earlier dynamic URL without checking the current startup output. Stop a
+server with Control-C in its terminal, or send TERM to its verified printed PID.
+
+An existing private gallery snapshot may contain local presentation changes and
+older source. Re-serving it does not validate the current PR. Record its revision
+and any adapters separately. The server reads output files on each request, so
+an authorized in-place output change appears after reload, subject to browser
+caching; source edits alone never update that snapshot.
+
+Failed builds retain a `.site-build-*` directory beside the chosen output for
+diagnosis; successful snapshots replace nothing. Never point build or packaging
+output at raw captures or source inputs. `.site-output/`, `site/node_modules/`
+and Python caches are ignored.
 
 `site/bundle.json` explicitly starts in `bootstrap` mode. This builds useful docs
 without a gallery navigation item, gallery page or placeholder image links.
@@ -113,7 +163,7 @@ Use this process for human or agent review while hosted PR previews are unavaila
    gallery; use the reviewed bundle or existing private gallery snapshot when
    gallery QA is needed. Preserve capture hashes and publication boundaries.
 2. **Serve it on the review computer.** Run
-   `python3 tools/site/preview.py --site SNAPSHOT_DIRECTORY --port 0`, using that
+   `python3 tools/site/preview.py --site SNAPSHOT_DIRECTORY --port 8000`, using that
    directory, then keep the process running. Use the printed URL,
    including its project base path. The browser must run on the same computer:
    `127.0.0.1` in a cloud browser points to that cloud computer, not the local Mac.
@@ -153,12 +203,16 @@ used in static Open Graph and Twitter large-card metadata with absolute URLs.
 For a GitHub project-site snapshot, override both values explicitly:
 
 ```sh
-python3 tools/site/site.py build --output .site-output/review/project \
-  --origin https://jballin.github.io --base /ballin-scripts
-python3 tools/site/preview.py --site .site-output/review/project
+snapshot=".site-output/review/project-$(date +%Y%m%d-%H%M%S)"
+python3 tools/site/site.py build --output "$snapshot" \
+  --origin https://jballin.github.io --base /ballin-scripts &&
+  python3 tools/site/preview.py --site "$snapshot" --port 8000
 ```
 
-That preview prints `http://127.0.0.1:8000/ballin-scripts/index.html`. To select a
+Stop your previous review server before reusing port 8000. This project snapshot's
+validation URL is **`http://127.0.0.1:8000/ballin-scripts/`**, including
+the project base path. The default root build above does not use that prefix.
+To select a
 different durable deployment target, edit the same configuration, or supply
 `--config /path/to/config.json` with exactly `origin` and `base`. Overrides affect
 one build only. Local serving stays loopback-only while canonical/share URLs
