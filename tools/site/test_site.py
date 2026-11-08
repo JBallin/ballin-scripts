@@ -526,7 +526,8 @@ class BuildTests(unittest.TestCase):
                 for name in ['CONTRIBUTING', 'SUPPORT', 'SECURITY']:
                     page = (output / (name + '.html')).read_text()
                     self.assertIn(f'<loc>{origin}{base}/{name}.html</loc>', sitemap)
-                    self.assertIn(f'href="https://github.com/{site.REPO}/blob/{revision}/.github/{name}.md"', page)
+                    source = f'{name}.md' if name == 'CONTRIBUTING' else f'.github/{name}.md'
+                    self.assertIn(f'href="https://github.com/{site.REPO}/blob/{revision}/{source}"', page)
                     self.assertFalse((output / '.github' / (name + '.html')).exists())
                 contributing = (output / 'CONTRIBUTING.html').read_text()
                 support = (output / 'SUPPORT.html').read_text()
@@ -937,7 +938,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(set(workflow['on']), {'push', 'workflow_dispatch'})
         self.assertEqual(workflow['on']['push']['branches'], ['main'])
         paths = set(workflow['on']['push']['paths'])
-        expected = {'README.md', '.github/CONTRIBUTING.md', '.github/SUPPORT.md', '.github/SECURITY.md', 'LICENSE.md', 'docs/**', 'site/**', 'tools/site/**', '.nvmrc', '.github/workflows/pages.yml'}
+        expected = {'README.md', 'CONTRIBUTING.md', '.github/SUPPORT.md', '.github/SECURITY.md', 'LICENSE.md', 'docs/**', 'site/**', 'tools/site/**', '.nvmrc', '.github/workflows/pages.yml'}
         self.assertEqual(paths, expected)
         self.assertEqual(workflow['permissions'], {'contents': 'read'})
         self.assertFalse(workflow['concurrency']['cancel-in-progress'])
@@ -950,7 +951,9 @@ class BuildTests(unittest.TestCase):
         freshness = next(step['run'] for step in deploy['steps'] if step.get('name') == 'Refuse a superseded snapshot')
         self.assertIn('git diff --exit-code', freshness)
         self.assertIn('docs site tools/site .nvmrc .github/workflows/pages.yml', freshness)
-        for name in ['CONTRIBUTING.md', 'SUPPORT.md', 'SECURITY.md']:
+        self.assertIn('CONTRIBUTING.md', freshness.split())
+        self.assertNotIn('.github/CONTRIBUTING.md', freshness.split())
+        for name in ['SUPPORT.md', 'SECURITY.md']:
             self.assertIn('.github/' + name, freshness.split())
             self.assertNotIn(name, freshness.split())
 

@@ -3,7 +3,8 @@
 *Maintainer guide to building complete documentation snapshots and deliberately activating approved gallery assets.*
 
 The website renders the root README and canonical guides in this repository.
-Community guides live in `.github/`; their site URLs remain `/CONTRIBUTING.html`,
+The contribution guide lives at root `CONTRIBUTING.md`; support and security
+guides live in `.github/`. Their site URLs remain `/CONTRIBUTING.html`,
 `/SUPPORT.html`, and `/SECURITY.html`.
 GitHub Releases remain the published release-note history. Product release
 preparation belongs to [Releasing Ballin](releasing.md); VM validation belongs to
@@ -478,7 +479,7 @@ partial tree. Only trusted `main` pushes or a manual `main` dispatch may deploy;
 there are no privileged PR events or hosted previews. The build token has contents
 read permission; only the deployment job receives Pages write and OIDC permissions.
 
-Automatic paths match the actual build inputs: `README.md`, `.github/CONTRIBUTING.md`,
+Automatic paths match the actual build inputs: `README.md`, `CONTRIBUTING.md`,
 `.github/SUPPORT.md`, `.github/SECURITY.md`, `LICENSE.md`, `docs/**` (including existing images),
 `site/**` (template, styles, renderer lock and bundle pin), `tools/site/**`, `.nvmrc`
 and `.github/workflows/pages.yml`. Generator/tool changes under `tools/output-gallery`
