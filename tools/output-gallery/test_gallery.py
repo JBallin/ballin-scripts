@@ -155,14 +155,18 @@ class GallerySecurityTests(unittest.TestCase):
             root = Path(temp)
             builder = root / 'build.py'
             shutil.copy2(legacy / 'build.py', builder)
-            trusted = json.loads((legacy / 'generation-runtime.json').read_text())
-            original = {'sourceRevision': trusted['sourceRevision'], 'executableHashes': trusted['executableHashes']}
-            wrong = {**original, 'executableHashes': {**original['executableHashes'], 'terminalStyle.ts': '0' * 64}}
             pins = root / 'generation-runtime.json'
-            pins.write_text(json.dumps({**wrong, 'reviewedProfiles': [original]}))
+            shutil.copy2(legacy / 'generation-runtime.json', pins)
             repo = TOOLS.parents[1]
             source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
             command = ['python3', str(builder), '--root', str(repo), '--candidate', source]
+            # Select the complete reviewed profile matching this source, rather
+            # than assuming HEAD still uses the historical top-level profile.
+            baseline = root / 'baseline'
+            subprocess.run(command + ['--output', str(baseline)], check=True, capture_output=True, timeout=30)
+            original = json.loads((baseline / 'trusted-runtime.json').read_text())
+            wrong = {**original, 'executableHashes': {**original['executableHashes'], 'terminalStyle.ts': '0' * 64}}
+            pins.write_text(json.dumps({**wrong, 'reviewedProfiles': [original]}))
             output = root / 'accepted'
             subprocess.run(command + ['--output', str(output)], check=True, capture_output=True, timeout=30)
             self.assertEqual(json.loads((output / 'trusted-runtime.json').read_text()), original)
