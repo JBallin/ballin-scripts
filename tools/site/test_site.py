@@ -681,7 +681,10 @@ class BuildTests(unittest.TestCase):
         self.assertLess(gallery.index('Choose a topic'), gallery.index('<article'))
         for label in ['Installing', 'Backups &amp; preferences', 'Updating', 'Diagnostics']:
             self.assertIn(label, gallery)
-        self.assertIn('How to read this gallery', gallery)
+        guide = gallery.index('<details class="review-context"><summary>How to read this gallery</summary>')
+        self.assertLess(gallery.index('Choose a topic'), guide)
+        self.assertLess(guide, gallery.index('<nav class="gallery-topics"'))
+        self.assertLess(guide, gallery.index('<h2 id="install-quickstart"'))
         style = (self.output / 'style.css').read_text()
         self.assertNotIn('max-width:1440px', style)
         self.assertNotIn('.full-image', style)

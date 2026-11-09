@@ -364,6 +364,9 @@ def retrieve(pin, request=github):
 
 def gallery_html(manifest, files, base):
     lines = ['<h1 id="gallery">Output gallery</h1>', '<p>See what Ballin looks like in Terminal. Choose a topic, then open an example to view its output or read the matching text.</p>']
+    lines.append('<details class="review-context"><summary>How to read this gallery</summary>'
+                 '<p>Actual captures show output from a specific VM session. Staged examples illustrate output without running Ballin. '
+                 'Images are rendered from terminal output. Open <strong>Source and capture details</strong> for the revision and how each example was prepared.</p></details>')
     lines.append('<nav class="gallery-topics" aria-label="Gallery sections">')
     topic_labels = {'Install & Quickstart': 'Installing', 'Setup & Backup': 'Backups & preferences', 'Update': 'Updating', 'Diagnostics': 'Diagnostics'}
     for category in CATEGORIES:
@@ -387,7 +390,6 @@ def gallery_html(manifest, files, base):
                 width, height = struct.unpack('>II', files[image][16:24])
                 lines.append(f'<figure><a href="{base}/{viewer}"><img loading="lazy" width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, rendered page {index}. Open full-size image."></a><figcaption>Page {index} of {len(entry["images"])} · <a href="{base}/{viewer}">Open full-size image ({width} × {height})</a></figcaption></figure>')
             lines.append(transcript_html(entry, files, base) + '</details></article>')
-    lines.append('<details class="review-context"><summary>How to read this gallery</summary><p>Actual recordings show a particular VM session. Staged examples illustrate output without live execution. Images are rendered from terminal output, not native Terminal screenshots. Each example keeps its source revision and capture details; presentation examples do not establish end-to-end correctness.</p></details>')
     return '\n'.join(lines)
 
 
