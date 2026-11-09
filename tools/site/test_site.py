@@ -512,7 +512,7 @@ class BuildTests(unittest.TestCase):
             self.assertEqual((self.output / name).read_bytes(), data)
         source = (self.output / 'index.html').read_text()
         self.assertIn('/ballin-scripts/docs/quickstart.html', source)
-        self.assertIn('/ballin-scripts/gallery.html', source)
+        self.assertIn('/ballin-scripts/gallery/', source)
         self.assertIn('github.com/JBallin/ballin-scripts/blob/', source)
         site.verify_site(self.output, '/ballin-scripts')
 
@@ -533,8 +533,8 @@ class BuildTests(unittest.TestCase):
                     self.assertFalse((output / '.github' / (name + '.html')).exists())
                 contributing = (output / 'CONTRIBUTING.html').read_text()
                 support = (output / 'SUPPORT.html').read_text()
-                self.assertIn(f'href="{base}/index.html#installation"', contributing)
-                self.assertIn(f'href="{base}/docs/index.html"', contributing)
+                self.assertIn(f'href="{base}/#installation"', contributing)
+                self.assertIn(f'href="{base}/docs/"', contributing)
                 self.assertIn(f'href="{base}/docs/installation.html#selecting-a-revision"', contributing)
                 self.assertIn(f'href="{base}/SUPPORT.html"', contributing)
                 self.assertIn(f'href="{base}/docs/installation.html#health-and-recovery"', support)
@@ -543,7 +543,7 @@ class BuildTests(unittest.TestCase):
                 site.verify_site(output, base)
 
     def test_favicon_copy_download_and_full_resolution_pages(self):
-        page = (self.output / 'gallery.html').read_text()
+        page = (self.output / 'gallery/index.html').read_text()
         self.assertIn('href="/ballin-scripts/favicon.svg"', page)
         self.assertIn('data-copy="text-update"', page)
         self.assertIn('role="status"', page)
@@ -553,7 +553,7 @@ class BuildTests(unittest.TestCase):
         self.assertIn('width="1" height="1"', viewer)
         self.assertNotIn('class="native-mode"', viewer)
         self.assertEqual(viewer.count('class="image-preview"'), 1)
-        self.assertIn('/ballin-scripts/gallery.html#entry-update', viewer)
+        self.assertIn('/ballin-scripts/gallery/#entry-update', viewer)
         self.assertIn('&lt;untrusted &amp; text&gt;', viewer)
         self.assertEqual((self.output / 'favicon.svg').read_bytes(), (site.ROOT / 'site/favicon.svg').read_bytes())
 
@@ -567,9 +567,11 @@ class BuildTests(unittest.TestCase):
                 attrs = dict(attrs)
                 if tag == 'meta':
                     self.meta[attrs.get('property', attrs.get('name'))] = attrs.get('content')
-        expected = {'index.html': 'Ballin — Back up dotfiles and update your Mac', 'LICENSE.html': 'LICENSE · Ballin', 'gallery.html': 'Output gallery · Ballin',
+        expected = {'index.html': 'Ballin — Back up dotfiles and update your Mac', 'LICENSE.html': 'LICENSE · Ballin', 'gallery/index.html': 'Output gallery · Ballin',
                     'gallery/update/output-001.html': 'Synthetic update fixture — page 1 of 1 · Ballin'}
+        clean_paths = {'index.html': '', 'docs/index.html': 'docs/', 'gallery/index.html': 'gallery/', 'gallery.html': 'gallery/'}
         for path in self.output.rglob('*.html'):
+            relative = path.relative_to(self.output).as_posix()
             source = path.read_text()
             title = __import__('re').search(r'<title>(.*?)</title>', source).group(1)
             self.assertTrue(title.strip())
@@ -585,7 +587,7 @@ class BuildTests(unittest.TestCase):
                 for key in ('description', 'og:description', 'twitter:description'):
                     self.assertEqual(head.meta[key], description)
             self.assertEqual(head.meta['twitter:card'], 'summary_large_image')
-            self.assertEqual(head.meta['og:url'], 'https://jballin.github.io/ballin-scripts/' + path.relative_to(self.output).as_posix())
+            self.assertEqual(head.meta['og:url'], 'https://jballin.github.io/ballin-scripts/' + clean_paths.get(relative, relative))
             self.assertEqual(head.meta['og:image'], 'https://jballin.github.io/ballin-scripts/docs/assets/brand/social-preview.png')
             self.assertEqual(head.meta['og:image:type'], 'image/png')
             self.assertTrue(head.meta['og:image:alt'])
@@ -626,17 +628,27 @@ class BuildTests(unittest.TestCase):
                 metadata = json.loads((output / 'build.json').read_text())
                 self.assertEqual(metadata['hosting'], {'origin': origin, 'base': base})
                 site.verify_site(output, base)
-                for relative in ['index.html', 'docs/quickstart.html', 'gallery.html', 'gallery/update/output-001.html']:
+                routes = {'': 'index.html', 'docs/': 'docs/index.html', 'gallery/': 'gallery/index.html',
+                          'docs/quickstart.html': 'docs/quickstart.html',
+                          'gallery/update/output-001.html': 'gallery/update/output-001.html'}
+                sitemap = (output / 'sitemap.xml').read_text()
+                for route, relative in routes.items():
                     page = (output / relative).read_text()
-                    self.assertIn('href="' + origin + base + '/' + relative + '"', page)
+                    self.assertIn('href="' + origin + base + '/' + route + '"', page)
                     self.assertIn('content="' + origin + base + '/docs/assets/brand/social-preview.png"', page)
-                    self.assertEqual(preview.selected_file(output, base, base + '/' + relative), (output / relative).resolve())
-                self.assertIn(origin + base + '/gallery.html', (output / 'sitemap.xml').read_text())
+                    self.assertEqual(preview.selected_file(output, base, base + '/' + route), (output / relative).resolve())
+                    header = page.split('</header>', 1)[0]
+                    self.assertIn(f'class="wordmark" href="{base}/"', header)
+                    self.assertIn(f'href="{base}/docs/">Documentation</a>', header)
+                    self.assertIn(f'href="{base}/gallery/">Gallery</a>', header)
+                    self.assertIn(f'<loc>{origin}{base}/{route}</loc>', sitemap)
+                self.assertEqual((output / 'gallery.html').read_bytes(), (output / 'gallery/index.html').read_bytes())
+                self.assertNotIn('/gallery.html</loc>', sitemap)
                 self.assertIn(origin + base + '/sitemap.xml', (output / 'robots.txt').read_text())
                 self.assertFalse((output / 'CNAME').exists())
                 for name, data in self.files.items():
                     self.assertEqual((output / name).read_bytes(), data)
-                self.assertIn('github.com/JBallin/ballin-scripts/blob/', (output / 'gallery.html').read_text())
+                self.assertIn('github.com/JBallin/ballin-scripts/blob/', (output / 'gallery/index.html').read_text())
 
     def test_deployment_configuration_refuses_invalid_inputs(self):
         self.assertEqual(site.deployment_config(site.ROOT / 'site/deployment.json'), {'origin': 'https://getballin.com', 'base': ''})
@@ -652,7 +664,7 @@ class BuildTests(unittest.TestCase):
                     site.deployment_config(config)
 
     def test_output_readability_and_provenance_disclosures(self):
-        gallery = (self.output / 'gallery.html').read_text()
+        gallery = (self.output / 'gallery/index.html').read_text()
         viewer = (self.output / 'gallery/update/output-001.html').read_text()
         self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', gallery)
         self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', viewer)
@@ -666,7 +678,7 @@ class BuildTests(unittest.TestCase):
         self.assertIn('Download text', viewer)
 
     def test_gallery_orientation_precedes_examples_and_preserves_shared_width(self):
-        gallery = (self.output / 'gallery.html').read_text()
+        gallery = (self.output / 'gallery/index.html').read_text()
         self.assertLess(gallery.index('Choose a topic'), gallery.index('<article'))
         for label in ['Installing', 'Backups &amp; preferences', 'Updating', 'Diagnostics']:
             self.assertIn(label, gallery)
@@ -678,11 +690,11 @@ class BuildTests(unittest.TestCase):
     def test_intro_gallery_link_keeps_readme_and_respects_bootstrap(self):
         complete = (self.output / 'docs/what-is-ballin.html').read_text()
         self.assertIn('class="gallery-related"', complete)
-        self.assertIn('href="/ballin-scripts/gallery.html">Browse the output gallery</a>', complete)
-        self.assertIn('href="/ballin-scripts/index.html#example-output"', complete)
+        self.assertIn('href="/ballin-scripts/gallery/">Browse the output gallery</a>', complete)
+        self.assertIn('href="/ballin-scripts/#example-output"', complete)
         self.assertEqual(site.related_gallery('docs/what-is-ballin.md', '', False), '')
         self.assertEqual(site.related_gallery('docs/quickstart.md', '', True), '')
-        self.assertIn('href="/gallery.html"', site.related_gallery('docs/what-is-ballin.md', '', True))
+        self.assertIn('href="/gallery/"', site.related_gallery('docs/what-is-ballin.md', '', True))
 
     def test_copy_success_failure_and_repeat_activation(self):
         subprocess.run(['node', str(site.ROOT / 'tools/site/test_interactions.cjs')], check=True)
@@ -792,7 +804,12 @@ class BuildTests(unittest.TestCase):
     def test_preview_preserves_clean_directory_urls(self):
         with tempfile.TemporaryDirectory() as directory:
             selected = Path(directory)
-            (selected / 'index.html').write_text('public home')
+            routes = {'/': 'home', '/index.html': 'home', '/?review=1': 'home',
+                      '/docs/': 'docs', '/docs/index.html': 'docs',
+                      '/gallery/': 'gallery', '/gallery/index.html': 'gallery'}
+            for directory, label in [(selected, 'home'), (selected / 'docs', 'docs'), (selected / 'gallery', 'gallery')]:
+                directory.mkdir(exist_ok=True)
+                (directory / 'index.html').write_text(label)
             for base in ['', '/ballin-scripts']:
                 handler = functools.partial(preview.Preview, site=selected, base=base)
                 server = preview.http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
@@ -800,7 +817,8 @@ class BuildTests(unittest.TestCase):
                 thread.start()
                 try:
                     for method in ['GET', 'HEAD']:
-                        for path in [base + '/', base + '/index.html', base + '/?review=1']:
+                        for route, label in routes.items():
+                            path = base + route
                             with self.subTest(base=base, method=method, path=path):
                                 connection = http.client.HTTPConnection('localhost', server.server_port, timeout=5)
                                 try:
@@ -808,7 +826,7 @@ class BuildTests(unittest.TestCase):
                                     response = connection.getresponse()
                                     self.assertEqual(response.status, 200)
                                     self.assertIsNone(response.getheader('Location'))
-                                    self.assertEqual(response.read(), b'public home' if method == 'GET' else b'')
+                                    self.assertEqual(response.read(), label.encode() if method == 'GET' else b'')
                                 finally:
                                     connection.close()
                     if base:
@@ -883,7 +901,7 @@ class BuildTests(unittest.TestCase):
             self.assertIn(b'Error:', result.stderr)
 
     def test_accessible_nested_details_and_escaped_text(self):
-        value = (self.output / 'gallery.html').read_text()
+        value = (self.output / 'gallery/index.html').read_text()
         self.assertEqual(value.count('<details'), 4)
         self.assertNotIn('<details open', value)
         self.assertIn('<summary>Text version</summary>', value)
@@ -895,8 +913,8 @@ class BuildTests(unittest.TestCase):
         output = self.folder / 'bootstrap'
         with contextlib.redirect_stdout(io.StringIO()):
             site.build(output, self.bootstrap_pin, '/ballin-scripts')
-        self.assertFalse((output / 'gallery.html').exists())
-        self.assertNotIn('href="/ballin-scripts/gallery.html"', (output / 'index.html').read_text())
+        self.assertFalse((output / 'gallery/index.html').exists())
+        self.assertNotIn('href="/ballin-scripts/gallery/"', (output / 'index.html').read_text())
         with self.assertRaisesRegex(ValueError, 'Bootstrap'):
             site.build(self.folder / 'invalid-bootstrap', self.bootstrap_pin, '', self.bundle)
 
@@ -927,9 +945,14 @@ class BuildTests(unittest.TestCase):
         self.assertFalse((self.folder / 'bad-pin').exists())
 
     def test_verify_rejects_broken_fragments_and_base_paths(self):
-        for value in ['<a href="/docs/installation.html">bad base</a>', '<a href="#missing">bad fragment</a>', '<img src="missing.png" alt="Fixture">']:
+        for value in ['<a href="/docs/">bad base</a>',
+                      '<a href="/ballin-scripts/docs/">missing directory index</a>',
+                      '<a href="/ballin-scripts/#missing">bad directory fragment</a>',
+                      '<a href="#missing">bad fragment</a>',
+                      '<img src="missing.png" alt="Fixture">']:
             with tempfile.TemporaryDirectory() as folder:
                 output = Path(folder)
+                (output / 'docs').mkdir()
                 (output / 'index.html').write_text(value)
                 with self.subTest(value=value), self.assertRaises(ValueError):
                     site.verify_site(output, '/ballin-scripts')

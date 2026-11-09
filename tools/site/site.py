@@ -420,7 +420,7 @@ def image_pages(manifest, files, base):
         for index, image in enumerate(entry['images'], 1):
             width, height = struct.unpack('>II', files[image][16:24])
             title = html.escape(entry['title'])
-            content = (f'<h1>{title}</h1><p class="image-actions"><a href="{base}/gallery.html#entry-{entry["id"]}">Back to gallery example</a>'
+            content = (f'<h1>{title}</h1><p class="image-actions"><a href="{base}/gallery/#entry-{entry["id"]}">Back to gallery example</a>'
                        f'<a href="#transcript-{entry["id"]}-image">Matching text</a><a href="{base}/{image}">Open original PNG</a></p>'
                        f'<p>Rendered image, {width} × {height} pixels. Open the original PNG to zoom. '
                        f'Page {index} of {len(entry["images"])}. {html.escape(entry["kind"])} · Source: <code>{entry["sourceRevision"]}</code></p>'
@@ -467,6 +467,8 @@ def verify_site(output, base):
                 path = path[len(base) + 1:]
             else:
                 path = str(PurePosixPath(name).parent / path) if path else name
+            if url.path.endswith('/'):
+                path = str(PurePosixPath(path) / 'index.html')
             target = output / path
             require(target.resolve().is_relative_to(output.resolve()) and target.is_file(), 'Broken local link from ' + name + ': ' + link)
             if url.fragment:
@@ -475,8 +477,14 @@ def verify_site(output, base):
 
 def related_gallery(source, base, enabled):
     if enabled and source == 'docs/what-is-ballin.md':
-        return f'<p class="gallery-related"><a href="{base}/gallery.html">Browse the output gallery</a></p>'
+        return f'<p class="gallery-related"><a href="{base}/gallery/">Browse the output gallery</a></p>'
     return ''
+
+
+def page_url(path, base, origin):
+    if PurePosixPath(path).name == 'index.html':
+        path = path.removesuffix('index.html')
+    return origin + base + '/' + urllib.parse.quote(path)
 
 
 def page_metadata(page, base, origin):
@@ -489,7 +497,7 @@ def page_metadata(page, base, origin):
         description = topic + ' — ' + description
     values = {
         'pageTitle': title, 'description': description,
-        'canonical': origin + base + '/' + urllib.parse.quote(page['path']),
+        'canonical': page_url(page['path'], base, origin),
         'shareImage': origin + base + '/docs/assets/brand/social-preview.png',
         'shareAlt': 'Ballin: Back up dotfiles. Keep your tools current.',
     }
@@ -529,14 +537,14 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
     pages = json.loads(subprocess.check_output(['node', str(ROOT / 'tools/site/markdown.cjs')], input=json_bytes(payload), cwd=ROOT))
     template = (ROOT / 'site/page.html').read_text()
     if manifest:
-        pages.append({'path': 'gallery.html', 'title': 'Output gallery', 'source': 'tools/output-gallery/README.md', 'content': gallery_html(manifest, files, base)})
+        pages.append({'path': 'gallery/index.html', 'title': 'Output gallery', 'source': 'tools/output-gallery/README.md', 'content': gallery_html(manifest, files, base)})
         pages.extend(image_pages(manifest, files, base))
     work = Path(tempfile.mkdtemp(prefix='.site-build-', dir=output.parent))
     try:
         for page in pages:
             values = {**page_metadata(page, base, origin), 'base': base,
                       'analytics': (f'<script src="{base}/analytics.js" data-token="{analytics_token}" data-origin="{origin}" defer></script>' if analytics_token else ''),
-                      'galleryNav': f'<a href="{base}/gallery.html">Gallery</a>' if manifest else '',
+                      'galleryNav': f'<a href="{base}/gallery/">Gallery</a>' if manifest else '',
                       'content': page['content'] + related_gallery(page['source'], base, manifest is not None), 'source': source_base + '/' + urllib.parse.quote(page['source'])}
             rendered = re.sub(r'\{\{(\w+)\}\}', lambda m: values[m[1]], template)
             target = work / page['path']
@@ -555,10 +563,12 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
         if manifest:
+            # Keep old Gallery links and their fragments usable.
+            shutil.copyfile(work / 'gallery/index.html', work / 'gallery.html')
             (work / 'gallery/manifest.json').write_bytes(json_bytes(manifest))
         (work / '.nojekyll').write_text('')
         (work / 'build.json').write_bytes(json_bytes({'sourceRevision': revision, 'sourceWorktreeDirty': dirty, 'hosting': {'origin': origin, 'base': base}, 'bundle': pin}))
-        urls = ''.join('<url><loc>' + html.escape(origin + base + '/' + urllib.parse.quote(p['path'])) + '</loc></url>' for p in pages)
+        urls = ''.join('<url><loc>' + html.escape(page_url(p['path'], base, origin)) + '</loc></url>' for p in pages)
         (work / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + urls + '</urlset>')
         (work / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: ' + origin + base + '/sitemap.xml\n')
         verify_site(work, base)

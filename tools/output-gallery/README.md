@@ -413,7 +413,7 @@ publication.
 candidate bundle's size and SHA-256, and the base/replacement identities. Save
 that output with the local review evidence. At the top of the review handoff,
 list the replaced IDs and the retained count, identify the candidate bundle/hash,
-and link each replaced ID to `gallery.html#entry-ID` on the running local preview.
+and link each replaced ID to `gallery/#entry-ID` on the running local preview.
 Use the preview's printed origin and base path; keep the full retained list in
 the saved summary.
 

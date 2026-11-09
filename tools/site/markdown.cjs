@@ -22,8 +22,10 @@ const rendered = input.pages.map(page => {
     const target = path.normalize(path.join(path.dirname(page.path), decodeURIComponent(match[1])));
     if (target.startsWith('../') || target.startsWith('/')) throw new Error('Link outside repository: ' + value);
     let destination;
-    if (pages.has(target)) destination = input.base + '/' + encodePath(outputPath(target));
-    else if (target.startsWith('docs/assets/') && !target.endsWith('.md')) destination = input.base + '/' + encodePath(target);
+    if (pages.has(target)) {
+      const pagePath = outputPath(target).replace(/(^|\/)index\.html$/, '$1');
+      destination = input.base + '/' + encodePath(pagePath);
+    } else if (target.startsWith('docs/assets/') && !target.endsWith('.md')) destination = input.base + '/' + encodePath(target);
     else destination = input.sourceBase + '/' + encodePath(target);
     return destination + match[2];
   };
