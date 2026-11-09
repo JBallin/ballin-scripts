@@ -495,11 +495,13 @@ class BuildTests(unittest.TestCase):
         subprocess.run(['node', str(site.ROOT / 'tools/site/test_analytics.cjs')], check=True)
 
     def test_netlify_credit_in_shared_footer(self):
-        credit = '<a href="https://www.netlify.com/">This site is powered by Netlify</a>'
+        credit = '<span class="hosting-credit">This site is powered by <a href="https://www.netlify.com/">Netlify</a></span>'
         for page in self.output.rglob('*.html'):
             source = page.read_text()
             footer = source.split('<footer>', 1)[1].split('</footer>', 1)[0]
             self.assertEqual(footer.count(credit), 1)
+            self.assertNotIn('>This site is powered by Netlify</a>', footer)
+            self.assertIn('class="footer-tagline"', footer)
             self.assertIn('View source on GitHub', footer)
             self.assertIn('Back up dotfiles. Keep your tools current.', footer)
 
