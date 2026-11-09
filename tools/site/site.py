@@ -54,8 +54,10 @@ def load_json(data):
     return json.loads(data, object_pairs_hook=pairs)
 
 
-def keys(value, names):
-    require(isinstance(value, dict) and set(value) == set(names.split()), 'Unexpected or missing schema fields')
+def keys(value, names, optional=''):
+    required = set(names.split())
+    require(isinstance(value, dict) and required <= set(value) <= required | set(optional.split()),
+            'Unexpected or missing schema fields')
 
 
 def string(value, limit=1000):
@@ -144,7 +146,9 @@ def validate_manifest(manifest, files):
     ids = set()
     updates = 0
     for entry in manifest['entries']:
-        keys(entry, 'id title category kind sourceRevision edits text images readmeUpdate')
+        keys(entry, 'id title category kind sourceRevision edits text images readmeUpdate', 'command')
+        if 'command' in entry:
+            require(string(entry['command'], 600).strip(), 'Empty example command')
         require(isinstance(entry['id'], str) and SLUG.fullmatch(entry['id']) and entry['id'] not in ids, 'Invalid or duplicate entry ID')
         ids.add(entry['id'])
         string(entry['title'], 160)
@@ -219,7 +223,7 @@ def pack(gallery, selection_path, output):
     generated = {entry['id']: entry for entry in generation['scenarios']}
     entries, files = [], {}
     for selected in selection['entries']:
-        keys(selected, 'scenario id title edits approvedForPublication readmeUpdate')
+        keys(selected, 'scenario id title edits approvedForPublication readmeUpdate', 'command')
         require(selected['approvedForPublication'] is True, 'Explicit file publication approval is required')
         require(isinstance(selected['scenario'], str) and SLUG.fullmatch(selected['scenario']), 'Invalid scenario')
         require(isinstance(selected['id'], str) and SLUG.fullmatch(selected['id']), 'Invalid public ID')
@@ -229,6 +233,8 @@ def pack(gallery, selection_path, output):
         require(not folder.is_symlink(), 'Symlink scenario directory')
         entry = {key: scenario[key] for key in ('category', 'kind', 'sourceRevision')}
         entry.update({key: selected[key] for key in ('id', 'title', 'edits', 'readmeUpdate')})
+        if 'command' in selected:
+            entry['command'] = selected['command']
         prefix = 'gallery/' + selected['id'] + '/'
         entry['text'] = prefix + 'text.txt'
         report = load_json(read_regular(folder / 'output.json', MAX_FILE))
@@ -362,34 +368,58 @@ def retrieve(pin, request=github):
     return data
 
 
+def capture_details(entry):
+    revision = entry['sourceRevision']
+    return (f'<details class="provenance"><summary>Details</summary>'
+            f'<p>Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>'
+            f'{html.escape(entry["edits"])}</p></details>')
+
+
+def command_html(entry):
+    if 'command' not in entry:
+        return ''
+    label = 'Recorded command' if entry['kind'] == 'actual-vm' else 'Illustrative command'
+    return f'<div class="invocation"><p>{label}</p><pre><code>{html.escape(entry["command"])}</code></pre></div>'
+
+
 def gallery_html(manifest, files, base):
-    lines = ['<h1 id="gallery">Output gallery</h1>', '<p>See what Ballin looks like in Terminal. Choose a topic, then open an example to view its output or read the matching text.</p>']
-    lines.append('<details class="review-context"><summary>How to read this gallery</summary>'
-                 '<p>Actual captures show output from a specific VM session. Staged examples illustrate output without running Ballin. '
-                 'Images are rendered from terminal output. Open <strong>Source and capture details</strong> for the revision and how each example was prepared.</p></details>')
+    lines = ['<h1 id="gallery">Output gallery</h1>',
+             '<p>Explore Ballin’s terminal output, rendered from VM recordings or staged examples.</p>']
     lines.append('<nav class="gallery-topics" aria-label="Gallery sections">')
     topic_labels = {'Install & Quickstart': 'Installing', 'Setup & Backup': 'Backups & preferences', 'Update': 'Updating', 'Diagnostics': 'Diagnostics'}
     for category in CATEGORIES:
         slug = category.lower().replace(' & ', '-').replace(' ', '-')
         lines.append(f'<a href="#{slug}">{html.escape(topic_labels[category])}</a> ')
     lines.append('</nav>')
+    first = True
     for category in CATEGORIES:
         slug = category.lower().replace(' & ', '-').replace(' ', '-')
         lines.append(f'<h2 id="{slug}">{html.escape(category)}</h2>')
         entries = [entry for entry in manifest['entries'] if entry['category'] == category]
         if not entries:
-            lines.append('<p>No approved examples in this section yet.</p>')
+            lines.append('<p>No examples yet.</p>')
         for entry in entries:
-            label = 'Actual VM capture · rendered recorded output' if entry['kind'] == 'actual-vm' else 'Staged · source-informed synthetic output'
-            lines.append(f'<article class="gallery-entry" id="entry-{entry["id"]}"><h3>{html.escape(entry["title"])}</h3><p>{label}; not a native Terminal screenshot.</p>')
-            revision = entry['sourceRevision']
-            lines.append(f'<details class="provenance"><summary>Source and capture details</summary><p>Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>{html.escape(entry["edits"])}</p></details>')
-            lines.append('<details><summary>Example output</summary>')
-            for index, image in enumerate(entry['images'], 1):
-                viewer = image.removesuffix('.png') + '.html'
-                width, height = struct.unpack('>II', files[image][16:24])
-                lines.append(f'<figure><a href="{base}/{viewer}"><img loading="lazy" width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, rendered page {index}. Open full-size image."></a><figcaption>Page {index} of {len(entry["images"])} · <a href="{base}/{viewer}">Open full-size image ({width} × {height})</a></figcaption></figure>')
-            lines.append(transcript_html(entry, files, base) + '</details></article>')
+            ident = entry['id']
+            title = html.escape(entry['title'])
+            label = 'VM recording' if entry['kind'] == 'actual-vm' else 'Staged example'
+            lines.append(f'<article class="gallery-entry" id="entry-{ident}"><h3>{title}</h3><p class="capture-label">{label}</p>')
+            image = entry['images'][0]
+            viewer = image.removesuffix('.png') + '.html'
+            width, height = struct.unpack('>II', files[image][16:24])
+            if height > 400:
+                width, height = max(1, round(width * 400 / height)), 400
+            count = len(entry['images'])
+            expanded = ' open' if first else ''
+            first = False
+            lines.append(f'<details class="gallery-output"{expanded}><summary>Example output</summary>'
+                         f'<p class="image-actions"><a href="{base}/{viewer}">Open image viewer</a>'
+                         f'<a href="#transcript-{ident}">Text version</a></p>'
+                         + command_html(entry)
+                         + f'<figure><img loading="lazy" width="{width}" height="{height}" '
+                         f'src="{base}/{image}" alt="{title}, rendered page 1">'
+                         + (f'<figcaption>Page 1 of {count}</figcaption>' if count > 1 else '')
+                         + '</figure>')
+            lines.append(transcript_html(entry, files, base) + '</details>' + capture_details(entry) + '</article>')
     return '\n'.join(lines)
 
 
@@ -422,15 +452,17 @@ def image_pages(manifest, files, base):
         for index, image in enumerate(entry['images'], 1):
             width, height = struct.unpack('>II', files[image][16:24])
             title = html.escape(entry['title'])
-            content = (f'<h1>{title}</h1><p class="image-actions"><a href="{base}/gallery/#entry-{entry["id"]}">Back to gallery example</a>'
-                       f'<a href="#transcript-{entry["id"]}-image">Matching text</a><a href="{base}/{image}">Open original PNG</a></p>'
-                       f'<p>Rendered image, {width} × {height} pixels. Open the original PNG to zoom. '
-                       f'Page {index} of {len(entry["images"])}. {html.escape(entry["kind"])} · Source: <code>{entry["sourceRevision"]}</code></p>'
-                       f'<details class="provenance"><summary>Source and capture details</summary><p>{html.escape(entry["edits"])}</p></details>'
-                       + image_page_navigation(entry, index, base) +
-                       f'<figure class="image-preview"><img width="{width}" height="{height}" src="{base}/{image}" alt="{html.escape(entry["title"], quote=True)}, page {index}. Matching text follows."><figcaption>Complete image, fitted to the page. Open the original PNG to zoom, or read the text version.</figcaption></figure>'
+            label = 'VM recording' if entry['kind'] == 'actual-vm' else 'Staged example'
+            content = (f'<h1>{title}</h1><p class="image-actions"><a href="{base}/gallery/#entry-{entry["id"]}">Back to gallery example</a></p>'
+                       f'<p class="capture-label">{label} · Page {index} of {len(entry["images"])}</p>'
                        + image_page_navigation(entry, index, base)
-                       + transcript_html(entry, files, base, '-image'))
+                       + f'<p class="image-actions"><a href="{base}/{image}">Open original PNG</a>'
+                       f'<a href="#transcript-{entry["id"]}-image">Text version</a></p>'
+                       + command_html(entry)
+                       + f'<figure class="image-preview"><img width="{width}" height="{height}" src="{base}/{image}" '
+                       f'alt="{html.escape(entry["title"], quote=True)}, rendered page {index}"></figure>'
+                       + image_page_navigation(entry, index, base)
+                       + transcript_html(entry, files, base, '-image') + capture_details(entry))
             pages.append({'path': image.removesuffix('.png') + '.html', 'title': f"{entry['title']} — page {index} of {len(entry['images'])}", 'source': 'tools/output-gallery/README.md', 'content': content})
     return pages
 

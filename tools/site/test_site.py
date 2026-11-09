@@ -250,7 +250,7 @@ class BundleTests(unittest.TestCase):
             site.read_bundle(b'x' * (site.MAX_ZIP + 1))
 
     def test_manifest_is_an_exact_public_schema(self):
-        for value in ['capturesManifest', 'environment', 'command', 'answers', 'raw']:
+        for value in ['capturesManifest', 'environment', 'answers', 'raw']:
             manifest = copy.deepcopy(self.manifest)
             manifest['entries'][0][value] = 'PRIVATE SENTINEL'
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'schema fields'):
@@ -410,7 +410,7 @@ class BundleTests(unittest.TestCase):
             report = site.json_bytes({'text': text.decode(), 'private': 'PRIVATE SENTINEL'})
             for name, data in [('text.txt', text), ('output-001.png', png()), ('output.json', report), ('raw.ansi', b'PRIVATE SENTINEL')]:
                 (folder / name).write_bytes(data)
-            scenario = {**self.manifest['entries'][0], 'id': 'staged-09', 'environment': 'PRIVATE SENTINEL',
+            scenario = {**self.manifest['entries'][0], 'id': 'staged-09', 'environment': 'PRIVATE SENTINEL', 'command': 'PRIVATE SENTINEL',
                         'files': {p.name: site.digest(p.read_bytes()) for p in folder.iterdir()}}
             (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario], 'capturesManifest': 'PRIVATE SENTINEL'}))
             selected = {'schema': 1, 'entries': [{'scenario': 'staged-09', 'id': 'update', 'title': 'Synthetic update fixture', 'edits': 'Synthetic fixture only.', 'approvedForPublication': True, 'readmeUpdate': True}]}
@@ -425,6 +425,12 @@ class BundleTests(unittest.TestCase):
             self.assertNotIn('PRIVATE SENTINEL', json.dumps(manifest) + repr(files))
             with self.assertRaisesRegex(ValueError, 'Output exists'):
                 site.pack(gallery, selection, root / 'one.zip')
+            selected['entries'][0]['command'] = 'ballin update'
+            selection.write_bytes(site.json_bytes(selected))
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.pack(gallery, selection, root / 'command.zip')
+            manifest, _ = site.read_bundle((root / 'command.zip').read_bytes())
+            self.assertEqual(manifest['entries'][0]['command'], 'ballin update')
             selected['entries'][0]['approvedForPublication'] = False
             selection.write_bytes(site.json_bytes(selected))
             with self.assertRaisesRegex(ValueError, 'approval'):
@@ -612,6 +618,9 @@ class BuildTests(unittest.TestCase):
             self.assertIn(f'href="/ballin-scripts/gallery/update/output-{other:03}.html">Page {other}</a>', page['content'])
             self.assertEqual(page['content'].count('class="image-pages"'), 2)
         self.assertEqual(site.image_page_navigation(fixture()[0]['entries'][0], 1, ''), '')
+        gallery = site.gallery_html(manifest, files, '/ballin-scripts')
+        self.assertIn('Page 1 of 2', gallery)
+        self.assertNotIn('output-002', gallery)
 
     def test_root_custom_domain_complete_snapshot_and_project_cli_override(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -662,32 +671,44 @@ class BuildTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     site.deployment_config(config)
 
-    def test_output_readability_and_provenance_disclosures(self):
+    def test_output_actions_precede_images_and_details_follow_output(self):
         gallery = (self.output / 'gallery/index.html').read_text()
         viewer = (self.output / 'gallery/update/output-001.html').read_text()
-        self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', gallery)
-        self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', viewer)
-        self.assertIn('href="/ballin-scripts/gallery/update/output-001.png">Open original PNG</a>', viewer)
-        self.assertIn('Open the original PNG to zoom.', viewer)
-        self.assertIn('Complete image, fitted to the page.', viewer)
-        self.assertNotIn('Native resolution', viewer)
-        self.assertIn('Synthetic fixture only.', gallery)
-        self.assertIn('Synthetic fixture only.', viewer)
-        self.assertIn('Copy text', viewer)
-        self.assertIn('Download text', viewer)
+        details = '<details class="provenance"><summary>Details</summary>'
+        for page, ident in [(gallery, 'update'), (viewer, 'update-image')]:
+            self.assertLess(page.index(f'href="#transcript-{ident}">Text version</a>'), page.index('<figure'))
+            self.assertLess(page.index('Download text'), page.index(details))
+            self.assertIn('Staged example', page)
+            self.assertIn('Synthetic fixture only.', page)
+            self.assertIn('Copy text', page)
+        png_link = 'href="/ballin-scripts/gallery/update/output-001.png">Open original PNG</a>'
+        self.assertLess(viewer.index(png_link), viewer.index('<figure'))
+        self.assertLess(gallery.index('Open image viewer'), gallery.index('<figure'))
 
-    def test_gallery_orientation_precedes_examples_and_preserves_shared_width(self):
-        gallery = (self.output / 'gallery/index.html').read_text()
-        self.assertLess(gallery.index('Choose a topic'), gallery.index('<article'))
+    def test_reviewed_command_is_escaped_labeled_and_optional(self):
+        manifest, files = fixture()
+        entry = manifest['entries'][0]
+        self.assertNotIn('class="invocation"', site.gallery_html(manifest, files, ''))
+        entry['command'] = 'ballin update && printf "<result>"'
+        for kind, label in [('staged', 'Illustrative command'), ('actual-vm', 'Recorded command')]:
+            entry['kind'] = kind
+            site.validate_manifest(manifest, files)
+            for value in [site.gallery_html(manifest, files, ''), site.image_pages(manifest, files, '')[0]['content']]:
+                self.assertIn(f'<p>{label}</p>', value)
+                self.assertIn('ballin update &amp;&amp; printf &quot;&lt;result&gt;&quot;', value)
+                self.assertLess(value.index(label), value.index('<figure'))
+
+    def test_gallery_opens_first_preview_and_keeps_topic_navigation(self):
+        manifest, files = fixture()
+        other = {**manifest['entries'][0], 'id': 'second', 'title': 'Second example', 'readmeUpdate': False}
+        manifest['entries'].append(other)
+        gallery = site.gallery_html(manifest, files, '')
+        first, second = gallery.split('id="entry-second"', 1)
+        self.assertIn('<details class="gallery-output" open>', first)
+        self.assertNotIn('<details class="gallery-output" open>', second)
+        self.assertLess(first.index('aria-label="Gallery sections"'), first.index('<article'))
         for label in ['Installing', 'Backups &amp; preferences', 'Updating', 'Diagnostics']:
-            self.assertIn(label, gallery)
-        guide = gallery.index('<details class="review-context"><summary>How to read this gallery</summary>')
-        self.assertLess(gallery.index('Choose a topic'), guide)
-        self.assertLess(guide, gallery.index('<nav class="gallery-topics"'))
-        self.assertLess(guide, gallery.index('<h2 id="install-quickstart"'))
-        style = (self.output / 'style.css').read_text()
-        self.assertNotIn('max-width:1440px', style)
-        self.assertNotIn('.full-image', style)
+            self.assertIn(label, first)
 
     def test_intro_gallery_link_keeps_readme_and_respects_bootstrap(self):
         complete = (self.output / 'docs/what-is-ballin.html').read_text()
@@ -904,8 +925,8 @@ class BuildTests(unittest.TestCase):
 
     def test_accessible_nested_details_and_escaped_text(self):
         value = (self.output / 'gallery/index.html').read_text()
-        self.assertEqual(value.count('<details'), 4)
-        self.assertNotIn('<details open', value)
+        self.assertEqual(value.count('<details'), 3)
+        self.assertIn('<details class="gallery-output" open>', value)
         self.assertIn('<summary>Text version</summary>', value)
         self.assertIn('&lt;untrusted &amp; text&gt;', value)
         for anchor in ['install-quickstart', 'setup-backup', 'update', 'diagnostics']:

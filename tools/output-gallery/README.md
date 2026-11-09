@@ -94,6 +94,43 @@ script checksum. Do not enable key logging. If using Tart folder shares, expose
 only dedicated capture inputs (read-only) and generated output, never host HOME or
 credentials; clipboard sharing is unnecessary.
 
+### Record full Quickstart with backups enabled
+
+1. Select one reviewed product commit that contains the Quickstart installer and
+   backup behavior being documented. Check the combined changes and exact SHA
+   before guest execution; site-only overlays do not establish product provenance.
+   Until an approved stable release and its install URL are live, run the exact
+   reviewed Quickstart script with its explicit SHA and label the capture as such.
+2. Use a fresh disposable macOS guest without Homebrew or Ballin. For the
+   authenticated journey, use an authorized clone of the dedicated test-account
+   base (see below). Verify the intended account privately with recording paused.
+   Before running, agree on one exact private, disposable GitHub.com repository
+   owned by that account, whether Ballin may create it, and the permitted
+   snapshot writes and reads. Stop on a name collision, redirect, identity
+   mismatch, or any unexpected request for authentication or access. Never use a
+   personal account, existing backup, or host data.
+3. Inventory the guest's [backup sources](../../docs/backup-sources.md) and use
+   only disposable data, even with sensitive sources off. Record Quickstart from
+   its first prompt through installation, choosing backup setup, confirming the
+   agreed private destination, completing preferences and accepting the first
+   backup. Then record `ballin backup list` and one read of a preselected,
+   non-sensitive synthetic snapshot using `ballin backup read <snapshot>`.
+   Verify the repository is private and the expected snapshot exists there.
+   Retain the exact guest commands (including wrappers, SHA and arguments), exit
+   statuses and a separate disclosure for any omitted or redacted material.
+4. Import the reviewed ANSI using the manifest below. Compare every image page
+   with the transcript and raw evidence. Check the Gallery card and viewer in
+   the local site preview: command, image size and pagination, text access, and
+   navigation back to the example. Inspect commands, pixels, transcripts and
+   metadata for secrets, account/repository identifiers and personal data. If a
+   command cannot be shared safely, omit it from the served page and retain its
+   exact form only in private provenance.
+5. Keep local previews loopback-only. Review the candidate files and disclosures
+   for publication suitability separately; that review is neither permission to
+   upload the asset or publish a release nor permission to deploy the site. See
+   the [site/gallery runbook](../../docs/website.md#start-to-finish-workflow) for
+   each publication step. Preserve the guest and private evidence at handoff.
+
 ### Guest local admin access
 
 The basic installation-testing guide selects the Cirrus Labs Golden Gate vanilla
@@ -349,7 +386,12 @@ Keep approval false until the actual selected files and disclosures are approved
 `pack` will refuse it. `scenario` selects a generated entry; `id` defines its stable
 public path. Source revision, category and actual/staged classification come from
 the generation manifest. `edits` discloses meaningful edits/omissions publicly.
-Use exactly one canonical README Update designation when exporting that example.
+An optional `command` adds a reviewed command above the output. For a VM
+recording, copy the exact safe command from its provenance; for a staged example,
+provide only an illustrative command. Omit the field if the exact recorded
+command is unavailable or contains private data. Packaging does not copy this
+field from private provenance automatically. Use exactly one canonical README
+Update designation when exporting that example.
 
 After file-publication approval, set the selected entries' approval to true.
 `--gallery` must name the exact output directory from the generation being
@@ -368,8 +410,8 @@ Record the successful command's ZIP size/hash and entry list. Packaging checks
 source hashes and renderer/text equality, removes PNG EXIF/text/time metadata
 without changing encoded pixels or color, and hashes the resulting public bytes.
 The ZIP includes only selected PNGs, UTF-8 text and minimal public provenance;
-raw ANSI, capture manifests, command/answer/environment records, source snapshots
-and tools stay private. Never upload the entire generation directory. Hashes do
+raw ANSI, full capture manifests and provenance records, source snapshots and
+tools stay private. Never upload the entire generation directory. Hashes do
 not prove faithful execution or absence of secrets; review still matters.
 
 ## Replace selected examples

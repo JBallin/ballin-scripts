@@ -304,9 +304,10 @@ an HTTP response or source inspection alone does not establish visual quality.
   contents. Verify the Download target and, when permitted, the saved transcript.
   A timeout or permission prompt is not successful completion; inspect an uncertain
   outcome before retrying. Keep browser permissions and unrelated files unchanged.
-- Check concise actual/staged, historical and incomplete labels. Keep recorded
-  invocations accessible in capture details, separate from recommended commands
-  in the installation guides. Keep technical provenance accessible without burying examples.
+- Check concise recording/staged, historical and incomplete labels. Check that
+  reviewed commands appear above the output and are labeled recorded or
+  illustrative. Keep source and capture notes in Details and reproduction
+  instructions in the installation guides.
   Use the [CLI-output review workflow](../tools/output-gallery/README.md#review-command-line-output)
   to establish source fidelity separately from presentation quality.
 

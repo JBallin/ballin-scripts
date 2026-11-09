@@ -4,12 +4,16 @@ header,main,footer{max-width:1000px;margin:auto;padding:1.5rem 2rem}header{displ
 @media(max-width:650px){:root{font-size:16px}header,main,footer{padding:1.2rem}header{align-items:flex-start;flex-direction:column}nav{gap:1rem}h1{font-size:2.2rem}pre{padding:.8rem}main{padding-top:2rem}}
 button{font:inherit;color:var(--accent);background:var(--panel);border:1px solid var(--line);border-radius:.3rem;padding:.3rem .7rem;cursor:pointer}button:focus-visible{outline:3px solid var(--accent);outline-offset:4px}button:disabled{opacity:.65;cursor:wait}.copy-status{display:block;font-size:.85rem;color:var(--muted)}.image-actions{display:flex;flex-wrap:wrap;gap:1rem}
 
-/* Gallery and image viewers keep the shared site column. */
-.gallery-entry>details:not(.provenance){padding:.75rem}.gallery-entry figure{margin:.75rem 0}.gallery-entry img{display:block}
+/* Keep previews compact; the viewer can show the original width. */
+.gallery-output{padding:.75rem}.gallery-entry figure{margin:.75rem 0}.gallery-entry img{display:block}
+.gallery-entry .provenance,main:has(>.image-preview)>.provenance{border:0;padding:0;color:var(--muted)}
+.gallery-entry .provenance summary,main:has(>.image-preview)>.provenance summary{color:inherit}
 details[id^="transcript-"] button[data-copy]{margin:.9rem 0 .65rem}details[id^="transcript-"] pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:.95rem;line-height:1.6}details[id^="transcript-"] pre code{font-size:1em}
 .provenance summary{font-size:.95rem}.capture-label{color:var(--muted);margin:.5rem 0 1rem}.review-status{border-left:3px solid var(--accent);padding-left:.8rem}
 
-.image-preview{margin:1rem 0}.image-preview img{display:block;max-width:100%;height:auto}.image-preview figcaption{font-size:.85rem;color:var(--muted)}.invocation pre{white-space:pre-wrap;overflow-wrap:anywhere}.invocation p{margin-bottom:.3rem}.invocation pre{margin-top:.3rem}.review-context{font-size:.9rem;color:var(--muted)}
+main:has(>.image-preview){max-width:calc(1280px + 4rem)}
+main:has(>.image-preview)>:not(.image-preview){max-width:calc(1000px - 4rem);margin-inline:auto}
+.image-preview{margin:1rem 0}.image-preview img{display:block;margin-inline:auto}.invocation pre{white-space:pre-wrap;overflow-wrap:anywhere}.invocation p{margin-bottom:.3rem}.invocation pre{margin-top:.3rem}
 
 .gallery-topics{margin:1.5rem 0 2rem}.gallery-highlights{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.5rem 0 2rem}.gallery-highlights a{display:block;border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem;text-decoration:none}.gallery-highlights strong{display:block;font-size:1.2rem}.gallery-highlights span{display:block;color:var(--muted);font-size:.9rem;margin-top:.3rem}.image-pages{align-items:center;gap:1rem;margin:1.2rem 0}.image-pages [aria-current]{font-weight:600;color:var(--ink)}@media(max-width:650px){.gallery-highlights{grid-template-columns:1fr}}
 
