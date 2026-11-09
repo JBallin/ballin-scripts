@@ -70,6 +70,12 @@ describe('read-only NVM discovery and eligibility', () => {
     fs.copyFileSync(path.join(directory, 'nvm.sh'), path.join(xdg, 'nvm/nvm.sh'));
     assert.equal(discoverNvm(env({ NVM_DIR: undefined, XDG_CONFIG_HOME: xdg })).directory, path.join(xdg, 'nvm'));
   });
+  it('does not query Brew in experimental direct installation mode', () => {
+    const marker = path.join(root, 'brew-called');
+    fs.writeFileSync(path.join(root, 'brew'), `#!/bin/sh\nprintf called > '${marker}'\nexit 1\n`, { mode: 0o700 });
+    assert.isNull(discoverNvm({ ...env(), PATH: root, BALLIN_EXPERIMENT_INSTALL_OWNER: 'direct' }));
+    assert.isFalse(fs.existsSync(marker));
+  });
   it('resolves a verified Homebrew libexec without executing its mutating wrapper', () => {
     const prefix = path.join(root, 'brew'); const tools = path.join(root, 'tools'); fs.mkdirSync(tools);
     fs.mkdirSync(path.join(prefix, 'opt/nvm/libexec'), { recursive: true });

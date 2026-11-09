@@ -685,6 +685,17 @@ exit 1
     });
   }
 
+  it('does not query Brew when experimental direct ownership selects local bin', () => {
+    installConfigSources();
+    writeExecutable('brew', `#!/bin/sh\nprintf called >> '${commandLogPath}'\nexit 99\n`);
+    const result = withEnvironment({
+      HOME: path.join(testDir, 'home'), PATH: binDir, BALLIN_EXPERIMENT_INSTALL_OWNER: 'direct',
+      BALLIN_BACKUP_CHOICE: 'no',
+    }, () => captureStdout(() => setup(repoDir, docsUrl, undefined, 'self-update')));
+    assert.isTrue(result.result, result.output);
+    assert.notInclude(commandLog(), 'called');
+    assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());
+  });
   it('stops safely when neither Homebrew nor HOME can provide a command directory', () => {
     installConfigSources();
     const previousHome = process.env.HOME;

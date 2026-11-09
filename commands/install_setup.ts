@@ -145,7 +145,7 @@ const setupRetry = (mode: SetupMode): string => mode === 'fresh' ? 'run the inst
   : mode === 'self-update' ? `run ${terminalCommand('ballin self-update')} again`
     : `use ${terminalCommand('ballin self-update')} for the default selection`;
 const resolveBinDir = (mode: SetupMode): string | null => {
-  if (commandExists('brew')) {
+  if (process.env.BALLIN_EXPERIMENT_INSTALL_OWNER !== 'direct' && commandExists('brew')) {
     const result = runCommand('brew', ['--prefix']);
     requireUninterrupted(result);
     const brewPrefix = result.status === 0 && !result.error ? result.stdout : null;

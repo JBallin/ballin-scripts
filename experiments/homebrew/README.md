@@ -103,3 +103,12 @@ Homebrew does not autonomously upgrade Ballin merely because it was installed:
 the user must run an upgrade or their chosen maintenance workflow. A later local,
 cached “update available” hint is separate from self-updating and can be evaluated
 if actual users need it; it is not necessary for the packaging experiment.
+
+## Explicit owner-choice candidate
+
+The [local chooser candidate](CHOICE-CANDIDATE.md) now offers an explicit official
+Homebrew installation or the existing direct route without invoking Brew. It is
+isolated under this experiment and uses a frozen unpublished source transport for
+disposable guests. Public Quickstart does not invoke it. Its invocation-scoped
+owner flag, separate prototype state paths, prepared-Git transport prerequisite
+and unverified live matrix cells are deliberate limitations, not shipped policy.

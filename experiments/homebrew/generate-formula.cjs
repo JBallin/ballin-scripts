@@ -8,7 +8,8 @@ const { execFileSync } = require('node:child_process');
 const rubyString = value => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const required = ['package.json', '.nvmrc', 'bin/ballin', 'commands/ballin.ts', 'commands/installation.ts', 'config/.defaultConfig.json', 'completions/_ballin', 'completions/ballin.bash'];
-function generate({ archive, checksum, sourceRevision, nodeMajor }) {
+function generate({ archive, checksum, sourceRevision, nodeMajor, formula = 'ballin-experiment' }) {
+  if (!/^(?:[a-z0-9-]+\/[a-z0-9-]+\/)?ballin-experiment$/.test(formula)) throw Error('Invalid experimental formula identity.');
   if (!archive || !path.isAbsolute(archive)) throw Error('Archive must be an explicit absolute local path.');
   if (!/^[a-f0-9]{64}$/.test(checksum || '')) throw Error('Expected a lowercase SHA256 checksum.');
   if (!/^[a-f0-9]{40}$/.test(sourceRevision || '')) throw Error('Expected a full lowercase source commit SHA.');
@@ -34,17 +35,17 @@ function generate({ archive, checksum, sourceRevision, nodeMajor }) {
   if (!/^[1-9]\d*$/.test(testedMajor)) throw Error('Archive .nvmrc must name a Node major.');
   const major = String(nodeMajor ?? testedMajor);
   if (!/^[1-9]\d*$/.test(major) || Number(major) < Number(engine[1])) throw Error('Node dependency is below the required runtime major.');
-  const marker = { manager: 'homebrew', formula: 'ballin-experiment', schema: 2, version: metadata.version, sourceRevision, archiveSha256: checksum, selection: { kind: 'development' } };
+  const marker = { manager: 'homebrew', formula, schema: 2, version: metadata.version, sourceRevision, archiveSha256: checksum, selection: { kind: 'development' } };
   return `# Generated local-only experiment. No published-release claim.\n# Source revision is caller-supplied; archive checksum pins the actual bytes.\nrequire "json"\nrequire "shellwords"\n\nclass BallinExperiment < Formula\n  desc "Local Ballin package ownership experiment"\n  homepage "https://github.com/JBallin/ballin-scripts"\n  url ${rubyString(pathToFileURL(archive).href)}\n  version ${rubyString(`${metadata.version}-dev.${sourceRevision.slice(0, 12)}`)}\n  sha256 ${rubyString(checksum)}\n  license "MIT"\n  depends_on :macos\n  depends_on "node@${major}"\n\n  def install\n    node = Formula["node@${major}"].opt_bin/"node"\n    system node, "-e", ${rubyString(`const a=process.versions.node.split('.').map(Number), b='${minimum}'.split('.').map(Number); if(a[0]!==${major} || a[0]<b[0] || (a[0]===b[0] && (a[1]<b[1] || (a[1]===b[1] && a[2]<b[2])))) process.exit(1);`)}\n    libexec.install "bin", "commands", "config", "completions", "package.json"\n    completion_node = "_ballin_completion_node=#{Shellwords.escape(node.to_s)}\\n"\n    completion_helper = "\\n_ballin_completion_helper=#{Shellwords.escape((opt_libexec/"commands/completion_members.ts").to_s)}\\n"\n    bash_completion = libexec/"completions/ballin.bash"\n    File.write(bash_completion, bash_completion.read + "\\n" + completion_node + completion_helper)\n    zsh_completion = libexec/"completions/_ballin"\n    zsh_source = zsh_completion.read\n    odie "Expected zsh compdef header" unless zsh_source.start_with?("#compdef ballin\\n")\n    File.write(zsh_completion, zsh_source + "\\n" + completion_node + completion_helper)\n    marker = JSON.parse(${rubyString(JSON.stringify(marker))})\n    marker["commandPath"] = (opt_bin/"ballin").to_s\n    marker["completionRoot"] = (opt_libexec/"completions").to_s\n    (libexec/".ballin-package.json").write(JSON.generate(marker) + "\\n")\n    (bin/"ballin").write_env_script libexec/"bin/ballin", PATH: "#{node.dirname}:$PATH"
   end\n\n  def caveats\n    "Experimental development package. Run ballin setup --initial when ready; backups are optional. User state remains in ~/.ballin after removal."\n  end\n\n  test do\n    assert_match "ballin", shell_output("#{bin}/ballin help")\n  end\nend\n`;
 }
 if (require.main === module) {
   try {
     const args = process.argv.slice(2), options = {};
-    const names = { '--archive': 'archive', '--sha256': 'checksum', '--source-sha': 'sourceRevision', '--node-major': 'nodeMajor' };
+    const names = { '--archive': 'archive', '--sha256': 'checksum', '--source-sha': 'sourceRevision', '--node-major': 'nodeMajor', '--formula': 'formula' };
     for (let i = 0; i < args.length; i += 2) {
       const key = names[args[i]];
-      if (!key || !args[i + 1] || options[key]) throw Error('Use --archive ABSOLUTE_PATH --sha256 SHA256 --source-sha FULL_SHA [--node-major MAJOR].');
+      if (!key || !args[i + 1] || options[key]) throw Error('Use --archive ABSOLUTE_PATH --sha256 SHA256 --source-sha FULL_SHA [--node-major MAJOR] [--formula USER/TAP/ballin-experiment].');
       options[key] = args[i + 1];
     }
     process.stdout.write(generate(options));

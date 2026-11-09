@@ -90,3 +90,9 @@ setup. Replacing its final installer call with an unqualified `brew install`
 would lose exact-selection behavior. A future package route must verify formula
 provenance against the resolved selection, split Git-specific preflight from
 package preflight, and handle unsupported historical/branch selectors explicitly.
+
+For the local chooser, `--formula ballin-local/choice/ballin-experiment` records
+that exact owning tap/formula in the marker. The default remains the earlier bare
+experimental identity. Modern Homebrew requires formulae inside a tap; the chooser
+creates only a guest-local tap and retains its archive there. This does not publish
+a tap or make a development marker a release.

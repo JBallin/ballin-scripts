@@ -318,6 +318,14 @@ ballin_download() { : > "$2"; }
     ]);
   });
 
+  it('does not query Brew during experimental direct command preflight', () => {
+    installBaseCommands();
+    writeExecutable('brew', '#!/bin/sh\nprintf called >> "$FAKE_COMMAND_LOG"\nexit 99\n');
+    const result = runInstall({ env: { BALLIN_EXPERIMENT_INSTALL_OWNER: 'direct' }, input: 'n\n' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Link the ballin command in ~/.local/bin');
+    assert.notInclude(commandLog().join('\n'), 'called');
+  });
   it('previews the Homebrew command directory with HOME abbreviated', () => {
     installBaseCommands();
     writeExecutable('brew', '#!/bin/sh\nprintf "%s\\n" "$HOME/custom-brew"\n');

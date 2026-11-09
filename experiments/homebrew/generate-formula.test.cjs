@@ -41,6 +41,8 @@ test('deterministic local formula pins bytes, development provenance and managed
   assert.match(formula, /opt_libexec\/"completions"/);
   assert.match(formula, /#\{node.dirname\}:\$PATH/);
   assert.doesNotMatch(formula, /depends_on "(?:git|gh|npm|nvm)"|npm (?:ci|install)|releaseId/);
+  assert.match(generate({ ...options, formula: 'ballin-local/choice/ballin-experiment' }), /\"formula\":\"ballin-local\/choice\/ballin-experiment\"/);
+  assert.throws(() => generate({ ...options, formula: 'invalid;command' }), /formula identity/);
   assert.match(generate({ ...options, nodeMajor: 24 }), /depends_on "node@24"/);
   assert.throws(() => generate({ ...options, nodeMajor: 22 }), /below/);
   assert.throws(() => generate({ ...options, nodeMajor: '26;evil' }), /below/);

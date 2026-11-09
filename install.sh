@@ -462,7 +462,7 @@ write_install_cancelled() {
 if command_preflight=$(node -e '
   const fs = require("fs"), path = require("path"), cp = require("child_process");
   let directory = path.join(process.env.HOME, ".local", "bin");
-  const brew = cp.spawnSync("brew", ["--prefix"], { encoding: "utf8" });
+  const brew = process.env.BALLIN_EXPERIMENT_INSTALL_OWNER === "direct" ? {status: 1} : cp.spawnSync("brew", ["--prefix"], { encoding: "utf8" });
   if (brew.signal === "SIGINT" || brew.status === 130) process.exit(130);
   if (brew.signal === "SIGTERM" || brew.status === 143) process.exit(143);
   if (brew.status === 0) {
