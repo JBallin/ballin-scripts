@@ -485,6 +485,7 @@ esac
       if (noBrew) {
         fs.mkdirSync(path.join(prefix, 'opt/nvm/libexec'), { recursive: true });
         fs.copyFileSync(path.join(root, 'nvm-source.sh'), path.join(prefix, 'opt/nvm/libexec/nvm.sh'));
+        fs.writeFileSync(path.join(prefix, 'opt/nvm/libexec/nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
         fs.mkdirSync(path.join(home, '.nvm'));
         fs.symlinkSync(path.join(prefix, 'opt/nvm/libexec/nvm.sh'), path.join(home, '.nvm/nvm.sh'));
       }
@@ -542,8 +543,17 @@ esac
     assert.include(switched.stdout, 'Older Node installations and versions remain'); assert.include(readLog(), 'nvm:install:--lts');
     assert.isTrue(fs.existsSync(path.join(tools, 'node')));
   });
+  for (const consent of [false, true]) it(`lets compatible Node decline unloadable NVM (consent: ${consent})`, () => {
+    const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+    fs.writeFileSync(path.join(nvm, 'nvm.sh'), 'return 1\n');
+    const result = run('y\ny\ny\n', { FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: consent ? 'y\n' : 'n\n' });
+    assert.equal(result.status, consent ? 1 : 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Existing NVM could not be loaded.');
+    assert.notInclude(readLog(), 'nvm:install:');
+    if (consent) assert.include(result.stderr, 'Repair its source');
+  });
   for (const unsafe of ['source', 'parent', 'target parent', 'link parent', 'intermediate symlink']) {
-    it(`rejects unsafe NVM ${unsafe} before executing it or requesting consent`, () => {
+    it(`lets compatible Node skip unsafe NVM ${unsafe} without executing it`, () => {
       const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
       const marker = path.join(root, 'outside-probe');
       fs.writeFileSync(path.join(nvm, 'nvm.sh'), `printf compromised > '${marker}'\n` + fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8'));
@@ -565,8 +575,10 @@ esac
       }
       const result = run('', { NVM_DIR: selected, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'n\n' });
       assert.isFalse(fs.existsSync(marker), 'discovery must not execute an outside-marker payload');
-      assert.notEqual(result.status, 0); assert.include(result.stderr, 'not trusted');
-      assert.notInclude(result.stdout, 'Use NVM and latest LTS Node?');
+      assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'not trusted');
+      assert.include(result.stdout, 'Use NVM and latest LTS Node?');
+      const consented = run('', { NVM_DIR: selected, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n' });
+      assert.notEqual(consented.status, 0); assert.include(consented.stderr, 'not trusted');
       assert.isFalse(fs.existsSync(marker));
     });
   }
@@ -578,8 +590,54 @@ esac
     if (linked) { fs.renameSync(source, path.join(root, 'source.sh')); fs.symlinkSync(path.join(root, 'source.sh'), source); }
     assert.equal(spawnSync('/bin/chmod', ['-h', '+a', `everyone allow ${linked ? 'delete' : 'write'}`, source]).status, 0);
     const result = run('', { FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'n\n' });
-    assert.isFalse(fs.existsSync(marker)); assert.notEqual(result.status, 0); assert.include(result.stderr, 'not trusted');
+    assert.isFalse(fs.existsSync(marker)); assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'not trusted');
   });
+  for (const unsafe of ['root world', 'root group', 'versions', 'cache', 'node link', 'nested link', 'missing root parent']) {
+    it(`rejects a peer-writable NVM working tree before its install can execute Node: ${unsafe}`, () => {
+      const prefix = nativeBrew();
+      const libexec = path.join(prefix, 'opt/nvm/libexec'); fs.mkdirSync(libexec, { recursive: true });
+      const nvm = path.join(home, '.nvm'); const bin = path.join(nvm, 'versions/node/v26.13.0/bin');
+      fs.mkdirSync(bin, { recursive: true });
+      const marker = path.join(root, 'executed-peer-node');
+      fs.writeFileSync(path.join(bin, 'node'), `#!/bin/sh\nprintf compromised > '${marker}'\n`, { mode: 0o700 });
+      const script = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8').replace('    install)\n', '    install)\n      "$NVM_DIR/versions/node/v26.13.0/bin/node"\n');
+      fs.writeFileSync(path.join(libexec, 'nvm.sh'), script);
+      fs.writeFileSync(path.join(libexec, 'nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
+      let selected = nvm;
+      if (unsafe === 'root world') fs.chmodSync(nvm, 0o777);
+      if (unsafe === 'root group') fs.chmodSync(nvm, 0o770);
+      if (unsafe === 'versions') fs.chmodSync(path.join(nvm, 'versions'), 0o777);
+      if (unsafe === 'cache') { fs.mkdirSync(path.join(nvm, '.cache')); fs.writeFileSync(path.join(nvm, '.cache/archive'), 'untrusted'); fs.chmodSync(path.join(nvm, '.cache/archive'), 0o666); }
+      if (unsafe === 'node link') {
+        const outside = path.join(root, 'peer-node'); fs.renameSync(path.join(bin, 'node'), outside); fs.chmodSync(outside, 0o777);
+        fs.symlinkSync(outside, path.join(bin, 'node'));
+      }
+      if (unsafe === 'nested link') {
+        const versions = path.join(nvm, 'versions'); const external = path.join(root, 'external-versions');
+        fs.renameSync(versions, external); fs.symlinkSync(external, versions);
+        const parent = path.join(root, 'outside'); fs.mkdirSync(parent); fs.chmodSync(parent, 0o777);
+        const target = path.join(parent, 'node'); fs.renameSync(path.join(bin, 'node'), target); fs.symlinkSync(target, path.join(bin, 'node'));
+      }
+      if (unsafe === 'missing root parent') { selected = path.join(nvm, 'missing'); fs.chmodSync(nvm, 0o777); }
+      const result = run('y\ny\ny\n', { NVM_DIR: selected, PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n' });
+      assert.isFalse(fs.existsSync(marker), 'peer-supplied Node must never execute');
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'not trusted');
+      assert.notInclude(readLog(), 'nvm:install:');
+    });
+  }
+  if (process.platform === 'darwin') for (const unsafe of [false, true]) {
+    it(`${unsafe ? 'rejects world-write in' : 'accepts admin-group directories in'} a standard Homebrew NVM route`, () => {
+      const prefix = nativeBrew();
+      for (const name of ['opt', 'Cellar']) {
+        const directory = path.join(prefix, name);
+        fs.chownSync(directory, process.getuid!(), 80); fs.chmodSync(directory, unsafe ? 0o777 : 0o775);
+      }
+      const result = run('y\ny\ny\n', { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' });
+      if (unsafe) { assert.notEqual(result.status, 0); assert.include(result.stderr, 'not trusted'); }
+      else { assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(readLog(), 'nvm:install:--lts'); }
+    });
+  }
   for (const linked of ['NVM directory', 'alias directory', 'default alias', 'hard-linked default alias']) {
     it(`keeps compatible Node by default with a linked ${linked} without changing NVM`, () => {
       const actual = path.join(root, 'existing-nvm'); fs.mkdirSync(path.join(actual, 'alias/lts'), { recursive: true });
@@ -634,6 +692,7 @@ esac
       for (const [keg, label] of [[oldKeg, 'old-keg'], [nextKeg, 'new-keg']]) {
         fs.mkdirSync(path.join(keg, 'libexec'), { recursive: true });
         fs.writeFileSync(path.join(keg, 'libexec/nvm.sh'), fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8') + `\nexport FAKE_LOADED_NVM=${label}\n`);
+        fs.writeFileSync(path.join(keg, 'libexec/nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
       }
       const opt = path.join(prefix, 'opt/nvm'); fs.symlinkSync(oldKeg, opt);
       const nvm = path.join(home, '.nvm'); fs.mkdirSync(path.join(nvm, 'alias'), { recursive: true });
@@ -664,6 +723,7 @@ esac
       const prefix = nativeBrew(); const keg = path.join(prefix, 'Cellar/nvm/0.40.8');
       fs.mkdirSync(path.join(keg, 'libexec'), { recursive: true });
       const source = path.join(keg, 'libexec/nvm.sh'); fs.copyFileSync(path.join(root, 'nvm-source.sh'), source);
+      fs.writeFileSync(path.join(keg, 'libexec/nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
       if (stable === 'different') {
         fs.mkdirSync(path.join(prefix, 'opt/nvm/libexec'), { recursive: true });
         fs.writeFileSync(path.join(prefix, 'opt/nvm/libexec/nvm.sh'), 'touch "$HOME/UNSAFE"\n');

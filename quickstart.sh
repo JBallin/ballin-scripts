@@ -624,6 +624,10 @@ validate_nvm_directory() {
     suffix="/${ancestor##*/}$suffix"; ancestor=${ancestor%/*}; ancestor=${ancestor:-/}
   done
   [[ -d "$ancestor" && -O "$ancestor" && -w "$ancestor" && -x "$ancestor" ]] || fail 'NVM_DIR needs an accessible user-owned directory. Review it before configuring NVM.'
+  trusted_nvm_path "$ancestor" directory || fail 'NVM_DIR or its path is not trusted. Repair its ownership and permissions before configuring NVM.'
+  if [[ -d "$nvm_directory" ]]; then
+    trusted_nvm_tree || fail 'The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM.'
+  fi
   physical=$(cd -P -- "$ancestor" && pwd -P) || fail 'Unable to resolve the NVM working directory.'
   case "$physical$suffix/" in */Cellar/*) fail 'NVM_DIR must be a user-owned directory outside Homebrew Cellar.' ;; esac
 }
@@ -642,24 +646,47 @@ validate_nvm_alias_targets() {
 
 # A disposable HOME is not a sandbox for shell code. Check the full lexical
 # path, including every symlink and target ancestor, before sourcing existing NVM.
-trusted_nvm_source() {
-  local pending=$1 current=/ component target metadata owner mode acl links=0
+homebrew_nvm_source_prefix() {
+  local source=$1 directory prefix='' target hops=0
+  while [[ -L "$source" ]]; do
+    (( hops += 1 )); (( hops <= 40 )) || return 1
+    target=$(readlink "$source") || return 1
+    if [[ "$target" == /* ]]; then source=$target; else source="${source%/*}/$target"; fi
+  done
+  directory=$(cd -P -- "${source%/*}" 2>/dev/null && pwd -P) || return 1
+  case "$directory/${source##*/}" in
+    */Cellar/nvm/*/libexec/nvm.sh) prefix=${directory%%/Cellar/nvm/*} ;;
+    */opt/nvm/libexec/nvm.sh) prefix=${directory%/opt/nvm/libexec} ;;
+    *) return 1 ;;
+  esac
+  [[ -f "$prefix/Library/Homebrew/brew.sh" || -f "$prefix/Homebrew/Library/Homebrew/brew.sh" ]] || return 1
+  printf '%s' "$prefix"
+}
+trusted_nvm_path() {
+  local pending=$1 kind=${2:-file} homebrew_prefix=${3:-} current=/ component target metadata owner group mode acl links=0
+  local platform
+  platform=$(/usr/bin/uname -s) || return 1
   [[ "$pending" == /* ]] || return 1
   pending=${pending#/}
   while :; do
-    if metadata=$(/usr/bin/stat -f '%u %p' "$current" 2>/dev/null); then
-      owner=${metadata%% *}; mode=${metadata#* }; mode=$((8#$mode))
+    if metadata=$(/usr/bin/stat -f '%u %g %p' "$current" 2>/dev/null); then
+      owner=${metadata%% *}; metadata=${metadata#* }; group=${metadata%% *}; mode=${metadata#* }; mode=$((8#$mode))
     else
-      metadata=$(/usr/bin/stat -c '%u %f' "$current") || return 1
-      owner=${metadata%% *}; mode=${metadata#* }; mode=$((16#$mode))
+      if ! metadata=$(/usr/bin/stat -c '%u %g %f' "$current" 2>/dev/null); then
+        [[ "$kind" == entry && -z "$pending" && ! -e "$current" && ! -L "$current" ]]; return
+      fi
+      owner=${metadata%% *}; metadata=${metadata#* }; group=${metadata%% *}; mode=${metadata#* }; mode=$((16#$mode))
     fi
     [[ "$owner" == 0 || "$owner" == "$UID" ]] || return 1
     if [[ ! -L "$current" ]]; then
       if (( (mode & 0022) != 0 )); then
-        [[ -d "$current" ]] && (( (mode & 01000) != 0 )) || return 1
+        # Homebrew's standard admin-group directories are a trusted macOS
+        # dependency, unlike ordinary peer-writable NVM working directories.
+        if [[ "$platform" == Darwin && -d "$current" && "$group" == 80 && -n "$homebrew_prefix" && ( "$current" == "$homebrew_prefix" || "$current" == "$homebrew_prefix/"* ) ]] && (( (mode & 0002) == 0 )); then :
+        else [[ -d "$current" ]] && (( (mode & 01000) != 0 )) || return 1; fi
       fi
     fi
-    if [[ "$(/usr/bin/uname -s)" == Darwin ]]; then
+    if [[ "$platform" == Darwin ]]; then
       acl=$(LC_ALL=C /bin/ls -lde "$current") || return 1
       [[ -n "$acl" ]] || return 1
       if printf '%s\n' "$acl" | grep -Eq '^[[:space:]]*[0-9]+:.* allow .*(write|append|add_file|add_subdirectory|delete|chown)'; then return 1; fi
@@ -671,7 +698,10 @@ trusted_nvm_source() {
       if [[ "$target" == /* ]]; then current=/; pending=${pending#/}; else current=${current%/*}; current=${current:-/}; fi
       continue
     fi
-    [[ -n "$pending" ]] || { [[ -f "$current" ]]; return; }
+    if [[ -z "$pending" ]]; then
+      case "$kind" in file) [[ -f "$current" ]] ;; directory) [[ -d "$current" ]] ;; entry) [[ -f "$current" || -d "$current" ]] ;; *) return 1 ;; esac
+      return
+    fi
     [[ -d "$current" ]] || return 1
     component=${pending%%/*}
     if [[ "$pending" == */* ]]; then pending=${pending#*/}; else pending=''; fi
@@ -683,18 +713,57 @@ trusted_nvm_source() {
   done
 }
 
+trusted_nvm_source() {
+  local prefix=''
+  prefix=$(homebrew_nvm_source_prefix "$1") || prefix=''
+  trusted_nvm_path "$1" file "$prefix"
+}
+trusted_nvm_tree_links() {
+  local tree=$1 prefix=$2 depth=${3:-0} links entry
+  (( depth <= 40 )) || return 1
+  links=$(/usr/bin/mktemp "$scratch/nvm-links.XXXXXX") || return 1
+  # -H follows this root, but leaves nested links for explicit validation.
+  /usr/bin/find -H "$tree" -type l -print0 > "$links" || return 1
+  while IFS= read -r -d '' entry; do
+    case "$entry" in
+      "$nvm_directory/nvm.sh"|"$nvm_directory/nvm-exec") trusted_nvm_path "$entry" entry "$prefix" || return 1 ;;
+      *) trusted_nvm_path "$entry" entry || return 1 ;;
+    esac
+    if [[ -d "$entry" ]]; then trusted_nvm_tree_links "$entry" "$prefix" "$((depth + 1))" || return 1; fi
+  done < "$links"
+  rm -f -- "$links"
+}
+trusted_nvm_tree() {
+  local unsafe acls entry prefix=''
+  trusted_nvm_path "$nvm_directory" directory || return 1
+  # Follow existing links to inspect the content NVM can use. find rejects
+  # loops; every reachable link's lexical chain is checked separately.
+  unsafe=$(/usr/bin/find -L "$nvm_directory" \( ! -user "$UID" -a ! -user 0 \) -o \( ! -type l -a \( -perm -0020 -o -perm -0002 \) \)) || return 1
+  [[ -z "$unsafe" ]] || return 1
+  prefix=$(homebrew_nvm_source_prefix "${nvm_source:-$nvm_directory/nvm.sh}") || prefix=''
+  trusted_nvm_tree_links "$nvm_directory" "$prefix" || return 1
+  if [[ "$(/usr/bin/uname -s)" == Darwin ]]; then
+    acls=$(/usr/bin/mktemp "$scratch/nvm-acls.XXXXXX") || return 1
+    /usr/bin/find -L "$nvm_directory" -acl -print0 > "$acls" || return 1
+    while IFS= read -r -d '' entry; do trusted_nvm_path "$entry" entry || return 1; done < "$acls"
+    rm -f -- "$acls"
+  fi
+}
+
 # NVM discovery is read-only. Never source Homebrew's outer nvm.sh wrapper:
 # it creates the working directory and compatibility links even with --no-use.
 discover_nvm() {
   local directory source candidate prefix='' status=0
-  nvm_source=''; nvm_method='official'; nvm_loadable=false; nvm_follows_lts=false
+  nvm_source=''; nvm_method='official'; nvm_loadable=false; nvm_follows_lts=false; nvm_problem=''
   nvm_directory=${NVM_DIR:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}}
   nvm_directory=${nvm_directory:-$HOME/.nvm}
   normalize_nvm_directory
+  nvm_default_exists=false
+  [[ ! -e "$nvm_directory/alias/default" && ! -L "$nvm_directory/alias/default" ]] || nvm_default_exists=true
   for directory in "$nvm_directory" "$HOME/.nvm"; do
     source="$directory/nvm.sh"
     if [[ -f "$source" && -r "$source" ]]; then
-      trusted_nvm_source "$source" || fail 'Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'
+      trusted_nvm_source "$source" || { nvm_problem='Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'; return 0; }
       candidate=$source
       local hops=0 target
       while [[ -L "$candidate" && $hops -lt 40 ]]; do
@@ -731,7 +800,7 @@ discover_nvm() {
   nvm_default_exists=false
   [[ ! -e "$nvm_directory/alias/default" && ! -L "$nvm_directory/alias/default" ]] || nvm_default_exists=true
   [[ -n "$nvm_source" ]] || return 0
-  trusted_nvm_source "$nvm_source" || fail 'Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'
+  trusted_nvm_source "$nvm_source" || { nvm_problem='Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'; return 0; }
   local probe="$scratch/nvm-probe" version alias='default' seen=':' target
   mkdir -p "$probe/versions/node"
   mkdir -p "$probe/alias/lts"
@@ -763,7 +832,7 @@ discover_nvm() {
   result=$(HOME="$scratch" NVM_DIR="$probe" BASH_ENV='' ENV='' /bin/bash --noprofile --norc -c \
     '. "$1" --no-use >/dev/null && declare -F nvm >/dev/null || exit 1; printf "loadable\n"; nvm version default' ballin-nvm-probe "$nvm_source") || status=$?
   stop_if_interrupted "$status"
-  [[ "$result" == loadable || "$result" == loadable$'\n'* ]] || fail 'Existing NVM could not be loaded. Repair its source before retrying Quickstart.'
+  [[ "$result" == loadable || "$result" == loadable$'\n'* ]] || { nvm_problem='Existing NVM could not be loaded. Repair its source before retrying Quickstart.'; return 0; }
   nvm_loadable=true
   for (( hops=0; hops<40; hops++ )); do
     if [[ "$alias" == 'lts/*' ]]; then
@@ -784,7 +853,8 @@ plan_nvm() {
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
   printf '\nNVM can install and maintain latest LTS Node.\n'
-  if [[ "$nvm_loadable" != true ]]; then
+  if [[ -n "$nvm_problem" ]]; then printf '%s\n' "$nvm_problem"
+  elif [[ "$nvm_loadable" != true ]]; then
     if [[ -n "$brew_tool" ]]; then printf '$ brew install --formula nvm\n'
     else printf '$ PROFILE=/dev/null bash <downloaded official NVM v0.40.8 installer>\n'; fi
   fi
@@ -800,6 +870,7 @@ plan_nvm() {
     fi
     return
   fi
+  [[ -z "$nvm_problem" ]] || fail "$nvm_problem"
   validate_nvm_directory
   validate_nvm_alias_targets
   use_nvm=true; nvm_profile_needed=true
@@ -844,6 +915,7 @@ install_nvm_lts() {
       ln -s "${nvm_source%/nvm.sh}/nvm-exec" "$nvm_directory/nvm-exec"
     fi
   fi
+  validate_nvm_directory
   export NVM_DIR="$nvm_directory"
   # Activation must occur in this Bash process, never a subshell or user profile.
   unset -f nvm
@@ -855,6 +927,7 @@ install_nvm_lts() {
   stop_if_interrupted "$nvm_status"
   [[ "$nvm_status" == 0 ]] || fail 'Unable to load NVM. Repair its source before retrying Quickstart.'
   declare -F nvm >/dev/null || fail 'The installed NVM source did not define nvm.'
+  trusted_nvm_tree || fail 'The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM.'
   printf '$ nvm install --lts\n'
   unset NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER
   nvm install --lts || nvm_status=$?
@@ -863,6 +936,7 @@ install_nvm_lts() {
     printf '\nQuickstart: NVM LTS installation did not finish. Inspect its output, then rerun Quickstart.\n' >&2
     return "$nvm_status"
   fi
+  trusted_nvm_tree || fail 'The installed NVM working tree is not trusted. Repair its ownership and permissions before continuing.'
   if "$nvm_default_exists"; then
     printf "$ nvm alias default 'lts/*'\n"
     # Check the whole NVM call: its internals are not safe under errexit.

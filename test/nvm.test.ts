@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { testChildEnvironment, withEnvironment } = require('./helpers/environment.ts');
-const { discoverNvm, followsLtsAlias, inspectNvm, trustedNvmSource } = require('../commands/nvm.ts');
+const { discoverNvm, followsLtsAlias, inspectNvm, trustedNvmSource, trustedNvmDirectory } = require('../commands/nvm.ts');
 
 describe('read-only NVM discovery and eligibility', () => {
   let root: string;
@@ -93,6 +93,43 @@ describe('read-only NVM discovery and eligibility', () => {
     assert.equal(discoverNvm(env()).completion, path.join(prefix, 'opt/nvm/etc/bash_completion.d/nvm'));
     assert.isTrue(inspectNvm(env()).followsLts); assert.equal(fs.readlinkSync(path.join(directory, 'nvm.sh')), script);
   });
+  if (process.platform === 'darwin') for (const group of [80, process.getgid!()]) {
+    for (const mode of [0o775, 0o777]) it(`checks Homebrew group ${group} mode ${mode.toString(8)} without trusting ordinary peers`, () => {
+      const prefix = path.join(root, 'brew'); const formula = path.join(prefix, 'Cellar/nvm/0.40.8');
+      fs.mkdirSync(path.join(formula, 'libexec'), { recursive: true }); fs.mkdirSync(path.join(prefix, 'opt'));
+      fs.mkdirSync(path.join(prefix, 'Library/Homebrew'), { recursive: true }); fs.writeFileSync(path.join(prefix, 'Library/Homebrew/brew.sh'), '# fixture');
+      const script = path.join(formula, 'libexec/nvm.sh'); fs.writeFileSync(script, 'nvm() { printf "v26.13.0\\n"; }\n');
+      fs.symlinkSync(formula, path.join(prefix, 'opt/nvm')); fs.symlinkSync(script, path.join(directory, 'nvm.sh'));
+      for (const name of ['opt', 'Cellar']) { fs.chownSync(path.join(prefix, name), process.getuid!(), group); fs.chmodSync(path.join(prefix, name), mode); }
+      assert.equal(inspectNvm(env()).loadable, group === 80 && mode === 0o775);
+      fs.unlinkSync(path.join(prefix, 'Library/Homebrew/brew.sh'));
+      assert.isFalse(trustedNvmSource(script), 'a Homebrew-looking path alone does not establish the route');
+    });
+  }
+  for (const unsafe of ['none', 'root', 'versions', 'node', 'linked node', 'nested link', 'safe nested link']) {
+    it(`validates the NVM working tree before update (unsafe: ${unsafe})`, () => {
+      source(); const node = path.join(directory, 'versions/node/v26.13.0/bin/node');
+      if (unsafe === 'root') fs.chmodSync(directory, 0o777);
+      if (unsafe === 'versions') fs.chmodSync(path.join(directory, 'versions'), 0o770);
+      if (unsafe === 'node') fs.chmodSync(node, 0o666);
+      if (unsafe === 'linked node') { const outside = path.join(root, 'outside-node'); fs.renameSync(node, outside); fs.chmodSync(outside, 0o777); fs.symlinkSync(outside, node); }
+      if (unsafe.includes('nested link')) {
+        const versions = path.join(directory, 'versions'); const external = path.join(root, 'external-versions');
+        fs.renameSync(versions, external); fs.symlinkSync(external, versions);
+        const parent = path.join(root, 'outside'); fs.mkdirSync(parent);
+        const target = path.join(parent, 'node'); fs.renameSync(node, target); fs.symlinkSync(target, node);
+        if (unsafe === 'nested link') fs.chmodSync(parent, 0o777);
+      }
+      assert.equal(trustedNvmDirectory(directory, path.join(directory, 'nvm.sh')), unsafe === 'none' || unsafe === 'safe nested link');
+    });
+  }
+  if (process.platform === 'darwin') for (const target of ['.cache', '.cache/archive']) {
+    it(`rejects write-granting working-tree ACLs on ${target}`, () => {
+      source(); fs.mkdirSync(path.join(directory, '.cache')); fs.writeFileSync(path.join(directory, '.cache/archive'), 'fixture');
+      assert.equal(require('child_process').spawnSync('/bin/chmod', ['+a', 'everyone allow write', path.join(directory, target)]).status, 0);
+      assert.isFalse(trustedNvmDirectory(directory, path.join(directory, 'nvm.sh')));
+    });
+  }
   it('handles missing installations, invalid directories, and failed brew discovery', () => {
     assert.isNull(discoverNvm(env({ PATH: root, NVM_DIR: 'relative' })));
     fs.writeFileSync(path.join(root, 'brew'), '#!/bin/sh\nexit 1\n', { mode: 0o700 });

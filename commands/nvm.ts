@@ -11,7 +11,16 @@ const safeDirectory = (directory: string): boolean => path.isAbsolute(directory)
 
 // HOME/NVM_DIR isolation contains ordinary NVM bookkeeping, not arbitrary shell
 // code. Trust every traversed component before executing an existing source.
-const trustedNvmSource = (file: string): boolean => {
+const homebrewSourcePrefix = (file: string): string | undefined => {
+  try {
+    const match = fs.realpathSync(file).match(/^(.*)\/(?:Cellar\/nvm\/[^/]+|opt\/nvm)\/libexec\/nvm\.sh$/u);
+    if (!match) return undefined;
+    const prefix = match[1];
+    return [path.join(prefix, 'Library/Homebrew/brew.sh'), path.join(prefix, 'Homebrew/Library/Homebrew/brew.sh')].some(readableFile) ? prefix : undefined;
+  } catch { return undefined; }
+};
+
+const trustedNvmPath = (file: string, kind: 'file' | 'directory' | 'entry', homebrewPrefix?: string): boolean => {
   if (!safeDirectory(file) || !process.getuid) return false;
   const uid = process.getuid();
   let pending = file.split('/').filter(Boolean);
@@ -19,11 +28,19 @@ const trustedNvmSource = (file: string): boolean => {
   let links = 0;
   try {
     while (true) {
-      const stat = fs.lstatSync(current);
+      let stat;
+      try { stat = fs.lstatSync(current); } catch (error) {
+        return kind === 'entry' && !pending.length && (error as NodeJS.ErrnoException).code === 'ENOENT';
+      }
       if (stat.uid !== 0 && stat.uid !== uid) return false;
       if (!stat.isSymbolicLink()) {
         // A sticky directory protects each trusted owner's entry from peers.
-        if ((stat.mode & 0o022) && !(stat.isDirectory() && (stat.mode & 0o1000))) return false;
+        // Standard macOS Homebrew directories trust the privileged admin group.
+        // This exception never applies to files, world-write, or the NVM tree.
+        const homebrewAdmin = process.platform === 'darwin' && stat.isDirectory() && stat.gid === 80
+          && homebrewPrefix && (current === homebrewPrefix || current.startsWith(`${homebrewPrefix}/`))
+          && !(stat.mode & 0o002);
+        if ((stat.mode & 0o022) && !homebrewAdmin && !(stat.isDirectory() && (stat.mode & 0o1000))) return false;
       }
       if (process.platform === 'darwin') {
         const acl = runCommand('/bin/ls', ['-lde', current], { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
@@ -37,12 +54,48 @@ const trustedNvmSource = (file: string): boolean => {
         current = path.isAbsolute(target) ? '/' : path.dirname(current);
         continue;
       }
-      if (!pending.length) return stat.isFile();
+      if (!pending.length) return kind === 'file' ? stat.isFile() : kind === 'directory' ? stat.isDirectory() : stat.isFile() || stat.isDirectory();
       if (!stat.isDirectory()) return false;
       const next = pending.shift()!;
       current = next === '..' ? path.dirname(current) : next === '.' ? current : path.join(current, next);
     }
   } catch (error) { rethrowInterruption(error); return false; }
+};
+
+const trustedNvmSource = (file: string): boolean => trustedNvmPath(file, 'file', homebrewSourcePrefix(file));
+
+// NVM may execute an already-installed Node during `nvm install`, so validate
+// its working tree before invoking it, not just the script or final executable.
+const trustedNvmDirectory = (directory: string, source: string): boolean => {
+  if (!trustedNvmPath(directory, 'directory')) return false;
+  const prefix = homebrewSourcePrefix(source);
+  const find = (args: string[]): string | null => {
+    const result = runCommand('/usr/bin/find', args, { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
+    requireUninterrupted(result);
+    return result.status === 0 && typeof result.stdout === 'string' ? result.stdout : null;
+  };
+  const unsafe = find(['-L', directory, '(', '!', '-user', String(process.getuid!()), '-a', '!', '-user', '0', ')',
+    '-o', '(', '!', '-type', 'l', '-a', '(', '-perm', '-0020', '-o', '-perm', '-0002', ')', ')']);
+  if (unsafe === null || unsafe) return false;
+  const inspectLinks = (tree: string, depth = 0): boolean => {
+    if (depth > 40) return false;
+    // Follow this root only, then inspect and recurse through each nested link.
+    const links = find(['-H', tree, '-type', 'l', '-print0']);
+    if (links === null) return false;
+    for (const link of links.split('\0').filter(Boolean)) {
+      const sourceLink = link === path.join(directory, 'nvm.sh') || link === path.join(directory, 'nvm-exec');
+      if (!trustedNvmPath(link, 'entry', sourceLink ? prefix : undefined)) return false;
+      if (fs.existsSync(link) && fs.statSync(link).isDirectory() && !inspectLinks(link, depth + 1)) return false;
+    }
+    return true;
+  };
+  if (!inspectLinks(directory)) return false;
+  if (process.platform === 'darwin') {
+    const acls = find(['-L', directory, '-acl', '-print0']);
+    if (acls === null) return false;
+    for (const entry of acls.split('\0').filter(Boolean)) if (!trustedNvmPath(entry, 'entry')) return false;
+  }
+  return true;
 };
 
 // Resolve the formula's libexec directly. Its outer nvm.sh wrapper can mkdir/link
@@ -142,5 +195,5 @@ const inspectNvm = (env: NodeJS.ProcessEnv = process.env): { installation: NvmIn
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 };
 
-module.exports = { discoverNvm, inspectNvm, followsLtsAlias, trustedNvmSource };
+module.exports = { discoverNvm, inspectNvm, followsLtsAlias, trustedNvmSource, trustedNvmDirectory };
 export type { NvmInstallation };

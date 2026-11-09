@@ -313,9 +313,9 @@ function runUpdateCommand(): void {
 
   if (settings.nvm) {
     progress('Updating Node.js LTS');
-    const { discoverNvm } = require('./nvm.ts');
+    const { discoverNvm, trustedNvmDirectory } = require('./nvm.ts');
     const installation = discoverNvm(childEnv);
-    if (installation) {
+    if (installation && trustedNvmDirectory(installation.directory, installation.source)) {
       const result = runNvmInstall({ ...childEnv, NVM_DIR: installation.directory }, installation.source);
       recordFailure(result.status);
       if (result.captureFailed) {
