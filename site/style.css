@@ -5,7 +5,13 @@ header,main,footer{max-width:1000px;margin:auto;padding:1.5rem 2rem}header{displ
 button{font:inherit;color:var(--accent);background:var(--panel);border:1px solid var(--line);border-radius:.3rem;padding:.3rem .7rem;cursor:pointer}button:focus-visible{outline:3px solid var(--accent);outline-offset:4px}button:disabled{opacity:.65;cursor:wait}.copy-status{display:block;font-size:.85rem;color:var(--muted)}.image-actions{display:flex;flex-wrap:wrap;gap:1rem}
 
 /* Keep previews compact; the viewer can show the original width. */
-.gallery-output{padding:.75rem}.gallery-entry figure{margin:.75rem 0}.gallery-entry img{display:block}
+main:has(>.gallery-topics)>h1{margin-bottom:.55rem}
+main:has(>.gallery-topics)>p{margin-block:.5rem}
+.gallery-topics+h2{margin-top:1.35rem}
+.gallery-entry{margin:1rem 0 2rem}.gallery-entry h3{margin:0 0 .2rem}
+.gallery-entry .capture-label{margin:.25rem 0 .55rem}
+.gallery-output{margin-block:.65rem;padding:.75rem}.gallery-output .image-actions{margin-block:.5rem}
+.gallery-output .invocation p{margin-top:.45rem}.gallery-output .invocation pre{padding:.65rem .8rem;margin-bottom:.55rem}.gallery-entry figure{margin:.75rem 0}.gallery-entry img{display:block}
 .gallery-entry .provenance,main:has(>.image-preview)>.provenance{border:0;padding:0;color:var(--muted)}
 .gallery-entry .provenance summary,main:has(>.image-preview)>.provenance summary{color:inherit}
 details[id^="transcript-"] button[data-copy]{margin:.9rem 0 .65rem}details[id^="transcript-"] pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:.95rem;line-height:1.6}details[id^="transcript-"] pre code{font-size:1em}
@@ -15,6 +21,6 @@ main:has(>.image-preview){max-width:calc(1280px + 4rem)}
 main:has(>.image-preview)>:not(.image-preview){max-width:calc(1000px - 4rem);margin-inline:auto}
 .image-preview{margin:1rem 0}.image-preview img{display:block;margin-inline:auto}.invocation pre{white-space:pre-wrap;overflow-wrap:anywhere}.invocation p{margin-bottom:.3rem}.invocation pre{margin-top:.3rem}
 
-.gallery-topics{margin:1.5rem 0 2rem}.gallery-highlights{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.5rem 0 2rem}.gallery-highlights a{display:block;border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem;text-decoration:none}.gallery-highlights strong{display:block;font-size:1.2rem}.gallery-highlights span{display:block;color:var(--muted);font-size:.9rem;margin-top:.3rem}.image-pages{align-items:center;gap:1rem;margin:1.2rem 0}.image-pages [aria-current]{font-weight:600;color:var(--ink)}@media(max-width:650px){.gallery-highlights{grid-template-columns:1fr}}
+.gallery-topics{margin:.85rem 0 1.15rem}.gallery-highlights{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.5rem 0 2rem}.gallery-highlights a{display:block;border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem;text-decoration:none}.gallery-highlights strong{display:block;font-size:1.2rem}.gallery-highlights span{display:block;color:var(--muted);font-size:.9rem;margin-top:.3rem}.image-pages{align-items:center;gap:1rem;margin:1.2rem 0}.image-pages [aria-current]{font-weight:600;color:var(--ink)}@media(max-width:650px){.gallery-highlights{grid-template-columns:1fr}}
 
 @media(max-width:850px){footer{grid-template-columns:1fr;text-align:center;gap:.65rem}.footer-tagline{text-align:center}}
