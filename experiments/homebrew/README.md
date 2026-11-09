@@ -19,6 +19,9 @@ release. Schema-1 ownership remains readable for earlier experiments but cannot
 perform initial onboarding. Preferences, analytics identity and backup cache live
 under `~/.ballin`, separate from a Git installation's `~/.ballin-scripts`.
 No existing preferences are imported automatically.
+Package preference backups read the invoking installation's resolved configuration
+file; direct-install discovery remains unchanged. Package installs do not export a coexisting Git installation's preferences,
+and a missing package configuration does not fall back to the Git configuration.
 
 ## Initial setup and coexistence
 

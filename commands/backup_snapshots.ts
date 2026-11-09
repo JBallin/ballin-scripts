@@ -79,6 +79,8 @@ type SnapshotSourceDiscovery =
   | FailedSnapshotDiscovery;
 
 type SnapshotDiscoveryContext = {
+  // The calling installation owns preference selection; do not infer it from HOME.
+  configPath?: string;
   homeDir: string;
   env: NodeJS.ProcessEnv;
 };
@@ -516,7 +518,13 @@ const portableConfigSnapshot = (): SnapshotDefinition => {
   return {
     ...definition,
     discover: (context) => {
-      const result = definition.discover(context);
+      const result = context.configPath
+        ? sourceFromPathDiscovery(
+          inspectPath(context.configPath, 'file'),
+          fileSource(context.configPath, context.homeDir),
+          { fileName: configSnapshotFileName, command: process.execPath, cwd: context.homeDir, env: context.env },
+        )
+        : definition.discover(context);
       if (result.status !== 'available') {
         return result;
       }

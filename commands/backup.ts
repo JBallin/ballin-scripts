@@ -520,7 +520,8 @@ const runRepositoryBackup = (
   destination: RepositoryDestination, includeSensitive: boolean, homeDir: string, cacheRoot: string,
   evidence: BackupFailureEvidence,
 ): boolean => {
-  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env }, includeSensitive), evidence);
+  const staged = stageSnapshots(observeSnapshotSources({ homeDir, env: process.env,
+    configPath: require('./installation.ts').isHomebrewInstallation() ? configPath : undefined }, includeSensitive), evidence);
   if (!staged) {
     if (!evidence.category) observeBackupFailure(evidence, 'unknown');
     return false;

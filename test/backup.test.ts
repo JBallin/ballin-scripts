@@ -706,6 +706,24 @@ printf '%s\\n' '123456 Example App'
     assert.deepEqual(fs.readdirSync(scratchDir), []);
   });
 
+  it('publishes package preferences instead of a coexisting direct installation', () => {
+    const keg = path.join(testHomeDir, 'package');
+    fs.mkdirSync(keg);
+    for (const name of ['commands', 'config', 'bin', 'package.json']) {
+      fs.cpSync(path.join(repoRoot, name), path.join(keg, name), { recursive: true });
+    }
+    fs.writeFileSync(path.join(keg, '.ballin-package.json'), JSON.stringify({ manager: 'homebrew', schema: 1 }));
+    fs.writeFileSync(path.join(testHomeDir, '.ballin-scripts', 'ballin.config.json'),
+      JSON.stringify({ update: { cleanup: 'true' } }));
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.update.cleanup = 'false';
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    const result = runBackup({ commandPath: path.join(keg, 'bin/ballin') });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(remoteDir, 'ballin_config'), 'utf8')),
+      { update: { cleanup: 'false' } });
+  });
+
   it('creates and uploads the first snapshot when cache and repository are missing', () => {
     writeSnapshot('alias hello="world"\n');
 

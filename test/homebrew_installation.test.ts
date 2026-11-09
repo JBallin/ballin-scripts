@@ -29,6 +29,40 @@ describe('Homebrew package boundary experiment', () => {
     first = packageAt('keg-one');
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+  it('backs up only the invoking installation preferences across package replacement', () => {
+    const legacy = path.join(home, '.ballin-scripts');
+    fs.mkdirSync(legacy);
+    fs.writeFileSync(path.join(legacy, 'ballin.config.json'), JSON.stringify({ update: { cleanup: 'true' } }));
+    const state = path.join(home, '.ballin');
+    fs.mkdirSync(state);
+    const preferences = path.join(state, 'ballin.config.json');
+    fs.writeFileSync(preferences, JSON.stringify({ update: { cleanup: 'false' }, custom: { token: 'PRIVATE_FIXTURE' } }));
+    const inspect = (repo: string) => spawnSync(process.execPath, ['-e', `
+      const { configPath } = require(process.argv[1] + '/config/index.ts');
+      const { observeSnapshotSources } = require(process.argv[1] + '/commands/backup_snapshots.ts');
+      const source = observeSnapshotSources({ homeDir: process.env.HOME, env: process.env, configPath }, false)
+        .find(item => item.definition.name === 'ballin_config');
+      if (source.status !== 'available') { console.log(source.status); process.exit(0); }
+      const result = require('child_process').spawnSync(source.collector.command, source.collector.args, {
+        cwd: source.collector.cwd, env: source.collector.env, encoding: 'utf8'
+      });
+      process.stdout.write(result.stdout); process.exitCode = result.status;
+    `, repo], { env: { HOME: home, PATH: '', BALLIN_NO_COMMAND_ANALYTICS: '1' }, encoding: 'utf8' });
+    for (const repo of [first, packageAt('keg-two')]) {
+      const result = inspect(repo);
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(JSON.parse(result.stdout), { update: { cleanup: 'false' } });
+      assert.notInclude(result.stdout, 'PRIVATE_FIXTURE');
+    }
+    const direct = packageAt('direct-checkout');
+    fs.unlinkSync(path.join(direct, '.ballin-package.json'));
+    fs.writeFileSync(path.join(direct, 'ballin.config.json'), JSON.stringify({ update: { cleanup: 'true' } }));
+    assert.deepEqual(JSON.parse(inspect(direct).stdout), { update: { cleanup: 'true' } });
+    fs.unlinkSync(preferences);
+    assert.equal(inspect(first).stdout.trim(), 'absent', 'must not fall back to another installation');
+    fs.mkdirSync(preferences);
+    assert.equal(inspect(first).stdout.trim(), 'unavailable');
+  });
   it('keeps Git layout only when no package marker exists', () => {
     assert.isFalse(isHomebrewInstallation(source));
     assert.equal(stateDirectory(source), source);
