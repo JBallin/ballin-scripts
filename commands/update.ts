@@ -315,7 +315,12 @@ function runUpdateCommand(): void {
     progress('Updating Node.js LTS');
     const { discoverNvm, trustedNvmDirectory } = require('./nvm.ts');
     const installation = discoverNvm(childEnv);
-    if (installation && trustedNvmDirectory(installation.directory, installation.source)) {
+    if (installation && !trustedNvmDirectory(installation.directory, installation.source)) {
+      reportDiagnostic('Unable to update Node.js LTS: the NVM working tree failed safety checks.');
+      reportDiagnostic('Check its ownership, permissions, ACLs, and unreadable or linked paths before retrying. Ballin has not changed them.');
+      reportDiagnostic('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#quickstart-helper');
+      recordFailure(1);
+    } else if (installation) {
       const result = runNvmInstall({ ...childEnv, NVM_DIR: installation.directory }, installation.source);
       recordFailure(result.status);
       if (result.captureFailed) {

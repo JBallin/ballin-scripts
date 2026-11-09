@@ -1239,7 +1239,13 @@ kill -TERM "$$"
     const result = runUpdate({ NVM_DIR: nvmDir });
     assert.equal(result.status, unsafe ? 1 : 0, result.stdout + result.stderr);
     assert.equal(fs.existsSync(marker), !unsafe);
-    if (unsafe) assert.include(result.stderr, 'unable to load nvm');
+    if (unsafe) {
+      assert.include(result.stderr, 'NVM working tree failed safety checks');
+      assert.include(result.stderr, 'ownership, permissions, ACLs');
+      assert.include(result.stderr, 'installation.md#quickstart-helper');
+      assert.notInclude(result.stderr, 'unable to load nvm');
+      assert.notInclude(result.stderr, 'Set `NVM_DIR`');
+    }
   });
 
   it('reports unexpected bash spawn failures and continues to backup', () => {

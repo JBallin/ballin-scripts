@@ -9,7 +9,10 @@ const allowedPaths = root && (quickstart
   ? [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter), path.join(root, 'tools')]
   : [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)]);
 if (Array.isArray(allowedPaths) && quickstart && nvmBin && fs.existsSync(path.join(nvmBin, 'node'))) {
-  if (!fs.lstatSync(path.join(nvmBin, 'node')).isSymbolicLink() || fs.realpathSync(path.join(nvmBin, 'node')) !== fs.realpathSync(process.execPath)) fail();
+  const installedNode = path.join(nvmBin, 'node');
+  const originalNode = fs.realpathSync(path.join(root, 'tools/node'));
+  if (fs.lstatSync(installedNode).isSymbolicLink() || !fs.lstatSync(installedNode).isFile()
+    || !fs.readFileSync(installedNode).equals(fs.readFileSync(originalNode))) fail();
   allowedPaths.push(...allowedPaths.map(value => `${nvmBin}:${value}`));
 }
 if (process.env.BALLIN_NO_ANALYTICS !== '1' || !root || fs.realpathSync(root) !== root || process.env.HOME !== path.join(root, 'home')
