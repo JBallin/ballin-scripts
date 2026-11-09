@@ -376,7 +376,18 @@ case "$name" in
         [[ "\${FAKE_BACKUP_FAIL:-0}" != 1 ]] || exit 1
         if [[ "\${FAKE_CHECK_NPM_COLLECTOR:-0}" == 1 ]]; then npm list -g --depth=0 >/dev/null; fi
         if ! grep -q '"repository":{' "$HOME/.ballin-scripts/ballin.config.json"; then printf 'Backup is not configured\\n' >&2; exit 1; fi ;;
-      'backup open') [[ "\${FAKE_OPEN_FAIL:-0}" != 1 ]] || exit 1 ;;
+      'backup open')
+        if [[ "\${FAKE_OPEN_VALIDATION_FAIL:-0}" == 1 ]]; then
+          printf '%s\\n' 'ballin backup: GitHub authentication is unavailable.' >&2
+          exit 1
+        fi
+        if [[ "\${FAKE_OPEN_STATUS:-0}" != 0 ]]; then
+          if [[ "\${FAKE_OPEN_STATUS}" == 1 ]]; then
+            printf '%s\\n' 'ballin backup open: unable to open your browser. Open https://github.com/fixture/private-backup manually.' >&2
+            [[ "\${BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER:-0}" != 1 ]] || exit 0
+          fi
+          exit "\${FAKE_OPEN_STATUS}"
+        fi ;;
       *) exit 97 ;;
     esac ;;
   *) exit 97 ;;
@@ -2514,14 +2525,16 @@ Proceed with installation? [y/N] `);
       });
     }
   }
-  for (const scenario of ['capture', 'backup-declined', 'setup-skipped', 'sign-in-skipped', 'install-declined', 'install-failed', 'backup-failed', 'open-failed', 'cancelled', 'path-incomplete', 'path-incomplete-cancelled']) {
+  for (const scenario of ['capture', 'backup-declined', 'setup-skipped', 'sign-in-skipped', 'install-declined', 'install-failed', 'backup-failed', 'open-failed', 'open-validation-failed', 'open-interrupted-130', 'open-interrupted-143', 'cancelled', 'path-incomplete', 'path-incomplete-cancelled']) {
     it(`prints final terminal guidance only after successful Quickstart: ${scenario}`, () => {
       const overrides: NodeJS.ProcessEnv = {
         FAKE_SKIP_BACKUP: scenario === 'setup-skipped' ? '1' : '0',
         FAKE_AUTH: scenario === 'sign-in-skipped' ? 'missing' : 'ready',
         FAKE_INSTALL_FAIL: scenario === 'install-failed' ? '1' : '0',
         FAKE_BACKUP_FAIL: scenario === 'backup-failed' ? '1' : '0',
-        FAKE_OPEN_FAIL: scenario === 'open-failed' ? '1' : '0',
+        FAKE_OPEN_STATUS: scenario === 'open-failed' ? '1'
+          : scenario.startsWith('open-interrupted-') ? scenario.slice(-3) : '0',
+        FAKE_OPEN_VALIDATION_FAIL: scenario === 'open-validation-failed' ? '1' : '0',
         FAKE_EARLY_ANSWER: scenario === 'sign-in-skipped' ? 'no\n' : 'yes\n',
       };
       const input = scenario === 'sign-in-skipped' ? 'y\ny\n'
@@ -2529,8 +2542,10 @@ Proceed with installation? [y/N] `);
         : scenario.startsWith('path-incomplete') ? 'n\ny\n' : 'y\ny\n';
       const backupInput = scenario === 'backup-declined' ? 'n\n' : scenario === 'setup-skipped' ? '\nn\n' : ['cancelled', 'path-incomplete-cancelled'].includes(scenario) ? '' : '\n';
       const result = run(input, overrides, home, '', backupInput);
-      const succeeds = !['install-failed', 'backup-failed', 'open-failed'].includes(scenario);
-      assert.equal(result.status, succeeds ? 0 : 1, result.stdout + result.stderr);
+      const status = scenario.startsWith('open-interrupted-') ? Number(scenario.slice(-3))
+        : ['install-failed', 'backup-failed', 'open-validation-failed'].includes(scenario) ? 1 : 0;
+      const succeeds = status === 0;
+      assert.equal(result.status, status, result.stdout + result.stderr);
       const expected = succeeds && scenario !== 'install-declined' && !scenario.startsWith('path-incomplete');
       assert.equal(result.stdout.split(terminalGuidanceMessage).length - 1, expected ? 1 : 0, result.stdout);
       assert.equal(result.stdout.split(incompletePathGuidance).length - 1, scenario.startsWith('path-incomplete') ? 1 : 0, result.stdout);
@@ -2539,7 +2554,17 @@ Proceed with installation? [y/N] `);
       } else if (expected) assert.isTrue(result.stdout.endsWith(`\n${terminalGuidance}`), result.stdout);
       assert.notInclude(result.stdout, 'Tools are ready');
       assert.notInclude(result.stdout, 'Continue setup here');
-      if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+      if (scenario === 'capture' || scenario.startsWith('open-')) {
+        assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+      }
+      if (scenario === 'backup-failed') assert.notInclude(readLog(), 'ballin:backup open\n');
+      if (scenario === 'open-failed') {
+        assert.include(result.stderr, 'Open https://github.com/fixture/private-backup manually.');
+      }
+      if (scenario === 'open-validation-failed') {
+        assert.include(result.stderr, 'GitHub authentication is unavailable.');
+        assert.notInclude(result.stderr, 'manually.');
+      }
       if (scenario.startsWith('path-incomplete')) {
         assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + (scenario.endsWith('cancelled') ? '\n' : '\n\n') + incompletePathGuidance);
         assert.include(result.stdout, 'PATH setup skipped.');

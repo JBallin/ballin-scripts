@@ -363,8 +363,11 @@ The core installer then:
   analytics as described in [Analytics](analytics.md).
 
 The direct installer leaves the first backup for you to run with `ballin backup`;
-Quickstart may offer to run it after successful destination setup. A backup
-collects the selected allowlisted sources, reads the destination, and saves changes
+Quickstart may offer to run it after successful destination setup. If the backup
+succeeds but the browser cannot open, Quickstart shows the destination URL and
+finishes setup.
+
+A backup collects the selected allowlisted sources, reads the destination, and saves changes
 that pass the conflict checks. See [Backup sources and sensitivity](backup-sources.md).
 
 ## Revisiting onboarding choices

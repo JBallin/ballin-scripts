@@ -1329,7 +1329,7 @@ main() {
     if [[ "$destination" == repository ]]; then
       "$repo/bin/ballin" backup
       printf '\n'
-      "$repo/bin/ballin" backup open
+      BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER=1 "$repo/bin/ballin" backup open
     fi
   fi
   if "$path_setup_complete"; then

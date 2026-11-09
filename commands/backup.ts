@@ -781,9 +781,16 @@ function runBackupCommand(args = process.argv.slice(2)): void {
         const url = repositoryOpenUrl(config.repository);
         const result = runCommand('gh', ['browse', '--repo', url], { env: { ...process.env, GH_HOST: config.repository.host }, stdio: 'ignore' });
         requireUninterrupted(result);
-        process.exitCode = result.error ? 1 : spawnResultStatus(result);
-        if (process.exitCode !== 0) writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
-        else writeStdoutLine(`Opened ${url} in your browser.`);
+        const status = result.error ? 1 : spawnResultStatus(result);
+        if (status !== 0) {
+          writeStderrLine(`ballin backup open: unable to open your browser. Open ${url} manually.`);
+          // gh reserves other statuses for outcomes such as cancellation and missing authentication.
+          const optionalFailure = status === 1 && !result.signal && process.env.BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER === '1';
+          process.exitCode = optionalFailure ? 0 : status;
+        } else {
+          process.exitCode = 0;
+          writeStdoutLine(`Opened ${url} in your browser.`);
+        }
       }, true);
     } else {
       /* c8 ignore next 3 -- The catalog predicate and handled cases enforce the supported command union. */
