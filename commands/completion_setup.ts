@@ -141,7 +141,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       return prompt(question);
     };
     const target = completionTarget(env, completionPrompt);
-    if (!target) { fallback(true); return; }
+    if (!target) { fallback(firstQuestion); return; }
     // Inspect only the selected file; a conventional location is not activation proof.
     try {
       const fd = fs.openSync(target.profile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);

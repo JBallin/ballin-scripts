@@ -2321,7 +2321,7 @@ main
     const detection = result.stdout.indexOf('Checking required tools');
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
-    assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools\n");
+    assert.include(result.stdout, "\n\nInstallation will:\n  - Install Xcode Command Line Tools\n");
     assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the Ballin command in ~/.local/bin\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);

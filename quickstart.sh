@@ -1357,7 +1357,7 @@ main() {
       fi
       prerequisite_names+=${prerequisite_list[index]}
     done
-    printf 'Installation will:\n'
+    printf '\nInstallation will:\n'
     if [[ -n "$brew_tool" ]]; then
       printf '  - Install missing tools and dependencies using existing Homebrew: %s\n' "$prerequisite_names"
     else
