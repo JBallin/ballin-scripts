@@ -183,7 +183,13 @@ For missing NVM, Quickstart uses suitable existing Homebrew, otherwise the
 versioned official NVM installer. It does not install Homebrew for this purpose.
 The NVM working directory stays outside Homebrew Cellar. Direct installation and
 `ballin setup` never install NVM or change its default. Broken or unverifiable
-Node/NVM commands need repair before proceeding.
+Node/NVM commands need repair before proceeding. Before probing an existing
+NVM source, Quickstart and setup check the ownership and permissions of the
+source, its symlinks, and every parent directory. Entries must belong to the
+current user or root and must not be writable by other users (protected sticky
+directories are allowed). On macOS, write-granting ACLs are rejected too. Repair
+untrusted paths manually; setup does not change their permissions. The temporary
+probe directory contains ordinary NVM bookkeeping, but is not a shell sandbox.
 
 Suitable existing Homebrew is also preferred for missing Git and GitHub CLI.
 Homebrew can install dependencies; automatic updates, upgrades of already

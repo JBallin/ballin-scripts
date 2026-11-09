@@ -640,6 +640,49 @@ validate_nvm_alias_targets() {
   done
 }
 
+# A disposable HOME is not a sandbox for shell code. Check the full lexical
+# path, including every symlink and target ancestor, before sourcing existing NVM.
+trusted_nvm_source() {
+  local pending=$1 current=/ component target metadata owner mode acl links=0
+  [[ "$pending" == /* ]] || return 1
+  pending=${pending#/}
+  while :; do
+    if metadata=$(/usr/bin/stat -f '%u %p' "$current" 2>/dev/null); then
+      owner=${metadata%% *}; mode=${metadata#* }; mode=$((8#$mode))
+    else
+      metadata=$(/usr/bin/stat -c '%u %f' "$current") || return 1
+      owner=${metadata%% *}; mode=${metadata#* }; mode=$((16#$mode))
+    fi
+    [[ "$owner" == 0 || "$owner" == "$UID" ]] || return 1
+    if [[ ! -L "$current" ]]; then
+      if (( (mode & 0022) != 0 )); then
+        [[ -d "$current" ]] && (( (mode & 01000) != 0 )) || return 1
+      fi
+    fi
+    if [[ "$(/usr/bin/uname -s)" == Darwin ]]; then
+      acl=$(LC_ALL=C /bin/ls -lde "$current") || return 1
+      [[ -n "$acl" ]] || return 1
+      if printf '%s\n' "$acl" | grep -Eq '^[[:space:]]*[0-9]+:.* allow .*(write|append|add_file|add_subdirectory|delete|chown)'; then return 1; fi
+    fi
+    if [[ -L "$current" ]]; then
+      (( links += 1 )); (( links <= 40 )) || return 1
+      target=$(readlink "$current") || return 1
+      pending="$target${pending:+/$pending}"
+      if [[ "$target" == /* ]]; then current=/; pending=${pending#/}; else current=${current%/*}; current=${current:-/}; fi
+      continue
+    fi
+    [[ -n "$pending" ]] || { [[ -f "$current" ]]; return; }
+    [[ -d "$current" ]] || return 1
+    component=${pending%%/*}
+    if [[ "$pending" == */* ]]; then pending=${pending#*/}; else pending=''; fi
+    case "$component" in
+      ''|.) ;;
+      ..) current=${current%/*}; current=${current:-/} ;;
+      *) current="${current%/}/$component" ;;
+    esac
+  done
+}
+
 # NVM discovery is read-only. Never source Homebrew's outer nvm.sh wrapper:
 # it creates the working directory and compatibility links even with --no-use.
 discover_nvm() {
@@ -651,6 +694,7 @@ discover_nvm() {
   for directory in "$nvm_directory" "$HOME/.nvm"; do
     source="$directory/nvm.sh"
     if [[ -f "$source" && -r "$source" ]]; then
+      trusted_nvm_source "$source" || fail 'Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'
       candidate=$source
       local hops=0 target
       while [[ -L "$candidate" && $hops -lt 40 ]]; do
@@ -664,7 +708,7 @@ discover_nvm() {
           local stable="${candidate%%/Cellar/nvm/*}/opt/nvm/libexec/nvm.sh"
           # Persist the stable source only when it identifies this installation.
           # Never load the mutating Homebrew wrapper during discovery.
-          if [[ -r "$stable" && "$stable" -ef "$candidate" ]]; then candidate=$stable; fi
+          if [[ -r "$stable" && "$stable" -ef "$candidate" ]] && trusted_nvm_source "$stable"; then candidate=$stable; fi
           ;;
       esac
       if grep -q 'libexec/nvm.sh' "$candidate" && ! grep -q 'nvm_process_parameters' "$candidate"; then continue; fi
@@ -687,6 +731,7 @@ discover_nvm() {
   nvm_default_exists=false
   [[ ! -e "$nvm_directory/alias/default" && ! -L "$nvm_directory/alias/default" ]] || nvm_default_exists=true
   [[ -n "$nvm_source" ]] || return 0
+  trusted_nvm_source "$nvm_source" || fail 'Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'
   local probe="$scratch/nvm-probe" version alias='default' seen=':' target
   mkdir -p "$probe/versions/node"
   mkdir -p "$probe/alias/lts"
@@ -804,6 +849,7 @@ install_nvm_lts() {
   unset -f nvm
   local nvm_status=0
   # The selected source is discovered and checked before consented activation.
+  trusted_nvm_source "$nvm_source" || fail 'NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'
   # shellcheck source=/dev/null
   . "$nvm_source" --no-use || nvm_status=$?
   stop_if_interrupted "$nvm_status"

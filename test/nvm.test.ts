@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { testChildEnvironment, withEnvironment } = require('./helpers/environment.ts');
-const { discoverNvm, followsLtsAlias, inspectNvm } = require('../commands/nvm.ts');
+const { discoverNvm, followsLtsAlias, inspectNvm, trustedNvmSource } = require('../commands/nvm.ts');
 
 describe('read-only NVM discovery and eligibility', () => {
   let root: string;
@@ -100,6 +100,103 @@ describe('read-only NVM discovery and eligibility', () => {
     fs.writeFileSync(path.join(root, 'brew'), '#!/bin/sh\nprintf relative\n', { mode: 0o700 });
     assert.isNull(discoverNvm(env({ PATH: root })));
     assert.isFalse(inspectNvm(env({ PATH: root })).loadable);
+  });
+  for (const unsafe of ['source', 'parent', 'target parent', 'link parent', 'intermediate symlink']) {
+    it(`never executes an unsafe ${unsafe} during discovery`, () => {
+      const marker = path.join(root, 'outside-probe');
+      source(`printf compromised > '${marker}'\nnvm() { printf 'v26.13.0\\n'; }\n`);
+      alias('default', 'lts/*');
+      let selected = directory;
+      if (unsafe === 'source') fs.chmodSync(path.join(directory, 'nvm.sh'), 0o666);
+      if (unsafe === 'parent') fs.chmodSync(directory, 0o777);
+      if (unsafe === 'target parent') {
+        const target = path.join(root, 'writable'); fs.mkdirSync(target, { mode: 0o700 });
+        fs.renameSync(path.join(directory, 'nvm.sh'), path.join(target, 'nvm.sh'));
+        fs.symlinkSync('../writable/nvm.sh', path.join(directory, 'nvm.sh')); fs.chmodSync(target, 0o777);
+      }
+      if (unsafe === 'link parent' || unsafe === 'intermediate symlink') {
+        const parent = path.join(root, 'writable'); fs.mkdirSync(parent, { mode: 0o700 });
+        fs.symlinkSync(directory, path.join(parent, 'linked')); fs.chmodSync(parent, 0o777);
+        selected = path.join(parent, 'linked');
+        if (unsafe === 'intermediate symlink') {
+          fs.symlinkSync(selected, path.join(root, 'outer')); selected = path.join(root, 'outer');
+        }
+      }
+      const result = inspectNvm(env({ NVM_DIR: selected }));
+      assert.isFalse(fs.existsSync(marker), 'discovery must not execute an outside-marker payload');
+      assert.isFalse(result.loadable);
+    });
+  }
+  it('rejects an unsafe inherited XDG source', () => {
+    source(); fs.chmodSync(path.join(directory, 'nvm.sh'), 0o664);
+    fs.renameSync(directory, path.join(root, 'nvm'));
+    assert.isFalse(inspectNvm(env({ NVM_DIR: undefined, XDG_CONFIG_HOME: root })).loadable);
+  });
+  if (process.platform === 'darwin') for (const linked of [false, true]) it(`rejects write-granting macOS ACLs on ${linked ? 'symlinks' : 'files'} even without writable mode bits`, () => {
+    source();
+    const file = path.join(directory, 'nvm.sh');
+    if (linked) { fs.renameSync(file, path.join(root, 'source.sh')); fs.symlinkSync(path.join(root, 'source.sh'), file); }
+    const result = require('child_process').spawnSync('/bin/chmod', ['-h', '+a', `everyone allow ${linked ? 'delete' : 'write'}`, file]);
+    assert.equal(result.status, 0);
+    assert.isFalse(trustedNvmSource(file));
+    assert.isFalse(inspectNvm(env()).loadable);
+  });
+  for (const entry of ['source', 'parent', 'symlink', 'target parent']) it(`rejects a foreign-owned ${entry} even with read-only modes`, () => {
+    const marker = path.join(root, 'outside-probe');
+    source(`printf compromised > '${marker}'\nnvm() { return 3; }\n`);
+    let foreign = entry === 'parent' ? directory : path.join(directory, 'nvm.sh');
+    if (entry === 'symlink' || entry === 'target parent') {
+      const target = path.join(root, 'target'); fs.mkdirSync(target);
+      fs.renameSync(path.join(directory, 'nvm.sh'), path.join(target, 'nvm.sh'));
+      fs.symlinkSync(path.join(target, 'nvm.sh'), path.join(directory, 'nvm.sh'));
+      if (entry === 'target parent') foreign = target;
+    }
+    const stat = fs.lstatSync;
+    fs.lstatSync = (file: string, ...args: unknown[]) => {
+      const value = stat(file, ...args);
+      if (file === foreign) value.uid = 123456;
+      return value;
+    };
+    try {
+      assert.isFalse(inspectNvm(env()).loadable);
+      assert.isFalse(fs.existsSync(marker));
+    } finally { fs.lstatSync = stat; }
+  });
+  it('accepts a trusted relative symlink but rejects cycles and traversal through an unsafe directory', () => {
+    source(); const link = path.join(root, 'linked.sh'); fs.symlinkSync('.nvm/nvm.sh', link);
+    assert.isTrue(trustedNvmSource(link));
+    const unsafe = path.join(root, 'writable'); fs.mkdirSync(unsafe); fs.chmodSync(unsafe, 0o777);
+    assert.isFalse(trustedNvmSource(`${unsafe}/../.nvm/nvm.sh`));
+    fs.unlinkSync(link); fs.symlinkSync('linked.sh', link); assert.isFalse(trustedNvmSource(link));
+  });
+  it('fails closed for unavailable ownership and non-file paths, while preserving lexical traversal', () => {
+    source();
+    assert.isFalse(trustedNvmSource('relative/nvm.sh'));
+    assert.isFalse(trustedNvmSource(directory));
+    assert.isFalse(trustedNvmSource(`${directory}/nvm.sh/child`));
+    assert.isFalse(trustedNvmSource(path.join(root, 'missing')));
+    assert.isTrue(trustedNvmSource(`${directory}/../.nvm/./nvm.sh`));
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'getuid')!;
+    Object.defineProperty(process, 'getuid', { value: undefined, configurable: true });
+    try { assert.isFalse(trustedNvmSource(path.join(directory, 'nvm.sh'))); }
+    finally { Object.defineProperty(process, 'getuid', descriptor); }
+  });
+  for (const outcome of ['failure', 'missing output', 'interrupted', 'write ACL', 'read ACL']) it(`handles ACL inspection ${outcome} without sourcing NVM`, () => {
+    source();
+    const helpers = require('../commands/commandHelpers.ts');
+    const original = helpers.runCommand;
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    const modulePath = require.resolve('../commands/nvm.ts'); const cached = require.cache[modulePath];
+    helpers.runCommand = () => ({ status: outcome === 'failure' ? 1 : outcome === 'interrupted' ? null : 0,
+      signal: outcome === 'interrupted' ? 'SIGINT' : null,
+      stdout: outcome === 'write ACL' ? ' 0: group:everyone allow write' : outcome === 'read ACL' ? ' 0: group:everyone allow read' : undefined });
+    delete require.cache[modulePath];
+    try {
+      const fresh = require('../commands/nvm.ts');
+      if (outcome === 'interrupted') assert.throws(() => fresh.trustedNvmSource(path.join(directory, 'nvm.sh')), 'Interrupted');
+      else assert.equal(fresh.trustedNvmSource(path.join(directory, 'nvm.sh')), outcome === 'read ACL');
+    } finally { helpers.runCommand = original; require.cache[modulePath] = cached; Object.defineProperty(process, 'platform', platform); }
   });
   it('propagates NVM inspection interruption', () => {
     source('kill -INT $$\n');

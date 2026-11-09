@@ -542,6 +542,44 @@ esac
     assert.include(switched.stdout, 'Older Node installations and versions remain'); assert.include(readLog(), 'nvm:install:--lts');
     assert.isTrue(fs.existsSync(path.join(tools, 'node')));
   });
+  for (const unsafe of ['source', 'parent', 'target parent', 'link parent', 'intermediate symlink']) {
+    it(`rejects unsafe NVM ${unsafe} before executing it or requesting consent`, () => {
+      const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+      const marker = path.join(root, 'outside-probe');
+      fs.writeFileSync(path.join(nvm, 'nvm.sh'), `printf compromised > '${marker}'\n` + fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8'));
+      let selected = nvm;
+      if (unsafe === 'source') fs.chmodSync(path.join(nvm, 'nvm.sh'), 0o666);
+      if (unsafe === 'parent') fs.chmodSync(nvm, 0o777);
+      if (unsafe === 'target parent') {
+        const target = path.join(root, 'writable'); fs.mkdirSync(target);
+        fs.renameSync(path.join(nvm, 'nvm.sh'), path.join(target, 'nvm.sh'));
+        fs.symlinkSync(path.join(target, 'nvm.sh'), path.join(nvm, 'nvm.sh')); fs.chmodSync(target, 0o777);
+      }
+      if (unsafe === 'link parent' || unsafe === 'intermediate symlink') {
+        const parent = path.join(root, 'writable'); fs.mkdirSync(parent);
+        fs.symlinkSync(nvm, path.join(parent, 'linked')); fs.chmodSync(parent, 0o777);
+        selected = path.join(parent, 'linked');
+        if (unsafe === 'intermediate symlink') {
+          fs.symlinkSync(selected, path.join(root, 'outer')); selected = path.join(root, 'outer');
+        }
+      }
+      const result = run('', { NVM_DIR: selected, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'n\n' });
+      assert.isFalse(fs.existsSync(marker), 'discovery must not execute an outside-marker payload');
+      assert.notEqual(result.status, 0); assert.include(result.stderr, 'not trusted');
+      assert.notInclude(result.stdout, 'Use NVM and latest LTS Node?');
+      assert.isFalse(fs.existsSync(marker));
+    });
+  }
+  if (process.platform === 'darwin') for (const linked of [false, true]) it(`rejects a write-granting NVM ACL on ${linked ? 'symlink' : 'file'} before executing the source`, () => {
+    const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+    const marker = path.join(root, 'outside-probe');
+    const source = path.join(nvm, 'nvm.sh');
+    fs.writeFileSync(source, `printf compromised > '${marker}'\n` + fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8'));
+    if (linked) { fs.renameSync(source, path.join(root, 'source.sh')); fs.symlinkSync(path.join(root, 'source.sh'), source); }
+    assert.equal(spawnSync('/bin/chmod', ['-h', '+a', `everyone allow ${linked ? 'delete' : 'write'}`, source]).status, 0);
+    const result = run('', { FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'n\n' });
+    assert.isFalse(fs.existsSync(marker)); assert.notEqual(result.status, 0); assert.include(result.stderr, 'not trusted');
+  });
   for (const linked of ['NVM directory', 'alias directory', 'default alias', 'hard-linked default alias']) {
     it(`keeps compatible Node by default with a linked ${linked} without changing NVM`, () => {
       const actual = path.join(root, 'existing-nvm'); fs.mkdirSync(path.join(actual, 'alias/lts'), { recursive: true });
