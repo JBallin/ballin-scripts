@@ -45,5 +45,5 @@ coordinates Claude PR reviews and reports their status.
 
 [Python](https://www.python.org/) runs the site and gallery tooling, and
 [markdown-it](https://github.com/markdown-it/markdown-it) renders the site's
-canonical Markdown. The website targets [GitHub Pages](https://pages.github.com/)
-for hosting.
+canonical Markdown. The website targets [Netlify](https://www.netlify.com/)
+for production hosting and optional review previews.

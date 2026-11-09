@@ -38,7 +38,7 @@ Preparation/review does not authorize access changes or publication.
    Confirm its actual identity; inspect uncertain results before retrying.
 5. **Activate:** replace offline placeholders with [verified real IDs](#pin-and-verify),
    retrieve and QA the complete snapshot, including coordinated README text.
-   Authorize deployment **before** relevant `main` merges, which trigger Pages.
+   Authorize deployment **before** relevant `main` merges, which trigger production publication once enabled.
 6. **Verify delivery:** check deployment results, public PNG/text bytes and
    navigation. A first README image-link consumer waits for the verified URL and
    its own checks/reviews and merge authorization; later refreshes repeat step 3.
@@ -242,10 +242,11 @@ different durable deployment target, edit the same configuration, or supply
 one build only. Local serving stays loopback-only while canonical/share URLs
 remain those of the intended public target.
 
-For an Actions deployment, configure the same custom domain separately in
-GitHub Pages settings and maintain its DNS and HTTPS configuration. A source or
-artifact `CNAME` does not configure this: [GitHub ignores CNAME files for custom
-Actions workflows](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
+Configure `getballin.com`, DNS and HTTPS separately in Netlify after approval.
+The repository's origin/base configuration does not set up a Netlify site, team,
+plan or domain. The visible Netlify footer credit is included on every page;
+there is no website Code of Conduct link. The OSS application has been submitted,
+but acceptance and the separate-team arrangement remain external prerequisites.
 When changing hosting, verify the configured origin/base against deployed pages,
 assets, gallery viewers, transcripts, fragments, sitemap and social metadata.
 Check certificate/redirect behavior and inspect sharing-platform previews after
@@ -265,7 +266,7 @@ credential; never put a Cloudflare API token or account secret there. Use manual
 beacon installation and avoid enabling automatic injection as well, which could
 count visits twice. No CLI analytics credentials or data are reused.
 
-The committed null token disables collection. The Pages workflow passes
+The committed null token disables collection. The Netlify production workflow passes
 `--analytics`; it includes the beacon loader only once a valid token is configured.
 Ordinary local builds omit it. Even an analytics-enabled snapshot loads the
 third-party script only when the browser origin exactly matches the build's
@@ -322,7 +323,7 @@ observed bugs from unverified causes. Keep local screenshots/evidence ignored an
 
 Generate and review output deliberately on the local Mac using the
 [gallery recipes](../tools/output-gallery/README.md#generate-review-output).
-Nothing captures or renders in Pages CI. Use the
+Nothing captures or renders in deployment CI. Use the
 [publication selection and packaging recipe](../tools/output-gallery/README.md#package-approved-examples)
 to include only approved images, matching UTF-8 text and minimal public provenance.
 Raw ANSI, command/answer/environment metadata and generation inputs stay private.
@@ -472,36 +473,57 @@ fragments when publishing or changing public links. Keep the README self-contain
 
 ## Deploy and recover
 
-`.github/workflows/pages.yml` assembles and uploads one complete snapshot; the
-deploy job receives only that artifact. A docs change reuses the pinned bundle.
-A bundle-pin change includes the current docs. Neither operation can publish a
-partial tree. Only trusted `main` pushes or a manual `main` dispatch may deploy;
-there are no privileged PR events or hosted previews. The build token has contents
-read permission; only the deployment job receives Pages write and OIDC permissions.
+`.github/workflows/netlify.yml` builds and uploads one complete snapshot, then
+publishes only that artifact with a pinned Netlify CLI. A docs change reuses the
+pinned bundle; a bundle-pin change includes current docs. Gallery generation and
+asset approval stay local. GitHub Pages deployment and its write/OIDC permissions
+are removed. No Netlify Git integration or automatic PR previews are needed.
 
-Automatic paths match the actual build inputs: `README.md`, `CONTRIBUTING.md`,
-`.github/SUPPORT.md`, `.github/SECURITY.md`, `LICENSE.md`, `docs/**` (including existing images),
-`site/**` (template, styles, renderer lock and bundle pin), `tools/site/**`, `.nvmrc`
-and `.github/workflows/pages.yml`. Generator/tool changes under `tools/output-gallery`
-do not regenerate or deploy assets; deliberate packaging and a pin update activate
-them. CI also exercises site tests on PRs without release access or deploy rights.
+Publication is off until the repository variable `NETLIFY_DEPLOYS_ENABLED` is
+explicitly set to `true`. Before enabling it, separately authorize and configure
+the Netlify site and the GitHub `netlify-production` and `netlify-preview`
+environments. Require production approval, restrict both environments to workflow
+runs on `main`, and store the intended `NETLIFY_SITE_ID` variable and
+`NETLIFY_AUTH_TOKEN` secret in each environment. Use the minimum permitted token
+access. Confirm the separate-team/OSS arrangement without changing the existing
+legacy team's plan or projects. These are setup instructions, not completed setup.
 
-One workflow concurrency group serializes assembly through publication without
-canceling an active deployment. Every queued run checks out current `main`, even
-for an older event. Before deployment, changed publication inputs invalidate a
-superseded snapshot; the newer relevant run or a manual rerun builds fresh state.
-Unrelated product commits do not block the same complete documentation snapshot.
+Relevant `main` pushes publish production once enabled. The path filters cover
+`README.md`, `CONTRIBUTING.md`, `.github/SUPPORT.md`, `.github/SECURITY.md`,
+`LICENSE.md`, `docs/**`, `site/**`, `tools/site/**`, `.nvmrc` and the workflow.
+Generator-only changes under `tools/output-gallery` do not regenerate assets.
+CI tests PRs without deployment credentials. Production assembly/publication is
+serialized without canceling active runs. Queued production runs build current
+`main`, not the triggering historical commit. After environment approval, changed
+publication inputs invalidate a superseded snapshot. Unrelated product commits
+do not block an otherwise current complete documentation snapshot.
 
-Once Pages settings and the `github-pages` environment are separately configured,
-obtain deployment authorization before merging relevant `main` changes as well as
-before a manual rerun. With that authority, the manual recovery command is:
+Authorize production before merging relevant changes or manually dispatching:
 
 ```sh
-gh workflow run pages.yml --ref main --repo JBallin/ballin-scripts
+gh workflow run netlify.yml --ref main --repo JBallin/ballin-scripts -f target=production
 ```
 
-This is a deployment action, not a local build. Inspect its actual result before
-claiming publication. A workflow file alone does not enable Pages or prove its URL.
+For an optional on-demand preview, dispatch the trusted workflow on `main` with a
+reviewed same-repository branch or commit. The build has no Netlify credentials;
+the deployment job runs the pinned CLI outside the source checkout and uploads
+only the completed static artifact. Review the selected code before authorizing
+its build. A preview uses Netlify's default draft deploy, never `--prod`, so it
+does not replace production. Preview builds omit analytics even if a token exists.
+Previews are not required for contributors or every PR, and run in a separate
+serialized lane so they do not delay production approval.
+
+```sh
+gh workflow run netlify.yml --ref main --repo JBallin/ballin-scripts \
+  -f target=preview -f preview_ref=REVIEWED_COMMIT
+```
+
+Both commands publish externally, not just build locally. Inspect the returned
+deploy ID and URL, final Netlify state, access and retention before sharing or
+claiming success. Draft URLs are not inherently private. Verify production domain,
+HTTPS, navigation, assets and downloads after separately authorized publication.
+The seven-day Actions artifact retention is not Netlify preview retention.
+A workflow file does not establish live hosting or OSS-plan approval.
 
 For rollback, review a change restoring the known-good bundle pin and any affected
 documentation/site inputs, validate that complete state, then deploy through this
