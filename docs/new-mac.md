@@ -23,6 +23,22 @@ Snapshots are references for manual setup. Ballin does not automatically restore
 dotfiles or reinstall packages, and it does not synchronize Macs. Keep a broader
 backup for documents, applications, and other data.
 
+## Review Claude Code preferences
+
+If `claude_preferences.json` is present, treat it as a filtered reference, not a
+replacement for `settings.json`. Manually merge only the values you still want
+into the new Mac's active Claude configuration, preserving existing settings.
+Missing keys are not instructions to delete local values.
+
+Recreate excluded environment values, hooks, permissions, MCP and plugin
+configuration separately. Project-local settings, sign-in, and approvals are not
+restored. Custom model and output-style names may need definitions or access
+not included in the snapshot.
+
+Retained text can still be sensitive. Reconnecting Ballin does not apply these
+preferences. See [filtered preference boundaries](backup-sources.md#filtered-preferences)
+for the captured fields and exclusions.
+
 ## Choose a backup destination
 
 When the new Mac is ready, choose where to capture its future state during

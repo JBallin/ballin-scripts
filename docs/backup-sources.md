@@ -209,6 +209,8 @@ No defaults are added. Custom names may identify private models or styles, and
 referenced custom definitions may be missing on another machine. Ballin does not
 collect referenced content or apply these preferences automatically. Use the
 snapshot as a manual reference, not a complete Claude Code backup.
+See [using Claude preferences on another Mac](new-mac.md#review-claude-code-preferences)
+before manually merging saved values into an existing configuration.
 
 This projection uses the existing sensitive-source opt-in even though it is
 filtered. It is not secret scanning and does not promise secret-free output:
