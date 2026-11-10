@@ -357,6 +357,11 @@ const runBallinCli = (): void => {
       args = [args[1], args[2], commandHelpOptionName];
     }
   }
+  if (args.length > 1 && ['help', commandHelpOptionName].includes(args[0])) {
+    writeStderr(`Unknown or unsupported help target.\nTry: ${terminalCommand('ballin help', process.stderr)}\n`);
+    process.exitCode = 2;
+    return;
+  }
   if (args.length === 0 || (args.length === 1 && ['help', commandHelpOptionName].includes(args[0]))
     || isCommandHelp(args) || backupHelpCommand(args) !== undefined || isPositionalHelp(args) || isConfigCommandHelp(args)) {
     runBallinCommand(args);

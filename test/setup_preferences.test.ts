@@ -203,7 +203,8 @@ describe('general preference review', () => {
       assert.equal(result.stdout.includes('Earlier choices saved.'), saved);
       assert.notInclude(result.stdout, 'Earlier confirmed choices remain saved.');
       assert.include(result.stdout, 'Review cancelled'); assert.notInclude(result.stdout, 'Setup complete.');
-      assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
+      assert.include(result.stdout, 'Run `ballin setup` to resume preference review.');
+      assert.notInclude(result.stdout, 'Run `ballin backup setup`');
     });
   }
   for (const installation of [false, true]) for (const outcome of ['completed', 'first EOF', 'saved then EOF']) {

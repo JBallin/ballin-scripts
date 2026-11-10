@@ -265,15 +265,19 @@ function runUpdateCommand(): void {
 
   let childEnv = process.env;
   let exitStatus = 0;
+  let activeStage = 'Updating Homebrew';
+  const failedStages = new Set<string>();
 
   const progress = (text: string): void => {
+    activeStage = text;
     printProgress(text, needsPhaseSeparator);
     needsPhaseSeparator = true;
   };
 
-  const recordFailure = (status: number): void => {
+  const recordFailure = (status: number, stage = activeStage): void => {
     if (status !== 0) {
       exitStatus = status;
+      failedStages.add(stage);
     }
   };
 
@@ -341,7 +345,7 @@ function runUpdateCommand(): void {
       runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
     } else {
       reportDiagnostic(terminalError('Unable to update global npm packages: npm is not available on PATH.', process.stderr));
-      recordFailure(1);
+      recordFailure(1, 'Updating global npm packages');
     }
   }
 
@@ -356,7 +360,7 @@ function runUpdateCommand(): void {
       runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
     } else {
       reportDiagnostic(terminalError('Unable to install macOS updates: softwareupdate is not available on PATH.', process.stderr));
-      recordFailure(1);
+      recordFailure(1, 'Installing macOS updates');
     }
   }
 
@@ -387,6 +391,8 @@ function runUpdateCommand(): void {
   }
 
   if (exitStatus !== 0) {
+    reportDiagnostic();
+    reportDiagnostic(terminalError(`Update finished with errors: ${[...failedStages].join('; ')}. Review the output above before retrying.`, process.stderr));
     process.exitCode = exitStatus;
   }
 }

@@ -55,7 +55,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     let savedChoice = false;
     const cancel = (): SetupOutcome => {
       writeStdoutLine(`\nReview cancelled.${savedChoice ? ' Earlier choices saved.' : ''}`);
-      if (!options.deferFollowUp) backupHint();
+      writeStdoutLine(`Run ${terminalCommand('ballin setup')} to resume preference review.`);
       return 'cancelled';
     };
     const save = (section: 'update' | 'analytics', key: string, enabled: boolean): void => {

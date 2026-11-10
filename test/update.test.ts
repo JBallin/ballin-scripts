@@ -430,7 +430,8 @@ exit 0
 
     assert.equal(result.status, 42);
     assert.match(result.stdout, /^simulated refresh failure\n\n==> Cleaning up Homebrew packages\n/u);
-    assert.equal(result.stderr, 'Homebrew refresh diagnostic\n');
+    assert.isTrue(result.stderr.startsWith('Homebrew refresh diagnostic\n'));
+    assert.include(result.stderr, 'Update finished with errors: Updating Homebrew.');
     assert.notMatch(result.stdout, /^==> Updating Homebrew$/mu);
     assert.notInclude(result.stdout, 'Updating Homebrew packages');
     assert.include(result.stdout, 'Cleaning up Homebrew packages');
@@ -1175,6 +1176,7 @@ exit 0
 
     assert.equal(result.status, 23);
     assert.include(result.stdout, 'simulated npm failure');
+    assert.include(result.stderr.replace(/\s+/gu, ' '), 'Update finished with errors: Updating global npm packages. Review the output above before retrying.');
     assert.deepEqual(commandLog(), [
       'npm|,|update -g',
       'ballin|,|self-update',
@@ -1591,7 +1593,7 @@ printf '%s\\n' 'backup still ran' >> "$UPDATE_TEST_LOG"
 
       assert.equal(result.status, 1);
       assert.include(result.stderr, diagnostic);
-      assert.equal(result.stderr.split('✗').length - 1, 1);
+      assert.equal(result.stderr.split('✗').length - 1, 2);
       if (name !== 'nvm') {
         assert.equal(result.stdout, '\n==> Backing up development environment\n');
       }
