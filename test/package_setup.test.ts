@@ -54,6 +54,58 @@ for (const layout of ['copied keg', 'source modules']) describe(`explicit Homebr
     assert.isFalse(fs.existsSync(path.join(repo, 'ballin.config.json')));
     assert.isFalse(fs.existsSync(path.join(root, 'unexpected')));
   };
+  for (const prompt of ['backup', 'preferences']) for (const failure of ['EAGAIN', 'EIO', 'unknown', '130', '143']) {
+    it(`contains ${prompt} consent input failure ${failure} without changing saved state`, () => {
+      fs.mkdirSync(path.dirname(file));
+      const config = JSON.parse(fs.readFileSync(path.join(repo, 'config/.defaultConfig.json'), 'utf8'));
+      config.update.npm = 'false';
+      config.custom = { retained: true };
+      fs.writeFileSync(file, require('../config/store.ts').stringify(config));
+      const before = fs.readFileSync(file);
+      const receipt = fs.readFileSync(markerPath);
+      const preload = path.join(root, 'fail-consent-input.cjs');
+      const interrupted = ['130', '143'].includes(failure);
+      fs.writeFileSync(preload, `
+const fs = require('fs');
+const helpers = require(${JSON.stringify(path.join(repo, 'commands/commandHelpers.ts'))});
+const read = fs.readSync;
+let consumed = 0;
+fs.readSync = (fd, ...args) => {
+  if (fd !== 0) return read.call(fs, fd, ...args);
+  if (consumed >= ${prompt === 'backup' ? 0 : 2}) {
+    ${interrupted ? `throw new helpers.CommandInterrupted(${failure});`
+      : `throw Object.assign(new Error('PRIVATE_INPUT_FAILURE ghp_fixture_secret /private/example'), { code: ${JSON.stringify(failure)} });`}
+  }
+  const count = read.call(fs, fd, ...args);
+  consumed += count;
+  return count;
+};
+`);
+      packageEnv.NODE_OPTIONS = `${packageEnv.NODE_OPTIONS ?? ''} --require ${JSON.stringify(preload)}`.trim();
+      const result = run('n\ny\n');
+      const output = result.stdout + result.stderr;
+      assert.equal(result.status, interrupted ? Number(failure) : 1, output);
+      assert.include(result.stdout, 'Configure or review your GitHub backup?');
+      if (prompt === 'preferences') assert.include(result.stdout, 'Review your Ballin preferences?');
+      else assert.notInclude(result.stdout, 'Review your Ballin preferences?');
+      for (const secret of ['PRIVATE_INPUT_FAILURE', 'ghp_fixture_secret', '/private/example']) assert.notInclude(output, secret);
+      if (interrupted) {
+        assert.include(output, 'Interrupted. Earlier completed changes remain.');
+        assert.notInclude(result.stderr, 'Run `ballin');
+      } else {
+        assert.include(result.stderr, `stdin read: ${failure}`);
+        assert.include(result.stderr, `Unable to read ${prompt === 'backup' ? 'backup setup' : 'preference review'} input.`);
+        assert.include(result.stderr, prompt === 'backup' ? 'Run `ballin setup --initial`' : 'Run `ballin setup`');
+      }
+      assert.notInclude(output, 'Initial setup complete');
+      assert.notInclude(output, 'Initial setup cancelled');
+      assert.notInclude(output, 'Update global npm packages?');
+      assert.deepEqual(fs.readFileSync(file), before);
+      assert.deepEqual(fs.readFileSync(markerPath), receipt);
+      assert.isFalse(fs.existsSync(path.join(home, '.ballin/.analytics/install-id')));
+      assertUntouched();
+    });
+  }
   it('creates external config on EOF without touching profiles, command links or Git state', () => {
     const result = run();
     assert.equal(result.status, 0, result.stderr + result.stdout);

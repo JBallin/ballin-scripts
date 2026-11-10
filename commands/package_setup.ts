@@ -3,8 +3,8 @@ const { isHomebrewInstallation, configurationFile, selectedPackageCommand, readP
 const { configure, readOriginalSetupConfig } = require('../config/setup.ts');
 const { configureBackup, setupAnalytics } = require('./install_setup.ts');
 const { reviewGeneralPreferences } = require('./setup.ts');
-const { readYesNo, promptInputState, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
-const { terminalError, terminalComplete, terminalProse } = require('./terminalStyle.ts');
+const { readYesNo, promptInputState, CommandInterrupted, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
+const { terminalError, terminalComplete, terminalProse, terminalCommand } = require('./terminalStyle.ts');
 
 // Onboarding owns user choices only. Homebrew owns installation and command links.
 const runPackageSetupCommand = (): void => {
@@ -43,7 +43,16 @@ const runPackageSetupCommand = (): void => {
     writeStdoutLine(terminalProse('Run `ballin setup --initial` to repeat initial setup, `ballin setup` to review preferences, or `ballin backup setup` to configure backups.'));
     process.exitCode = 0;
   };
-  const backup = readYesNo('\nConfigure or review your GitHub backup? [y/N] ', false);
+  let backup: boolean | null;
+  try {
+    backup = readYesNo('\nConfigure or review your GitHub backup? [y/N] ', false);
+  } catch (error) {
+    if (error instanceof CommandInterrupted) throw error;
+    writeStderrLine(terminalError('\nUnable to read backup setup input. Earlier choices remain saved.', process.stderr));
+    writeStderrLine(`Run ${terminalCommand('ballin setup --initial', process.stderr)} to repeat initial setup.`);
+    process.exitCode = 1;
+    return;
+  }
   if (backup === null) { finish(true); return; }
   if (backup) {
     let cancelled = false;
@@ -55,7 +64,16 @@ const runPackageSetupCommand = (): void => {
     if (!succeeded) { process.exitCode = 1; return; }
     if (cancelled || promptInputState() !== 'open') { finish(true); return; }
   }
-  const preferences = readYesNo('\nReview your Ballin preferences? [Y/n] ', true);
+  let preferences: boolean | null;
+  try {
+    preferences = readYesNo('\nReview your Ballin preferences? [Y/n] ', true);
+  } catch (error) {
+    if (error instanceof CommandInterrupted) throw error;
+    writeStderrLine(terminalError('\nUnable to read preference review input. Earlier choices remain saved.', process.stderr));
+    writeStderrLine(`Run ${terminalCommand('ballin setup', process.stderr)} to review preferences.`);
+    process.exitCode = 1;
+    return;
+  }
   if (preferences === null) { finish(true); return; }
   if (preferences) {
     const outcome = reviewGeneralPreferences(file, { installation: true, deferFollowUp: true });

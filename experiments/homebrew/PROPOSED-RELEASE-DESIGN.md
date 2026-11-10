@@ -115,14 +115,13 @@ also covers upgrades performed directly through Brew.
 
 ## Source, Claude backup and release sequencing
 
-The published experiment checkpoint is `331e9d3`. These technical additions are a
-local follow-up; [validation results](README.md#verification-and-remaining-work)
-do not authorize further publication or adoption.
-The newer version-aware stack tip `df16ef6` adds three test files' coverage cases;
-it has not been merged here. Guided setup `171db47` is a separate newer branch.
-Do not claim this proposal includes either later tip until explicitly reconciled.
+The current integration preserves Homebrew checkpoint `53a9b56` and includes
+version-aware-install `f3edbb3`, which already contains guided setup `171db47`
+and main `8bd2397`. It brings in the newer setup handling, NVM diagnostics,
+coverage cases and focused native macOS workflow. [Validation results](README.md#verification-and-remaining-work)
+belong to their named source checkpoint; publication does not imply adoption.
 
-The independent Claude preference source is now draft [PR #678](https://github.com/JBallin/ballin-scripts/pull/678)
+The independent Claude preference source is [PR #678](https://github.com/JBallin/ballin-scripts/pull/678)
 at `b1caad6`, targeting main. It is not copied into this worktree. The formula
 already installs the whole commands directory and its JSON catalog.
 When that feature is integrated, preserve its filtered collector,

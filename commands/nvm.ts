@@ -66,37 +66,45 @@ const trustedNvmSource = (file: string): boolean => trustedNvmPath(file, 'file',
 
 // NVM may execute an already-installed Node during `nvm install`, so validate
 // its working tree before invoking it, not just the script or final executable.
-const trustedNvmDirectory = (directory: string, source: string): boolean => {
-  if (!trustedNvmPath(directory, 'directory')) return false;
+// Report the first failing path so users can repair it without searching.
+type NvmTrustFailure = { kind: 'directory' | 'entry' | 'link' | 'acl' | 'scan'; path: string };
+const untrustedNvmEntry = (directory: string, source: string): NvmTrustFailure | null => {
+  if (!trustedNvmPath(directory, 'directory')) return { kind: 'directory', path: directory };
   const prefix = homebrewSourcePrefix(source);
-  const find = (args: string[]): string | null => {
-    const result = runCommand('/usr/bin/find', args, { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
+  const find = (args: string[]): string[] | null => {
+    const result = runCommand('/usr/bin/find', [...args, '-print0'], { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
     requireUninterrupted(result);
-    return result.status === 0 && typeof result.stdout === 'string' ? result.stdout : null;
+    return result.status === 0 && typeof result.stdout === 'string' ? result.stdout.split('\0').filter(Boolean) : null;
   };
-  const unsafe = find(['-L', directory, '(', '!', '-user', String(process.getuid!()), '-a', '!', '-user', '0', ')',
-    '-o', '(', '!', '-type', 'l', '-a', '(', '-perm', '-0020', '-o', '-perm', '-0002', ')', ')']);
-  if (unsafe === null || unsafe) return false;
-  const inspectLinks = (tree: string, depth = 0): boolean => {
-    if (depth > 40) return false;
+  const unsafe = find(['-L', directory, '(', '(', '!', '-user', String(process.getuid!()), '-a', '!', '-user', '0', ')',
+    '-o', '(', '!', '-type', 'l', '-a', '(', '-perm', '-0020', '-o', '-perm', '-0002', ')', ')', ')']);
+  if (unsafe === null) return { kind: 'scan', path: directory };
+  if (unsafe.length) return { kind: 'entry', path: unsafe[0] };
+  const inspectLinks = (tree: string, depth = 0): NvmTrustFailure | null => {
+    if (depth > 40) return { kind: 'link', path: tree };
     // Follow this root only, then inspect and recurse through each nested link.
-    const links = find(['-H', tree, '-type', 'l', '-print0']);
-    if (links === null) return false;
-    for (const link of links.split('\0').filter(Boolean)) {
+    const links = find(['-H', tree, '-type', 'l']);
+    if (links === null) return { kind: 'scan', path: tree };
+    for (const link of links) {
       const sourceLink = link === path.join(directory, 'nvm.sh') || link === path.join(directory, 'nvm-exec');
-      if (!trustedNvmPath(link, 'entry', sourceLink ? prefix : undefined)) return false;
-      if (fs.existsSync(link) && fs.statSync(link).isDirectory() && !inspectLinks(link, depth + 1)) return false;
+      if (!trustedNvmPath(link, 'entry', sourceLink ? prefix : undefined)) return { kind: 'link', path: link };
+      if (fs.existsSync(link) && fs.statSync(link).isDirectory()) {
+        const failure = inspectLinks(link, depth + 1);
+        if (failure) return failure;
+      }
     }
-    return true;
+    return null;
   };
-  if (!inspectLinks(directory)) return false;
+  const linkFailure = inspectLinks(directory);
+  if (linkFailure) return linkFailure;
   if (process.platform === 'darwin') {
-    const acls = find(['-L', directory, '-acl', '-print0']);
-    if (acls === null) return false;
-    for (const entry of acls.split('\0').filter(Boolean)) if (!trustedNvmPath(entry, 'entry')) return false;
+    const acls = find(['-L', directory, '-acl']);
+    if (acls === null) return { kind: 'scan', path: directory };
+    for (const entry of acls) if (!trustedNvmPath(entry, 'entry')) return { kind: 'acl', path: entry };
   }
-  return true;
+  return null;
 };
+const trustedNvmDirectory = (directory: string, source: string): boolean => untrustedNvmEntry(directory, source) === null;
 
 // Resolve the formula's libexec directly. Its outer nvm.sh wrapper can mkdir/link
 // even with --no-use, so it must never be executed during discovery.
@@ -195,5 +203,5 @@ const inspectNvm = (env: NodeJS.ProcessEnv = process.env): { installation: NvmIn
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 };
 
-module.exports = { discoverNvm, inspectNvm, followsLtsAlias, trustedNvmSource, trustedNvmDirectory };
-export type { NvmInstallation };
+module.exports = { discoverNvm, inspectNvm, followsLtsAlias, trustedNvmSource, trustedNvmDirectory, untrustedNvmEntry };
+export type { NvmInstallation, NvmTrustFailure };

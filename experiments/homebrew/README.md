@@ -11,9 +11,10 @@ sections below describe the implemented experiment, not compatibility obligation
 
 Experimental source originally based on the version-aware-install branch at
 `4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9`, preserved for assessment in
-[issue #17](https://github.com/JBallin/ballin-scripts/issues/17). The local runtime
-prototype reconciles the preserved experiment `4dca8c4` with version-aware-install
-`fbe14b4` (including unified-guided-setup `9609593`) and main `8bd2397`. Not a released
+[issue #17](https://github.com/JBallin/ballin-scripts/issues/17). The current
+integration preserves the Homebrew checkpoint `53a9b56` and includes
+version-aware-install `f3edbb3`, which includes unified-guided-setup `171db47`
+and main `8bd2397`. Not a released
 installation method, published tap, migration promise, or change to Quickstart.
 
 The development generator installs source under a versioned keg and writes schema-2
