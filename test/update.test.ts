@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createAnalyticsCapture } = require('./helpers/analytics.ts');
+const { createPackageSourceFixture } = require('./helpers/package_source.ts');
 const { fixtureDestination, fixtureState, installRepositoryFixture, blobHash } = require('./helpers/repository.ts');
 import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 const {
@@ -167,6 +168,232 @@ exit ${status}
   const commandLog = () => (
     fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : []
   );
+
+  describe('Homebrew internal Ballin runtime', () => {
+    const packageSourceFixture = () => {
+      const fixture = createPackageSourceFixture(tempDir, path.join(__dirname, '..'));
+      fs.writeFileSync(fixture.markerPath, JSON.stringify({ manager: 'homebrew', schema: 1 }));
+      return fixture;
+    };
+
+    for (const ambientNode of ['missing', 'incompatible', 'changed by nvm']) {
+      it(`keeps the app runtime and integration environment when ambient Node is ${ambientNode}`, function test() {
+        this.timeout(5000);
+        const childLog = path.join(tempDir, 'children.jsonl');
+        const preload = path.join(tempDir, 'capture-children.cjs');
+        const commandsDir = path.join(__dirname, '..', 'commands');
+        const fixture = packageSourceFixture();
+        fs.writeFileSync(preload, `
+if (process.argv[2] === 'backup') {
+  const capture = () => require('fs').appendFileSync(process.env.UPDATE_CHILD_LOG, JSON.stringify({
+    execPath: process.execPath,
+    args: process.argv.slice(1),
+    path: process.env.PATH,
+    caller: process.env.UPDATE_CALLER_MARKER,
+    nvm: process.env.UPDATE_NVM_MARKER ?? null,
+    automatic: process.env.BALLIN_AUTOMATIC_UPDATE,
+    commandOptOut: process.env.BALLIN_NO_COMMAND_ANALYTICS,
+  }) + '\\n');
+  require(${JSON.stringify(path.join(commandsDir, 'backup.ts'))}).runBackupCommand = capture;
+}
+`);
+        fs.rmSync(path.join(binDir, 'node'));
+        if (ambientNode === 'incompatible') writeTestExecutable('node', '#!/bin/bash\nexit 42\n');
+        const nvmDir = path.join(tempDir, 'nvm');
+        const nvmBinDir = path.join(tempDir, 'nvm-bin');
+        if (ambientNode === 'changed by nvm') {
+          fs.mkdirSync(nvmDir);
+          fs.mkdirSync(nvmBinDir);
+          fs.writeFileSync(path.join(nvmDir, 'nvm.sh'), `nvm() {
+  export PATH="${nvmBinDir}:$PATH"
+  export UPDATE_NVM_MARKER='captured-after-nvm'
+}
+`);
+          writeTestExecutable('node', `#!/bin/bash
+if [ "$1" = '-e' ]; then exec ${JSON.stringify(process.execPath)} "$@"; fi
+exit 42
+`, nvmBinDir);
+          installCommandStub('npm', { directory: nvmBinDir });
+        }
+        writeUpdateConfig({
+          TEST_UPDATE_NVM: String(ambientNode === 'changed by nvm'),
+          TEST_UPDATE_NPM: String(ambientNode === 'changed by nvm'),
+          TEST_UPDATE_BALLIN: 'true',
+          TEST_UPDATE_BACKUP: 'true',
+        });
+
+        const result = spawnSync(process.execPath, [ballinPath, 'update'], {
+          encoding: 'utf8',
+          env: {
+            HOME: tempDir,
+            PATH: binDir,
+            NVM_DIR: nvmDir,
+            NODE_OPTIONS: `${fixture.env.NODE_OPTIONS} --require ${JSON.stringify(preload)}`,
+            BALLIN_NO_ANALYTICS: '1',
+            BALLIN_TEST_CONFIG_PATH: configPath,
+            UPDATE_TEST_LOG: logPath,
+            UPDATE_CHILD_LOG: childLog,
+            UPDATE_CALLER_MARKER: 'preserved-caller',
+          },
+        });
+
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(result.stderr, '');
+        assert.notInclude(result.stdout, 'Updating Ballin');
+        assert.notInclude(result.stdout, 'Checking Ballin readiness');
+        const children = fs.readFileSync(childLog, 'utf8').trim().split('\n').map((line: string) => JSON.parse(line));
+        assert.deepEqual(children, [{
+          execPath: process.execPath,
+          args: [fs.realpathSync(ballinPath), 'backup'],
+          path: ambientNode === 'changed by nvm' ? `${nvmBinDir}:${binDir}` : binDir,
+          caller: 'preserved-caller',
+          nvm: ambientNode === 'changed by nvm' ? 'captured-after-nvm' : null,
+          automatic: '1',
+          commandOptOut: '1',
+        }]);
+        assert.deepEqual(commandLog(), ambientNode === 'changed by nvm' ? ['npm|,|update -g'] : []);
+      });
+    }
+
+    it('keeps the backup failure label when the app runtime launches the internal child', () => {
+      const preload = path.join(tempDir, 'fail-children.cjs');
+      const commandsDir = path.join(__dirname, '..', 'commands');
+      const fixture = packageSourceFixture();
+      fs.writeFileSync(preload, `
+if (process.argv[2] === 'backup') {
+  require(${JSON.stringify(path.join(commandsDir, 'backup.ts'))}).runBackupCommand = () => { process.exitCode = 17; };
+}
+`);
+      fs.rmSync(path.join(binDir, 'node'));
+      writeUpdateConfig({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true' });
+
+      const result = spawnSync(process.execPath, [ballinPath, 'update'], {
+        encoding: 'utf8',
+        env: {
+          HOME: tempDir,
+          PATH: binDir,
+          NODE_OPTIONS: `${fixture.env.NODE_OPTIONS} --require ${JSON.stringify(preload)}`,
+          BALLIN_NO_ANALYTICS: '1',
+          BALLIN_TEST_CONFIG_PATH: configPath,
+        },
+      });
+
+      assert.equal(result.status, 17, result.stdout + result.stderr);
+      assert.include(result.stderr.replace(/\s+/gu, ' '), 'Update finished with errors: Backing up development environment.');
+      assert.notInclude(result.stderr, process.execPath);
+      assert.notInclude(result.stdout, 'Updating Ballin');
+      assert.notInclude(result.stdout, 'Checking Ballin readiness');
+    });
+
+    it('captures the physical internal script before an integration relinks it', () => {
+      const fixtureRoot = path.join(tempDir, 'package');
+      const fixtureCommands = path.join(fixtureRoot, 'commands');
+      const fixtureBin = path.join(fixtureRoot, 'bin');
+      const fixtureBallin = path.join(fixtureBin, 'ballin');
+      const originalScript = path.join(tempDir, 'original-ballin');
+      const replacementScript = path.join(tempDir, 'replacement-ballin');
+      const commandsDir = path.join(__dirname, '..', 'commands');
+      fs.mkdirSync(fixtureCommands, { recursive: true });
+      fs.mkdirSync(fixtureBin);
+      fs.writeFileSync(path.join(fixtureRoot, '.ballin-package.json'), JSON.stringify({ manager: 'homebrew', schema: 1 }));
+      fs.symlinkSync(path.join(__dirname, '..', 'config'), path.join(fixtureRoot, 'config'));
+      for (const file of fs.readdirSync(commandsDir)) {
+        const source = path.join(commandsDir, file), target = path.join(fixtureCommands, file);
+        if (['update.ts', 'installation.ts'].includes(file)) fs.copyFileSync(source, target);
+        else fs.symlinkSync(source, target);
+      }
+      fs.writeFileSync(originalScript, `#!/usr/bin/env node
+require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, JSON.stringify({
+  execPath: process.execPath, args: process.argv.slice(1), path: process.env.PATH,
+}) + '\\n');
+`, { mode: 0o755 });
+      fs.writeFileSync(replacementScript, '#!/usr/bin/env node\nprocess.exit(42);\n', { mode: 0o755 });
+      fs.symlinkSync(originalScript, fixtureBallin);
+      writeTestExecutable('brew', `#!${process.execPath}
+if (process.env.HOMEBREW_NO_INSTALL_CLEANUP !== '1') process.exit(92);
+if (process.argv[2] === 'upgrade') {
+  require('fs').unlinkSync(${JSON.stringify(fixtureBallin)});
+  require('fs').symlinkSync(${JSON.stringify(replacementScript)}, ${JSON.stringify(fixtureBallin)});
+}
+`);
+      fs.rmSync(path.join(binDir, 'node'));
+      writeUpdateConfig({ TEST_UPDATE_NVM: 'false', TEST_UPDATE_BACKUP: 'true' });
+
+      const result = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(path.join(fixtureCommands, 'update.ts'))}).runUpdateCommand()`], {
+        encoding: 'utf8',
+        env: {
+          HOME: tempDir,
+          PATH: binDir,
+          BALLIN_NO_ANALYTICS: '1',
+          BALLIN_TEST_CONFIG_PATH: configPath,
+          UPDATE_TEST_LOG: logPath,
+        },
+      });
+
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(fs.realpathSync(fixtureBallin), fs.realpathSync(replacementScript));
+      assert.deepEqual(commandLog().map((line: string) => JSON.parse(line)), [{
+        execPath: process.execPath,
+        args: [fs.realpathSync(originalScript), 'backup'],
+        path: binDir,
+      }]);
+    });
+  });
+
+  it('keeps direct-install children on PATH after Homebrew cleanup retires the parent runtime', () => {
+    const retiredRuntime = path.join(tempDir, 'retired-node');
+    const preload = path.join(tempDir, 'direct-runtime.cjs');
+    const commandsDir = path.join(__dirname, '..', 'commands');
+    fs.symlinkSync(process.execPath, retiredRuntime);
+    fs.writeFileSync(preload, `
+if (process.argv[1] === ${JSON.stringify(ballinPath)}) {
+  if (process.argv[2] === 'update') {
+    // Model a running runtime whose executable will be unlinked during cleanup.
+    // The fixture owns this symlink; never replace or remove the actual Node.
+    Object.defineProperty(process, 'execPath', { value: ${JSON.stringify(retiredRuntime)} });
+    require(${JSON.stringify(path.join(commandsDir, 'setup_readiness.ts'))}).collectSetupReadiness = () => ({ status: 'pass' });
+    require(${JSON.stringify(path.join(commandsDir, 'doctor_report.ts'))}).formatDefaultDoctorReport = () => '';
+  } else if (['self-update', 'backup'].includes(process.argv[2])) {
+    const capture = () => require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, JSON.stringify({
+      execPath: process.execPath, args: process.argv.slice(1), path: process.env.PATH,
+    }) + '\\n');
+    require(${JSON.stringify(path.join(commandsDir, 'self_update.ts'))}).runSelfUpdateCommand = capture;
+    require(${JSON.stringify(path.join(commandsDir, 'backup.ts'))}).runBackupCommand = capture;
+  }
+}
+`);
+    writeTestExecutable('brew', `#!${process.execPath}
+require('fs').appendFileSync(process.env.UPDATE_TEST_LOG, 'brew ' + process.argv[2] + '\\n');
+if (process.env.HOMEBREW_NO_INSTALL_CLEANUP !== undefined) process.exit(92);
+if (process.argv[2] === 'cleanup') require('fs').unlinkSync(${JSON.stringify(retiredRuntime)});
+`);
+    writeUpdateConfig({
+      TEST_UPDATE_CLEANUP: 'true', TEST_UPDATE_NVM: 'false',
+      TEST_UPDATE_BALLIN: 'true', TEST_UPDATE_BACKUP: 'true',
+    });
+
+    const result = spawnSync(process.execPath, [ballinPath, 'update'], {
+      encoding: 'utf8',
+      env: {
+        HOME: tempDir,
+        PATH: binDir,
+        NODE_OPTIONS: `--require ${JSON.stringify(preload)}`,
+        BALLIN_NO_ANALYTICS: '1',
+        BALLIN_TEST_CONFIG_PATH: configPath,
+        UPDATE_TEST_LOG: logPath,
+      },
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stderr, '');
+    assert.isFalse(fs.existsSync(retiredRuntime));
+    assert.deepEqual(commandLog().slice(0, 4), ['brew update', 'brew upgrade', 'brew cleanup', 'brew doctor']);
+    assert.deepEqual(commandLog().slice(4).map((line: string) => JSON.parse(line)), ['self-update', 'backup'].map((command) => ({
+      execPath: process.execPath,
+      args: [ballinPath, command],
+      path: binDir,
+    })));
+  });
 
   describe('interruption', function() {
     // Real local processes need headroom under coverage; readiness, not elapsed

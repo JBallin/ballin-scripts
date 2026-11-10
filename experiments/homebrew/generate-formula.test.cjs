@@ -4,8 +4,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const { generate } = require('./generate-formula.cjs');
+const { renderFormulaWrapper } = require('./formula-wrapper-fixture.cjs');
 function fixture(t, change = () => {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-formula-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -39,7 +40,7 @@ test('deterministic local formula pins bytes, development provenance and managed
   assert.match(formula, /"selection":\{"kind":"development"\}/);
   assert.match(formula, /opt_bin\/"ballin"/);
   assert.match(formula, /opt_libexec\/"completions"/);
-  assert.match(formula, /#\{node.dirname\}:\$PATH/);
+  assert.doesNotMatch(formula, /write_env_script|PATH:/);
   assert.doesNotMatch(formula, /depends_on "(?:git|gh|npm|nvm)"|npm (?:ci|install)|releaseId/);
   assert.match(generate({ ...options, formula: 'ballin-local/choice/ballin-experiment' }), /\"formula\":\"ballin-local\/choice\/ballin-experiment\"/);
   assert.throws(() => generate({ ...options, formula: 'invalid;command' }), /formula identity/);
@@ -47,6 +48,59 @@ test('deterministic local formula pins bytes, development provenance and managed
   assert.throws(() => generate({ ...options, nodeMajor: 22 }), /below/);
   assert.throws(() => generate({ ...options, nodeMajor: '26;evil' }), /below/);
 });
+
+test('generated executable uses package Node while preserving caller PATH, argv and exit status', t => {
+  const options = fixture(t), formula = generate(options);
+  const base = path.dirname(options.archive);
+  const quoted = "space 'quote\" $dollar `tick` & \\backslash";
+  const keg = path.join(base, 'Cellar', quoted, '1.0.0');
+  const libexec = path.join(keg, 'libexec');
+  const bin = path.join(keg, 'bin');
+  const runtimeBin = path.join(base, 'package Node', quoted, 'bin');
+  const callerBin = path.join(base, 'caller tools');
+  const emptyBin = path.join(base, 'empty tools');
+  const home = path.join(base, 'home'), tmp = path.join(base, 'tmp');
+  for (const directory of [bin, path.join(libexec, 'bin'), runtimeBin, callerBin, emptyBin, home, tmp]) fs.mkdirSync(directory, { recursive: true });
+  const node = path.join(runtimeBin, 'node');
+  fs.symlinkSync(process.execPath, node);
+  fs.writeFileSync(path.join(runtimeBin, 'npm'), '#!/bin/sh\nprintf "package npm"\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(callerBin, 'npm'), '#!/bin/sh\nprintf "caller npm"\n', { mode: 0o755 });
+  const entry = path.join(libexec, 'bin/ballin');
+  fs.writeFileSync(entry, `#!/usr/bin/env node
+const { execFileSync } = require('node:child_process');
+let npm;
+try { npm = execFileSync('npm', ['ls', '--global', '--json'], { encoding: 'utf8' }); }
+catch (error) { npm = error.code; }
+process.stdout.write(JSON.stringify({ argv: process.argv.slice(2), path: process.env.PATH, entry: __filename, node: process.execPath, npm }));
+process.stderr.write('fixture stderr\\n');
+process.exitCode = Number(process.env.FIXTURE_EXIT_CODE);
+`, { mode: 0o755 });
+  const wrapper = renderFormulaWrapper({ formula, node, libexec, bin });
+  assert.equal(fs.statSync(wrapper).mode & 0o777, 0o755);
+  assert.ok(fs.readFileSync(wrapper, 'utf8').startsWith('#!/bin/sh\n'));
+  const argv = ['', 'two words', "quote'\"", '$HOME', '`printf bad`', '$(printf bad)', '*', 'line\nbreak', '\\backslash', '--flag=value', '日本語'];
+  for (const ambientNode of ['absent', 'incompatible']) {
+    if (ambientNode === 'incompatible') fs.writeFileSync(path.join(callerBin, 'node'), '#!/bin/sh\nprintf "v18.0.0\\n" >&2\nexit 91\n', { mode: 0o755 });
+    const result = spawnSync(wrapper, argv, {
+      cwd: home,
+      env: { PATH: callerBin, HOME: home, TMPDIR: tmp, FIXTURE_EXIT_CODE: '23' },
+      encoding: 'utf8',
+    });
+    assert.equal(result.error, undefined, ambientNode);
+    assert.equal(result.status, 23, `${ambientNode}: ${result.stderr}`);
+    assert.equal(result.stderr, 'fixture stderr\n');
+    assert.deepEqual(JSON.parse(result.stdout), { argv, path: callerBin, entry: fs.realpathSync(entry), node: fs.realpathSync(process.execPath), npm: 'caller npm' });
+  }
+  const absentNpm = spawnSync(wrapper, [], {
+    cwd: home,
+    env: { PATH: emptyBin, HOME: home, TMPDIR: tmp, FIXTURE_EXIT_CODE: '0' },
+    encoding: 'utf8',
+  });
+  assert.equal(absentNpm.status, 0, absentNpm.stderr);
+  assert.equal(JSON.parse(absentNpm.stdout).npm, 'ENOENT');
+  assert.equal(JSON.parse(absentNpm.stdout).path, emptyBin);
+});
+
 test('rejects checksum mismatch and invalid provenance arguments', t => {
   const options = fixture(t);
   assert.throws(() => generate({ ...options, checksum: '0'.repeat(64) }), /mismatch/);

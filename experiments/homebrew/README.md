@@ -1,14 +1,16 @@
 # Homebrew-managed installation experiment
 
-See [clean pre-release design](CLEAN-INSTALL-DESIGN.md) for the latest
-recommendation after Jonathan clarified he is the only existing user and
-is open to requiring Brew if beginner Quickstart remains simple. Neither
-installation policy is decided. The
+The [earlier dual-route design](CLEAN-INSTALL-DESIGN.md) records one alternative.
+The current scoped prototype evaluates a Homebrew-first route after Jonathan
+clarified he is the only existing user and is open to requiring Brew if beginner
+Quickstart remains simple. Neither installation policy is decided. The
 sections below describe the implemented experiment, not compatibility obligations.
 
-Parked experimental source based on the version-aware-install branch at
+Experimental source originally based on the version-aware-install branch at
 `4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9`, preserved for assessment in
-[issue #17](https://github.com/JBallin/ballin-scripts/issues/17). Not a released
+[issue #17](https://github.com/JBallin/ballin-scripts/issues/17). The local runtime
+prototype reconciles the preserved experiment `4dca8c4` with version-aware-install
+`1ea4679` (including unified-guided-setup `9609593`) and main `8bd2397`. Not a released
 installation method, published tap, migration promise, or change to Quickstart.
 
 The local generator installs source under a versioned keg and writes schema-2
@@ -49,6 +51,13 @@ archive validation, Node dependency, and separate release/publication sequence.
 Only supported Node is a runtime dependency; GitHub CLI and other maintenance
 integrations remain optional. No npm runtime packages or transpilation are added.
 
+The generated command selects the package's Node without adding its directory
+to PATH. npm maintenance and inventory retain the caller's tool environment.
+The package-owned update's backup child uses the application's Node and physical
+script captured before integrations run. Direct installs retain PATH-based child
+runtime selection. This isolates package runtime selection;
+it does not change NVM failure handling or define a new npm selection policy.
+
 Quickstart remains the current Git-based script. A future package handoff must
 preserve its exact release/commit/branch selection guarantees rather than silently
 installing the latest formula. Keeping Quickstart unchanged currently preserves
@@ -71,10 +80,21 @@ lint, both typechecks, release consistency and the unchanged coverage gates
 completed with exit 0. Coverage was 99.60% for statements/lines, 96.90% for branches
 and 100% for functions. This aggregate run used isolated fixtures, not live
 package or backup operations; earlier incomplete runs remain separate evidence.
-The VM evidence does not cover interactive TTY onboarding, real backup or
-authentication, full maintenance, first-time Homebrew provisioning, migration,
-or an Intel/wider macOS matrix. Local experiment receipts remain separate from
-this source checkpoint.
+The later [November 9 chooser record](../../docs/installation-test-runs/2026-11-09-choice-candidate.md)
+documents clean and prepared Homebrew installation from frozen source `919fb5b`.
+It does not validate this current-stack runtime patch. Real backup/authentication,
+full maintenance, migration and an Intel/wider macOS matrix remain outside this
+prototype's validation. Preserve each VM attempt's own source and limits rather
+than treating earlier receipts as a pass for the current candidate.
+
+The runtime prototype has separate generated-launcher tests for missing or
+incompatible ambient Node, competing caller/package npm, shell quoting and exit
+status. Isolated real CLI tests run npm update and automatic backup through that
+launcher, assert the caller's inventory reaches only a fake repository, and
+verify cleanup follows backup while preferences and backup state remain outside
+package code. These tests do not replace a new disposable-VM run of the final
+candidate. Completion runtime-major changes, migration/schema policy, package
+update controls and platform support remain separate decisions.
 
 Before any release decision: verify the final candidate, consider package upgrade
 configuration/schema and backup-scope communication, choose the Quickstart policy,

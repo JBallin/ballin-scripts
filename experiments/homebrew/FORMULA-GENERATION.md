@@ -57,9 +57,14 @@ The formula explicitly requires macOS.
 The default is `node@MAJOR` using the archive's `.nvmrc` (currently 26). Formula
 availability for that versioned name must be verified in the disposable VM;
 generation does not query Homebrew or promise that the formula exists. The
-package wrapper prepends the selected dependency's `opt_bin` to runtime PATH,
-retaining the caller's PATH for optional tools. Installation checks that Node is
-the selected major and meets the package minimum (currently 24.12.0).
+package wrapper executes that dependency's Node with the physical installed
+`libexec/bin/ballin` path, without changing the caller's PATH. Optional tools,
+including npm maintenance and inventory, therefore keep the caller's selected
+environment rather than selecting the package runtime's npm. A package-owned
+update launches its internal backup child with the running application's Node
+and physical script path even if an integration changes PATH. Direct installs
+retain their existing PATH-based child runtime selection. Installation checks
+that Node is the selected major and meets the package minimum (currently 24.12.0).
 
 For the existing Node 24 disposable-VM experiment, append `--node-major 24`.
 This is an explicit compatibility experiment, not evidence that Node 26 package

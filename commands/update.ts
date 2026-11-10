@@ -212,10 +212,6 @@ const nodeVersionForEnv = (env: NodeJS.ProcessEnv): string | undefined => {
   return result.stdout.trim() || undefined;
 };
 
-const ballinCommandPath = (): string => (
-  process.env.BALLIN_TEST_BALLIN_PATH || path.join(__dirname, '..', 'bin', 'ballin')
-);
-
 const reportBallinReadiness = (env: NodeJS.ProcessEnv): number => {
   const repoDir = path.join(__dirname, '..');
   const report = collectSetupReadiness({
@@ -265,6 +261,14 @@ function runUpdateCommand(): void {
     return;
   }
 
+  // Package cleanup is deferred, so pin its children before PATH or links change.
+  // Direct installs keep PATH dispatch: earlier cleanup can retire their Node.
+  // Test overrides remain executable fixtures.
+  const testBallinCommand = process.env.BALLIN_TEST_BALLIN_PATH;
+  const ballinScript = path.join(__dirname, '..', 'bin', 'ballin');
+  const pinBallinRuntime = homebrewManaged && !testBallinCommand;
+  const ballinCommand = testBallinCommand || (pinBallinRuntime ? process.execPath : ballinScript);
+  const ballinArgs = pinBallinRuntime ? [fs.realpathSync(ballinScript)] : [];
   let childEnv = process.env;
   let exitStatus = 0;
   let activeStage = 'Updating Homebrew';
@@ -371,7 +375,7 @@ function runUpdateCommand(): void {
 
   if (settings.selfUpdate && !homebrewManaged) {
     progress('Updating Ballin');
-    const updateStatus = runAutomaticStage('update.self-update', () => runIntegrationCommand(ballinCommandPath(), ['self-update'], {
+    const updateStatus = runAutomaticStage('update.self-update', () => runIntegrationCommand(ballinCommand, [...ballinArgs, 'self-update'], {
       env: {
         ...childEnv,
         BALLIN_NO_COMMAND_ANALYTICS: '1',
@@ -386,7 +390,7 @@ function runUpdateCommand(): void {
 
   if (settings.backup) {
     progress('Backing up development environment');
-    runAutomaticStage('update.backup', () => runIntegrationCommand(ballinCommandPath(), ['backup'], {
+    runAutomaticStage('update.backup', () => runIntegrationCommand(ballinCommand, [...ballinArgs, 'backup'], {
       env: {
         ...childEnv,
         BALLIN_NO_COMMAND_ANALYTICS: '1',
