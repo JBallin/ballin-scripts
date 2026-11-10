@@ -14,7 +14,7 @@ type CapturedAnalyticsEvent = {
 const fixtureInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 
 // Every HTTPS request in the child is intercepted; no real network fallback exists.
-const createAnalyticsCapture = (rootDir: string) => {
+const createAnalyticsCapture = (rootDir: string, repoDir = path.join(__dirname, '..', '..')) => {
   const captureDir = path.join(rootDir, 'analytics-fixture');
   fs.mkdirSync(captureDir, { recursive: true });
   const installIdPath = path.join(captureDir, 'install-id');
@@ -46,7 +46,7 @@ https.request = (_options, callback) => {
   };
   return request;
 };
-const analytics = require(${JSON.stringify(path.join(__dirname, '..', '..', 'commands', 'analytics.ts'))});
+const analytics = require(${JSON.stringify(path.join(repoDir, 'commands', 'analytics.ts'))});
 for (const [name, runtimeIndex] of [['runWithCommandAnalytics', 2], ['ensureAnalyticsInstallId', 0]]) {
   const original = analytics[name];
   analytics[name] = (...args) => {

@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
 const { isHomebrewInstallation, stateDirectory, readPackageMetadata, selectedPackageCommand, homebrewCommandOwner } = require('../commands/installation.ts');
 
 describe('Homebrew package boundary experiment', () => {
@@ -194,6 +195,46 @@ esac
       assert.deepEqual(fs.readFileSync(log, 'utf8').trim().split('\n'),
         cleanup && !upgradeStatus && !backupStatus ? ['update', 'upgrade', 'doctor', 'backup', 'cleanup'] : ['update', 'upgrade', 'doctor', 'backup']);
       assert.equal(fs.existsSync(first), !cleanup || Boolean(upgradeStatus || backupStatus));
+    });
+  }
+  for (const [enabled, cleanupStatus, disableDuringCleanup, failVersionCapture] of [
+    [true, 0, false, false], [true, 9, false, false], [false, 0, false, false],
+    [false, 9, false, false], [true, 0, true, false], [true, 0, false, true],
+  ] as const) {
+    it(`preserves update analytics after keg retirement (enabled=${enabled}, cleanupStatus=${cleanupStatus}, optOut=${disableDuringCleanup}, versionError=${failVersionCapture})`, () => {
+      fs.writeFileSync(path.join(first, '.ballin-package.json'), JSON.stringify(receipt(first)));
+      const capture = createAnalyticsCapture(root, first);
+      if (failVersionCapture) fs.appendFileSync(capture.preloadPath,
+        `require(${JSON.stringify(path.join(first, 'commands/analytics.ts'))}).loadAppVersion = () => { throw new Error('fixture version failure'); };`);
+      const tools = path.join(root, 'tools');
+      fs.mkdirSync(tools);
+      fs.writeFileSync(path.join(tools, 'brew'), `#!/bin/sh
+if [ "$1" = cleanup ]; then
+  /bin/rm -rf "$KEG"
+  if [ "$DISABLE_ANALYTICS" = 1 ]; then
+    printf '%s\\n' '{"analytics":{"enabled":"false"}}' > "$HOME/.ballin/ballin.config.json"
+  fi
+  exit ${cleanupStatus}
+fi
+`, { mode: 0o755 });
+      fs.mkdirSync(path.join(home, '.ballin'));
+      fs.writeFileSync(path.join(home, '.ballin/ballin.config.json'), JSON.stringify({
+        update: { cleanup: true, nvm: false, npm: false, softwareupdate: false, selfUpdate: true, backup: false },
+        analytics: { enabled: String(enabled) },
+      }));
+      const result = spawnSync(process.execPath, [path.join(first, 'bin/ballin'), 'update'], {
+        env: { HOME: home, PATH: tools, NO_COLOR: '1', TERM: 'dumb', KEG: first,
+          DISABLE_ANALYTICS: disableDuringCleanup ? '1' : '0', ...capture.env },
+        encoding: 'utf8', input: '', timeout: 15000,
+      });
+      assert.equal(result.status, cleanupStatus, result.stderr + result.stdout);
+      assert.isFalse(fs.existsSync(first), 'the fixture must retire the invoking keg');
+      const events = capture.readEvents();
+      assert.lengthOf(events, enabled && !disableDuringCleanup ? 1 : 0);
+      if (enabled && !disableDuringCleanup) assert.deepInclude(events[0], {
+        schemaVersion: 1, command: 'ballin update', status: cleanupStatus ? 'failure' : 'success',
+        appVersion: failVersionCapture ? 'unknown' : 'development', installId: fixtureInstallId,
+      });
     });
   }
   it('initializes external preferences then safely cancels setup on EOF', () => {

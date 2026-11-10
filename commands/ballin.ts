@@ -3,6 +3,7 @@ const { terminalCommand, terminalCommandReferences } = require('./terminalStyle.
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   ensureAnalyticsInstallId,
+  loadAppVersion,
   rethrowCommandError,
   runWithCommandAnalytics,
 } = require('./analytics.ts');
@@ -377,9 +378,23 @@ const runBallinCli = (): void => {
   if (!isAnalyticsPreferenceWrite(args)) {
     repairAnalyticsInstallId();
   }
+  // Package cleanup may retire this keg. Keep its version while final analytics
+  // still reread the external opt-in and identity.
+  let appVersion: string | undefined;
+  try {
+    if (args[0] === 'update' && require('./installation.ts').isHomebrewInstallation()) {
+      appVersion = loadAppVersion();
+    }
+  } catch {
+    // Optional analytics metadata must not prevent the requested command.
+  }
   const analyticsRuntime = isAnalyticsPreferenceWrite(args)
     ? { analyticsConfig: { enabled: 'false' }, installIdPath: analyticsInstallIdPath }
-    : { installIdPath: analyticsInstallIdPath, preserveLocalState: args[0] === 'uninstall' };
+    : {
+      installIdPath: analyticsInstallIdPath,
+      preserveLocalState: args[0] === 'uninstall',
+      appVersion,
+    };
   void runWithCommandAnalytics(
     analyticsCommandForBallinArgs(args),
     () => runBallinCommand(args),
