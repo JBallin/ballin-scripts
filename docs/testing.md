@@ -22,6 +22,23 @@ with the full Node 26 checks. It exercises CLI startup, direct TypeScript import
 and basic runtime paths in an isolated environment. Run it locally with
 `node test/ci/minimum_node_smoke.ts`; it reports the runtime actually used.
 
+The separate [macOS CI workflow](../.github/workflows/macos.yml) runs focused
+native tests on a GitHub-hosted macOS 26 ARM64 runner for every PR, including
+stacked PRs, main pushes, and manual requests. It uses Node from `.nvmrc` and
+`npm ci`, then runs NVM discovery/trust, platform JSON parsing, and prompt-input
+tests serially. Native coverage includes macOS ACL and Homebrew group ownership
+fixtures, comparisons with `/usr/bin/plutil`, and real zsh PTY behavior. All
+fixtures use isolated temporary state; they do not install Homebrew or NVM.
+The job verifies its platform, tools, and fixture group requirements before
+testing, and rejects pending or empty runs. Its logs retain the runner image,
+OS, architecture, identity, tool versions, test counts, and durations.
+
+This focused job supplements the full Linux validation and coverage gate; it
+does not replace disposable macOS release validation or prove clean-machine
+installation and live-service behavior. Adding the workflow does not change
+branch protection. Portable workflow contracts run with
+`npm run test:unit -- test/ci_workflow.test.ts`.
+
 The coverage command uses `test/coverage.ts` to correct c8 12.0.0's indexing of
 executed absolute script paths. It retains `all: true` and every coverage threshold;
 unexecuted included files still count as uncovered. Use the same wrapper when
