@@ -46,8 +46,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     const defaults = require('../config/.defaultConfig.json');
     questions.forEach(([key]) => preferenceBoolean(config.update?.[key] === undefined ? defaults.update[key] : config.update[key], `update.${key}`));
     preferenceBoolean(config.analytics?.enabled === undefined ? defaults.analytics.enabled : config.analytics.enabled, 'analytics.enabled');
-    const destination = configuredBackupDestination(config);
-    if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
+    // Destination validation belongs to backup setup, not preference review.
     const nvm = inspectNvm();
     reviewing = true;
     writeStdoutLine(terminalProse('i Optional capabilities: getballin.com/docs/optional-capabilities.html'));

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { testChildEnvironment, withEnvironment } = require('./helpers/environment.ts');
-const { discoverNvm, followsLtsAlias, inspectNvm, trustedNvmSource, trustedNvmDirectory } = require('../commands/nvm.ts');
+const { discoverNvm, followsLtsAlias, inspectNvm, trustedNvmSource, trustedNvmDirectory, untrustedNvmEntry } = require('../commands/nvm.ts');
 
 describe('read-only NVM discovery and eligibility', () => {
   let root: string;
@@ -121,8 +121,21 @@ describe('read-only NVM discovery and eligibility', () => {
         if (unsafe === 'nested link') fs.chmodSync(parent, 0o777);
       }
       assert.equal(trustedNvmDirectory(directory, path.join(directory, 'nvm.sh')), unsafe === 'none' || unsafe === 'safe nested link');
+      const expected: Record<string, { kind: string; path: string } | null> = {
+        none: null, 'safe nested link': null,
+        root: { kind: 'directory', path: directory },
+        versions: { kind: 'entry', path: path.join(directory, 'versions') },
+        node: { kind: 'entry', path: node },
+        'linked node': { kind: 'entry', path: node },
+        'nested link': { kind: 'link', path: node },
+      };
+      assert.deepEqual(untrustedNvmEntry(directory, path.join(directory, 'nvm.sh')), expected[unsafe]);
     });
   }
+  it('reports the first unsafe entry even when its name contains newlines', () => {
+    source(); const name = path.join(directory, 'line\nbreak'); fs.writeFileSync(name, 'fixture'); fs.chmodSync(name, 0o666);
+    assert.deepEqual(untrustedNvmEntry(directory, path.join(directory, 'nvm.sh')), { kind: 'entry', path: name });
+  });
   if (process.platform === 'darwin') for (const target of ['.cache', '.cache/archive']) {
     it(`rejects write-granting working-tree ACLs on ${target}`, () => {
       source(); fs.mkdirSync(path.join(directory, '.cache')); fs.writeFileSync(path.join(directory, '.cache/archive'), 'fixture');
