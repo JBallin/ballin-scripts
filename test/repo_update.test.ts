@@ -37,6 +37,16 @@ describe('selected checkout integration', () => {
     assert.equal(fs.readFileSync(path.join(installed, 'ballin.config.json'), 'utf8'), '{"preserve":true}'); assert.equal(fs.readFileSync(path.join(installed, '.analytics/install-id'), 'utf8'), 'preserved');
     const receipt = JSON.parse(fs.readFileSync(path.join(installed, '.git/ballin-install.json'), 'utf8')); assert.equal(receipt.kind, 'sha'); assert.equal(receipt.sha, target);
   });
+  for (const kind of ['sha', 'branch']) it(`labels unchanged ${kind} without a redundant transition`, () => {
+    const value = kind === 'sha' ? before : 'main';
+    fs.writeFileSync(path.join(installed, '.git/ballin-install.json'), JSON.stringify({kind, value, sha: before, minimumNode: '24.12.0', releaseId: '-'}));
+    const result = run({kind, value, sha: before, mode: 'self-update'});
+    assert.equal(result.status, 0, result.stderr);
+    assert.include(result.stdout, '(unchanged)');
+    assert.notInclude(result.stdout, '→');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+    assert.include(result.stdout, 'Selected ');
+  });
   for (const scenario of [
     ['stable', 'release', 'v1.0.0', 'release', 'v1.1.0'],
     ['major', 'release', 'v1.0.0', 'release', 'v2.0.0'],

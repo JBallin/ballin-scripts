@@ -268,7 +268,7 @@ const setup = (
   }
 
   if (!configExisted && fs.existsSync(configPathFor(repoDir)) && mode !== 'fresh') {
-    writeStdoutLine(`\n${docsUrl}#what-will-installation-change`);
+    writeStdoutLine(terminalProse(`\ni Installation details: ${docsUrl}#what-will-installation-change`));
   }
 
   if (backupSetupSucceeded && process.env.BALLIN_SETUP_RESULT_FILE) {

@@ -141,7 +141,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
   const write = options.write ?? ((text = '') => writeStdoutLine(terminalProse(text)));
   const fallback = (needsContext = false, declined = false): void => {
     if (needsContext) write('');
-    write(`${declined ? '' : 'Tab completion skipped.\n'}i Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
+    write(`${declined ? '' : 'Tab completion skipped.\n'}i Enable it later: ${docsUrl}#startup-files-and-manual-activation`);
   };
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
   const prompt: typeof readPromptLine = options.prompt ?? readPromptLine;
@@ -157,7 +157,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       return prompt(question, choiceLabel);
     };
     const target = completionTarget(env, completionPrompt, write);
-    if (!target) { fallback(true); return; }
+    if (!target) { fallback(firstQuestion); return; }
     // Inspect only the selected file; a conventional location is not activation proof.
     try {
       const fd = fs.openSync(target.profile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
@@ -190,7 +190,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
     rethrowInterruption(error);
     if (error instanceof CompletionProfileError) write(error.message);
     write('Tab completion setup could not finish. Ballin remains installed.');
-    write(`i Manual setup:\n${docsUrl}#startup-files-and-manual-activation`);
+    write(`i Manual setup: ${docsUrl}#startup-files-and-manual-activation`);
   }
 };
 

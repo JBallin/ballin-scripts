@@ -269,17 +269,17 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
     ['help', 'backup', 'setup', 'repository'], ['help', 'backup', 'read', 'zshrc.sh'],
     ['help', 'config', 'missing'], ['help', 'doctor', '--help'],
   ]) {
-    it(`preserves overview output and analytics eligibility for unsupported help route ${JSON.stringify(args)}`, () => {
-      const expectedOutput = runBallin(['help']).stdout;
+    it(`rejects unsupported help without creating analytics identity ${JSON.stringify(args)}`, () => {
       writeConfig({ analytics: { enabled: 'true' } });
       const installIdPath = path.join(tempDir, '.analytics', 'install-id');
       const result = runBallin(args, {
         BALLIN_NO_ANALYTICS: '',
         BALLIN_NO_COMMAND_ANALYTICS: '1',
       });
-      assertHelpOutput(result);
-      assert.equal(result.stdout, expectedOutput);
-      assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
+      assert.equal(result.status, 2);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'Unknown or unsupported help target.');
+      assert.isFalse(fs.existsSync(installIdPath));
       assert.deepEqual(commandLog(), []);
     });
   }
@@ -694,7 +694,7 @@ require('https').request = () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
-    assert.include(result.stdout, '\nNext: Run `ballin config reset` to recreate the config.');
+    assert.include(result.stdout, '\nNext: Repair the reported config problem while preserving saved settings and backup linkage, then rerun `ballin doctor`.');
     assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
     assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
@@ -776,7 +776,7 @@ require('https').request = () => {
 
     assert.equal(missingConfig.status, 1);
     assert.include(missingConfig.stdout, 'ERROR Config readability: Unable to read');
-    assert.include(missingConfig.stdout, 'Next: Run `ballin config reset` to recreate the config.');
+    assert.include(missingConfig.stdout, 'Next: Repair the reported config problem while preserving saved settings and backup linkage, then rerun `ballin doctor`.');
   });
 
   it('rejects invalid doctor usage', () => {

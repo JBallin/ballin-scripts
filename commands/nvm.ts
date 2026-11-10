@@ -9,6 +9,95 @@ const readableFile = (file: string): boolean => {
 };
 const safeDirectory = (directory: string): boolean => path.isAbsolute(directory) && !/[:\r\n\0]/u.test(directory);
 
+// HOME/NVM_DIR isolation contains ordinary NVM bookkeeping, not arbitrary shell
+// code. Trust every traversed component before executing an existing source.
+const homebrewSourcePrefix = (file: string): string | undefined => {
+  try {
+    const match = fs.realpathSync(file).match(/^(.*)\/(?:Cellar\/nvm\/[^/]+|opt\/nvm)\/libexec\/nvm\.sh$/u);
+    if (!match) return undefined;
+    const prefix = match[1];
+    return [path.join(prefix, 'Library/Homebrew/brew.sh'), path.join(prefix, 'Homebrew/Library/Homebrew/brew.sh')].some(readableFile) ? prefix : undefined;
+  } catch { return undefined; }
+};
+
+const trustedNvmPath = (file: string, kind: 'file' | 'directory' | 'entry', homebrewPrefix?: string): boolean => {
+  if (!safeDirectory(file) || !process.getuid) return false;
+  const uid = process.getuid();
+  let pending = file.split('/').filter(Boolean);
+  let current = '/';
+  let links = 0;
+  try {
+    while (true) {
+      let stat;
+      try { stat = fs.lstatSync(current); } catch (error) {
+        return kind === 'entry' && !pending.length && (error as NodeJS.ErrnoException).code === 'ENOENT';
+      }
+      if (stat.uid !== 0 && stat.uid !== uid) return false;
+      if (!stat.isSymbolicLink()) {
+        // A sticky directory protects each trusted owner's entry from peers.
+        // Standard macOS Homebrew directories trust the privileged admin group.
+        // This exception never applies to files, world-write, or the NVM tree.
+        const homebrewAdmin = process.platform === 'darwin' && stat.isDirectory() && stat.gid === 80
+          && homebrewPrefix && (current === homebrewPrefix || current.startsWith(`${homebrewPrefix}/`))
+          && !(stat.mode & 0o002);
+        if ((stat.mode & 0o022) && !homebrewAdmin && !(stat.isDirectory() && (stat.mode & 0o1000))) return false;
+      }
+      if (process.platform === 'darwin') {
+        const acl = runCommand('/bin/ls', ['-lde', current], { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
+        requireUninterrupted(acl);
+        if (acl.status !== 0 || !acl.stdout || /^\s*\d+:.* allow .*\b(?:write|append|add_file|add_subdirectory|delete|delete_child|writeattr|writeextattr|writesecurity|chown)\b/mu.test(acl.stdout)) return false;
+      }
+      if (stat.isSymbolicLink()) {
+        if (++links > 40) return false;
+        const target = fs.readlinkSync(current);
+        pending = [...target.split('/').filter(Boolean), ...pending];
+        current = path.isAbsolute(target) ? '/' : path.dirname(current);
+        continue;
+      }
+      if (!pending.length) return kind === 'file' ? stat.isFile() : kind === 'directory' ? stat.isDirectory() : stat.isFile() || stat.isDirectory();
+      if (!stat.isDirectory()) return false;
+      const next = pending.shift()!;
+      current = next === '..' ? path.dirname(current) : next === '.' ? current : path.join(current, next);
+    }
+  } catch (error) { rethrowInterruption(error); return false; }
+};
+
+const trustedNvmSource = (file: string): boolean => trustedNvmPath(file, 'file', homebrewSourcePrefix(file));
+
+// NVM may execute an already-installed Node during `nvm install`, so validate
+// its working tree before invoking it, not just the script or final executable.
+const trustedNvmDirectory = (directory: string, source: string): boolean => {
+  if (!trustedNvmPath(directory, 'directory')) return false;
+  const prefix = homebrewSourcePrefix(source);
+  const find = (args: string[]): string | null => {
+    const result = runCommand('/usr/bin/find', args, { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
+    requireUninterrupted(result);
+    return result.status === 0 && typeof result.stdout === 'string' ? result.stdout : null;
+  };
+  const unsafe = find(['-L', directory, '(', '!', '-user', String(process.getuid!()), '-a', '!', '-user', '0', ')',
+    '-o', '(', '!', '-type', 'l', '-a', '(', '-perm', '-0020', '-o', '-perm', '-0002', ')', ')']);
+  if (unsafe === null || unsafe) return false;
+  const inspectLinks = (tree: string, depth = 0): boolean => {
+    if (depth > 40) return false;
+    // Follow this root only, then inspect and recurse through each nested link.
+    const links = find(['-H', tree, '-type', 'l', '-print0']);
+    if (links === null) return false;
+    for (const link of links.split('\0').filter(Boolean)) {
+      const sourceLink = link === path.join(directory, 'nvm.sh') || link === path.join(directory, 'nvm-exec');
+      if (!trustedNvmPath(link, 'entry', sourceLink ? prefix : undefined)) return false;
+      if (fs.existsSync(link) && fs.statSync(link).isDirectory() && !inspectLinks(link, depth + 1)) return false;
+    }
+    return true;
+  };
+  if (!inspectLinks(directory)) return false;
+  if (process.platform === 'darwin') {
+    const acls = find(['-L', directory, '-acl', '-print0']);
+    if (acls === null) return false;
+    for (const entry of acls.split('\0').filter(Boolean)) if (!trustedNvmPath(entry, 'entry')) return false;
+  }
+  return true;
+};
+
 // Resolve the formula's libexec directly. Its outer nvm.sh wrapper can mkdir/link
 // even with --no-use, so it must never be executed during discovery.
 const discoverNvm = (env: NodeJS.ProcessEnv = process.env): NvmInstallation | null => {
@@ -16,12 +105,13 @@ const discoverNvm = (env: NodeJS.ProcessEnv = process.env): NvmInstallation | nu
   const directories = [env.NVM_DIR, env.XDG_CONFIG_HOME && path.join(env.XDG_CONFIG_HOME, 'nvm'), home && path.join(home, '.nvm')].filter(Boolean) as string[];
   for (const directory of directories) {
     if (!safeDirectory(directory)) continue;
-    const file = path.join(directory, 'nvm.sh');
+    const file = `${directory}/nvm.sh`;
     if (!readableFile(file)) continue;
+    if (!trustedNvmSource(file)) return null;
     let source = fs.realpathSync(file);
     if (source.includes('/Cellar/nvm/')) {
       const stable = path.join(source.split('/Cellar/nvm/')[0], 'opt/nvm/libexec/nvm.sh');
-      if (readableFile(stable) && fs.realpathSync(stable) === source) source = stable;
+      if (readableFile(stable) && trustedNvmSource(stable) && fs.realpathSync(stable) === source) source = stable;
     }
     // A standard brew symlink leads to libexec, not the mutating formula wrapper.
     if (/\/nvm(?:\/[^/]+)?\/libexec\/nvm\.sh$/u.test(source)) {
@@ -38,7 +128,7 @@ const discoverNvm = (env: NodeJS.ProcessEnv = process.env): NvmInstallation | nu
   if (result.status !== 0 || !prefix || !safeDirectory(prefix)) return null;
   const source = path.join(prefix, 'opt/nvm/libexec/nvm.sh');
   const directory = env.NVM_DIR || (env.XDG_CONFIG_HOME ? path.join(env.XDG_CONFIG_HOME, 'nvm') : home && path.join(home, '.nvm'));
-  if (!directory || !safeDirectory(directory) || !readableFile(source)) return null;
+  if (!directory || !safeDirectory(directory) || !readableFile(source) || !trustedNvmSource(source)) return null;
   return { directory, source, completion: path.join(prefix, 'opt/nvm/etc/bash_completion.d/nvm'), method: 'homebrew' };
 };
 
@@ -67,7 +157,7 @@ const inspectNvm = (env: NodeJS.ProcessEnv = process.env): { installation: NvmIn
     rethrowInterruption(error);
     return { installation: null, loadable: false, followsLts: false };
   }
-  if (!installation) return { installation, loadable: false, followsLts: false };
+  if (!installation || !trustedNvmSource(installation.source)) return { installation, loadable: false, followsLts: false };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-nvm-probe-'));
   try {
     const directory = path.join(root, 'nvm');
@@ -105,5 +195,5 @@ const inspectNvm = (env: NodeJS.ProcessEnv = process.env): { installation: NvmIn
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 };
 
-module.exports = { discoverNvm, inspectNvm, followsLtsAlias };
+module.exports = { discoverNvm, inspectNvm, followsLtsAlias, trustedNvmSource, trustedNvmDirectory };
 export type { NvmInstallation };

@@ -6,8 +6,8 @@ const { createAnalyticsCapture } = require('./helpers/analytics.ts');
 import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
-const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
-const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const docsUrl = 'getballin.com/docs/installation.html';
+const analyticsDocsUrl = 'getballin.com/docs/analytics.html';
 const updateLine = '==> Updating Ballin\n';
 type SpawnSelfUpdateOverrides = Omit<
   import('child_process').SpawnSyncOptionsWithStringEncoding,
@@ -382,9 +382,9 @@ if(r.signal==='SIGINT')process.exit(130);if(r.signal==='SIGTERM')process.exit(14
     assert.equal(result.status, 0, result.stderr);
     const setupCall = commandLog().find((line: string) => line.includes('|install_setup:setup ')) ?? '';
     assert.isNotEmpty(setupCall);
-    const guideUrl = setupCall.match(/https:\/\/github\.com\/JBallin\/ballin-scripts\/blob\/main\/docs\/[A-Za-z-]+\.md/u)?.[0] ?? '';
+    const guideUrl = setupCall.match(/getballin\.com\/docs\/[A-Za-z-]+\.html/u)?.[0] ?? '';
     assert.isNotEmpty(guideUrl);
-    const guidePath = new URL(guideUrl).pathname.replace('/JBallin/ballin-scripts/blob/main/', '');
+    const guidePath = new URL('https://' + guideUrl).pathname.slice(1).replace(/\.html$/u, '.md');
     const guide = fs.readFileSync(path.join(__dirname, '..', guidePath), 'utf8');
     assert.match(guide, /^## What installation changes$/mu);
     assert.match(guide, /^## What will installation change\?$/mu);
@@ -493,7 +493,7 @@ if(r.signal==='SIGINT')process.exit(130);if(r.signal==='SIGTERM')process.exit(14
     assert.notInclude(result.stdout, 'Updating...');
   });
 
-  const reviewLine = 'Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n';
+  const reviewLine = 'i Review: getballin.com/docs/backup-sources.html\n';
   const changedLine = 'Supported backup sources or collection scope changed.\n';
   const unavailableLine = 'Unable to compare backup sources and collection scope across this update.\n';
   const consentLine = 'Your sensitive-source opt-in remains enabled across updates and covers current and future supported sources.\n';
