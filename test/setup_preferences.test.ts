@@ -67,6 +67,23 @@ describe('general preference review', () => {
       assert.notInclude(result.stdout, 'Change preferences');
     });
   }
+  for (const enabled of [false, true]) {
+    it(`reviews general preferences with an invalid backup destination (backup enabled: ${enabled})`, () => {
+      const config = structuredClone(defaults);
+      config.backup.repository = { invalid: 'retained' };
+      config.update.backup = String(enabled);
+      write(config);
+      const result = run('\n'.repeat(8));
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Setup complete.');
+      assert.include(result.stdout, 'ballin backup setup');
+      assert.equal(result.stdout.includes('Back up to GitHub during updates?'), enabled);
+      assert.deepEqual(read().backup, config.backup);
+      assert.equal(read().update.backup, String(enabled));
+      assert.notInclude(result.stdout, 'GitHub hostname');
+      assert.notInclude(result.stdout, 'Create a new backup');
+    });
+  }
   it('falls back only for absent preferences and retains bundled macOS default Yes', () => {
     write({ custom: true }); const result = run('\n'.repeat(5));
     assert.equal(result.status, 0, result.stderr);
