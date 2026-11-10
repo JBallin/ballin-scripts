@@ -24,3 +24,7 @@ main:has(>.image-preview)>:not(.image-preview){max-width:calc(1000px - 4rem);mar
 .gallery-topics{margin:.85rem 0 1.15rem}.gallery-highlights{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.5rem 0 2rem}.gallery-highlights a{display:block;border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem;text-decoration:none}.gallery-highlights strong{display:block;font-size:1.2rem}.gallery-highlights span{display:block;color:var(--muted);font-size:.9rem;margin-top:.3rem}.image-pages{align-items:center;gap:1rem;margin:1.2rem 0}.image-pages [aria-current]{font-weight:600;color:var(--ink)}@media(max-width:650px){.gallery-highlights{grid-template-columns:1fr}}
 
 @media(max-width:850px){footer{grid-template-columns:1fr;text-align:center;gap:.65rem}.footer-tagline{text-align:center}}
+
+/* Keep long provenance hashes and recorded commands inside narrow layouts. */
+.provenance{min-width:0;overflow-wrap:anywhere}
+.provenance pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}

@@ -717,6 +717,11 @@ class BuildTests(unittest.TestCase):
         self.assertIn('https://github.com/JBallin/.github/blob/main/CODE_OF_CONDUCT.md', value)
         self.assertGreater(value.index('id="project-resources"'), value.index('id="maintainer-guides"'))
 
+    def test_provenance_long_values_wrap_on_narrow_layouts(self):
+        css = (site.ROOT / 'site/style.css').read_text()
+        self.assertIn('.provenance{min-width:0;overflow-wrap:anywhere}', css)
+        self.assertIn('.provenance pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}', css)
+
     def test_guide_section_links_only_use_present_examples(self):
         manifest, _ = fixture()
         entry = manifest['entries'][0]
