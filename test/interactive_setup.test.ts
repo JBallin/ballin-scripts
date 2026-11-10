@@ -157,7 +157,7 @@ describe('integrated setup with delayed terminal answers', function() {
     assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'Enter Yes or No.');
     assert.equal(config().update.npm, 'true'); assert.equal(config().update.selfUpdate, 'true');
     assert.notInclude(result.stdout, 'Setup complete.'); assert.include(result.stdout, 'Review cancelled.');
-    assert.equal(plain(result.stdout).split('Run ballin backup setup').length - 1, 1);
+    assert.equal(plain(result.stdout).split('Run ballin setup to resume preference review.').length - 1, 1);
   });
 
   for (const mode of ['styled', 'NO_COLOR', 'dumb']) {
