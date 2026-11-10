@@ -190,7 +190,8 @@ permissions of its source, symlinks, and parent directories. Standard macOS
 Homebrew source directories may be writable by the privileged admin group;
 ordinary group-write, world-write, and write-granting ACLs are rejected.
 Quickstart and NVM updates also check the working tree before invoking NVM,
-including existing versions and cached files. Repair untrusted paths manually;
+including existing versions and cached files. A failed working-tree check names
+the first unsafe path, quoting unusual characters. Repair untrusted paths manually;
 Ballin does not change their permissions. These checks do not protect against
 changes by the trusted owner or administrators. The temporary discovery probe
 contains ordinary NVM bookkeeping, but is not a shell sandbox.

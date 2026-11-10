@@ -623,9 +623,30 @@ esac
       assert.isFalse(fs.existsSync(marker), 'peer-supplied Node must never execute');
       assert.notEqual(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stderr, 'not trusted');
+      const named: Record<string, string> = {
+        versions: 'Unsafe owner or permissions: ~/.nvm/versions\n',
+        cache: 'Unsafe owner or permissions: ~/.nvm/.cache/archive\n',
+        'node link': 'Unsafe owner or permissions: ~/.nvm/versions/node/v26.13.0/bin/node\n',
+        'nested link': 'Unsafe symlink or link target: ~/.nvm/versions/node/v26.13.0/bin/node\n',
+      };
+      if (named[unsafe]) assert.include(result.stderr, named[unsafe]);
       assert.notInclude(readLog(), 'nvm:install:');
     });
   }
+  it('escapes an untrusted NVM path before naming it', () => {
+    const prefix = nativeBrew();
+    const libexec = path.join(prefix, 'opt/nvm/libexec'); fs.mkdirSync(libexec, { recursive: true });
+    fs.writeFileSync(path.join(libexec, 'nvm.sh'), fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8'));
+    fs.writeFileSync(path.join(libexec, 'nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
+    const nvm = path.join(home, '.nvm'); fs.mkdirSync(path.join(nvm, '.cache'), { recursive: true });
+    const unsafe = path.join(nvm, '.cache', 'evil\u001b[31m\nforged\\line');
+    fs.writeFileSync(unsafe, 'untrusted'); fs.chmodSync(unsafe, 0o666);
+    const result = run('y\ny\ny\n', { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n' });
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stderr, 'Unsafe owner or permissions: "~/.nvm/.cache/evil\\033[31m\\012forged\\134line"\n');
+    assert.notInclude(result.stderr, '\u001b');
+    assert.notInclude(readLog(), 'nvm:install:');
+  });
   if (process.platform === 'darwin') for (const unsafe of [false, true]) {
     it(`${unsafe ? 'rejects world-write in' : 'accepts admin-group directories in'} a standard Homebrew NVM route`, () => {
       const prefix = nativeBrew();

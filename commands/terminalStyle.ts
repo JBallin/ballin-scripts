@@ -10,6 +10,15 @@ const terminalPath = (value: string, home = process.env.HOME): string => {
     ? `~/${relative}` : absolute;
 };
 
+// Quote unusual paths so control sequences cannot alter the terminal or impersonate another line.
+const displayPath = (value: string): string => {
+  const unsafe = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
+  if (!unsafe.test(value)) return value;
+  return JSON.stringify(value).replace(/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu, (character) => (
+    Array.from({ length: character.length }, (_, index) => `\\u${character.charCodeAt(index).toString(16).padStart(4, '0')}`).join('')
+  ));
+};
+
 // Emphasis belongs only on human-facing output, never config or snapshot bytes.
 const supportsEmphasis = (stream: { isTTY?: boolean }, env: NodeJS.ProcessEnv): boolean => (
   Boolean(stream.isTTY) && env.TERM !== 'dumb' && !env.NO_COLOR
@@ -107,6 +116,6 @@ const terminalError = (text: string, stream: { isTTY?: boolean; columns?: number
 const terminalComplete = (text: string, stream: { isTTY?: boolean } = process.stdout, env: NodeJS.ProcessEnv = process.env): string => terminalColor(text, 32, stream, env);
 
 module.exports = {
-  terminalPath, terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences,
+  displayPath, terminalPath, terminalEmphasis, terminalHeading, terminalCommand, terminalCommandReferences,
   terminalUrls, terminalPrompt, stripAnsi, visibleWidth, terminalProse, terminalError, terminalComplete,
 };

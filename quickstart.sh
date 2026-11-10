@@ -57,6 +57,20 @@ display_path() {
     *) printf '%s' "$1" ;;
   esac
 }
+# Show a path a peer may have named. Escape every nonprinting byte (escape
+# sequences, newlines, bidi controls) so it cannot alter the terminal. Bash 3.2 safe.
+display_untrusted_path() {
+  local LC_ALL=C value shown='' char code index
+  value=$(display_path "$1")
+  if [[ "$value" != *[![:print:]]* ]]; then printf '%s' "$value"; return; fi
+  for (( index=0; index<${#value}; index++ )); do
+    char=${value:index:1}
+    if [[ "$char" == [[:print:]] && "$char" != "\\" ]]; then shown+=$char; continue; fi
+    code=$(printf '%d' "'$char"); (( code >= 0 )) || (( code += 256 ))
+    shown+=$(printf '\\%03o' "$code")
+  done
+  printf '"%s"' "$shown"
+}
 
 # Compare the reviewed command entry again before using Quickstart consent.
 command_entry_snapshot() {
@@ -82,6 +96,7 @@ required_node_version='24.12'
 scratch=''
 profile_temp=''
 gh_temp=''
+nvm_trust_problem=''
 original_path=${PATH-}
 original_pwd=$PWD
 
@@ -626,7 +641,7 @@ validate_nvm_directory() {
   [[ -d "$ancestor" && -O "$ancestor" && -w "$ancestor" && -x "$ancestor" ]] || fail 'NVM_DIR needs an accessible user-owned directory. Review it before configuring NVM.'
   trusted_nvm_path "$ancestor" directory || fail 'NVM_DIR or its path is not trusted. Repair its ownership and permissions before configuring NVM.'
   if [[ -d "$nvm_directory" ]]; then
-    trusted_nvm_tree || fail 'The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM.'
+    trusted_nvm_tree || fail "The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM."$'\n'"$nvm_trust_problem"
   fi
   physical=$(cd -P -- "$ancestor" && pwd -P) || fail 'Unable to resolve the NVM working directory.'
   case "$physical$suffix/" in */Cellar/*) fail 'NVM_DIR must be a user-owned directory outside Homebrew Cellar.' ;; esac
@@ -732,16 +747,21 @@ trusted_nvm_source() {
   prefix=$(homebrew_nvm_source_prefix "$1") || prefix=''
   trusted_nvm_path "$1" file "$prefix"
 }
+# Record the first failing path for the caller's message, then fail the check.
+nvm_tree_failure() {
+  nvm_trust_problem="$1: $(display_untrusted_path "$2")"
+  return 1
+}
 trusted_nvm_tree_links() {
   local tree=$1 prefix=$2 depth=${3:-0} links entry
-  (( depth <= 40 )) || return 1
+  (( depth <= 40 )) || nvm_tree_failure 'Unsafe symlink or link target' "$tree" || return 1
   links=$(/usr/bin/mktemp "$scratch/nvm-links.XXXXXX") || return 1
   # -H follows this root, but leaves nested links for explicit validation.
-  /usr/bin/find -H "$tree" -type l -print0 > "$links" || return 1
+  /usr/bin/find -H "$tree" -type l -print0 > "$links" || nvm_tree_failure 'Unable to scan (unreadable folder or link loop)' "$tree" || return 1
   while IFS= read -r -d '' entry; do
     case "$entry" in
-      "$nvm_directory/nvm.sh"|"$nvm_directory/nvm-exec") trusted_nvm_path "$entry" entry "$prefix" || return 1 ;;
-      *) trusted_nvm_path "$entry" entry || return 1 ;;
+      "$nvm_directory/nvm.sh"|"$nvm_directory/nvm-exec") trusted_nvm_path "$entry" entry "$prefix" || nvm_tree_failure 'Unsafe symlink or link target' "$entry" || return 1 ;;
+      *) trusted_nvm_path "$entry" entry || nvm_tree_failure 'Unsafe symlink or link target' "$entry" || return 1 ;;
     esac
     if [[ -d "$entry" ]]; then trusted_nvm_tree_links "$entry" "$prefix" "$((depth + 1))" || return 1; fi
   done < "$links"
@@ -749,17 +769,21 @@ trusted_nvm_tree_links() {
 }
 trusted_nvm_tree() {
   local unsafe acls entry prefix=''
-  trusted_nvm_path "$nvm_directory" directory || return 1
+  nvm_trust_problem=''
+  trusted_nvm_path "$nvm_directory" directory || nvm_tree_failure 'Unsafe NVM folder or parent folder' "$nvm_directory" || return 1
   # Follow existing links to inspect the content NVM can use. find rejects
   # loops; every reachable link's lexical chain is checked separately.
-  unsafe=$(/usr/bin/find -L "$nvm_directory" \( ! -user "$UID" -a ! -user 0 \) -o \( ! -type l -a \( -perm -0020 -o -perm -0002 \) \)) || return 1
-  [[ -z "$unsafe" ]] || return 1
+  unsafe=$(/usr/bin/mktemp "$scratch/nvm-unsafe.XXXXXX") || return 1
+  /usr/bin/find -L "$nvm_directory" \( \( ! -user "$UID" -a ! -user 0 \) -o \( ! -type l -a \( -perm -0020 -o -perm -0002 \) \) \) -print0 > "$unsafe" \
+    || nvm_tree_failure 'Unable to scan (unreadable folder or link loop)' "$nvm_directory" || return 1
+  if IFS= read -r -d '' entry < "$unsafe"; then nvm_tree_failure 'Unsafe owner or permissions' "$entry" || return 1; fi
+  rm -f -- "$unsafe"
   prefix=$(homebrew_nvm_source_prefix "${nvm_source:-$nvm_directory/nvm.sh}") || prefix=''
   trusted_nvm_tree_links "$nvm_directory" "$prefix" || return 1
   if [[ "$(/usr/bin/uname -s)" == Darwin ]]; then
     acls=$(/usr/bin/mktemp "$scratch/nvm-acls.XXXXXX") || return 1
-    /usr/bin/find -L "$nvm_directory" -acl -print0 > "$acls" || return 1
-    while IFS= read -r -d '' entry; do trusted_nvm_path "$entry" entry || return 1; done < "$acls"
+    /usr/bin/find -L "$nvm_directory" -acl -print0 > "$acls" || nvm_tree_failure 'Unable to scan (unreadable folder or link loop)' "$nvm_directory" || return 1
+    while IFS= read -r -d '' entry; do trusted_nvm_path "$entry" entry || nvm_tree_failure 'Write-granting ACL' "$entry" || return 1; done < "$acls"
     rm -f -- "$acls"
   fi
 }
@@ -943,7 +967,7 @@ install_nvm_lts() {
   stop_if_interrupted "$nvm_status"
   [[ "$nvm_status" == 0 ]] || fail 'Unable to load NVM. Repair its source before retrying Quickstart.'
   declare -F nvm >/dev/null || fail 'The installed NVM source did not define nvm.'
-  trusted_nvm_tree || fail 'The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM.'
+  trusted_nvm_tree || fail "The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM."$'\n'"$nvm_trust_problem"
   printf '$ nvm install --lts\n'
   unset NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER
   nvm install --lts || nvm_status=$?
@@ -952,7 +976,7 @@ install_nvm_lts() {
     printf '\nQuickstart: NVM LTS installation did not finish. Inspect its output, then rerun Quickstart.\n' >&2
     return "$nvm_status"
   fi
-  trusted_nvm_tree || fail 'The installed NVM working tree is not trusted. Repair its ownership and permissions before continuing.'
+  trusted_nvm_tree || fail "The installed NVM working tree is not trusted. Repair its ownership and permissions before continuing."$'\n'"$nvm_trust_problem"
   if "$nvm_default_exists"; then
     printf "$ nvm alias default 'lts/*'\n"
     # Check the whole NVM call: its internals are not safe under errexit.
