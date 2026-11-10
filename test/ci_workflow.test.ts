@@ -1,9 +1,113 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const os = require('os');
+const { execFileSync, spawnSync } = require('child_process');
 
 const github = path.join(__dirname, '..', '.github');
 const workflow = yaml.load(fs.readFileSync(path.join(github, 'workflows', 'ci.yml'), 'utf8'));
+
+describe('CI Bash file discovery', () => {
+  let root: string;
+  let repo: string;
+  let env: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-ci-bash-'));
+    repo = path.join(root, 'repo');
+    fs.mkdirSync(repo);
+    env = { PATH: '/usr/bin:/bin', HOME: root, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+    execFileSync('git', ['init', '-q', repo], { env });
+  });
+
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  function track(files: Record<string, string>) {
+    for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(repo, name), content);
+    execFileSync('git', ['add', '--', '.'], { cwd: repo, env });
+  }
+
+  function run(name: string) {
+    const step = workflow.jobs.test.steps.find((step: { name: string }) => step.name === name);
+    // Explicit bash selects GitHub Actions' -eo pipefail invocation.
+    assert.equal(step.shell, 'bash');
+    return spawnSync('/bin/bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', step.run], {
+      cwd: repo, env, encoding: 'utf8', timeout: 10_000,
+    });
+  }
+
+  for (const [name, tool, args] of [
+    ['Check Bash syntax', 'bash', ['-n']],
+    ['Run ShellCheck', 'shellcheck', []],
+  ] as const) {
+    function stub(exitCode = 0) {
+      const bin = path.join(root, 'bin');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(path.join(bin, tool), `#!${process.execPath}\n`
+        + `require('fs').appendFileSync(${JSON.stringify(path.join(root, 'calls'))}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`
+        + `process.exit(${exitCode});\n`, { mode: 0o755 });
+      env.PATH = `${bin}:${env.PATH}`;
+    }
+
+    it(`${name} selects only first-line Bash shebangs and preserves unusual filenames`, () => {
+      const scripts = ['extensionless', 'space name.sh', 'tab\tname', 'line\nname', '-leading-option'];
+      track({
+        ...Object.fromEntries(scripts.map((file, i) => [file,
+          i % 2 ? '#!/usr/bin/env bash\necho ok\n' : '#!/bin/bash\necho ok\n'])),
+        'fixture.cjs': "const fixture = `\n#!/bin/bash\necho fixture\n`;\n",
+        'not-bash.sh': '#!/bin/sh\necho ok\n',
+        'node-script': '#!/usr/bin/env node\n// #!/bin/bash\n',
+        'empty.sh': '',
+        'no-final-newline': '#!/bin/bash',
+      });
+      fs.writeFileSync(path.join(repo, 'untracked'), '#!/bin/bash\n');
+      stub();
+      const result = run(name);
+      assert.equal(result.status, 0, result.stderr);
+      const calls: string[][] = fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n')
+        .map((line: string) => JSON.parse(line));
+      assert.sameDeepMembers(calls, [...scripts, 'no-final-newline'].map(file => [...args, `./${file}`]));
+    });
+
+    it(`${name} succeeds when no Bash scripts are tracked`, () => {
+      track({ 'fixture.cjs': 'const text = `\n#!/bin/bash\n`;\n' });
+      stub();
+      const result = run(name);
+      assert.equal(result.status, 0, result.stderr);
+      assert.isFalse(fs.existsSync(path.join(root, 'calls')));
+    });
+
+    it(`${name} propagates validation failures`, () => {
+      track({ 'a-invalid': '#!/bin/bash\n', 'z-valid': '#!/bin/bash\n' });
+      stub(7);
+      const result = run(name);
+      assert.equal(result.status, 7, result.stderr);
+      assert.equal(fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').length, 1);
+    });
+
+    it(`${name} propagates Git discovery failures`, () => {
+      fs.rmSync(path.join(repo, '.git'), { recursive: true, force: true });
+      assert.notEqual(run(name).status, 0);
+    });
+
+    it(`${name} propagates failures to read tracked files`, () => {
+      track({ 'missing': '#!/bin/bash\n' });
+      fs.unlinkSync(path.join(repo, 'missing'));
+      const result = run(name);
+      assert.notEqual(result.status, 0);
+      assert.include(result.stderr, 'missing');
+    });
+  }
+
+  it('rejects an actual invalid Bash script while ignoring an embedded fixture shebang', () => {
+    track({ 'fixture.cjs': 'const text = `\n#!/bin/bash\n`;\n', 'script': '#!/bin/bash\necho ok\n' });
+    assert.equal(run('Check Bash syntax').status, 0);
+    fs.writeFileSync(path.join(repo, 'script'), '#!/bin/bash\nif\n');
+    const result = run('Check Bash syntax');
+    assert.notEqual(result.status, 0);
+    assert.include(result.stderr, 'syntax error');
+  });
+});
 
 describe('Ubuntu CI prerequisites', () => {
   it('uses fixed runner labels, with macOS reserved for native tests', () => {
