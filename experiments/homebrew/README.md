@@ -1,5 +1,8 @@
 # Homebrew-managed installation experiment
 
+Start with the [current proposed release design](PROPOSED-RELEASE-DESIGN.md) for
+technical decisions, implemented follow-up and remaining product choices.
+
 The [earlier dual-route design](CLEAN-INSTALL-DESIGN.md) records one alternative.
 The current scoped prototype evaluates a Homebrew-first route after Jonathan
 clarified he is the only existing user and is open to requiring Brew if beginner
@@ -13,7 +16,7 @@ prototype reconciles the preserved experiment `4dca8c4` with version-aware-insta
 `fbe14b4` (including unified-guided-setup `9609593`) and main `8bd2397`. Not a released
 installation method, published tap, migration promise, or change to Quickstart.
 
-The local generator installs source under a versioned keg and writes schema-2
+The development generator installs source under a versioned keg and writes schema-2
 `.ballin-package.json` metadata beside it. The receipt identifies the owning
 formula, development version, caller-declared source revision, verified archive
 checksum and stable command/completion paths. It does not claim a published
@@ -34,7 +37,7 @@ on cancellation. Bare `ballin setup` remains preference-only. The formula never
 runs interactive setup, authenticates, backs up data or edits shell profiles.
 
 Initial setup prints guarded commands to source the package's Bash/Zsh completion
-assets through stable paths. The configured assets use the package's Node runtime
+assets through stable paths. The configured assets use the package's stable runtime trampoline
 and stable helper path; re-source after upgrades for updated definitions. Sourcing
 Git assets afterward resets runtime selection to the Git workflow's ambient Node.
 
@@ -46,8 +49,9 @@ uninstall name the exact owning formula. Brew removal retains `~/.ballin` state.
 
 ## Dependencies and release boundary
 
-See [formula generation](FORMULA-GENERATION.md) for the local-only generator,
-archive validation, Node dependency, and separate release/publication sequence.
+See [formula generation](FORMULA-GENERATION.md) for development formula generation,
+stable-release collection, archive validation, Node dependency, and the separate
+release/publication sequence.
 Only supported Node is a runtime dependency; GitHub CLI and other maintenance
 integrations remain optional. No npm runtime packages or transpilation are added.
 
@@ -97,12 +101,13 @@ status. Isolated real CLI tests run npm update and automatic backup through that
 launcher, assert the caller's inventory reaches only a fake repository, and
 verify cleanup follows backup while preferences and backup state remain outside
 package code. These tests do not replace a new disposable-VM run of the final
-candidate. Completion runtime-major changes, migration/schema policy, package
-update controls and platform support remain separate decisions.
+candidate. The current proposal resolves completion runtime continuity, state
+retention, package update ownership and backup-source notices. A real dependency
+major-version transition and the final combined release still need validation;
+platform support and installation policy remain product decisions.
 
-Before any release decision: verify the final candidate, consider package upgrade
-configuration/schema and backup-scope communication, choose the Quickstart policy,
-and implement/review the approved stable-release-to-tap publication flow. This
+Before release: reconcile and verify the final candidate, choose the Quickstart
+policy, and implement/review its checked-recipe handoff and approved tap delivery. This
 source checkpoint does not publish a package or tap and does not decide inclusion
 in version 1.0.
 

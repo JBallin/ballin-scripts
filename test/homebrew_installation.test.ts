@@ -89,6 +89,63 @@ describe('Homebrew package boundary experiment', () => {
     sourceRevision: 'a'.repeat(40), archiveSha256: 'b'.repeat(64), selection: { kind: 'development' },
     commandPath: path.join(repo, 'bin/ballin'), completionRoot: path.join(repo, 'completions'),
   });
+  const stableReceipt = (repo: string) => ({ ...receipt(repo), schema: 3,
+    selection: { kind: 'release', value: `v${receipt(repo).version}`, releaseId: '123' },
+    runtime: { nodeMajor: 26, minimumNode: '24.12.0' },
+  });
+  it('recognizes stable package identity without contacting a publication service', () => {
+    fs.writeFileSync(path.join(first, '.ballin-package.json'), JSON.stringify(stableReceipt(first)));
+    const metadata = readPackageMetadata(first);
+    assert.equal(metadata.schema, 3);
+    assert.deepEqual(metadata.selection, stableReceipt(first).selection);
+    const { loadAppVersion } = require('../commands/analytics.ts');
+    assert.equal(loadAppVersion(path.join(first, 'package.json')), receipt(first).version);
+    const { collectSetupReadiness } = require('../commands/setup_readiness.ts');
+    const report = collectSetupReadiness({ repoDir: first,
+      configPath: path.join(home, 'missing-config.json'), env: { HOME: home, PATH: path.join(first, 'bin') },
+      runCommand: () => ({ status: 0, stdout: '', stderr: '', signal: null }),
+    });
+    const provenance = report.checks.find((check: { id: string }) => check.id === 'package.provenance');
+    assert.equal(provenance.status, 'info');
+    assert.include(provenance.summary, `Release package v${receipt(first).version}`);
+    assert.include(provenance.summary, 'installed files are not reverified');
+    assert.include(run(first, 'self-update').stdout, 'brew upgrade ballin-experiment');
+    assert.include(run(first, 'uninstall').stdout, 'brew uninstall ballin-experiment');
+  });
+  it('rejects invalid stable publication and runtime contracts without promoting legacy metadata', () => {
+    const file = path.join(first, '.ballin-package.json');
+    for (const patch of [
+      { selection: undefined }, { selection: { kind: 'development' } },
+      { selection: { kind: 'release', value: 'v99.0.0', releaseId: '123' } },
+      ...[undefined, 123, '0', '01', '-1', 'abc'].map(releaseId => ({
+        selection: { kind: 'release', value: `v${receipt(first).version}`, releaseId },
+      })),
+      { runtime: undefined }, { runtime: { nodeMajor: 0, minimumNode: '24.12.0' } },
+      { runtime: { nodeMajor: 26.5, minimumNode: '24.12.0' } },
+      { runtime: { nodeMajor: 26, minimumNode: 24 } },
+      { runtime: { nodeMajor: 26, minimumNode: '24.13.0' } },
+      { runtime: { nodeMajor: 22, minimumNode: '24.12.0' } },
+    ]) {
+      fs.writeFileSync(file, JSON.stringify({ ...stableReceipt(first), ...patch }));
+      assert.throws(() => readPackageMetadata(first), 'Invalid Ballin stable package provenance');
+    }
+    const packageFile = path.join(first, 'package.json');
+    const metadata = JSON.parse(fs.readFileSync(packageFile, 'utf8'));
+    fs.writeFileSync(file, JSON.stringify(stableReceipt(first)));
+    for (const engines of [undefined, { node: '^24.12.0' }, { node: '>=24.12.1' }]) {
+      fs.writeFileSync(packageFile, JSON.stringify({ ...metadata, engines }));
+      assert.throws(() => readPackageMetadata(first), 'Invalid Ballin stable package provenance');
+    }
+    fs.writeFileSync(packageFile, JSON.stringify({ ...metadata, engines: { node: '>=24.12.0' } }));
+    assert.equal(readPackageMetadata(first).runtime.minimumNode, '24.12.0');
+    for (const ballin of [undefined, { installerProtocol: 2 }, { installerProtocol: 2, packageSchema: 2 }]) {
+      fs.writeFileSync(packageFile, JSON.stringify({ ...metadata, ballin }));
+      assert.throws(() => readPackageMetadata(first), 'Invalid Ballin stable package provenance');
+    }
+    fs.writeFileSync(packageFile, JSON.stringify(metadata));
+    fs.writeFileSync(file, JSON.stringify({ ...stableReceipt(first), schema: 2 }));
+    assert.throws(() => readPackageMetadata(first), 'Invalid Ballin package provenance');
+  });
   it('validates package provenance and distinguishes PATH shadowing without running commands', () => {
     fs.writeFileSync(path.join(first, '.ballin-package.json'), JSON.stringify(receipt(first)));
     assert.equal(readPackageMetadata(first).selection.kind, 'development');
@@ -120,7 +177,7 @@ describe('Homebrew package boundary experiment', () => {
   });
   it('rejects unsupported ownership and each malformed provenance field in the source module', () => {
     const marker = path.join(first, '.ballin-package.json');
-    for (const value of [null, {}, { manager: 'git', schema: 1 }, { manager: 'homebrew', schema: 3 }]) {
+    for (const value of [null, {}, { manager: 'git', schema: 1 }, { manager: 'homebrew', schema: 4 }]) {
       fs.writeFileSync(marker, JSON.stringify(value));
       assert.throws(() => readPackageMetadata(first), 'Unsupported Ballin package ownership');
     }

@@ -53,7 +53,7 @@ describe('release preparation', () => {
     const file = path.join(root, 'package.json'); const data = packageData(); data.engines.node = '>=26.2.1'; fs.writeFileSync(file, JSON.stringify(data));
     assert.notEqual(run('--check').status, 0); const updated = run(); assert.equal(updated.status, 0, updated.stderr);
     assert.include(updated.stdout, 'Node >=26.2.1'); assert.equal(run('--check').status, 0);
-    assert.deepEqual(packageData().ballin, { installerProtocol: 2 });
+    assert.deepEqual(packageData().ballin, { installerProtocol: 2, packageSchema: 3 });
   });
   it('detects root and package lock version drift', () => {
     assert.equal(run().status, 0);

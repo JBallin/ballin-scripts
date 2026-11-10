@@ -127,7 +127,7 @@ test('installed completion assignments preserve quoting and the zsh header', t =
   const root = path.join(path.dirname(options.archive), 'source');
   fs.writeFileSync(path.join(root, 'completions/_ballin'), '#compdef ballin\n# zsh body\n');
   const runtime = "/tmp/Node space & quote' and \\backslash/bin/node";
-  const body = formula.slice(formula.indexOf('    completion_node ='), formula.indexOf('    marker ='));
+  const body = formula.slice(formula.indexOf('    (libexec/"completion-node").write '), formula.indexOf('    marker ='));
   execFileSync('/usr/bin/ruby', ['-rpathname', '-rshellwords', '-e', 'node = Pathname.new(ARGV[0]); libexec = Pathname.new(ARGV[1]); def opt_libexec; Pathname.new(\"/opt/experimental space/opt/ballin-experiment/libexec\"); end; ' + body, runtime, root]);
   const bash = fs.readFileSync(path.join(root, 'completions/ballin.bash'), 'utf8').split('\n');
   const zsh = fs.readFileSync(path.join(root, 'completions/_ballin'), 'utf8').split('\n');
@@ -141,24 +141,45 @@ test('installed completion assignments preserve quoting and the zsh header', t =
   assert.equal(zsh.at(-2), helperAssignment);
   assert.match(helperAssignment, /^_ballin_completion_helper=/);
   assert.equal(execFileSync('/bin/bash', ['-c', helperAssignment + '; printf "%s" "$_ballin_completion_helper"'], { encoding: 'utf8' }), '/opt/experimental space/opt/ballin-experiment/libexec/commands/completion_members.ts');
-  assert.equal(execFileSync('/bin/bash', ['-c', nodeAssignment + '; printf "%s" "$_ballin_completion_node"'], { encoding: 'utf8' }), runtime);
+  assert.equal(execFileSync('/bin/bash', ['-c', nodeAssignment + '; printf "%s" "$_ballin_completion_node"'], { encoding: 'utf8' }), '/opt/experimental space/opt/ballin-experiment/libexec/completion-node');
 });
 
-test('an already-sourced completion follows opt after old keg removal', t => {
-  const options = fixture(t), formula = generate(options);
-  const base = path.dirname(options.archive), oldKeg = path.join(base, 'old keg'), newKeg = path.join(base, 'new keg'), opt = path.join(base, 'stable opt');
-  for (const [root, value] of [[oldKeg, 'old'], [newKeg, 'new']]) {
-    fs.mkdirSync(path.join(root, 'commands'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'commands/completion_members.ts'), `process.stdout.write('${value}');`);
-  }
-  fs.mkdirSync(path.join(oldKeg, 'completions'));
-  const source = '_ballin_completion_node=node\n_ballin_completion_helper="old-physical-path"\nprobe_completion() { command "${_ballin_completion_node:-node}" "$_ballin_completion_helper"; }\n';
-  fs.writeFileSync(path.join(oldKeg, 'completions/ballin.bash'), source);
-  fs.writeFileSync(path.join(oldKeg, 'completions/_ballin'), '#compdef ballin\n' + source);
-  fs.symlinkSync(oldKeg, opt);
-  const body = formula.slice(formula.indexOf('    completion_node ='), formula.indexOf('    marker ='));
-  execFileSync('/usr/bin/ruby', ['-rpathname', '-rshellwords', '-e', 'node = Pathname.new(ARGV[0]); libexec = Pathname.new(ARGV[1]); $opt = Pathname.new(ARGV[2]); def opt_libexec; $opt; end; ' + body, process.execPath, oldKeg, opt]);
-  const shell = '. "$1/completions/ballin.bash"; probe_completion; /bin/rm "$1"; /bin/ln -s "$3" "$1"; /bin/rm -rf "$2"; probe_completion';
-  assert.equal(execFileSync('/bin/bash', ['-c', shell, 'completion-upgrade-fixture', opt, oldKeg, newKeg], { encoding: 'utf8' }), 'oldnew');
-  assert.equal(fs.existsSync(oldKeg), false);
-});
+for (const shell of ['/bin/bash', '/bin/zsh']) {
+  test(`already-sourced ${shell} completion follows package and runtime after removal`, t => {
+    const options = fixture(t), formula = generate(options);
+    const base = path.dirname(options.archive);
+    const quoted = "space 'quote\" $dollar `tick` & \\backslash";
+    const oldKeg = path.join(base, quoted, 'old keg'), newKeg = path.join(base, quoted, 'new keg');
+    const opt = path.join(base, quoted, 'stable opt');
+    const home = path.join(base, 'home'), emptyBin = path.join(base, 'empty bin');
+    for (const directory of [home, emptyBin]) fs.mkdirSync(directory);
+    const runtimes = [];
+    for (const [root, value] of [[oldKeg, 'old'], [newKeg, 'new']]) {
+      fs.mkdirSync(path.join(root, 'commands'), { recursive: true });
+      fs.mkdirSync(path.join(root, 'completions'));
+      fs.writeFileSync(path.join(root, 'commands/completion_members.ts'), `process.stdout.write('${value}');`);
+      const runtime = path.join(base, quoted, `${value} Node`);
+      // Distinct executables model removal of the old major, not just a keg change.
+      fs.writeFileSync(runtime, `#!/bin/sh\nprintf '${value}-runtime:'\nexec '${process.execPath.replace(/'/g, "'\\''")}' "$@"\n`, { mode: 0o755 });
+      runtimes.push(runtime);
+      const source = '_ballin_completion_node=node\n_ballin_completion_helper="old-physical-path"\nprobe_completion() { command "${_ballin_completion_node:-node}" "$_ballin_completion_helper"; }\n';
+      fs.writeFileSync(path.join(root, 'completions/ballin.bash'), source);
+      fs.writeFileSync(path.join(root, 'completions/_ballin'), '#compdef ballin\n' + source);
+      const body = formula.slice(formula.indexOf('    (libexec/"completion-node").write '), formula.indexOf('    marker ='));
+      execFileSync('/usr/bin/ruby', ['-rpathname', '-rshellwords', '-e', 'node = Pathname.new(ARGV[0]); libexec = Pathname.new(ARGV[1]); $opt = Pathname.new(ARGV[2]); def opt_libexec; $opt; end; ' + body, runtime, root, opt], {
+        env: { PATH: '/usr/bin:/bin', HOME: home, TMPDIR: home },
+      });
+      assert.equal(fs.statSync(path.join(root, 'completion-node')).mode & 0o777, 0o755);
+    }
+    fs.symlinkSync(oldKeg, opt);
+    const asset = shell.endsWith('zsh') ? '_ballin' : 'ballin.bash';
+    const script = '. "$1/completions/$5"; probe_completion; /bin/rm "$1"; /bin/ln -s "$3" "$1"; /bin/rm -rf "$2"; /bin/rm "$4"; probe_completion';
+    const result = spawnSync(shell, ['-f', '-c', script, 'completion-upgrade-fixture', opt, oldKeg, newKeg, runtimes[0], asset], {
+      cwd: home, env: { PATH: emptyBin, HOME: home, TMPDIR: home, ZDOTDIR: home }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'old-runtime:oldnew-runtime:new');
+    assert.equal(fs.existsSync(oldKeg), false);
+    assert.equal(fs.existsSync(runtimes[0]), false);
+  });
+}

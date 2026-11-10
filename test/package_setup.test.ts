@@ -80,6 +80,20 @@ for (const layout of ['copied keg', 'source modules']) describe(`explicit Homebr
     assert.equal(fs.readFileSync(identity, 'utf8'), before);
     assertUntouched();
   });
+  it('onboards a stable release package through the same optional setup without changing ownership', () => {
+    const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    Object.assign(marker, { schema: 3,
+      selection: { kind: 'release', value: `v${marker.version}`, releaseId: '123' },
+      runtime: { nodeMajor: 26, minimumNode: '24.12.0' },
+    });
+    fs.writeFileSync(markerPath, JSON.stringify(marker));
+    const result = run('n\nn\n');
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.include(result.stdout, 'Initial setup complete');
+    assert.isTrue(fs.existsSync(file));
+    assert.deepEqual(JSON.parse(fs.readFileSync(markerPath, 'utf8')), marker);
+    assertUntouched();
+  });
   it('retains preference cancellation and does not offer self-update for a package', () => {
     const result = run('n\ny\n');
     assert.equal(result.status, 0, result.stderr + result.stdout);

@@ -4,8 +4,9 @@ const os = require('os');
 
 // Only a marker beside the installed code selects package ownership. Ambient
 // environment variables must not turn an existing Git checkout into a package.
-type PackageMetadata = { manager: 'homebrew'; schema: 1 | 2; formula?: string; version?: string; sourceRevision?: string; archiveSha256?: string;
-  selection?: { kind: 'development' }; commandPath?: string; completionRoot?: string };
+type PackageMetadata = { manager: 'homebrew'; schema: 1 | 2 | 3; formula?: string; version?: string; sourceRevision?: string; archiveSha256?: string;
+  selection?: { kind: 'development' } | { kind: 'release'; value: string; releaseId: string };
+  runtime?: { nodeMajor: number; minimumNode: string }; commandPath?: string; completionRoot?: string };
 const readPackageMetadata = (repoDir = path.join(__dirname, '..')): PackageMetadata | undefined => {
   const file = path.join(repoDir, '.ballin-package.json');
   let contents: string;
@@ -24,21 +25,35 @@ const readPackageMetadata = (repoDir = path.join(__dirname, '..')): PackageMetad
   try { marker = JSON.parse(contents); } catch {
     throw new Error('Invalid Ballin package ownership metadata. Reinstall the package before retrying.');
   }
-  if (marker?.manager !== 'homebrew' || ![1, 2].includes(marker?.schema)) {
+  if (marker?.manager !== 'homebrew' || ![1, 2, 3].includes(marker?.schema)) {
     throw new Error('Unsupported Ballin package ownership metadata. Reinstall the package before retrying.');
   }
-  if (marker.schema === 2) {
+  if (marker.schema === 2 || marker.schema === 3) {
     const safePath = (value: unknown): value is string => typeof value === 'string'
       && path.isAbsolute(value) && !/[\r\n\0]/u.test(value);
     if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(marker.version)
       || !/^[0-9a-f]{40}$/u.test(marker.sourceRevision) || !/^[0-9a-f]{64}$/u.test(marker.archiveSha256)
       || typeof marker.formula !== 'string' || !/^[a-z0-9][a-z0-9+_.@-]*(?:\/[a-z0-9][a-z0-9+_.@-]*){0,2}$/u.test(marker.formula)
-      || marker.selection?.kind !== 'development'
+      || (marker.schema === 2 && marker.selection?.kind !== 'development')
       || !safePath(marker.commandPath) || !safePath(marker.completionRoot)) {
       throw new Error('Invalid Ballin package provenance. Reinstall the package before retrying.');
     }
     const metadata = JSON.parse(fs.readFileSync(path.join(repoDir, 'package.json'), 'utf8'));
     if (metadata.version !== marker.version) throw new Error('Ballin package version disagrees with its provenance. Reinstall before retrying.');
+    if (marker.schema === 3) {
+      // This receipt records the stable publication verified while packaging.
+      // Ordinary commands do not contact GitHub or attest installed file contents.
+      const engine = /^>=(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/u.exec(metadata.engines?.node);
+      if (metadata.ballin?.packageSchema !== 3
+        || marker.selection?.kind !== 'release' || marker.selection.value !== `v${marker.version}`
+        || typeof marker.selection.releaseId !== 'string' || !/^[1-9]\d*$/u.test(marker.selection.releaseId)
+        || !Number.isSafeInteger(marker.runtime?.nodeMajor) || marker.runtime.nodeMajor < 1
+        || typeof marker.runtime.minimumNode !== 'string' || !engine
+        || marker.runtime.minimumNode !== `${engine[1]}.${engine[2]}.${engine[3] || '0'}`
+        || marker.runtime.nodeMajor < Number(engine[1])) {
+        throw new Error('Invalid Ballin stable package provenance. Reinstall the package before retrying.');
+      }
+    }
   }
   return marker;
 };

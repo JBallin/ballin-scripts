@@ -218,35 +218,52 @@ const spawn=cp.spawnSync;cp.spawnSync=function(command,args,options){if(command=
     assert.equal(result.status,1,result.stdout+result.stderr);assert.include(result.stderr,'Applied-update checkout does not match');
     assert.deepEqual(records('candidate-starts'),[]);assert.deepEqual(records('setup-runs'),[]);
   });
-  it('keeps the genuine v1 refusal and reviewed manual recovery path distinct', function () {
-    // One coherent refusal -> decline -> recovery -> track-consent -> automatic journey.
-    this.timeout(30000);
-    // Frozen pre-repair source from 442bc80; these fixtures are never product dependencies.
-    const legacy=fs.readFileSync(path.join(source,'test/fixtures/revision-bootstrap-v1.sh'),'utf8').replace(/^#![^\n]*\n/,'').trimEnd();
-    const file=path.join(installed,'install.sh');
-    fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace(/(# BEGIN RELEASE BOOTSTRAP\nballin_entry='install.sh'\nballin_embedded_version='1.0.0'\n)[\s\S]*?# END RELEASE BOOTSTRAP/, (_match: string, prefix: string) => prefix+legacy+'\n# END RELEASE BOOTSTRAP'));
-    fs.copyFileSync(path.join(source,'test/fixtures/repo-update-v1.ts.txt'),path.join(installed,'commands/repo_update.ts'));
-    const metadata=JSON.parse(fs.readFileSync(path.join(installed,'package.json'))); metadata.ballin.installerProtocol=1; fs.writeFileSync(path.join(installed,'package.json'),JSON.stringify(metadata));
-    git(installed,['add','.']);git(installed,['commit','-qm','obsolete prelaunch contract']);
-    const legacyHead=git(installed,['rev-parse','HEAD']),data=preserved(); saveReceipt('sha',legacyHead,legacyHead);
-    const previousReceipt=fs.readFileSync(receiptFile(),'utf8');
-    const refusal=run();assert.equal(refusal.status,1,refusal.stdout+refusal.stderr);assert.include(refusal.stderr,'unsupported installer contract');
-    assert.deepEqual(records('candidate-starts'),[]);assert.equal(git(installed,['rev-parse','HEAD']),legacyHead);assert.equal(fs.readFileSync(receiptFile(),'utf8'),previousReceipt);assert.deepEqual(preserved(),data);
-    const explicit=spawnSync('/bin/bash',[file,'--sha',target],{env:env(),encoding:'utf8'});assert.equal(explicit.status,1);assert.include(explicit.stderr,'unsupported installer contract');assert.deepEqual(records('candidate-starts'),[]);
-    const reviewed=path.join(root,'reviewed-install.sh');fs.copyFileSync(path.join(source,'install.sh'),reviewed);
-    const unsupported=spawnSync('/bin/bash',[reviewed,'--self-update'],{env:env(),encoding:'utf8'});assert.equal(unsupported.status,1);assert.include(unsupported.stderr,'Installed updater uses an unsupported contract.');
-    const guide=fs.readFileSync(path.join(source,'docs/installation-testing.md'),'utf8');
-    const start=guide.indexOf('CANDIDATE_SHA=FULL_REVIEWED_COMMIT_SHA');assert.isAtLeast(start,0);
-    const command=guide.slice(start,guide.indexOf('\n```',start)).replace('FULL_REVIEWED_COMMIT_SHA',target);
-    const recover=(input:string)=>spawnSync('/bin/bash',['-c',command],{input,env:env({FIXTURE_REAL_SETUP:'1'}),encoding:'utf8',timeout:12000});
-    const metadataFile=path.join(installed,'package.json'),metadataBytes=fs.readFileSync(metadataFile);fs.appendFileSync(metadataFile,' ');
-    const dirty=recover('Yes\n');assert.equal(dirty.status,1);assert.include(dirty.stderr,'local changes');assert.equal(git(installed,['rev-parse','HEAD']),legacyHead);assert.isTrue(fs.readFileSync(metadataFile).equals(Buffer.concat([metadataBytes,Buffer.from(' ')])));fs.writeFileSync(metadataFile,metadataBytes);
-    const declined=recover('No\n');assert.equal(declined.status,0,declined.stdout+declined.stderr);assert.equal(git(installed,['rev-parse','HEAD']),legacyHead);assert.equal(fs.readFileSync(receiptFile(),'utf8'),previousReceipt);assert.deepEqual(preserved(),data);
-    const accepted=recover('Yes\nn\n');assert.equal(accepted.status,0,accepted.stdout+accepted.stderr);assert.equal(git(installed,['rev-parse','HEAD']),target);assert.deepEqual(preserved(),data);
-    assert.isTrue(fs.lstatSync(path.join(home,'.local/bin/ballin')).isSymbolicLink());
-    const next=run('',{BALLIN_AUTOMATIC_UPDATE:'1'});assert.equal(next.status,1,next.stdout+next.stderr);assert.include(next.stderr,'Confirmation required.');
-    assert.equal(JSON.parse(fs.readFileSync(receiptFile())).kind,'sha');
-    const tracking=run('Yes\n');assert.equal(tracking.status,0,tracking.stdout+tracking.stderr);assert.equal(JSON.parse(fs.readFileSync(receiptFile())).kind,'branch');
-    const automatic=run('',{BALLIN_AUTOMATIC_UPDATE:'1'});assert.equal(automatic.status,0,automatic.stdout+automatic.stderr);assert.notInclude(automatic.stdout,'Change the installed revision/track?');
+  describe('genuine v1 refusal and reviewed manual recovery', () => {
+    let legacyHead: string, previousReceipt: string, data: ReturnType<typeof preserved>;
+    beforeEach(() => {
+      // Frozen pre-repair source from 442bc80; these fixtures are never product dependencies.
+      const legacy=fs.readFileSync(path.join(source,'test/fixtures/revision-bootstrap-v1.sh'),'utf8').replace(/^#![^\n]*\n/,'').trimEnd();
+      const file=path.join(installed,'install.sh');
+      fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace(/(# BEGIN RELEASE BOOTSTRAP\nballin_entry='install.sh'\nballin_embedded_version='1.0.0'\n)[\s\S]*?# END RELEASE BOOTSTRAP/, (_match: string, prefix: string) => prefix+legacy+'\n# END RELEASE BOOTSTRAP'));
+      fs.copyFileSync(path.join(source,'test/fixtures/repo-update-v1.ts.txt'),path.join(installed,'commands/repo_update.ts'));
+      const metadata=JSON.parse(fs.readFileSync(path.join(installed,'package.json'))); metadata.ballin.installerProtocol=1; fs.writeFileSync(path.join(installed,'package.json'),JSON.stringify(metadata));
+      git(installed,['add','.']);git(installed,['commit','-qm','obsolete prelaunch contract']);
+      legacyHead=git(installed,['rev-parse','HEAD']);data=preserved(); saveReceipt('sha',legacyHead,legacyHead);
+      previousReceipt=fs.readFileSync(receiptFile(),'utf8');
+    });
+    const recoveryCommand = () => {
+      const guide=fs.readFileSync(path.join(source,'docs/installation-testing.md'),'utf8');
+      const start=guide.indexOf('CANDIDATE_SHA=FULL_REVIEWED_COMMIT_SHA');assert.isAtLeast(start,0);
+      const command=guide.slice(start,guide.indexOf('\n```',start)).replace('FULL_REVIEWED_COMMIT_SHA',target);
+      return (input:string)=>spawnSync('/bin/bash',['-c',command],{input,env:env({FIXTURE_REAL_SETUP:'1'}),encoding:'utf8',timeout:12000});
+    };
+    it('refuses self-update without changing the installed v1 checkout', () => {
+      const refusal=run();assert.equal(refusal.status,1,refusal.stdout+refusal.stderr);assert.include(refusal.stderr,'unsupported installer contract');
+      assert.deepEqual(records('candidate-starts'),[]);assert.equal(git(installed,['rev-parse','HEAD']),legacyHead);assert.equal(fs.readFileSync(receiptFile(),'utf8'),previousReceipt);assert.deepEqual(preserved(),data);
+    });
+    it('refuses an explicit revision through the v1 installer', () => {
+      const explicit=spawnSync('/bin/bash',[path.join(installed,'install.sh'),'--sha',target],{env:env(),encoding:'utf8'});assert.equal(explicit.status,1);assert.include(explicit.stderr,'unsupported installer contract');assert.deepEqual(records('candidate-starts'),[]);
+    });
+    it('refuses reviewed self-update with an unsupported installed contract', () => {
+      const reviewed=path.join(root,'reviewed-install.sh');fs.copyFileSync(path.join(source,'install.sh'),reviewed);
+      const unsupported=spawnSync('/bin/bash',[reviewed,'--self-update'],{env:env(),encoding:'utf8'});assert.equal(unsupported.status,1);assert.include(unsupported.stderr,'Installed updater uses an unsupported contract.');
+    });
+    it('rejects reviewed manual recovery with local changes', () => {
+      const recover=recoveryCommand();
+      const metadataFile=path.join(installed,'package.json'),metadataBytes=fs.readFileSync(metadataFile);fs.appendFileSync(metadataFile,' ');
+      const dirty=recover('Yes\n');assert.equal(dirty.status,1);assert.include(dirty.stderr,'local changes');assert.equal(git(installed,['rev-parse','HEAD']),legacyHead);assert.isTrue(fs.readFileSync(metadataFile).equals(Buffer.concat([metadataBytes,Buffer.from(' ')])));fs.writeFileSync(metadataFile,metadataBytes);
+    });
+    it('recovers manually before consenting to tracking and automatic updates', function () {
+      // One coherent decline -> recovery -> track-consent -> automatic journey.
+      this.timeout(30000);
+      const recover=recoveryCommand();
+      const declined=recover('No\n');assert.equal(declined.status,0,declined.stdout+declined.stderr);assert.equal(git(installed,['rev-parse','HEAD']),legacyHead);assert.equal(fs.readFileSync(receiptFile(),'utf8'),previousReceipt);assert.deepEqual(preserved(),data);
+      const accepted=recover('Yes\nn\n');assert.equal(accepted.status,0,accepted.stdout+accepted.stderr);assert.equal(git(installed,['rev-parse','HEAD']),target);assert.deepEqual(preserved(),data);
+      assert.isTrue(fs.lstatSync(path.join(home,'.local/bin/ballin')).isSymbolicLink());
+      const next=run('',{BALLIN_AUTOMATIC_UPDATE:'1'});assert.equal(next.status,1,next.stdout+next.stderr);assert.include(next.stderr,'Confirmation required.');
+      assert.equal(JSON.parse(fs.readFileSync(receiptFile())).kind,'sha');
+      const tracking=run('Yes\n');assert.equal(tracking.status,0,tracking.stdout+tracking.stderr);assert.equal(JSON.parse(fs.readFileSync(receiptFile())).kind,'branch');
+      const automatic=run('',{BALLIN_AUTOMATIC_UPDATE:'1'});assert.equal(automatic.status,0,automatic.stdout+automatic.stderr);assert.notInclude(automatic.stdout,'Change the installed revision/track?');
+    });
   });
 });

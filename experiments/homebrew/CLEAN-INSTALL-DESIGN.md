@@ -1,6 +1,8 @@
-# Recommended dual-install pre-release design
+# Earlier dual-install alternative
 
-Status: design recommendation, not an accepted installation policy. Jonathan is
+Status: earlier alternative, superseded as the current proposal by
+[Proposed Homebrew release design](PROPOSED-RELEASE-DESIGN.md). Retained to explain
+the dual-route tradeoff, not an accepted installation policy. Jonathan is
 the only existing user and is open to requiring Homebrew. His priority is a simple
 one-script experience for people who do not already have it. Mandatory non-Brew
 support and mandatory Brew are both undecided; earlier statements treating either

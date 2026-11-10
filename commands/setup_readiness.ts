@@ -322,6 +322,8 @@ const collectSetupReadiness = ({
   const metadata = require('./installation.ts').readPackageMetadata(repoDir);
   if (metadata?.schema === 2) checks.push({ id: 'package.provenance', label: 'Package provenance', status: 'info',
     summary: `Development package ${metadata.version}, archive ${metadata.archiveSha256}. Declared source revision: ${metadata.sourceRevision}. This does not establish a published release.` });
+  if (metadata?.schema === 3) checks.push({ id: 'package.provenance', label: 'Package provenance', status: 'info',
+    summary: `Release package v${metadata.version}, source revision ${metadata.sourceRevision}. Publication identity was verified when packaging; installed files are not reverified here.` });
   const { check: configCheck, config } = readConfig(configPath);
   checks.push(configCheck);
   checks.push(...guConfigChecks(config, env, runCommand));

@@ -76,6 +76,7 @@
     "serialize-javascript": "^7.0.5"
   },
   "ballin": {
-    "installerProtocol": 2
+    "installerProtocol": 2,
+    "packageSchema": 3
   }
 }

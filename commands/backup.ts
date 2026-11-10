@@ -643,6 +643,7 @@ const runRealBackup = (homeDir: string, backupCacheDir: string, evidence: Backup
     const previous = previousBackupSuccessLine(backupCacheDir, config.repository);
     if (previous) writeStdoutLine(previous);
     const includeSensitive = config.includeSensitive;
+    require('./package_backup_scope.ts').notifyPackageBackupScope(includeSensitive, process.env.BALLIN_TEST_REPO_DIR || path.join(__dirname, '..'));
     return withTemporaryStatus('Backing up...', () => (
       runRepositoryBackup(config.repository, includeSensitive, homeDir, backupCacheDir, evidence) ? 0 : 1
     ));

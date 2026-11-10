@@ -143,7 +143,7 @@ const defaultRepoDir = path.join(__dirname, '..');
 
 const loadAppVersion = (appPackageJsonPath = packageJsonPath): string => {
   const metadata = require('./installation.ts').readPackageMetadata(path.dirname(appPackageJsonPath));
-  if (metadata) return metadata.schema === 2 ? 'development' : 'unknown';
+  if (metadata) return metadata.schema === 3 ? metadata.version as string : metadata.schema === 2 ? 'development' : 'unknown';
   return require('./repo_update.ts').readIdentity(path.dirname(appPackageJsonPath)).version;
 };
 
