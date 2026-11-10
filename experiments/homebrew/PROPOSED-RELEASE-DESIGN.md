@@ -116,7 +116,8 @@ also covers upgrades performed directly through Brew.
 ## Source, Claude backup and release sequencing
 
 The published experiment checkpoint is `331e9d3`. These technical additions are a
-local follow-up and need validation/review before any further publication.
+local follow-up; [validation results](README.md#verification-and-remaining-work)
+do not authorize further publication or adoption.
 The newer version-aware stack tip `df16ef6` adds three test files' coverage cases;
 it has not been merged here. Guided setup `171db47` is a separate newer branch.
 Do not claim this proposal includes either later tip until explicitly reconciled.

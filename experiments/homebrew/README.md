@@ -69,6 +69,15 @@ two installation systems; that is an evaluation choice, not a permanent policy.
 
 ## Verification and remaining work
 
+Release-design follow-up `dafa61fdb56dcf5a491f450fd27cfefb90581a99` passed
+`npm test` on November 10, 2026 with Node 26.13.0: all 4,562 tests, lint, both
+typechecks, release consistency and the unchanged coverage gates completed with
+exit 0. Coverage was 99.59% for statements/lines, 96.85% for branches and 100% for
+functions. All 42 separately invoked experimental tests also passed. These are
+isolated-fixture results; release collection uses a fake transport in tests.
+The real clean-bootstrap and same-source self-upgrade VM checks at `331e9d3`
+predate this follow-up and do not validate its new code or a Node-major transition.
+
 The first disposable-VM experiments verified real package install, revision
 upgrade, state retention, ownership guards, uninstall and running-keg update
 ordering. Current initial-setup/coexistence/formula changes have isolated
@@ -78,7 +87,7 @@ upgrade, state retention, ownership guards, completion-helper continuity and
 uninstall. That VM candidate predates a narrow CLI analytics identity-path
 correction, which received focused regression checks and independent review.
 
-A clean `npm test` run on November 10, 2026 passed at
+The earlier current-stack `npm test` run on November 10, 2026 passed at
 `793a7ddc4da20a70d57e8e972988bb30073c2f1d` with Node 26.13.0: all 4,544 tests,
 lint, both typechecks, release consistency and the unchanged coverage gates
 completed with exit 0. Coverage was 99.59% for statements/lines, 96.82% for branches
