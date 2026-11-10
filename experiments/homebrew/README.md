@@ -10,7 +10,7 @@ Experimental source originally based on the version-aware-install branch at
 `4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9`, preserved for assessment in
 [issue #17](https://github.com/JBallin/ballin-scripts/issues/17). The local runtime
 prototype reconciles the preserved experiment `4dca8c4` with version-aware-install
-`1ea4679` (including unified-guided-setup `9609593`) and main `8bd2397`. Not a released
+`fbe14b4` (including unified-guided-setup `9609593`) and main `8bd2397`. Not a released
 installation method, published tap, migration promise, or change to Quickstart.
 
 The local generator installs source under a versioned keg and writes schema-2
@@ -75,11 +75,15 @@ uninstall. That VM candidate predates a narrow CLI analytics identity-path
 correction, which received focused regression checks and independent review.
 
 A clean `npm test` run on November 10, 2026 passed at
-`680ce8717fd4c806550b80f16f56ce507d3da1a9` with Node 26.13.0: all 4,407 tests,
+`793a7ddc4da20a70d57e8e972988bb30073c2f1d` with Node 26.13.0: all 4,544 tests,
 lint, both typechecks, release consistency and the unchanged coverage gates
-completed with exit 0. Coverage was 99.60% for statements/lines, 96.90% for branches
-and 100% for functions. This aggregate run used isolated fixtures, not live
-package or backup operations; earlier incomplete runs remain separate evidence.
+completed with exit 0. Coverage was 99.59% for statements/lines, 96.82% for branches
+and 100% for functions. All 30 separately invoked experimental tests also passed.
+The subsequent ancestry merge `68719fc` includes the published stack's matching
+test fixes at `fbe14b4`; its Git tree is identical to the tested `793a7dd` tree.
+These runs used isolated fixtures, not live package or backup operations. The
+earlier 4,407-test run at `680ce87` remains evidence for the original experiment,
+not the current stack. Failed attempts remain separate receipts.
 The later [November 9 chooser record](../../docs/installation-test-runs/2026-11-09-choice-candidate.md)
 documents clean and prepared Homebrew installation from frozen source `919fb5b`.
 It does not validate this current-stack runtime patch. Real backup/authentication,
