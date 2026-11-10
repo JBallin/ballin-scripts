@@ -1,4 +1,4 @@
-const { terminalPath, terminalProse, terminalCommand, terminalError } = require('./terminalStyle.ts');
+const { displayPath, terminalPath, terminalProse, terminalCommand, terminalError } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { stringify } = require('../config/store.ts');
@@ -30,14 +30,6 @@ const saveBackupConfig = (configPath: string, config: Record<string, unknown>): 
       try { fs.rmSync(temporary, { force: true }); } catch { writeStdoutLine('Unable to remove a private backup configuration staging file.'); }
     }
   }
-};
-// Quote unusual paths so control sequences cannot alter the terminal or impersonate another line.
-const displayPath = (value: string): string => {
-  const unsafe = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
-  if (!unsafe.test(value)) return value;
-  return JSON.stringify(value).replace(/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu, (character) => (
-    Array.from({ length: character.length }, (_, index) => `\\u${character.charCodeAt(index).toString(16).padStart(4, '0')}`).join('')
-  ));
 };
 const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolean => {
   const sensitiveDefinitions = (snapshotDefinitions as readonly SnapshotDefinition[])
@@ -99,7 +91,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
   writeStdoutLine('! Backups may contain private information or secrets.');
-  writeStdoutLine('i Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
+  writeStdoutLine('i Backup source details: getballin.com/docs/backup-sources.html#what-will-ballin-back-up');
   let reviewSucceeded = false;
   if (!process.env.HOME) writeStdoutLine('HOME is required to review sensitive sources.');
   else reviewSucceeded = reviewSensitiveSources(process.env.HOME, process.env);

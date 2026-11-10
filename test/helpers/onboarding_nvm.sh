@@ -11,7 +11,11 @@ nvm() {
     install)
       [[ "$*" == --lts && "$NVM_DIR" == "$BALLIN_QA_ROOT/home/.config/nvm" ]] || return 97
       mkdir -p "$NVM_DIR/alias/lts" "$NVM_DIR/versions/node/v26.13.0/bin"
-      ln -sf "$BALLIN_QA_NODE" "$NVM_DIR/versions/node/v26.13.0/bin/node"
+      # Keep the model inside its private tree rather than inheriting host
+      # toolcache permissions through a symlink.
+      rm -f "$NVM_DIR/versions/node/v26.13.0/bin/node"
+      cp "$BALLIN_QA_NODE" "$NVM_DIR/versions/node/v26.13.0/bin/node"
+      chmod 700 "$NVM_DIR/versions/node/v26.13.0/bin/node"
       # Literal arguments belong to the generated npm stub.
       # shellcheck disable=SC2016
       printf '#!/bin/sh\n[ "$1" = --version ] || exit 97\nprintf "11.0.0\\n"\n' > "$NVM_DIR/versions/node/v26.13.0/bin/npm"

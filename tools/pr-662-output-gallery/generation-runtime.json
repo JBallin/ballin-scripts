@@ -1,10 +1,42 @@
 {
-  "sourceRevision": "1f0c793d7bc6567af7ed2a580ad831c3a1567cc8",
+  "sourceRevision": "feb913a78d31b0da848a5a3609508f41526ad671",
   "executableHashes": {
-    "terminalStyle.ts": "a2793a1e94996012f6e692f05eb35979dc482d5991711d539ff962974a120d4a",
-    "help_format.ts": "c2c9b8944a113465a1bd6c0edd3d89b6bfa304e71049e24753983f595a0b71ee",
-    "doctor_report.ts": "b1839122fed6c98f15957ed19c5158bd65aa6cf663c2c4ee3ba927f67462abd3",
+    "terminalStyle.ts": "0bf50e27a6b4ab9c2168843853961f0da2f416630d0449b1dda9df39df44df28",
+    "help_format.ts": "dc61497b9c8a5e638bb18b8b65103e72b8f0b231cd9f5113bbd737673a322efa",
+    "doctor_report.ts": "c6ab6d09882baae7dab1a632324af7f2c6fcc810a112f648a154a1c5722f08fc",
     "diagnostics.ts": "2e475fceeaa4255201d48acbc5e207401bcc3d3c2c39dc43e5c182b4528f21a5",
     "selection_label.cjs": "e1c24dddb2d68e6e34b0e3ed9e696f1c03957691527eb0620d2a9c4456cb2835"
-  }
+  },
+  "reviewedProfiles": [
+    {
+      "sourceRevision": "fbe14b4a6b5dfb6da403fe8d8bc05935195f4303",
+      "executableHashes": {
+        "terminalStyle.ts": "5817c1318037df67bcae55b2de28fb8bf0f52f8547bed727b05484ef058870e8",
+        "help_format.ts": "dc61497b9c8a5e638bb18b8b65103e72b8f0b231cd9f5113bbd737673a322efa",
+        "doctor_report.ts": "c6ab6d09882baae7dab1a632324af7f2c6fcc810a112f648a154a1c5722f08fc",
+        "diagnostics.ts": "2e475fceeaa4255201d48acbc5e207401bcc3d3c2c39dc43e5c182b4528f21a5",
+        "selection_label.cjs": "e1c24dddb2d68e6e34b0e3ed9e696f1c03957691527eb0620d2a9c4456cb2835"
+      }
+    },
+    {
+      "sourceRevision": "1f0c793d7bc6567af7ed2a580ad831c3a1567cc8",
+      "executableHashes": {
+        "terminalStyle.ts": "a2793a1e94996012f6e692f05eb35979dc482d5991711d539ff962974a120d4a",
+        "help_format.ts": "c2c9b8944a113465a1bd6c0edd3d89b6bfa304e71049e24753983f595a0b71ee",
+        "doctor_report.ts": "b1839122fed6c98f15957ed19c5158bd65aa6cf663c2c4ee3ba927f67462abd3",
+        "diagnostics.ts": "2e475fceeaa4255201d48acbc5e207401bcc3d3c2c39dc43e5c182b4528f21a5",
+        "selection_label.cjs": "e1c24dddb2d68e6e34b0e3ed9e696f1c03957691527eb0620d2a9c4456cb2835"
+      }
+    },
+    {
+      "sourceRevision": "a92ef82fa45f13c260af0969a0c946b3d893808c",
+      "executableHashes": {
+        "terminalStyle.ts": "e32ceb735d3cefc4eb5b71d7a0865283419b9ee3fb35179066685f6850587b68",
+        "help_format.ts": "dc61497b9c8a5e638bb18b8b65103e72b8f0b231cd9f5113bbd737673a322efa",
+        "doctor_report.ts": "b1839122fed6c98f15957ed19c5158bd65aa6cf663c2c4ee3ba927f67462abd3",
+        "diagnostics.ts": "2e475fceeaa4255201d48acbc5e207401bcc3d3c2c39dc43e5c182b4528f21a5",
+        "selection_label.cjs": "e1c24dddb2d68e6e34b0e3ed9e696f1c03957691527eb0620d2a9c4456cb2835"
+      }
+    }
+  ]
 }

@@ -1,4 +1,4 @@
-const { terminalCommand, terminalError, terminalProse } = require('./terminalStyle.ts');
+const { displayPath, terminalCommand, terminalError, terminalPath, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -23,6 +23,7 @@ const {
   writeStderrLine,
 } = require('./commandHelpers.ts');
 import type { DoctorReport } from './doctor_report.ts';
+import type { NvmTrustFailure } from './nvm.ts';
 
 type NvmInstallResult = {
   captureFailed: boolean;
@@ -246,6 +247,15 @@ const runAutomaticStage = (
   }
 };
 
+// Name the first failing path; the generic guidance below covers how to repair it.
+const nvmTrustFailureLabels: Record<NvmTrustFailure['kind'], string> = {
+  directory: 'Unsafe NVM folder or parent folder',
+  entry: 'Unsafe owner or permissions',
+  link: 'Unsafe symlink or link target',
+  acl: 'Write-granting ACL',
+  scan: 'Unable to scan (unreadable folder or link loop)',
+};
+
 function runUpdateCommand(): void {
   let needsPhaseSeparator = false;
   const reportDiagnostic = (text = ''): void => {
@@ -265,15 +275,19 @@ function runUpdateCommand(): void {
 
   let childEnv = process.env;
   let exitStatus = 0;
+  let activeStage = 'Updating Homebrew';
+  const failedStages = new Set<string>();
 
   const progress = (text: string): void => {
+    activeStage = text;
     printProgress(text, needsPhaseSeparator);
     needsPhaseSeparator = true;
   };
 
-  const recordFailure = (status: number): void => {
+  const recordFailure = (status: number, stage = activeStage): void => {
     if (status !== 0) {
       exitStatus = status;
+      failedStages.add(stage);
     }
   };
 
@@ -313,9 +327,16 @@ function runUpdateCommand(): void {
 
   if (settings.nvm) {
     progress('Updating Node.js LTS');
-    const { discoverNvm } = require('./nvm.ts');
+    const { discoverNvm, untrustedNvmEntry } = require('./nvm.ts');
     const installation = discoverNvm(childEnv);
-    if (installation) {
+    const trustFailure: NvmTrustFailure | null = installation && untrustedNvmEntry(installation.directory, installation.source);
+    if (installation && trustFailure) {
+      reportDiagnostic('Unable to update Node.js LTS: the NVM working tree failed safety checks.');
+      reportDiagnostic(`${nvmTrustFailureLabels[trustFailure.kind]}: ${displayPath(terminalPath(trustFailure.path, childEnv.HOME))}`);
+      reportDiagnostic('Check its ownership, permissions, ACLs, and unreadable or linked paths before retrying. Ballin has not changed them.');
+      reportDiagnostic('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#quickstart-helper');
+      recordFailure(1);
+    } else if (installation) {
       const result = runNvmInstall({ ...childEnv, NVM_DIR: installation.directory }, installation.source);
       recordFailure(result.status);
       if (result.captureFailed) {
@@ -336,7 +357,7 @@ function runUpdateCommand(): void {
       runIntegrationCommand('npm', ['update', '-g'], { env: childEnv });
     } else {
       reportDiagnostic(terminalError('Unable to update global npm packages: npm is not available on PATH.', process.stderr));
-      recordFailure(1);
+      recordFailure(1, 'Updating global npm packages');
     }
   }
 
@@ -351,7 +372,7 @@ function runUpdateCommand(): void {
       runIntegrationCommand('softwareupdate', ['-ia'], { env: childEnv });
     } else {
       reportDiagnostic(terminalError('Unable to install macOS updates: softwareupdate is not available on PATH.', process.stderr));
-      recordFailure(1);
+      recordFailure(1, 'Installing macOS updates');
     }
   }
 
@@ -382,6 +403,8 @@ function runUpdateCommand(): void {
   }
 
   if (exitStatus !== 0) {
+    reportDiagnostic();
+    reportDiagnostic(terminalError(`Update finished with errors: ${[...failedStages].join('; ')}. Review the output above before retrying.`, process.stderr));
     process.exitCode = exitStatus;
   }
 }

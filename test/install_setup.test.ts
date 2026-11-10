@@ -28,6 +28,7 @@ describe('install setup', () => {
   let binDir: string;
   let commandLogPath: string;
   const docsUrl = 'https://example.test/docs';
+  const displayDocsUrl = 'example.test/docs';
   const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 
   const withoutStdout = (action: () => boolean): boolean => {
@@ -129,6 +130,46 @@ describe('install setup', () => {
       assert.equal(commandLog(), '');
     });
   }
+  for (const mode of ['fresh', 'refresh']) for (const failure of ['EAGAIN', 'EIO', 'unknown', '130', '143']) {
+    it(`contains optional preference input failure ${failure} during ${mode} installation`, () => {
+      installConfigSources();
+      const configPath = path.join(repoDir, 'ballin.config.json');
+      const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config/.defaultConfig.json'), 'utf8'));
+      fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
+      const before = fs.readFileSync(configPath);
+      const script = `const fs = require('fs');
+        const helpers = require(${JSON.stringify(path.join(repoRoot, 'commands/commandHelpers.ts'))});
+        const originalRead = fs.readSync;
+        fs.readSync = (fd, ...args) => {
+          if (fd !== 0) return originalRead(fd, ...args);
+          ${['130', '143'].includes(failure)
+            ? `throw new helpers.CommandInterrupted(${failure});`
+            : `throw Object.assign(new Error('PRIVATE_INPUT_FAILURE /private/example'), {code: ${JSON.stringify(failure)}});`}
+        };
+        process.argv = [process.execPath, ${JSON.stringify(installSetupPath)}, 'setup', ${JSON.stringify(repoDir)}, ${JSON.stringify(docsUrl)}, '', ${JSON.stringify(mode)}];
+        require(${JSON.stringify(installSetupPath)}).runInstallSetupCli();`;
+      const result = spawnSync(process.execPath, ['-e', script], {
+        encoding: 'utf8', input: '', env: childEnvironment({ BALLIN_BACKUP_CHOICE: 'no' }),
+      });
+      const interrupted = ['130', '143'].includes(failure);
+      assert.equal(result.status, interrupted ? Number(failure) : 1, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Review your Ballin preferences?');
+      assert.notInclude(result.stdout + result.stderr, 'PRIVATE_INPUT_FAILURE');
+      assert.notInclude(result.stdout + result.stderr, '/private/example');
+      if (interrupted) {
+        assert.include(result.stdout, 'Interrupted. Earlier completed changes remain.');
+        assert.notInclude(result.stderr, 'Run `ballin setup`');
+      } else {
+        assert.include(result.stderr, `stdin read: ${failure}`);
+        assert.include(result.stderr, 'Unable to read preference review input.');
+        assert.include(result.stderr, 'Run `ballin setup` to review preferences.');
+      }
+      assert.deepEqual(fs.readFileSync(configPath), before);
+      assert.equal(fs.readlinkSync(path.join(binDir, 'ballin')), path.join(sourceBinDir, 'ballin'));
+      assert.equal(commandLog(), '');
+    });
+  }
+
   it('creates the command directory and symlinks repository binaries', () => {
     const result = withoutStdout(() => symlinkBinaries(repoDir, binDir));
 
@@ -617,8 +658,8 @@ exit 1
     }
   }
 
-  for (const mode of ['fresh', 'refresh']) {
-    it(`defers an invalid saved backup destination when Quickstart declines backup in ${mode} mode`, () => {
+  for (const mode of ['fresh', 'refresh']) for (const review of [false, true]) {
+    it(`defers an invalid saved backup destination when Quickstart declines backup in ${mode} mode (review: ${review})`, () => {
       installConfigSources();
       const configPath = path.join(repoDir, 'ballin.config.json');
       const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8'));
@@ -626,7 +667,7 @@ exit 1
       fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
       const previousConfig = fs.readFileSync(configPath);
       const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
-        encoding: 'utf8', input: 'n\n', env: childEnvironment({ BALLIN_BACKUP_CHOICE: 'no' }),
+        encoding: 'utf8', input: review ? '\n'.repeat(10) : 'n\n', env: childEnvironment({ BALLIN_BACKUP_CHOICE: 'no' }),
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.notInclude(result.stdout, 'backup destination configuration is invalid');
@@ -881,7 +922,7 @@ exit 2
     assert.equal(
       analyticsDisclosureFor('https://example.test/analytics'),
       'i Analytics report command results, not backup contents.\n'
-      + 'i Analytics details:\nhttps://example.test/analytics',
+      + 'i Analytics details: https://example.test/analytics',
     );
     assert.equal(analyticsPrompt, 'Share usage analytics to help improve Ballin? [y/N] ');
     assert.equal(analyticsPromptFor(true), 'Share usage analytics to help improve Ballin? [Y/n] ');
@@ -1003,7 +1044,7 @@ process.exitCode = configureAnalyticsPreference({
         docsUrl: 'https://example.test/analytics',
       }));
       assert.isFalse(result);
-      assert.include(output, analyticsDisclosureFor('https://example.test/analytics'));
+      assert.include(output, analyticsDisclosureFor('https://example.test/analytics').replace('https://', ''));
     } finally {
       fs.readSync = originalRead;
     }
@@ -1094,8 +1135,8 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout.split("\n"), `✓ Created config: ${path.join(repoDir, 'ballin.config.json')}`);
     assert.isBelow(result.stdout.indexOf('Ballin installed successfully.'), result.stdout.indexOf('Set up private backups'));
-    assert.include(result.stdout, 'Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
-    assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
+    assert.include(result.stdout, 'Backup details: getballin.com/docs/installation.html#optional-backup-setup-and-reconnect');
+    assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped.');
     assert.equal(result.stdout.split('Change backup settings with `ballin backup setup`.').length - 1, 1);
@@ -1122,7 +1163,7 @@ require('https').request = () => {
       });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Zsh settings directory [Enter for home (~), an absolute directory, or skip]: ');
-      if (!enableCompletion) assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
+      if (!enableCompletion) assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
       assert.notInclude(result.stdout, 'Tab completion enabled.');
       assert.equal(fs.existsSync(path.join(testDir, 'home', '.zshrc')), enableCompletion);
       assert.equal(readRepoConfig().update.backup, 'false');
@@ -1146,7 +1187,7 @@ require('https').request = () => {
       assert.equal(result.status, backupFails ? 1 : 0, result.stdout + result.stderr);
       assert.include(result.stdout, 'Tab completion setup could not finish. Ballin remains installed.');
       assert.notInclude(result.stdout, 'Tab completion skipped.');
-      assert.include(result.stdout, `${docsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
+      assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
       assert.notInclude(result.stdout, 'symlinked binaries');
       assert.isTrue(fs.lstatSync(profile).isDirectory());
       assert.isTrue(fs.lstatSync(path.join(binDir, 'ballin')).isSymbolicLink());

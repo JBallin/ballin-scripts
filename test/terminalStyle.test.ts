@@ -112,6 +112,25 @@ describe('setup presentation roles', () => {
     assert.equal(styled, '🔗 Details:\nVisit \x1b[34mhttps://example.com/guide\x1b[0m, then \x1b[34mhttps://example.com/next\x1b[0m.');
     assert.equal(terminalUrls(styled, tty, {}), styled);
   });
+  it('keeps fallback Ballin documentation visible without schemes or hidden hyperlinks', () => {
+    const docs = 'getballin.com/docs/installation.html#health-and-recovery';
+    assert.equal(terminalUrls('getballin.com/', tty, {}), 'getballin.com/');
+    assert.equal(terminalUrls(docs + '.', tty, {}), docs + '.');
+    const other = 'https://github.com/JBallin/ballin-scripts/issues https://github.com/JBallin/ballin-scripts/security https://github.com/JBallin/ballin-scripts/blob/main/install.sh https://cli.github.com/ https://github.com/fixture-user/private-backup';
+    assert.equal(stripAnsi(terminalUrls(other, tty, {})), other);
+    for (const mode of [
+      { stream: { isTTY: false, columns: 16 }, env: {} },
+      { stream: { isTTY: true, columns: 16 }, env: { TERM: 'dumb' } },
+      { stream: { isTTY: true, columns: 16 }, env: { NO_COLOR: '1' } },
+      { stream: { isTTY: true, columns: 16 }, env: {} },
+    ]) {
+      const row = 'i Installation details: ' + docs;
+      const output = terminalProse(row, mode.stream, mode.env);
+      assert.equal(stripAnsi(output), row);
+      assert.notInclude(output, '\n'); assert.notInclude(output, '\x1b]');
+      assert.notInclude(output, 'https://');
+    }
+  });
   it('opts a proposed URL out of coloring without changing other presentation', () => {
     const url = 'https://example.com/backup';
     assert.equal(terminalProse(`i Proposed backup: ${url}`, tty, {}, { colorUrls: false }), `\x1b[0;34mi\x1b[0m Proposed backup: ${url}`);
@@ -184,4 +203,18 @@ describe('setup presentation roles', () => {
     const reference = terminalCommand('ballin backup setup', stream, {});
     assert.equal(terminalProse(`Run (${reference}), then retry.`, stream, {}), `Run\n(${reference}),\nthen retry.`);
   });
+});
+
+describe('pre-existing terminal hyperlinks', () => {
+  const { terminalUrls, terminalProse, visibleWidth } = require('../commands/terminalStyle.ts');
+  for (const ending of ['\x07', '\x1b\\']) {
+    it(`preserves linked URL labels and resumes coloring after ${JSON.stringify(ending)}`, () => {
+      const linked = `\x1b]8;;https://example.com/target${ending}https://example.com/label\x1b]8;;${ending}`;
+      const tty = { isTTY: true, columns: 8 };
+      const env = { TERM: 'xterm' };
+      assert.equal(terminalUrls(`${linked} https://example.com/plain`, tty, env), `${linked} \x1b[34mhttps://example.com/plain\x1b[0m`);
+      assert.equal(terminalProse(linked, tty, env), linked);
+      assert.equal(visibleWidth(linked), 'https://example.com/label'.length);
+    });
+  }
 });

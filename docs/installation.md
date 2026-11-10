@@ -244,7 +244,18 @@ For missing NVM, Quickstart uses suitable existing Homebrew, otherwise the
 versioned official NVM installer. It does not install Homebrew for this purpose.
 The NVM working directory stays outside Homebrew Cellar. Direct installation and
 `ballin setup` never install NVM or change its default. Broken or unverifiable
-Node/NVM commands need repair before proceeding.
+Node commands need repair before proceeding. Untrusted or unloadable NVM can
+be skipped when an existing Node is compatible; opting into NVM requires repair
+first. Before loading NVM, Quickstart and setup check the ownership and
+permissions of its source, symlinks, and parent directories. Standard macOS
+Homebrew source directories may be writable by the privileged admin group;
+ordinary group-write, world-write, and write-granting ACLs are rejected.
+Quickstart and NVM updates also check the working tree before invoking NVM,
+including existing versions and cached files. A failed working-tree check names
+the first unsafe path, quoting unusual characters. Repair untrusted paths manually;
+Ballin does not change their permissions. These checks do not protect against
+changes by the trusted owner or administrators. The temporary discovery probe
+contains ordinary NVM bookkeeping, but is not a shell sandbox.
 
 Suitable existing Homebrew is also preferred for missing Git and GitHub CLI.
 Homebrew can install dependencies; automatic updates, upgrades of already
@@ -424,8 +435,11 @@ The core installer then:
   analytics as described in [Analytics](analytics.md).
 
 The direct installer leaves the first backup for you to run with `ballin backup`;
-Quickstart may offer to run it after successful destination setup. A backup
-collects the selected allowlisted sources, reads the destination, and saves changes
+Quickstart may offer to run it after successful destination setup. If the backup
+succeeds but the browser cannot open, Quickstart shows the destination URL and
+finishes setup.
+
+A backup collects the selected allowlisted sources, reads the destination, and saves changes
 that pass the conflict checks. See [Backup sources and sensitivity](backup-sources.md).
 
 ## Revisiting onboarding choices
@@ -668,7 +682,7 @@ git clone https://github.com/example-user/ballin-backups.git
 
 For an unexpected problem, run `ballin self-update` first. If it succeeds and the
 problem remains, run `ballin doctor` and follow its guidance. If you still need
-help, see [Support](../SUPPORT.md). Review output before sharing it and remove
+help, see [Support](../.github/SUPPORT.md). Review output before sharing it and remove
 credentials or sensitive backup contents.
 
 If `ballin self-update` fails during setup, the checkout may already be updated;

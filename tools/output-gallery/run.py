@@ -109,7 +109,11 @@ def update_example(staged, sample):
     if not text.startswith('$ ballin update\n'):
         raise ValueError('Update example must start with its illustrative command')
     trusted = json.loads((LEGACY / 'generation-runtime.json').read_text())
-    if digest(staged / 'terminalStyle.ts') != trusted['executableHashes']['terminalStyle.ts']:
+    # This path executes only terminalStyle.ts. Full-gallery generation also
+    # checks the complete formatter profile in build.py before reaching here.
+    profiles = [trusted] + trusted.get('reviewedProfiles', [])
+    if not any(digest(staged / 'terminalStyle.ts') == profile['executableHashes']['terminalStyle.ts']
+               for profile in profiles):
         raise ValueError('Unreviewed gallery runtime: terminalStyle.ts')
     source = (staged / 'source-evidence/commands/update.ts').read_text()
     headings = [line[4:] for line in text.splitlines() if line.startswith('==> ')]
@@ -240,6 +244,8 @@ def main():
         (folder / 'text.txt').write_text(header + text)
         presentation = {'label': label, 'source': args.source, 'scenario': entry['title'] + ' (' + entry['id'] + ')',
                         'keepTogether': staged_case_ranges(text) if entry['id'] == 'staged-09' else []}
+        if entry['kind'] == 'actual-vm' and entry.get('commandCaptionReviewed') is True and entry.get('command'):
+            presentation['captionCommand'] = entry['command']
         (folder / 'presentation.json').write_text(json.dumps(presentation, indent=2) + '\n')
         run([str(renderer), str(folder / 'output'), str(folder / 'presentation.json')], input=(header + canonical).encode())
         render_report = json.loads((folder / 'output.json').read_text())

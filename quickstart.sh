@@ -19,7 +19,10 @@ ballin_download() {
   }
   case "$code" in
     200) return 0 ;;
-    404) ballin_error "No published release or supported revision was found: $1" ;;
+    404) ballin_error "No published release or supported revision was found: $1
+Check the requested version, branch, or commit and retry with an existing supported revision.
+See https://github.com/JBallin/ballin-scripts/releases for published stable versions.
+If no stable release is published yet, wait for publication; no fallback was selected." ;;
     401|403|429) ballin_error "GitHub authentication or rate limit rejected the request (HTTP $code). Retry later: $1" ;;
     *) ballin_error "GitHub request failed (HTTP $code): $1" ;;
   esac
@@ -232,9 +235,10 @@ choice_word() {
   printf '%s' "$1"
 }
 presentation_text() {
-  local line
+  local line label
   while IFS= read -r line; do
     case "$line" in
+      'i '*': getballin.com/'*) label=${line#i }; documentation_pointer "${label%%: *}" "${line#*: }" "${2:-1}" ;;
       'i '*) status_marker info "${2:-1}"; printf ' %s\n' "${line#i }" ;;
       *) printf '%s\n' "$line" ;;
     esac
@@ -282,11 +286,30 @@ confirm_fixed_choice() {
   render_fixed_prompt
   printf '\033[36m%s\033[0m\n' "$1"
 }
+supports_hyperlinks() {
+  [[ -t "${1:-1}" && "${TERM:-}" =~ ^(xterm|wezterm)(-|$) && -z "${NO_COLOR:-}" && -z "${TMUX:-}" && -z "${STY:-}" && -z "${SSH_CONNECTION:-}" && -z "${SSH_TTY:-}" && -z "${CI:-}" ]] || return 1
+  case "${TERM_PROGRAM:-}" in
+    iTerm.app)
+      [[ "${TERM_PROGRAM_VERSION:-}" =~ ^([0-9]{1,3})\.([0-9]{1,3})(\.[0-9]{1,5})?([a-zA-Z][a-zA-Z0-9.-]*)?$ ]] || return 1
+      (( 10#${BASH_REMATCH[1]} > 3 || (10#${BASH_REMATCH[1]} == 3 && 10#${BASH_REMATCH[2]} >= 1) )) ;;
+    WezTerm) [[ "${TERM_PROGRAM_VERSION:-}" =~ ^[0-9]{8}-[0-9]{6}-[a-fA-F0-9]+$ ]] ;;
+    *) return 1 ;;
+  esac
+}
 documentation_pointer() {
-  status_marker info
-  printf ' %s:\n' "$1"
-  url_reference "$2"
-  printf '\n'
+  local label=$1 url=$2 stream=${3:-1} target='' safe_label safe_url
+  status_marker info "$stream" >&"$stream"
+  printf ' ' >&"$stream"
+  case "$url" in https://*) target=$url ;; getballin.com/*) target="https://$url" ;; esac
+  safe_label=${label//[[:cntrl:]]/}; safe_url=${url//[[:cntrl:]]/}
+  if supports_hyperlinks "$stream" && [[ "$url" != *[[:cntrl:][:space:]]* && "$label" != *[[:cntrl:]]* && "$target" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?(/|[?#]|$) && "$target" != *'@'* ]]; then
+    printf '\033]8;;%s\033\\\033[34m%s\033[0m\033]8;;\033\\\n' "$target" "$label" >&"$stream"
+  else
+    safe_url=${safe_url#https://}; safe_url=${safe_url#http://}
+    printf '%s: ' "$safe_label" >&"$stream"
+    url_reference "$safe_url" "$stream" >&"$stream"
+    printf '\n' >&"$stream"
+  fi
 }
 error_icon() {
   status_marker failure "${1:-1}"
@@ -331,6 +354,20 @@ display_path() {
     *) printf '%s' "$1" ;;
   esac
 }
+# Show a path a peer may have named. Escape every nonprinting byte (escape
+# sequences, newlines, bidi controls) so it cannot alter the terminal. Bash 3.2 safe.
+display_untrusted_path() {
+  local LC_ALL=C value shown='' char code index
+  value=$(display_path "$1")
+  if [[ "$value" != *[![:print:]]* ]]; then printf '%s' "$value"; return; fi
+  for (( index=0; index<${#value}; index++ )); do
+    char=${value:index:1}
+    if [[ "$char" == [[:print:]] && "$char" != "\\" ]]; then shown+=$char; continue; fi
+    code=$(printf '%d' "'$char"); (( code >= 0 )) || (( code += 256 ))
+    shown+=$(printf '\\%03o' "$code")
+  done
+  printf '"%s"' "$shown"
+}
 
 # Compare the reviewed command entry again before using Quickstart consent.
 command_entry_snapshot() {
@@ -356,6 +393,7 @@ required_node_version=''
 scratch=''
 profile_temp=''
 gh_temp=''
+nvm_trust_problem=''
 original_path=${PATH-}
 original_pwd=$PWD
 
@@ -715,7 +753,7 @@ existing_hidden_node() {
 }
 
 manual_node_guidance() {
-  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\ni Node.js details:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs"
+  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\ni Node.js details: '"getballin.com/docs/optional-capabilities.html#nodejs"
 }
 
 brew_checked() {
@@ -912,8 +950,26 @@ validate_nvm_directory() {
     suffix="/${ancestor##*/}$suffix"; ancestor=${ancestor%/*}; ancestor=${ancestor:-/}
   done
   [[ -d "$ancestor" && -O "$ancestor" && -w "$ancestor" && -x "$ancestor" ]] || fail 'NVM_DIR needs an accessible user-owned directory. Review it before configuring NVM.'
+  trusted_nvm_path "$ancestor" directory || fail 'NVM_DIR or its path is not trusted. Repair its ownership and permissions before configuring NVM.'
+  if [[ -d "$nvm_directory" ]]; then
+    trusted_nvm_tree || fail "The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM."$'\n'"$nvm_trust_problem"
+  fi
   physical=$(cd -P -- "$ancestor" && pwd -P) || fail 'Unable to resolve the NVM working directory.'
   case "$physical$suffix/" in */Cellar/*) fail 'NVM_DIR must be a user-owned directory outside Homebrew Cellar.' ;; esac
+}
+# Claim every missing component exclusively after consent. Never adopt a path
+# that appeared after validation, including below a sticky shared ancestor.
+prepare_nvm_directory() {
+  local ancestor="$nvm_directory" index
+  local missing=()
+  while [[ ! -e "$ancestor" && ! -L "$ancestor" ]]; do
+    missing+=("$ancestor"); ancestor=${ancestor%/*}; ancestor=${ancestor:-/}
+  done
+  validate_nvm_directory
+  for (( index=${#missing[@]}-1; index>=0; index-- )); do
+    mkdir -m 700 -- "${missing[index]}" || fail 'The NVM path changed or could not be created safely. Inspect it before retrying Quickstart.'
+  done
+  validate_nvm_directory
 }
 validate_nvm_alias_targets() {
   local entry links
@@ -928,17 +984,135 @@ validate_nvm_alias_targets() {
   done
 }
 
+# A disposable HOME is not a sandbox for shell code. Check the full lexical
+# path, including every symlink and target ancestor, before sourcing existing NVM.
+homebrew_nvm_source_prefix() {
+  local source=$1 directory prefix='' target hops=0
+  while [[ -L "$source" ]]; do
+    (( hops += 1 )); (( hops <= 40 )) || return 1
+    target=$(readlink "$source") || return 1
+    if [[ "$target" == /* ]]; then source=$target; else source="${source%/*}/$target"; fi
+  done
+  directory=$(cd -P -- "${source%/*}" 2>/dev/null && pwd -P) || return 1
+  case "$directory/${source##*/}" in
+    */Cellar/nvm/*/libexec/nvm.sh) prefix=${directory%%/Cellar/nvm/*} ;;
+    */opt/nvm/libexec/nvm.sh) prefix=${directory%/opt/nvm/libexec} ;;
+    *) return 1 ;;
+  esac
+  [[ -f "$prefix/Library/Homebrew/brew.sh" || -f "$prefix/Homebrew/Library/Homebrew/brew.sh" ]] || return 1
+  printf '%s' "$prefix"
+}
+trusted_nvm_path() {
+  local pending=$1 kind=${2:-file} homebrew_prefix=${3:-} current=/ component target metadata owner group mode acl links=0
+  local platform
+  platform=$(/usr/bin/uname -s) || return 1
+  [[ "$pending" == /* ]] || return 1
+  pending=${pending#/}
+  while :; do
+    if metadata=$(/usr/bin/stat -f '%u %g %p' "$current" 2>/dev/null); then
+      owner=${metadata%% *}; metadata=${metadata#* }; group=${metadata%% *}; mode=${metadata#* }; mode=$((8#$mode))
+    else
+      if ! metadata=$(/usr/bin/stat -c '%u %g %f' "$current" 2>/dev/null); then
+        [[ "$kind" == entry && -z "$pending" && ! -e "$current" && ! -L "$current" ]]; return
+      fi
+      owner=${metadata%% *}; metadata=${metadata#* }; group=${metadata%% *}; mode=${metadata#* }; mode=$((16#$mode))
+    fi
+    [[ "$owner" == 0 || "$owner" == "$UID" ]] || return 1
+    if [[ ! -L "$current" ]]; then
+      if (( (mode & 0022) != 0 )); then
+        # Homebrew's standard admin-group directories are a trusted macOS
+        # dependency, unlike ordinary peer-writable NVM working directories.
+        if [[ "$platform" == Darwin && -d "$current" && "$group" == 80 && -n "$homebrew_prefix" && ( "$current" == "$homebrew_prefix" || "$current" == "$homebrew_prefix/"* ) ]] && (( (mode & 0002) == 0 )); then :
+        else [[ -d "$current" ]] && (( (mode & 01000) != 0 )) || return 1; fi
+      fi
+    fi
+    if [[ "$platform" == Darwin ]]; then
+      acl=$(LC_ALL=C /bin/ls -lde "$current") || return 1
+      [[ -n "$acl" ]] || return 1
+      if printf '%s\n' "$acl" | grep -Eq '^[[:space:]]*[0-9]+:.* allow .*(write|append|add_file|add_subdirectory|delete|chown)'; then return 1; fi
+    fi
+    if [[ -L "$current" ]]; then
+      (( links += 1 )); (( links <= 40 )) || return 1
+      target=$(readlink "$current") || return 1
+      pending="$target${pending:+/$pending}"
+      if [[ "$target" == /* ]]; then current=/; pending=${pending#/}; else current=${current%/*}; current=${current:-/}; fi
+      continue
+    fi
+    if [[ -z "$pending" ]]; then
+      case "$kind" in file) [[ -f "$current" ]] ;; directory) [[ -d "$current" ]] ;; entry) [[ -f "$current" || -d "$current" ]] ;; *) return 1 ;; esac
+      return
+    fi
+    [[ -d "$current" ]] || return 1
+    component=${pending%%/*}
+    if [[ "$pending" == */* ]]; then pending=${pending#*/}; else pending=''; fi
+    case "$component" in
+      ''|.) ;;
+      ..) current=${current%/*}; current=${current:-/} ;;
+      *) current="${current%/}/$component" ;;
+    esac
+  done
+}
+
+trusted_nvm_source() {
+  local prefix=''
+  prefix=$(homebrew_nvm_source_prefix "$1") || prefix=''
+  trusted_nvm_path "$1" file "$prefix"
+}
+# Record the first failing path for the caller's message, then fail the check.
+nvm_tree_failure() {
+  nvm_trust_problem="$1: $(display_untrusted_path "$2")"
+  return 1
+}
+trusted_nvm_tree_links() {
+  local tree=$1 prefix=$2 depth=${3:-0} links entry
+  (( depth <= 40 )) || nvm_tree_failure 'Unsafe symlink or link target' "$tree" || return 1
+  links=$(/usr/bin/mktemp "$scratch/nvm-links.XXXXXX") || return 1
+  # -H follows this root, but leaves nested links for explicit validation.
+  /usr/bin/find -H "$tree" -type l -print0 > "$links" || nvm_tree_failure 'Unable to scan (unreadable folder or link loop)' "$tree" || return 1
+  while IFS= read -r -d '' entry; do
+    case "$entry" in
+      "$nvm_directory/nvm.sh"|"$nvm_directory/nvm-exec") trusted_nvm_path "$entry" entry "$prefix" || nvm_tree_failure 'Unsafe symlink or link target' "$entry" || return 1 ;;
+      *) trusted_nvm_path "$entry" entry || nvm_tree_failure 'Unsafe symlink or link target' "$entry" || return 1 ;;
+    esac
+    if [[ -d "$entry" ]]; then trusted_nvm_tree_links "$entry" "$prefix" "$((depth + 1))" || return 1; fi
+  done < "$links"
+  rm -f -- "$links"
+}
+trusted_nvm_tree() {
+  local unsafe acls entry prefix=''
+  nvm_trust_problem=''
+  trusted_nvm_path "$nvm_directory" directory || nvm_tree_failure 'Unsafe NVM folder or parent folder' "$nvm_directory" || return 1
+  # Follow existing links to inspect the content NVM can use. find rejects
+  # loops; every reachable link's lexical chain is checked separately.
+  unsafe=$(/usr/bin/mktemp "$scratch/nvm-unsafe.XXXXXX") || return 1
+  /usr/bin/find -L "$nvm_directory" \( \( ! -user "$UID" -a ! -user 0 \) -o \( ! -type l -a \( -perm -0020 -o -perm -0002 \) \) \) -print0 > "$unsafe" \
+    || nvm_tree_failure 'Unable to scan (unreadable folder or link loop)' "$nvm_directory" || return 1
+  if IFS= read -r -d '' entry < "$unsafe"; then nvm_tree_failure 'Unsafe owner or permissions' "$entry" || return 1; fi
+  rm -f -- "$unsafe"
+  prefix=$(homebrew_nvm_source_prefix "${nvm_source:-$nvm_directory/nvm.sh}") || prefix=''
+  trusted_nvm_tree_links "$nvm_directory" "$prefix" || return 1
+  if [[ "$(/usr/bin/uname -s)" == Darwin ]]; then
+    acls=$(/usr/bin/mktemp "$scratch/nvm-acls.XXXXXX") || return 1
+    /usr/bin/find -L "$nvm_directory" -acl -print0 > "$acls" || nvm_tree_failure 'Unable to scan (unreadable folder or link loop)' "$nvm_directory" || return 1
+    while IFS= read -r -d '' entry; do trusted_nvm_path "$entry" entry || nvm_tree_failure 'Write-granting ACL' "$entry" || return 1; done < "$acls"
+    rm -f -- "$acls"
+  fi
+}
+
 # NVM discovery is read-only. Never source Homebrew's outer nvm.sh wrapper:
 # it creates the working directory and compatibility links even with --no-use.
 discover_nvm() {
   local directory source candidate prefix='' status=0
-  nvm_source=''; nvm_method='official'; nvm_follows_lts=false
+  nvm_source=''; nvm_method='official'; nvm_follows_lts=false; nvm_problem=''
   nvm_directory=${NVM_DIR:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}}
   nvm_directory=${nvm_directory:-$HOME/.nvm}
   normalize_nvm_directory
+  nvm_default_exists=false
+  [[ ! -e "$nvm_directory/alias/default" && ! -L "$nvm_directory/alias/default" ]] || nvm_default_exists=true
   for directory in "$nvm_directory" "$HOME/.nvm"; do
     source="$directory/nvm.sh"
     if [[ -f "$source" && -r "$source" ]]; then
+      trusted_nvm_source "$source" || { nvm_problem='Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'; return 0; }
       candidate=$source
       local hops=0 target
       while [[ -L "$candidate" && $hops -lt 40 ]]; do
@@ -952,7 +1126,7 @@ discover_nvm() {
           local stable="${candidate%%/Cellar/nvm/*}/opt/nvm/libexec/nvm.sh"
           # Persist the stable source only when it identifies this installation.
           # Never load the mutating Homebrew wrapper during discovery.
-          if [[ -r "$stable" && "$stable" -ef "$candidate" ]]; then candidate=$stable; fi
+          if [[ -r "$stable" && "$stable" -ef "$candidate" ]] && trusted_nvm_source "$stable"; then candidate=$stable; fi
           ;;
       esac
       if grep -q 'libexec/nvm.sh' "$candidate" && ! grep -q 'nvm_process_parameters' "$candidate"; then continue; fi
@@ -975,6 +1149,7 @@ discover_nvm() {
   nvm_default_exists=false
   [[ ! -e "$nvm_directory/alias/default" && ! -L "$nvm_directory/alias/default" ]] || nvm_default_exists=true
   [[ -n "$nvm_source" ]] || return 0
+  trusted_nvm_source "$nvm_source" || { nvm_problem='Existing NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'; return 0; }
   local probe="$scratch/nvm-probe" version alias='default' seen=':' target
   mkdir -p "$probe/versions/node"
   mkdir -p "$probe/alias/lts"
@@ -1006,7 +1181,7 @@ discover_nvm() {
   result=$(HOME="$scratch" NVM_DIR="$probe" BASH_ENV='' ENV='' /bin/bash --noprofile --norc -c \
     '. "$1" --no-use >/dev/null && declare -F nvm >/dev/null || exit 1; printf "loadable\n"; nvm version default' ballin-nvm-probe "$nvm_source") || status=$?
   stop_if_interrupted "$status"
-  [[ "$result" == loadable || "$result" == loadable$'\n'* ]] || fail 'Existing NVM could not be loaded. Repair its source before retrying Quickstart.'
+  [[ "$result" == loadable || "$result" == loadable$'\n'* ]] || { nvm_problem='Existing NVM could not be loaded. Repair its source before retrying Quickstart.'; return 0; }
   for (( hops=0; hops<40; hops++ )); do
     if [[ "$alias" == 'lts/*' ]]; then
       [[ "$status" != 0 ]] || nvm_follows_lts=true
@@ -1025,7 +1200,8 @@ plan_nvm() {
   use_nvm=false; nvm_profile_needed=false
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
-  documentation_pointer 'Node.js details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
+  if [[ -n "$nvm_problem" ]]; then printf '%s\n' "$nvm_problem"; fi
+  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
   local question='Ballin requires Node.js. Install it using NVM?'
   [[ "$compatible" != true ]] || question='Use NVM with Node.js LTS instead?'
   if ! confirm "$question"; then
@@ -1035,6 +1211,7 @@ plan_nvm() {
     fi
     return
   fi
+  [[ -z "$nvm_problem" ]] || fail "$nvm_problem"
   validate_nvm_directory
   validate_nvm_alias_targets
   use_nvm=true; nvm_profile_needed=true
@@ -1057,11 +1234,13 @@ install_nvm_lts() {
       nvm_source="$brew_prefix/opt/nvm/libexec/nvm.sh"; nvm_method=homebrew
       [[ -r "$nvm_source" ]] || fail 'Homebrew NVM source was not installed at its stable prefix.'
     else
-      mkdir -p "$nvm_directory"
+      prepare_nvm_directory
       download 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh' "$scratch/nvm-install.sh"
       if [[ ! -s "$scratch/nvm-install.sh" ]] || ! /bin/bash -n "$scratch/nvm-install.sh"; then
         fail 'The official NVM installer is empty or incomplete.'
       fi
+      validate_nvm_directory
+      validate_nvm_alias_targets
       printf 'Installing NVM v0.40.8 in %s...\n' "$(display_path "$nvm_directory")"
       local installer_status=0
       printf "$ PROFILE=/dev/null NVM_DIR=%q METHOD=git BASH_ENV='' ENV='' /bin/bash %q\n" "$nvm_directory" "$scratch/nvm-install.sh"
@@ -1081,7 +1260,7 @@ install_nvm_lts() {
   if [[ "$nvm_method" == homebrew ]]; then
     # Initialize fresh and discovered Homebrew installations only after consent.
     # Preserve every existing entry, including dangling links and directories.
-    mkdir -p "$nvm_directory"
+    prepare_nvm_directory
     if [[ ! -e "$nvm_directory/nvm.sh" && ! -L "$nvm_directory/nvm.sh" ]]; then
       ln -s "$nvm_source" "$nvm_directory/nvm.sh"
     fi
@@ -1089,16 +1268,19 @@ install_nvm_lts() {
       ln -s "${nvm_source%/nvm.sh}/nvm-exec" "$nvm_directory/nvm-exec"
     fi
   fi
+  validate_nvm_directory
   export NVM_DIR="$nvm_directory"
   # Activation must occur in this Bash process, never a subshell or user profile.
   unset -f nvm
   local nvm_status=0
   # The selected source is discovered and checked before consented activation.
+  trusted_nvm_source "$nvm_source" || fail 'NVM source or its path is not trusted. Repair its ownership and permissions before retrying Quickstart.'
   # shellcheck source=/dev/null
   . "$nvm_source" --no-use || nvm_status=$?
   stop_if_interrupted "$nvm_status"
   [[ "$nvm_status" == 0 ]] || fail 'Unable to load NVM. Repair its source before retrying Quickstart.'
   declare -F nvm >/dev/null || fail 'The installed NVM source did not define nvm.'
+  trusted_nvm_tree || fail "The NVM working tree is not trusted. Repair its ownership and permissions before configuring NVM."$'\n'"$nvm_trust_problem"
   printf '$ nvm install --lts\n'
   unset NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER
   nvm install --lts || nvm_status=$?
@@ -1107,6 +1289,7 @@ install_nvm_lts() {
     failure_message 'Node.js LTS installation did not finish. Inspect its output, then rerun Quickstart.'
     return "$nvm_status"
   fi
+  trusted_nvm_tree || fail "The installed NVM working tree is not trusted. Repair its ownership and permissions before continuing."$'\n'"$nvm_trust_problem"
   if "$nvm_default_exists"; then
     printf "$ nvm alias default 'lts/*'\n"
     # Check the whole NVM call: its internals are not safe under errexit.
@@ -1192,7 +1375,7 @@ manual_nvm_guidance() {
   if [[ "${nvm_profile_needed:-false}" == true && "${path_setup_complete:-false}" != true ]]; then
     printf 'Activate NVM in your shell startup file before running Ballin in a new Terminal.\nUse this NVM working directory:\n'
     printf 'export NVM_DIR=%q\n' "$nvm_directory"
-    documentation_pointer 'NVM activation' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-nvm-activation'
+    documentation_pointer 'NVM activation' 'getballin.com/docs/installation.html#manual-nvm-activation'
   fi
 }
 
@@ -1262,7 +1445,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=true
   else
-    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\ni Manual setup:\n'"https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup"
+    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\ni Manual setup: '"getballin.com/docs/installation.html#manual-path-setup"
   fi
   return 0
 }
@@ -1544,7 +1727,7 @@ main() {
       fi
       prerequisite_names+=${prerequisite_list[index]}
     done
-    printf 'Installation will:\n'
+    printf '\nInstallation will:\n'
     if [[ -n "$brew_tool" ]]; then
       printf '  - Install missing tools and dependencies using existing Homebrew: %s\n' "$prerequisite_names"
     else
@@ -1571,7 +1754,7 @@ main() {
         printf '.\n'
       fi
     fi
-    documentation_pointer 'Installation details' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#what-installation-changes'
+    documentation_pointer 'Installation details' 'getballin.com/docs/installation.html#what-installation-changes'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n"
@@ -1642,7 +1825,7 @@ main() {
     if [[ "$destination" == repository ]]; then
       "$repo/bin/ballin" backup
       printf '\n'
-      "$repo/bin/ballin" backup open
+      BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER=1 "$repo/bin/ballin" backup open
     fi
   fi
   if "$path_setup_complete"; then
@@ -1651,7 +1834,7 @@ main() {
     printf '.\n'
   else
     printf "\nBallin is installed. PATH setup wasn’t verified.\n"
-    documentation_pointer 'Manual setup' 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#manual-path-setup'
+    documentation_pointer 'Manual setup' 'getballin.com/docs/installation.html#manual-path-setup'
   fi
 }
 

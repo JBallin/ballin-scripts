@@ -5,7 +5,11 @@ const MarkdownIt = require('../../site/node_modules/markdown-it');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const pages = new Set(input.pages.map(page => page.path));
 const encodePath = value => value.split('/').map(encodeURIComponent).join('/');
-const outputPath = file => file === 'README.md' ? 'index.html' : file.replace(/README\.md$/, 'index.md').replace(/\.md$/, '.html');
+// Support and security sources live in .github; keep their public page URLs.
+const outputPath = file => {
+  const publicPath = file.replace(/^\.github\/(SUPPORT|SECURITY)\.md$/, '$1.md');
+  return publicPath === 'README.md' ? 'index.html' : publicPath.replace(/README\.md$/, 'index.md').replace(/\.md$/, '.html');
+};
 const rendered = input.pages.map(page => {
   const md = new MarkdownIt({ html: true, linkify: false });
   const counts = new Map();
@@ -18,8 +22,10 @@ const rendered = input.pages.map(page => {
     const target = path.normalize(path.join(path.dirname(page.path), decodeURIComponent(match[1])));
     if (target.startsWith('../') || target.startsWith('/')) throw new Error('Link outside repository: ' + value);
     let destination;
-    if (pages.has(target)) destination = input.base + '/' + encodePath(outputPath(target));
-    else if (target.startsWith('docs/assets/') && !target.endsWith('.md')) destination = input.base + '/' + encodePath(target);
+    if (pages.has(target)) {
+      const pagePath = outputPath(target).replace(/(^|\/)index\.html$/, '$1');
+      destination = input.base + '/' + encodePath(pagePath);
+    } else if (target.startsWith('docs/assets/') && !target.endsWith('.md')) destination = input.base + '/' + encodePath(target);
     else destination = input.sourceBase + '/' + encodePath(target);
     return destination + match[2];
   };

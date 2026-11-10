@@ -24,13 +24,14 @@
   <link rel="stylesheet" href="{{base}}/style.css">
   <link rel="icon" href="{{base}}/favicon.svg" type="image/svg+xml" sizes="any">
   <script src="{{base}}/gallery.js" defer></script>
+  {{analytics}}
 </head>
 <body>
   <a class="skip" href="#content">Skip to content</a>
-  <header><a class="wordmark" href="{{base}}/index.html"><span aria-hidden="true">&gt;_ </span>ballin</a>
-    <nav aria-label="Main"><a href="{{base}}/docs/index.html">Documentation</a>{{galleryNav}}<a href="https://github.com/JBallin/ballin-scripts">GitHub ↗</a></nav>
+  <header><a class="wordmark" href="{{base}}/"><span aria-hidden="true">&gt;_ </span>ballin</a>
+    <nav aria-label="Main"><a href="{{base}}/docs/">Documentation</a>{{galleryNav}}<a href="https://github.com/JBallin/ballin-scripts">GitHub ↗</a></nav>
   </header>
   <main id="content">{{content}}</main>
-  <footer><a href="{{source}}">View source on GitHub</a><span>Back up dotfiles. Keep your tools current.</span></footer>
+  <footer><a href="{{source}}">View source on GitHub</a><a class="hosting-credit" href="https://www.netlify.com/">This site is powered by <span>Netlify</span></a><span class="footer-tagline">Back up dotfiles. Keep your tools current.</span></footer>
 </body>
 </html>

@@ -16,9 +16,13 @@ bash tools/pr-662-output-gallery/run.command
 python3 tools/pr-662-output-gallery/verify.py
 ```
 
-For exact historical rebuilding, use the original `c2f09af` branch snapshot.
-The current builder targets the repaired protocol-2 stack and is used by the
-unified workflow below.
+The original preservation commit was
+[`c2f09af`](https://github.com/JBallin/ballin-scripts/commit/c2f09af4636cc394adfc69666c6749ed5f91b9bf).
+Its temporary branch has been removed after the reusable tooling was carried
+forward here. Old generated staged captures are not retained assets; regenerate
+current output with the unified workflow below. The current builder targets the
+repaired protocol-2 stack. The original PDF/PNG exporter was not included in that
+preservation snapshot.
 
 Prefer the unified [local workflow](../output-gallery/README.md) for new current-stack review.
 Rendered text/ANSI captures and verification reports are regenerated locally and

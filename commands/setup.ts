@@ -18,8 +18,7 @@ Use \`ballin backup setup\` for backup destinations and sensitive sources. Use \
 
 This review does not run updates, backups, or runtime installation.
 
-i Preferences:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md
+i Preferences: getballin.com/docs/optional-capabilities.html
 `;
 
 type SetupOutcome = 'completed' | 'cancelled' | 'failed';
@@ -47,16 +46,15 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     const defaults = require('../config/.defaultConfig.json');
     questions.forEach(([key]) => preferenceBoolean(config.update?.[key] === undefined ? defaults.update[key] : config.update[key], `update.${key}`));
     preferenceBoolean(config.analytics?.enabled === undefined ? defaults.analytics.enabled : config.analytics.enabled, 'analytics.enabled');
-    const destination = configuredBackupDestination(config);
-    if (destination.kind === 'invalid') throw new Error('Invalid backup destination configuration.');
+    // Destination validation belongs to backup setup, not preference review.
     const nvm = inspectNvm();
     reviewing = true;
-    writeStdoutLine(terminalProse('i Optional capabilities:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'));
+    writeStdoutLine(terminalProse('i Optional capabilities: getballin.com/docs/optional-capabilities.html'));
     writeStdoutLine(`\n${terminalHeading('ballin update')}`);
     let savedChoice = false;
     const cancel = (): SetupOutcome => {
       writeStdoutLine(`\nReview cancelled.${savedChoice ? ' Earlier choices saved.' : ''}`);
-      if (!options.deferFollowUp) backupHint();
+      writeStdoutLine(`Run ${terminalCommand('ballin setup')} to resume preference review.`);
       return 'cancelled';
     };
     const save = (section: 'update' | 'analytics', key: string, enabled: boolean): void => {

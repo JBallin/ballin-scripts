@@ -1,3 +1,4 @@
+const { terminalProse } = require('./terminalStyle.ts');
 import type { Identity } from './repo_update.ts';
 const path = require('path');
 const {
@@ -12,7 +13,7 @@ const {
   updateInstalledRepo,
 } = require('./repo_update.ts');
 
-const sourcesUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md';
+const sourcesUrl = 'getballin.com/docs/backup-sources.html';
 
 const localGit = (repoDir: string, args: string[]) => {
   const result = runCommand('git', args, {
@@ -175,7 +176,7 @@ const refreshInstalledBallin = (): void => {
     if (sensitiveSourcesEnabled(repoDir)) {
       writeStdoutLine('Your sensitive-source opt-in remains enabled across updates and covers current and future supported sources.');
     }
-    writeStdoutLine(`Review: ${sourcesUrl}`);
+    writeStdoutLine(terminalProse(`i Review: ${sourcesUrl}`));
   }
 };
 

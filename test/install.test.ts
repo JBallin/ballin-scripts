@@ -5,9 +5,9 @@ const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
 const terminalGuidance = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.';
-const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
+const docsUrl = 'getballin.com/docs/installation.html';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
-const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
+const analyticsDocsUrl = 'getballin.com/docs/analytics.html#what-will-analytics-share';
 
 type RunInstallOptions = {
   env?: NodeJS.ProcessEnv;
@@ -273,7 +273,7 @@ ballin_download() { : > "$2"; }
         assert.isTrue(result.stdout.startsWith(existing ? '==> Updating Ballin\n' : '==> Setting up Ballin\n'), result.stdout);
         if (existing) assert.notInclude(result.stdout, '==> Setting up Ballin');
         const separator = scenario === 'initial configuration'
-          ? `\n==> Initial configuration\ni Installation details:\n${docsUrl}#what-will-installation-change\n`
+          ? `\n==> Initial configuration\ni Installation details: ${docsUrl}#what-will-installation-change\n`
           : existing ? '' : '\n';
         assert.include(result.stdout, `Git output fixture.\n${separator}Typed setup fixture.\n\n${terminalGuidance}\n`);
         assert.notInclude(result.stdout, '\n\n\n');
@@ -309,8 +309,8 @@ ballin_download() { : > "$2"; }
     assert.notInclude(result.stdout, 'private GitHub');
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
-    assert.include(result.stdout, `Installation details:\n${docsUrl}#what-will-installation-change\n? Proceed with installation? [y/N] `);
-    assert.lengthOf(result.stdout.match(/https:\/\/[^\s]+/gu) ?? [], 1);
+    assert.include(result.stdout, `Installation details: ${docsUrl}#what-will-installation-change\n? Proceed with installation? [y/N] `);
+    assert.lengthOf(result.stdout.match(/getballin\.com\/[^\s]+/gu) ?? [], 1);
     assert.deepEqual(commandLog(), [
       `git:clone --no-checkout https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
       'node:repo_update selected helper',
@@ -490,7 +490,7 @@ ballin_download() { : > "$2"; }
     assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install supported Node.js');
-    assert.include(result.stdout, 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -598,7 +598,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'existing installation method');
-    assert.include(result.stdout, 'i Node.js details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');

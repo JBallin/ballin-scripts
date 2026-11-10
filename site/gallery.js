@@ -32,7 +32,7 @@ function revealFragment(hash = location.hash) {
   const target = id && document.getElementById(id);
   if (!target) return;
   if (target.matches('.gallery-entry')) {
-    const output = target.querySelector('details:not(.provenance)');
+    const output = target.querySelector('.gallery-output');
     if (output) output.open = true;
   }
   for (let node = target; node; node = node.parentElement) {

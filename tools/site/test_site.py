@@ -3,6 +3,9 @@
 import contextlib
 import copy
 import io
+import functools
+import http.client
+import threading
 import json
 from pathlib import Path
 import stat
@@ -23,6 +26,10 @@ spec.loader.exec_module(site)
 preview_spec = importlib.util.spec_from_file_location('ballin_preview', Path(__file__).with_name('preview.py'))
 preview = importlib.util.module_from_spec(preview_spec)
 preview_spec.loader.exec_module(preview)
+
+local_spec = importlib.util.spec_from_file_location('ballin_local', Path(__file__).with_name('local.py'))
+local = importlib.util.module_from_spec(local_spec)
+local_spec.loader.exec_module(local)
 
 
 def png():
@@ -243,7 +250,7 @@ class BundleTests(unittest.TestCase):
             site.read_bundle(b'x' * (site.MAX_ZIP + 1))
 
     def test_manifest_is_an_exact_public_schema(self):
-        for value in ['capturesManifest', 'environment', 'command', 'answers', 'raw']:
+        for value in ['capturesManifest', 'environment', 'answers', 'raw']:
             manifest = copy.deepcopy(self.manifest)
             manifest['entries'][0][value] = 'PRIVATE SENTINEL'
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'schema fields'):
@@ -403,7 +410,7 @@ class BundleTests(unittest.TestCase):
             report = site.json_bytes({'text': text.decode(), 'private': 'PRIVATE SENTINEL'})
             for name, data in [('text.txt', text), ('output-001.png', png()), ('output.json', report), ('raw.ansi', b'PRIVATE SENTINEL')]:
                 (folder / name).write_bytes(data)
-            scenario = {**self.manifest['entries'][0], 'id': 'staged-09', 'environment': 'PRIVATE SENTINEL',
+            scenario = {**self.manifest['entries'][0], 'id': 'staged-09', 'environment': 'PRIVATE SENTINEL', 'command': 'PRIVATE SENTINEL',
                         'files': {p.name: site.digest(p.read_bytes()) for p in folder.iterdir()}}
             (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario], 'capturesManifest': 'PRIVATE SENTINEL'}))
             selected = {'schema': 1, 'entries': [{'scenario': 'staged-09', 'id': 'update', 'title': 'Synthetic update fixture', 'edits': 'Synthetic fixture only.', 'approvedForPublication': True, 'readmeUpdate': True}]}
@@ -418,6 +425,20 @@ class BundleTests(unittest.TestCase):
             self.assertNotIn('PRIVATE SENTINEL', json.dumps(manifest) + repr(files))
             with self.assertRaisesRegex(ValueError, 'Output exists'):
                 site.pack(gallery, selection, root / 'one.zip')
+            selected['entries'][0]['command'] = 'ballin update'
+            selection.write_bytes(site.json_bytes(selected))
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.pack(gallery, selection, root / 'command.zip')
+            manifest, _ = site.read_bundle((root / 'command.zip').read_bytes())
+            self.assertEqual(manifest['entries'][0]['command'], 'ballin update')
+            scenario['commandCaptionReviewed'] = True
+            (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario]}))
+            with self.assertRaisesRegex(ValueError, 'matching explicit'):
+                site.pack(gallery, selection, root / 'caption-mismatch.zip')
+            scenario['command'] = 'ballin update'
+            (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario]}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.pack(gallery, selection, root / 'caption-reviewed.zip')
             selected['entries'][0]['approvedForPublication'] = False
             selection.write_bytes(site.json_bytes(selected))
             with self.assertRaisesRegex(ValueError, 'approval'):
@@ -450,6 +471,53 @@ class BuildTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
+    def test_analytics_disabled_by_default_and_null_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'analytics.json'
+            path.write_text(json.dumps({'token': None}))
+            self.assertIsNone(site.analytics_config(path))
+        for page in self.output.rglob('*.html'):
+            self.assertNotIn('src="/ballin-scripts/analytics.js"', page.read_text())
+
+    def test_analytics_configuration_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'analytics.json'
+            for token in ('', 'not-a-token', 'A' * 32, '<script>', 12, False, []):
+                path.write_text(json.dumps({'token': token}))
+                with self.subTest(token=token), self.assertRaises(ValueError):
+                    site.analytics_config(path)
+            for config in ({}, {'token': None, 'secret': 'no'}):
+                path.write_text(json.dumps(config))
+                with self.assertRaises(ValueError):
+                    site.analytics_config(path)
+            path.write_text(json.dumps({'token': 'a' * 32}))
+            self.assertEqual(site.analytics_config(path), 'a' * 32)
+
+    def test_analytics_enabled_on_every_page_in_both_hosting_modes(self):
+        for index, base in enumerate(('', '/ballin-scripts')):
+            output = self.folder / f'analytics-{index}'
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.build(output, self.pin, base, self.bundle, 'https://getballin.com', 'a' * 32)
+            for page in output.rglob('*.html'):
+                self.assertEqual(page.read_text().count(f'src="{base}/analytics.js"'), 1)
+                self.assertIn('data-origin="https://getballin.com"', page.read_text())
+                self.assertIn('data-token="' + 'a' * 32 + '"', page.read_text())
+            self.assertTrue((output / 'analytics.js').is_file())
+            site.verify_site(output, base)
+
+    def test_analytics_loader_offline_origin_and_token_guards(self):
+        subprocess.run(['node', str(site.ROOT / 'tools/site/test_analytics.cjs')], check=True)
+
+    def test_netlify_credit_in_shared_footer(self):
+        credit = '<a class="hosting-credit" href="https://www.netlify.com/">This site is powered by <span>Netlify</span></a>'
+        for page in self.output.rglob('*.html'):
+            source = page.read_text()
+            footer = source.split('<footer>', 1)[1].split('</footer>', 1)[0]
+            self.assertEqual(footer.count(credit), 1)
+            self.assertIn('class="footer-tagline"', footer)
+            self.assertIn('View source on GitHub', footer)
+            self.assertIn('Back up dotfiles. Keep your tools current.', footer)
+
     def test_complete_site_contains_docs_and_same_bundle_bytes(self):
         self.assertTrue((self.output / 'docs/installation.html').is_file())
         self.assertTrue((self.output / 'sitemap.xml').is_file())
@@ -457,12 +525,38 @@ class BuildTests(unittest.TestCase):
             self.assertEqual((self.output / name).read_bytes(), data)
         source = (self.output / 'index.html').read_text()
         self.assertIn('/ballin-scripts/docs/quickstart.html', source)
-        self.assertIn('/ballin-scripts/gallery.html', source)
+        self.assertIn('/ballin-scripts/gallery/', source)
         self.assertIn('github.com/JBallin/ballin-scripts/blob/', source)
         site.verify_site(self.output, '/ballin-scripts')
 
+    def test_community_guides_keep_public_urls_and_source_links(self):
+        root_output = self.folder / 'community-root'
+        with contextlib.redirect_stdout(io.StringIO()):
+            site.build(root_output, self.bootstrap_pin, '', origin='https://getballin.com')
+        revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=site.ROOT, text=True).strip()
+        for output, origin, base in [(self.output, 'https://jballin.github.io', '/ballin-scripts'),
+                                     (root_output, 'https://getballin.com', '')]:
+            with self.subTest(base=base):
+                sitemap = (output / 'sitemap.xml').read_text()
+                for name in ['CONTRIBUTING', 'SUPPORT', 'SECURITY']:
+                    page = (output / (name + '.html')).read_text()
+                    self.assertIn(f'<loc>{origin}{base}/{name}.html</loc>', sitemap)
+                    source = f'{name}.md' if name == 'CONTRIBUTING' else f'.github/{name}.md'
+                    self.assertIn(f'href="https://github.com/{site.REPO}/blob/{revision}/{source}"', page)
+                    self.assertFalse((output / '.github' / (name + '.html')).exists())
+                contributing = (output / 'CONTRIBUTING.html').read_text()
+                support = (output / 'SUPPORT.html').read_text()
+                self.assertIn(f'href="{base}/#installation"', contributing)
+                self.assertIn(f'href="{base}/docs/"', contributing)
+                self.assertIn(f'href="{base}/docs/installation.html#selecting-a-revision"', contributing)
+                self.assertIn(f'href="{base}/SUPPORT.html"', contributing)
+                self.assertIn(f'href="{base}/docs/installation.html#health-and-recovery"', support)
+                self.assertIn(f'href="{base}/SECURITY.html"', support)
+                self.assertIn(f'/blob/{revision}/AGENTS.md', contributing)
+                site.verify_site(output, base)
+
     def test_favicon_copy_download_and_full_resolution_pages(self):
-        page = (self.output / 'gallery.html').read_text()
+        page = (self.output / 'gallery/index.html').read_text()
         self.assertIn('href="/ballin-scripts/favicon.svg"', page)
         self.assertIn('data-copy="text-update"', page)
         self.assertIn('role="status"', page)
@@ -470,8 +564,9 @@ class BuildTests(unittest.TestCase):
         self.assertIn('href="/ballin-scripts/gallery/update/output-001.html"', page)
         viewer = (self.output / 'gallery/update/output-001.html').read_text()
         self.assertIn('width="1" height="1"', viewer)
-        self.assertIn('tabindex="0" role="region"', viewer)
-        self.assertIn('/ballin-scripts/gallery.html#entry-update', viewer)
+        self.assertNotIn('class="native-mode"', viewer)
+        self.assertEqual(viewer.count('class="image-preview"'), 1)
+        self.assertIn('/ballin-scripts/gallery/#entry-update', viewer)
         self.assertIn('&lt;untrusted &amp; text&gt;', viewer)
         self.assertEqual((self.output / 'favicon.svg').read_bytes(), (site.ROOT / 'site/favicon.svg').read_bytes())
 
@@ -485,9 +580,11 @@ class BuildTests(unittest.TestCase):
                 attrs = dict(attrs)
                 if tag == 'meta':
                     self.meta[attrs.get('property', attrs.get('name'))] = attrs.get('content')
-        expected = {'index.html': 'Ballin', 'LICENSE.html': 'LICENSE · Ballin', 'gallery.html': 'Output gallery · Ballin',
+        expected = {'index.html': 'Ballin — Back up dotfiles and update your Mac', 'LICENSE.html': 'LICENSE · Ballin', 'gallery/index.html': 'Output gallery · Ballin',
                     'gallery/update/output-001.html': 'Synthetic update fixture — page 1 of 1 · Ballin'}
+        clean_paths = {'index.html': '', 'docs/index.html': 'docs/', 'gallery/index.html': 'gallery/', 'gallery.html': 'gallery/'}
         for path in self.output.rglob('*.html'):
+            relative = path.relative_to(self.output).as_posix()
             source = path.read_text()
             title = __import__('re').search(r'<title>(.*?)</title>', source).group(1)
             self.assertTrue(title.strip())
@@ -497,8 +594,13 @@ class BuildTests(unittest.TestCase):
             head = Head()
             head.feed(source)
             self.assertEqual(head.meta['og:title'], __import__('html').unescape(title))
+            self.assertEqual(head.meta['twitter:title'], __import__('html').unescape(title))
+            if path.relative_to(self.output).as_posix() == 'index.html':
+                description = 'Back up your dotfiles and keep your macOS development tools current.'
+                for key in ('description', 'og:description', 'twitter:description'):
+                    self.assertEqual(head.meta[key], description)
             self.assertEqual(head.meta['twitter:card'], 'summary_large_image')
-            self.assertEqual(head.meta['og:url'], 'https://jballin.github.io/ballin-scripts/' + path.relative_to(self.output).as_posix())
+            self.assertEqual(head.meta['og:url'], 'https://jballin.github.io/ballin-scripts/' + clean_paths.get(relative, relative))
             self.assertEqual(head.meta['og:image'], 'https://jballin.github.io/ballin-scripts/docs/assets/brand/social-preview.png')
             self.assertEqual(head.meta['og:image:type'], 'image/png')
             self.assertTrue(head.meta['og:image:alt'])
@@ -518,6 +620,17 @@ class BuildTests(unittest.TestCase):
         files['gallery/update/output-002.png'] = png()
         pages = site.image_pages(manifest, files, '/ballin-scripts')
         self.assertEqual([page['title'] for page in pages], ['Synthetic update fixture — page 1 of 2', 'Synthetic update fixture — page 2 of 2'])
+        for index, page in enumerate(pages, 1):
+            self.assertIn(f'<span aria-current="page">Page {index}</span>', page['content'])
+            other = 3 - index
+            self.assertIn(f'href="/ballin-scripts/gallery/update/output-{other:03}.html">Page {other}</a>', page['content'])
+            self.assertEqual(page['content'].count('class="image-pages"'), 2)
+        self.assertEqual(site.image_page_navigation(fixture()[0]['entries'][0], 1, ''), '')
+        gallery = site.gallery_html(manifest, files, '/ballin-scripts')
+        self.assertIn('Page 1 of 2', gallery)
+        self.assertIn('output-002.html', gallery)
+        self.assertNotIn('src="/ballin-scripts/gallery/update/output-002.png"', gallery)
+        self.assertIn('aria-label="Open Synthetic update fixture image viewer"', gallery)
 
     def test_root_custom_domain_complete_snapshot_and_project_cli_override(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -533,17 +646,27 @@ class BuildTests(unittest.TestCase):
                 metadata = json.loads((output / 'build.json').read_text())
                 self.assertEqual(metadata['hosting'], {'origin': origin, 'base': base})
                 site.verify_site(output, base)
-                for relative in ['index.html', 'docs/quickstart.html', 'gallery.html', 'gallery/update/output-001.html']:
+                routes = {'': 'index.html', 'docs/': 'docs/index.html', 'gallery/': 'gallery/index.html',
+                          'docs/quickstart.html': 'docs/quickstart.html',
+                          'gallery/update/output-001.html': 'gallery/update/output-001.html'}
+                sitemap = (output / 'sitemap.xml').read_text()
+                for route, relative in routes.items():
                     page = (output / relative).read_text()
-                    self.assertIn('href="' + origin + base + '/' + relative + '"', page)
+                    self.assertIn('href="' + origin + base + '/' + route + '"', page)
                     self.assertIn('content="' + origin + base + '/docs/assets/brand/social-preview.png"', page)
-                    self.assertEqual(preview.selected_file(output, base, base + '/' + relative), (output / relative).resolve())
-                self.assertIn(origin + base + '/gallery.html', (output / 'sitemap.xml').read_text())
+                    self.assertEqual(preview.selected_file(output, base, base + '/' + route), (output / relative).resolve())
+                    header = page.split('</header>', 1)[0]
+                    self.assertIn(f'class="wordmark" href="{base}/"', header)
+                    self.assertIn(f'href="{base}/docs/">Documentation</a>', header)
+                    self.assertIn(f'href="{base}/gallery/">Gallery</a>', header)
+                    self.assertIn(f'<loc>{origin}{base}/{route}</loc>', sitemap)
+                self.assertEqual((output / 'gallery.html').read_bytes(), (output / 'gallery/index.html').read_bytes())
+                self.assertNotIn('/gallery.html</loc>', sitemap)
                 self.assertIn(origin + base + '/sitemap.xml', (output / 'robots.txt').read_text())
                 self.assertFalse((output / 'CNAME').exists())
                 for name, data in self.files.items():
                     self.assertEqual((output / name).read_bytes(), data)
-                self.assertIn('github.com/JBallin/ballin-scripts/blob/', (output / 'gallery.html').read_text())
+                self.assertIn('github.com/JBallin/ballin-scripts/blob/', (output / 'gallery/index.html').read_text())
 
     def test_deployment_configuration_refuses_invalid_inputs(self):
         self.assertEqual(site.deployment_config(site.ROOT / 'site/deployment.json'), {'origin': 'https://getballin.com', 'base': ''})
@@ -558,28 +681,92 @@ class BuildTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     site.deployment_config(config)
 
-    def test_output_readability_and_provenance_disclosures(self):
-        gallery = (self.output / 'gallery.html').read_text()
+    def test_output_actions_precede_images_and_details_follow_output(self):
+        gallery = (self.output / 'gallery/index.html').read_text()
         viewer = (self.output / 'gallery/update/output-001.html').read_text()
-        self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', gallery)
-        self.assertIn('<details class="provenance"><summary>Source and capture details</summary>', viewer)
-        self.assertIn('href="/ballin-scripts/gallery/update/output-001.png">Open original PNG</a>', viewer)
-        self.assertIn('Scroll horizontally and vertically', viewer)
-        self.assertIn('Complete image, fitted to available width.', viewer)
-        self.assertIn('Native resolution — scroll or use arrow keys', viewer)
-        self.assertIn('Synthetic fixture only.', gallery)
-        self.assertIn('Synthetic fixture only.', viewer)
-        self.assertIn('Copy text', viewer)
-        self.assertIn('Download text', viewer)
+        details = '<details class="provenance"><summary>Details</summary>'
+        for page, ident in [(gallery, 'update'), (viewer, 'update-image')]:
+            self.assertLess(page.index(f'href="#transcript-{ident}">Text version</a>'), page.index('<figure'))
+            self.assertLess(page.index('Download text'), page.index(details))
+            self.assertIn('Staged example', page)
+            self.assertIn('Synthetic fixture only.', page)
+            self.assertIn('Copy text', page)
+        png_link = 'href="/ballin-scripts/gallery/update/output-001.png">Open original PNG</a>'
+        self.assertLess(viewer.index(png_link), viewer.index('<figure'))
+        self.assertLess(gallery.index('Open image viewer'), gallery.index('<figure'))
+
+    def test_reviewed_command_is_escaped_labeled_and_optional(self):
+        manifest, files = fixture()
+        entry = manifest['entries'][0]
+        self.assertNotIn('class="invocation"', site.gallery_html(manifest, files, ''))
+        entry['command'] = 'ballin update && printf "<result>"'
+        for kind, label in [('staged', 'Illustrative command'), ('actual-vm', 'Recorded command')]:
+            entry['kind'] = kind
+            site.validate_manifest(manifest, files)
+            for value in [site.gallery_html(manifest, files, ''), site.image_pages(manifest, files, '')[0]['content']]:
+                self.assertIn(f'<p>{label}</p>', value)
+                self.assertIn('ballin update &amp;&amp; printf &quot;&lt;result&gt;&quot;', value)
+                self.assertGreater(value.index(label), value.index('<details class="provenance">'))
+                self.assertNotIn('class="invocation"', value)
+
+    def test_docs_index_has_compact_project_resources(self):
+        value = (self.output / 'docs/index.html').read_text()
+        self.assertIn('id="project-resources"', value)
+        for target in ['SUPPORT.html', 'CONTRIBUTING.html', 'SECURITY.html', 'LICENSE.html']:
+            self.assertIn('href="/ballin-scripts/' + target + '"', value)
+        self.assertIn('https://github.com/JBallin/.github/blob/main/CODE_OF_CONDUCT.md', value)
+        self.assertGreater(value.index('id="project-resources"'), value.index('id="maintainer-guides"'))
+
+    def test_provenance_long_values_wrap_on_narrow_layouts(self):
+        css = (site.ROOT / 'site/style.css').read_text()
+        self.assertIn('.provenance{min-width:0;overflow-wrap:anywhere}', css)
+        self.assertIn('.provenance pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}', css)
+
+    def test_guide_section_links_only_use_present_examples(self):
+        manifest, _ = fixture()
+        entry = manifest['entries'][0]
+        entry.update(command='ballin backup list', title='List <saved> backups')
+        page = dict(path='docs/installation.html', content='<h2 id="inspect-saved-backups">Inspect</h2>')
+        rendered = site.add_gallery_section_links(page, manifest, '/prefix')
+        self.assertIn('href="/prefix/gallery/#entry-update"', rendered)
+        self.assertIn('List &lt;saved&gt; backups', rendered)
+        self.assertEqual(site.add_gallery_section_links(page, None, ''), page['content'])
+        unrelated = dict(path='docs/quickstart.html', content=page['content'])
+        self.assertEqual(site.add_gallery_section_links(unrelated, manifest, ''), page['content'])
+
+    def test_example_guides_link_to_specific_local_sections(self):
+        for command, path in [
+            ('ballin setup', 'optional-capabilities.html#guided-preference-review'),
+            ('ballin backup setup fixture --hostname github.com', 'installation.html#optional-backup-setup-and-reconnect'),
+            ('ballin backup list', 'installation.html#inspect-saved-backups'),
+            ('ballin backup read ballin_config', 'installation.html#inspect-saved-backups'),
+            ('ballin backup', 'capabilities.html#ballin-backup')]:
+            with self.subTest(command=command):
+                output = site.command_html({'command': command, 'category': 'Setup & Backup'}, '/prefix')
+                self.assertIn('href="/prefix/docs/' + path + '"', output)
+                self.assertNotIn('<pre>', output)
+
+    def test_gallery_opens_first_preview_and_keeps_topic_navigation(self):
+        manifest, files = fixture()
+        other = {**manifest['entries'][0], 'id': 'second', 'title': 'Second example', 'readmeUpdate': False}
+        manifest['entries'].append(other)
+        gallery = site.gallery_html(manifest, files, '')
+        first, second = gallery.split('id="entry-second"', 1)
+        self.assertIn('<details class="gallery-output" open>', first)
+        self.assertNotIn('<details class="gallery-output" open>', second)
+        self.assertLess(first.index('aria-label="Gallery sections"'), first.index('<article'))
+        for label in ['Installing', 'Backups &amp; preferences', 'Updating', 'Diagnostics']:
+            self.assertIn(label, first)
 
     def test_intro_gallery_link_keeps_readme_and_respects_bootstrap(self):
         complete = (self.output / 'docs/what-is-ballin.html').read_text()
         self.assertIn('class="gallery-related"', complete)
-        self.assertIn('href="/ballin-scripts/gallery.html">Browse the output gallery</a>', complete)
-        self.assertIn('href="/ballin-scripts/index.html#example-output"', complete)
+        self.assertIn('href="/ballin-scripts/gallery/">Browse the output gallery</a>', complete)
+        self.assertIn('href="/ballin-scripts/#example-output"', complete)
         self.assertEqual(site.related_gallery('docs/what-is-ballin.md', '', False), '')
-        self.assertEqual(site.related_gallery('docs/quickstart.md', '', True), '')
-        self.assertIn('href="/gallery.html"', site.related_gallery('docs/what-is-ballin.md', '', True))
+        self.assertIn('/gallery/#install-quickstart', site.related_gallery('docs/quickstart.md', '', True))
+        self.assertEqual(site.related_gallery('docs/quickstart.md', '', False), '')
+        self.assertIn('href="/gallery/"', site.related_gallery('docs/what-is-ballin.md', '', True))
 
     def test_copy_success_failure_and_repeat_activation(self):
         subprocess.run(['node', str(site.ROOT / 'tools/site/test_interactions.cjs')], check=True)
@@ -598,6 +785,137 @@ class BuildTests(unittest.TestCase):
             for path in ['/private.txt', '/ballin-scripts/../private.txt', '/ballin-scripts/%2e%2e/private.txt', '/ballin-scripts/escape', '/ballin-scripts/nested/']:
                 with self.subTest(path=path):
                     self.assertIsNone(preview.selected_file(selected, '/ballin-scripts', path))
+
+    def test_local_rebuild_switches_running_preview_only_after_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            storage = Path(directory) / 'local'
+            version = ['first']
+            def fake_build(output, *args, **kwargs):
+                output.mkdir()
+                (output / 'index.html').write_text(version[0])
+                (output / 'build.json').write_text('{"hosting":{"base":""}}')
+            with mock.patch.object(local.site, 'build', side_effect=fake_build):
+                current = local.rebuild(storage)
+                first = current.resolve()
+                server = preview.http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(preview.Preview, site=current, base=''))
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                def fetch():
+                    connection = http.client.HTTPConnection('localhost', server.server_port, timeout=5)
+                    try:
+                        connection.request('GET', '/')
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.getheader('Cache-Control'), 'no-store')
+                        return response.read()
+                    finally:
+                        connection.close()
+                try:
+                    self.assertEqual(fetch(), b'first')
+                    version[0] = 'second'
+                    local.rebuild(storage)
+                    self.assertEqual(fetch(), b'second')
+                    self.assertNotEqual(first, current.resolve())
+                    self.assertTrue(first.is_dir())
+                    with mock.patch.object(local.site, 'build', side_effect=ValueError('failed validation')):
+                        with self.assertRaisesRegex(ValueError, 'failed validation'):
+                            local.rebuild(storage)
+                    self.assertEqual(fetch(), b'second')
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
+
+    def test_local_rebuild_refuses_unmanaged_output_and_storage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            storage = Path(directory) / 'local'
+            storage.mkdir()
+            current = storage / 'current'
+            current.mkdir()
+            (current / 'keep.txt').write_text('evidence')
+            with self.assertRaisesRegex(ValueError, 'existing local preview'):
+                local.rebuild(storage)
+            self.assertEqual((current / 'keep.txt').read_text(), 'evidence')
+            alias = Path(directory) / 'alias'
+            alias.symlink_to(storage)
+            with self.assertRaisesRegex(ValueError, 'must not be a symlink'):
+                local.rebuild(alias)
+
+    def test_local_rebuild_rejects_parallel_build_and_unmanaged_link(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as directory:
+            storage = Path(directory) / 'local'
+            storage.mkdir()
+            with (storage / 'build.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaisesRegex(ValueError, 'Another local rebuild'):
+                    local.rebuild(storage)
+            target = Path(directory) / 'unmanaged'
+            target.mkdir()
+            (target / 'build.json').write_text('{}')
+            (storage / 'current').symlink_to(target)
+            with self.assertRaisesRegex(ValueError, 'unmanaged local preview link'):
+                local.rebuild(storage)
+            self.assertTrue((target / 'build.json').is_file())
+
+    def test_preview_prints_localhost_but_binds_only_loopback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = Path(directory)
+            (selected / 'index.html').write_text('public home')
+            (selected / 'build.json').write_text(json.dumps({
+                'hosting': {'base': ''}, 'sourceRevision': 'a' * 40,
+                'sourceWorktreeDirty': False, 'bundle': {'mode': 'bootstrap'}}))
+            with mock.patch.object(preview.http.server, 'ThreadingHTTPServer') as factory:
+                factory.return_value.server_port = 8000
+                output = io.StringIO()
+                with mock.patch('sys.argv', ['preview.py', '--site', str(selected)]), contextlib.redirect_stdout(output):
+                    preview.main()
+                self.assertEqual(factory.call_args.args[0], ('127.0.0.1', 8000))
+                self.assertEqual(json.loads(output.getvalue())['url'], 'http://localhost:8000/')
+
+    def test_preview_preserves_clean_directory_urls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = Path(directory)
+            routes = {'/': 'home', '/index.html': 'home', '/?review=1': 'home',
+                      '/docs/': 'docs', '/docs/index.html': 'docs',
+                      '/gallery/': 'gallery', '/gallery/index.html': 'gallery'}
+            for directory, label in [(selected, 'home'), (selected / 'docs', 'docs'), (selected / 'gallery', 'gallery')]:
+                directory.mkdir(exist_ok=True)
+                (directory / 'index.html').write_text(label)
+            for base in ['', '/ballin-scripts']:
+                handler = functools.partial(preview.Preview, site=selected, base=base)
+                server = preview.http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    for method in ['GET', 'HEAD']:
+                        for route, label in routes.items():
+                            path = base + route
+                            with self.subTest(base=base, method=method, path=path):
+                                connection = http.client.HTTPConnection('localhost', server.server_port, timeout=5)
+                                try:
+                                    connection.request(method, path)
+                                    response = connection.getresponse()
+                                    self.assertEqual(response.status, 200)
+                                    self.assertIsNone(response.getheader('Location'))
+                                    self.assertEqual(response.read(), label.encode() if method == 'GET' else b'')
+                                finally:
+                                    connection.close()
+                    if base:
+                        for path in ['/', base]:
+                            connection = http.client.HTTPConnection('localhost', server.server_port, timeout=5)
+                            try:
+                                connection.request('GET', path)
+                                response = connection.getresponse()
+                                self.assertEqual(response.status, 302)
+                                self.assertEqual(response.getheader('Location'), base + '/')
+                                response.read()
+                            finally:
+                                connection.close()
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
 
     def test_preview_handles_only_disconnected_response_writes(self):
         class FailedWriter:
@@ -655,9 +973,9 @@ class BuildTests(unittest.TestCase):
             self.assertIn(b'Error:', result.stderr)
 
     def test_accessible_nested_details_and_escaped_text(self):
-        value = (self.output / 'gallery.html').read_text()
+        value = (self.output / 'gallery/index.html').read_text()
         self.assertEqual(value.count('<details'), 3)
-        self.assertNotIn('<details open', value)
+        self.assertIn('<details class="gallery-output" open>', value)
         self.assertIn('<summary>Text version</summary>', value)
         self.assertIn('&lt;untrusted &amp; text&gt;', value)
         for anchor in ['install-quickstart', 'setup-backup', 'update', 'diagnostics']:
@@ -667,8 +985,8 @@ class BuildTests(unittest.TestCase):
         output = self.folder / 'bootstrap'
         with contextlib.redirect_stdout(io.StringIO()):
             site.build(output, self.bootstrap_pin, '/ballin-scripts')
-        self.assertFalse((output / 'gallery.html').exists())
-        self.assertNotIn('href="/ballin-scripts/gallery.html"', (output / 'index.html').read_text())
+        self.assertFalse((output / 'gallery/index.html').exists())
+        self.assertNotIn('href="/ballin-scripts/gallery/"', (output / 'index.html').read_text())
         with self.assertRaisesRegex(ValueError, 'Bootstrap'):
             site.build(self.folder / 'invalid-bootstrap', self.bootstrap_pin, '', self.bundle)
 
@@ -699,32 +1017,63 @@ class BuildTests(unittest.TestCase):
         self.assertFalse((self.folder / 'bad-pin').exists())
 
     def test_verify_rejects_broken_fragments_and_base_paths(self):
-        for value in ['<a href="/docs/installation.html">bad base</a>', '<a href="#missing">bad fragment</a>', '<img src="missing.png" alt="Fixture">']:
+        for value in ['<a href="/docs/">bad base</a>',
+                      '<a href="/ballin-scripts/docs/">missing directory index</a>',
+                      '<a href="/ballin-scripts/#missing">bad directory fragment</a>',
+                      '<a href="#missing">bad fragment</a>',
+                      '<img src="missing.png" alt="Fixture">']:
             with tempfile.TemporaryDirectory() as folder:
                 output = Path(folder)
+                (output / 'docs').mkdir()
                 (output / 'index.html').write_text(value)
                 with self.subTest(value=value), self.assertRaises(ValueError):
                     site.verify_site(output, '/ballin-scripts')
 
     def test_workflow_scope_permissions_and_freshness(self):
-        code = "const fs=require('node:fs'),yaml=require('js-yaml');process.stdout.write(JSON.stringify(yaml.load(fs.readFileSync('.github/workflows/pages.yml','utf8'))));"
+        code = "const fs=require('node:fs'),yaml=require('js-yaml');process.stdout.write(JSON.stringify(yaml.load(fs.readFileSync('.github/workflows/netlify.yml','utf8'))));"
         workflow = json.loads(subprocess.check_output(['node', '-e', code], cwd=site.ROOT))
         self.assertEqual(set(workflow['on']), {'push', 'workflow_dispatch'})
         self.assertEqual(workflow['on']['push']['branches'], ['main'])
         paths = set(workflow['on']['push']['paths'])
-        expected = {'README.md', 'CONTRIBUTING.md', 'SUPPORT.md', 'SECURITY.md', 'LICENSE.md', 'docs/**', 'site/**', 'tools/site/**', '.nvmrc', '.github/workflows/pages.yml'}
+        expected = {'README.md', 'CONTRIBUTING.md', '.github/SUPPORT.md', '.github/SECURITY.md', 'LICENSE.md', 'docs/**', 'site/**', 'tools/site/**', '.nvmrc', '.github/workflows/netlify.yml'}
         self.assertEqual(paths, expected)
         self.assertEqual(workflow['permissions'], {'contents': 'read'})
         self.assertFalse(workflow['concurrency']['cancel-in-progress'])
         build, deploy = workflow['jobs']['build'], workflow['jobs']['deploy']
         self.assertIn("github.ref == 'refs/heads/main'", build['if'])
         self.assertNotIn('permissions', build)
-        self.assertEqual(deploy['permissions'], {'contents': 'read', 'pages': 'write', 'id-token': 'write'})
+        self.assertEqual(deploy['permissions'], {'contents': 'read'})
         self.assertEqual(deploy['needs'], 'build')
-        self.assertEqual(build['steps'][0]['with']['ref'], 'main')
+        self.assertEqual(build['steps'][0]['with']['ref'], "${{ inputs.target == 'preview' && inputs.preview_ref || 'main' }}")
+        self.assertIn("vars.NETLIFY_DEPLOYS_ENABLED == 'true'", build['if'])
+        self.assertEqual(workflow['on']['workflow_dispatch']['inputs']['target']['default'], 'preview')
+        self.assertEqual(workflow['on']['workflow_dispatch']['inputs']['target']['options'], ['preview', 'production'])
+        self.assertIn("inputs.target || 'production'", workflow['concurrency']['group'])
+        self.assertEqual(deploy['environment']['name'], "${{ inputs.target == 'preview' && 'netlify-preview' || 'netlify-production' }}")
+        self.assertNotIn('NETLIFY_AUTH_TOKEN', json.dumps(build))
+        upload = next(step for step in build['steps'] if step.get('name') == 'Upload complete snapshot')
+        download = next(step for step in deploy['steps'] if step.get('name') == 'Download complete snapshot')
+        self.assertEqual(upload['with']['name'], download['with']['name'])
+        self.assertEqual(upload['with']['path'], '.site-output/site')
+        self.assertEqual(upload['with']['if-no-files-found'], 'error')
+        publish = next(step for step in deploy['steps'] if step.get('name') == 'Deploy complete snapshot')
+        self.assertEqual(publish['working-directory'], '${{ runner.temp }}')
+        self.assertIn('--no-build --dir "$RUNNER_TEMP/site-snapshot"', publish['run'])
+        self.assertIn('netlify-cli@27.16.2', publish['run'])
+        self.assertIn('if [[ "$TARGET" == production ]]; then args+=(--prod); fi', publish['run'])
+        self.assertNotIn('deploy-pages', json.dumps(workflow))
+        freshness_step = next(step for step in deploy['steps'] if step.get('name') == 'Refuse a superseded snapshot')
+        self.assertEqual(freshness_step['if'], "inputs.target != 'preview'")
+        build_step = next(step for step in build['steps'] if step.get('name') == 'Build current docs and the explicitly pinned bundle')
+        self.assertIn('if [[ "$TARGET" == production ]]; then args+=(--analytics); fi', build_step['run'])
         freshness = next(step['run'] for step in deploy['steps'] if step.get('name') == 'Refuse a superseded snapshot')
         self.assertIn('git diff --exit-code', freshness)
-        self.assertIn('docs site tools/site .nvmrc .github/workflows/pages.yml', freshness)
+        self.assertIn('docs site tools/site .nvmrc .github/workflows/netlify.yml', freshness)
+        self.assertIn('CONTRIBUTING.md', freshness.split())
+        self.assertNotIn('.github/CONTRIBUTING.md', freshness.split())
+        for name in ['SUPPORT.md', 'SECURITY.md']:
+            self.assertIn('.github/' + name, freshness.split())
+            self.assertNotIn(name, freshness.split())
 
 
 if __name__ == '__main__':

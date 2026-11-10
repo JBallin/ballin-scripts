@@ -227,7 +227,7 @@ describe('plain prompt input contracts', function() {
         assert.include(fs.readFileSync(path.join(sandbox.home, '.bashrc'), 'utf8'), 'ballin.bash');
       } else {
         assert.include(output, 'Enable it later:');
-        assert.include(output, 'https://example.test/install#startup-files-and-manual-activation');
+        assert.include(output, 'example.test/install#startup-files-and-manual-activation');
         assert.equal(output.includes('Tab completion skipped.'), label === undefined);
         assert.isFalse(fs.existsSync(path.join(sandbox.home, '.bashrc')));
       }

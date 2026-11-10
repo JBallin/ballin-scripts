@@ -30,11 +30,15 @@ def selected_file(site, base, request_path):
 
 class Preview(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, site, base, **kwargs):
-        self.site, self.base = site, base
+        self.site, self.base = site.resolve(), base
         super().__init__(*args, directory=str(site), **kwargs)
 
     def translate_path(self, path):
         return str(selected_file(self.site, self.base, path))
+
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
 
     def copyfile(self, source, outputfile):
         try:
@@ -44,9 +48,9 @@ class Preview(http.server.SimpleHTTPRequestHandler):
             self.log_message('Client disconnected while sending response body')
 
     def do_GET(self):
-        if self.path in ('/', self.base):
+        if self.base and self.path in ('/', self.base):
             self.send_response(302)
-            self.send_header('Location', self.base + '/index.html')
+            self.send_header('Location', self.base + '/')
             self.end_headers()
         elif selected_file(self.site, self.base, self.path) is None:
             self.send_error(404)
@@ -66,7 +70,7 @@ def main():
     parser.add_argument('--base', help='Override the snapshot base; legacy snapshots default to /ballin-scripts')
     parser.add_argument('--port', type=int, default=8000, help='Use 0 to choose a free port')
     args = parser.parse_args()
-    site = args.site.resolve()
+    site = args.site.absolute()
     if not (site / 'build.json').is_file() or not (site / 'index.html').is_file():
         parser.error('--site must select a complete generated snapshot')
     metadata = json.loads((site / 'build.json').read_text())
@@ -74,7 +78,7 @@ def main():
     if not isinstance(base, str) or not re.fullmatch(r'(?:/[a-zA-Z0-9_-]+)*', base) or not 0 <= args.port <= 65535:
         parser.error('Invalid snapshot base or port')
     server = http.server.ThreadingHTTPServer(('127.0.0.1', args.port), functools.partial(Preview, site=site, base=base))
-    print(json.dumps({'pid': os.getpid(), 'url': f'http://127.0.0.1:{server.server_port}{base}/index.html',
+    print(json.dumps({'pid': os.getpid(), 'url': f'http://localhost:{server.server_port}{base}/',
                       'site': str(site), 'sourceRevision': metadata['sourceRevision'],
                       'sourceWorktreeDirty': metadata['sourceWorktreeDirty'], 'bundleMode': metadata['bundle']['mode']}), flush=True)
     try:

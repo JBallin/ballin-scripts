@@ -33,7 +33,7 @@ function exerciseFragments() {
     } };
   const provenance = { open: false }, output = { open: false };
   const entry = { tagName: 'ARTICLE', parentElement: outer, matches: () => true,
-    querySelector: selector => selector === 'details:not(.provenance)' ? output : provenance,
+    querySelector: selector => selector === '.gallery-output' ? output : provenance,
     scrollIntoView: () => { assert.equal(output.open, true); scrolled.push('entry'); } };
   const location = new URL('https://example.test/project/viewer.html');
   const document = { querySelectorAll: () => [], addEventListener: (name, fn) => { handlers[name] = fn; },
