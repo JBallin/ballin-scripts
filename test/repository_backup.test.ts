@@ -1199,22 +1199,46 @@ describe('repository backup lifecycle', function() {
         assert.isUndefined(remote('claude_skills.bundle.json'));
       }
       const files = state().commits[state().head].files;
-      assert.notProperty(files, 'claude_settings.json');
+      assert.equal(remote('claude_settings.json'), included ? '{}\n' : undefined);
       assert.notProperty(files, 'claude_skills');
       const repeated = run([], '', { CLAUDE_CONFIG_DIR: claude }); ok(repeated);
       assert.notInclude(repeated.stdout, 'View changes:');
       assert.lengthOf(publications(), 1);
     });
   });
-  describe('Claude preferences lifecycle', () => {
-    const snapshot = 'claude_preferences.json';
+  describe('Claude settings lifecycle', () => {
+    const snapshot = 'claude_settings.json';
     const settings = () => path.join(home, '.claude', 'settings.json');
     const writeSettings = (contents: string): void => {
       fs.mkdirSync(path.dirname(settings()), { recursive: true });
       fs.writeFileSync(settings(), contents);
     };
 
-    it('publishes only filtered preferences and reads them without applying local settings', () => {
+    it('preserves a pre-release filename without treating it as the settings snapshot or cache base', () => {
+      const previousName = 'claude_preferences.json';
+      const previous = '{"model":"DUMMY_PRE_RELEASE"}\n';
+      saveState(fixtureState({ [previousName]: previous }));
+      seedCache(previousName, '{"model":"DUMMY_OLD_CACHE"}\n');
+      writeSettings('{"model":"sonnet"}');
+      ok(run());
+      assert.deepEqual(JSON.parse(remote(snapshot)!), { model: 'sonnet' });
+      assert.equal(remote(previousName), previous);
+      assert.equal(cached(snapshot), remote(snapshot));
+      assert.equal(cached(previousName), '{"model":"DUMMY_OLD_CACHE"}\n');
+      const listed = run(['list']); ok(listed);
+      assert.include(listed.stdout, snapshot);
+      assert.include(listed.stdout, 'Unexpected entries: 1.');
+      assert.notInclude(listed.stdout, previousName);
+      const read = run(['read', snapshot]); ok(read);
+      assert.equal(read.stdout, remote(snapshot));
+      const obsolete = run(['read', previousName]);
+      assert.equal(obsolete.status, 1);
+      assert.notInclude(obsolete.stdout + obsolete.stderr, 'DUMMY_PRE_RELEASE');
+      assert.equal(remote(previousName), previous);
+      assert.lengthOf(publications(), 1);
+    });
+
+    it('publishes only filtered settings and reads them without applying local settings', () => {
       const admitted = {
         model: 'sonnet', effortLevel: 'high', theme: 'dark',
         attribution: { commit: '', pr: 'Synthetic attribution' },
@@ -1247,7 +1271,7 @@ describe('repository backup lifecycle', function() {
       ['malformed', '{"model":"DUMMY_PARSE_SECRET",'],
       ['admitted-invalid', '{"effortLevel":"DUMMY_INVALID_SECRET"}'],
     ]) {
-      it(`preserves remote snapshots and caches without publication for ${kind} preferences`, () => {
+      it(`preserves remote snapshots and caches without publication for ${kind} settings`, () => {
         writeSettings('{"model":"sonnet"}'); source('old shell\n');
         ok(run());
         const previous = remote(snapshot);
@@ -1257,7 +1281,7 @@ describe('repository backup lifecycle', function() {
         writeSettings(invalid); source('new shell\n');
         const failed = run();
         assert.equal(failed.status, 1);
-        assert.include(failed.stderr, 'claude_preferences.json');
+        assert.include(failed.stderr, 'claude_settings.json');
         assert.notInclude(failed.stdout + failed.stderr, 'DUMMY_');
         assert.equal(state().head, previousHead);
         assert.lengthOf(publications(), 1);
@@ -1267,7 +1291,7 @@ describe('repository backup lifecycle', function() {
       });
     }
 
-    it('excludes source discovery and collection with sensitive consent off while retaining saved preferences', () => {
+    it('excludes source discovery and collection with sensitive consent off while retaining saved settings', () => {
       writeSettings('{"model":"sonnet"}'); ok(run());
       const previous = remote(snapshot);
       writeSettings('DUMMY_UNREADABLE_SECRET');
@@ -1287,7 +1311,7 @@ describe('repository backup lifecycle', function() {
         }
         const cp = require('child_process'); const spawn = cp.spawnSync;
         cp.spawnSync = function(command, args, ...rest) {
-          if (args?.some(arg => typeof arg === 'string' && arg.endsWith('/claude_preferences.ts'))) {
+          if (args?.some(arg => typeof arg === 'string' && arg.endsWith('/claude_settings.ts'))) {
             fs.appendFileSync(${JSON.stringify(attempts)}, 'collector\\n');
             throw new Error('DUMMY_EXCLUDED_COLLECTOR');
           }
@@ -1300,7 +1324,7 @@ describe('repository backup lifecycle', function() {
       assert.notInclude(excluded.stdout + excluded.stderr, 'DUMMY_');
     });
 
-    it('reviews and discloses the settings path without reading preference bytes', () => {
+    it('reviews and discloses the settings path without reading settings bytes', () => {
       unconfigured(); writeSettings('DUMMY_PREVIEW_SECRET');
       const attempts = path.join(root, 'settings-read.log');
       const preload = `
@@ -1326,7 +1350,7 @@ describe('repository backup lifecycle', function() {
       const reviewed = run(['setup'], '\nreconnect\n\ny\nn\n', {}, preload);
       assert.equal(reviewed.status, 1);
       assert.include(reviewed.stdout, '~/.claude/settings.json');
-      assert.include(reviewed.stdout, 'Claude settings.json contributes selected preferences only; retained values may still be private.');
+      assert.include(reviewed.stdout, 'Claude settings.json contributes a filtered subset; retained values may still be private.');
       assert.notInclude(reviewed.stdout + reviewed.stderr, 'DUMMY_');
       assert.isFalse(fs.existsSync(attempts));
       assert.lengthOf(mutations(), 0);

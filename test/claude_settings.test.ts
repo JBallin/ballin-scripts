@@ -2,16 +2,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { projectClaudePreferences, serializeClaudePreferences, captureClaudePreferences } = require('../commands/claude_preferences.ts');
-const { snapshotDefinitions } = require('../commands/backup_snapshots.ts');
+const { projectClaudeSettings, serializeClaudeSettings, captureClaudeSettings } = require('../commands/claude_settings.ts');
+const { snapshotDefinitions, classifySnapshotFileName } = require('../commands/backup_snapshots.ts');
 const { snapshotByteLimit } = require('../commands/recursive_snapshot.ts');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 
-describe('filtered Claude preferences', () => {
+describe('filtered Claude settings', () => {
   let home: string;
   let root: string;
-  const definition = (snapshotDefinitions as SnapshotDefinition[]).find(({ name }) => name === 'claude_preferences.json')!;
+  const definition = (snapshotDefinitions as SnapshotDefinition[]).find(({ name }) => name === 'claude_settings.json')!;
   const write = (value: string | Buffer, directory = root): string => {
     fs.mkdirSync(directory, { recursive: true });
     const file = path.join(directory, 'settings.json');
@@ -27,13 +27,19 @@ describe('filtered Claude preferences', () => {
     });
   };
   beforeEach(() => {
-    home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-claude-preferences-')));
+    home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-claude-settings-')));
     root = path.join(home, '.claude');
     fs.mkdirSync(root);
   });
   afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
-  it('preserves the exact reviewed preferences and reconstructs nested objects', () => {
+  it('uses the settings filename without adding a pre-release read alias', () => {
+    assert.equal(definition.inclusionGroup, 'sensitive');
+    assert.equal(classifySnapshotFileName('claude_settings.json'), 'current');
+    assert.equal(classifySnapshotFileName('claude_preferences.json'), 'unexpected');
+  });
+
+  it('preserves the exact reviewed settings and reconstructs nested objects', () => {
     const expected = {
       model: 'synthetic-model', effortLevel: 'high', alwaysThinkingEnabled: false,
       language: 'English', outputStyle: 'custom-style', theme: 'custom-theme', verbose: true,
@@ -42,13 +48,14 @@ describe('filtered Claude preferences', () => {
       attribution: { commit: '', pr: 'Private attribution', sessionUrl: false },
       modelSettings: { 'synthetic-model': { effortLevel: 'xhigh', maxEffortLevel: 'max' } },
     };
-    const actual = projectClaudePreferences({
+    const actual = projectClaudeSettings({
       ...expected,
       env: { SECRET: 'DUMMY_EXCLUDED' }, apiKeyHelper: 'DUMMY_EXCLUDED', awsAuthRefresh: 'DUMMY_EXCLUDED',
       hooks: { PreToolUse: [{ hooks: [{ type: 'http', url: 'DUMMY_EXCLUDED' }, { type: 'mcp', tool: 'DUMMY_EXCLUDED' }] }] },
       statusLine: { command: 'DUMMY_EXCLUDED' }, subagentStatusLine: { command: 'DUMMY_EXCLUDED' },
       fileSuggestion: { command: 'DUMMY_EXCLUDED' }, processWrapper: 'DUMMY_EXCLUDED',
       permissions: { allow: ['DUMMY_EXCLUDED'], deny: ['DUMMY_EXCLUDED'] }, sandbox: { enabled: false },
+      autoMode: { environment: ['DUMMY_EXCLUDED'] },
       enableAllProjectMcpServers: true, enabledPlugins: { DUMMY_EXCLUDED: true },
       pluginConfigs: { DUMMY_EXCLUDED: {} }, extraKnownMarketplaces: { DUMMY_EXCLUDED: {} },
       autoMemoryDirectory: 'DUMMY_EXCLUDED', cleanupPeriodDays: 1, futureKey: 'DUMMY_EXCLUDED',
@@ -60,14 +67,14 @@ describe('filtered Claude preferences', () => {
     });
     assert.deepEqual(actual, expected);
     assert.notInclude(JSON.stringify(actual), 'DUMMY_EXCLUDED');
-    assert.equal(projectClaudePreferences({ attribution: false }).attribution, false);
-    assert.deepEqual(projectClaudePreferences({}), {});
-    assert.deepEqual(projectClaudePreferences({ attribution: {}, modelSettings: {} }), { attribution: {}, modelSettings: {} });
+    assert.equal(projectClaudeSettings({ attribution: false }).attribution, false);
+    assert.deepEqual(projectClaudeSettings({}), {});
+    assert.deepEqual(projectClaudeSettings({ attribution: {}, modelSettings: {} }), { attribution: {}, modelSettings: {} });
   });
 
   it('keeps admitted arbitrary strings intact, without claiming to scan for secrets', () => {
     const value = 'DUMMY_PRIVATE_VALUE\nwith whitespace';
-    assert.deepEqual(projectClaudePreferences({ model: value, language: value, outputStyle: value, attribution: { commit: value } }), {
+    assert.deepEqual(projectClaudeSettings({ model: value, language: value, outputStyle: value, attribution: { commit: value } }), {
       model: value, language: value, outputStyle: value, attribution: { commit: value },
     });
   });
@@ -75,15 +82,15 @@ describe('filtered Claude preferences', () => {
   it('is deterministic across formatting and top-level, leaf and model ordering', () => {
     const a = { modelSettings: { z: { maxEffortLevel: 'max', effortLevel: 'low' }, a: { effortLevel: 'high' } }, attribution: { pr: '', commit: '' }, model: 'sonnet' };
     const b = { model: 'sonnet', attribution: { commit: '', pr: '' }, modelSettings: { a: { effortLevel: 'high' }, z: { effortLevel: 'low', maxEffortLevel: 'max' } } };
-    assert.equal(serializeClaudePreferences(JSON.stringify(a)), serializeClaudePreferences(JSON.stringify(b, null, 4)));
-    assert.equal(serializeClaudePreferences('{"future":42,"env":false,"permissions":null}'), '{}\n');
-    assert.equal(serializeClaudePreferences('{"env":{"duplicated":1,"duplicated":2}}'), '{}\n');
-    assert.equal(serializeClaudePreferences('{"attribution":{"future":1,"future":2}}'), '{\n  "attribution": {}\n}\n');
+    assert.equal(serializeClaudeSettings(JSON.stringify(a)), serializeClaudeSettings(JSON.stringify(b, null, 4)));
+    assert.equal(serializeClaudeSettings('{"future":42,"env":false,"permissions":null}'), '{}\n');
+    assert.equal(serializeClaudeSettings('{"env":{"duplicated":1,"duplicated":2}}'), '{}\n');
+    assert.equal(serializeClaudeSettings('{"attribution":{"future":1,"future":2}}'), '{\n  "attribution": {}\n}\n');
   });
 
   it('ignores inherited properties and safely retains unusual model identifiers', () => {
-    assert.deepEqual(projectClaudePreferences(Object.create({ model: 'inherited' })), {});
-    const output = JSON.parse(serializeClaudePreferences('{"modelSettings":{"__proto__":{"effortLevel":"low"},"constructor":{"maxEffortLevel":"max"}}}'));
+    assert.deepEqual(projectClaudeSettings(Object.create({ model: 'inherited' })), {});
+    const output = JSON.parse(serializeClaudeSettings('{"modelSettings":{"__proto__":{"effortLevel":"low"},"constructor":{"maxEffortLevel":"max"}}}'));
     assert.equal(Object.getPrototypeOf(output), Object.prototype);
     assert.isTrue(Object.hasOwn(output.modelSettings, '__proto__'));
     assert.deepEqual(output.modelSettings.__proto__, { effortLevel: 'low' });
@@ -109,13 +116,13 @@ describe('filtered Claude preferences', () => {
       const result = run();
       assert.equal(result.status, 1);
       assert.equal(result.stdout, '');
-      assert.include(result.stderr, 'ballin Claude preferences:');
+      assert.include(result.stderr, 'ballin Claude settings:');
       assert.notInclude(result.stderr, 'DUMMY_PRIVATE_VALUE');
     });
   }
 
   it('ignores duplicates and nested values inside excluded fields', () => {
-    assert.equal(serializeClaudePreferences('{"future":[{"model":1,"model":2}],"env":{"model":"a","model":"b"},"other":"commas, brackets[] {}"}'), '{}\n');
+    assert.equal(serializeClaudeSettings('{"future":[{"model":1,"model":2}],"env":{"model":"a","model":"b"},"other":"commas, brackets[] {}"}'), '{}\n');
   });
 
   for (const mode of ['default', 'empty', 'absolute', 'relative', 'alias']) {
@@ -172,7 +179,7 @@ describe('filtered Claude preferences', () => {
     assert.equal(run(['--max-bytes', '3']).stdout, '{}\n');
     const result = run(['--max-bytes', '2']);
     assert.equal(result.status, 1); assert.equal(result.stdout, '');
-    assert.equal(captureClaudePreferences(root, 'settings.json'), '{}\n');
+    assert.equal(captureClaudeSettings(root, 'settings.json'), '{}\n');
   });
 
   for (const extra of [['--max-bytes', '-1'], ['--max-bytes', 'NaN'], ['--max-bytes'], ['--unexpected'], ['--max-bytes', String(snapshotByteLimit + 1)]]) {
@@ -182,7 +189,7 @@ describe('filtered Claude preferences', () => {
     });
   }
   it('rejects incomplete collector arguments', () => {
-    const result = spawnSync(process.execPath, [path.join(__dirname, '../commands/claude_preferences.ts')], {
+    const result = spawnSync(process.execPath, [path.join(__dirname, '../commands/claude_settings.ts')], {
       env: testChildEnvironment({ HOME: home }), encoding: 'utf8',
     });
     assert.equal(result.status, 1); assert.equal(result.stdout, ''); assert.include(result.stderr, 'Invalid collector arguments');

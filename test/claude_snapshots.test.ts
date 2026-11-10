@@ -41,7 +41,7 @@ describe('Claude Code selected configuration', () => {
 
   it('uses six canonical sensitive definitions and no implicit additional source', () => {
     const definitions = (snapshotDefinitions as SnapshotDefinition[]).filter(({ category }) => category === 'claude');
-    assert.deepEqual(definitions.map(({ name }) => name), ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json', 'claude_preferences.json']);
+    assert.deepEqual(definitions.map(({ name }) => name), ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json', 'claude_settings.json']);
     assert.deepEqual([...configurationSnapshotGroups].filter(([, category]) => category === 'claude').map(([name]) => name), definitions.map(({ name }) => name));
     definitions.forEach(({ inclusionGroup }) => assert.equal(inclusionGroup, 'sensitive'));
   });
@@ -137,7 +137,7 @@ describe('Claude Code selected configuration', () => {
       'projects/demo/memory/MEMORY.md', 'agent-memory/demo/MEMORY.md', 'history.jsonl'].forEach((relative) => write(relative, 'DUMMY_EXCLUDED_SECRET'));
     write('.claude.json', 'DUMMY_HOME_SECRET', homeDir);
     write('settings.json', '{"env":{"SECRET":"DUMMY_EXCLUDED_SECRET"}}');
-    assert.equal(capture('claude_preferences.json').stdout, '{}\n');
+    assert.equal(capture('claude_settings.json').stdout, '{}\n');
     write('project/CLAUDE.md', 'project instructions', homeDir);
     write('project/.claude/rules/project.md', 'project rules', homeDir);
     ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json'].forEach((name) => {

@@ -426,7 +426,7 @@ Repository capture selects sources from the canonical definitions described
 below.
 
 `commands/backup_scope.json` owns the source catalog, source roots, recursive
-selection rules, and exported preference keys consumed by the collectors.
+selection rules, and exported settings keys consumed by the collectors.
 Self-update compares this data locally from Git before and after a successful
 refresh, ignoring formatting and the order of sources and selection sets. Capture internals are outside
 that comparison. Missing or unreadable scope data produces an explicit
@@ -439,14 +439,14 @@ scope changes it can express. Increment `collectionPolicy` for a semantic
 collection change outside those declarations, such as new traversal or selection
 semantics. Do not increment it for implementation fixes that preserve the
 supported sources and selection policy, including bounded reading.
-The filtered Claude preferences addition advances `collectionPolicy` from 1 to 2
+The filtered Claude settings addition advances `collectionPolicy` from 1 to 2
 for its projection semantics. Its top-level and nested allowlists live in the
 canonical scope data, so changes remain visible to the source-scope advisory.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
 31 sensitive sources, and one projected Ballin preferences snapshot. The filtered
-Claude preferences snapshot belongs to `sensitive`, not `preferences`.
+Claude settings snapshot belongs to `sensitive`, not `preferences`.
 `backup.includeSensitive` is the only local sensitive-source preference. Opting
 in covers the maintained sensitive catalog, including future supported sources;
 existing opt-ins therefore include Codex and Claude Code. Setup discloses this
@@ -475,15 +475,15 @@ UTF-8 and content with non-text controls use Base64 string content. No timestamp
 absolute paths or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
 
-### Claude preferences projection
+### Claude settings projection
 
-`claude_preferences.json` reads `settings.json` from nonempty `CLAUDE_CONFIG_DIR`,
+`claude_settings.json` reads `settings.json` from nonempty `CLAUDE_CONFIG_DIR`,
 otherwise `HOME/.claude`. It uses the existing sensitive-source gate and Claude
 source traversal rules. Discovery and preview check attributes and readability,
 not settings contents. Excluded sensitive sources are not probed.
 
 Capture reconstructs a JSON object from the fixed allowlist documented in the
-[source guide](backup-sources.md#filtered-preferences). Each model's
+[source guide](backup-sources.md#filtered-settings). Each model's
 `modelSettings` object retains only `effortLevel` and `maxEffortLevel`;
 `attribution` retains only `false` or an object with `commit`/`pr` strings and a
 `sessionUrl` boolean. Unknown root and nested keys are omitted without
@@ -555,7 +555,7 @@ caches cannot establish a comparison base for new filenames.
 ### Capture bounds and traversal
 
 New Codex and Claude Code captures are each bounded to 16 MiB total normalized
-staged bytes per application (raw files, filtered preferences, and all archives, including unchanged
+staged bytes per application (raw files, filtered settings, and all archives, including unchanged
 captures) and 8,192 visited entries per
 recursive source. Incremental iterative metadata traversal and opened-file
 bounded reads reject overflow without truncation. Text capture incrementally

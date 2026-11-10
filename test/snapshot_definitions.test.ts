@@ -90,7 +90,7 @@ const expectedDefinitions = [
   ['claude_agents.bundle.json', 'claude', [{ kind: 'directory', name: 'agents' }]],
   ['claude_commands.bundle.json', 'claude', [{ kind: 'directory', name: 'commands' }]],
   ['claude_skills.bundle.json', 'claude', [{ kind: 'directory', name: 'skills' }]],
-  ['claude_preferences.json', 'claude', [{ kind: 'file', name: 'settings.json' }]],
+  ['claude_settings.json', 'claude', [{ kind: 'file', name: 'settings.json' }]],
   [
     'ballin_config',
     'ballin',
@@ -170,7 +170,7 @@ describe('backup snapshot definitions', () => {
         'codex_AGENTS.md', 'codex_AGENTS.override.md', 'codex_config.toml', 'codex_profiles.bundle.json', 'codex_hooks.json',
         'codex_skills.bundle.json', 'codex_user_skills.bundle.json', 'codex_rules.bundle.json', 'codex_agents.bundle.json', 'codex_marketplace.json',
         'claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json',
-        'claude_preferences.json',
+        'claude_settings.json',
       ],
       preferences: ['ballin_config'],
     };

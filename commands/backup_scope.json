@@ -45,7 +45,7 @@
     "npm",
     "nvm"
   ],
-  "claudePreferences": {
+  "claudeSettings": {
     "keys": [
       "model", "effortLevel", "modelSettings", "alwaysThinkingEnabled",
       "language", "outputStyle", "attribution", "editorMode", "theme", "verbose",
@@ -97,7 +97,7 @@
     ["configuration", "claude", "claude_agents.bundle.json", "agents", true, false, false, false],
     ["configuration", "claude", "claude_commands.bundle.json", "commands", true, false, false, false],
     ["configuration", "claude", "claude_skills.bundle.json", "skills", true, false, false, true],
-    ["claude-preferences", "claude_preferences.json", "settings.json"],
+    ["claude-settings", "claude_settings.json", "settings.json"],
     ["preferences"],
     ["command", "mas", "inventory", "mas", "mas", "mas list"]
   ],

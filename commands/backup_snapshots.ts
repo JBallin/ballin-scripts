@@ -597,7 +597,7 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
 });
 
 // The data catalog owns source and collection scope; capture internals stay here.
-const claudePreferencesSnapshot = (name: string, relative: string): SnapshotDefinition => {
+const claudeSettingsSnapshot = (name: string, relative: string): SnapshotDefinition => {
   const definition = configurationSnapshot('claude', name, relative, false, false, false, false);
   return {
     ...definition,
@@ -609,7 +609,7 @@ const claudePreferencesSnapshot = (name: string, relative: string): SnapshotDefi
         collector: {
           ...result.collector,
           // Preserve root/mode/relative arguments used by metadata-only source review.
-          args: [path.join(__dirname, 'claude_preferences.ts'), ...result.collector.args!.slice(1)],
+          args: [path.join(__dirname, 'claude_settings.ts'), ...result.collector.args!.slice(1)],
         },
       };
     },
@@ -622,7 +622,7 @@ type SnapshotSpec =
   | ['editor-file', ...Parameters<typeof editorFileSnapshot>]
   | ['editor-extensions', ...Parameters<typeof editorExtensionsSnapshot>]
   | ['configuration', ...Parameters<typeof configurationSnapshot>]
-  | ['claude-preferences', ...Parameters<typeof claudePreferencesSnapshot>]
+  | ['claude-settings', ...Parameters<typeof claudeSettingsSnapshot>]
   | ['bash-completions']
   | ['preferences'];
 const snapshotDefinitions: readonly SnapshotDefinition[] = (backupScope.sources as SnapshotSpec[]).map((spec) => {
@@ -639,7 +639,7 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = (backupScope.sources 
     case 'editor-file': return editorFileSnapshot(...spec.slice(1) as Parameters<typeof editorFileSnapshot>);
     case 'editor-extensions': return editorExtensionsSnapshot(...spec.slice(1) as Parameters<typeof editorExtensionsSnapshot>);
     case 'configuration': return configurationSnapshot(...spec.slice(1) as Parameters<typeof configurationSnapshot>);
-    case 'claude-preferences': return claudePreferencesSnapshot(...spec.slice(1) as Parameters<typeof claudePreferencesSnapshot>);
+    case 'claude-settings': return claudeSettingsSnapshot(...spec.slice(1) as Parameters<typeof claudeSettingsSnapshot>);
     case 'bash-completions': return bashCompletionsSnapshot();
     case 'preferences': return portableConfigSnapshot();
   }

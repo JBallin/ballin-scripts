@@ -5,7 +5,7 @@ import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 describe('backup commit messages', () => {
   it('describes one source without a redundant body', () => {
     assert.deepEqual(backupCommitMessage(['codex_config.toml']), { headline: 'Update: Codex config' });
-    assert.deepEqual(backupCommitMessage(['claude_preferences.json']), { headline: 'Update: Claude preferences' });
+    assert.deepEqual(backupCommitMessage(['claude_settings.json']), { headline: 'Update: Claude settings' });
   });
   it('uses alphabetical filenames and deduplicates paths', () => {
     const expected = { headline: 'Update: Git config, Zsh settings' };

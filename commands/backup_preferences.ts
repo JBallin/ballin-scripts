@@ -81,7 +81,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
     .sort((left, right) => left.name.localeCompare(right.name, 'en'));
   const available: string[] = [];
   let pipxAvailable = false;
-  let claudePreferencesAvailable = false;
+  let claudeSettingsAvailable = false;
   let actualHome = homeDir;
   try { actualHome = fs.realpathSync(homeDir); } catch { /* Preserve normal source discovery errors. */ }
   for (const definition of sensitiveDefinitions) {
@@ -121,7 +121,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
         fs.accessSync(resolved, fs.constants.R_OK);
       }
       available.push(displayPath(terminalPath(resolved, actualHome)));
-      if (definition.name === 'claude_preferences.json') claudePreferencesAvailable = true;
+      if (definition.name === 'claude_settings.json') claudeSettingsAvailable = true;
     } catch (error) {
       if (error instanceof require('./recursive_snapshot.ts').SnapshotCwdError) throw error;
       writeStdoutLine(`Unable to review ${definition.name}: resolution or read access failed.`);
@@ -132,7 +132,7 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
   writeStdoutLine(available.length ? 'Sensitive source paths available now:' : 'Sensitive source paths available now: none.');
   [...new Set(available)].forEach((line) => writeStdoutLine(`  ${line}`));
   if (pipxAvailable) writeStdoutLine('pipx installation metadata is also available.');
-  if (claudePreferencesAvailable) writeStdoutLine('Claude settings.json contributes selected preferences only; retained values may still be private.');
+  if (claudeSettingsAvailable) writeStdoutLine('Claude settings.json contributes a filtered subset; retained values may still be private.');
   return true;
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
