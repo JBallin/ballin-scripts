@@ -16,6 +16,7 @@ const {
   requireUninterrupted,
   runCommand,
   writeStdoutLine,
+  writeStderrLine,
 } = require('./commandHelpers.ts');
 const { configureRepositoryBackup, disconnectBackup } = require('./backup_setup.ts');
 
@@ -238,7 +239,15 @@ const setup = (
   }
   if (interactive && promptInputState() === 'open') {
     const { readYesNo } = require('./commandHelpers.ts');
-    const review = readYesNo('\nReview your update and analytics preferences? [Y/n] ', true);
+    let review: boolean | null;
+    try {
+      review = readYesNo('\nReview your update and analytics preferences? [Y/n] ', true);
+    } catch (error) {
+      if (error instanceof CommandInterrupted) throw error;
+      writeStderrLine(terminalError('Unable to read preference review input. Earlier installation changes remain.', process.stderr));
+      writeStderrLine(`Run ${terminalCommand('ballin setup', process.stderr)} to review preferences.`);
+      return false;
+    }
     if (review === true) {
       const { reviewGeneralPreferences } = require('./setup.ts');
       if (reviewGeneralPreferences(configPathFor(repoDir), { installation: true }) === 'failed') return false;
