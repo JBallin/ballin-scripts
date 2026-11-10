@@ -12,7 +12,7 @@ LAUNCHER = Path(__file__).with_name('private-login.sh')
 
 
 class PrivateLoginTests(unittest.TestCase):
-    def run_launcher(self, *, git_exit=0, login_exit=0, token='', tty=True, missing=None):
+    def run_launcher(self, *, git_exit=0, login_exit=0, token='', tty=True, missing=None, acknowledgement='test-account\n'):
         with tempfile.TemporaryDirectory(prefix='ballin-login-test-') as folder:
             root = Path(folder)
             for name, body in {
@@ -39,6 +39,7 @@ exit ''' + str(login_exit),
                 if pid == 0:
                     os.execve('/bin/bash', ['bash', str(LAUNCHER)], env)
                 output = b''
+                os.write(master, acknowledgement.encode())
                 while True:
                     try:
                         data = os.read(master, 4096)
@@ -65,6 +66,17 @@ exit ''' + str(login_exit),
         self.assertIn('env:1:/usr/bin/true:/usr/bin/true:\n', calls)
         self.assertIn('private-stub-instructions', output)
         self.assertIn('Verify the intended account privately', output)
+        self.assertIn('can read or use its token', output)
+        self.assertIn('dedicated minimal-access disposable', output)
+
+    def test_declined_or_incomplete_acknowledgement_never_starts_tools(self):
+        for answer in ['\n', 'yes\n', 'test-account-extra\n', '\x04']:
+            with self.subTest(answer=repr(answer)):
+                code, output, calls = self.run_launcher(acknowledgement=answer)
+                self.assertNotEqual(code, 0)
+                self.assertIn('Login cancelled', output)
+                self.assertEqual(calls, '')
+                self.assertNotIn('private-stub-instructions', output)
 
     def test_missing_prerequisites_block_login(self):
         for tool in ['git', 'gh']:

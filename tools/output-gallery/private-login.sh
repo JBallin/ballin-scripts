@@ -7,6 +7,15 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 [ "$#" -eq 0 ] || fail 'Usage: bash tools/output-gallery/private-login.sh'
 [ -t 0 ] && [ -t 1 ] && [ -t 2 ] || fail 'Use a private interactive Terminal, without redirects or recording.'
 [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] || fail 'Remove token environment overrides before manual login.'
+# An operator acknowledgement prevents accidental personal-account use. Candidate
+# code can bypass this helper or impersonate gh; this is not a security boundary.
+printf '%s\n' 'Use only the dedicated minimal-access disposable GitHub test account.' \
+  'Code already run in this guest can read or use its token, even after device login in a trusted browser.' \
+  'Keep personal/maintainer accounts and valuable data out of this guest.' \
+  'Stop all recording before continuing. Revoke exposed authorization remotely from a trusted environment.'
+printf '%s' 'Type test-account to confirm this account choice and accept token exposure, or press Return to cancel: '
+IFS= read -r acknowledgement || fail 'Login cancelled before starting GitHub CLI.'
+[ "$acknowledgement" = test-account ] || fail 'Login cancelled before starting GitHub CLI.'
 command -v gh >/dev/null 2>&1 || fail 'Install the official GitHub CLI first.'
 git_path=$(command -v git) || fail 'Install working Git first.'
 # Probing the Apple placeholder can start an installer. Check its selected
