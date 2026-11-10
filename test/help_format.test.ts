@@ -94,3 +94,16 @@ describe('help layout', () => {
     assert.equal(formatHelp('', { columns: 40 }), '');
   });
 });
+
+describe('non-documentation help notices', () => {
+  it('wraps ordinary information without treating it as a documentation link', () => {
+    const input = 'Usage: ballin setup\ni Keep saved settings while reviewing preferences.\n    ballin setup';
+    assert.equal(formatHelp(input, { columns: 24 }, { NO_COLOR: '1' }),
+      'Usage: ballin setup\ni Keep saved settings\nwhile reviewing\npreferences.\n    ballin setup');
+    assert.equal(formatHelp('i Keep saved settings.', { columns: 80, isTTY: true }, { TERM: 'xterm' }),
+      '\x1b[0;34mi\x1b[0m Keep saved settings.');
+  });
+  it('preserves empty list placeholders without inventing text', () => {
+    assert.equal(formatHelp('- \n1. ', { columns: 20 }), '- \n1. ');
+  });
+});
