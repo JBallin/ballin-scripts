@@ -65,9 +65,13 @@ upgrade, state retention, ownership guards, completion-helper continuity and
 uninstall. That VM candidate predates a narrow CLI analytics identity-path
 correction, which received focused regression checks and independent review.
 
-There is no clean single aggregate full-suite pass for this prototype. An earlier
-full run was interrupted after failures later corrected and retested in focused
-suites. The VM evidence does not cover interactive TTY onboarding, real backup or
+A clean `npm test` run on November 10, 2026 passed at
+`680ce8717fd4c806550b80f16f56ce507d3da1a9` with Node 26.13.0: all 4,407 tests,
+lint, both typechecks, release consistency and the unchanged coverage gates
+completed with exit 0. Coverage was 99.60% for statements/lines, 96.90% for branches
+and 100% for functions. This aggregate run used isolated fixtures, not live
+package or backup operations; earlier incomplete runs remain separate evidence.
+The VM evidence does not cover interactive TTY onboarding, real backup or
 authentication, full maintenance, first-time Homebrew provisioning, migration,
 or an Intel/wider macOS matrix. Local experiment receipts remain separate from
 this source checkpoint.
