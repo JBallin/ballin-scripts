@@ -229,6 +229,9 @@ def pack(gallery, selection_path, output):
         require(isinstance(selected['id'], str) and SLUG.fullmatch(selected['id']), 'Invalid public ID')
         require(selected['scenario'] in generated, 'Unknown scenario')
         scenario = generated[selected['scenario']]
+        if scenario.get('commandCaptionReviewed') is True:
+            require(selected.get('command') == scenario.get('command') and bool(selected.get('command')),
+                    'Captioned command requires matching explicit publication selection')
         folder = gallery / selected['scenario']
         require(not folder.is_symlink(), 'Symlink scenario directory')
         entry = {key: scenario[key] for key in ('category', 'kind', 'sourceRevision')}
@@ -370,16 +373,61 @@ def retrieve(pin, request=github):
 
 def capture_details(entry):
     revision = entry['sourceRevision']
+    command = ''
+    if entry.get('command'):
+        label = 'Recorded command' if entry['kind'] == 'actual-vm' else 'Illustrative command'
+        command = f'<p>{label}</p><pre><code>$ {html.escape(entry["command"])}</code></pre>'
     return (f'<details class="provenance"><summary>Details</summary>'
-            f'<p>Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>'
+            f'{command}<p>Source: <a href="https://github.com/{REPO}/commit/{revision}"><code>{revision}</code></a><br>'
             f'{html.escape(entry["edits"])}</p></details>')
 
 
-def command_html(entry):
+def example_guide(entry):
+    command = entry.get('command', '')
+    if command == 'ballin setup':
+        guide = ('optional-capabilities.html#guided-preference-review', 'Preference setup guide')
+    elif command.startswith('ballin backup setup'):
+        guide = ('installation.html#optional-backup-setup-and-reconnect', 'Backup setup guide')
+    elif command.startswith(('ballin backup list', 'ballin backup read')):
+        guide = ('installation.html#inspect-saved-backups', 'Inspect saved backups')
+    elif command == 'ballin backup':
+        guide = ('capabilities.html#ballin-backup', 'Backup guide')
+    elif entry['category'] == 'Install & Quickstart':
+        guide = ('installation.html#install', 'Installation guide')
+    elif entry['category'] == 'Update':
+        guide = ('capabilities.html#ballin-update', 'Update guide')
+    else:
+        guide = ('commands.html', 'Command reference')
+    return guide
+
+
+def command_html(entry, base=""):
     if 'command' not in entry:
         return ''
-    label = 'Recorded command' if entry['kind'] == 'actual-vm' else 'Illustrative command'
-    return f'<div class="invocation"><p>{label}</p><pre><code>{html.escape(entry["command"])}</code></pre></div>'
+    guide = example_guide(entry)
+    return f'<p class="example-guide"><a href="{base}/docs/{guide[0]}">{guide[1]}</a></p>'
+
+
+def add_gallery_section_links(page, manifest, base):
+    """Link existing guide sections to the examples actually in this bundle."""
+    if not manifest:
+        return page['content']
+    links = {}
+    for entry in manifest['entries']:
+        if not entry.get('command'):
+            continue
+        target, _, anchor = example_guide(entry)[0].partition('#')
+        if page['path'] != 'docs/' + target or not anchor:
+            continue
+        links.setdefault(anchor, []).append(
+            f'<a href="{base}/gallery/#entry-{entry["id"]}">{html.escape(entry["title"])}</a>')
+    content = page['content']
+    for anchor, items in links.items():
+        pattern = r'(<h[1-6] id="' + re.escape(anchor) + r'"[^>]*>.*?</h[1-6]>)'
+        content = re.sub(pattern, lambda match: match[1] + '<p class="gallery-related">Examples: '
+                         + ' · '.join(items) + '</p>', content, count=1, flags=re.S)
+    return content
+
 
 
 def gallery_html(manifest, files, base):
@@ -414,9 +462,10 @@ def gallery_html(manifest, files, base):
             lines.append(f'<details class="gallery-output"{expanded}><summary>Example output</summary>'
                          f'<p class="image-actions"><a href="{base}/{viewer}">Open image viewer</a>'
                          f'<a href="#transcript-{ident}">Text version</a></p>'
-                         + command_html(entry)
-                         + f'<figure><img loading="lazy" width="{width}" height="{height}" '
-                         f'src="{base}/{image}" alt="{title}, rendered page 1">'
+                         + command_html(entry, base)
+                         + image_page_navigation(entry, 0, base)
+                         + f'<figure><a href="{base}/{viewer}" aria-label="Open {title} image viewer"><img loading="lazy" width="{width}" height="{height}" '
+                         f'src="{base}/{image}" alt="{title}, rendered page 1"></a>'
                          + (f'<figcaption>Page 1 of {count}</figcaption>' if count > 1 else '')
                          + '</figure>')
             lines.append(transcript_html(entry, files, base) + '</details>' + capture_details(entry) + '</article>')
@@ -458,7 +507,7 @@ def image_pages(manifest, files, base):
                        + image_page_navigation(entry, index, base)
                        + f'<p class="image-actions"><a href="{base}/{image}">Open original PNG</a>'
                        f'<a href="#transcript-{entry["id"]}-image">Text version</a></p>'
-                       + command_html(entry)
+                       + command_html(entry, base)
                        + f'<figure class="image-preview"><img width="{width}" height="{height}" src="{base}/{image}" '
                        f'alt="{html.escape(entry["title"], quote=True)}, rendered page {index}"></figure>'
                        + image_page_navigation(entry, index, base)
@@ -510,9 +559,19 @@ def verify_site(output, base):
 
 
 def related_gallery(source, base, enabled):
-    if enabled and source == 'docs/what-is-ballin.md':
-        return f'<p class="gallery-related"><a href="{base}/gallery/">Browse the output gallery</a></p>'
-    return ''
+    if not enabled:
+        return ''
+    targets = {
+        'docs/what-is-ballin.md': ('', 'Browse the output gallery'),
+        'docs/README.md': ('', 'Explore command output in the gallery'),
+        'docs/quickstart.md': ('#install-quickstart', 'See installation examples'),
+        'docs/commands.md': ('', 'See command output examples'),
+        'docs/backup-sources.md': ('#setup-backup', 'See backup examples'),
+    }
+    if source not in targets:
+        return ''
+    anchor, label = targets[source]
+    return f'<p class="gallery-related"><a href="{base}/gallery/{anchor}">{label}</a></p>'
 
 
 def page_url(path, base, origin):
@@ -579,7 +638,7 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
             values = {**page_metadata(page, base, origin), 'base': base,
                       'analytics': (f'<script src="{base}/analytics.js" data-token="{analytics_token}" data-origin="{origin}" defer></script>' if analytics_token else ''),
                       'galleryNav': f'<a href="{base}/gallery/">Gallery</a>' if manifest else '',
-                      'content': page['content'] + related_gallery(page['source'], base, manifest is not None), 'source': source_base + '/' + urllib.parse.quote(page['source'])}
+                      'content': add_gallery_section_links(page, manifest, base) + related_gallery(page['source'], base, manifest is not None), 'source': source_base + '/' + urllib.parse.quote(page['source'])}
             rendered = re.sub(r'\{\{(\w+)\}\}', lambda m: values[m[1]], template)
             target = work / page['path']
             target.parent.mkdir(parents=True, exist_ok=True)

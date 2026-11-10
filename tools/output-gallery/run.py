@@ -240,6 +240,8 @@ def main():
         (folder / 'text.txt').write_text(header + text)
         presentation = {'label': label, 'source': args.source, 'scenario': entry['title'] + ' (' + entry['id'] + ')',
                         'keepTogether': staged_case_ranges(text) if entry['id'] == 'staged-09' else []}
+        if entry['kind'] == 'actual-vm' and entry.get('commandCaptionReviewed') is True and entry.get('command'):
+            presentation['captionCommand'] = entry['command']
         (folder / 'presentation.json').write_text(json.dumps(presentation, indent=2) + '\n')
         run([str(renderer), str(folder / 'output'), str(folder / 'presentation.json')], input=(header + canonical).encode())
         render_report = json.loads((folder / 'output.json').read_text())

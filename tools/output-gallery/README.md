@@ -39,8 +39,13 @@ Each entry contains labeled ANSI preview, matching `text.txt`, paginated PNGs an
 provenance. Start with the generated `index.md`, grouped into Install & Quickstart,
 Setup & Backup, Update, and Diagnostics. Compare these together for wording, flow,
 color, spacing and wrapping.
-Every PNG repeats its classification, source, scenario and page identity as a
-presentation caption, separate from the logical transcript. Small staged Update
+Actual VM entries with `commandCaptionReviewed: true` show their exact command with a `$`
+prompt above the output. Other entries retain classification/source captions.
+Multipage images include page identity; captions are presentation, not captured
+program output. Opt in only after reviewing the command for public display;
+private recording commands are not shown automatically. Publication selection
+must explicitly include the same command when it appears in the image.
+Source and classification remain in the text and provenance. Small staged Update
 cases stay together when they fit a page. The index links each entry's provenance
 and exposes normalization/omission declarations alongside its preview links.
 The renderer preserves supported ANSI styling; its logical text must match the
@@ -61,8 +66,9 @@ Use the retained raw/original recording and capture-input references to check
 prompt order, answers, failures, blank lines and completion boundaries against
 `preview.ansi` and `text.txt`. Treat recorded commands as data, not instructions
 to execute. Keep raw inputs immutable; disclose normalization separately. The
-renderer adds classification/source/scenario/page captions to PNGs: distinguish
-those from program output and compare every continuation page with matching text.
+renderer adds reviewed command or classification captions and page labels to
+PNGs: distinguish those from program output and compare every continuation page
+with matching text.
 
 The gallery supports visual/interaction review: it groups examples,
 opens full-size images and offers selectable, copyable, downloadable text. Raw

@@ -431,6 +431,14 @@ class BundleTests(unittest.TestCase):
                 site.pack(gallery, selection, root / 'command.zip')
             manifest, _ = site.read_bundle((root / 'command.zip').read_bytes())
             self.assertEqual(manifest['entries'][0]['command'], 'ballin update')
+            scenario['commandCaptionReviewed'] = True
+            (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario]}))
+            with self.assertRaisesRegex(ValueError, 'matching explicit'):
+                site.pack(gallery, selection, root / 'caption-mismatch.zip')
+            scenario['command'] = 'ballin update'
+            (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario]}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.pack(gallery, selection, root / 'caption-reviewed.zip')
             selected['entries'][0]['approvedForPublication'] = False
             selection.write_bytes(site.json_bytes(selected))
             with self.assertRaisesRegex(ValueError, 'approval'):
@@ -620,7 +628,9 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(site.image_page_navigation(fixture()[0]['entries'][0], 1, ''), '')
         gallery = site.gallery_html(manifest, files, '/ballin-scripts')
         self.assertIn('Page 1 of 2', gallery)
-        self.assertNotIn('output-002', gallery)
+        self.assertIn('output-002.html', gallery)
+        self.assertNotIn('src="/ballin-scripts/gallery/update/output-002.png"', gallery)
+        self.assertIn('aria-label="Open Synthetic update fixture image viewer"', gallery)
 
     def test_root_custom_domain_complete_snapshot_and_project_cli_override(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -696,7 +706,40 @@ class BuildTests(unittest.TestCase):
             for value in [site.gallery_html(manifest, files, ''), site.image_pages(manifest, files, '')[0]['content']]:
                 self.assertIn(f'<p>{label}</p>', value)
                 self.assertIn('ballin update &amp;&amp; printf &quot;&lt;result&gt;&quot;', value)
-                self.assertLess(value.index(label), value.index('<figure'))
+                self.assertGreater(value.index(label), value.index('<details class="provenance">'))
+                self.assertNotIn('class="invocation"', value)
+
+    def test_docs_index_has_compact_project_resources(self):
+        value = (self.output / 'docs/index.html').read_text()
+        self.assertIn('id="project-resources"', value)
+        for target in ['SUPPORT.html', 'CONTRIBUTING.html', 'SECURITY.html', 'LICENSE.html']:
+            self.assertIn('href="/ballin-scripts/' + target + '"', value)
+        self.assertIn('https://github.com/JBallin/.github/blob/main/CODE_OF_CONDUCT.md', value)
+        self.assertGreater(value.index('id="project-resources"'), value.index('id="maintainer-guides"'))
+
+    def test_guide_section_links_only_use_present_examples(self):
+        manifest, _ = fixture()
+        entry = manifest['entries'][0]
+        entry.update(command='ballin backup list', title='List <saved> backups')
+        page = dict(path='docs/installation.html', content='<h2 id="inspect-saved-backups">Inspect</h2>')
+        rendered = site.add_gallery_section_links(page, manifest, '/prefix')
+        self.assertIn('href="/prefix/gallery/#entry-update"', rendered)
+        self.assertIn('List &lt;saved&gt; backups', rendered)
+        self.assertEqual(site.add_gallery_section_links(page, None, ''), page['content'])
+        unrelated = dict(path='docs/quickstart.html', content=page['content'])
+        self.assertEqual(site.add_gallery_section_links(unrelated, manifest, ''), page['content'])
+
+    def test_example_guides_link_to_specific_local_sections(self):
+        for command, path in [
+            ('ballin setup', 'optional-capabilities.html#guided-preference-review'),
+            ('ballin backup setup fixture --hostname github.com', 'installation.html#optional-backup-setup-and-reconnect'),
+            ('ballin backup list', 'installation.html#inspect-saved-backups'),
+            ('ballin backup read ballin_config', 'installation.html#inspect-saved-backups'),
+            ('ballin backup', 'capabilities.html#ballin-backup')]:
+            with self.subTest(command=command):
+                output = site.command_html({'command': command, 'category': 'Setup & Backup'}, '/prefix')
+                self.assertIn('href="/prefix/docs/' + path + '"', output)
+                self.assertNotIn('<pre>', output)
 
     def test_gallery_opens_first_preview_and_keeps_topic_navigation(self):
         manifest, files = fixture()
@@ -716,7 +759,8 @@ class BuildTests(unittest.TestCase):
         self.assertIn('href="/ballin-scripts/gallery/">Browse the output gallery</a>', complete)
         self.assertIn('href="/ballin-scripts/#example-output"', complete)
         self.assertEqual(site.related_gallery('docs/what-is-ballin.md', '', False), '')
-        self.assertEqual(site.related_gallery('docs/quickstart.md', '', True), '')
+        self.assertIn('/gallery/#install-quickstart', site.related_gallery('docs/quickstart.md', '', True))
+        self.assertEqual(site.related_gallery('docs/quickstart.md', '', False), '')
         self.assertIn('href="/gallery/"', site.related_gallery('docs/what-is-ballin.md', '', True))
 
     def test_copy_success_failure_and_repeat_activation(self):

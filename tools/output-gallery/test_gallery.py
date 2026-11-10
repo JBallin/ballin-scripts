@@ -59,6 +59,23 @@ class GalleryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(prefix.with_suffix('.json').read_text())['text'], header + 'large case\n' * 100)
 
+    def test_actual_command_caption_preserves_output_and_pagination(self):
+        header = 'ACTUAL VM CAPTURE\nSource: ' + 'a' * 40 + '\n\n'
+        text = header + 'retained output\n' * 90
+        context = dict(label='ACTUAL VM CAPTURE', source='a' * 40,
+                       scenario='Read preferences', keepTogether=[], captionCommand='ballin backup read ballin_config')
+        result, prefix = self.render(text, 'command-caption', context)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(prefix.with_suffix('.json').read_text())
+        self.assertEqual(report['text'], text)
+        self.assertGreater(len(report['pages']), 1)
+        for index, caption in enumerate(report['pageCaptions'], 1):
+            self.assertIn('$ ballin backup read ballin_config', caption)
+            self.assertIn(f'Page {index} of ', caption)
+            self.assertNotIn('Source:', caption)
+        result, _ = self.render(text, 'unsafe-caption', {**context, 'captionCommand': 'ballin\nforged'})
+        self.assertNotEqual(result.returncode, 0)
+
     def test_staged_notes_and_transition_cases_form_complete_blocks(self):
         text = '[STAGED alternative — NVM failed]\n\n[STAGED omission: upstream output]\n\nFailure\n\n' \
             '[STAGED alternative — transition scope]\n\n[STAGED major release]\nProposal\nConsent\nResult\n'

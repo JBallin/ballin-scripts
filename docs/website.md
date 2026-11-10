@@ -245,7 +245,7 @@ remain those of the intended public target.
 Configure `getballin.com`, DNS and HTTPS separately in Netlify after approval.
 The repository's origin/base configuration does not set up a Netlify site, team,
 plan or domain. The visible Netlify footer credit is included on every page;
-there is no website Code of Conduct link. The OSS application has been submitted,
+the documentation index links to project resources, including the shared Code of Conduct. The OSS application has been submitted,
 but acceptance and the separate-team arrangement remain external prerequisites.
 When changing hosting, verify the configured origin/base against deployed pages,
 assets, gallery viewers, transcripts, fragments, sitemap and social metadata.
@@ -305,9 +305,11 @@ an HTTP response or source inspection alone does not establish visual quality.
   A timeout or permission prompt is not successful completion; inspect an uncertain
   outcome before retrying. Keep browser permissions and unrelated files unchanged.
 - Check concise recording/staged, historical and incomplete labels. Check that
-  reviewed commands appear above the output and are labeled recorded or
-  illustrative. Keep source and capture notes in Details and reproduction
-  instructions in the installation guides.
+  reviewed commands shown in images match what actually ran. Keep the selectable
+  command, its recorded/illustrative label, source and capture notes in Details
+  instead of duplicating a visible command card. Verify guide links point to the
+  relevant task and reciprocal links include only examples in the selected bundle.
+  Keep reproduction instructions in the installation guides.
   Use the [CLI-output review workflow](../tools/output-gallery/README.md#review-command-line-output)
   to establish source fidelity separately from presentation quality.
 
