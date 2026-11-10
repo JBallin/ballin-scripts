@@ -1062,7 +1062,7 @@ trusted_nvm_tree() {
 # it creates the working directory and compatibility links even with --no-use.
 discover_nvm() {
   local directory source candidate prefix='' status=0
-  nvm_source=''; nvm_method='official'; nvm_loadable=false; nvm_follows_lts=false; nvm_problem=''
+  nvm_source=''; nvm_method='official'; nvm_follows_lts=false; nvm_problem=''
   nvm_directory=${NVM_DIR:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}}
   nvm_directory=${nvm_directory:-$HOME/.nvm}
   normalize_nvm_directory
@@ -1141,7 +1141,6 @@ discover_nvm() {
     '. "$1" --no-use >/dev/null && declare -F nvm >/dev/null || exit 1; printf "loadable\n"; nvm version default' ballin-nvm-probe "$nvm_source") || status=$?
   stop_if_interrupted "$status"
   [[ "$result" == loadable || "$result" == loadable$'\n'* ]] || { nvm_problem='Existing NVM could not be loaded. Repair its source before retrying Quickstart.'; return 0; }
-  nvm_loadable=true
   for (( hops=0; hops<40; hops++ )); do
     if [[ "$alias" == 'lts/*' ]]; then
       [[ "$status" != 0 ]] || nvm_follows_lts=true
