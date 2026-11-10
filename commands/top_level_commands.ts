@@ -9,6 +9,7 @@ const topLevelCommandNames = [
 ] as const;
 const commandHelpOptionName = '--help';
 const doctorVerboseOptionName = '--verbose';
+const setupInitialOptionName = '--initial';
 
 export type TopLevelCommandName = typeof topLevelCommandNames[number];
 
@@ -23,4 +24,5 @@ module.exports = {
   topLevelCommandNames,
   commandHelpOptionName,
   doctorVerboseOptionName,
+  setupInitialOptionName,
 };

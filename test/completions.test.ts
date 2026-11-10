@@ -89,6 +89,43 @@ describe('shell completions', () => {
   });
 
   for (const shell of ['zsh', 'bash'] as const) {
+    it(`uses the package-pinned runtime for ${shell} dynamic completion without ambient Node`, () => {
+      const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-pinned-completion-'));
+      try {
+        const pinned = path.join(fixture, 'package node');
+        fs.writeFileSync(pinned, '#!/bin/sh\nprintf "member/file.md\\n"\n', { mode: 0o755 });
+        const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
+        const packageAsset = path.join(fixture, shell === 'zsh' ? '_ballin' : 'ballin.bash');
+        fs.writeFileSync(packageAsset, fs.readFileSync(asset, 'utf8') + '\n_ballin_completion_node="$PINNED_NODE"\n');
+        const script = [
+          ...(shell === 'zsh' ? ['compdef() { :; }', 'compadd() { shift; printf "%s\\n" "$@"; }'] : []),
+          'source "$COMPLETION_ASSET"',
+          ...(shell === 'zsh' ? [
+            'CURRENT=6; words=(ballin backup read codex_skills.bundle.json --file ""); _ballin',
+          ] : [
+            'COMP_CWORD=5; COMP_WORDS=(ballin backup read codex_skills.bundle.json --file ""); _ballin_completion; printf "%s\\n" "${COMPREPLY[@]}"',
+          ]),
+        ].join('\n');
+        const result = spawnSync(findShell(shell), [...(shell === 'zsh' ? ['-d', '-f'] : ['--noprofile', '--norc']), '-c', script], {
+          encoding: 'utf8', timeout: 2000,
+          env: { HOME: fixture, PATH: fixture, COMPLETION_ASSET: packageAsset, PINNED_NODE: pinned },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(outputLines(result.stdout), ['member/file.md']);
+        // Switching back to Git assets must clear the package runtime dependency.
+        fs.writeFileSync(path.join(fixture, 'node'), '#!/bin/sh\nprintf "git/member.md\\n"\n', { mode: 0o755 });
+        const switched = spawnSync(findShell(shell), [...(shell === 'zsh' ? ['-d', '-f'] : ['--noprofile', '--norc']), '-c',
+          script.replace('source "$COMPLETION_ASSET"', 'source "$COMPLETION_ASSET"\nsource "$GIT_ASSET"')], {
+          encoding: 'utf8', timeout: 2000,
+          env: { HOME: fixture, PATH: fixture, COMPLETION_ASSET: packageAsset, PINNED_NODE: pinned, GIT_ASSET: asset },
+        });
+        assert.equal(switched.status, 0, switched.stderr);
+        assert.deepEqual(outputLines(switched.stdout), ['git/member.md']);
+      } finally { fs.rmSync(fixture, { recursive: true, force: true }); }
+    });
+  }
+
+  for (const shell of ['zsh', 'bash'] as const) {
     it(`preserves native ${shell} current-command context after harmless compound prefixes`, function () {
       this.timeout(10000);
       const asset = shell === 'zsh' ? zshCompletionPath : bashCompletionPath;
@@ -335,7 +372,7 @@ describe('shell completions', () => {
           [4, '', 'backup', ['--list', '--file']], [4, '--f', 'backup', ['--file']],
         ];
         for (const family of topLevelCommandNames.filter((name: string) => !['backup', 'config'].includes(name))) {
-          cases.push([2, '', family, [...(family === 'doctor' ? [doctorVerboseOptionName] : []), commandHelpOptionName]]);
+          cases.push([2, '', family, [...(family === 'doctor' ? [doctorVerboseOptionName] : family === 'setup' ? ['--initial'] : []), commandHelpOptionName]]);
         }
         for (const [position, prefix, family, expected] of cases) {
           const result = complete(position, prefix, family);

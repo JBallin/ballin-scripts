@@ -121,7 +121,7 @@ const discoverNvm = (env: NodeJS.ProcessEnv = process.env): NvmInstallation | nu
     if (text.includes('libexec/nvm.sh') && !text.includes('nvm_process_parameters')) continue;
     return { directory, source, completion: path.join(directory, 'bash_completion'), method: 'official' };
   }
-  if (!commandExists('brew', { env })) return null;
+  if (env.BALLIN_EXPERIMENT_INSTALL_OWNER === 'direct' || !commandExists('brew', { env })) return null;
   const result = runCommand('brew', ['--prefix'], { env: { ...env, HOMEBREW_NO_AUTO_UPDATE: '1', HOMEBREW_NO_ANALYTICS: '1' } });
   requireUninterrupted(result);
   const prefix = result.stdout?.trimEnd();

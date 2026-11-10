@@ -141,9 +141,11 @@ const analyticsPrompt = analyticsPromptFor();
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
 const defaultRepoDir = path.join(__dirname, '..');
 
-const loadAppVersion = (appPackageJsonPath = packageJsonPath): string => (
-  require('./repo_update.ts').readIdentity(path.dirname(appPackageJsonPath)).version
-);
+const loadAppVersion = (appPackageJsonPath = packageJsonPath): string => {
+  const metadata = require('./installation.ts').readPackageMetadata(path.dirname(appPackageJsonPath));
+  if (metadata) return metadata.schema === 2 ? 'development' : 'unknown';
+  return require('./repo_update.ts').readIdentity(path.dirname(appPackageJsonPath)).version;
+};
 
 const isAnalyticsConfig = (value: unknown): value is AnalyticsConfig => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -165,7 +167,7 @@ const commandAnalyticsDisabledByEnv = (env: NodeJS.ProcessEnv): boolean => (
 );
 
 const installIdPathForRepo = (repoDir = defaultRepoDir): string => (
-  path.join(repoDir, '.analytics', 'install-id')
+  path.join(require('./installation.ts').stateDirectory(repoDir), '.analytics', 'install-id')
 );
 
 const readLocalInstallId = (installIdPath = installIdPathForRepo()): string | null => {

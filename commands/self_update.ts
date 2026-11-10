@@ -149,6 +149,10 @@ const updateResult = (repoDir: string, before: string | undefined, previousIdent
 };
 
 const refreshInstalledBallin = (): void => {
+  if (require('./installation.ts').isHomebrewInstallation()) {
+    writeStdoutLine(`Homebrew manages this installation. Run \`brew upgrade ${require('./installation.ts').packageFormula()}\` to update it.`);
+    return;
+  }
   const repoDir = path.join(process.env.HOME ?? '', '.ballin-scripts');
   const previousSources = installedScope(repoDir);
   const previousRevision = installedRevision(repoDir);

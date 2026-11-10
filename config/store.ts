@@ -118,6 +118,7 @@ const createConfigStore = ({
 
   const writeConfig = (configJSON: string): void => {
     try {
+      require('../commands/installation.ts').prepareConfigurationDirectory(configPath);
       writeConfigFile(configPath, configJSON);
     } catch (error) {
       if (!isFileSystemError(error)) throw error;

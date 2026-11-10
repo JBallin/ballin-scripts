@@ -9,9 +9,11 @@ const { configuredBackupDestination } = require('./backup_config.ts');
 const { inspectNvm } = require('./nvm.ts');
 const { readYesNo, promptInputState, rethrowInterruption, writeStdoutLine, writeStderrLine } = require('./commandHelpers.ts');
 
-const setupHelp = `Usage: ballin setup
+const setupHelp = `Usage: ballin setup [--initial]
 
 Review update and analytics preferences, using saved choices as defaults.
+
+For Homebrew installations, --initial runs repeatable initial setup with optional backup and preference review. Homebrew keeps ownership of command links and completion assets; shell startup files are unchanged.
 Node.js LTS updates through NVM are offered when NVM is loadable and its default follows latest LTS, or when this preference is already enabled. Automatic backup is offered when configured or already enabled.
 
 Use \`ballin backup setup\` for backup destinations and sensitive sources. Use \`ballin config get/set/reset\` for direct configuration.
@@ -63,6 +65,10 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
       savedChoice = true;
     };
     for (const [key, question] of questions) {
+      if (key === 'selfUpdate' && require('./installation.ts').isHomebrewInstallation()) {
+        writeStdoutLine(`Homebrew manages Ballin updates: use \`brew upgrade ${require('./installation.ts').packageFormula()}\`.`);
+        continue;
+      }
       const current = readSetupConfigContext(file, false);
       const saved = preferenceBoolean(current.update?.[key] === undefined ? defaults.update[key] : current.update[key], `update.${key}`);
       if (key === 'nvm' && !saved && !(nvm.loadable && nvm.followsLts)) {

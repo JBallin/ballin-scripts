@@ -137,6 +137,8 @@ describe('repository backup lifecycle', function() {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-repository-test-'));
     home = path.join(root, 'home'); bin = path.join(root, 'bin'); checkout = path.join(home, '.ballin-scripts');
     [home, bin, checkout, path.join(root, 'tmp')].forEach((directory) => fs.mkdirSync(directory));
+    fs.mkdirSync(path.join(checkout, 'commands'), { recursive: true });
+    fs.copyFileSync(path.join(repoRoot, 'commands/installation.ts'), path.join(checkout, 'commands/installation.ts'));
     fs.cpSync(path.join(repoRoot, 'config'), path.join(checkout, 'config'), { recursive: true });
     configPath = path.join(checkout, 'ballin.config.json'); statePath = path.join(root, 'remote.json');
     cacheRoot = path.join(checkout, '.backup-cache'); cache = repositoryCacheDirectory(cacheRoot, fixtureDestination);

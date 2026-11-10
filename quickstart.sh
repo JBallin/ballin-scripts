@@ -640,7 +640,7 @@ normalize_absolute() {
 select_command_bin() {
   local selected_brew selected_prefix brew_status=0
   command_bin="$local_bin"
-  if selected_brew=$(type -P brew); then
+  if [[ "${BALLIN_EXPERIMENT_INSTALL_OWNER:-}" != direct ]] && selected_brew=$(type -P brew); then
     selected_prefix=$(probe_tool "$selected_brew" --prefix 2>/dev/null) || brew_status=$?
     stop_if_interrupted "$brew_status"
     if [[ "$brew_status" == 0 ]]; then
@@ -683,6 +683,7 @@ original_path_sufficient() {
 find_suitable_brew() {
   local candidate prefix cellar repository location
   brew_tool=''; brew_prefix=''
+  [[ "${BALLIN_EXPERIMENT_INSTALL_OWNER:-}" != direct ]] || return 0
   candidate=$(type -P brew) || return 0
   # Only normal native installations. Unknown/custom/Rosetta installations use direct routes.
   case "$machine:$candidate" in "arm64:$system_brew_arm/bin/brew"|"x86_64:$system_brew_intel/bin/brew") ;; *) return 0 ;; esac
@@ -1097,7 +1098,7 @@ discover_nvm() {
       break
     fi
   done
-  if [[ -z "$nvm_source" ]]; then
+  if [[ -z "$nvm_source" && "${BALLIN_EXPERIMENT_INSTALL_OWNER:-}" != direct ]]; then
     candidate=$(type -P brew) || candidate=''
     if [[ -n "$candidate" ]]; then
       prefix=$(HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 probe_tool "$candidate" --prefix 2>/dev/null) || status=$?

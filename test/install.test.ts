@@ -318,6 +318,14 @@ ballin_download() { : > "$2"; }
     ]);
   });
 
+  it('does not query Brew during experimental direct command preflight', () => {
+    installBaseCommands();
+    writeExecutable('brew', '#!/bin/sh\nprintf called >> "$FAKE_COMMAND_LOG"\nexit 99\n');
+    const result = runInstall({ env: { BALLIN_EXPERIMENT_INSTALL_OWNER: 'direct' }, input: 'n\n' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Link the ballin command in ~/.local/bin');
+    assert.notInclude(commandLog().join('\n'), 'called');
+  });
   it('previews the Homebrew command directory with HOME abbreviated', () => {
     installBaseCommands();
     writeExecutable('brew', '#!/bin/sh\nprintf "%s\\n" "$HOME/custom-brew"\n');
@@ -534,6 +542,38 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
       assert.isFalse(fs.existsSync(repoDir));
     });
   }
+  for (const existing of [false, true]) {
+    it(`refuses a Brew-owned command before Git mutation (existing=${existing})`, () => {
+      installBaseCommands();
+      if (existing) writeCurrentCheckout();
+      const keg = path.join(homeDir, 'Cellar/ballin/1.0.0');
+      fs.mkdirSync(path.join(keg, 'bin'), { recursive: true });
+      fs.mkdirSync(path.join(keg, 'libexec'), { recursive: true });
+      fs.writeFileSync(path.join(keg, 'bin/ballin'), 'package command');
+      fs.writeFileSync(path.join(keg, 'libexec/.ballin-package.json'), '{}');
+      const target = path.join(homeDir, '.local/bin/ballin');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.symlinkSync(path.join(keg, 'bin/ballin'), target);
+      const before = fs.readlinkSync(target);
+      const result = runInstall();
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'Homebrew package owns');
+      assert.equal(fs.readlinkSync(target), before);
+      assert.deepEqual(commandLog(), []);
+      assert.equal(fs.existsSync(repoDir), existing);
+    });
+  }
+  it('refuses an unresolved package command instead of replacing a dangling link', () => {
+    installBaseCommands();
+    const target = path.join(homeDir, '.local/bin/ballin');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.symlinkSync(path.join(homeDir, 'Cellar/ballin/missing/bin/ballin'), target);
+    const result = runInstall();
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'Package command target is unresolved');
+    assert.isTrue(fs.lstatSync(target).isSymbolicLink());
+    assert.deepEqual(commandLog(), []);
+  });
   for (const entry of ['file', 'foreign link', 'managed link', 'directory']) {
     it(`reviews the actual command ${entry} before installation consent`, () => {
       installBaseCommands();

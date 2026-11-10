@@ -484,7 +484,7 @@ write_install_cancelled() {
 if command_preflight=$(node -e '
   const fs = require("fs"), path = require("path"), cp = require("child_process");
   let directory = path.join(process.env.HOME, ".local", "bin");
-  const brew = cp.spawnSync("brew", ["--prefix"], { encoding: "utf8" });
+  const brew = process.env.BALLIN_EXPERIMENT_INSTALL_OWNER === "direct" ? {status: 1} : cp.spawnSync("brew", ["--prefix"], { encoding: "utf8" });
   if (brew.signal === "SIGINT" || brew.status === 130) process.exit(130);
   if (brew.signal === "SIGTERM" || brew.status === 143) process.exit(143);
   if (brew.status === 0) {
@@ -501,6 +501,19 @@ if command_preflight=$(node -e '
     if (stat.isDirectory()) throw Error("Refusing to replace a directory at " + displayPath(target));
     if (!stat.isFile() && !stat.isSymbolicLink()) throw Error("Refusing to replace an unsafe command entry at " + displayPath(target));
     const link = stat.isSymbolicLink() ? fs.readlinkSync(target) : null;
+    let resolved;
+    try { resolved = fs.realpathSync(target); } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      const missing = link && path.resolve(path.dirname(target), link);
+      if (missing && /\/Cellar\/[^/]+\/[^/]+\/bin\/ballin$/u.test(missing)) throw Error("Package command target is unresolved. Repair it with Homebrew before retrying; no command was replaced.");
+    }
+    if (resolved) {
+      const prefix = path.dirname(path.dirname(resolved));
+      for (const marker of [path.join(prefix, ".ballin-package.json"), path.join(prefix, "libexec", ".ballin-package.json")]) {
+        try { fs.lstatSync(marker); } catch (error) { if (error.code === "ENOENT") continue; throw error; }
+        throw Error("A Homebrew package owns the existing Ballin command. Unlink it with Homebrew before choosing a Git installation; no command was replaced.");
+      }
+    }
     snapshot = JSON.stringify({dev:stat.dev, ino:stat.ino, mode:stat.mode, nlink:stat.nlink, size:stat.size, mtimeMs:stat.mtimeMs, ctimeMs:stat.ctimeMs, link});
     if (!(stat.isSymbolicLink() && path.resolve(path.dirname(target), link) === source)) console.error("Warning: installation will replace the existing command at " + displayPath(target) + (link === null ? "." : " (link target: " + displayPath(link) + ")."));
   } catch (error) {

@@ -63,6 +63,11 @@ const removeOwnedLink = (linkPath: string, targetPath: string): OwnedLinkCleanup
 };
 
 const runUninstallCommand = (): void => {
+  if (require('./installation.ts').isHomebrewInstallation()) {
+    writeStdoutLine(`Homebrew manages this installation. Run \`brew uninstall ${require('./installation.ts').packageFormula()}\` to remove it.`);
+    writeStdoutLine('Your ~/.ballin preferences and state are retained.');
+    return;
+  }
   const homeDir = process.env.HOME ?? '';
   const repoDir = path.join(homeDir, '.ballin-scripts');
   const systemRoot = process.env.BALLIN_UNINSTALL_TEST_SYSTEM_ROOT ?? '';

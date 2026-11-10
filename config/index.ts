@@ -10,7 +10,7 @@ const {
   stringify,
 } = require('./store.ts');
 
-const userConfigPath = path.join(__dirname, '..', 'ballin.config.json');
+const userConfigPath = require('../commands/installation.ts').configurationFile();
 const configPath = process.env.BALLIN_TEST_CONFIG_PATH || userConfigPath;
 const defaultConfigPath = path.join(__dirname, '.defaultConfig.json');
 const store = createConfigStore({ configPath, defaultConfigPath });

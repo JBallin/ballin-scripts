@@ -3,7 +3,7 @@ const { terminalCommand, terminalCommandReferences } = require('./terminalStyle.
 const { withTemporaryStatus } = require('./temporaryStatus.ts');
 const {
   ensureAnalyticsInstallId,
-  installIdPathForRepo,
+  loadAppVersion,
   rethrowCommandError,
   runWithCommandAnalytics,
 } = require('./analytics.ts');
@@ -43,14 +43,17 @@ const {
   isTopLevelCommandName,
   commandHelpOptionName,
   doctorVerboseOptionName,
+  setupInitialOptionName,
 } = require('./top_level_commands.ts') as {
   isTopLevelCommandName: (value: unknown) => value is TopLevelCommandName;
   commandHelpOptionName: string;
   doctorVerboseOptionName: string;
+  setupInitialOptionName: string;
 };
 import type { DoctorReport } from './doctor_report.ts';
 
-const analyticsInstallIdPath = installIdPathForRepo(path.dirname(configPath));
+// configPath already identifies writable state for both Git and package installs.
+const analyticsInstallIdPath = path.join(path.dirname(configPath), '.analytics', 'install-id');
 
 const ballinHelp = `Usage: ballin <command> [options]
        ballin help [command...]
@@ -310,6 +313,10 @@ function runBallinCommand(args = process.argv.slice(2)): void {
         writeStdout(terminalCommandReferences(formatHelp(setupHelp), ['ballin backup setup']));
         return;
       }
+      if (commandArgs.length === 1 && commandArgs[0] === setupInitialOptionName) {
+        require('./package_setup.ts').runPackageSetupCommand();
+        return;
+      }
       runNoArgCommand('ballin setup', commandArgs, () => {
         runSetupCommand();
         if (process.exitCode === 0) repairAnalyticsInstallId();
@@ -370,9 +377,23 @@ const runBallinCli = (): void => {
   if (!isAnalyticsPreferenceWrite(args)) {
     repairAnalyticsInstallId();
   }
+  // Package cleanup may retire this keg. Keep its version while final analytics
+  // still reread the external opt-in and identity.
+  let appVersion: string | undefined;
+  try {
+    if (args[0] === 'update' && require('./installation.ts').isHomebrewInstallation()) {
+      appVersion = loadAppVersion();
+    }
+  } catch {
+    // Optional analytics metadata must not prevent the requested command.
+  }
   const analyticsRuntime = isAnalyticsPreferenceWrite(args)
     ? { analyticsConfig: { enabled: 'false' }, installIdPath: analyticsInstallIdPath }
-    : { installIdPath: analyticsInstallIdPath, preserveLocalState: args[0] === 'uninstall' };
+    : {
+      installIdPath: analyticsInstallIdPath,
+      preserveLocalState: args[0] === 'uninstall',
+      appVersion,
+    };
   void runWithCommandAnalytics(
     analyticsCommandForBallinArgs(args),
     () => runBallinCommand(args),

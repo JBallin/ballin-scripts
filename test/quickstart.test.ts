@@ -2040,6 +2040,14 @@ printf '0\\n'
       });
     }
   }
+  it('keeps experimental direct ownership independent of an existing native Brew', () => {
+    const prefix = nativeBrew();
+    const result = run('y\ny\n', { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix,
+      BALLIN_EXPERIMENT_INSTALL_OWNER: 'direct', FAKE_EARLY_ANSWER: 'n\n' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notInclude(readLog(), 'native-brew:');
+    assert.include(readProfile(path.join(home, '.zshrc')), path.join(home, '.local/bin'));
+  });
   for (const arch of ['arm64', 'x86_64']) {
     it(`installs missing official prerequisites for ${arch}`, () => {
       fs.unlinkSync(path.join(tools, 'gh'));

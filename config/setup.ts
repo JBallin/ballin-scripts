@@ -12,7 +12,7 @@ const isConfigObject = (value: unknown): value is ConfigObject => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-const configPathFor = (repoDir: string): string => path.join(repoDir, 'ballin.config.json');
+const configPathFor = (repoDir: string): string => require('../commands/installation.ts').configurationFile(repoDir);
 
 // Capture choices before configure() supplies defaults for this invocation.
 const readOriginalSetupConfig = (configPath: string): Record<string, unknown> | null => {
@@ -65,6 +65,7 @@ const updateConfig = (repoDir: string, docsUrl: string, configPath = configPathF
 const createDefaultConfig = (repoDir: string, configPath: string, deferBackupSelection = false): boolean => {
   const defaultConfigPath = path.join(repoDir, 'config', '.defaultConfig.json');
   try {
+    require('../commands/installation.ts').prepareConfigurationDirectory(configPath, repoDir);
     const defaults = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
     if (deferBackupSelection) {
       delete defaults.backup.repository;
