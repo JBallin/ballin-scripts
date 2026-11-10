@@ -32,3 +32,11 @@ For the project overview, see the [main README](../README.md).
 | [Backup design](backup-design.md) | Backup safety model and GitHub constraints. |
 | [Design system](design-system.md) | Ballin identity, product messaging, visual guidance, and brand asset conventions. |
 | [Analytics backend](analytics-backend.md) | Backend deployment and data-policy notes for usage analytics. |
+
+## Project resources
+
+- [Support](../.github/SUPPORT.md)
+- [Contributing](../CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/JBallin/.github/blob/main/CODE_OF_CONDUCT.md)
+- [Security](../.github/SECURITY.md)
+- [License](../LICENSE.md)
